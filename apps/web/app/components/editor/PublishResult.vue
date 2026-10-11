@@ -16,6 +16,7 @@ const props = defineProps<{
 }>();
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle');
 let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
+let copyAttempt = 0;
 
 const publicHref = computed(() => {
   const result = props.state;
@@ -34,21 +35,24 @@ async function copyLink(): Promise<void> {
   const path = publicHref.value;
   if (path === null) return;
   resetCopyState();
+  const attempt = copyAttempt;
   try {
     await navigator.clipboard.writeText(`${location.origin}${path}`);
-    if (publicHref.value !== path) return;
+    if (attempt !== copyAttempt || publicHref.value !== path) return;
     copyState.value = 'copied';
     copyResetTimer = setTimeout(() => {
+      if (attempt !== copyAttempt) return;
       copyState.value = 'idle';
       copyResetTimer = undefined;
     }, 2_000);
   } catch {
-    if (publicHref.value !== path) return;
+    if (attempt !== copyAttempt || publicHref.value !== path) return;
     copyState.value = 'failed';
   }
 }
 
 function resetCopyState(): void {
+  copyAttempt++;
   if (copyResetTimer !== undefined) {
     clearTimeout(copyResetTimer);
     copyResetTimer = undefined;
