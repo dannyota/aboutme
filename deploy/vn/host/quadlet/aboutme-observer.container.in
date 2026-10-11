@@ -1,0 +1,36 @@
+# Rendered by deploy-host.sh. The observer verifies the root reporter's file
+# without access to Podman (docs/design/deployment-transparency/host.md).
+[Unit]
+OnFailure=aboutme-alert@%N.service
+Description=aboutme deployment observer
+Requires=aboutme-observer-network.service aboutme-observer-firewall.service
+After=aboutme-observer-network.service aboutme-observer-firewall.service
+
+[Container]
+Image=@OBSERVER_IMAGE@
+ContainerName=aboutme-observer
+Exec=run --interval 60s
+User=65532:65532
+Network=aboutme-observer
+DNS=8.8.8.8
+DNS=1.1.1.1
+ReadOnly=true
+DropCapability=all
+NoNewPrivileges=true
+Environment=OBSERVER_PLATFORM=podman
+Environment=OBSERVER_REGION=HCM03
+Environment=OBSERVER_TUF_CACHE=/tmp/sigstore-tuf
+Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,uid=65532,gid=65532,mode=0700
+Volume=/var/lib/aboutme/observation:/observation:ro
+Volume=/var/lib/aboutme/deployment:/public:rw
+# The firewall policy covers IPv4; disable IPv6 in this network namespace.
+PodmanArgs=--memory=128m --sysctl=net.ipv6.conf.all.disable_ipv6=1 --sysctl=net.ipv6.conf.default.disable_ipv6=1
+LogDriver=journald
+
+[Service]
+LimitCORE=0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

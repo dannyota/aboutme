@@ -148,17 +148,20 @@ describe('verify page states', () => {
       const vietnamese = await mountVerify();
       expect(status(vietnamese).attributes('data-state')).toBe('unverified');
       expect(status(vietnamese).get('[role="status"]').text()).toContain(
-        'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
-        + 'được hiển thị nhưng chưa được kiểm chứng.',
+        'Chưa kiểm tra xong chữ ký của server. '
+        + 'Trang tự làm mới sau một phút.',
       );
-      expect(status(vietnamese).get('[role="status"]').text())
-        .not.toContain('Trang tự làm mới sau một phút.');
       expect(vietnamese.get('[data-step="image"]').text())
         .toContain('3 image, chữ ký chưa được kiểm chứng');
       expect(vietnamese.get('[data-step="image"]').text())
         .not.toContain('đã được GitHub ký');
+      expect(vietnamese.get('[data-step="running"]').text())
+        .not.toContain('từ –');
       const limits = vietnamese.get('[data-testid="verify-limits"]');
       expect(limits.text()).toContain('Máy chủ GreenNode tự báo cáo');
+      expect(limits.text()).toContain(
+        'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image',
+      );
       expect(limits.text()).toContain('Yếu hơn báo cáo từ API của ECS');
       expect(limits.text()).not.toContain('AWS');
       expect(vietnamese.get('[data-testid="verify-components"]').text())
@@ -167,19 +170,62 @@ describe('verify page states', () => {
       setSiteLocale('en');
       const english = await mountVerify();
       expect(status(english).get('[role="status"]').text()).toContain(
-        'This host does not check signatures yet. The running digests '
-        + 'are shown without verification.',
+        'The signature check for server hasn\'t finished. '
+        + 'The page refreshes in a minute.',
       );
-      expect(status(english).get('[role="status"]').text())
-        .not.toContain('The page refreshes in a minute.');
       expect(english.get('[data-step="image"]').text())
         .toContain('3 images, signatures not verified');
       expect(english.get('[data-step="image"]').text())
         .not.toContain('signed by GitHub');
+      expect(english.get('[data-step="running"]').text())
+        .not.toContain('since –');
       const englishLimits = english.get('[data-testid="verify-limits"]');
       expect(englishLimits.text())
         .toContain('The GreenNode host itself reports');
+      expect(englishLimits.text()).toContain(
+        'An observer container on that same host checks image signatures',
+      );
       expect(englishLimits.text()).toContain('weaker than an ECS API report');
+      expect(englishLimits.text()).not.toContain('AWS');
+    });
+
+  it('shows a signed Podman host report as Verified in both languages',
+    async () => {
+      const base = fixture('verified');
+      const document = {
+        ...base,
+        platform: {
+          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
+        },
+      };
+      mockResponse = {
+        status: 200, body: document, date: freshDate(document),
+      };
+      const vietnamese = await mountVerify();
+      expect(status(vietnamese).attributes('data-state')).toBe('verified');
+      expect(status(vietnamese).text()).toContain(
+        'Cả 3 thành phần chạy bản v0.6.0, do GitHub dựng và ký từ commit '
+        + '91466ff.',
+      );
+      const vietnameseLimits = vietnamese.get(
+        '[data-testid="verify-limits"]',
+      );
+      expect(vietnameseLimits.text()).toContain(
+        'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image',
+      );
+      expect(vietnameseLimits.text()).not.toContain('AWS');
+
+      setSiteLocale('en');
+      const english = await mountVerify();
+      expect(status(english).attributes('data-state')).toBe('verified');
+      expect(status(english).text()).toContain(
+        'All 3 components run v0.6.0, built and signed by GitHub from commit '
+        + '91466ff.',
+      );
+      const englishLimits = english.get('[data-testid="verify-limits"]');
+      expect(englishLimits.text()).toContain(
+        'An observer container on that same host checks image signatures',
+      );
       expect(englishLimits.text()).not.toContain('AWS');
     });
 

@@ -51,10 +51,7 @@ export interface VerifyCopy {
   };
   readonly unverified: {
     readonly title: string;
-    readonly detail: (
-      component: ComponentName,
-      orchestrator?: DeploymentDocument['orchestrator'],
-    ) => string;
+    readonly detail: (component: ComponentName) => string;
   };
   readonly rollingOut: {
     readonly title: string;
@@ -169,11 +166,8 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Chưa kiểm tra được chữ ký',
-      detail: (component, orchestrator) => orchestrator === 'podman'
-        ? 'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
-        + 'được hiển thị nhưng chưa được kiểm chứng.'
-        : `Chưa kiểm tra xong chữ ký của ${component}. `
-          + 'Trang tự làm mới sau một phút.',
+      detail: (component) => `Chưa kiểm tra xong chữ ký của ${component}. `
+        + 'Trang tự làm mới sau một phút.',
     },
     rollingOut: {
       title: 'Đang cập nhật, hai phiên bản cùng chạy',
@@ -333,11 +327,8 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Signatures not checked yet',
-      detail: (component, orchestrator) => orchestrator === 'podman'
-        ? 'This host does not check signatures yet. The running digests '
-        + 'are shown without verification.'
-        : `The signature check for ${component} hasn't `
-          + 'finished. The page refreshes in a minute.',
+      detail: (component) => `The signature check for ${component} hasn't `
+        + 'finished. The page refreshes in a minute.',
     },
     rollingOut: {
       title: 'Update in progress, two versions running',
@@ -501,17 +492,21 @@ export function verifyLimits(
     : (vi
         ? 'Báo cáo của nền tảng không chứng minh máy chủ trung thực.'
         : 'A platform report does not prove the server is honest.');
-  return {
-    ...base,
-    proves: [
-      reports[reporter],
-      vi
+  const signatures = reporter === 'host'
+    ? (vi
+        ? 'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image '
+        + 'với GitHub và Sigstore.'
+        : 'An observer container on that same host checks image signatures '
+          + 'against GitHub and Sigstore.')
+    : (vi
         ? 'Chỉ image có chữ ký đã kiểm chứng mới được xác nhận do GitHub dựng '
         + 'từ commit công khai, với chữ ký trong nhật ký Sigstore.'
         : 'Only images with verified signatures are confirmed as built by '
           + 'GitHub from the public commit, with signatures '
-          + 'in the Sigstore log.',
-    ],
+          + 'in the Sigstore log.');
+  return {
+    ...base,
+    proves: [reports[reporter], signatures],
     not: [trust, ...base.not.slice(1)],
   };
 }

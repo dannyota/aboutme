@@ -9,7 +9,7 @@ import (
 // again. Digests are immutable, so the cache only saves API calls.
 const CacheTTL = 24 * time.Hour
 
-// Cache stores Evidence by digest (verified/<digest>.json in the bucket).
+// Cache stores Evidence by digest, in memory or in object storage.
 // Get returns found=false, nil for a missing entry. An Unchecked result is
 // never stored.
 type Cache interface {

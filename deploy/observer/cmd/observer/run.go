@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dannyota/aboutme/deploy/observer/internal/document"
+	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
 	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
 )
 
@@ -32,11 +33,15 @@ func (o *observer) run(ctx context.Context, now func() time.Time) error {
 		evidence[img.Digest] = o.verifier.Check(vctx, img.Digest)
 	}
 
+	observed := now()
+	if snapshot, ok := o.lister.(platform.SnapshotLister); ok {
+		observed = snapshot.ObservationTime()
+	}
 	doc, err := document.Build(document.Input{
 		Environment: environment,
 		Site:        site,
 		Platform:    o.info,
-		ObservedAt:  now(),
+		ObservedAt:  observed,
 		Images:      images,
 		Evidence:    evidence,
 		Observer:    o.build,

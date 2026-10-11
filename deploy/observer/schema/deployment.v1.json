@@ -401,7 +401,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)/aboutme-(server|web|caddy)\\.spdx\\.json$"
+                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)/aboutme-(server|web|caddy)(-amd64)?\\.spdx\\.json$"
                 }
               ]
             },

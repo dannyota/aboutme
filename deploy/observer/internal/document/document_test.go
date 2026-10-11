@@ -120,6 +120,51 @@ func TestMaintenanceUsesTheCaddyImageAndSkipsRelease(t *testing.T) {
 	}
 }
 
+func TestSBOMLinksMatchPlatform(t *testing.T) {
+	for _, tc := range []struct {
+		orchestrator string
+		suffix       string
+	}{
+		{orchestrator: "ecs"},
+		{orchestrator: "kubernetes"},
+		{orchestrator: "podman", suffix: "-amd64"},
+	} {
+		t.Run(tc.orchestrator, func(t *testing.T) {
+			in := release065()
+			in.Platform.Orchestrator = tc.orchestrator
+			if tc.orchestrator == "podman" {
+				in.Platform.Provider = "greennode"
+				in.Platform.Region = "HCM03"
+			}
+			in.Images = append(in.Images, img(platform.Maintenance, 4, observed.Add(-time.Hour)))
+			in.Evidence[digest(4)] = verified(caddyRepo, "v0.6.4", 6)
+			for _, c := range build(t, in).Components {
+				ri := c.RunningImages[0]
+				want := SourceRepository + "/releases/download/" + *ri.Version + "/" + imageBase(c.Image) + tc.suffix + ".spdx.json"
+				if ri.Links.SBOM == nil || *ri.Links.SBOM != want {
+					t.Errorf("%s SBOM = %v, want %s", c.Name, ri.Links.SBOM, want)
+				}
+			}
+		})
+	}
+}
+
+func TestSBOMLinksRefuseUnexpectedAssets(t *testing.T) {
+	for _, asset := range []string{
+		"aboutme-server-arm64.spdx.json",
+		"aboutme-server-amd64.spdx.json?download=1",
+		"aboutme-observer-amd64.spdx.json",
+	} {
+		t.Run(asset, func(t *testing.T) {
+			doc := build(t, release065())
+			doc.Components[0].RunningImages[0].Links.SBOM = optional(SourceRepository + "/releases/download/v0.6.5/" + asset)
+			if _, err := Encode(doc); err == nil {
+				t.Fatal("encoded an unsupported SBOM asset")
+			}
+		})
+	}
+}
+
 func TestSummaryRules(t *testing.T) {
 	cases := map[string]struct {
 		mutate  func(*Input)
