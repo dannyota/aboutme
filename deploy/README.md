@@ -1,7 +1,7 @@
 # Deployment artifacts
 
-`deploy/` contains the local Compose deployment and the production AWS
-deployment. The intended environment and trust boundaries live in the
+`deploy/` contains local Compose, the live Vietnam deployment, and retained
+undeployed AWS code. The intended environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
 | Path                 | Purpose                                                |
@@ -10,13 +10,14 @@ deployment. The intended environment and trust boundaries live in the
 | `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle   |
 | `web.Dockerfile`     | Nuxt production image                                  |
 | `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary  |
-| `caddy/production/`  | Production Caddy image: CloudFront origin mTLS trust   |
+| `caddy/production/`  | Caddy image: direct Vietnam edge and retained AWS listener |
 | `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof   |
-| `aws/`               | Production OpenTofu roots, modules, and deploy scripts |
+| `vn/`                | Live Vietnam host, OpenTofu root, and deploy scripts    |
+| `aws/`               | Retained undeployed AWS roots, modules, and scripts     |
 
-`deploy/aws/` holds the production OpenTofu code and deploy scripts. GitHub
-Actions builds the images on `ubuntu-24.04-arm` for `linux/arm64`. See the
-[single-host design](../docs/design/single-host-production.md).
+`deploy/vn/` holds the production OpenTofu root, host bundle, and deploy
+scripts. GitHub Actions builds images for `linux/amd64` and `linux/arm64`.
+See the [Vietnam production design](../docs/design/vietnam-production.md).
 
 ## Which stack to use
 
@@ -37,7 +38,7 @@ deployment smoke checks and self-hosting evaluation because it is heavier. The
 current Compose Caddyfile is HTTP-only. Local authenticated checks use the
 native HTTPS harness; complete product checks run in production. See the
 [local checks runbook](../docs/runbooks/local-uat.md) and the
-[single-host design](../docs/design/single-host-production.md).
+[Vietnam production design](../docs/design/vietnam-production.md).
 
 ## Start the Compose deployment
 
@@ -134,15 +135,18 @@ and the AWS SDK default credential chain.
 
 Compose selects custom-endpoint S3 with `http://media:9000`, path-style access,
 and credentials from `.env`. MinIO is development and self-hosting tooling;
-production uses private S3 without an endpoint or static credentials.
+production uses private GreenNode vStorage with a custom endpoint, path-style
+addressing, and bucket-scoped static credentials.
 
 The database password is supplied through `PGPASSWORD`, not inserted into the
 database URL. This preserves passwords containing URI delimiters.
 
 The current Caddyfile is a development trust boundary. Do not expose it to the
 Internet or place it unchanged behind another proxy. Production uses
-`caddy/production/`, which trusts only Amazon CloudFront's origin mTLS client
-certificate on 8443.
+`caddy/production/` with `EDGES=direct` on the Vietnam host. Caddy terminates
+TLS on 443, strips forwarding headers, and uses the socket address. The
+[Vietnam deployment](vn/README.md) owns host setup; the CloudFront listener is
+kept for the undeployed AWS path.
 
 The [self-hosting guide](../docs/guides/self-hosting.md) states the current
 operator scope and TLS limits.

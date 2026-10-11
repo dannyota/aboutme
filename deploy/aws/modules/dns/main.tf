@@ -138,8 +138,8 @@ resource "aws_route53_record" "edge" {
   }
 }
 
-# The Vietnam host's rehearsal names (docs/design/vietnam-production.md,
-# "Rehearsal"), until the apex itself moves to the host.
+# The Vietnam host's rehearsal names, until the apex itself moves to the host
+# (docs/design/vietnam-production.md).
 resource "aws_route53_record" "vn_rehearsal" {
   for_each = var.vn_host_ipv4 == null || var.apex_on_vn_host ? toset([]) : toset(["vn-rehearsal.${local.zone}", "www.vn-rehearsal.${local.zone}"])
 

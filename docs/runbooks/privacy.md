@@ -9,9 +9,9 @@ authentication, or Chromium components.
 Run commands from `apps/server` with the normal runtime environment. The
 database commands read `DATABASE_URL`. The two media commands also read the
 configured private media backend settings. `release-snapshot-sweep` reads no
-database; it uses the AWS credential chain, which is the `jobs` task role in
-production. Do not place secret values in command lines, logs, tickets, or
-evidence.
+database; it uses the AWS credential chain for the retained AWS path and does
+not run in Vietnam production. pgBackRest expires production backups. Do not
+place secret values in command lines, logs, tickets, or evidence.
 
 | Command                    | Local use                                                                 | Production cadence |
 | -------------------------- | ------------------------------------------------------------------------- | ------------------ |
@@ -19,7 +19,7 @@ evidence.
 | `media-deletion-sweep`     | Drain due exact-key deletion jobs                                         | Hourly             |
 | `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection             | Weekly             |
 | `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup        | Daily              |
-| `release-snapshot-sweep`   | Delete deploy.sh snapshots more than 27 days old, or beyond the newest 30 | Daily              |
+| `release-snapshot-sweep`   | Delete deploy.sh snapshots more than 27 days old, or beyond the newest 30 | Not scheduled      |
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
 successful skip. `release-snapshot-sweep` takes no lock; an overlapping run can
@@ -74,8 +74,8 @@ category totals, backlogs, and oldest ages.
 First inspect the fixed result and secret-free structured diagnostics. A nonzero
 failure, a growing backlog, an overdue count, or a missed heartbeat is an
 operational failure. Check database reachability, the relevant advisory lock,
-the task's configured media backend for media jobs, and the scheduler's task
-exit and alarm events. Do not print database URLs, access keys, object keys, or
+the job's configured media backend for media jobs, and the systemd unit's exit
+state and journal. Do not print database URLs, access keys, object keys, or
 token values while collecting evidence.
 
 If a run is cancelled or reaches its deadline, rerun the same command. Claims
@@ -90,7 +90,7 @@ session, generation, or grant denies access. Physical media deletion removes an
 unreferenced object asynchronously and targets completion within 24 hours of
 reference revocation. Backup expiry is separate: backups follow the 30-day
 retention schedule and can outlive live revocation or physical object removal.
-Rollback restores the application and scheduler configuration to a reviewed
+Rollback restores the application and job configuration to a reviewed
 previous version; it does not restore revoked references, sessions, or deleted
 media.
 
@@ -122,6 +122,7 @@ entry, public, publish, password, exports, and privacy. The editor proof
 includes template partial recovery and the photo lifecycle after realtime
 adoption.
 
-All five schedules are enabled in production. Successful job reports, alarm
-delivery, 180-day log retention, and backup-expiry evidence have not been
-recorded.
+Four systemd job timers run in production. The host journal retains 30 days,
+capped at 2 GB. The [production runbook](production.md#alarms) owns host and
+external alarms. Successful job reports, alarm delivery, and backup-expiry
+evidence have not been recorded here.

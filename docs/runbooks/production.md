@@ -1,441 +1,239 @@
 # Production
 
-Status: **serving production**. The live release is the `DEPLOY_RELEASE_TAG`
-value in the `aboutme-prod-app` task definition. This runbook covers the
-single-host production environment at `https://aboutme.vn`. The
-[single-host design](../design/single-host-production.md) explains why it is
-shaped this way.
+Production serves `https://aboutme.vn` on one GreenNode host in Vietnam under
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[Vietnam production design](../design/vietnam-production.md) owns the topology.
+Cutover completed on 2026-10-11 with release v0.7.3. The AWS production stack
+and its state bootstrap were destroyed that day. Nothing from `deploy/aws/` is
+deployed; the code remains for a possible AWS ECS or Kubernetes path.
 
-## Access
+## Access and state
 
-- AWS: `aws login` into the owner's account, region `ap-southeast-1`. This
-  identity applies OpenTofu directly. `deploy.sh` never mutates ECS, Scheduler,
-  a release snapshot, or the release fence with it directly: it assumes
-  `aboutme-prod-operator`, which may only read the fence and assume
-  `aboutme-prod-deploy`, which performs every deployment mutation. See
-  [Passkey release fence](#passkey-release-fence).
-- OpenTofu: `deploy/aws/prod` with the ignored `backend.hcl` and `prod.tfvars`.
-  Every `tofu plan` and `tofu apply` takes `-var-file=prod.tfvars`, because
-  state encryption reads the key ARN before a saved plan loads.
+SSH uses `aboutme-admin` on TCP 22922, with the owner's `ssh-ed25519` key and
+`sudo`. Root and password login are disabled. CrowdSec bans SSH attacks. The
+GreenNode web console provides break-glass access.
+
+Set `DEPLOY_HOST` to the host's floating IP for laptop scripts. `SSH_PORT`
+defaults to 22922. OpenTofu lives in `deploy/vn/prod`; ignored `backend.hcl` and
+`prod.tfvars` hold backend and environment settings. State is encrypted on
+GreenNode vStorage. Follow the [host guide](../../deploy/vn/README.md) for
+credentials, quotes, and host installation.
+
+Read the installed release and unit state on the host:
 
 ```sh
-tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars
+sudo /usr/local/lib/aboutme/deploy-host.sh - - release-json
+sudo systemctl status aboutme-caddy aboutme-server aboutme-web
 ```
 
-A clean environment prints `No changes.`
+`/var/lib/aboutme/release.json` records the installed tag and image digests.
+Unit state and `/readyz` establish whether that release serves.
 
-## Route 53 DNS
+## Cloudflare DNS
 
-Route 53 is authoritative for `aboutme.vn`. OpenTofu in `deploy/aws/prod` owns
-the zone, records, and DNSSEC signing. Change them through that stack and follow
-the [DNS runbook](dns.md) for DNSSEC operations.
+Cloudflare provides DNS-only records on the Free plan. Apex and `www` A records
+point to the floating IP with TTL 300. Records are edited by hand; OpenTofu
+ownership remains open. Follow the [DNS runbook](dns.md) for the record
+inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at the
+`.vn` registrar.
 
-- `aboutme.vn` and `www.aboutme.vn`: alias A, AAAA, and HTTPS records to the
-  CloudFront distribution.
-- ACM validation CNAMEs: managed from certificate validation options. See the
-  [CloudFront runbook](cloudfront.md#origin-certificate).
-- CAA: `0 issue "amazon.com"`.
-- DNSSEC: Route 53 signing on, with the DS record at the `.vn` registry.
-- Hosted-zone name servers: the four Route 53 servers delegated by the `.vn`
-  registrar.
-
-Mail records (MX, TXT, DKIM and the SES `bounce` records) belong to the
-[email runbook](email.md); do not change them here.
+Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80.
+DNS must point at the host before the edge starts so validation can reach it.
+Production uses `EDGES=direct`: Caddy takes the socket address, strips forwarding
+headers, and emits one `X-Real-IP` to Go on loopback. Coraza and CrowdSec run on
+the host. The [CloudFront runbook](cloudfront.md) is an AWS reference.
 
 ## Secrets
 
-Values live in SSM Parameter Store under `/aboutme/prod/`. Never print them.
-
-- `deploy/aws/scripts/secrets.sh` creates missing database passwords and keys
-  and never overwrites one.
-- `tls.sh export` stores the ACM origin certificate in
-  `/aboutme/prod/tls/origin-{key,cert}` ([CloudFront runbook](cloudfront.md)).
-- `tls.sh client-ca` and `tls.sh client-import` manage the CloudFront origin
-  mTLS client CA and certificate; see the
-  [CloudFront runbook](cloudfront.md#origin-mtls-client-certificate).
-- The RDS master password is managed by RDS in Secrets Manager. Only the
-  one-shot `db-setup` task can read it.
-
-List names only:
+Secrets are root-owned 0400 files under `/etc/aboutme/secrets/` on the encrypted
+data volume. Containers receive only their named Podman secrets. The laptop
+keeps an age-encrypted copy in `aboutme-infra`. Never print values.
 
 ```sh
-aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Parameters[].Name'
+DEPLOY_HOST=<host> bash deploy/vn/scripts/secrets.sh list
 ```
 
-## Provider sign-in
+`secrets.sh generate` creates missing values. `secrets.sh import <name>` reads
+a value from standard input and syncs Podman. Supported rotations use
+`--replace`; feed a private file or an approved runtime pipe, never a literal
+value in a command. See the [host guide](../../deploy/vn/README.md#build-order)
+for media and backup key imports.
 
-The `provider_login_enabled` variable sets `PROVIDER_LOGIN_ENABLED`: `""` (the
-default) keeps provider login off, `"google"` turns on Google, and
-`"google,linkedin"` adds LinkedIn
-([ADR 0016](../adr/0016-sign-in-providers.md)). The app task reads each listed
-provider's credentials from the SecureString parameters
-`/aboutme/prod/oauth/<provider>-client-id` and `<provider>-client-secret`. The
-server refuses to start when a listed provider's value is missing, and
-`deploy.sh` refuses to begin a deploy while any task secret is missing.
+The owner edits `/etc/aboutme/flags.env` on the host. `host/install.sh` copies
+the example once and preserves that file. Redeploy the live tag after a flag or
+secret change so the rendered units and running containers use it.
 
-Turn a provider on as its own step, after the release that supports it is live
-and healthy, so a rollback never gives an older release a value it refuses.
+- `PROVIDER_LOGIN_ENABLED=false` disables provider login. `google` enables
+  Google; `google,linkedin` enables both. Import the corresponding
+  `<provider>-client-id` and `<provider>-client-secret` before enabling them.
+  Keep provider callback URLs under `https://aboutme.vn/api/v1/auth/`.
+- `PASSWORD_REGISTRATION_ENABLED=false` disables new email registration. Login,
+  password reset, pending verification, and provider sign-up keep working.
+  Set `true` and redeploy to restore registration.
+- Passkey, TOTP, and sign-in-to-view flags require their release-fence floors.
+  See [Passkey release fence](#passkey-release-fence).
 
-1. Register the client. Google: create an OAuth client of type "Web application"
-   with the redirect URI `https://aboutme.vn/api/v1/auth/google/callback` and a
-   consent screen in production. LinkedIn: follow
-   [LinkedIn app setup](../design/linkedin-sign-in.md#linkedin-app-setup), and
-   never replace that app, because its subjects are per app.
-2. Store each value through a private tmpfs file, never a command argument.
-   `mktemp` creates the file readable only by you. Copy each value in the
-   console, then write it to the file and clear the clipboard; the server trims
-   the trailing newline. For LinkedIn, write the `linkedin-` names.
-
-   ```sh
-   f=$(mktemp -p "$XDG_RUNTIME_DIR")
-   wl-paste >"$f" && wl-copy --clear # after copying the client ID
-   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /aboutme/prod/oauth/google-client-id --value "file://$f"
-   wl-paste >"$f" && wl-copy --clear # after copying the client secret
-   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /aboutme/prod/oauth/google-client-secret --value "file://$f"
-   rm -f "$f"
-   ```
-
-3. Set `provider_login_enabled` in `prod.tfvars`, copy it to the private
-   infrastructure repository, then run `tofu apply`. The plan changes the app
-   task definition only.
-4. Redeploy the live tag with `deploy.sh <tag>`. It builds the new revision from
-   the task definition that `tofu apply` registered.
-5. Check `https://aboutme.vn/api/v1/capabilities`: `providers` lists exactly the
-   enabled providers, and `/api/v1/auth/github/start` returns 404. For LinkedIn,
-   also run steps 4 and 5 of
-   [Release and enable](../design/linkedin-sign-in.md#release-and-enable).
-
-To rotate a value, repeat step 2 with `--overwrite` on `put-parameter`. The
-running app keeps the old value until its task next starts, so deploy after
-rotating. To turn a provider off, remove it from `provider_login_enabled`,
-apply, and deploy; leave the parameters in place.
-
-## Email sign-up
-
-Email-and-password sign-up is on and sends a verification email through SES,
-which has production access. To turn sign-up off, for example during an SES
-incident, set `password_registration_enabled = false` in `prod.tfvars`, run
-`tofu apply`, and redeploy the live tag with `deploy.sh <tag>`. The register
-route then returns 404 and the web hides the sign-up form. Google sign-up,
-login, password reset, and verification of pending registrations keep working.
-Turn it back on the same way with `true`.
+The app sends through Bizfly SMTP as
+`Danny from aboutme.vn <danny@aboutme.vn>`. Replies reach Google Workspace.
+The [email runbook](email.md) owns configuration and delivery checks.
 
 ## Deploy
 
-Public pages link the resume stylesheets and hydration script with a build-time
-content hash (`?v=`), so a release reaches browsers despite the one-year
-immutable cache. A font change must rename the fixed-name `.woff2` under
-`/_nuxt/fonts/`, changing both stylesheet hashes too.
-
-A release is a `v*` tag on `main` with green `ci.yml` (not `workflow_dispatch`).
-`release-images.yml` publishes public `aboutme-{server,web,caddy}` arm64 and
-amd64 images under one index (`deploy.sh` pins arm64); a fixable HIGH/CRITICAL
-Trivy finding fails it. `security-scan.yml` runs `govulncheck`/`npm audit`
-weekly on `main`/latest images; cron editor alone is alerted; 60d idle drops it.
-
-Before the first maintenance deploy, apply reviewed OpenTofu. It creates
-`aboutme-prod-maintenance` at desired count zero. The deploy script registers
-its release Caddy image before starting the service.
+Use the current reviewed checkout's deployer. A release tag must be on `main`
+with a green push run of `ci.yml` on its exact commit. The image workflow
+publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and pins
+image digests. GitHub holds no cloud credentials.
 
 ```sh
-bash deploy/aws/scripts/deploy.sh <tag> [--first-deploy]
-bash deploy/aws/scripts/deploy.sh --check-public-root <tag> <root>
-bash deploy/aws/scripts/deploy.sh <tag> --require-free-root <root>  # a release adding a root (guide, showcase) runs both
+DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>
 ```
 
-The script verifies the caller, assumes the operator then deploy role, reads the
-release fence, and rejects a target below its minimum before any AWS mutation.
-It then checks the tag and CI, resolves image digests, verifies each digest's
-tag-bound build provenance (`gh attestation verify`), refuses when the origin
-certificate expires within 21 days, runs a distribution preflight (origin
-domain, port 8443, HTTPS only, the origin mTLS client certificate), checks that
-every secret the new revisions reference exists (by name, never reading a
-value), snapshots RDS, registers task definition revisions, disables the
-`aboutme-prod-site-down` alarm actions and the `aboutme-prod-task-stopped` rule
-when they were enabled, and disables the job schedules. `app` and `maintenance`
-both listen on 8443 at once. Each handoff starts the incoming service and
-confirms its task runs before it stops the outgoing one: `maintenance` up, `app`
-down, the database steps, `web` up, `app` up, `maintenance` down, then the
-schedules re-enable. `maintenance` serves
-`deploy/caddy/production/maintenance.html` at 503 for every path, including
-`/readyz` and `/api/*`. It then smoke-tests through CloudFront, using the base
-caller's own credentials for `ec2:DescribeAddresses` and
-`cloudwatch:GetMetricStatistics` (in `us-east-1`), both outside the deploy
-role's IAM list. The smoke checks require HSTS, a `Via` header naming CloudFront
-(`(CloudFront)`), and no `CF-Ray` on `https://aboutme.vn/`, and require that a
-direct request to the Elastic IP on 443 and 8443 time out. It warms
-`DEPLOY_WARM_PAGE` (default `/danny`; a 404 passes, since an unpublished resume
-runs the same path) and the homepage, since first requests after a restart can
-be slow on the CloudFront-to-origin path in a way `/healthz` misses, until each
-answers fast (`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run out.
-Smoke checks retry any failed answer, such as a 502 or 504 from CloudFront, a
-bounded number of times. The script requires the maintenance page's 503
-response, checked through CloudFront, before a database task starts, and refuses
-to run while either task definition still maps host port 443 or 8443. Do not
-promise a bounded downtime window.
+The deployer checks tag-bound build provenance and requires the installed
+`fence.sh`, `deploy-host.sh`, and `deploy-safety.sh` to match the checkout. If
+they differ, install the reviewed host bundle before retrying.
 
-The deploy records the prior state of the site-down alarm actions and
-task-stopped rule before it changes either source. On success, it re-enables the
-task-stopped rule, then waits (bounded by `DEPLOY_ALARM_WAIT` seconds, default
-900, polled every `DEPLOY_ALARM_POLL` seconds) for the alarm to read `OK` with
-enough healthy Route 53 minutes since the site came back up, before re-enabling
-its actions: CloudWatch evaluates the alarm on a delay, so `OK` alone does not
-prove the outage finished evaluating, and re-enabling early can send a false
-alert. A warm-up or smoke failure after the app started waits the same way, up
-to `DEPLOY_ALARM_WAIT` seconds; Ctrl-C during that wait skips it and re-enables
-the actions at once. A timeout still re-enables the actions and fails, naming
-the alarm's last state and healthy-minute count. An error before the handoff
-finishes, or a HUP, INT, or TERM exit before that wait starts, restores both
-sources at once when they were enabled. Database, capacity, Scheduler, and host
-recovery alarms stay active throughout. SIGKILL, host loss, and shell death skip
-cleanup. Before retrying after one of those failures, use the recorded
-`deployment notification states` line from the deploy output. Run the first
-command if the recorded task-stopped rule was `ENABLED`, and the second if the
-recorded site-down actions were `True`:
+The deployer then:
 
-```sh
-aws events enable-rule --region ap-southeast-1 --name aboutme-prod-task-stopped
-aws cloudwatch enable-alarm-actions --region us-east-1 \
-  --alarm-names aboutme-prod-site-down
-```
+1. Takes the host operation lock and rejects a tag below the release floor.
+2. Pulls images while the old release serves and checks every referenced secret
+   by name.
+3. Takes a pgBackRest incremental backup annotated with the tag.
+4. Stops job timers and active jobs. Starts maintenance beside Caddy with shared
+   ports and certificate storage, then stops serving Caddy and Go.
+5. Requires the marked 503 maintenance page from outside the host.
+6. Renders the new units, runs migrations, and requires exit 0. `--first-deploy`
+   runs `db-setup` before migrations.
+7. Restarts Nuxt, starts Go, and waits for `/readyz` at `127.0.0.1:8080` on the
+   host. Starts Caddy, then stops maintenance and proves it stopped.
+8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
+   `nosniff`, and a CrowdSec 403 for the operator's test ban. Releases the lock.
 
-Leave a source unchanged when its recorded state was `DISABLED` or `False`. If
-the deploy output is unavailable, change neither until the operator establishes
-its prior state from operational evidence.
+The external uptime workflow keeps running during maintenance. Host alarms and
+backup timers also remain active. A deploy can therefore send a site-down mail.
 
-Each release snapshot is tagged `aboutme:created-by=deploy.sh`; the script never
-deletes one. The daily `release-snapshot-sweep` job (20:00 UTC) deletes release
-snapshots of `aboutme-prod` more than 27 days old, or beyond the newest 30, by
-`SnapshotCreateTime`, so none reaches 30 days even after one missed run and the
-AWS limit of 100 manual snapshots holds. It deletes only manual, available
-snapshots whose names match `aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry
-the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`. Automated
-backups, the final snapshot, and other snapshots stay. The log names each
-deleted or failed snapshot and a failed delete's error code. Scheduler retries a
-failed start twice; the job runs only after a deploy enables it.
+Public-page stylesheets and hydration scripts use a build-time content hash.
+Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 
-To keep a release snapshot longer, copy it without the tag and under a name the
-job does not match (`copy-db-snapshot` copies no tags unless given
-`--copy-tags`), then delete the copy when it is no longer needed. A kept copy is
-outside the 30-day backup promise in the privacy policy.
+## Failed deploy
 
-```sh
-aws rds copy-db-snapshot --region ap-southeast-1 \
-  --source-db-snapshot-identifier <release-snapshot> \
-  --target-db-snapshot-identifier keep-<release-snapshot>
-```
-
-A failure before the migration task starts brings the previous `app` revision up
-beside `maintenance`, confirms it, stops `maintenance`, and restores the job
-schedules' earlier state, then exits non-zero. Once the script requests
-`migrate`, it keeps maintenance up and `app` and the job schedules stopped: the
-request can succeed when the client loses its response, and Goose can commit an
-earlier migration before a later one fails. Fix forward with a new release, or
-restore the deploy's snapshot. On `--first-deploy`, a failure keeps maintenance
-up, stops the app and confirms every task stopped, and leaves the job schedules
-disabled, since `db-setup` may not have made usable state.
-
-If the script reports a possibly running database task, it leaves maintenance,
-the app, and the schedules as they are: check it with
-`aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it has
-stopped, rerun the deploy. Enabled schedules use the released `jobs` revision.
-
-Two recovery paths leave a service unconfirmed, print what to check by hand, and
-exit non-zero. If maintenance cannot be confirmed, on a first deploy or after a
-migration request, the app stays as it is (running only if its start was
-requested) and is not scaled down, so a running app still answers on port 8443.
-If the previous app cannot be confirmed, it prints
-`could not confirm that the previous app started` and scales it to 0 with
-maintenance up, or leaves both as they are when maintenance is unconfirmed too.
+Before a migration request, a failed deploy restores the previous release and
+job timers through maintenance. A failed first deploy keeps maintenance up.
+Once a migration may have run, the deployer keeps maintenance up with the app
+and jobs stopped. Recover with a forward fix or point-in-time restore.
+A failed recovery retains the operation lock. Inspect units and the host
+journal before retrying.
 
 ## Rollback
 
 ```sh
-bash deploy/aws/scripts/deploy.sh --rollback <previous-tag>
+DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh --rollback <previous-tag>
 ```
 
-It redeploys earlier server, web, and app Caddy images without a snapshot or
-migration, through the same maintenance-page window as a normal deploy. The
-maintenance service keeps its currently registered Caddy image so rollbacks to
-tags from before maintenance mode still serve the page. A rollback is safe only
-when the failed release applied no migration, and only to a tag whose Caddy runs
-as uid 10001: `SO_REUSEPORT` needs the same uid on both Caddies. After a
-migration, fix forward or restore the snapshot the failed deploy took.
-
-A rollback also runs through the fence-aware `deploy.sh`, never a copy from the
-target tag, and is rejected the same way a forward deploy is when the target is
-below the release fence minimum. Once passkey enrollment has ever been possible
-in production, rolling back below that minimum is a forward fix or privileged
-administration, not a supported rollback; see
-[Passkey release fence](#passkey-release-fence).
-
-A rollback cannot cross a document schema release. Every resume write persists
-the current document version, and an older release fails closed on a version it
-does not know. After a release that raises the document version, such as
-document v5 (ADR 0004), any resume saved since the deploy is unreadable and
-unwritable by the older release. Fix forward instead. A rollback past such a
-release first needs every newer row lowered to the older version, and no tool
-does that yet.
-
-A rollback builds from the current task definition, so it keeps the current
-settings. Before rolling back to a tag older than the provider list parser
-(older than `b8460d9`) while Google is on, set `provider_login_enabled = ""` and
-run `tofu apply`; that older release refuses to start with
-`PROVIDER_LOGIN_ENABLED=google`. Before rolling back past the LinkedIn release
-(0.6.2) while LinkedIn is on, set `"google"`, apply, and deploy: older releases
-send LinkedIn a PKCE verifier and show the older privacy notice.
-
-A rollback also points the job schedules at the older `jobs` revision. Rolling
-back to a release that predates the `release-snapshot-sweep` command leaves that
-schedule failing daily with a usage error and deleting nothing until the next
-release. Each day without a successful run uses one day of the 30-day margin, so
-ship the fix-forward release within a day, or delete expired release snapshots
-by hand.
+Rollback uses the same lock and maintenance path, with no backup or migration.
+It keeps the current maintenance image. Rollback is safe only when the failed
+release applied no migration, the tag meets the release floor, and the older
+server can read every stored document version. No tool lowers newer document
+rows for an older server. Fix forward when those conditions do not hold.
 
 ## Passkey release fence
 
-[The release-fence contract](../design/passkey-release-fence.md) keeps a durable
-minimum release in DynamoDB table `aboutme-prod-release-fence` (item id
-`application`) and one nonexpiring operation lock on the same item. `deploy.sh`
-assumes `aboutme-prod-operator`, which may only read the fence and assume
-`aboutme-prod-deploy`, which holds every ECS, Scheduler, snapshot, fence, and
-alarm-suppression permission the script needs. A normal deploy,
-`--first-deploy`, and `--rollback` all read the fence, reject a target below its
-minimum before any mutation, and hold the lock for the whole run, rechecking it
-before every task registration, service, one-shot, schedule, alarm, and rule
-mutation that starts an image. The maintenance page is the one exception: it
-carries no release or enrollment logic and stays available as a recovery
-fallback even when a checkpoint elsewhere fails. The lock releases only once
-notifications are restored, using the exact operation ID this run acquired.
+`/var/lib/aboutme/fence.json` holds the monotonic minimum release and a
+nonexpiring operation lock outside PostgreSQL. `fence.sh` writes it under
+`flock`, with an atomic rename. A crash leaves the lock closed. Every supported
+deploy, rollback, and activation takes the lock; host image starts check the
+floor before Podman runs.
 
-The same fence and lock gate TOTP enrollment at a second, higher floor (numeric
-4007). [The TOTP keys runbook](totp-keys.md) covers the flag-off deploy, floor
-activation, flag enablement, key rotation, the `aboutme-prod-totp-unavailable`
-alarm, and the production proofs for that release.
-[Sign in to view](sign-in-to-view.md) covers the same sequence at a third floor
-(numeric 6026). [Account delete](account-delete.md) removes an abusive account.
-
-The one-time bootstrap, before the first fence-aware deploy: set
-`operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`
-identity, run `sync.sh` in the `aboutme-infra` repository to back up that
-change, then `tofu apply`.
-
-Accepted residual risk: the deploy role's `ecs:RegisterTaskDefinition` is
-unscoped and its `ecs:RunTask` covers every revision of the migrate, db-setup,
-and jobs families, so it can register and run those families with an arbitrary
-image or command. `iam:PassRole` still limits which task and execution roles
-such a task can assume. This is accepted because the deploy role is reachable
-only through the operator role, which the AWS-login principal alone may assume.
-
-### Activation
-
-Enrollment stays off in production until a healthy release at or above v0.4.2
-runs with `PASSKEY_ENROLLMENT_ENABLED=false` and passes the first production
-proof below. Only then:
+Activation requires the exact candidate server to be running:
 
 ```sh
-bash deploy/aws/scripts/deploy.sh --activate <tag>
+DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh --activate <tag>
 ```
 
-This requires `aboutme-prod-app` to already be stable and running exactly the
-candidate release, acquires the lock, raises the fence to the tag's release with
-one idempotent conditional update, and releases the lock. It makes no image,
-ECS, snapshot, or notification change. A lower or malformed fence state, an
-operation already in progress, or a running app that is not the exact stable
-candidate, fails it before the raise. Only after it succeeds does a reviewed
-`tofu apply` set `passkey_enrollment_enabled = true` in `prod.tfvars`; then
-redeploy the same tag with a normal `deploy.sh <tag>` run. Enabling the flag
-before the raise, or redeploying a different tag after it, is not the supported
-order. If the raise succeeds but the apply or the redeploy then fails, the fence
-stays raised; fix forward with the same or a newer capable tag, never a flag-off
-image that predates the raise.
+Deploy a capable release with its feature flag off, prove it healthy, activate
+the floor, then enable the flag in `/etc/aboutme/flags.env` and redeploy the same
+tag. The floors are v0.4.2 for passkeys, v0.4.7 for TOTP, and v0.6.26 for
+sign in to view. A raised floor stays raised if a later step fails.
 
-### Recovery
+Before clearing a stale lock, prove that no laptop deploy, host deploy process,
+database command, or media writer from that operation can still run. Inspect
+release state, unit state, the fence, and any mutation marker. On the host:
 
-A script failure or signal restores alarm actions and the task-stopped rule,
-then releases the lock unless a public-root audit or TOTP key re-encryption may
-still run. A public-root audit prints `started-by root-...` and retains the
-lock. Do not clear it until that ECS list-tasks search has no active task or all
-matches are STOPPED. Process death (SIGKILL, host loss) also leaves the lock
-closed. Use the AWS-login principal's privileged bypass credentials to clear it:
+```sh
+sudo /usr/local/lib/aboutme/fence.sh clear '<reason>'
+```
 
-1. Confirm no `deploy.sh` process is running.
-2. Confirm no database task and no release snapshot from a prior run is still in
-   flight:
+The clear records its reason and never lowers the floor. It refuses a retained
+cutover mutation marker. A retained cutover lock or marker also blocks serving
+and job starts across reboot; maintenance remains available. Inspect and
+recover the exact mutation before clearing its lock. Do not delete fence files
+to restart the app.
 
-   ```sh
-   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-migrate
-   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-db-setup
-   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-totp-reencrypt
-   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by <printed-started-by>
-   aws rds describe-db-snapshots --region ap-southeast-1 --db-instance-identifier aboutme-prod \
-     --query 'DBSnapshots[?Status!=`available`]'
-   ```
+## Backups and restore
 
-   Every task must be absent or STOPPED, and the snapshot query must be empty.
+PostgreSQL 18 runs on the encrypted data volume and listens only on
+`/run/postgresql`. pgBackRest archives WAL to an encrypted private GreenNode
+vStorage repository in HCM04. It keeps 30 days by time, runs a full backup
+weekly, a differential daily, and backup verification weekly. Deploys add
+incremental backups. `archive_timeout=60s` bounds normal WAL shipping delay.
 
-3. Inspect app, web, maintenance, job schedules, the site-down alarm, and the
-   task-stopped rule against [Healthy state](#healthy-state).
-4. Strongly read the fence item and record its `operation_id` and
-   `operation_kind` with the reason for the clear:
+RDS was deleted without a final snapshot on 2026-10-11. Production data lives
+only on the Vietnam host and its pgBackRest backups in GreenNode vStorage.
+There is no AWS recovery copy.
 
-   ```sh
-   aws dynamodb get-item --region ap-southeast-1 --table-name aboutme-prod-release-fence \
-     --key '{"id":{"S":"application"}}' --consistent-read
-   ```
+The quarterly [restore drill](../../deploy/vn/README.md#restore-drill) restores
+the latest backup and a point-in-time target to a temporary encrypted server.
+Outbound networking for that server remains open; do not claim a completed
+drill from backup configuration alone.
 
-5. Remove only the operation attributes, conditioned on the exact `operation_id`
-   read in step 4, so the clear cannot remove a different operation that started
-   in between:
+## Alarms
 
-   ```sh
-   aws dynamodb update-item --region ap-southeast-1 \
-     --table-name aboutme-prod-release-fence --key '{"id":{"S":"application"}}' \
-     --update-expression 'REMOVE operation_id, operation_kind, operation_started_at, operation_checked_at' \
-     --condition-expression 'operation_id = :o' \
-     --expression-attribute-values '{":o":{"S":"<operation_id from step 4>"}}'
-   ```
+[`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) checks
+`https://aboutme.vn/readyz` every five minutes. It tries three times, 20 seconds
+apart, and passes only on HTTP 200. A failed run makes GitHub email the account
+that last changed the cron line.
 
-This clear never lowers `minimum_release`. An old `deploy.sh` from a tag before
-this contract, or any script run with the AWS-login or administrator credentials
-directly, bypasses the fence entirely; prove from account and factor state that
-a bypass target is compatible with what already ran, and record the reason,
-before using one.
+GitHub documents that scheduled runs can be delayed under load, five minutes is
+the shortest interval, and scheduled workflows in a public repository are
+disabled after 60 days without repository activity. See
+[GitHub's schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+A delayed or disabled workflow does not prove the site healthy. Check the
+workflow's enabled state and run history after an idle period.
 
-### Production proofs
+Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
+`aboutme-alert@.service`. The watcher runs every five minutes and checks:
 
-GitHub CI cannot observe the deployed fence, the enrollment flag, live identity
-providers, or the production origin. Two manual browser proofs cover what CI
-cannot, each with the owner's standing v0.4.x authorization, a dedicated
-fictional account, one browser profile, and the shared local-check lock and
-memory floor:
+- Root and data volume use above 70%, failed units, and PostgreSQL on its socket.
+- WAL archive failure, unreadable backups, and newest backup age at 26 hours.
+- CrowdSec retention timer and lease, CrowdSec alert counts, and Coraza match
+  counts and malformed records in the last hour.
+- `totp_unavailable` in the server journal.
 
-- After the flag-off deploy and before activation: sign in with password and
-  every enabled provider without a second factor, confirm enrollment stays
-  hidden, and check existing sessions, connected agents, and health.
-- After activation and the flag-on redeploy, using only the release's named
-  fictional account: enroll a passkey, confirm pending login isolation,
-  recovery, epoch revocation on a factor change, both locales, and remove the
-  account's last factor.
+Unit failures also trigger mail through `OnFailure=`. `alert.sh` sends through
+Bizfly SMTP with `msmtp`, at most once per condition per UTC day. A send failure
+removes the stamp so a later call can retry. Mail carries names and counts,
+never raw journal lines or personal data. Read details on the host:
 
-Each proof starts no local product stack. On success, failure, or an unexpected
-exit, remove the fictional account's proof factors, recovery plaintext, and
-sessions before signing out; if cleanup cannot finish in the run, repeat it
-alone before any further release action.
+```sh
+sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
+sudo systemctl list-timers 'aboutme-*'
+```
+
+## Reboot
+
+Use the GreenNode API to reboot the server. An in-guest `systemctl reboot` hung
+once. Readiness stayed failed once after a hard reset until `aboutme-server`
+restarted. The cause remains open. If the same failure occurs, inspect the
+journal and fence before restarting the server unit, then check public
+readiness again.
 
 ## Healthy state
 
-- ECS services `aboutme-prod-app` and `aboutme-prod-web` each run one task;
-  `aboutme-prod-maintenance` runs zero. `deploy.sh` is the only thing that
-  changes any of their desired counts; OpenTofu ignores that drift.
-- `https://aboutme.vn/healthz` and `/readyz` return 200 through CloudFront,
-  responses carry `Via: ... (CloudFront)`, and `https://www.aboutme.vn/`
-  redirects to the apex.
-- A request straight to the Elastic IP on 443 or 8443 gets no response.
-- The five job schedules in group `aboutme-prod-jobs` are enabled.
-- The `aboutme-prod-site-down` alarm (us-east-1) has actions enabled
-  (`site_alarm_enabled = true` in `prod.tfvars`).
-- `aboutme-prod-release-fence`'s `application` item has no `operation_id`
-  between deploys.
+Healthy state has these properties:
+
+- `aboutme-caddy`, `aboutme-server`, and `aboutme-web` are active;
+  `aboutme-maintenance` is inactive.
+- Public `/healthz` and `/readyz` return 200, and `www` redirects to the apex.
+- The four job timers, backup timers, host watcher, and CrowdSec retention timer
+  are enabled and active.
+- The fence has no operation lock or mutation marker between operations.
+- The uptime workflow is enabled and has recent successful runs.

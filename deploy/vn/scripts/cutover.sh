@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The data move in the cutover window (docs/design/vietnam-production.md,
-# "Migration", step 5). The owner runs each step in order from the laptop,
+# The data move in the cutover window (deploy/vn/README.md, "Cutover
+# prerequisites"). The owner runs each step in order from the laptop,
 # with AWS credentials and SSH to the Vietnam host. Every value and every row
 # stays out of the terminal: steps print counts, versions, and hashes only.
 #
@@ -132,7 +132,7 @@ assert_cutover_quiescent() {
 }
 
 # AWS must already serve maintenance with the app stopped and schedules off,
-# so no write lands in RDS after the dump (design "Migration", step 5.1).
+# so no write lands in RDS after the dump.
 cmd_preflight() {
   assert_aws_quiescent
   mutation_start quiesce
@@ -186,8 +186,8 @@ cmd_dump_restore() {
     <"$work/dump.age"
   rm -f "$work/dump.age"
   # As postgres into the database db-setup prepared, keeping owners and
-  # grants (design "Migration", step 5.2). Unconfirmed until the rehearsal:
-  # that the RDS dump names no RDS-only role in an owner or a grant.
+  # grants. The dump must satisfy this constraint:
+  # the RDS dump names no RDS-only role in an owner or a grant.
   host_root "set -euo pipefail
     /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null
     trap \"rm -f /srv/data/cutover-dump.age /etc/aboutme/secrets/cutover-age.key\" EXIT
@@ -200,7 +200,7 @@ cmd_dump_restore() {
 }
 
 # Counts and ordered hashes per table on both sides, then the catalog grant
-# test on the host (design "Migration", step 5.3).
+# test on the host before serving traffic.
 cmd_verify() {
   local sql_tables sql_goose rds_out host_out
   assert_cutover_quiescent
