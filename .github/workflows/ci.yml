@@ -24,14 +24,17 @@ concurrency:
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
 # job past that limit waits in the queue, including behind other branches'
-# runs. This workflow starts 18 jobs (5 single jobs, 2 Semgrep product
-# scans, 2 web-e2e shards, 9 proof groups), each sized to finish in about 4
-# minutes, then the ci gate. Short checks join a longer job that already has
+# runs. This workflow starts 20 jobs (5 single jobs, 2 VN infrastructure jobs,
+# 2 Semgrep product scans, 2 web-e2e shards, 9 proof groups), then the ci gate.
+# Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
 # work inside a job overlaps through scripts/ci-background.sh. Each check
 # after a job's first runs under `if: ${{ !cancelled() }}` so one failure
 # does not hide another.
 jobs:
+  vn-infra:
+    uses: ./.github/workflows/vn-infra.yml
+
   # Every check that needs no database, browser, or Go test run: the
   # append-only migration and released-schema guards, gitleaks, the
   # schema/API/Tofu contract gates, docs lint, the operational static tests,
@@ -737,12 +740,12 @@ jobs:
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded; a Semgrep job may be `skipped` only through its own
-  # `if:` (a fork pull request withholds SEMGREP_APP_TOKEN), never any other
-  # job.
+  # job above succeeded. Only a fork pull request may skip the two Semgrep
+  # jobs because GitHub withholds SEMGREP_APP_TOKEN.
   ci:
     if: always()
     needs:
+      - vn-infra
       - contracts
       - server
       - server-integration
@@ -783,15 +786,17 @@ jobs:
             { echo "no TOTP shard evidence files were downloaded" >&2; exit 1; }
           node deploy/dev-https-browser/check-shard-coverage.mjs totp \
             "${evidence_files[@]}"
-      - name: Require every job to succeed (Semgrep jobs may be skipped on their own condition)
+      - name: Require every job to succeed (only fork PRs may skip Semgrep)
         if: always()
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          ALLOW_SEMGREP_SKIP: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          bad=$(echo "$NEEDS_JSON" | jq -r '
+          bad=$(echo "$NEEDS_JSON" | jq -r --arg allow_semgrep_skip "$ALLOW_SEMGREP_SKIP" '
             to_entries
             | map(select(.value.result != "success"))
             | map(select(.value.result != "skipped"
+                or $allow_semgrep_skip != "true"
                 or (.key | IN("semgrep-code", "semgrep-supply-chain") | not)))
             | .[]
             | "\(.key)=\(.value.result)"
