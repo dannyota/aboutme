@@ -171,7 +171,7 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       title: 'Chưa kiểm tra được chữ ký',
       detail: (component, orchestrator) => orchestrator === 'podman'
         ? 'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
-          + 'được hiển thị nhưng chưa được kiểm chứng.'
+        + 'được hiển thị nhưng chưa được kiểm chứng.'
         : `Chưa kiểm tra xong chữ ký của ${component}. `
           + 'Trang tự làm mới sau một phút.',
     },
@@ -335,7 +335,7 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       title: 'Signatures not checked yet',
       detail: (component, orchestrator) => orchestrator === 'podman'
         ? 'This host does not check signatures yet. The running digests '
-          + 'are shown without verification.'
+        + 'are shown without verification.'
         : `The signature check for ${component} hasn't `
           + 'finished. The page refreshes in a minute.',
     },
@@ -377,7 +377,8 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       buildLine: (runId) => `release-images, run ${runId}`,
       imageLine: (count, signaturesVerified) =>
         `${plural(count, 'image', 'images')}, ${signaturesVerified
-          ? 'signed by GitHub' : 'signatures not verified'}`,
+          ? 'signed by GitHub'
+          : 'signatures not verified'}`,
       runningLine: (place, replicas, time) =>
         `${place}, ${plural(replicas, 'replica', 'replicas')}, since ${time}`,
       chips: {
@@ -479,7 +480,7 @@ export function verifyLimits(
   const reports = {
     host: vi
       ? 'Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy '
-        + 'và số bản sao.'
+      + 'và số bản sao.'
       : 'The GreenNode host itself reports the running Podman digests '
         + 'and replica counts.',
     kubernetes: vi
@@ -487,14 +488,14 @@ export function verifyLimits(
       : 'The Kubernetes API reports the running digests and replica counts.',
     unknown: vi
       ? 'Tài liệu triển khai cho biết nền tảng nào báo cáo '
-        + 'các mã băm đang chạy.'
+      + 'các mã băm đang chạy.'
       : 'The deployment document identifies the platform reporting '
         + 'the running digests.',
   };
   const trust = reporter === 'host'
     ? (vi
         ? 'Yếu hơn báo cáo từ API của ECS: máy chủ tự báo cáo, '
-          + 'không chứng minh máy chủ trung thực.'
+        + 'không chứng minh máy chủ trung thực.'
         : 'This is weaker than an ECS API report: the host reports itself '
           + 'and does not prove its honesty.')
     : (vi
@@ -506,7 +507,7 @@ export function verifyLimits(
       reports[reporter],
       vi
         ? 'Chỉ image có chữ ký đã kiểm chứng mới được xác nhận do GitHub dựng '
-          + 'từ commit công khai, với chữ ký trong nhật ký Sigstore.'
+        + 'từ commit công khai, với chữ ký trong nhật ký Sigstore.'
         : 'Only images with verified signatures are confirmed as built by '
           + 'GitHub from the public commit, with signatures '
           + 'in the Sigstore log.',

@@ -2,13 +2,12 @@
 
 Anyone can read the image digests reported for `https://aboutme.vn`. The
 [Vietnam host reporter](host.md) reads Podman and publishes unchecked digests.
-On AWS ECS and Kubernetes, an observer outside the application asks the
-platform which digests run and checks each against the signed GitHub build
-record. Both publish the result at
-`https://aboutme.vn/.well-known/deployment.json`. The page `/verify` shows the
-same document to people and tells them how to check it themselves.
-[ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
-choice.
+On AWS ECS and Kubernetes, an observer outside the application asks the platform
+which digests run and checks each against the signed GitHub build record. Both
+publish the result at `https://aboutme.vn/.well-known/deployment.json`. The page
+`/verify` shows the same document to people and tells them how to check it
+themselves. [ADR 0028](../../adr/0028-deployment-transparency-observer.md)
+records the choice.
 
 Status: accepted; the owner approved A1 to A5 on 2026-09-27. **Owner approval**
 marks a product-visible choice the owner makes before the work that depends on
@@ -26,8 +25,8 @@ devops confirms on the account before relying on it
 
 ## Evidence model
 
-The critical field is the image digest the reporter reads, not a tag. A tag
-can move; a digest names exact bytes. A checked running digest is joined to a
+The critical field is the image digest the reporter reads, not a tag. A tag can
+move; a digest names exact bytes. A checked running digest is joined to a
 Sigstore-signed provenance record that GitHub Actions produced when it built
 that digest from a tagged commit. The document shows four steps, and each must
 match:
@@ -37,11 +36,11 @@ match:
 3. **Image:** the digest the build signed, in `ghcr.io/dannyota/aboutme-*`.
 4. **Running:** the digest the platform reports for each serving container.
 
-On ECS and Kubernetes, build fields come from the signed record, never from
-the application or deploy scripts. The host leaves build fields null until
-their signatures have been checked. Running fields come from the named
-reporting platform. Application self-reporting would be weaker evidence: a
-compromised application can say anything about itself.
+On ECS and Kubernetes, build fields come from the signed record, never from the
+application or deploy scripts. The host leaves build fields null until their
+signatures have been checked. Running fields come from the named reporting
+platform. Application self-reporting would be weaker evidence: a compromised
+application can say anything about itself.
 
 ## Where the observer runs
 
@@ -254,8 +253,8 @@ not in its cache ([verification](verification.md)) and writes the document.
   `invalid`. A document that fails the output schema is never written.
 
 The page never shows "verified" for a stale document, an unknown schema version,
-or any image whose status is not `verified`.
-The [host timer](host.md) uses the same freshness and staleness thresholds.
+or any image whose status is not `verified`. The [host timer](host.md) uses the
+same freshness and staleness thresholds.
 
 ## Serving and caching
 
@@ -290,9 +289,9 @@ It proves:
   replica counts. On Podman the reporter is the host itself, not an independent
   platform API, so the trust claim is weaker than ECS's off-host observer.
 - For an image marked verified, GitHub Actions, running the public
-  `release-images.yml` workflow for that tag on a GitHub-hosted runner,
-  built and signed the digest from the
-  named commit, and the signature is in the public Sigstore transparency log.
+  `release-images.yml` workflow for that tag on a GitHub-hosted runner, built
+  and signed the digest from the named commit, and the signature is in the
+  public Sigstore transparency log.
 
 It does not prove:
 
@@ -323,9 +322,9 @@ The page states the first three limits in plain words ([page](page.md#limits)).
 
 - There is no database change and nothing to migrate. The document is a
   snapshot; no history is kept, so nothing is lost when it is overwritten.
-- Digests without an SBOM attestation have no checked SBOM. The document
-  marks their SBOM `not_found`, and the page shows that step without failing the
-  build chain.
+- Digests without an SBOM attestation have no checked SBOM. The document marks
+  their SBOM `not_found`, and the page shows that step without failing the build
+  chain.
 - A browser holding an older page reads a newer document by `schema_version`. An
   unknown major version shows "This page is out of date" and never a status.
 - Self-hosted instances without a reporter answer the path with 404, and the

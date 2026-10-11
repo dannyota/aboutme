@@ -9,10 +9,10 @@ remains available for an ECS deployment.
 ## Vietnam host
 
 Run `deploy/vn/host/install.sh <bundle-dir>` on the host with the reviewed
-`deploy/vn` bundle. It installs the generator, creates the public directory,
-and enables `aboutme-deployment-document.timer`. Rendering the Caddy Quadlet
-units adds the read-only directory mount. Deploy the Caddy and web images that
-support the host document before checking `/verify`.
+`deploy/vn` bundle. It installs the generator, creates the public directory, and
+enables `aboutme-deployment-document.timer`. Rendering the Caddy Quadlet units
+adds the read-only directory mount. Deploy the Caddy and web images that support
+the host document before checking `/verify`.
 
 The timer observes Podman every minute, including container restarts outside a
 deploy. To refresh once and inspect service state on the host:
@@ -41,14 +41,14 @@ curl -fsS -D /tmp/aboutme-deployment.headers \
 Expect `greennode` / `podman`, current timestamps, and the digests Podman
 reports. A complete report has summary `unverified`, since the host generator
 does not check attestations. The page must show the digests and the host trust
-limit, with no AWS claim. Use the page's GitHub CLI commands to check each
-image independently.
+limit, with no AWS claim. Use the page's GitHub CLI commands to check each image
+independently.
 
 A generator failure leaves the last document to become stale and invokes
 `aboutme-alert@`. Inspect the fixed error message and Podman state. A missing
 required container produces `mismatch`. A missing document produces 404.
-Disabling the timer leaves the document to become stale; removing the file
-stops publication. Never substitute `release.json` for a failed Podman read.
+Disabling the timer leaves the document to become stale; removing the file stops
+publication. Never substitute `release.json` for a failed Podman read.
 
 ## AWS ECS setup
 

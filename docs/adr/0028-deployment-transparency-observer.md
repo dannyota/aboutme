@@ -8,8 +8,8 @@ approval** (A1 to A5) in the
 
 aboutme is open source, and its users should be able to see exactly what runs in
 production. Release images are built in public CI and carry Sigstore-signed
-build provenance bound to their digests, and `deploy.sh` deploys by digest.
-A release tag alone cannot tell a user which digests run: tags can move.
+build provenance bound to their digests, and `deploy.sh` deploys by digest. A
+release tag alone cannot tell a user which digests run: tags can move.
 
 Evidence is weak if the application reports its own version, because a
 compromised application can report anything. It is stronger if a separate
@@ -18,12 +18,11 @@ against the signed build record.
 
 ## Decision
 
-- On ECS and Kubernetes, an observer separate from the application and
-  read-only on the platform publishes
-  `https://aboutme.vn/.well-known/deployment.json`: every running
-  digest per serving component with its replica count, and the version, commit,
-  signature status, SBOM status, and links taken from the signed provenance for
-  that digest.
+- On ECS and Kubernetes, an observer separate from the application and read-only
+  on the platform publishes `https://aboutme.vn/.well-known/deployment.json`:
+  every running digest per serving component with its replica count, and the
+  version, commit, signature status, SBOM status, and links taken from the
+  signed provenance for that digest.
 - On AWS the observer is a Lambda function running the observer container image,
   started every minute, with a role that may call only `ecs:ListTasks` and
   `ecs:DescribeTasks` on the production cluster, write one S3 object, and write
@@ -65,12 +64,12 @@ edge. The [host design](../design/deployment-transparency/host.md) defines the
 source, atomic publication, headers, and failure rules. The existing platform
 fields identify Podman; version 1 adds that enum value without a new field.
 
-The host reports itself, not an independent platform API. Its evidence is
-weaker than ECS's off-host observer. The report does not prove host honesty or
-runtime integrity. The host publishes unchecked signature and SBOM statuses;
-it does not treat deploy-time checks as runtime verification. GitHub
-attestation and Sigstore checks retain their policy and independent commands.
-AWS ECS and Kubernetes retain their observer implementations.
+The host reports itself, not an independent platform API. Its evidence is weaker
+than ECS's off-host observer. The report does not prove host honesty or runtime
+integrity. The host publishes unchecked signature and SBOM statuses; it does not
+treat deploy-time checks as runtime verification. GitHub attestation and
+Sigstore checks retain their policy and independent commands. AWS ECS and
+Kubernetes retain their observer implementations.
 
 ## Alternatives
 

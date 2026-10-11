@@ -30,21 +30,21 @@ renames the file atomically to `deployment.json`. A lock serializes writers.
 
 The directory is root-owned with mode `0755`. Serving and maintenance Caddy
 mount that directory read-only at `/srv/deployment`. A directory mount keeps
-atomic replacements visible. The direct edge serves only the exact document
-path for GET and HEAD. Other methods get 405; a missing file gets 404.
-Responses carry `Content-Type: application/json`,
-`Cache-Control: public, max-age=30`, `Access-Control-Allow-Origin: *`, HSTS
-`max-age=31536000`, and `X-Content-Type-Options: nosniff`. Caddy removes its
-`Server` and `Via` headers. The `www` host keeps its apex redirect.
+atomic replacements visible. The direct edge serves only the exact document path
+for GET and HEAD. Other methods get 405; a missing file gets 404. Responses
+carry `Content-Type: application/json`, `Cache-Control: public, max-age=30`,
+`Access-Control-Allow-Origin: *`, HSTS `max-age=31536000`, and
+`X-Content-Type-Options: nosniff`. Caddy removes its `Server` and `Via` headers.
+The `www` host keeps its apex redirect.
 
 ## Evidence and compatibility
 
 The document uses `platform.provider: greennode`,
 `platform.orchestrator: podman`, and region `HCM03`. These existing fields
-identify the host reporter without a new field. Version 1 adds the `podman`
-enum value without changing field meanings or accepting extra properties.
-Existing ECS and Kubernetes documents retain their schema and behavior. Older
-pages that reject the new enum need a reload after the updated web image ships.
+identify the host reporter without a new field. Version 1 adds the `podman` enum
+value without changing field meanings or accepting extra properties. Existing
+ECS and Kubernetes documents retain their schema and behavior. Older pages that
+reject the new enum need a reload after the updated web image ships.
 
 The host reporter publishes signatures and SBOMs as `unchecked`. It does not
 copy deploy-time verification or release metadata into runtime evidence. The
@@ -73,6 +73,6 @@ alert service.
 
 Disabling the timer leaves the last document to become stale. Removing the
 public file produces 404. Rolling back the web image can make the page refuse
-the Podman enum; the machine document remains available for manual checks.
-No database or resume data changes, and overwriting a snapshot loses no stored
+the Podman enum; the machine document remains available for manual checks. No
+database or resume data changes, and overwriting a snapshot loses no stored
 history.
