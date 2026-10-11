@@ -188,7 +188,8 @@ Notes on rows whose reason is not obvious:
   cadence. Operation counts per request are separate from the 256 KiB body cap.
 - **Showcase.** The listing limiter keeps the ADR 0007 overflow. Card images
   count against the public artifact limit, so one showcase page uses 12 of the
-  300 a minute ([showcase](showcase.md#delivery-caching-and-revocation)).
+  300 a minute
+  ([showcase](showcase-contract.md#delivery-caching-and-revocation)).
 - **Registration egress ranges.** An address inside a deployment-configured
   range (`OAUTH_REGISTER_EGRESS_CIDRS`, starting with Anthropic's published
   `160.79.104.0/21`) shares that range's 120-an-hour bucket instead of the

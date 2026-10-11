@@ -57,7 +57,8 @@ documents as entry identifiers.
 card version and template ID current inside every write to the resume. Turning
 the switch off, unpublishing, turning on sign in to view, and deleting the
 resume or account remove the row. The
-[showcase design](showcase.md#data-and-contract) owns its columns and checks.
+[showcase design](showcase-contract.md#data-and-contract) owns its columns and
+checks.
 
 `media_deletion_jobs` is cleanup state, not media ownership. A transaction that
 removes a photo reference enqueues its validated exact key in the same commit.

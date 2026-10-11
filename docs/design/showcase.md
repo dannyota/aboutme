@@ -7,8 +7,8 @@ to the public resume. Nothing about visitors is recorded.
 [ADR 0029](../adr/0029-community-showcase.md) records the decisions.
 
 Status: approved and built ([approvals](#owner-approvals)); the legal dates in
-[Copy](#copy) change at release. The [showcase page layout](ui/showcase.md) sets
-the page's layout.
+[Copy](showcase-copy.md#copy) change at release. The
+[showcase page layout](ui/showcase.md) sets the page's layout.
 
 ## Opt-in
 
@@ -44,100 +44,16 @@ state.
 
 ## What a listing shows
 
-A listing is one tile (**Owner approval** S2):
-
-1. The stored link-preview card at its versioned URL,
-   `/api/v1/public/resumes/{slug}/og/{version}.png`
-   ([ADR 0014](../adr/0014-public-page-head-and-link-preview.md)). The card
-   already holds only the name, headline, photo, accent, and
-   `aboutme.vn/{slug}`, and never a contact detail. Its `alt` text is the card's
-   image text.
-2. One meta line: the template name, or "Custom design" when no preset matches,
-   and the resume language.
-3. The role chip, when the owner picked one.
-4. A footer row: `aboutme.vn/{slug}` as text (**Owner approval** S14) and a
-   Report link.
-
-The whole tile except the footer row links to `/{slug}` in the same tab with
-`rel="nofollow"`. A tile never shows a contact detail, a date, a view count, or
-anything from the resume body. The slug shows as text only in the footer row; it
-also reaches the visitor through the card image, the image's `alt` text when the
-card has no name, and the Report link's accessible name.
-
-The page's count line shows the listing `total`, the number of listings that
-match the filters (**Owner approval** S14). The total is not a per-listing field
-and not a view count.
-
-**Template.** The document stores no template identity
-([template limits](templates/limitations.md)), so Go derives it: a resume
-matches a preset when its `customization` equals the preset's, compared as
-canonical JSON without five leaves and without placement. The five leaves are
-the four a template apply keeps for the owner (`pageFormat`, `font.textAlign`,
-`header.photoPosition`, `colorScheme`) and `dateFormat`, which apply resets and
-the owner may change after. Placement is `layout.sections` on the resume and
-`layout.placement` and `layout.sidebarSectionTypes` on the preset
-([template contract](templates/contract.md)). A committed generator builds the
-Go preset table from `packages/schema/templates/`, and a test fails when the
-table is stale. No match shows "Custom design" (**Owner approval** S4).
-
-**Language.** The primary subtag of the resume language: `vi`, `en`, or `other`.
-
-**Roles.** The nine Library role chips plus Other: `backend`, `frontend`,
-`mobile`, `devops`, `data-ai`, `qa`, `fresher`, `brse`, `security`, `other`,
-with the Library's labels.
+See [What a listing shows](showcase-contract.md#what-a-listing-shows).
 
 ## Order and filters
 
-Listings are ordered oldest opt-in first: `requested_at ASC, resume_id ASC`
-(**Owner approval** S5, as changed by N4). Editing never moves a resume. Turning
-the switch off and on again moves it to the end, because it starts a new opt-in.
-There is no popularity order: view counts are owner-only
-([ADR 0022](../adr/0022-viewer-privacy-and-counting.md)), and ordering by them
-would publish them.
-
-Three filters combine: role (the ten roles), language (`vi`, `en`), and template
-(a preset ID or `custom`). They live in the page URL (`?role=backend&lang=vi`),
-so a filtered view is a plain link. The page stores nothing in cookies or
-browser storage, runs no counting script, and personalizes nothing.
-
-Twelve listings show per page (**Owner approval** S13), with Previous and Next
-links and `?page=`. Card images load lazily; a page of 12 moves at most about 3
-MB of card images, usually about 1.5 MB.
+See [Order and filters](showcase-contract.md#order-and-filters).
 
 ## Derived values and reports
 
-Nothing is reviewed: a resume is listed at once while its opt-in exists, it is
-live, and sign in to view is off, so abuse stands until someone reports it.
-
-**Keeping derived values current.** The showcase row holds the current card
-version and the derived template ID. Every committed write to an opted-in resume
-(document, photo, and publish settings) recomputes both in the same transaction,
-through the one resume write boundary. At start, Go recomputes them for every
-row, so a changed preset or card layout applies after a deploy.
-
-**Report, then the operator deletes the account.** Each tile's Report link opens
-an email to `danny@aboutme.vn` with the subject "Report showcase: {slug}".
-aboutme stores nothing about the reporter. When a report shows a serious breach
-of the Terms, or the law requires action, the operator deletes the account that
-owns the reported slug (**Owner approval** N3; see
-[Terms of Service](#terms-of-service)). It runs `server account-delete`, a
-one-shot task the deploy script starts out of band
-([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)):
-
-1. `show <slug>` is read-only. It prints the user ID that owns the resume
-   holding the slug and every current slug of that account, or "not found" for a
-   tombstoned or unknown slug.
-2. `confirm <slug> <user-id>` checks again, inside the deletion transaction,
-   that the slug's owner is that user ID. A mismatch deletes nothing. A match
-   deletes the account through the self-delete path: media, sessions, grants,
-   OAuth tokens, showcase rows, and public pages go, and each slug becomes a
-   tombstone for 180 days. New public requests return `404` at once; responses
-   already admitted finish
-   ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
-
-Output and the one audit log line per run carry only the user ID, slugs, action,
-outcome, and time; never an email, name, headline, IP address, or session data.
-The task log keeps that line with the server logs for 180 days.
+See
+[Derived values and reports](showcase-contract.md#derived-values-and-reports).
 
 ## Search engines and discovery
 
@@ -153,34 +69,8 @@ The showcase never changes whether a resume is indexed (**Owner approval** S8).
 
 ## Delivery, caching, and revocation
 
-`/showcase` is a Nuxt page whose server HTML holds no listing. The browser reads
-the listing from Go, which computes it from committed PostgreSQL state on every
-request and never stores or caches it:
-
-`GET /api/v1/public/showcase?role=&lang=&template=&page=`
-
-- Query: every parameter optional; `role` in the ten roles, `lang` in `vi` or
-  `en`, `template` a preset ID or `custom`, `page` an integer from 1 to 100. Any
-  other parameter, repeated parameter, or value is `400 request_invalid`.
-- Response: `{ items, page, pageCount, total }`, each item
-  `{ slug, cardVersion, imageText, language, templateId, role }`, with
-  `templateId` and `role` null when unset. `imageText` follows the card's image
-  text rule, so it holds no contact detail.
-- Headers: `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`. It
-  reads no cookie and sets none.
-- Rate limit: 60 requests a minute per IP, with the ADR 0007 overflow. Card
-  images keep their limit of 300 artifact reads a minute per IP.
-- An item appears only while the opt-in exists, the resume is live, and sign in
-  to view is off. The query checks all three, not only the opt-in row.
-
-Because nothing is cached, the ADR 0010 rule holds without a fence: a listing
-request that reaches the origin after opt-out, unpublish, sign in to view,
-rename, or delete succeeds reads the new state and omits the resume. The card
-URL and the resume link return the uniform public 404 at the same moment. An
-open showcase tab keeps its tiles and loaded card images until reload; there is
-no live update. An edit that changes the card version (name, headline, photo, or
-color) keeps the listing, and tiles fetched before it show a missing image until
-reload.
+See
+[Delivery, caching, and revocation](showcase-contract.md#delivery-caching-and-revocation).
 
 ## Route and navigation
 
@@ -198,100 +88,28 @@ On a signed-in phone it drops with Library, as the header already does.
 
 At launch the operator turns the switch on for `/danny` in the publish dialog,
 so the page opens with one real listing (**Owner approval** S10). With no
-listings, the page shows the empty state below, and the nav link stays.
+listings, the page shows the [empty state](showcase-copy.md#showcase-page), and
+the nav link stays.
 
 ## Copy
 
-All interface text follows the interface language. Vietnamese uses "xuất bản"
-for publish and "CV" for resume, as the rest of the product does.
+See [Copy](showcase-copy.md#copy).
 
 ### Publish dialog
 
-| Part                       | Vietnamese                                                                                                 | English                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Switch                     | Hiện trong trang Cộng đồng                                                                                 | Show in the community showcase                                                                                    |
-| Help                       | Hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí của CV này tại aboutme.vn/showcase. Ai cũng xem được trang đó. | Shows this resume's preview image, template, language, and role at aboutme.vn/showcase. Anyone can see that page. |
-| Role label                 | Vị trí hiển thị                                                                                            | Role shown                                                                                                        |
-| Role hint                  | Tùy chọn. Giúp người xem lọc theo vị trí.                                                                  | Optional. Lets visitors filter by role.                                                                           |
-| No role                    | Không chọn                                                                                                 | None                                                                                                              |
-| Other role                 | Khác                                                                                                       | Other                                                                                                             |
-| Needs public               | Bật CV công khai để hiện trong trang Cộng đồng.                                                            | Turn on Public resume to show it in the community showcase.                                                       |
-| Needs open view            | Không dùng được khi bật Yêu cầu đăng nhập để xem.                                                          | Not available while Require sign-in to view is on.                                                                |
-| Listed                     | Đang hiện trong trang Cộng đồng.                                                                           | Shown in the community showcase.                                                                                  |
-| Listed link                | Xem trang Cộng đồng                                                                                        | View the showcase                                                                                                 |
-| Issue `requires_open_view` | Tùy chọn này cần tắt Yêu cầu đăng nhập để xem.                                                             | This option needs Require sign-in to view off.                                                                    |
+See [Publish dialog](showcase-copy.md#publish-dialog).
 
 ### Showcase page
 
-| Part              | Vietnamese                                                                                        | English                                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Nav link          | Cộng đồng                                                                                         | Community                                                                                            |
-| Title and h1      | CV từ cộng đồng                                                                                   | Community resumes                                                                                    |
-| Meta description  | CV thật do người dùng aboutme.vn chọn chia sẻ.                                                    | Real resumes that aboutme.vn users chose to share.                                                   |
-| Lead              | CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.                                     | Real resumes that aboutme.vn users published and chose to show here.                                 |
-| Count line        | {N} CV · sớm nhất trước                                                                           | {N} resumes · earliest added first; 1 resume · earliest added first                                  |
-| Count, no total   | Sớm nhất trước                                                                                    | Earliest added first                                                                                 |
-| Filters           | Bộ lọc                                                                                            | Filters                                                                                              |
-| Filters, active   | Bộ lọc, {n} đang bật                                                                              | Filters, {n} active                                                                                  |
-| Role heading      | Vị trí                                                                                            | Role                                                                                                 |
-| Close             | Đóng                                                                                              | Close                                                                                                |
-| Clear filters     | Xóa bộ lọc                                                                                        | Clear filters                                                                                        |
-| Show results      | Xem {N} CV                                                                                        | Show {N} resumes; Show 1 resume                                                                      |
-| Show, loading     | Xem kết quả                                                                                       | Show results                                                                                         |
-| Active filters    | Bộ lọc đang bật                                                                                   | Active filters                                                                                       |
-| Remove filter     | {label}, gỡ bộ lọc                                                                                | {label}, remove filter                                                                               |
-| Clear all         | Xóa hết                                                                                           | Clear all                                                                                            |
-| Role filter label | Lọc theo vị trí                                                                                   | Filter by role                                                                                       |
-| All roles         | Mọi vị trí                                                                                        | All roles                                                                                            |
-| Language label    | Ngôn ngữ của CV                                                                                   | Resume language                                                                                      |
-| All languages     | Mọi ngôn ngữ                                                                                      | All languages                                                                                        |
-| Vietnamese        | Tiếng Việt                                                                                        | Vietnamese                                                                                           |
-| English           | Tiếng Anh                                                                                         | English                                                                                              |
-| Other language    | Ngôn ngữ khác                                                                                     | Other language                                                                                       |
-| Template label    | Mẫu                                                                                               | Template                                                                                             |
-| All templates     | Mọi mẫu                                                                                           | All templates                                                                                        |
-| Custom design     | Thiết kế riêng                                                                                    | Custom design                                                                                        |
-| Report tooltip    | Báo cáo                                                                                           | Report                                                                                               |
-| Report label      | Báo cáo CV {slug} qua email                                                                       | Report resume {slug} by email                                                                        |
-| Report subject    | Báo cáo trang Cộng đồng: {slug}                                                                   | Report showcase: {slug}                                                                              |
-| Empty             | Chưa có CV nào ở đây. Xuất bản CV của bạn và bật Hiện trong trang Cộng đồng để là người đầu tiên. | No resumes here yet. Publish your resume and turn on Show in the community showcase to be the first. |
-| Empty action      | Tạo CV                                                                                            | Create your resume                                                                                   |
-| No match          | Không có CV nào khớp với bộ lọc này.                                                              | No resume matches these filters.                                                                     |
-| Load failed       | Không tải được danh sách. Hãy thử lại.                                                            | Could not load the list. Try again.                                                                  |
-| Retry             | Thử lại                                                                                           | Try again                                                                                            |
-| Invite title      | Muốn CV của bạn ở đây?                                                                            | Want your resume here?                                                                               |
-| Invite body       | Khi xuất bản CV, bật Hiện trong trang Cộng đồng. Bạn tắt lúc nào cũng được.                       | When you publish, turn on Show in the community showcase. You can turn it off any time.              |
-| Invite button     | Tạo CV miễn phí                                                                                   | Create a free resume                                                                                 |
-| Previous, Next    | Trang trước, Trang sau                                                                            | Previous, Next                                                                                       |
-| Page status       | Trang {page}/{pageCount}                                                                          | Page {page} of {pageCount}                                                                           |
-
-The empty action and the invite button open `/register` when password
-registration is on, otherwise `/login`; a signed-in visitor gets `/app/resumes`,
-with "Mở CV của bạn" / "Open your resumes" on the empty action.
+See [Showcase page](showcase-copy.md#showcase-page).
 
 ### Privacy Policy
 
-Text in `legal-vi.ts` and `legal-en.ts` (**Owner approval** S11, as changed by
-N2, and N5 approved 2026-10-02). The "updated" date becomes the release date.
-
-| Section                                                 | Vietnamese                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | English                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What we collect, new item after Content                 | Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi lưu thời điểm bạn bật và vị trí bạn chọn.                                                                                                                                                                                                                                                                                                                                                                                 | Community showcase: if you turn it on for a resume, we store when you turned it on and the role you picked.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Why we use your data, optional features list            | (xuất bản CV công khai, cho phép lập chỉ mục, hiện CV trong trang Cộng đồng, kết nối trợ lý AI, đăng nhập bằng Google hoặc LinkedIn)                                                                                                                                                                                                                                                                                                                                                      | (publishing, search and AI indexing, the community showcase, connected AI agents, Google or LinkedIn sign-in)                                                                                                                                                                                                                                                                                                                                                                                               |
-| Public only by your choice, new last paragraph          | Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem và sao chép những gì trang hiển thị. | The community showcase (aboutme.vn/showcase) lists only resumes whose owners turn on Show in the community showcase. It shows the resume's preview image (your name, headline, and photo), its template, language, and the role you picked, with a link to the resume. When you turn the option off, unpublish, or turn on Require sign-in to view, the resume leaves the showcase right away. Search engines are asked not to index the showcase, but anyone who visits it can see and copy what it shows. |
-| Your controls, new item after the deletion records (N5) | Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản dịch vụ của chúng tôi, chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của tài khoản đó và thời điểm xóa trong tối đa 180 ngày.                                                                                                                                                                                                                                                                                            | If we delete an account for a breach of our Terms of Service, we keep a record of the account ID, the web addresses of its resumes, and the time, for up to 180 days.                                                                                                                                                                                                                                                                                                                                       |
+See [Privacy Policy](showcase-copy.md#privacy-policy).
 
 ### Terms of Service
 
-The Terms add no showcase line under Acceptable use; its line "We may remove
-content or delete accounts that break these rules." covers the showcase and
-operator deletion. Termination promises notice unless a breach is serious or the
-law requires otherwise; the command sends none, so the operator deletes only
-then.
-
-| Section                                     | Vietnamese                                                                                                                                                                                                               | English                                                                                                                                                                                                           |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Your content, new paragraph after the first | Nếu bạn bật Hiện trong trang Cộng đồng cho một CV, bạn cũng cho phép aboutme.vn hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí bạn chọn của CV đó trên trang Cộng đồng, cho đến khi bạn tắt tùy chọn này hoặc hủy xuất bản. | If you turn on Show in the community showcase for a resume, you also let aboutme.vn show its preview image, template, language, and the role you picked on the showcase page, until you turn it off or unpublish. |
+See [Terms of Service](showcase-copy.md#terms-of-service).
 
 ## Privacy and abuse
 
@@ -309,8 +127,8 @@ then.
   referrer kept.
 - **Abuse.** Spam, impersonation, offensive content, and other people's data are
   handled after a report: the operator deletes the account
-  ([Report](#derived-values-and-reports)). A verified email and three resumes
-  per account bound bulk opt-ins.
+  ([Report](showcase-contract.md#derived-values-and-reports)). A verified email
+  and three resumes per account bound bulk opt-ins.
 - **Minors.** The Terms require age 16 and say an account that belongs to a
   younger person is deleted; a report starts the same deletion.
 - **Retention.** The opt-in row, with its opt-in time and role, is deleted on
@@ -323,71 +141,7 @@ then.
 
 ## Data and contract
 
-**Table `resume_showcase`**, one row per opted-in resume:
-
-| Column            | Rule                                                                 |
-| ----------------- | -------------------------------------------------------------------- |
-| `resume_id`       | Primary key; references `resumes` with `ON DELETE CASCADE`           |
-| `requested_at`    | Not null; the opt-in time, which orders the listing                  |
-| `role`            | Null or one of the ten roles                                         |
-| `card_version`    | 16 lowercase hex, not null; maintained by Go                         |
-| `template_id`     | Null or a preset ID matching the slug grammar, at most 64 characters |
-| `review_key`      | Unused; not null, default `0000000000000000`; Go never writes it     |
-| `reviewed_key`    | Unused; always null                                                  |
-| `review_outcome`  | Unused; always null                                                  |
-| `reviewed_at`     | Unused; always null                                                  |
-| `first_listed_at` | Unused; always null                                                  |
-
-An index on `(requested_at DESC, resume_id DESC)` serves the listing.
-`aboutme_app` keeps select, insert, update, and delete. A row is about 100 bytes
-in use; three resumes per account bound the table. Nothing in the resume
-document changes.
-
-**Migration 00011** keeps the earlier release able to run against the new
-schema. It never edits 00010 and only adds a default and an index, besides the
-row changes (**Owner approval** N1):
-
-1. Delete every row whose `review_outcome` is `declined` (see N1 below).
-2. Set `reviewed_key`, `review_outcome`, `reviewed_at`, and `first_listed_at` to
-   null on every remaining row. Pending and approved opt-ins are then listed in
-   opt-in order, and no review result stays stored.
-3. Set the default of `review_key` to `0000000000000000`, so inserts omit it.
-4. Create the listing index above. The old partial index stays until a later
-   migration drops the unused columns with it.
-
-`Down` drops the index and the default; it cannot restore deleted rows or
-cleared results. The unused columns and the old index go in a later contract
-migration, once no supported rollback reads them.
-
-**Older release on the new schema.** The earlier release lists only rows with a
-matching approved result; after 00011 none has one, so it lists nothing and
-shows every owner `pending`. Its review command could list resumes again, but
-never one the new rules would not. Rows it writes are valid opt-ins under the
-new rules, and the new release ignores the `review_key` it rewrites at start.
-
-**Publish request.** `PublishResumeRequest` gains two optional fields. Omitted
-keeps the stored value, so an older web tab that does not know them leaves the
-opt-in unchanged.
-
-- `showcaseEnabled` (boolean). `true` with `live` false is `requires_live`;
-  `true` with sign in to view on is the new issue `requires_open_view`. A
-  request that turns on sign in to view or turns off `live` ends the opt-in even
-  when the field is omitted.
-- `showcaseRole` (string). Empty clears it; any value outside the ten roles is
-  `invalid_format`. Allowed only with the switch on.
-
-The owner resume resource carries `showcase`: `null` when off, otherwise
-`{ state, role }` with `state` always `listed`. The field keeps its shape, so an
-open tab of the earlier web app reads it unchanged, and a later state can join
-the enum without a new shape. OpenAPI gains the listing path and these fields;
-the public resume JSON, MCP tools, and the resume document schema are unchanged.
-
-**Security.** The listing route is unauthenticated `GET` and `HEAD` with strict
-query parsing, no cookie reads, and closed output fields; the page renders every
-value as escaped text and loads images only from its own origin under the
-existing app CSP. The showcase adds no privileged route. Its one operator
-command, `account-delete`, runs out of band as ADR 0003 requires and prints no
-contact data.
+See [Data and contract](showcase-contract.md#data-and-contract).
 
 ## Rejected
 
@@ -412,22 +166,22 @@ as each reads. The owner decision of 2026-10-01 (no review; Report and the Terms
 stay) superseded S6 and S7, changed S5, S10, and S11, and settled N1 to N4. The
 manager approved S14 on 2026-10-03 under owner delegation.
 
-| ID  | Decision                                                                                                                      | Owner decision                                                                 |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| S1  | Separate switch, off by default, live and open view only; unpublish, sign in to view, and delete end it; republish starts off | Approved as written                                                            |
-| S2  | Tile shows the stored preview card, template, language, optional role, and Report; no contact, date, or count; slug text: S14 | Approved; a page thumbnail can follow later as its own decision                |
-| S3  | Owner picks an optional role from the nine Library roles plus Other                                                           | Approved                                                                       |
-| S4  | Template derived by exact token match, else "Custom design"                                                                   | Approved                                                                       |
-| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                              | Approved; since 2026-10-01 oldest opt-in first (N4)                            |
-| S6  | Review before listing through an out-of-band command; re-review when the review key changes; Report by email                  | Approved; superseded 2026-10-01: no review, Report by email stays              |
-| S7  | No operator notice at launch and no promised review time in the copy                                                          | Approved; superseded 2026-10-01: nothing to review                             |
-| S8  | `/showcase` noindex and nofollow, outside sitemap and `llms.txt`; SEO and GEO switch unchanged                                | Approved                                                                       |
-| S9  | Route `/showcase`; nav link Community / Cộng đồng after Library                                                               | Approved                                                                       |
-| S10 | Launch with `/danny` opted in and approved; empty state as written; nav link from day one                                     | Approved; the owner wants `/danny` listed; no approval step since 2026-10-01   |
-| S11 | Privacy and Terms text above; update the dates; no advance email, since nothing changes for anyone who does not opt in        | Approved: the text as written, and no advance email; review text changed by N2 |
-| S12 | Each resume of an account may be listed on its own, never grouped                                                             | Approved                                                                       |
-| S13 | Twelve listings per page, lazy card images                                                                                    | Approved                                                                       |
-| S14 | Tile footer shows `aboutme.vn/{slug}` as text; the count line shows the listing `total`                                       | Approved 2026-10-03 by the manager under owner delegation                      |
+| ID  | Decision                                                                                                                                          | Owner decision                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| S1  | Separate switch, off by default, live and open view only; unpublish, sign in to view, and delete end it; republish starts off                     | Approved as written                                                            |
+| S2  | Tile shows the stored preview card, template, language, optional role, and Report; no contact, date, or count; slug text: S14                     | Approved; a page thumbnail can follow later as its own decision                |
+| S3  | Owner picks an optional role from the nine Library roles plus Other                                                                               | Approved                                                                       |
+| S4  | Template derived by exact token match, else "Custom design"                                                                                       | Approved                                                                       |
+| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                                                  | Approved; since 2026-10-01 oldest opt-in first (N4)                            |
+| S6  | Review before listing through an out-of-band command; re-review when the review key changes; Report by email                                      | Approved; superseded 2026-10-01: no review, Report by email stays              |
+| S7  | No operator notice at launch and no promised review time in the copy                                                                              | Approved; superseded 2026-10-01: nothing to review                             |
+| S8  | `/showcase` noindex and nofollow, outside sitemap and `llms.txt`; SEO and GEO switch unchanged                                                    | Approved                                                                       |
+| S9  | Route `/showcase`; nav link Community / Cộng đồng after Library                                                                                   | Approved                                                                       |
+| S10 | Launch with `/danny` opted in and approved; empty state as written; nav link from day one                                                         | Approved; the owner wants `/danny` listed; no approval step since 2026-10-01   |
+| S11 | Privacy and Terms text in [Copy](showcase-copy.md#copy); update the dates; no advance email, since nothing changes for anyone who does not opt in | Approved: the text as written, and no advance email; review text changed by N2 |
+| S12 | Each resume of an account may be listed on its own, never grouped                                                                                 | Approved                                                                       |
+| S13 | Twelve listings per page, lazy card images                                                                                                        | Approved                                                                       |
+| S14 | Tile footer shows `aboutme.vn/{slug}` as text; the count line shows the listing `total`                                                           | Approved 2026-10-03 by the manager under owner delegation                      |
 
 Choices that follow from the 2026-10-01 decision:
 
@@ -437,13 +191,19 @@ Choices that follow from the 2026-10-01 decision:
 | N2  | Legal edits only delete review claims: the review sentences, "our review result" in what we collect, the Terms showcase line; release date; no advance email | Decided 2026-10-01 by that decision |
 | N3  | No account blocking; abuse ends in deleting the account that owns the reported slug, by the out-of-band `account-delete` command                             | Decided 2026-10-01 by the owner     |
 | N4  | Order by oldest opt-in first, `requested_at ASC, resume_id ASC`; turning the switch off and on moves a resume to the end                                     | Decided 2026-10-01 by the owner     |
-| N5  | Privacy Policy discloses the record an operator deletion keeps (text in [Privacy Policy](#privacy-policy))                                                   | Approved 2026-10-02                 |
+| N5  | Privacy Policy discloses the record an operator deletion keeps (text in [Privacy Policy](showcase-copy.md#privacy-policy))                                   | Approved 2026-10-02                 |
 
 **N1.** Every `declined` row is deleted, whatever key it was declined for,
 including rows the previous UI showed as `pending`. Their owners see the switch
 off and may turn it on again. No review result stays stored.
 
-**N5.** The `account-delete` audit line keeps the user ID and the account's
-slugs for 180 days, and CloudTrail keeps the task's arguments for 90 days, so
-the policy discloses that record; the audit needs both to tie a deletion to its
-report.
+**N5, historical approval rationale.** The approval relied on the
+`account-delete` audit line keeping the user ID and the account's slugs for 180
+days, and CloudTrail keeping the task's arguments for 90 days, so the policy
+discloses that record; the audit needs both to tie a deletion to its report.
+
+Production uses the Vietnam host under
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). CloudTrail is not its
+audit store. The host procedure for retaining and tying the deletion audit to
+its report remains unresolved; the approved disclosure and 180-day retention
+requirement remain unchanged.
