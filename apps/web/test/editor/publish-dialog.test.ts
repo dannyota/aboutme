@@ -4,6 +4,8 @@ import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, nextTick, ref, type Ref } from 'vue';
 
 import PublishDialog from '../../app/components/editor/PublishDialog.vue';
+import PublishResult from '../../app/components/editor/PublishResult.vue';
+import { publishCopy } from '../../app/i18n/publish';
 import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
@@ -500,6 +502,55 @@ describe('PublishDialog', () => {
       expect(context.actions.publish.submit).not.toHaveBeenCalled();
     });
 
+  it('disables password and recovery controls during reauthentication',
+    async () => {
+      const record = editorRecord();
+      const context = actionsFor(record, {
+        kind: 'reauth-required', method: 'password', attempt: {} as never,
+      });
+      const pending = deferredPromise<PublishControllerState>();
+      vi.mocked(context.actions.publish.reauthPassword)
+        .mockReturnValue(pending.promise);
+      const wrapper = await mountDialog(record, context.actions);
+      const password = wrapper.get('[data-action="publish-password"]');
+      const reauthenticate = wrapper.get(
+        '[data-action="publish-password-reauth"]',
+      );
+      expect(reauthenticate.attributes('disabled')).toBeDefined();
+      await password.setValue('current-password');
+      await reauthenticate.trigger('click');
+
+      expect(password.attributes('disabled')).toBeDefined();
+      expect(reauthenticate.attributes('disabled')).toBeDefined();
+      expect(wrapper.get('[data-action="publish-close"]')
+        .attributes('disabled')).toBeDefined();
+      expect(wrapper.get('[role="status"]').text()).toBe('Publishing…');
+      expect(wrapper.find('[data-action="publish-submit"]').exists())
+        .toBe(false);
+      await reauthenticate.trigger('click');
+      expect(context.actions.publish.reauthPassword).toHaveBeenCalledOnce();
+
+      context.state.value = {
+        kind: 'reauth-wrong-password', method: 'password',
+        attempt: {} as never,
+      };
+      pending.resolve(context.state.value);
+      await pending.promise;
+      await nextTick();
+      await nextTick();
+      expect((password.element as HTMLInputElement).value)
+        .toBe('current-password');
+      expect(reauthenticate.attributes('disabled')).toBeUndefined();
+      expect(wrapper.get('[role="alert"]').text())
+        .toBe(publishCopy.en.wrongPassword);
+      const controls = wrapper.findAll('[data-action]')
+        .map((control) => control.attributes('data-action'));
+      expect(controls.indexOf('publish-password'))
+        .toBeLessThan(controls.indexOf('publish-password-reauth'));
+      expect(controls.indexOf('publish-password-reauth'))
+        .toBeLessThan(controls.indexOf('publish-close'));
+    });
+
   it('uses provider start and explicit post-round-trip retry actions',
     async () => {
       const record = editorRecord();
@@ -529,6 +580,8 @@ describe('PublishDialog', () => {
       expect(link.classes()).toEqual(
         expect.arrayContaining(['text-link', 'underline']),
       );
+      expect(wrapper.find('[data-action="publish-provider-retry"]').exists())
+        .toBe(false);
       await link.trigger('click');
       expect(openSpy).not.toHaveBeenCalled();
       expect(wrapper.text()).toContain('return to the editor');
@@ -1022,6 +1075,198 @@ describe('PublishDialog', () => {
     });
 });
 
+describe('PublishResult clipboard lifecycle', () => {
+  function acceptedState(slug: string, live = true): PublishControllerState {
+    return {
+      kind: 'accepted',
+      resume: acceptedFixture({
+        metadata: { ...acceptedFixture().metadata, live, slug },
+      }),
+    };
+  }
+
+  function mountResult() {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const wrapper = mount(PublishResult, {
+      props: {
+        state: acceptedState('canonical-slug'),
+        copy: publishCopy.en,
+        locale: 'en',
+      },
+    });
+    mounted.push(wrapper);
+    return { wrapper, writeText };
+  }
+
+  it('restarts the copied timer and clears it when the result unmounts',
+    async () => {
+      const { wrapper } = mountResult();
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(1_000);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(1_000);
+      await nextTick();
+      expect(wrapper.get('[data-action="copy-link"]').text()).toBe('Copied');
+      wrapper.unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+  it('keeps newer copied feedback when an older write rejects', async () => {
+    const { wrapper, writeText } = mountResult();
+    const older = deferredPromise<undefined>();
+    const newer = deferredPromise<undefined>();
+    writeText.mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const button = wrapper.get('[data-action="copy-link"]');
+    await button.trigger('click');
+    await button.trigger('click');
+
+    newer.resolve(undefined);
+    await newer.promise;
+    await nextTick();
+    expect(button.text()).toBe('Copied');
+
+    older.reject(new Error('denied'));
+    await older.promise.catch(() => undefined);
+    await nextTick();
+    expect(button.text()).toBe('Copied');
+    expect(wrapper.find('[data-testid="copy-link-error"]').exists())
+      .toBe(false);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it.each(['older', 'newer'] as const)(
+    'keeps one reset timer when the %s overlapping write succeeds first',
+    async (first) => {
+      const { wrapper, writeText } = mountResult();
+      const older = deferredPromise<undefined>();
+      const newer = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(older.promise)
+        .mockReturnValueOnce(newer.promise);
+      const button = wrapper.get('[data-action="copy-link"]');
+      await button.trigger('click');
+      await button.trigger('click');
+
+      const writes = first === 'older' ? [older, newer] : [newer, older];
+      for (const write of writes) {
+        write.resolve(undefined);
+        await write.promise;
+        await nextTick();
+        expect(vi.getTimerCount()).toBe(write === older && first === 'older'
+          ? 0
+          : 1);
+      }
+      expect(button.text()).toBe('Copied');
+      wrapper.unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['success', 'failure'] as const)(
+    'ignores clipboard %s after unmount during a pending write',
+    async (outcome) => {
+      const { wrapper, writeText } = mountResult();
+      const pending = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(pending.promise);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      const vm = wrapper.vm as unknown as { copyState: string };
+      wrapper.unmount();
+      expect(vm.copyState).toBe('idle');
+      expect(vi.getTimerCount()).toBe(0);
+
+      if (outcome === 'success') {
+        pending.resolve(undefined);
+      } else {
+        pending.reject(new Error('denied'));
+      }
+      await pending.promise.catch(() => undefined);
+      await nextTick();
+
+      expect(vm.copyState).toBe('idle');
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('resets copied and failed feedback when the accepted link changes',
+    async () => {
+      const { wrapper, writeText } = mountResult();
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      await wrapper.setProps({ state: acceptedState('another-slug') });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(wrapper.get('[data-action="copy-link"]').text()).toBe('Copy link');
+      expect(wrapper.get('[data-action="view-public-resume"]')
+        .attributes('href')).toBe('/another-slug');
+
+      writeText.mockRejectedValueOnce(new Error('denied'));
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(wrapper.get('[data-testid="copy-link-error"]').exists())
+        .toBe(true);
+      await wrapper.setProps({ state: acceptedState('third-slug') });
+      expect(wrapper.find('[data-testid="copy-link-error"]').exists())
+        .toBe(false);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(writeText).toHaveBeenLastCalledWith(
+        `${location.origin}/third-slug`,
+      );
+      await wrapper.setProps({ state: acceptedState('third-slug', false) });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(wrapper.find('[data-action="copy-link"]').exists()).toBe(false);
+      expect(wrapper.find('[data-action="view-public-resume"]').exists())
+        .toBe(false);
+      expect(wrapper.get('[role="status"]').text())
+        .toBe(publishCopy.en.private);
+    });
+
+  it.each(['success', 'failure'] as const)(
+    'ignores clipboard %s after the accepted link changes',
+    async (outcome) => {
+      const { wrapper, writeText } = mountResult();
+      const pending = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(pending.promise);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(writeText).toHaveBeenCalledWith(
+        `${location.origin}/canonical-slug`,
+      );
+
+      await wrapper.setProps({ state: acceptedState('another-slug') });
+      if (outcome === 'success') {
+        pending.resolve(undefined);
+      } else {
+        pending.reject(new Error('denied'));
+      }
+      await pending.promise.catch(() => undefined);
+      await nextTick();
+
+      expect(wrapper.get('[data-action="view-public-resume"]')
+        .attributes('href')).toBe('/another-slug');
+      expect(wrapper.get('[data-action="copy-link"]').text())
+        .toBe(publishCopy.en.copyLink);
+      expect(wrapper.find('[data-testid="copy-link-error"]').exists())
+        .toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(writeText).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('clears the copied timer when publication leaves the accepted state',
+    async () => {
+      const { wrapper } = mountResult();
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      await wrapper.setProps({ state: { kind: 'saving' } });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(wrapper.find('[role="status"]').exists()).toBe(false);
+      await wrapper.setProps({ state: acceptedState('canonical-slug') });
+      expect(wrapper.get('[data-action="copy-link"]').text()).toBe('Copy link');
+    });
+});
+
 describe('PublishDialog browser tab fields', () => {
   function withName(record: ResumeRecord, fullName: string): ResumeRecord {
     record.current.document.personalDetails.fullName = fullName;
@@ -1295,10 +1540,13 @@ function actionsFor(
 function deferredPromise<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
+  reject: (reason: Error) => void;
 } {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
