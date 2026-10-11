@@ -1294,6 +1294,36 @@ run_browser_staging_checks() (
   for path in "$work/staged/"*; do
     [ "$(stat -c '%u %a' "$path")" = "$(id -u) 600" ] || fail 'staged source owner or mode differs'
   done
+  for operation in copy directory-mode file-mode; do
+    mkdir "$work/failing-stage"
+    if output=$({
+      trap 'rm -rf -- "$work/failing-stage"' EXIT
+      cp() {
+        if [ "$operation" = copy ] && [ "${!#}" = "$work/failing-stage/${sources[0]}" ]; then
+          printf 'partial\n' >"${!#}"
+          printf 'injected staging failure\n' >&2
+          return 1
+        fi
+        command cp "$@"
+      }
+      chmod() {
+        if { [ "$operation" = directory-mode ] && [ "$1" = 0700 ]; } ||
+          { [ "$operation" = file-mode ] && [ "${!#}" = "$work/failing-stage/${sources[0]}" ]; }; then
+          printf 'injected staging failure\n' >&2
+          return 1
+        fi
+        command chmod "$@"
+      }
+      # Match callers that guard staging with || and remove it on exit.
+      stage_dev_https_browser_specs "$work/context" "$work/failing-stage" || exit 1
+      touch "$work/accepted-stage"
+    } 2>&1); then
+      fail "staging accepted a failed $operation"
+    fi
+    assert_contains "$output" 'injected staging failure'
+    [ ! -e "$work/accepted-stage" ] || fail 'failed staging reached the consumer'
+    [ ! -e "$work/failing-stage" ] || fail 'caller left failed staging files behind'
+  done
   rm "$work/context/additional.spec.ts"
   if output=$(stage_dev_https_browser_specs "$work/context" "$work/staged" 2>&1); then
     fail 'staging accepted a missing source'
