@@ -112,18 +112,18 @@ member_has_token() {
 
 # Keep group IDs, state, and exit flags in one snapshot after a failed token read.
 proc_member_state() {
-  local pid=$1 stat flags
+  local pid=$1 stat stat_flags
   local -a fields=()
   if ! stat=$(cat "/proc/$pid/stat" 2>/dev/null); then
     ! proc_member_exists "$pid" || return 1
     return 0
   fi
   read -ra fields <<<"${stat##*) }" || return 1
-  flags=${fields[6]-}
+  stat_flags=${fields[6]-}
   [[ ${fields[2]-} =~ ^[0-9]+$ && ${fields[3]-} =~ ^[0-9]+$ ]] || return 1
   [[ ${fields[0]-} =~ ^[RSDZTtWXxKPI]$ ]] || return 1
-  [[ $flags =~ ^[0-9]+$ ]] || return 1
-  printf '%s %s %s %s\n' "${fields[2]}" "${fields[3]}" "${fields[0]}" "$flags"
+  [[ $stat_flags =~ ^[0-9]+$ ]] || return 1
+  printf '%s %s %s %s\n' "${fields[2]}" "${fields[3]}" "${fields[0]}" "$stat_flags"
 }
 
 validate_group_member() {
