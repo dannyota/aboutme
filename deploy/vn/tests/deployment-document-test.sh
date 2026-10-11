@@ -63,7 +63,7 @@ for PODMAN_CASE in error inspect-error malformed bad-time extra-field; do
   export PODMAN_CASE
   if generate; then fail "accepted $PODMAN_CASE"; fi
   cmp -s "$doc" "$work/previous" || fail "replaced good document on $PODMAN_CASE"
-  if rg -q 'secret-canary' "$doc" "$work/out" "$work/err"; then fail 'leaked raw data'; fi
+  if grep -q -- 'secret-canary' "$doc" "$work/out" "$work/err"; then fail 'leaked raw data'; fi
   [[ $(find "$work/public" -name '.deployment.*' | wc -l) == 0 ]] || fail 'left a temporary file'
 done
 if flock -o "$work/public/.writer.lock" bash "$generator" "$work/public" HCM03 \
@@ -80,9 +80,9 @@ jq -e '.components[3].name == "maintenance" and .components[3].image == "ghcr.io
 if bash "$generator" "$work/public" 'HCM03 secret-canary' >"$work/out" 2>"$work/err"; then
   fail 'accepted invalid region'
 fi
-if rg -q 'secret-canary' "$work/out" "$work/err"; then fail 'printed invalid input'; fi
+if grep -q -- 'secret-canary' "$work/out" "$work/err"; then fail 'printed invalid input'; fi
 for unit in aboutme-caddy aboutme-maintenance; do
-  rg -q '^Volume=/var/lib/aboutme/deployment:/srv/deployment:ro$' \
+  grep -qx -- 'Volume=/var/lib/aboutme/deployment:/srv/deployment:ro' \
     "$root/deploy/vn/host/quadlet/$unit.container.in"
 done
 echo 'deployment document tests passed'
