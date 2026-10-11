@@ -97,6 +97,54 @@ test("checks HTML links without treating data attributes or titles as links", (t
   ]);
 });
 
+test("accepts local srcset assets with optional width or density descriptors", (t) => {
+  for (const srcset of [
+    "assets/banner.svg",
+    "assets/banner.svg 640w, assets/large.svg 1280w",
+    "assets/banner.svg 1x,assets/large.svg 2x",
+    "assets/banner.svg, assets/large.svg",
+    "\n assets/banner.svg\t1x,\n assets/large.svg 2x\n",
+    "https://example.invalid/banner.svg 1x, assets/large.svg 2x",
+    "data:image/png;base64,AAAA 1x, assets/large.svg 2x",
+    "assets/banner,wide.svg 1x, assets/large.svg 2x",
+    "assets/banner.svg?size=1&amp;format=svg 1x, assets/large.svg 2x",
+  ]) {
+    const root = fixture(t, {
+      "page.md": `<source srcset="${srcset}">\n`,
+      "assets/banner.svg": "<svg/>\n",
+      "assets/large.svg": "<svg/>\n",
+      "assets/banner,wide.svg": "<svg/>\n",
+    });
+    assert.deepEqual(checkFiles(root, ["page.md"]), [], srcset);
+  }
+});
+
+test("reports each missing srcset asset without its descriptor", (t) => {
+  for (const srcset of [
+    "missing.svg",
+    "missing.svg 640w, present.svg 1280w",
+    "present.svg 1x,missing.svg 2x",
+    "present.svg, missing.svg",
+    "https://example.invalid/banner.svg 1x, missing.svg 2x",
+    "data:image/png;base64,AAAA, missing.svg 2x",
+  ]) {
+    const root = fixture(t, {
+      "page.md": `# Page\n<img srcset='${srcset}' data-srcset="ignored.svg">\n`,
+      "present.svg": "<svg/>\n",
+    });
+    assert.deepEqual(checkFiles(root, ["page.md"]), [
+      "page.md:2: missing file: missing.svg",
+    ], srcset);
+  }
+  const root = fixture(t, {
+    "page.md": '<img SRCSET="first.svg 1x,second.svg 2x">\n',
+  });
+  assert.deepEqual(checkFiles(root, ["page.md"]), [
+    "page.md:1: missing file: first.svg",
+    "page.md:1: missing file: second.svg",
+  ]);
+});
+
 test("keeps duplicate heading suffixes unique", (t) => {
   const root = fixture(t, {
     "page.md": "# Same\n# Same\n# Same-1\n[valid](#same-1-1)\n[bad](#same-2)\n",
