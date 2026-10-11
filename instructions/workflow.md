@@ -7,8 +7,8 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |Work|Model|Effort|
 |-|-|-|
 |Design and first-party research|Fable through `designer`|high|
-|Design when Fable is unavailable|`gpt-6-astra`, separate design worker|high|
-|Planning and implementation on Codex|`gpt-6.1-sol`|medium|
+|Design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
+|Implementation on Codex|`gpt-6.1-sol`|medium|
 |Every review and fix confirmation|`gpt-6.1-sol` or `gpt-6-astra`, subject to review routing|xhigh|
 |QA proofs and persona dogfooding|`gpt-6.1-sol`|medium|
 |Exploration, searches, summaries, mechanical reading|`gpt-6-luna`|low|

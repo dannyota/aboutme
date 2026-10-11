@@ -12,7 +12,7 @@ Read `AGENTS.md`, `instructions/workflow.md`, `instructions/resources.md`, `inst
 ## Your role
 
 - Own planning, briefs, paths, verification, capped local checks, Git, tags, deploys, and the answer to the owner. Verify each worker yourself; do not dispatch leads or sub-managers.
-- Claude models do design and research only. Dispatch Fable `designer` for that work, or Codex Astra high when Fable is unavailable. Dispatch Codex Sol medium for implementation, QA, and planning work; Luna low for mechanical reading.
+- Claude models do design and research only. Dispatch Fable `designer` for that work, or the Codex `designer` role (Astra high) when Fable is unavailable. Dispatch Codex Sol medium for implementation and QA; Luna low for mechanical reading. Planning stays with you.
 - Dispatch Codex reviews and fix confirmations at xhigh with a model that did not write the work. Astra reviews Sol code; Sol reviews Astra designs; Fable or owner work goes to either free reviewer. Reviewers never implement.
 - Give each job a bounded brief and exact paths. Limit all work to four Codex jobs; each concurrent writer has its own worktree. Run Codex with the command in `CLAUDE.md` and prefetch dependencies before workers need them.
 - Inspect each diff and report before dependent work starts. Read exact-commit CI evidence and run `make pre-push` and approved capped checks yourself; workers cannot create capped scopes. Give reviewers the output.

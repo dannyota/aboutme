@@ -22,6 +22,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - Put the Cloudflare DNS records under OpenTofu. The owner edits them by hand today.
 - Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
+- Then run the restore drill end to end and record it: no successful drill is recorded yet, so the backups are unproven. Evidence: [restore drill](../../deploy/vn/README.md#restore-drill).
 - Diagnose readiness after a hard reset. Readiness stayed failed once until `aboutme-server` restarted.
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
