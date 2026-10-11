@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       base_sha:
-        description: Full SHA of the trusted ancestor commit to compare with the candidate.
+        description: Full SHA of the merge base of fetched main and the candidate.
         required: true
         type: string
 
@@ -17,36 +17,60 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same ref supersedes a running check.
+# PRs and dispatches supersede their own runs; each main push keeps its result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
 # job past that limit waits in the queue, including behind other branches'
-# runs. This workflow starts 20 jobs (5 single jobs, 2 VN infrastructure jobs,
-# 2 Semgrep product scans, 2 web-e2e shards, 9 proof groups), then the ci gate.
+# runs. After preflight, this workflow starts 20 jobs: 5 single jobs,
+# 2 VN infrastructure jobs, 2 Semgrep scans, 2 web-e2e shards, and 9 proof
+# groups, then the ci gate.
 # Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
 # work inside a job overlaps through scripts/ci-background.sh. Each check
 # after a job's first runs under `if: ${{ !cancelled() }}` so one failure
 # does not hide another.
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      base_sha: ${{ steps.comparison.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate comparison base and immutable artifacts
+        id: comparison
+        env:
+          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base="$BASE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            base=$(bash scripts/check-migrations-append-only.sh --dispatch-base "$BASE_SHA" HEAD origin/main)
+          fi
+          bash scripts/check-migrations-append-only.sh --commits "$base" HEAD
+          bash scripts/check-released-schemas.sh --commits "$base" HEAD
+          echo "base_sha=$base" >> "$GITHUB_OUTPUT"
+
   vn-infra:
+    needs: [preflight]
     uses: ./.github/workflows/vn-infra.yml
 
-  # Every check that needs no database, browser, or Go test run: the
-  # append-only migration and released-schema guards, gitleaks, the
-  # schema/API/Tofu contract gates, docs lint, the operational static tests,
-  # and `npm audit`. The guards need full history (fetch-depth 0), which is
-  # harmless for the rest. The dev-https static suite (two shards) and the
-  # deploy-script test run in the background beside the other steps.
+  # Checks needing no database, browser, or Go test run: gitleaks,
+  # schema/API/Tofu contract gates, docs lint, operational static tests, and
+  # `npm audit`. Full history supports gitleaks and docs links. The dev-https
+  # static suite (two shards) and deploy-script tests run in the background.
   # `npm audit` needs no install: every manifest ships a package-lock.json,
   # and npm reads it directly. It fails on a high or critical advisory in a
   # production dependency, unless .github/npm-audit-exceptions.json lists it
   # (scripts/npm-audit.sh); --omit=dev drops devDependencies, which never
   # ship.
   contracts:
+    needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -61,72 +85,6 @@ jobs:
             bash scripts/ci-background.sh start "dev-https-static-$shard" \
               make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$shard/2"
           done
-      - name: Reject modified or deleted migrations
-        env:
-          # Passed through the environment rather than interpolated directly
-          # into the script: `${{ }}` expansion happens before the shell sees
-          # the line, so event-derived values belong in env: as a rule, even
-          # for a commit SHA like this one.
-          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            if ! [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
-              ! git cat-file -e "$BASE_SHA^{commit}" ||
-              ! git merge-base --is-ancestor "$BASE_SHA" "$GITHUB_SHA"; then
-              echo "Manual CI requires base_sha to be a full ancestor commit SHA." >&2
-              exit 1
-            fi
-          fi
-          bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD
-      # Released resume schemas are immutable (docs/design/data.md, "Document
-      # versions"): a released resume.v<N>.schema.json is the contract stored
-      # documents and adjacent-version converters are pinned to. A one-time,
-      # owner-approved documentation-citation rewrite is hash-pinned below so
-      # it cannot authorize any other v1 bytes. The same name-status logic as
-      # the migration guard above, over a different immutable artifact.
-      # packages/schema/test/released-append-only.test.ts proves each
-      # rejected status against throwaway repositories and pins this
-      # script's text.
-      - if: ${{ !cancelled() }}
-        name: Reject modified or deleted released schemas
-        env:
-          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            if ! [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
-              ! git cat-file -e "$BASE_SHA^{commit}" ||
-              ! git merge-base --is-ancestor "$BASE_SHA" "$GITHUB_SHA"; then
-              echo "Manual CI requires base_sha to be a full ancestor commit SHA." >&2
-              exit 1
-            fi
-          fi
-          if ! base=$(git rev-parse --verify --quiet "$BASE_SHA^{commit}") ||
-            ! head=$(git rev-parse --verify --quiet "HEAD^{commit}"); then
-            echo "Could not resolve released-schema comparison commits." >&2
-            exit 1
-          fi
-          approved_old_v1_sha256="2da37bb75297fefe32a920e3fae960100f0a99236ba4dc21ef25ae6b3f61f13f"
-          approved_new_v1_sha256="879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866"
-          # Compare the event base and candidate trees directly. A merge-base
-          # diff can hide a released-schema reversion after rewritten history.
-          if ! diff=$(git diff --name-status "$base" "$head" -- 'packages/schema/resume.v*.schema.json'); then
-            echo "Could not compare released schemas with base." >&2
-            exit 1
-          fi
-          changed=$(printf '%s\n' "$diff" | grep -E '^(M|D|R|T)' || true)
-          approved_v1_change=$(printf 'M\tpackages/schema/resume.v1.schema.json')
-          if [ "$changed" = "$approved_v1_change" ]; then
-            base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-            head_v1_sha256=$(git show "$head:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-            if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ] && [ "$head_v1_sha256" = "$approved_new_v1_sha256" ]; then
-              changed=""
-            fi
-          fi
-          if [ -n "$changed" ]; then
-            echo "Released schemas are immutable; only a new version file may be added:"
-            echo "$changed"
-            exit 1
-          fi
       - if: ${{ !cancelled() }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -158,7 +116,7 @@ jobs:
       - if: ${{ !cancelled() }}
         name: Check changed Markdown and affected indexes
         env:
-          DOC_LINK_BASE: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+          DOC_LINK_BASE: ${{ needs.preflight.outputs.base_sha }}
         run: make docs-links-check
       - if: ${{ !cancelled() }}
         run: make lengths-check
@@ -253,6 +211,7 @@ jobs:
   # suppressed. Revisit by 2026-12-31: check for a Caddy release that builds
   # with cel-go >= 0.30, and for x/crypto dropping openpgp.
   server:
+    needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -400,6 +359,7 @@ jobs:
   # other suites in this job or with server-resumeapi. The production Caddy
   # image test joins this job last: it needs only Podman.
   server-integration:
+    needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -473,7 +433,9 @@ jobs:
   # database service, so they run at the same time as server-integration's
   # suites rather than one after the other.
   server-resumeapi:
+    needs: [preflight]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       postgres:
         image: docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
@@ -526,7 +488,9 @@ jobs:
   # imports is listed) is proven by the web-e2e shards, which build both Nuxt
   # surfaces from exactly the manifest's files.
   web:
+    needs: [preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -553,7 +517,9 @@ jobs:
   # every spec once (Makefile WEB_E2E_SHARD). Each shard builds the Nuxt
   # surfaces it tests from the source manifest inside the pinned image.
   web-e2e:
+    needs: [preflight]
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -595,6 +561,7 @@ jobs:
   # mid-test failure facts (exports.spec.ts); every other proof uploads
   # nothing.
   dev-https-proofs:
+    needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -687,7 +654,9 @@ jobs:
   # GitHub withholds from FORK pull requests, so they run on pushes, manual
   # runs, and same-repo PRs only. A fork PR would have no token and fail.
   semgrep-code:
+    needs: [preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -712,7 +681,9 @@ jobs:
         run: scripts/semgrep-gate.sh code "$RUNNER_TEMP/semgrep.json"
 
   semgrep-supply-chain:
+    needs: [preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -745,6 +716,7 @@ jobs:
   ci:
     if: always()
     needs:
+      - preflight
       - vn-infra
       - contracts
       - server
@@ -756,6 +728,7 @@ jobs:
       - semgrep-code
       - semgrep-supply-chain
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - if: ${{ needs.dev-https-proofs.result == 'success' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

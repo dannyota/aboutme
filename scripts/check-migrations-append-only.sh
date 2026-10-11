@@ -59,6 +59,18 @@ check_commits() {
   reject_sql_changes "$diff"
 }
 
+dispatch_base() {
+  local requested=$1 head main bases
+  [[ "$requested" =~ ^[0-9a-fA-F]{40}$ ]] || fail 'manual base must be a full commit SHA'
+  requested=$(resolve_commit "$requested") || fail 'manual base is not a commit'
+  head=$(resolve_commit "$2") || fail 'manual candidate is not a commit'
+  main=$(resolve_commit "$3") || fail 'fetched main is not a commit'
+  bases=$(git merge-base --all "$main" "$head") || fail 'candidate and fetched main have no common ancestor'
+  [[ "$bases" =~ ^[0-9a-f]{40}$ ]] || fail 'candidate and fetched main must have one merge base'
+  [ "$requested" = "$bases" ] || fail 'manual base must equal the merge base of fetched main and candidate'
+  printf '%s\n' "$bases"
+}
+
 check_local() {
   local base index_diff status worktree_diff
   if base=$(resolve_commit "$1"); then
@@ -93,6 +105,10 @@ check_local() {
 }
 
 case "${1:-}" in
+--dispatch-base)
+  [ "$#" -eq 4 ] || fail 'usage: --dispatch-base <requested-sha> <head> <fetched-main>'
+  dispatch_base "$2" "$3" "$4"
+  ;;
 --commits)
   [ "$#" -eq 3 ] || fail 'usage: --commits <base> <head>'
   check_commits "$2" "$3"
@@ -102,6 +118,6 @@ case "${1:-}" in
   check_local "$2"
   ;;
 *)
-  fail 'usage: --commits <base> <head> | --local <base-ref>'
+  fail 'usage: --commits <base> <head> | --local <base-ref> | --dispatch-base <requested-sha> <head> <fetched-main>'
   ;;
 esac
