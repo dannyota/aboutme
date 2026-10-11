@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Local non-security CI gate. Runs the hosted build, test, lint, and drift
-# checks on this laptop; connected security scanning remains `make scan`.
+# Local build, test, lint, and drift reproduction without hosted browser proofs.
+# ADR 0024 prohibits the full local run; connected security scanning uses `make scan`.
 #
-#   scripts/ci.sh          full gate (this is `make ci`)
-#   scripts/ci.sh --fast   everything that needs no database and no web build
-#                          (this is `make check`)
+#   scripts/ci.sh          local reproduction (`make ci`; prohibited by ADR 0024)
+#   scripts/ci.sh --fast   subset without web checks, DB/S3 suites, or route-table tests
+#                          (`make check`)
 #
 # The database-backed groups start or reuse the shared Postgres and always leave
 # it running. Teardown is an integration-owner action in a declared idle window;

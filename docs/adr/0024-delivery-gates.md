@@ -36,9 +36,11 @@ be recalled.
   beyond one line (authentication, sessions, CSRF, sanitizing, concurrency and
   CAS, idempotency, media privacy, publish revocation) needs the reviewer to
   confirm those invariants by name.
-- **GitHub CI is the full gate.** It runs `make ci`, Semgrep, and full-history
-  gitleaks, plus heavy builds, typechecks, full suites, race tests, linters, and
-  browser suites. A red run is fixed forward at once.
+- **GitHub CI is the full gate.** `ci.yml` runs checks per job, including
+  builds, typechecks, tests, linters, browser proofs, VN infrastructure, and two
+  Semgrep jobs. The `contracts` job runs full-history gitleaks. The aggregate
+  `ci` job is the only required check on `main`. Hosted CI never calls
+  `make ci`. A red run is fixed forward at once.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for green GitHub CI on that exact commit.
 - **No full local gate.** Full local `make ci` is prohibited, including while
@@ -103,3 +105,5 @@ proportional to the change.
 - 2026-10-11: The owner moved every review and fix confirmation to one model,
   `gpt-6.1-sol` at `xhigh`, run as a separate job from the author. Reviews no
   longer alternate by author model; `gpt-6-astra` writes designs only.
+- 2026-10-11: Corrected the hosted CI entry point to match `ci.yml`: checks run
+  per job and aggregate under `ci`, rather than calling local `make ci`.
