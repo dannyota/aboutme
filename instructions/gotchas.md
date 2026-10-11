@@ -1,6 +1,6 @@
 # Gotchas
 
-Non-obvious facts about this repository's tools. Implementers, qa, and devops read this file.
+Non-obvious facts about this repository's tools. Implementers and QA read this file.
 
 - Use Podman and `podman compose`, never Docker.
 - Goose SQL in `apps/server/migrations/` is the migration source and sqlc reads it. Run `make sqlc-check`. `sqlc.yaml` keeps its `public.citext` override.
