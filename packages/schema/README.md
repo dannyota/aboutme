@@ -19,10 +19,11 @@ Do not hand-edit generated files. Release a new document version by adding its
 snapshot and manifest entry, updating the working schema, then regenerating.
 Never change a released snapshot or manifest entry.
 
-Document schema v4 is current. The registry accepts and emits document versions
-1 through 4. Document schema v2 uses the licensed font catalog's stable IDs
-while retaining v1's immutable display-name identifiers. See the
-[font catalog design](../../docs/design/fonts.md).
+The [release manifest](released-versions.json) names the current, accepted, and
+emitted document versions. See
+[resume data](../../docs/architecture/resume-data.md) for runtime projection and
+mutation behavior, and the [font catalog design](../../docs/design/fonts.md) for
+font identifier compatibility.
 
 ## Validation data
 
@@ -35,14 +36,11 @@ while retaining v1's immutable display-name identifiers. See the
 - `validation/sanitizer-allowlist.v1.json` and `validation/hostile-corpus.json`
   define the generated cross-runtime sanitizer policy and conformance inputs.
 
-The Go and TypeScript validators consume the same fixture corpus. Divergent
-behavior fails both suites.
-
 ## Template presets
 
-`templates/` contains 20 committed preset JSON files. The web app uses the
-presets, renderer, and licensed font catalog. See the
-[template design](../../docs/design/templates/README.md).
+`templates/` contains the committed preset JSON sources. See the
+[template design](../../docs/design/templates/README.md) and
+[renderer architecture](../../docs/architecture/rendering-and-editor.md#pure-renderer).
 
 ## Commands
 

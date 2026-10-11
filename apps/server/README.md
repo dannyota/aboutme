@@ -3,54 +3,29 @@
 `apps/server` is the Go API module. Intended component boundaries live in the
 [system design](../../docs/design/system.md) and
 [repository design](../../docs/design/repository.md). The
-[current-state architecture](../../docs/architecture.md) records the landed
-slice.
+[current-state architecture](../../docs/architecture.md) describes the running
+system.
 
 ## Implemented surface
 
-- `GET` and `HEAD` liveness and readiness probes.
-- Google and LinkedIn OpenID Connect plus GitHub OAuth login, and
-  email-and-password registration, verification, login, reset, reauthentication,
-  and add/change.
-- Authenticated provider linking and reauthentication starts.
-- Opaque PostgreSQL-backed sessions, rotation with bounded predecessor grace,
-  CSRF, current-user lookup, logout, session listing, per-session revoke, and
-  logout-everywhere.
-- Request and body bounds, trusted-proxy client-IP extraction, rate limiting,
-  security and cache headers, JSON envelopes, and structured logging.
-- Resume and idempotency tables, bounded document validation and codec,
-  owner-scoped store operations, revision compare-and-swap, transactional
-  idempotency, pure projection, and compare-and-swap backfill.
-- The private resume HTTP surface: resume, entry, section, structure,
-  customization, and photo operations over private filesystem or S3 media.
-- Publish, unpublish, rename, and slug delete, with public JSON, photo, HTML,
-  Markdown, sitemap, robots, and llms.txt reads gated by publish state.
-- First-party OAuth 2.1 (dynamic client registration, S256 consent, token
-  rotation and revocation, discovery) and a bearer-authenticated MCP server with
-  fifteen resume tools.
-- Encrypted transactional authentication mail delivered through SES or a
-  loopback capture server.
+See [authentication and agent access](../../docs/architecture/auth-and-agent-access.md), [resume data](../../docs/architecture/resume-data.md), and [rendering and editor](../../docs/architecture/rendering-and-editor.md).
 
-Server-Sent Events, private print redemption, and direct public rendering are
-implemented across the Go and web components. Chromium is initialized only by
-the normal server path. Five privacy, media lifecycle, and release-retention
-jobs are available as one-shot commands: `idempotency-expiry-sweep`,
-`media-deletion-sweep`, `media-orphan-sweep` (with optional `--dry-run`),
-`privacy-retention-sweep`, and `release-snapshot-sweep`. The first four run
-before HTTP and Chromium initialization, load only the database configuration
-they need (media commands also load the media backend), and emit a fixed
-identifier-free JSON result. `release-snapshot-sweep` reads release snapshot
-metadata and needs no database or media configuration. Each run is bounded to 30
-minutes, uses an advisory overlap lock where database state is shared, and joins
-work after cancellation. The [privacy runbook](../../docs/runbooks/privacy.md)
-describes the budgets and failure handling. Production schedules all five jobs.
+## Source map
+
+| Path | Purpose |
+| --- | --- |
+| `cmd/server/` | Runtime wiring and one-shot command entry points |
+| `cmd/db-setup/`, `cmd/migrate/` | Database roles and migrations |
+| `internal/config/`, `internal/api/` | Validated configuration and HTTP policy |
+| `internal/auth/`, `internal/authmail/`, `internal/oauthsrv/`, `internal/mcpapi/` | User authentication, mail, and agent access |
+| `internal/resume/`, `internal/resumeapi/`, `internal/store/` | Resume domain, HTTP handlers, and generated data access |
+| `internal/media/`, `internal/mediacleanup/`, `internal/privacyretention/` | Private media and lifecycle workers |
+| `internal/directrender/`, `internal/renderjob/`, `internal/renderprocess/` | Public HTML transport and browser rendering |
+| `migrations/`, `sql/queries.sql`, `sqlc.yaml` | Relational schema and sqlc sources |
 
 ## Data sources
 
-Hand-written, append-only files in `migrations/` are the sole relational schema
-source. Goose applies them through `cmd/migrate`, and sqlc reads the same files
-with `sql/queries.sql`. [ADR 0005](../../docs/adr/0005-database-migrations.md)
-records this rule.
+See [resume data](../../docs/architecture/resume-data.md#implemented-resume-data-layer).
 
 The root `go.work` connects this module to the generated schema module at
 `packages/schema/gen/go`. Run Go commands from `apps/server` so the workspace is
@@ -81,10 +56,11 @@ go test ./...
 Run these commands from this directory. Database-backed gates use the one shared
 container started by `make test-db-up` from the repository root.
 
-Run a one-shot job from this directory with the same environment as the server.
-The command exits nonzero on an invalid command, invalid configuration, or
-failed job; its stdout still contains the fixed result when the worker returns
-one. Media commands require the configured private media backend.
+Run one-shot jobs from this directory. The
+[privacy runbook](../../docs/runbooks/privacy.md#commands-and-schedules) defines
+the required environment, command results, and failure handling. The
+[scheduled-job architecture](../../docs/architecture/resume-data.md#scheduled-jobs)
+distinguishes production timers from the retained AWS command.
 
 ```sh
 go run ./cmd/server idempotency-expiry-sweep

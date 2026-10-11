@@ -56,309 +56,68 @@ parts of a multi-replica runtime are deferred.
 
 Production enables email-and-password sign-up, Google sign-in, passkey and TOTP
 second factors, and agent access. The public capabilities endpoint reports these
-settings. Four systemd job timers invoke idempotency expiry, media deletion,
-orphan reconciliation, and privacy retention. pgBackRest expires backups.
-Successful job-run evidence is not yet recorded.
+settings. See [scheduled jobs](architecture/resume-data.md#scheduled-jobs) for
+lifecycle commands and backup expiry.
 
-The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
-`db-setup` creates and grants them, and every migration runs as
-`aboutme_migrator` behind a PostgreSQL session advisory lock
-([ADR 0005](adr/0005-database-migrations.md)). `aboutme_app` holds exactly
-SELECT/INSERT/UPDATE/DELETE on each business table and nothing on
-`goose_db_version`. Live tests prove the exact grant set, migrator ownership of
-every object, and a store smoke flow under `aboutme_app`.
+Database role and migration boundaries are described in
+[resume data](architecture/resume-data.md#database-roles).
+
+## Dependencies and trust boundaries
+
+The [repository design](design/repository.md) owns dependency direction. Caddy
+owns the viewer origin and canonical client-IP boundary. Go controls database
+and private media access, while Nuxt owns resume layout. Detailed boundaries:
+
+- [Authentication, cookie sessions, and agent bearer access](architecture/auth-and-agent-access.md).
+- [Resume mutations, private media, database roles, and realtime](architecture/resume-data.md).
+- [Editor state, public rendering, print capabilities, and exports](architecture/rendering-and-editor.md).
 
 ## Implemented HTTP surface
 
-The [OpenAPI document](api/openapi.yaml) is the exact JSON API authority. OAuth
-protocol and MCP endpoints follow their protocol contracts and the accepted
-[agent-access ADR](adr/0018-mcp-agent-access.md). The implemented surface
-includes:
-
-- `GET` and `HEAD` health and readiness probes;
-- an unauthenticated capabilities read that reports the enabled providers,
-  password-registration availability, and agent-access availability;
-- Google and LinkedIn OpenID Connect plus GitHub OAuth login, whose routes are
-  registered only for the providers `PROVIDER_LOGIN_ENABLED` enables (none by
-  default);
-- email-and-password registration, verification, login, reauthentication,
-  add/change, and reset;
-- authenticated, CSRF-protected provider link and reauthentication starts;
-- OAuth dynamic client registration, S256 authorization-code consent, token
-  exchange/rotation/revocation, discovery metadata, and bearer-authenticated
-  Streamable HTTP MCP;
-- current-user lookup, logout, session listing, per-session revoke, and
-  logout-everywhere;
-- owner-only resume list, create, read, metadata update, and delete;
-- owner-only personal-details, entry, section, structure, and customization
-  mutations;
-- owner-only photo upload, read, crop, and delete over private media;
-- owner-only publish, unpublish, rename, and slug delete, with public JSON,
-  photo, HTML, Markdown, sitemap, robots, and llms.txt reads gated by publish
-  state, SEO/GEO, and download flags;
-- owner and anonymous public Server-Sent Events (SSE) carrying revision
-  metadata;
-- JSON envelopes, request IDs, body bounds, security and cache headers,
-  trusted-proxy client-IP handling, and rate limiting.
-
-Password credentials are one Argon2id hash per user; verification and reset
-tokens are stored only as digests. Transactional authentication mail is sealed
-into an encrypted outbox and delivered by a bounded worker through Bizfly SMTP
-(production) or a loopback-only, secret-authenticated capture server
-(development). Every password login and credential mutation serializes on the
-user lock and fences session issuance and reset.
-
-The committed TypeScript API types are generated from OpenAPI. The web client
-uses those types through `openapi-fetch`, and `make api-check` detects drift.
+See
+[implemented HTTP surface](architecture/auth-and-agent-access.md#implemented-http-surface).
 
 ## Implemented agent access
 
-Users authorize public agent clients with account-wide `resumes:read` and
-`resumes:write` scopes. Client redirect URIs are exact-match; codes are
-60-second, digest-only, single-use, and bound to S256 PKCE. Access and rotating
-refresh tokens are stored only as digests. Code replay, refresh-token replay,
-and connected-agent revocation invalidate the applicable token family.
-
-The `/mcp` bearer boundary never reads cookies. Its fifteen tools provide
-private editor parity for resume read/write and photo operations, including
-delete of private or published resumes, but expose no publish, unpublish, or
-public-read capability. Mutations share the REST ownership, validation,
-sanitizing, bounds, and revision compare-and-swap path. The settings page lists
-live grants and revokes them through the existing session, Origin, and CSRF
-chain.
-
-`make dev-https-mcp-check` proves registration, provider login, consent, token
-exchange, exact tool discovery, agent-created editor content, grant revocation,
-and the revoked token's closed 401 over the trusted local HTTPS origin. The
-proof writes only bounded boolean/error-count evidence and cleans its reserved
-user, resume, client, grant, code, and token rows.
-
-Local native development and HTTPS proof commands seed one account and one
-private sample resume; Compose and cloud never run the seed.
+See
+[implemented agent access](architecture/auth-and-agent-access.md#implemented-agent-access).
 
 ## Implemented application chrome
 
-The application chrome uses Tailwind CSS v4 without Preflight and generated
-shadcn-vue primitives backed by reka-ui. Generated primitives under
-`app/components/ui/` own low-level behavior; shared composites under
-`app/components/app/` own the shell, page headers, fields, status and loading
-states, empty states, menus, and dialogs; pages and editor panels compose those
-layers with layout utilities. `AppShell` links the public template gallery and
-renders Sign in, Create account, and a theme toggle until the session read
-resolves. Signed-in navigation adds Resumes, Settings, and the account menu. The
-signed-in theme action moves into the account menu. Capability-gated provider
-and connected-agent controls remain hidden when their capability is false.
-
-The homepage, authentication pages, legal pages, template gallery, resume
-workspace, settings, and agent consent support Vietnamese and English, with
-Vietnamese as the default. These surfaces reuse the `aboutme-locale` cookie.
-Interface language does not change resume content or resume language. See
-[localization](design/localization.md).
-
-The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
-(`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature
-blue-black actions (`#1F2A44` in light mode and `#D7DEEE` in dark mode). Dark
-mode uses a lamp-lit desk (`#121614`) and panels (`#1A1F1C`); the renderer keeps
-its own document background. `Be Vietnam Pro`, then Inter and system fallbacks,
-is the chrome font. `AppSeal` is the only public-state red mark (`#C8102E`): its
-round SVG seal carries the public link, while `StateMark` uses the seal for
-public resumes and a pencil tick or text for saved, saving, failed, and draft
-states. Publish and destructive actions keep their distinct controls. The
-landing page renders a compiled-in Ada Lovelace sample through the pure renderer
-at server render and shows the seal without a data fetch.
-
-The chrome follows an 8 px module and keeps the preview sheet whole. At narrow
-widths the editor collapses its tool rail and outline, switches between Edit and
-Preview tabs, and stacks the inspector below the sections control; the sheet
-scales to the available viewport down to 390 px. Dialogs, menus, focus, and
-reduced-motion behavior stay on the shared accessible component boundary.
+See
+[implemented application chrome](architecture/rendering-and-editor.md#implemented-application-chrome).
 
 ## Implemented resume data layer
 
-The relational domain and transaction primitives back the complete private
-resume HTTP surface. The implemented boundary provides:
-
-- immutable resume schemas v1 through v5, retained generated types, explicit
-  adjacent converters, and released/accepted/emitted version registries;
-- hand-written, append-only Goose migrations as the sole relational schema
-  source, with the frozen baseline described in
-  [ADR 0005](adr/0005-database-migrations.md);
-- sqlc-generated data access from those migrations and `sql/` query sources;
-- schema-derived bounds, aggregate validation, and a bounded codec;
-- owner-scoped CRUD primitives, a three-resume cap, and revision
-  compare-and-swap (CAS) that persists the complete document aggregate;
-- a transactional idempotency primitive keyed by user, concrete operation, UUID
-  key, and canonical request fingerprint; it stores the exact response with the
-  mutation and enforces a bounded candidate deadline;
-- pure document projection, explicit adjacent-converter machinery, a one-row CAS
-  backfill primitive, independent write, migration, and bounds suites, and a
-  bounds completeness guard.
-
-Every mutation uses strict singleton headers, bounded and duplicate-key-safe
-decoding, owner-scoped lookup, revision CAS, and one aggregate sanitizer and
-validator boundary. A released v1 request is upgraded, changed, persisted as a
-complete current-v4 aggregate, and projected back to v1. The fixed customization
-allowlist is derived from the embedded current schema. The hourly global
-idempotency sweep uses the same user-first lock order and releases exact
-retained response bytes in each bounded transaction.
-
-The versioned sanitizer allowlist and hostile corpus generate Go and TypeScript
-artifacts. `internal/sanitize.RichText` builds its Go policy from that artifact;
-the client wrapper builds DOMPurify policy from the same data and is a byte-
-preserving passthrough on server-side rendering. Author and independent suites
-cover the corpus, parser boundaries, exact anchor hardening, idempotence, and
-deterministic arbitrary input. The Go sanitizer runs before every resume write
-and on the public-read and private-print projections.
-
-The web package contains the licensed font catalog, a pure Vue renderer with
-continuous and deterministic paged modes, and a generated registry for all 20
-validated template presets. Byte-exact HTML goldens cover both starting layouts
-and display modes for every preset. Renderer-boundary lint rejects runtime,
-state, network, clock, random, and ambient-locale dependencies. A pinned AMD64
-Chromium harness proves the named screenshot and print baselines at zero
-tolerance, all bundled fonts offline, the hostile corpus in a live DOM, and the
-renderer CSP against both harness and normal Nuxt output. Its reviewed manifest
-builds an immutable source archive from the exact commit and excludes the
-worktree, Git metadata, local state, and secret-like paths.
+See
+[implemented resume data layer](architecture/resume-data.md#implemented-resume-data-layer).
 
 ## Implemented private media boundary
 
-Resume photo objects are never public. Uploads pass session, CSRF, origin,
-route-rate, mutation-header, declared-size, and one-task admission checks before
-the body is read. The server streams one bounded raw multipart file, validates
-the container, fully decodes a static JPEG, PNG, or WebP, applies Exif
-orientation, strips metadata, and writes a deterministic bounded JPEG or PNG.
-
-Only the media package creates or parses a photo key. Every read, cleanup
-enqueue, and compensation validates that key against the expected resume before
-backend I/O. Filesystem and S3 implement the same create-only, bounded-page
-contract. Replacement and deletion revoke the database reference and enqueue the
-exact old key in one transaction. Definite failures compensate a proved-created
-candidate; unknown object-write or database outcomes remain private for later
-reconciliation. Scheduled workers process queued deletions and reconcile
-orphaned objects; the [privacy runbook](runbooks/privacy.md) defines their
-budgets and failure handling.
+See
+[implemented private media boundary](architecture/resume-data.md#implemented-private-media-boundary).
 
 ## Implemented authenticated editor
 
-The web app carries a full optimistic-save editor behind a per-resume mutation
-queue. User actions become typed commands that capture target/base/intended/
-context before replay, coalesce only adjacent same-target value edits, and
-dispatch after one second of inactivity. A revision CAS reconciles stale writes,
-offers one safe rebase per conflict, and surfaces dedicated field, entry,
-reorder, structure, crop/photo, and destructive reconfirmation actions.
-Templates apply against optimistic state, preserve content, and emit a
-deterministic placement delta with exact partial recovery and guarded undo. Text
-fields commit on blur or Enter, unset defined values when emptied, emit nothing
-when unchanged, and revert on Escape. Enumerations, checkboxes, switches,
-colors, and numbers commit on change. Generated primitives, shared application
-composites, and editor surfaces keep those controls and dialogs on one
-accessible component boundary. Photos upload as raw bytes and are never
-previewed or decoded on the client; owner reads bind an in-memory data URL to
-the accepted photo key. The preview imports the pure renderer, never derives a
-photo URL from an object key, and renders a photo-less projection while the
-owner read is loading or unavailable. Session loss retains in-memory work for
-reauthentication; no browser storage or unload beacon holds resume data.
-
-The editor's human-only Publish dialog keeps Public resume, PDF download, and
-SEO and GEO as separate choices. It flushes editor work before freezing the
-publish body, owner, parent revision, and idempotency key. One CSRF refresh may
-replay that same attempt; an uncertain result keeps it for explicit retry, while
-a stale winner is adopted without automatic republish. A live-slug rename uses
-the account's supported recent-reauthentication factor. Provider handoff is
-capability-gated, stable-first, allowlisted, and opened only by a second user
-action. Structured completeness issues return focus to the owning editor field.
-
-`EditorShell` composes the editor top bar, account menu, publish action, tool
-rail, collapsible resume outline, preview region, and inspector panels. The
-outline and inspector use section icons and preserve the selected field when an
-error summary focuses an issue. `EditorPreview` renders the pure document
-projection on a white, never-cropped sheet, reports the settled estimated page
-count, shows photo availability without exposing an object key, and places an
-`AppSeal` at the sheet foot when the resume is public. `ResumeList` presents up
-to three paper-like resume cards with title, relative update time, a public
-seal/link or pencil Draft mark, empty create slots, and an overflow menu for
-Rename and Delete. The sessions settings page uses shared headers, status
-banners, fields, and dialogs for signed-in devices, password changes, provider
-linking, and connected-agent revocation. `PublishDialog` combines the slug field
-and three independent switches with human-readable explanations,
-reauthentication states, the seal-colored publish action, and a successful
-public link with Copy link.
+See
+[implemented authenticated editor](architecture/rendering-and-editor.md#implemented-authenticated-editor).
 
 ## Implemented public publish and SSR
 
-Publish state is one row per resume holding the live flag, slug, discovery
-generation, and a 180-day tombstone for released slugs. Public reads project a
-closed, privacy-safe document that omits every account/owner/storage/private/
-hidden value and re-sanitizes retained rich text. Public JSON, photos, HTML,
-Markdown, sitemap, robots, and llms.txt derive from that projection. Live pages
-remain accessible by link with discovery disabled; discovery artifacts respect
-the SEO/GEO flag, and PDF download respects the download flag. Private and
-unpublished resumes return the uniform public `404`. Nuxt renders public HTML
-through an isolated worker with a five-second deadline, exact request/origin
-bounds, deterministic JSON-LD, a single matching CSP hash, and external
-hydration that replaces only a mismatched revision.
-
-The native HTTPS publish proof creates one disposable complete resume, verifies
-accepted-save ordering and the full mutation-header envelope, checks discovery
-off and on, then unpublishes and observes the uniform public `404` within five
-seconds. Its bounded local evidence contains statuses, elapsed time, header
-presence, fixed step booleans, and error counters only. The proof deletes its
-exact resume and signs out on success, and its `finally` path attempts the same
-exact cleanup after a failed assertion. Connected agents still have no publish,
-unpublish, or public-read tool.
+See
+[implemented public publish and SSR](architecture/rendering-and-editor.md#implemented-public-publish-and-ssr).
 
 ## Implemented realtime
 
-One pooled PostgreSQL LISTEN connection fans committed resume notifications into
-an in-process hub. Owner streams recheck sessions; public streams expose only
-revision metadata and hold a revocable lease. Unpublish, rename, and delete wait
-for the public writer to close before returning. Listener loss closes streams
-and rejects new admission until LISTEN recovers.
-
-Browsers refetch on every connection, reconnect, and newer revision. Repeated
-errors or silence activate conditional polling. Editor refresh reconciles with
-pending work; public refresh updates the mounted view and preserves scroll.
-Session loss stops owner retries, and browser Back restoration restarts public
-updates. See the [realtime runbook](runbooks/realtime.md) for bounds and local
-measurement evidence.
+See [implemented realtime](architecture/resume-data.md#implemented-realtime).
 
 ## Resume exports
 
-Owner PDF export flushes pending editor changes before requesting the authorized
-saved snapshot. A private listener redeems one-use, attempt-bound capabilities
-for an immutable, sanitized document with its normalized photo inline. Nuxt
-renders the shared continuous Vue components in a bounded worker thread.
-
-The Go render queue admits one active job and eight queued jobs. Its 20-second
-deadline includes queue time. Each job uses a fresh non-root sandboxed Chromium
-process, a deny-by-default proxy, and exact document, CSS, and font requests.
-Its environment contains only the fixed timezone and locale values; server
-credentials are never forwarded to Chromium. Cleanup joins browser processes,
-callbacks, private requests, and queue work.
-
-Public PDF requires a live resume with download enabled. The fixed 1200×630
-share image requires only a live resume. Both artifacts pass the current public
-generation gate before cache reuse or conditional responses and hold a lease
-through body delivery. Revocation cancels and drains old work before a mutation
-commits. The shared cache holds at most 128 entries and 32 MiB for 60 seconds.
-See the [export runbook](runbooks/exports.md) for checks and resource evidence.
+See [resume exports](architecture/rendering-and-editor.md#resume-exports).
 
 ## Account privacy
 
-Settings downloads a bounded JSON copy of the account, complete current-schema
-resumes, and normalized photos from one database snapshot. Credentials and
-backend keys are excluded. Account deletion requires recent reauthentication and
-a fresh typed confirmation. It drains discovery and all affected public resume
-generations, then atomically removes account state, creates slug tombstones,
-queues exact media keys, and records a durable audit event.
-
-Four one-shot server commands run idempotency expiry, queued media deletion,
-orphan reconciliation, and retention. They use PostgreSQL overlap locks and
-bounded work with cancellation cleanup. Pending media jobs never expire;
-completed jobs and lifecycle audits remain for 180 days. Session IP and user
-agent metadata is redacted after 90 days. See the
-[privacy runbook](runbooks/privacy.md) for command bounds and failure handling.
+See [account privacy](architecture/resume-data.md#account-privacy).
 
 ## Deferred work
 
