@@ -19,4 +19,4 @@ Non-obvious facts about this repository's tools. Implementers, qa, and devops re
 - Browser proofs withhold console output. A failure line ends with fixed diagnostic words (`lang-`, `header-`, `hydrated-`, `path-`, `el-`); read them before adding a debug branch.
 - Avoid `podman ps | grep -q` under `pipefail`; capture output first.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the container; rootless pasta can lose its forward.
-- Production has no ad hoc database query path: the hosts run Bottlerocket and RDS is private.
+- Production runs PostgreSQL on the Vietnam host; operator access uses SSH and the Unix socket. Never print row data or secrets.

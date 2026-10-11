@@ -1,9 +1,8 @@
 # CrowdSec HTTP privacy
 
 The Vietnam production edge gives CrowdSec a small HTTP request feed so it can
-detect repeated abuse without keeping ordinary access logs. This target is
-approved by the owner (2026-10-10). It becomes production behavior only at the
-Vietnam cutover. Until then, production keeps the AWS privacy contract.
+detect repeated abuse without keeping ordinary access logs. The owner approved
+this contract on 2026-10-10. It applies to the live direct edge.
 
 ## Request feed
 
@@ -44,12 +43,12 @@ Route classification uses the first matching row:
 Serving writes `/var/log/caddy/crowdsec/serving.json`; maintenance writes
 `/var/log/caddy/crowdsec/maintenance.json`. The host mounts both below
 `/run/aboutme/caddy-log`, a tmpfs with no swap backing. Each file is private to
-Caddy, caps at 5 MiB, rotates on every UTC clock hour, and keeps one
-uncompressed roll. An active file plus one roll normally holds less than two
-hours, but Caddy's roll settings are not the retention authority. The host
-precreates both exact current paths before CrowdSec starts; acquisition tails
-them without a glob. The retention unit enforces the 24-hour bound independently
-of size rotation and proves parser continuity after an active-file restart. A
+Caddy, caps at 1 MiB, has timed rotation disabled, and keeps one uncompressed
+size roll. The host precreates both exact current paths before CrowdSec starts;
+acquisition tails them without a glob. On startup and every five minutes,
+`crowdsec-retention.sh` truncates active request and bouncer feeds and deletes
+matching rolls. The retention unit enforces the 24-hour bound independently of
+size rotation and proves parser continuity after an active-file restart. A
 reboot removes both. Caddy's default logger excludes both access logger names
 and deletes the URI from runtime errors, so request data cannot fall through to
 stderr or journald.
@@ -149,11 +148,8 @@ queries, headers, and bodies; keeps the request feed, attack alerts, and bans
 for at most 24 hours; and does not share HTTP attack data with the CrowdSec
 community.
 
-The same edit replaces the current AWS hosting and transfer text with the
-approved GreenNode and Bizfly text. The notice is held with the Vietnam cutover
-release and is never deployed to AWS production. It becomes effective when the
-cutover switches the public Route 53 records to the verified Vietnam host. The
-temporary rehearsal hostname uses fictional data and is not announced.
+The production notices name GreenNode and Bizfly in Vietnam. Cloudflare provides
+DNS-only records; requests reach the Vietnam host directly.
 
 ## Required proof
 

@@ -44,9 +44,11 @@ private storage. PostgreSQL is not published to the host. Caddy is the only
 published service. The current Compose Caddyfile serves HTTP; this is suitable
 for deployment smoke checks.
 
-Production runs on one AWS Singapore host behind Amazon CloudFront, with RDS and
-private S3, per [ADR 0025](adr/0025-single-host-production.md), and the
-[single-host design](design/single-host-production.md). It runs one replica
+Production runs on one GreenNode vServer in Ho Chi Minh City, with Caddy,
+PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage, per
+[ADR 0027](adr/0027-vietnam-hosted-production.md) and the
+[Vietnam production design](design/vietnam-production.md). Cloudflare provides
+DNS-only records; clients connect directly to the host. It runs one replica
 under [ADR 0026](adr/0026-replica-scaling.md). Revocation leases, print jobs,
 event subscribers, and limiters hold process-local state, which is correct only
 with one replica. The [scaling contract](design/scaling/README.md) records which
@@ -54,8 +56,8 @@ parts of a multi-replica runtime are deferred.
 
 Production enables email-and-password sign-up, Google sign-in, passkey and TOTP
 second factors, and agent access. The public capabilities endpoint reports these
-settings. Five enabled schedules invoke idempotency expiry, media deletion,
-orphan reconciliation, privacy retention, and release-snapshot cleanup.
+settings. Four systemd job timers invoke idempotency expiry, media deletion,
+orphan reconciliation, and privacy retention. pgBackRest expires backups.
 Successful job-run evidence is not yet recorded.
 
 The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
@@ -101,7 +103,7 @@ includes:
 
 Password credentials are one Argon2id hash per user; verification and reset
 tokens are stored only as digests. Transactional authentication mail is sealed
-into an encrypted outbox and delivered by a bounded worker through SES
+into an encrypted outbox and delivered by a bounded worker through Bizfly SMTP
 (production) or a loopback-only, secret-authenticated capture server
 (development). Every password login and credential mutation serializes on the
 user lock and fences session issuance and reset.
@@ -361,5 +363,3 @@ agent metadata is redacted after 90 days. See the
 ## Deferred work
 
 Multi-replica runtime coordination and the Flutter client are not implemented.
-Remaining operational acceptance work is recorded in the
-[roadmap](plans/README.md).

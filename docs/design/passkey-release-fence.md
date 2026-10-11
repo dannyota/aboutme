@@ -2,16 +2,25 @@
 
 The release fence stops the supported production path from starting an image
 below the minimum release once second-factor enrollment can exist
-([ADR 0017](../adr/0017-second-factor-authentication.md)). Two floors apply:
+([ADR 0017](../adr/0017-second-factor-authentication.md)). These feature floors
+apply:
 
-| Enrollment flag              | Floor  | Numeric release |
-| ---------------------------- | ------ | --------------- |
-| `PASSKEY_ENROLLMENT_ENABLED` | v0.4.2 | 4002            |
-| `TOTP_ENROLLMENT_ENABLED`    | v0.4.7 | 4007            |
+| Enrollment flag              | Floor   | Numeric release |
+| ---------------------------- | ------- | --------------- |
+| `PASSKEY_ENROLLMENT_ENABLED` | v0.4.2  | 4002            |
+| `TOTP_ENROLLMENT_ENABLED`    | v0.4.7  | 4007            |
+| `SIGN_IN_TO_VIEW_ENABLED`    | v0.6.26 | 6026            |
 
-The fence does not bind OpenTofu, the AWS-login principal, an account
-administrator, or an old script run with those credentials. The
-[production runbook](../runbooks/production.md) owns the commands.
+Production uses the [Vietnam host fence](vietnam-production.md#release-fence)
+and the [host commands](../runbooks/production.md#passkey-release-fence). The
+sections below describe the undeployed AWS reference implementation. Its
+DynamoDB, IAM, ECS, and OpenTofu procedures do not apply to the live host.
+Reusing them requires rebuilding and reviewing the AWS path. In particular,
+`--check-public-root`, `--require-free-root`, and `--totp-key-reencrypt` are AWS
+options, not Vietnam deployer options. Host TOTP re-encryption remains open.
+
+The fence does not constrain privileged host administration. The AWS reference
+fence does not constrain OpenTofu or AWS administrator credentials.
 
 ## DynamoDB table and item
 

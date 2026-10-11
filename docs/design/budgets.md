@@ -6,16 +6,14 @@ changing a number requires a reviewed change with evidence.
 
 ## Operating budget
 
-Production costs about $45–55 a month before tax
-([ADR 0025](../adr/0025-single-host-production.md)); the
-[single-host design](single-host-production.md#monitoring-and-cost) itemizes it.
-The CloudFront edge adds about $11, mostly WAF and the exportable origin
-certificate. CloudFront is pay-as-you-go: its free tier covers 1 TB and 10
-million requests a month, and beyond it Vietnam and Singapore cost $0.120 per GB
-and $0.0120 per 10,000 HTTPS requests ([edge cost](cloudfront-edge.md#cost)).
-Spend alerts live outside this repository and are delayed, not a cap. A second
-replica must keep every per-account and per-IP limit, revocation deadline, and
-admission bound; the [scaling contract](scaling/README.md) and
+Production uses the Vietnam host under
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[host guide](../../deploy/vn/README.md#paid-resources-and-quotes) owns the dated
+resource quotes; they are not a measured monthly bill. Cloudflare DNS uses the
+Free plan. No AWS deployment or CloudFront edge is deployed. Spend alerts live
+outside this repository and are delayed, not a cap. A second replica must keep
+every per-account and per-IP limit, revocation deadline, and admission bound;
+the [scaling contract](scaling/README.md) and
 [policy catalog](scaling/policy-catalog.md) fix its shared pools and policies.
 
 ## Runtime bounds
@@ -44,7 +42,7 @@ admission bound; the [scaling contract](scaling/README.md) and
 | SSE concurrent connections per account                   | ≤ 20                                                | SSE admission                                            |
 | SSE queued notifications per connection                  | ≤ 8, then disconnect                                | Local hub                                                |
 | SSE write deadline                                       | ≤ 2 s per flush                                     | SSE writer                                               |
-| SSE heartbeat interval                                   | 25 s (< CloudFront 60 s origin read timeout)        | SSE transport; production edge check                     |
+| SSE heartbeat interval                                   | 25 s                                                | SSE transport; production edge check                     |
 | Request body                                             | ≤ 256 KB                                            | API middleware                                           |
 | Global API requests per client IP                        | ≤ 300/min                                           | API middleware                                           |
 | In-memory rate-limiter keys per instance                 | ≤ 10,000                                            | Every rate-limiter instance                              |
@@ -251,16 +249,16 @@ A threshold without a reproducible measurement is not a gate. A synthetic run
 over tiny documents can pass while representative documents fail. Measure each
 applicable target under this protocol and retain the raw evidence.
 
-| Parameter          | Requirement                                                                                                                                                                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Fixture corpus     | Three sizes measured separately: `minimal.json`, `full.json` (typical), and a **worst-case document at the 512 KB bound** with max sections/entries and 16 KB rich text                                                                                            |
-| Hardware / limits  | The media intake gate pins the local host identity, toolchain, CPU quota, and 512 MiB controlled cgroup for its provisional gate. A production run repeats on the ARM64 Graviton host and task cgroup; an unpinned laptop run is never accepted as launch evidence |
-| Concurrency        | Stated per target; SSE measured with connection **churn**, not just steady state                                                                                                                                                                                   |
-| Warm-up            | Discarded warm-up period before sampling; cold-start measured separately and reported as its own number                                                                                                                                                            |
-| Duration & samples | Minimum sustained duration and sample count declared per target; single-shot numbers are not accepted                                                                                                                                                              |
-| Percentile method  | Explicit (e.g. HdrHistogram); **queue time is included** in latency, never excluded                                                                                                                                                                                |
-| Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                                                                                                                        |
-| Evidence           | Raw results retained locally and cited by the change that claims the gate                                                                                                                                                                                          |
+| Parameter          | Requirement                                                                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixture corpus     | Three sizes measured separately: `minimal.json`, `full.json` (typical), and a **worst-case document at the 512 KB bound** with max sections/entries and 16 KB rich text                                                                                             |
+| Hardware / limits  | The media intake gate pins the local host identity, toolchain, CPU quota, and 512 MiB controlled cgroup for its provisional gate. A production run repeats on the AMD64 Vietnam host and server cgroup; an unpinned laptop run is never accepted as launch evidence |
+| Concurrency        | Stated per target; SSE measured with connection **churn**, not just steady state                                                                                                                                                                                    |
+| Warm-up            | Discarded warm-up period before sampling; cold-start measured separately and reported as its own number                                                                                                                                                             |
+| Duration & samples | Minimum sustained duration and sample count declared per target; single-shot numbers are not accepted                                                                                                                                                               |
+| Percentile method  | Explicit (e.g. HdrHistogram); **queue time is included** in latency, never excluded                                                                                                                                                                                 |
+| Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                                                                                                                         |
+| Evidence           | Raw results retained locally and cited by the change that claims the gate                                                                                                                                                                                           |
 
 The 512 MiB cgroup, render timeout, queue depth, and pgx pool are hard runtime
 limits. The render timer runs 20 seconds from admission; on timeout the queue

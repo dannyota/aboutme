@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Host fact probe for the production host (docs/design/vietnam-production.md,
-# "Host", "PostgreSQL", and "Migration", step 3; the networking facts follow
-# docs/design/single-host-production.md, "Host and networking"). Run it as root
+# "Host" and "PostgreSQL"; prerequisites in deploy/vn/README.md,
+# "Cutover prerequisites"). Run it as root
 # on the host after install.sh and before the first deploy:
 #
 #   ssh -p "${SSH_PORT:-22922}" aboutme-admin@HOST \

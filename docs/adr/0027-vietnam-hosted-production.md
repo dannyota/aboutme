@@ -3,13 +3,13 @@
 Status: Accepted (2026-09-24) for the provider choice, by the human owner's
 direction; the design choices in the
 [Vietnam production design](../design/vietnam-production.md) were approved on
-2026-10-10. Until cutover, ADR 0025 describes what runs.
+2026-10-10 and amended on 2026-10-11. Production runs on the Vietnam host.
 
 ## Context
 
-Production runs on one AWS host in Singapore (ADR 0025), with RDS, S3, SES, and
-a Google Workspace mailbox. Every user's account, resumes, photos, and sign-in
-data are stored abroad.
+At the provider decision, production ran on one AWS host in Singapore (ADR
+0025), with RDS, S3, SES, and a Google Workspace mailbox. Account, resume,
+photo, and sign-in data were stored abroad.
 
 Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
 transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),
@@ -20,7 +20,7 @@ no data protection impact assessment (DPIA) or cross-border dossier
 
 ## Decision
 
-Production moves to providers that store and process data in Vietnam:
+Production uses providers that store and process data in Vietnam:
 
 - GreenNode (VNG Cloud) for compute (vServer) and object storage (vStorage). Its
   vWAF is the escalation if a flood exceeds the host.
@@ -32,13 +32,14 @@ Production moves to providers that store and process data in Vietnam:
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
 - The release fence, secrets, jobs, logs, and alarms move to the host: journald
-  keeps the logs and a host timer mails alarms. The Route 53 health check stays
-  as the one check from outside.
+  keeps the logs and a host timer mails alarms. The GitHub uptime workflow
+  checks `/readyz` from outside the host.
 
-The AWS stack stays as a test environment that holds fictional data only, with
-no domain of its own. Once the cutover is verified, every copy of real data in
-AWS is deleted. The [Vietnam production design](../design/vietnam-production.md)
-states the rules and the migration order.
+The AWS production stack and its state bootstrap are removed. Nothing from
+`deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
+move to Kubernetes. The
+[Vietnam production design](../design/vietnam-production.md) states the running
+topology and recovery rules.
 
 These stay outside the move:
 
@@ -50,9 +51,9 @@ These stay outside the move:
   data leaves Vietnam.
 - MCP clients that a user connects may run abroad. The user starts that
   transfer, and the privacy notice says so.
-- Public DNS stays at Route 53 with DNSSEC and plain address records to the
-  host. An authoritative name server answers resolvers and sees no person. P.A
-  Vietnam stays the registrar.
+- Public DNS uses Cloudflare on the Free plan with DNSSEC and DNS-only address
+  records to the host. The owner adds Cloudflare's DS record at the `.vn`
+  registrar. P.A Vietnam stays the registrar.
 - The Google Workspace support mailbox stays. A person who writes to support
   sends their own mail; the application never sends account data to it.
 - GitHub holds code and public images with no personal data.
@@ -79,11 +80,29 @@ authorization, and every data invariant are unchanged.
 - Caddy terminates TLS and takes every request. A flood larger than the host is
   downtime until vWAF is switched on by a DNS change.
 - Release images must also build for `linux/amd64`.
-- The cutover replaces CloudFront and AWS WAF with Caddy's own TLS, Coraza, and
-  CrowdSec. DNS records change at Route 53; no name server moves.
+- Caddy provides TLS, Coraza, and CrowdSec. Cloudflare provides authoritative
+  DNS with proxying off. The owner edits records by hand; OpenTofu ownership
+  remains open.
 - Cutover needs a maintenance window. Moving data back after Vietnam accepts
   writes would be a new transfer abroad, so recovery after that is forward only.
-- AWS test costs continue beside the new production costs.
+- No AWS test environment remains deployed.
+
+## Amendment: 2026-10-11
+
+Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC, on
+the Free plan. Every record is DNS-only. Apex and `www` A records point to the
+host's floating IP with TTL 300. Cloudflare signs with DNSSEC algorithm 13; the
+owner adds its DS record at the `.vn` registrar. This replaces the Route 53 DNS
+choice. The zone, its key-signing key, and its KMS key were deleted on
+2026-10-11. The GitHub uptime workflow replaces the Route 53 health check.
+
+Production cut over on 2026-10-11 with release v0.7.3. The AWS production stack
+and state bootstrap were destroyed that day. RDS was deleted without a final
+snapshot. Production data lives only on the Vietnam host and its pgBackRest
+backups in GreenNode vStorage. The `aboutme-email` CloudFormation stack was also
+deleted, including its SES identity, configuration set, feedback queue, and
+alarms. Keeping AWS as a fictional-data test environment is superseded by
+removal of every deployed AWS resource.
 
 ## History
 
@@ -94,3 +113,7 @@ DNS a second name-server move. 2026-10-09: the owner chose vWAF from launch,
 Cloudflare DNS-only, and the Google Workspace mailbox over Bizfly Business
 Email. 2026-10-10: the owner dropped vCDN, then vWAF, for host-level controls
 (Coraza, CrowdSec) with vWAF as the escalation, so DNS stays at Route 53.
+
+2026-10-11: Cloudflare DNS-only replaces Route 53; the AWS production stack,
+state bootstrap, and email stack are removed after the Vietnam cutover. AWS code
+remains undeployed for a possible AWS ECS or Kubernetes path.

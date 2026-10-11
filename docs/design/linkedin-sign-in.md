@@ -22,7 +22,7 @@ fact that only the first production sign-in can confirm.
 | Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                                                     |
 | Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, reauth, and notices. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.                                  |
 | Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google and LinkedIn. The native HTTPS harness enables `google,linkedin`.                                                                                                                                      |
-| Production    | `deploy/aws/modules/tasks` wires each listed provider's two SSM parameters. The app execution role may read Google's and LinkedIn's.                                                                                                                        |
+| Production    | `deploy/vn/scripts/deploy-host.sh` gives the server each enabled provider's two named Podman secrets.                                                                                                                                                       |
 
 ## LinkedIn facts
 
@@ -156,17 +156,19 @@ The notice ships in the release, before the flag turns on.
 - Provider tokens are used for the exchange only, then discarded. No refresh
   token, picture, or locale is stored. Logs carry the provider name and a reason
   code, never the email, subject, code, or token.
-- The client secret lives only in SSM SecureString and the running task
-  environment. It is never printed, logged, or committed.
+- The client secret lives in a root-owned 0400 file on the encrypted host data
+  volume and a named Podman secret supplied to the server. It is never printed,
+  logged, or committed.
 
 ### Older clients and rollback
 
 No schema, API, OpenAPI, or database change. Every live release accepts the
 `google,linkedin` list, so rollback needs no flag change for the server. Rolling
 back to a release before this one while LinkedIn is on would bring back the PKCE
-flow and the old notice, so turn LinkedIn off (`"google"`, apply, deploy) before
-such a rollback. An account whose only method is LinkedIn cannot sign in while
-LinkedIn is off, as ADR 0016 already states.
+flow and the old notice. Before such a rollback, set
+`PROVIDER_LOGIN_ENABLED=google` in `/etc/aboutme/flags.env` and redeploy. An
+account whose only method is LinkedIn cannot sign in while LinkedIn is off, as
+ADR 0016 already states.
 
 ### Size
 
@@ -207,8 +209,8 @@ Tests cite this design and ADR 0016.
   cancelled". The entry proof expects exactly Google and LinkedIn buttons.
 - Web: privacy notice text in both languages; collision copy; notices list every
   provider in `providers`.
-- Infrastructure: the variable validation accepts exactly the three values; the
-  plan adds two secrets and two role resources and destroys nothing.
+- Host configuration: each enabled provider requires both named Podman secrets;
+  the server receives no secret for a disabled provider.
 
 ## LinkedIn app setup
 
@@ -234,17 +236,16 @@ argument, or a repository file.
    add exactly `https://aboutme.vn/api/v1/auth/linkedin/callback`. Add no other
    URL. Check that the scopes list shows `openid`, `profile`, and `email`.
 6. **Store the credentials.** From the Auth tab, copy the Client ID, then the
-   Primary Client Secret, each through a private tmpfs file, as the runbook's
-   Google steps do:
+   Primary Client Secret, each through a private tmpfs file. Set `DEPLOY_HOST`
+   to the production host address:
 
    ```sh
-   f=$(mktemp -p "$XDG_RUNTIME_DIR")
+   umask 077
+   f=$(mktemp -p "${XDG_RUNTIME_DIR:?set a per-user tmpfs directory}")
    wl-paste >"$f" && wl-copy --clear # after copying the client ID
-   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /aboutme/prod/oauth/linkedin-client-id --value "file://$f"
+   bash deploy/vn/scripts/secrets.sh import linkedin-client-id <"$f"
    wl-paste >"$f" && wl-copy --clear # after copying the client secret
-   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /aboutme/prod/oauth/linkedin-client-secret --value "file://$f"
+   bash deploy/vn/scripts/secrets.sh import linkedin-client-secret <"$f"
    rm -f "$f"
    ```
 
@@ -253,21 +254,20 @@ argument, or a repository file.
 
 ## Release and enable
 
-1. Release 0.6.2 with the code, notice, infrastructure, and proofs; flag
-   unchanged. Wait for it to be live and healthy.
-2. The owner finishes the app setup.
-3. Set `provider_login_enabled = "google,linkedin"` in `prod.tfvars` and copy it
-   to the private infrastructure repository. Run `tofu apply`; the plan replaces
-   the app task definition only, because the release's own apply already gave
-   the role the two parameters. Redeploy the live tag.
+1. Deploy a release that supports LinkedIn with the provider flag unchanged.
+   Wait for it to be live and healthy.
+2. The owner finishes the app setup and imports both credentials.
+3. Set `PROVIDER_LOGIN_ENABLED=google,linkedin` in `/etc/aboutme/flags.env` on
+   the host. Redeploy the live tag through the
+   [production runbook](../runbooks/production.md#deploy).
 4. Check: capabilities report `"providers":["google","linkedin"]`;
    `/api/v1/auth/linkedin/start` redirects to LinkedIn's authorize URL with the
    exact redirect URI, the three scopes, a nonce, and no `code_challenge`;
    `/api/v1/auth/github/start` returns 404.
 5. The owner links LinkedIn to his own account in Settings, signs out, and signs
    in with LinkedIn. This is the **Verify** step for the token exchange. If it
-   fails, set `"google"`, apply, redeploy, and bring the logged reason code back
-   for diagnosis.
+   fails, set `PROVIDER_LOGIN_ENABLED=google` on the host, redeploy, and read
+   the logged reason code for diagnosis.
 
 ## Owner approval
 
