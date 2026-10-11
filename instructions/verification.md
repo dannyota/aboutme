@@ -1,31 +1,13 @@
-# Engineering rules and verification
+# Common engineering rules and verification
 
-Code rules and the checks each change area needs. Implementers, QA, reviewers, and the primary read this file.
+Common code rules, CI lifecycle, exact-commit evidence, and failure handling. Implementers, QA, reviewers, and the primary read this file.
 
 - Pin the latest stable dependency at scaffold time; upgrades need review. Exact tool versions live in `.tool-versions`; `make tools-check` rejects drift. When an installed tool is newer than the pin, update `.tool-versions` and every mirror, then run the affected checks.
-- Follow Google Go and TypeScript style with `gofmt`/`goimports` and the configured ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs. Never retry a flaky test into a pass.
-- Never hand-edit generated files; change the source and regenerate. Migrations are append-only; roll back with a forward migration and grant `aboutme_app` explicitly ([ADR 0005](../docs/adr/0005-database-migrations.md)).
+- Never hand-edit generated files; change the source and regenerate. Migration rules live in [Go and database rules](go.md).
 - A contract change updates schema or OpenAPI sources, generated clients, tests, examples, design docs, and traceability in one change.
-- `npm audit` runs through `scripts/npm-audit.sh`: any high or critical advisory fails unless `.github/npm-audit-exceptions.json` lists its GHSA ID with a `reason` and an `expires` date. An expired entry fails every run; remove it or renew it with a new reason.
 - Do not weaken security controls: least privilege, strict input bounds, versioned sanitizing, CSRF and Origin checks, `__Host-` cookies, route-specific rate limits, CSP, secret-free logs.
 
-The table names required verification, not commands every worker must run locally. Use GitHub CI for these gates. The primary runs formatting and the static [pre-push check](resources.md#pre-push-check) before every push; any other local test, build, linter, or browser execution must follow [resources](resources.md). Reuse completed evidence when code has not changed.
-
-| Change area | Command or evidence |
-|-|-|
-| Release candidate | Green GitHub CI on the pushed commit |
-| Markdown people read | `node_modules/.bin/prettier --check` and `npx markdownlint-cli2` on touched files, outside the agent-only paths in AGENTS.md |
-| Resume schema or its types | `make schema-check` |
-| OpenAPI | `make api-check` |
-| Go server | `make server-build server-vet server-test` and `golangci-lint run ./...` over touched packages, tests included |
-| Store or migrations | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test` |
-| Nuxt/Vue | `make web-lint web-typecheck web-test web-build`; after adding a web file, `make web-source-manifest-update` |
-| Renderer or public page | Nuxt gate plus `make web-e2e`; baselines as in [Releases](releases.md#releases) |
-| Authenticated UI | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` |
-| Public surface | `make native-http-check` and `make dev-https-public-check` |
-| Security-sensitive or release | CI's Semgrep and gitleaks jobs; diagnose their hosted logs without a local scan |
-
-Reusable browser automation is scripted headless Playwright. To author it, use the Playwright MCP server to inspect real selectors, requests, and state, then write what you observed as `@playwright/test` specs. MCP never runs the recorded automation.
+Required change-area gates and browser automation rules live in [testing](testing.md). Read [Go](go.md), [web](web.md), or [deployment](deploy.md) rules for the change area.
 
 ## GitHub CI
 
@@ -43,12 +25,12 @@ The `preflight` job in `ci.yml` validates comparison bases and runs the migratio
 
 GitHub CI runs every build and test. `main` and other branches run it differently:
 
-| | `main` | Other branches |
+||`main`|Other branches|
 |-|-|-|
-| Trigger | Every push runs `ci.yml` | A pull request against `main` runs `ci.yml` on the branch merged into `main`, again on every push; without one, dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>` |
-| Release gate | A green push run on the exact commit is required to tag and deploy | Never counts as a release gate |
-| Caches | Saves Go and tool caches | Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main` |
-| Canceling | Each push has its own group and retains its result | A newer pull-request run cancels the older PR run; a newer dispatch cancels the older dispatch on that branch. Dispatch and push groups are separate |
+|Trigger|Every push runs `ci.yml`|A pull request against `main` runs `ci.yml` on the branch merged into `main`, again on every push; without one, dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>`|
+|Release gate|A green push run on the exact commit is required to tag and deploy|Never counts as a release gate|
+|Caches|Saves Go and tool caches|Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main`|
+|Canceling|Each push has its own group and retains its result|A newer pull-request run cancels the older PR run; a newer dispatch cancels the older dispatch on that branch. Dispatch and push groups are separate|
 
 A dispatch run tests a branch only. It never satisfies the main ruleset's required `ci` check, so it cannot serve as a landing gate. A pull request needs no dispatch: its run tests the branch merged into `main` as `main` stood when the run started. A later push to `main` does not rerun it, so if `main` moved since the last run, merge `origin/main` into the branch and push before landing; CI and the Copilot review then cover the combination that lands. Before dispatching on a branch without a pull request:
 

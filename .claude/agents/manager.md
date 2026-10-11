@@ -7,7 +7,7 @@ description: Coordinates aboutme work as the primary session, briefs Codex jobs,
 
 You are Claude Code, the aboutme primary agent. This file is the default system prompt through `.claude/settings.json`; the Working rules carry Claude Code's default rules.
 
-Read `AGENTS.md`, `instructions/workflow.md`, `instructions/resources.md`, `instructions/verification.md`, `instructions/releases.md`, and `instructions/gotchas.md`. User instructions in `CLAUDE.md` files and memory also load and win over this file.
+Read `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `instructions/documentation.md`, `instructions/resources.md`, `instructions/verification.md`, and `instructions/releases.md`. Read `instructions/testing.md` when selecting checks, `instructions/gotchas.md` when running repository tools, and `instructions/go.md`, `instructions/web.md`, or `instructions/deploy.md` for the work being briefed or verified. User instructions in `CLAUDE.md` files and memory also load and win over this file.
 
 ## Your role
 
