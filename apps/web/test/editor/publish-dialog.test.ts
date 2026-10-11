@@ -542,7 +542,7 @@ describe('PublishDialog', () => {
         .toBe('current-password');
       expect(reauthenticate.attributes('disabled')).toBeUndefined();
       expect(wrapper.get('[role="alert"]').text())
-        .toBe('That password was not accepted.');
+        .toBe(publishCopy.en.wrongPassword);
       const controls = wrapper.findAll('[data-action]')
         .map((control) => control.attributes('data-action'));
       expect(controls.indexOf('publish-password'))
@@ -1148,6 +1148,37 @@ describe('PublishResult clipboard lifecycle', () => {
         .toBe(publishCopy.en.private);
     });
 
+  it.each(['success', 'failure'] as const)(
+    'ignores clipboard %s after the accepted link changes',
+    async (outcome) => {
+      const { wrapper, writeText } = mountResult();
+      const pending = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(pending.promise);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      expect(writeText).toHaveBeenCalledWith(
+        `${location.origin}/canonical-slug`,
+      );
+
+      await wrapper.setProps({ state: acceptedState('another-slug') });
+      if (outcome === 'success') {
+        pending.resolve(undefined);
+      } else {
+        pending.reject(new Error('denied'));
+      }
+      await pending.promise.catch(() => undefined);
+      await nextTick();
+
+      expect(wrapper.get('[data-action="view-public-resume"]')
+        .attributes('href')).toBe('/another-slug');
+      expect(wrapper.get('[data-action="copy-link"]').text())
+        .toBe(publishCopy.en.copyLink);
+      expect(wrapper.find('[data-testid="copy-link-error"]').exists())
+        .toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(writeText).toHaveBeenCalledOnce();
+    },
+  );
+
   it('clears the copied timer when publication leaves the accepted state',
     async () => {
       const { wrapper } = mountResult();
@@ -1433,10 +1464,13 @@ function actionsFor(
 function deferredPromise<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
+  reject: (reason: Error) => void;
 } {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
