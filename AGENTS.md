@@ -2,30 +2,53 @@
 
 ## Scope and authority
 
-This file is the repository's single source of coding-agent instructions, for Claude Code and Codex alike. `CLAUDE.md` imports it and adds Claude Code specifics. Agent definitions live in `.claude/agents/` and `.codex/agents/`; each is a thin wrapper that names its duty and the [instruction files](#instruction-files) it reads.
+This file owns shared coding-agent rules for Claude Code and Codex. Component `AGENTS.md` files map local sources, boundaries, authorities, and checks. `CLAUDE.md` imports it and adds Claude Code specifics. Agent definitions live in `.claude/agents/` and `.codex/agents/`; each is a thin wrapper that names its duty and the [instruction files](#instruction-files) it reads.
 
 Direct user instructions and platform safety rules come first.
 
 ## Map
 
-|Question|File|
+|Question|Entry point|
 |-|-|
-|Intended product and architecture|`docs/design/`|
-|Rationale for one decision|`docs/adr/`|
-|Current implemented behavior|Code, deployment configuration, and `docs/api/openapi.yaml`|
-|Current architecture narrative|`docs/architecture.md` and `docs/runbooks/`|
-|Work order for a multi-step goal|The active plan in `docs/plans/`, when one exists|
-|Open follow-ups|`docs/plans/backlog.md`|
-|Acceptance-criterion ownership|`docs/plans/traceability/`|
-|Writing rules|`docs/standards/engineering.md`|
+|What component owns this work?|Component map below and nearest component `AGENTS.md`|
+|What behavior is intended?|`docs/design/README.md` and named accepted ADRs|
+|What behavior exists?|Code, deployment configuration, and `docs/api/openapi.yaml`|
+|How do the running components connect?|`docs/architecture.md`|
+|How is production operated?|`docs/runbooks/README.md`, then the named runbook|
+|What work remains?|Active plan and `docs/plans/backlog.md`|
+|Which acceptance criteria are covered?|`docs/plans/traceability/`|
+|How should documents and comments read?|`docs/standards/engineering.md`|
+|Where is historical evidence?|`docs/research/README.md`|
 
 |Doing|Read first|
 |-|-|
-|Design or research|`instructions/workflow.md`, `instructions/documentation.md`, accepted ADRs, and the domain's design docs|
-|Writing docs or comments|`docs/standards/engineering.md` and `instructions/documentation.md`|
-|Implementing or reviewing|`instructions/workflow.md`, `instructions/verification.md`, the relevant topic files below, and the brief's authorities|
-|Running local commands|`instructions/resources.md`, `instructions/gotchas.md`, and the relevant topic file|
-|Committing, tagging, or deploying|`instructions/workflow.md`, `instructions/releases.md`, and `instructions/deploy.md` for deployment|
+|Any bounded repository task|Root rules, brief, nearest component guide|
+|Planning, implementation, or review|`instructions/workflow.md` and named authorities|
+|Go work|`instructions/go.md`|
+|Web or renderer work|`instructions/web.md`|
+|Deployment work|`instructions/deploy.md`; `instructions/releases.md` for release work|
+|Writing or reviewing tests|`instructions/testing.md`; `instructions/verification.md` for gate evidence|
+|Writing documentation|`instructions/documentation.md` and engineering standard|
+|Running local commands|`instructions/resources.md` and applicable remaining gotchas|
+
+### Component map
+
+|Component|Guide|
+|-|-|
+|Go API and domains|[apps/server](apps/server/AGENTS.md)|
+|Web application|[apps/web](apps/web/AGENTS.md)|
+|Pure resume renderer|[resume components](apps/web/app/components/resume/AGENTS.md)|
+|Nitro render services|[web server](apps/web/server/AGENTS.md)|
+|Resume contract and generators|[schema](packages/schema/AGENTS.md)|
+|Documentation|[docs](docs/AGENTS.md)|
+|HTTP contract|[API](docs/api/AGENTS.md)|
+|Deployment artifacts|[deploy](deploy/AGENTS.md)|
+|Vietnam production|[Vietnam host](deploy/vn/AGENTS.md)|
+|Edge routing|[Caddy](deploy/caddy/AGENTS.md)|
+|Deployment transparency|[observer](deploy/observer/AGENTS.md)|
+|Undeployed AWS reference|[AWS](deploy/aws/AGENTS.md)|
+|HTTPS browser proofs|[browser harness](deploy/dev-https-browser/AGENTS.md)|
+|Repository tooling|[scripts](scripts/AGENTS.md)|
 
 Design wins over a plan. An accepted ADR wins over design text it contradicts; fix the text. Disagreement between code, deployment config, and OpenAPI is a defect: repair them together rather than picking one silently.
 
