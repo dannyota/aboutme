@@ -15,28 +15,38 @@ fail() {
 CHECKER=$ROOT/scripts/check-tool-versions.sh
 [ -x "$CHECKER" ] || fail "$CHECKER is missing or not executable"
 
+declare -A expected=()
+while read -r name version; do
+  [[ -z $name || $name == \#* ]] && continue
+  expected[$name]=$version
+done <"$ROOT/.tool-versions"
+export FIXTURE_NODE=${expected[nodejs]} FIXTURE_GO=${expected[golang]}
+export FIXTURE_SQLC=${expected[sqlc]} FIXTURE_SEMGREP=${expected[semgrep]}
+export FIXTURE_CADDY=${expected[caddy]} FIXTURE_GITLEAKS=${expected[gitleaks]}
+export FIXTURE_GOLANGCI=${expected[golangci-lint]} FIXTURE_GOVULNCHECK=${expected[govulncheck]}
+
 BIN=$WORK/bin
 mkdir -p "$BIN"
 
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' v24.21.0
+printf '%s\n' "v$FIXTURE_NODE"
 EOF
 
 cat >"$BIN/go" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = env ] && [ "${2:-}" = GOVERSION ]; then
-  printf '%s\n' go1.27.2
+  printf '%s\n' "go$FIXTURE_GO"
   exit 0
 fi
 if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
   case ${3##*/} in
-  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v2.14.0 ;;
-  govulncheck) module=golang.org/x/vuln version=v1.8.0 ;;
-  gitleaks) module=github.com/zricethezav/gitleaks/v8 version=v8.30.1 ;;
+  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v$FIXTURE_GOLANGCI ;;
+  govulncheck) module=golang.org/x/vuln version=v$FIXTURE_GOVULNCHECK ;;
+  gitleaks) module=github.com/zricethezav/gitleaks/v8 version=v$FIXTURE_GITLEAKS ;;
   *) exit 2 ;;
   esac
-  printf '%s\n' "$3: go1.27.2" "path fixture" "mod $module $version fixture"
+  printf '%s\n' "$3: go$FIXTURE_GO" "path fixture" "mod $module $version fixture"
   exit 0
 fi
 exit 2
@@ -44,17 +54,17 @@ EOF
 
 cat >"$BIN/sqlc" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' v1.31.1
+printf '%s\n' "v$FIXTURE_SQLC"
 EOF
 
 cat >"$BIN/semgrep" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 1.178.0
+printf '%s\n' "$FIXTURE_SEMGREP"
 EOF
 
 cat >"$BIN/caddy" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 'v2.11.4 fixture-checksum'
+printf '%s\n' "v$FIXTURE_CADDY fixture-checksum"
 EOF
 
 for name in golangci-lint govulncheck gitleaks; do
@@ -77,33 +87,9 @@ chmod +x "$BIN/sqlc"
 if PATH="$BIN:/usr/bin:/bin" "$CHECKER" ci >"$WORK/out" 2>&1; then
   fail "CI tool check accepted the wrong sqlc version"
 fi
-grep -Fq 'sqlc: want v1.31.1, got v9.9.9' "$WORK/out" ||
+grep -Fq "sqlc: want v$FIXTURE_SQLC, got v9.9.9" "$WORK/out" ||
   fail "CI tool check did not report the exact sqlc mismatch"
 
-grep -Fq 'node-version: 24.21.0' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin Node 24.21.0"
-grep -Fq 'go-version: "1.27.2"' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin Go 1.27.2"
-grep -Fq 'version: v2.14.0' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin golangci-lint v2.14.0"
-grep -Fq 'govulncheck@v1.8.0' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin govulncheck v1.8.0"
-grep -Fq 'semgrep==1.178.0' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin Semgrep 1.178.0"
-grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin sqlc v1.31.1"
-grep -Fq 'caddyserver/caddy/releases/download/v2.11.4' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin Caddy 2.11.4"
-grep -Fq 'gitleaks/v8@v8.30.1' "$ROOT/.github/workflows/ci.yml" \
-  "$ROOT"/.github/actions/*/action.yml ||
-  fail "GitHub CI does not pin gitleaks 8.30.1"
 grep -Fq 'gitleaks detect --redact --no-banner' "$ROOT/.github/workflows/ci.yml" \
   "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not run the full-history gitleaks gate"
@@ -116,7 +102,7 @@ node --check "$ROOT/scripts/generate-public-roots.mjs" ||
 
 cat >"$BIN/sqlc" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' v1.31.1
+printf '%s\n' "v$FIXTURE_SQLC"
 EOF
 chmod +x "$BIN/sqlc"
 
@@ -140,7 +126,7 @@ cp "$ROOT/deploy/caddy/production/Dockerfile" "$CONTRACT/deploy/caddy/production
 awk '
   $1 == "node-version:" {
     count++
-    if (count == 2) sub("24.21.0", "99.0.0")
+    if (count == 2) $2 = "99.0.0"
   }
   { print }
 ' "$CONTRACT/.github/workflows/ci.yml" >"$CONTRACT/.github/workflows/ci.yml.next"
@@ -150,20 +136,22 @@ if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
   >"$WORK/partial-drift.out" 2>&1; then
   fail "repository contract accepted one drifted Node job"
 fi
-grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.21.0' \
+grep -Fq "node: .github/workflows/ci.yml has 99.0.0, want $FIXTURE_NODE" \
   "$WORK/partial-drift.out" ||
   fail "repository contract did not identify the drifted Node job"
 
 # A drifted pin in a composite action the workflow uses is drift too.
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
-sed -i 's/go-version: "1.27.2"/go-version: "1.99.0"/' \
+sed -i 's/go-version:.*/go-version: "1.99.0"/' \
   "$CONTRACT/.github/actions/setup-go/action.yml"
 if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
   >"$WORK/action-drift.out" 2>&1; then
   fail "repository contract accepted a drifted Go pin in a composite action"
 fi
-grep -Fq 'go: .github/actions/setup-go/action.yml has 1.99.0, want 1.27.2' \
+grep -Fq "go: .github/actions/setup-go/action.yml has 1.99.0, want $FIXTURE_GO" \
   "$WORK/action-drift.out" ||
   fail "repository contract did not identify the drifted composite action"
+
+node --test "$ROOT/scripts/test/workflow-contract.test.mjs"
 
 printf 'toolchain contract tests passed\n'
