@@ -1,7 +1,7 @@
 # 0024: GitHub CI is the full delivery gate
 
-Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20), by the
-owner's repository policy.
+Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10),
+by the owner's repository policy.
 
 ## Context
 
@@ -28,11 +28,14 @@ be recalled.
   and CSRF. There is no separate blind test author.
 - **Per-commit gitleaks.** Each commit runs the pre-commit gitleaks scan.
 - **One fresh review.** One reviewer who authored none of the work reads each
-  plan or release before push. Local-only and test-only changes skip this
-  review. Findings return to the author, and the same reviewer confirms each
-  fix. A security-sensitive change (authentication, sessions, CSRF, sanitizing,
-  concurrency and CAS, idempotency, media privacy, publish revocation) needs the
-  reviewer to confirm those invariants by name.
+  plan or release before push. Local-only, test-only, and one-line changes skip
+  this review. For one-line changes, including production DNS, the manager shows
+  plan or diff evidence instead. Findings return to the author, and the same
+  reviewer confirms each fix at `xhigh`. Only when that reviewer shares the fix
+  author's model does another reviewer of a different model confirm at `xhigh`.
+  A security-sensitive change beyond one line (authentication, sessions, CSRF,
+  sanitizing, concurrency and CAS, idempotency, media privacy, publish
+  revocation) needs the reviewer to confirm those invariants by name.
 - **GitHub CI is the full gate.** It runs `make ci`, Semgrep, and full-history
   gitleaks, plus heavy builds, typechecks, full suites, race tests, linters, and
   browser suites. A red run is fixed forward at once.
@@ -75,6 +78,17 @@ test inputs on the shared laptop.
 - Environment-specific defects surface in hosted CI rather than on the laptop.
 - An independent acceptance pass returns only through a new ADR.
 
+## Amendment: One-line review exemption (2026-10-10)
+
+The owner decided that one-line changes skip the reviewer pass, including
+production DNS. The manager shows plan or diff evidence instead. Hosted CI and
+the exact green commit gate still apply. The exemption keeps review effort
+proportional to the change.
+
+Fix confirmation stays with the original reviewer unless the reviewer shares the
+fix author's model. In that case, another reviewer of a different model confirms
+at `xhigh` to preserve independent review.
+
 ## History
 
 - Former ADR 0011 (2026-08-11): risk-tiered review, two phase gates, local
@@ -86,3 +100,7 @@ test inputs on the shared laptop.
 - Former ADR 0046 (2026-09-19, updated 2026-09-20): GitHub CI as the full gate,
   replacing the local gate of record and the phase-level review. Its rules are
   the core of this record.
+- 2026-10-10: The owner exempted one-line changes, including production DNS,
+  from the reviewer pass and required manager plan or diff evidence instead. Fix
+  confirmation uses the original reviewer unless cross-model routing requires a
+  replacement.
