@@ -682,203 +682,205 @@ describe('PublishDialog', () => {
     ).toBe('concurrent-winner');
   });
 
-  it('uses fixed copy and one intended recovery path for terminal states',
-    async () => {
-      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
-      const cases: Array<{
-        name: string;
-        state: PublishControllerState;
-        recovery?: string;
-        forbidden?: string;
-        expectedCopy?: string;
-        primaryDisabled?: boolean;
-      }> = [
-        {
-          name: 'not loaded',
-          state: { kind: 'blocked', reason: 'not-loaded' },
-          expectedCopy: 'The resume is still loading.',
-          primaryDisabled: true,
-        },
-        {
-          name: 'saving',
-          state: { kind: 'blocked', reason: 'saving' },
-          expectedCopy: 'Save the latest resume changes',
-          primaryDisabled: true,
-        },
-        {
-          name: 'conflict',
-          state: { kind: 'blocked', reason: 'conflict' },
-          expectedCopy: 'Resolve the resume conflict',
-          primaryDisabled: true,
-        },
-        {
-          name: 'blocked session lost',
-          state: { kind: 'blocked', reason: 'session-lost' },
-          expectedCopy: 'Your session ended.',
-          primaryDisabled: true,
-        },
-        {
-          name: 'issue',
-          state: { kind: 'blocked', reason: 'issue' },
-          expectedCopy: 'Resolve the current resume issues',
-          primaryDisabled: true,
-        },
-        {
-          name: 'partial template',
-          state: { kind: 'blocked', reason: 'partial-template' },
-          expectedCopy: 'Finish recovering the template changes',
-          primaryDisabled: true,
-        },
-        {
-          name: 'opaque photo',
-          state: { kind: 'blocked', reason: 'opaque-photo' },
-          expectedCopy: 'Resolve the photo change',
-          primaryDisabled: true,
-        },
-        {
-          name: 'read required',
-          state: { kind: 'blocked', reason: 'read-required' },
-          expectedCopy: 'Refresh the complete resume',
-          primaryDisabled: true,
-        },
-        {
-          name: 'slug taken',
-          state: { kind: 'slug-taken' },
-          recovery: 'Retry publish',
-        },
-        {
-          name: 'stale',
-          state: { kind: 'stale', winner: {} as never },
-          forbidden: 'Retry publish',
-        },
-        {
-          name: 'rate limited',
-          state: { kind: 'rate-limited', retryAfterMs: null },
-          recovery: 'Retry publish',
-        },
-        {
-          name: 'public busy',
-          state: { kind: 'public-state-busy', retryAfterMs: null },
-          recovery: 'Retry publish',
-        },
-        { name: 'session lost', state: { kind: 'session-lost' } },
-        {
-          name: 'provider disabled',
-          state: { kind: 'failed', code: 'provider_disabled' as never },
-        },
-        {
-          name: 'csrf failure',
-          state: { kind: 'failed', code: 'csrf_rejected' as never },
-        },
-        {
-          name: 'save failure',
-          state: { kind: 'failed', code: 'save_failed' as never },
-        },
-        {
-          name: 'generic failure',
-          state: { kind: 'failed', code: 'request_invalid' },
-        },
-        {
-          name: 'wrong password',
-          state: {
-            kind: 'reauth-wrong-password',
-            method: 'password',
-            attempt: {} as never,
-          },
-        },
-        {
-          name: 'password rate',
-          state: {
-            kind: 'reauth-rate-limited',
-            method: 'password',
-            attempt: {} as never,
-          },
-        },
-        {
-          name: 'provider rate',
-          state: {
-            kind: 'reauth-rate-limited',
-            method: 'provider',
-            attempt: {} as never,
-          },
-        },
-        {
-          name: 'password unavailable',
-          state: {
-            kind: 'reauth-unavailable',
-            method: 'password',
-            attempt: {} as never,
-          },
-        },
-        {
-          name: 'provider unavailable',
-          state: {
-            kind: 'reauth-unavailable',
-            method: 'provider',
-            attempt: {} as never,
-          },
-        },
-        {
-          name: 'provider invalid',
-          state: {
-            kind: 'provider-start-invalid',
-            method: 'provider',
-            attempt: {} as never,
-          },
-          recovery: 'Try provider reauthentication again',
-          forbidden: 'Retry publish',
-        },
-        {
-          name: 'provider start rate',
-          state: {
-            kind: 'provider-started-rate-limited',
-            method: 'provider',
-            attempt: {} as never,
-          },
-          recovery: 'Try provider reauthentication again',
-          forbidden: 'Retry publish',
-        },
-        {
-          name: 'unknown',
-          state: { kind: 'unknown', reason: 'transport' },
-          recovery: 'Retry publish',
-          forbidden: 'Publish',
-        },
-      ];
+  const terminalCases: Array<{
+    name: string;
+    state: PublishControllerState;
+    recovery?: string;
+    forbidden?: string;
+    expectedCopy?: string;
+    primaryDisabled?: boolean;
+  }> = [
+    {
+      name: 'not loaded',
+      state: { kind: 'blocked', reason: 'not-loaded' },
+      expectedCopy: 'The resume is still loading.',
+      primaryDisabled: true,
+    },
+    {
+      name: 'saving',
+      state: { kind: 'blocked', reason: 'saving' },
+      expectedCopy: 'Save the latest resume changes',
+      primaryDisabled: true,
+    },
+    {
+      name: 'conflict',
+      state: { kind: 'blocked', reason: 'conflict' },
+      expectedCopy: 'Resolve the resume conflict',
+      primaryDisabled: true,
+    },
+    {
+      name: 'blocked session lost',
+      state: { kind: 'blocked', reason: 'session-lost' },
+      expectedCopy: 'Your session ended.',
+      primaryDisabled: true,
+    },
+    {
+      name: 'issue',
+      state: { kind: 'blocked', reason: 'issue' },
+      expectedCopy: 'Resolve the current resume issues',
+      primaryDisabled: true,
+    },
+    {
+      name: 'partial template',
+      state: { kind: 'blocked', reason: 'partial-template' },
+      expectedCopy: 'Finish recovering the template changes',
+      primaryDisabled: true,
+    },
+    {
+      name: 'opaque photo',
+      state: { kind: 'blocked', reason: 'opaque-photo' },
+      expectedCopy: 'Resolve the photo change',
+      primaryDisabled: true,
+    },
+    {
+      name: 'read required',
+      state: { kind: 'blocked', reason: 'read-required' },
+      expectedCopy: 'Refresh the complete resume',
+      primaryDisabled: true,
+    },
+    {
+      name: 'slug taken',
+      state: { kind: 'slug-taken' },
+      recovery: 'Retry publish',
+    },
+    {
+      name: 'stale',
+      state: { kind: 'stale', winner: {} as never },
+      forbidden: 'Retry publish',
+    },
+    {
+      name: 'rate limited',
+      state: { kind: 'rate-limited', retryAfterMs: null },
+      recovery: 'Retry publish',
+    },
+    {
+      name: 'public busy',
+      state: { kind: 'public-state-busy', retryAfterMs: null },
+      recovery: 'Retry publish',
+    },
+    { name: 'session lost', state: { kind: 'session-lost' } },
+    {
+      name: 'provider disabled',
+      state: { kind: 'failed', code: 'provider_disabled' as never },
+    },
+    {
+      name: 'csrf failure',
+      state: { kind: 'failed', code: 'csrf_rejected' as never },
+    },
+    {
+      name: 'save failure',
+      state: { kind: 'failed', code: 'save_failed' as never },
+    },
+    {
+      name: 'generic failure',
+      state: { kind: 'failed', code: 'request_invalid' },
+    },
+    {
+      name: 'wrong password',
+      state: {
+        kind: 'reauth-wrong-password',
+        method: 'password',
+        attempt: {} as never,
+      },
+    },
+    {
+      name: 'password rate',
+      state: {
+        kind: 'reauth-rate-limited',
+        method: 'password',
+        attempt: {} as never,
+      },
+    },
+    {
+      name: 'provider rate',
+      state: {
+        kind: 'reauth-rate-limited',
+        method: 'provider',
+        attempt: {} as never,
+      },
+    },
+    {
+      name: 'password unavailable',
+      state: {
+        kind: 'reauth-unavailable',
+        method: 'password',
+        attempt: {} as never,
+      },
+    },
+    {
+      name: 'provider unavailable',
+      state: {
+        kind: 'reauth-unavailable',
+        method: 'provider',
+        attempt: {} as never,
+      },
+    },
+    {
+      name: 'provider invalid',
+      state: {
+        kind: 'provider-start-invalid',
+        method: 'provider',
+        attempt: {} as never,
+      },
+      recovery: 'Try provider reauthentication again',
+      forbidden: 'Retry publish',
+    },
+    {
+      name: 'provider start rate',
+      state: {
+        kind: 'provider-started-rate-limited',
+        method: 'provider',
+        attempt: {} as never,
+      },
+      recovery: 'Try provider reauthentication again',
+      forbidden: 'Retry publish',
+    },
+    {
+      name: 'unknown',
+      state: { kind: 'unknown', reason: 'transport' },
+      recovery: 'Retry publish',
+      forbidden: 'Publish',
+    },
+  ];
 
-      for (const testCase of cases) {
-        const context = actionsFor(record, testCase.state);
-        const wrapper = await mountDialog(record, context.actions);
+  it.each(terminalCases)(
+    'uses fixed copy and one intended recovery path for $name',
+    async (testCase) => {
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const context = actionsFor(record, testCase.state);
+      const wrapper = await mountDialog(record, context.actions);
+      expect(document.body.querySelectorAll('[role="dialog"]'),
+        testCase.name).toHaveLength(1);
+      expect(wrapper.text(), testCase.name)
+        .not.toContain('secret server text');
+      expect(wrapper.get('[role="alert"]').exists(), testCase.name)
+        .toBe(true);
+      if (testCase.expectedCopy !== undefined) {
         expect(wrapper.text(), testCase.name)
-          .not.toContain('secret server text');
-        expect(wrapper.get('[role="alert"]').exists(), testCase.name)
-          .toBe(true);
-        if (testCase.expectedCopy !== undefined) {
+          .toContain(testCase.expectedCopy);
+      }
+      if (testCase.primaryDisabled) {
+        expect(
+          wrapper.get('[data-action="publish-submit"]')
+            .attributes('disabled'),
+          testCase.name,
+        ).toBeDefined();
+      }
+      if (testCase.recovery !== undefined) {
+        expect(wrapper.text(), testCase.name)
+          .toContain(testCase.recovery);
+      }
+      if (testCase.forbidden !== undefined) {
+        if (testCase.forbidden === 'Publish') {
+          expect(wrapper.find('[data-action="publish-submit"]').exists(),
+            testCase.name).toBe(false);
+        } else {
           expect(wrapper.text(), testCase.name)
-            .toContain(testCase.expectedCopy);
-        }
-        if (testCase.primaryDisabled) {
-          expect(
-            wrapper.get('[data-action="publish-submit"]')
-              .attributes('disabled'),
-            testCase.name,
-          ).toBeDefined();
-        }
-        if (testCase.recovery !== undefined) {
-          expect(wrapper.text(), testCase.name)
-            .toContain(testCase.recovery);
-        }
-        if (testCase.forbidden !== undefined) {
-          if (testCase.forbidden === 'Publish') {
-            expect(wrapper.find('[data-action="publish-submit"]').exists(),
-              testCase.name).toBe(false);
-          } else {
-            expect(wrapper.text(), testCase.name)
-              .not.toContain(testCase.forbidden);
-          }
+            .not.toContain(testCase.forbidden);
         }
       }
-    });
+    },
+  );
 
   it('shows only a canonical public link for a live accepted result',
     async () => {
