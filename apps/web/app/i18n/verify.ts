@@ -6,7 +6,11 @@ import type {
   DeploymentDocument,
   Failure,
 } from '../utils/deploymentDocument';
-import type { ChipKind, ConnectorKind } from '../utils/verifyView';
+import type {
+  ChipKind,
+  ConnectorKind,
+  ReportingPlatform,
+} from '../utils/verifyView';
 import type { Locale } from './locale';
 
 export const githubCliManualUrl
@@ -47,7 +51,10 @@ export interface VerifyCopy {
   };
   readonly unverified: {
     readonly title: string;
-    readonly detail: (component: ComponentName) => string;
+    readonly detail: (
+      component: ComponentName,
+      orchestrator?: DeploymentDocument['orchestrator'],
+    ) => string;
   };
   readonly rollingOut: {
     readonly title: string;
@@ -73,7 +80,7 @@ export interface VerifyCopy {
     readonly steps: Readonly<Record<ChainStep, string>>;
     readonly buildValue: string;
     readonly buildLine: (runId: string) => string;
-    readonly imageLine: (count: number) => string;
+    readonly imageLine: (count: number, signaturesVerified: boolean) => string;
     readonly runningLine: (place: string, replicas: number, time: string)
     => string;
     readonly chips: Readonly<Record<Exclude<ChipKind, 'failed'>, string>>;
@@ -162,8 +169,11 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Chưa kiểm tra được chữ ký',
-      detail: (component) => `Chưa kiểm tra xong chữ ký của ${component}. `
-        + 'Trang tự làm mới sau một phút.',
+      detail: (component, orchestrator) => orchestrator === 'podman'
+        ? 'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
+        + 'được hiển thị nhưng chưa được kiểm chứng.'
+        : `Chưa kiểm tra xong chữ ký của ${component}. `
+          + 'Trang tự làm mới sau một phút.',
     },
     rollingOut: {
       title: 'Đang cập nhật, hai phiên bản cùng chạy',
@@ -197,7 +207,9 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       },
       buildValue: 'GitHub Actions',
       buildLine: (runId) => `release-images, lần chạy ${runId}`,
-      imageLine: (count) => `${count} image, đã được GitHub ký`,
+      imageLine: (count, signaturesVerified) => signaturesVerified
+        ? `${count} image, đã được GitHub ký`
+        : `${count} image, chữ ký chưa được kiểm chứng`,
       runningLine: (place, replicas, time) =>
         `${place}, ${replicas} bản sao, từ ${time}`,
       chips: {
@@ -321,8 +333,11 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Signatures not checked yet',
-      detail: (component) => `The signature check for ${component} hasn't `
-        + 'finished. The page refreshes in a minute.',
+      detail: (component, orchestrator) => orchestrator === 'podman'
+        ? 'This host does not check signatures yet. The running digests '
+        + 'are shown without verification.'
+        : `The signature check for ${component} hasn't `
+          + 'finished. The page refreshes in a minute.',
     },
     rollingOut: {
       title: 'Update in progress, two versions running',
@@ -360,8 +375,10 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       },
       buildValue: 'GitHub Actions',
       buildLine: (runId) => `release-images, run ${runId}`,
-      imageLine: (count) =>
-        `${plural(count, 'image', 'images')}, signed by GitHub`,
+      imageLine: (count, signaturesVerified) =>
+        `${plural(count, 'image', 'images')}, ${signaturesVerified
+          ? 'signed by GitHub'
+          : 'signatures not verified'}`,
       runningLine: (place, replicas, time) =>
         `${place}, ${plural(replicas, 'replica', 'replicas')}, since ${time}`,
       chips: {
@@ -451,6 +468,53 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
   },
 };
+
+/** Limits name the actual reporter; an absent document makes no AWS claim. */
+export function verifyLimits(
+  locale: Locale,
+  reporter: ReportingPlatform,
+): VerifyCopy['limits'] {
+  const base = verifyCopy[locale].limits;
+  if (reporter === 'aws-ecs') return base;
+  const vi = locale === 'vi';
+  const reports = {
+    host: vi
+      ? 'Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy '
+      + 'và số bản sao.'
+      : 'The GreenNode host itself reports the running Podman digests '
+        + 'and replica counts.',
+    kubernetes: vi
+      ? 'API của Kubernetes báo cáo các mã băm đang chạy và số bản sao.'
+      : 'The Kubernetes API reports the running digests and replica counts.',
+    unknown: vi
+      ? 'Tài liệu triển khai cho biết nền tảng nào báo cáo '
+      + 'các mã băm đang chạy.'
+      : 'The deployment document identifies the platform reporting '
+        + 'the running digests.',
+  };
+  const trust = reporter === 'host'
+    ? (vi
+        ? 'Yếu hơn báo cáo từ API của ECS: máy chủ tự báo cáo, '
+        + 'không chứng minh máy chủ trung thực.'
+        : 'This is weaker than an ECS API report: the host reports itself '
+          + 'and does not prove its honesty.')
+    : (vi
+        ? 'Báo cáo của nền tảng không chứng minh máy chủ trung thực.'
+        : 'A platform report does not prove the server is honest.');
+  return {
+    ...base,
+    proves: [
+      reports[reporter],
+      vi
+        ? 'Chỉ image có chữ ký đã kiểm chứng mới được xác nhận do GitHub dựng '
+        + 'từ commit công khai, với chữ ký trong nhật ký Sigstore.'
+        : 'Only images with verified signatures are confirmed as built by '
+          + 'GitHub from the public commit, with signatures '
+          + 'in the Sigstore log.',
+    ],
+    not: [trust, ...base.not.slice(1)],
+  };
+}
 
 /** "AWS Singapore" or the GreenNode region, for the Running step. */
 export function platformPlace(document: DeploymentDocument): string {

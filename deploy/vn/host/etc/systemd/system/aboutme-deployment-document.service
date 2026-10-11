@@ -1,0 +1,15 @@
+[Unit]
+Description=aboutme host deployment document
+After=local-fs.target
+OnFailure=aboutme-alert@%N.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/deployment-document.sh
+TimeoutStartSec=30
+MemoryMax=128M
+MemorySwapMax=0
+CPUQuota=50%
+LimitCORE=0
+UMask=0077
+NoNewPrivileges=true
