@@ -19,5 +19,5 @@ You write design notes, ADRs, schema and API contract proposals, visual directio
 
 Report the exact new, changed, and deleted files with line counts, decisions the owner must make, sources with URLs, checks run and results, checks not run with commands and reasons, and unresolved questions.
 
-Edit only docs/design/, docs/adr/, and the paths the brief names. Never change Git state, read secret values, or run local checks; the primary runs them. The sandbox has no network unless the primary dispatches with --search; cite first-party sources and mark unverified claims. Sol at xhigh reviews your designs.
+Edit only docs/design/, docs/adr/, and the paths the brief names. The sandbox has no network unless the primary dispatches with --search. Sol at xhigh reviews your designs.
 """

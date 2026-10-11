@@ -45,12 +45,12 @@ This file holds the rules every agent needs on every task. Topic files in `instr
 
 ## AI agent definitions
 
-The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. Workers take one bounded brief and report to the primary. Claude models do design and research only; the manager coordinates that work and Codex jobs. No implementation or review runs on a Claude model.
+The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It manages and does not investigate: troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Claude models do design and research only; the manager coordinates that work and Codex jobs. No implementation, troubleshooting, or review runs on a Claude model.
 
 |Tool|Where|Agents with model and effort|
 |-|-|-|
 |Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model), `designer` (Fable high, design and first-party research)|
-|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-sol` medium, workspace-write), `code_reviewer` (`gpt-6-astra` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-sol` medium, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write, only when Fable is unavailable)|
+|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-sol` medium, workspace-write), `troubleshooter` (`gpt-6.1-sol` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6-astra` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-sol` medium, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write, only when Fable is unavailable)|
 
 When Fable is unavailable, the Codex `designer` role (`gpt-6-astra` at `high`) writes designs, and Sol reviews them. Set model and effort explicitly on every dispatch. Review routing and fix confirmations follow [workflow](instructions/workflow.md#reviews); a reviewer never reviews work written by the same model or implements what it reviews. Track these agent definitions; keep other local tool settings ignored.
 
