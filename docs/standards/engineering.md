@@ -3,7 +3,7 @@
 Write each fact once, in the artifact that owns it, in short plain words. Plans
 say what to do next and are deleted when the work ends; design docs and ADRs say
 how the system is and why. Code, tests, and living docs must stand on their own
-after every plan is gone.
+after every plan is gone. Do not use em dashes.
 
 ## Documentation ownership
 
@@ -32,6 +32,7 @@ section when the reasoning is longer than a short paragraph.
 
 Do not leave these in code, tests, or living docs:
 
+- citations of plans, phases, tasks, or review findings, with or without IDs;
 - plan, phase, task, slice, review-round, finding, or probe IDs (for example
   "Task 11", "P8-priv", "phase 10", "finding B2"), reviewer names, or report
   filenames; cite the design doc, ADR, or `AC-*` ID, or state the rule;
@@ -59,15 +60,8 @@ what changed and why; open a new ADR only for a new topic.
 
 ## Plans and records
 
-Plans describe work that remains. When a phase exits, delete its plan directory;
-git history keeps it. The traceability rows it proved, the architecture
-narrative, and the code record what it built. Never rewrite a proven
-traceability row's evidence to match later behavior; change its state and cite
-the new evidence.
-
-Use exact states: `planned`, `in progress`, `landed`, `verified`, `accepted`, or
-`blocked`. `Landed` means present in the repository. It does not imply that
-review, acceptance, or design approval passed.
+Agent procedures for plans, states, and evidence live in
+[documentation instructions](../../instructions/documentation.md#plans-and-records).
 
 ## Links and size
 

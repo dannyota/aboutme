@@ -47,7 +47,7 @@ Model these attackers:
 - A database writer without the application keys.
 - A leaked backup.
 
-Reviews stay read-only. Reviewers read the primary's check output and exact-commit CI runs; they never run local checks or delegate check execution. Reports go to the scratchpad outside the repository. Findings not fixed at once become lines in `docs/plans/backlog.md`.
+Reviews stay read-only. Reviewers read the primary's check output and exact-commit CI runs; they never run local checks or delegate check execution. Evidence handling follows [documentation instructions](documentation.md#evidence).
 
 ## Concurrency and blocked workers
 
@@ -63,18 +63,18 @@ When CI fails or a defect needs diagnosis, the primary downloads the failing log
 
 Implementers read their own diff line by line, update tests, specs, snapshots, and docs that assert changed behavior, and follow nearby code patterns. Report needed edits outside the brief's paths instead of making them.
 
-- Backend: use the Go, store, schema, and OpenAPI gates in [verification](verification.md). Migrations are append-only; preserve frozen migrations and grant `aboutme_app` under ADR 0005.
-- Frontend: adding a web file needs the source manifest regenerated through the primary. Never run Nuxt tooling in a checkout with an active browser proof. Report every pixel baseline a renderer change moves; generate it through hosted Baselines.
-- Devops: follow the [production runbook](../docs/runbooks/production.md) and prefer infrastructure as code. Production infrastructure and release paths beyond one-line changes need adversarial review before merge. The primary applies and deploys already reviewed commits under standing approval without a new review, and stops on unexpected destroys. Check that secrets exist; never read their values.
+- Backend: follow [Go and database rules](go.md) and the change-area gates in [testing](testing.md).
+- Frontend: follow [web rules](web.md) for source manifests, renderer boundaries, and baselines, and [resources](resources.md) for active browser proofs.
+- Devops: follow [deployment rules](deploy.md), the production runbook, and release authorities linked there.
 - Shared generated files: regenerate schema Go, sqlc output, OpenAPI clients, web source manifests, and public roots from their sources when affected. Never hand-edit generated output. The primary runs generators needing capped scopes. The source's assigned implementer reports each changed generated file and line. Serialize migrations and schema versions.
 
 ## QA and personas
 
-QA writes scripted headless Playwright proofs, inspects hosted pixel baselines, and checks production releases. It never fixes product code. Use the Playwright MCP server in `.codex/config.toml` to inspect selectors, requests, and state, then write `@playwright/test` specs; MCP never runs recorded automation. Report missing configuration or access to the primary. The primary dispatches Baselines at the exact candidate and downloads `candidate-baselines`; QA reports every changed PNG.
+QA writes scripted headless Playwright proofs, inspects hosted pixel baselines, and checks production releases. It never fixes product code. Follow [testing](testing.md) for Playwright authoring and [web rules](web.md) for hosted Baselines. The primary dispatches Baselines at the exact candidate and downloads `candidate-baselines`; QA reports every changed PNG.
 
 Persona dogfooding reads `PRODUCT.md` and judges only the visible product at phone (390 px) and desktop (1440 px) widths. A Vietnamese job seeker signs up, starts from a template or sample, edits, publishes, shares, and exports in Vietnamese or English. Create accounts and resumes only on the local stack. In production stay signed out unless the brief names a test account; never use the owner's account or create, publish, or delete production resumes. A recruiter holds no account and stays signed out while reading public resumes, gallery samples, PDFs, and applicant tracking system text. Check content, order, credibility, and scan speed.
 
-Save assigned persona evidence under `.dev/personas/`. Persona work never edits product files. Report each defect with steps, URL, expected and actual behavior, severity, screenshot or other evidence, and owning lane. Local proofs need an approved bounded primary-session command; the primary stops the stack when the proof ends.
+Persona evidence and defect reports follow [documentation instructions](documentation.md#evidence). Local proofs need an approved bounded primary-session command; the primary stops the stack when the proof ends.
 
 ## Reporting
 

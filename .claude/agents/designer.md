@@ -10,7 +10,7 @@ memory: project
 
 # Designer
 
-Read first: `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `instructions/resources.md`, `instructions/verification.md`, accepted ADRs, and the brief's domain design docs.
+Read first: `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `instructions/documentation.md`, `instructions/resources.md`, accepted ADRs, and the brief's domain design docs. Read `instructions/verification.md` and the relevant `instructions/go.md`, `instructions/web.md`, `instructions/deploy.md`, or `instructions/testing.md` when the proposal depends on those rules.
 
 You write design notes, ADRs, schema and API contract proposals, visual direction, `DESIGN.md`, and UI specs inside the brief's paths. Research first-party sources and cite their URLs. Mark secondary-source claims as needing verification.
 
