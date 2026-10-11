@@ -324,6 +324,80 @@ test("aggregate rejects unrestricted job and event skips", () => {
   }
 });
 
+test("browser groups retain every proof and shard on PR and main", () => {
+  checkProofCoverage(readWorkflow("ci"));
+});
+
+test("browser coverage rejects omitted proofs and lost shards", () => {
+  for (const omitted of ["linkedin-import", "mcp-ts-sdk", "totp:skew", "passkey:recovery-attempts"]) {
+    const ci = readWorkflow("ci");
+    for (const group of ci.jobs["dev-https-proofs"].strategy.matrix.include) {
+      group.proofs = expandProofs(group.proofs).filter((proof) => proof !== omitted).join(" ");
+    }
+    assert.throws(() => checkProofCoverage(ci), /complete proof coverage/, omitted);
+  }
+  for (const kind of ["passkey", "totp"]) {
+    const ci = readWorkflow("ci");
+    const step = ci.jobs.ci.steps.find((step) => step.run?.includes(`check-shard-coverage.mjs ${kind}`));
+    step.run = "true";
+    assert.throws(() => checkProofCoverage(ci), /shard evidence gate/, kind);
+  }
+});
+
+test("browser setup timings survive setup failure and reach an artifact", () => {
+  const steps = readWorkflow("ci").jobs["dev-https-proofs"].steps;
+  const start = steps.findIndex((step) => step.name === "Start setup timing");
+  const setup = steps.findIndex((step) => step.id === "setup");
+  const record = steps.findIndex((step) => step.name === "Record setup timing");
+  assert.ok(start >= 0 && start < setup && setup < record, "setup timing brackets setup");
+  assert.equal(steps[record].if, "always()");
+  assert.match(steps[start].run, /date \+%s/);
+  assert.match(steps[record].run, /date \+%s/);
+  assert.equal(steps[record].env.SETUP_RESULT, "${{ steps.setup.outcome }}");
+  const upload = steps.find((step) => step.name === "Upload browser proof timings");
+  assert.equal(upload.if, "always()");
+  assert.equal(upload.with.path, ".dev/proof-timing/");
+  assert.equal(upload.with["include-hidden-files"], true);
+});
+
+function expandProofs(proofs) {
+  return proofs.trim().split(/\s+/).flatMap((proof) => {
+    if (!proof.startsWith("totp:")) return [proof];
+    return proof.slice(5).split(",").map((shard) => `totp:${shard}`);
+  });
+}
+
+function checkProofCoverage(ci) {
+  assert.ok(Object.hasOwn(ci.on, "push") && Object.hasOwn(ci.on, "pull_request"), "PR and main triggers");
+  assert.equal(ci.on.push.paths, undefined, "full main coverage");
+  assert.equal(ci.on.push["paths-ignore"], undefined, "full main coverage");
+  assert.equal(ci.on.pull_request?.paths, undefined, "full PR coverage");
+  assert.equal(ci.on.pull_request?.["paths-ignore"], undefined, "full PR coverage");
+  const job = ci.jobs["dev-https-proofs"];
+  assert.equal(job.if, undefined, "browser groups run on every trigger");
+  assert.equal(job.strategy["fail-fast"], false, "all groups finish");
+  const groups = job.strategy.matrix.include;
+  assert.equal(groups.length, 9, "existing browser group count");
+  assert.equal(new Set(groups.map((group) => group.group)).size, 9, "unique browser groups");
+  assert.deepEqual(groups.flatMap((group) => expandProofs(group.proofs)).sort(), [
+    "totp:replay-concurrent", "totp:primary", "totp:skew", "totp:locale-attempts",
+    "totp:replace-recovery", "totp:epoch-disabled", "passkey:primary-disabled",
+    "passkey:recovery-attempts", "public", "auth", "editor", "exports", "entry",
+    "publish", "linkedin-import", "password", "privacy", "transport", "mcp",
+    "mcp-sdk", "mcp-ts-sdk", "sample-start", "linkedin",
+  ].sort(), "complete proof coverage");
+  const run = job.steps.find((step) => step.env?.PROOFS);
+  assert.equal(run.env.PROOFS, "${{ matrix.proofs }}");
+  assert.match(run.run, /bash scripts\/ci-browser-proofs\.sh "\$\{proofs\[@\]\}"/);
+  for (const kind of ["passkey", "totp"]) {
+    const gate = ci.jobs.ci.steps.find((step) => step.run?.includes(`check-shard-coverage.mjs ${kind}`));
+    assert.ok(gate, `${kind}: shard evidence gate`);
+    assert.equal(gate.if, "${{ needs.dev-https-proofs.result == 'success' }}");
+    assert.match(gate.run, /"\$\{evidence_files\[@\]\}"/);
+    assert.match(gate.run, /exit 1/, "empty shard evidence fails");
+  }
+}
+
 test("preflight gates every large job and publishes the validated comparison base", () => {
   const ci = readWorkflow("ci");
   const preflight = ci.jobs.preflight;
