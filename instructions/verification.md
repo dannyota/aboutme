@@ -33,12 +33,12 @@ GitHub CI runs every build and test. `main` and other branches run it differentl
 
 | | `main` | Other branches |
 |-|-|-|
-| Trigger | Every push runs `ci.yml` | Nothing runs on push; dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>` |
+| Trigger | Every push runs `ci.yml` | A pull request against `main` runs `ci.yml` on the branch merged into `main`, again on every push; without one, dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>` |
 | Release gate | A green push run on the exact commit is required to tag and deploy | Never counts as a release gate |
 | Caches | Saves Go and tool caches | Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main` |
-| Canceling | A newer push to `main` cancels the older run | A newer dispatch on the same branch cancels the older run |
+| Canceling | A newer push to `main` cancels the older run | A newer push to the pull request, or a newer dispatch on the branch, cancels the older run |
 
-Before dispatching on a branch:
+A pull request needs no dispatch: its run already tests the branch merged into `main` with the right base. Before dispatching on a branch without one:
 
 1. Merge `origin/main` into the branch (never rewrite pushed commits) so CI tests the branch as it will land.
 2. Pass `base_sha=$(git merge-base origin/main HEAD)`: the full 40-character SHA of a commit that is an ancestor of the branch head. A SHA that is not an ancestor, such as a newer `main`, fails the migration and released-schema guards before they check anything.
