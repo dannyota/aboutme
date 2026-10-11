@@ -239,7 +239,8 @@ These contracts match the server and Caddy images:
   `SMTP_TLS`, `SES_FROM_ADDRESS`, `SES_FROM_NAME`, and the Podman secrets
   `smtp-username` and `smtp-password` as `SMTP_USERNAME` and `SMTP_PASSWORD`.
 - App release images: a `linux/amd64` entry in each image index; `deploy.sh`
-  refuses a tag without one. The optional observer uses a separate
+  refuses a tag without one and pins that platform image's digest, which its
+  provenance and SBOM attestations name. The optional observer uses a separate
   single-platform `<tag>-amd64` image.
 
 ## Paid resources and quotes
