@@ -118,8 +118,8 @@ omitted keeps the stored value. `showcaseEnabled: true` needs `live`
 list is `invalid_format`. The owner resume resource gains `showcase`: `null`
 when off, otherwise `{ state, role }` with `state` always `listed`; nothing is
 reviewed. The public resume JSON and MCP tools are unchanged. The
-[showcase design](showcase.md#delivery-caching-and-revocation) owns the exact
-query, item, and field rules.
+[showcase design](showcase-contract.md#delivery-caching-and-revocation) owns the
+exact query, item, and field rules.
 
 ### Photo intake
 
