@@ -8,7 +8,7 @@ How work is reviewed and shipped. The manager, devops, and reviewer read this fi
 
 1. **One author per task.** Write the failing test first, make the smallest correct change, and use CI for the affected checks. A local red test is not required when it would violate [resource rules](resources.md); record that it was not run. Adversarial cases (write safety, races, bounds, hostile input, authz, CSRF) are the author's job.
 2. **One fresh review per plan or release,** by the reviewer role, before push. Local-only and test-only changes skip it. Findings go back to the author; the reviewer confirms the fix.
-3. **Copilot reviews every pull request** against `main` (the `copilot-review` ruleset), from another model family than the workers. Each finding is fixed on the branch or answered in its thread with the reason it does not apply before the merge. Copilot cannot approve and does not reply; a push after fixes starts its next review.
+3. **Copilot reviews every pull request** against `main` (the `copilot-review` ruleset), as a second reviewer beside the reviewer role. Each finding is fixed on the branch or answered in its thread with the reason it does not apply before the merge. Copilot cannot approve and does not reply; a push after fixes starts its next review.
 
 ## Releases
 

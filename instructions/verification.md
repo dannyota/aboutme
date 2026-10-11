@@ -38,7 +38,7 @@ GitHub CI runs every build and test. `main` and other branches run it differentl
 | Caches | Saves Go and tool caches | Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main` |
 | Canceling | A newer push to `main` cancels the older run | A newer push to the pull request, or a newer dispatch on the branch, cancels the older run |
 
-A pull request needs no dispatch: its run already tests the branch merged into `main` with the right base. Before dispatching on a branch without one:
+A pull request needs no dispatch: its run tests the branch merged into `main` as `main` stood when the run started. A later push to `main` does not rerun it, so if `main` moved since the last run, merge `origin/main` into the branch and push before landing; CI and the Copilot review then cover the combination that lands. Before dispatching on a branch without one:
 
 1. Merge `origin/main` into the branch (never rewrite pushed commits) so CI tests the branch as it will land.
 2. Pass `base_sha=$(git merge-base origin/main HEAD)`: the full 40-character SHA of a commit that is an ancestor of the branch head. A SHA that is not an ancestor, such as a newer `main`, fails the migration and released-schema guards before they check anything.
