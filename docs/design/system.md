@@ -7,18 +7,17 @@ sharing one renderer across every visual output.
 
 | Component      | Responsibility                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------ |
-| Caddy          | One origin, route dispatch, canonical client IP, origin mTLS check, and edge headers             |
+| Caddy          | Host TLS, Coraza, CrowdSec, route dispatch, canonical client IP, and security headers            |
 | Go server      | Authentication, sessions, resume API, public-state gates, media, and authorized render jobs      |
 | Nuxt           | Public server-side rendering (SSR), editor application, capability-gated print, and Vue renderer |
 | PostgreSQL     | Accounts, sessions, resume aggregates, slug state, idempotency, and operational records          |
 | Object storage | Private account avatars and resume photos; Go controls every read and write                      |
-| CloudFront     | Production viewer edge, TLS entry, cache bypass for everything except hashed assets              |
+| Cloudflare DNS | Authoritative DNS with DNSSEC; every record is DNS-only                                          |
 
 ```mermaid
 graph TD
-    U[Browser] --> CF[CloudFront]
-    R[Crawler] --> CF
-    CF --> CA[Caddy]
+    U[Browser] --> CA[Caddy]
+    R[Crawler] --> CA
     CA --> GO[Go server]
     CA --> NX[Nuxt]
     GO -->|leased public snapshot and response control| NX
@@ -98,5 +97,4 @@ authority. Public pages are continuous and have no page boundaries.
 - A Nuxt failure does not expose Go or PostgreSQL around Caddy.
 - A missed SSE notification is repaired by an unconditional refetch on every
   reconnect.
-- Production fails closed when trusted-proxy or origin certificate configuration
-  is absent.
+- Production fails closed when trusted-proxy configuration is absent.

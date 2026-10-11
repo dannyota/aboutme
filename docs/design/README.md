@@ -25,8 +25,9 @@ Current behavior lives in code, deployment configuration, and
 | 5e      | [Authenticator-app contract](totp-second-factor-contract.md)           | TOTP routes, failure budget, and storage                       |
 | 5f      | [TOTP key management](totp-key-management.md)                          | Sealing, key ring, rotation, and key failures                  |
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations    |
-| 6a      | [Single-host production](single-host-production.md)                    | Production host, edge, database, secrets, deploy, and alarms   |
+| 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms          |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM            |
+| 6c      | [Single-host AWS reference](single-host-production.md)                 | Retained AWS deployment design                                 |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                      |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                     |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks    |
@@ -60,7 +61,7 @@ Current behavior lives in code, deployment configuration, and
 
 ```mermaid
 graph LR
-    B[Browser or crawler] --> C[CloudFront and Caddy]
+    B[Browser or crawler] --> C[Caddy on the Vietnam host]
     A[Connected agent] --> C
     C --> N[Nuxt SSR and Vue renderer]
     C --> G[Go API]

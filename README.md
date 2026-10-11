@@ -37,25 +37,24 @@ supports Vietnamese and English.
 
 ## Project status
 
-Production runs on AWS in Singapore behind Amazon CloudFront. See
+Production runs on one GreenNode host in Vietnam with Cloudflare DNS-only. See
 [tags](https://github.com/dannyota/aboutme/tags) for published versions,
 [Actions](https://github.com/dannyota/aboutme/actions) for build results, and
 the [production runbook](docs/runbooks/production.md) for operations.
 
 The [architecture](docs/architecture.md) describes implemented behavior. The
-[design](docs/design/README.md) records intended behavior and the
-[roadmap](docs/plans/README.md) records remaining work. Flutter is deferred.
+[design](docs/design/README.md) records intended behavior. Flutter is deferred.
 
 ## Repository
 
-| Path              | Responsibility                                                                  |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP  |
-| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client    |
-| `apps/mobile`     | Deferred Flutter client                                                         |
-| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets  |
-| `deploy`          | Compose deployment, Caddy images, AWS OpenTofu modules, and the browser harness |
-| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks              |
+| Path              | Responsibility                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP         |
+| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client           |
+| `apps/mobile`     | Deferred Flutter client                                                                |
+| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets         |
+| `deploy`          | Vietnam host deployment, Compose, Caddy images, retained AWS code, and browser harness |
+| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks                     |
 
 See the [documentation map](docs/README.md) for authority and lifecycle rules.
 

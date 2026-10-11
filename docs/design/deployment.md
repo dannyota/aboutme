@@ -12,7 +12,7 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 | Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
 | Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
 | Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
-| Production          | CloudFront, one Bottlerocket ECS host (Caddy, Go, Nuxt), RDS PostgreSQL, private S3         | `https://aboutme.vn`              |
+| Production          | One GreenNode host (Caddy, Go, Nuxt, PostgreSQL), private vStorage                          | `https://aboutme.vn`              |
 
 Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
@@ -24,54 +24,55 @@ environments.
 
 The native HTTPS harness sets `PROVIDER_LOGIN_ENABLED=google,linkedin` for
 provider proofs. Native HTTP, Compose, and self-hosted configurations leave it
-unset for a password-only surface. Production sets it and
-`PASSWORD_REGISTRATION_ENABLED` from OpenTofu variables;
+unset for a password-only surface. The owner sets production provider and
+`PASSWORD_REGISTRATION_ENABLED` flags in `/etc/aboutme/flags.env`;
 [security](security.md#provider-identity) defines both flags.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
 and API work. Auth feature checks run at the native HTTPS origin. Complete
 product acceptance runs in production, per
-[ADR 0025](../adr/0025-single-host-production.md).
+[ADR 0027](../adr/0027-vietnam-hosted-production.md).
 
 ## Production topology
 
-A version tag builds ARM64 server, web, and Caddy images on GitHub-hosted ARM64
-runners, smoke-tests them, and publishes them with build provenance to public
-GitHub Container Registry packages. The AMD64 Playwright baseline job stays the
-pixel authority; ARM64 smoke tests cover runtime compatibility, including
-Chromium and fonts. OpenTofu lives in `deploy/aws/`, state and environment
-values stay out of Git, and GitHub holds no cloud credentials. The owner applies
-infrastructure and deploys from the laptop by image digest, never a moving tag.
+A version tag builds ARM64 and AMD64 server, web, and Caddy images on
+GitHub-hosted runners, smoke-tests them, and publishes them with build
+provenance to public GitHub Container Registry packages. The AMD64 Playwright
+baseline job is the pixel authority. The Vietnam host requires AMD64. OpenTofu
+lives in `deploy/vn/prod`; state and environment values stay out of Git. GitHub
+holds no cloud credentials. The owner applies infrastructure and deploys from
+the laptop by image digest.
 
-Production is Amazon CloudFront in front of one EC2 host running Caddy, Go, and
-Nuxt, with private single-AZ RDS PostgreSQL and private S3
-([ADR 0025](../adr/0025-single-host-production.md)). The
-[single-host design](single-host-production.md) owns its details. One serving
-replica runs under [ADR 0026](../adr/0026-replica-scaling.md), and the growth
-path is a larger instance first. Raising the replica count alone is unsafe:
-publication fences, render jobs and capabilities, and SSE state are
-process-local until the [scaling contract](scaling/README.md) lands.
+Production runs on one GreenNode host in Vietnam with Caddy, Go, Nuxt,
+PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage
+([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Cloudflare provides
+DNS-only records. The [Vietnam production design](vietnam-production.md) owns
+the topology. The AWS deployment was removed on 2026-10-11; `deploy/aws/`
+remains undeployed for a possible AWS ECS or Kubernetes path.
+
+One serving replica runs under [ADR 0026](../adr/0026-replica-scaling.md). Grow
+the host first. Raising the replica count alone is unsafe: publication fences,
+render jobs and capabilities, and SSE state are process-local until the
+[scaling contract](scaling/README.md) is implemented.
 
 ## Client-IP boundary
 
-CloudFront sets `CloudFront-Viewer-Address`. Caddy's CloudFront listener rejects
-duplicate or invalid values, strips every other forwarding header, and emits one
-`X-Real-IP`. Go accepts that canonical header only from the colocated Caddy on
-loopback, normalizes it with `netip`, and fails closed in production when its
-trusted-proxy set is empty. Go never parses `X-Forwarded-For`. Tests cover
-forged viewer headers and direct requests to the origin address.
+Caddy's direct listener takes the socket address and strips every forwarding
+header before emitting one `X-Real-IP`. Go accepts that canonical header only
+from colocated Caddy on loopback, normalizes it with `netip`, and fails closed
+in production when its trusted-proxy set is empty. Go never parses
+`X-Forwarded-For`. Tests cover forged forwarding headers on the direct listener.
 
 ## Edge behavior
 
-CloudFront terminates viewer TLS; the
-[CloudFront edge design](cloudfront-edge.md) lists its settings. Apex is the
-sole application origin and `www` redirects before any authentication route. The
-origin accepts only CloudFront's origin-facing prefix list with its origin mTLS
-client certificate. Every path except hashed `/_nuxt/*` assets bypasses the edge
-cache, so edge storage is never publication authority: each public request
-reaches the origin, which checks slug, live state, route flag, and public
-generation before a strong ETag can validate retained bytes
+Clients connect directly to the floating IP. Caddy terminates TLS with Let's
+Encrypt and runs Coraza and the CrowdSec bouncer. Apex is the sole application
+origin; `www` redirects before any authentication route. Cloudflare provides DNS
+with proxying off. There is no edge cache. Caddy serves hashed `/_nuxt/*` assets
+with Nuxt's immutable cache headers. Every public resume request reaches Go's
+slug, live-state, route-flag, and public-generation gate before a strong ETag
+can validate retained bytes
 ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 Go reaches Nuxt on the host's private network, and at the native Nuxt address in
@@ -116,41 +117,38 @@ permit, so their memory peaks never overlap.
 ## Authentication email
 
 Verification, reset, and security-notification email is committed through a
-bounded encrypted outbox and delivered by a worker. Production uses the AWS SDK
-for Go v2 SES client in `ap-southeast-1` with a verified sending domain, a
-configuration set, and delivery/bounce/complaint alarms. AWS credentials use the
-standard runtime credential chain and never enter repository files.
+bounded encrypted outbox and delivered by a worker. Production sends through
+Bizfly Email Transaction over SMTP as
+`Danny from aboutme.vn <danny@aboutme.vn>`. Replies reach the Google Workspace
+mailbox. The [email runbook](../runbooks/email.md) owns SMTP and delivery
+checks.
 
-Native development starts a loopback-only mail-capture command that retains a
-bounded number of messages and never initializes AWS. The
-[email runbook](../runbooks/email.md) records the existing Singapore SES sandbox
-setup. Preserve its Google Workspace root DNS and SES resources. The production
-task role adds send permission without taking over those resources. Mail to real
-users requires SES production access; a simulator smoke does not prove a user's
-verification or reset flow.
+Native development starts a loopback-only mail capture that retains a bounded
+number of messages. No production credentials enter that capture.
 
 ## Database and releases
 
-RDS PostgreSQL uses Graviton-compatible instances, gp3 storage, automated
-backups, and point-in-time recovery. It starts single-AZ; Multi-AZ is a later
-availability decision. Backup retention is 30 days. Restore evidence matters
-more than backup configuration: one isolated restore with data verification
-precedes the public announcement.
+PostgreSQL 18 runs on the host's encrypted data volume and listens only on its
+Unix socket. pgBackRest archives WAL to GreenNode vStorage and retains backups
+for 30 days. Quarterly restore drills check the latest backup and a
+point-in-time target on an isolated temporary server. The drill's outbound
+networking remains open. See the
+[Vietnam database design](vietnam-production.md#postgresql).
 
 Migrations run as a separate deploy step, never at server startup
 ([ADR 0026](../adr/0026-replica-scaling.md)); the
-[single-host design](single-host-production.md#release-and-deploy) lists the
-order. A nonzero migration exit blocks the update. The runner uses goose's
-Provider with a PostgreSQL session advisory locker, which takes the lock before
-reading the pending set, so a second concurrent runner is safe. Every migration
-runs as the fixed `aboutme_migrator` role that `db-setup` creates.
+[Vietnam production design](vietnam-production.md#deploy) lists the order. A
+nonzero migration exit blocks the update. The runner uses goose's Provider with
+a PostgreSQL session advisory locker, which takes the lock before reading the
+pending set, so a second concurrent runner is safe. Every migration runs as the
+fixed `aboutme_migrator` role that `db-setup` creates.
 `apps/server/migrations/.uat-baseline` keeps existing migrations immutable
 ([ADR 0005](../adr/0005-database-migrations.md)).
 
 The [release fence](passkey-release-fence.md) keeps every supported deploy,
 rollback, and restoration at or above the second-factor floor. Every supported
 path runs the current deployer, not a script from the target release. OpenTofu
-and AWS administration remain privileged bypasses that need a compatibility
+and host administration remain privileged bypasses that need a compatibility
 proof.
 
 A breaking schema change uses expand, backfill, and contract across releases, so
@@ -159,14 +157,14 @@ does not test that, so redeploying an earlier image is a supported rollback only
 when the failed release applied no migration. Otherwise recovery is a forward
 fix or a point-in-time restore.
 
-Application secrets use AWS Systems Manager Parameter Store `SecureString`
-values in `ap-southeast-1`, injected at runtime. They never enter images,
-source, command lines, logs, or OpenTofu state. Secret names and rotation
-procedures are tracked; values are never evidence.
+Application secrets are root-owned 0400 host files on the encrypted data volume,
+supplied as named Podman secrets only to the units that need them. An
+age-encrypted copy stays in `aboutme-infra`. Values never enter images, source,
+command lines, logs, or OpenTofu state.
 
-The TOTP key ring uses two such parameters, chosen by nonsecret OpenTofu slot
-variables; the [key-management design](totp-key-management.md) owns rotation and
-key failures.
+The TOTP key ring uses two host secret slots, selected in
+`/etc/aboutme/flags.env`; the [key-management design](totp-key-management.md)
+owns the application key-ring contract.
 
 A later second replica uses the pinned admission and password-email key versions
 from [key identity](scaling/admission.md#key-identity). A key change then

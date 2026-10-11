@@ -3,12 +3,11 @@
 Code for production at `https://aboutme.vn` on one GreenNode vServer in Ho Chi
 Minh City, under [ADR 0027](../../docs/adr/0027-vietnam-hosted-production.md)
 and the [Vietnam production design](../../docs/design/vietnam-production.md).
-`deploy/aws/` stays for the AWS test environment.
+`deploy/aws/` stays undeployed for a possible AWS ECS or Kubernetes path.
 
-`prod/` was first applied on 2026-10-10: the host runs in HCM03-1C at
-49.213.71.249 and serves nothing until cutover. Facts marked **Unconfirmed**
-come from provider docs or source and wait for a test on the account (design,
-"Provider facts to confirm").
+Production serves from HCM03-1C. Cutover completed on 2026-10-11 with release
+v0.7.3, and AWS was removed. Cloudflare provides DNS-only records; the owner
+edits them by hand. Facts marked **Unconfirmed** need an account check.
 
 ## Layout
 
@@ -87,7 +86,9 @@ the same value as `ssh_port` when using another port.
 7. `deploy-host.sh - <tag> db-bootstrap` on the host, then `probe/probe.sh`.
 8. `scripts/budget.sh --limit-vnd <amount>`, then fill `ALERT_TO` and the SMTP
    settings in `/etc/aboutme/smtp.env`.
-9. `DEPLOY_HOST=<ip> scripts/deploy.sh <tag> --first-deploy`.
+9. Point DNS at the floating IP before starting Caddy, so Let's Encrypt can
+   validate HTTP-01. Follow the [DNS runbook](../../docs/runbooks/dns.md).
+10. `DEPLOY_HOST=<ip> scripts/deploy.sh <tag> --first-deploy`.
 
 To rotate a media or backup key, create its new local key file, then run
 `scripts/secrets.sh import-s3 media --replace` or
@@ -108,8 +109,7 @@ Encrypting any disk at server create adds one `CES` line of 30% of the flavor
 price, 170,280 VND a month for `s2-general-2x4`. Encrypting the root disk too
 adds no further charge. The `vngcloud` CLI creates an encrypted volume from
 v0.59.0 (`volume create-volume --encryption-type-id`);
-`scripts/restore-drill.sh` refuses an older CLI, and the production apply waits
-for the provider check below.
+`scripts/restore-drill.sh` refuses an older CLI.
 
 ## Logs and alarms
 
@@ -119,11 +119,43 @@ aboutme unit, and the PostgreSQL, CrowdSec, and SSH services, names
 `aboutme-alert@.service` in `OnFailure=`, and `aboutme-watch.timer` runs
 `host/bin/watch.sh` every five minutes: root and data volume use above 70%,
 failed units, PostgreSQL on its socket, WAL archive failures, the newest backup
-older than 26 hours, the CrowdSec alert count and Coraza match count in the last
-hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh` mails
-the support mailbox through Bizfly SMTP with msmtp, at most once a day per
-condition, with names and counts only. The external app-down check is the Route
-53 health check, outside this tree.
+at least 26 hours old, the CrowdSec alert count and Coraza match count in the
+last hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh`
+mails the support mailbox through Bizfly SMTP with msmtp, at most once per
+condition per UTC day, with names and counts only. The external app-down check
+is the GitHub uptime workflow. The
+[production runbook](../../docs/runbooks/production.md#alarms) owns its
+schedule, notification recipient, and limits.
+
+## Restore drill
+
+`scripts/restore-drill.sh` creates a temporary encrypted server and data volume,
+reaches its private IP through the production host as an SSH jump host, installs
+PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
+target. It checks versions, row counts, grants, and an `aboutme_app` read. The
+exit trap deletes the server and volume unless `--keep` was requested.
+
+The server has no floating IP and no NAT, so it has no outbound internet for
+packages or vStorage. Outbound networking remains open. GreenNode Public NAT
+adds a `0.0.0.0/0` route for the whole VPC, which sends every VM's outbound
+traffic through it. Do not add a Public NAT to the production VPC for the drill.
+
+## Cutover prerequisites
+
+`scripts/cutover.sh` is a reference for an AWS-to-Vietnam data move. Before
+`preflight`, the Vietnam host must already serve maintenance with its server
+stopped. Preflight stops job timers and active jobs and checks that state; it
+does not start maintenance. AWS must also serve maintenance with its app and
+schedules stopped. The AWS stack is not deployed, so the script cannot run
+against the current infrastructure.
+
+## Reboot
+
+Use the GreenNode API to reboot. An in-guest `systemctl reboot` hung once.
+Readiness stayed failed once after a hard reset until `aboutme-server`
+restarted. The cause remains open. The
+[production runbook](../../docs/runbooks/production.md#reboot) owns the host
+checks.
 
 ## Provider facts
 
@@ -135,10 +167,10 @@ condition, with names and counts only. The external app-down check is the Route
 | Default endpoints `*.vngcloud.vn` still answer after the GreenNode domain move                                              | Yes: the provider's default token and vServer URLs worked for plan and apply (2026-10-10)                                                                                                                                         |
 | `vngcloud_vserver_volume.encryption_type` creates an encrypted volume                                                       | Yes: the data volume reads `EncryptionType` `aes-xts-plain64_256`                                                                                                                                                                 |
 | The UEFI Ubuntu image passes as `image_id`                                                                                  | Yes                                                                                                                                                                                                                               |
-| A server without `ssh_key` is accepted (the admin key comes through cloud-init)                                             | Yes; the admin key arrives through cloud-init                                                                                                                                                                                     |
-| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Created with the server; replacing the server twice kept the same address, 49.213.71.249. The server keeps `prevent_destroy`                                                                                                      |
+| User data with an SSH key ID at server creation                                                                             | Refused by GreenNode. `restore-drill.sh` omits `--ssh-key-id`; cloud-init supplies the admin key                                                                                                                                  |
+| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Created with the server; replacing the server twice kept the same address. The server keeps `prevent_destroy`                                                                                                                     |
 | The new security group's default egress allows outbound traffic                                                             | Yes: cloud-init installed packages over it                                                                                                                                                                                        |
-| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | Lock file works (412 on a contended lock), so `versions.tf` sets `use_lockfile`; pgBackRest itself runs at rehearsal                                                                                                              |
+| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | Lock file works (412 on a contended lock), so `versions.tf` sets `use_lockfile`; pgBackRest uses the backup bucket; restore-drill outbound networking remains open                                                                |
 | An encrypted volume attaches to a server created with plain disks                                                           | No: 400 `cannot attach encryption volume` (wiki Compute-Servers.md)                                                                                                                                                               |
 | GreenNode's Ubuntu 24.04 image ships its own `sshd_config`                                                                  | Yes: `Port 234`, no `Include` of `sshd_config.d`, password login on, and `ssh.service` without socket activation. cloud-init replaces the file before sshd starts, and the image's `ssh-keygen.service` fails on DSA without harm |
 | A security group description takes any text                                                                                 | No: only letters, digits, `_`, `.`, `@`, `-`, and spaces                                                                                                                                                                          |
@@ -214,6 +246,10 @@ Read-only quotes on 2026-10-10 in zone `HCM03-1C`, VND a month, 10% VAT included
 | Floating IP                                    | `tofu apply`                                | 120,000                      |
 | vStorage Gold project, 30 GB                   | `storage create-project`, bought 2026-10-10 | 30,000                       |
 | Restore drill server and volume, while it runs | `scripts/restore-drill.sh`                  | the server's price, prorated |
+
+The vStorage project has monthly auto-renew enabled since 2026-10-10. The next
+renewal is 2026-11-09. The owner checks the renewal and available balance so
+media, backups, and infrastructure state remain available.
 
 The budget is free. Alerts use the Bizfly SMTP account the server already sends
 with.

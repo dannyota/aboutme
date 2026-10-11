@@ -1,10 +1,11 @@
 # Single-host production
 
-Production runs at `https://aboutme.vn` on one host under
-[ADR 0025](../adr/0025-single-host-production.md). This page narrows the
-[deployment design](deployment.md); trust boundaries not named here are
-unchanged. The [production runbook](../runbooks/production.md) holds the
-commands.
+This page describes the undeployed AWS single-host reference architecture under
+[ADR 0025](../adr/0025-single-host-production.md). Production uses the
+[Vietnam host](vietnam-production.md) under
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). Follow the
+[production runbook](../runbooks/production.md) for live operations. The AWS
+commands below apply only after rebuilding and reviewing that path.
 
 ## Request path
 

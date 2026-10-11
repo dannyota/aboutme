@@ -16,7 +16,7 @@ exercised at the environment that owns the risk.
 | Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                                                                                                                                              |
 | Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                                                                                                                                        |
 | Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                                                                                                                                          |
-| Backups          | Automated backups and release snapshots expire after 30 days; disclosures distinguish this delay from live access and private-object deletion                                                                                                                              |
+| Backups          | pgBackRest backups expire after 30 days; disclosures distinguish this delay from live access and private-object deletion                                                                                                                                                   |
 
 Account and resume delete APIs may succeed once reference revocation and every
 applicable deletion job commit together. Object-storage latency does not extend
@@ -68,7 +68,7 @@ automatically submits deletion.
 ### Scheduled cleanup and audit
 
 The server's one-shot cleanup commands run on the schedule in the
-[single-host design](single-host-production.md#scheduled-jobs). Database
+[Vietnam production design](vietnam-production.md#scheduled-jobs). Database
 commands take PostgreSQL advisory overlap locks, every command has a bounded run
 and fixed numeric result fields, and none starts the HTTP listeners or Chromium.
 A failed scheduled run raises an alarm.
@@ -83,8 +83,8 @@ events are durable; audit insertion and the state they describe commit together.
 Completed media jobs remain for 180 days from completion to preserve outcome and
 ambiguous-commit proof. Audit events expire after 180 days from occurrence.
 Pending and overdue jobs never expire. A released slug's tombstone holds no
-account link and is deleted 180 days after release. Security diagnostic logs use
-the same 180-day hosted log retention; cleared mail delivery bookkeeping remains
+account link and is deleted 180 days after release. Host diagnostic logs stay in
+journald for 30 days, capped at 2 GB. Cleared mail delivery bookkeeping remains
 on its existing seven-day cleanup schedule.
 
 Orphan dry runs do not mutate objects, jobs, audit or the stored cursor. Failed
@@ -106,16 +106,16 @@ evidence.
 
 ## Monitoring
 
-Production alerts cover:
+Production uses host mail alert units and a GitHub uptime workflow. The
+[production runbook](../runbooks/production.md#alarms) owns exact triggers,
+notification recipients, and schedule limits. Host checks cover disk use, failed
+units, PostgreSQL availability, WAL archiving, backup age, CrowdSec retention
+and alerts, Coraza diagnostics, and TOTP key failures. Unit failures also raise
+mail alerts. The external workflow checks `/readyz` every five minutes.
+Production has no CloudWatch or Route 53 health-check alarm.
 
-- RDS storage, CPU, connections, backup, and restore verification.
-- Service running count, restart loops, and the external health check.
-- Render queue depth, timeout, and out-of-memory kills.
-- SSE connection and file-descriptor headroom.
-- TLS expiry and origin-path failures.
-- Scheduled retention, orphan cleanup, and audit jobs.
-- Media deletion queue age, retry exhaustion, 24-hour target breaches, and
-  weekly reconciliation drift.
+Resource and latency budgets still require measurements on the host. A service
+limit or readiness probe does not prove a separate alert exists for each budget.
 
 Every critical alert has a documented trigger and its delivery is proven in
 production before the public announcement. Dashboards without a tested
@@ -134,4 +134,4 @@ notification path do not satisfy the gate.
 - Production at `https://aboutme.vn` is where the owner tests the complete
   product, restore, migration, alarms, real email, and edge behavior. A separate
   UAT environment returns at about 500 users
-  ([ADR 0025](../adr/0025-single-host-production.md)).
+  ([ADR 0027](../adr/0027-vietnam-hosted-production.md)).
