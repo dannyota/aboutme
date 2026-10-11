@@ -7,6 +7,8 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 SCRIPT_SOURCE=$ROOT/scripts/mcp-owner-workflow.sh
+mapfile -t SPEC_SOURCES <"$ROOT/deploy/dev-https-browser/spec-sources.txt"
+readonly -a SPEC_SOURCES
 T=$(mktemp -d "${TMPDIR:-/tmp}/mcp-owner-workflow-test.XXXXXX")
 chmod 0700 "$T"
 T=$(cd "$T" && pwd -P)
@@ -299,13 +301,6 @@ write_container() {
   write_fake "$BROWSER/run.sh" <<'EOF'
 #!/usr/bin/env bash
 set -u
-readonly -a SPEC_SOURCES=(
-  playwright.config.ts
-  mcp.spec.ts
-  mcp-sdk.spec.ts
-  harness-lib.ts
-  network-policy.ts
-)
 ctl=__CTL__
 terminated() { echo container-terminated >>"$ctl/calls"; exit 143; }
 trap terminated TERM
@@ -375,7 +370,8 @@ refresh_image_manifest() {
   local id=${1:-$IMAGE} path hash
   hash=$({
     for path in deploy/dev-https-browser/Dockerfile deploy/dev-https-browser/package.json \
-      deploy/dev-https-browser/package-lock.json deploy/dev-https-browser/run.sh; do
+      deploy/dev-https-browser/package-lock.json deploy/dev-https-browser/run.sh \
+      deploy/dev-https-browser/spec-sources.txt deploy/dev-https-browser/verify-evidence.mjs; do
       printf '%s\0' "$path"
       (cd "$REPO" && sha256sum -- "$path")
     done
@@ -433,8 +429,8 @@ setup_tree() {
   cp -- "$SCRIPT_SOURCE" "$SCRIPT"
   chmod 0755 "$SCRIPT"
   local name
-  for name in Dockerfile package.json package-lock.json playwright.config.ts mcp.spec.ts \
-    mcp-sdk.spec.ts harness-lib.ts network-policy.ts; do
+  cp "$ROOT/deploy/dev-https-browser/spec-sources.txt" "$BROWSER/spec-sources.txt"
+  for name in Dockerfile package.json package-lock.json verify-evidence.mjs "${SPEC_SOURCES[@]}"; do
     printf '// %s fixture\n' "$name" >"$BROWSER/$name"
   done
   write_container
@@ -552,8 +548,7 @@ expected_args=$(printf '%s\n' "$IMAGE" "$STATE/input" STAGING EVIDENCE mcp-sdk l
   "$RUN/browser" "$RUN/synthetic-login.env" NAME)
 check 'container receives the exact local mounts' [ "$(container_args)" = "$expected_args" ]
 check 'container never receives the run root itself' no_line "$RUN" "$CTL/container.args"
-check 'staged browser sources are the closed manifest at mode 0600' [ "$(cat "$CTL/container.staged")" = "$(printf '%s\n' 700 \
-  'harness-lib.ts 600' 'mcp-sdk.spec.ts 600' 'mcp.spec.ts 600' 'network-policy.ts 600' 'playwright.config.ts 600')" ]
+check 'staged browser sources are the closed manifest at mode 0600' [ "$(cat "$CTL/container.staged")" = "$(printf '%s\n' 700; printf '%s 600\n' "${SPEC_SOURCES[@]}" | LC_ALL=C sort)" ]
 check 'browser root starts empty and private' [ "$(tr '\n' ' ' <"$CTL/container.browser")" = '0 700 ' ]
 check 'synthetic login is a private regular file' [ "$(cat "$CTL/container.credential")" = 'regular file 600' ]
 check 'synthetic login uses the reserved fixture prefix' \
@@ -588,7 +583,7 @@ run_workflow local env ABOUTME_RELEASE_APP_IMAGE="sha256:$(printf 'f%.0s' {1..64
 check 'release local proof succeeds' [ "$STATUS" -eq 0 ]
 check 'release local proof writes the attestation' has 'stage attestation-written' "$CTL/out"
 check 'attestation is private' [ "$(mode_of "$ATTESTATION") $(mode_of "$CONTROL")" = '600 700' ]
-expected_source=$(source_digest playwright.config.ts mcp.spec.ts mcp-sdk.spec.ts harness-lib.ts network-policy.ts)
+expected_source=$(source_digest "${SPEC_SOURCES[@]}")
 check 'attestation binds every identity' jqe --arg commit "$COMMIT" --arg tag "$TAG" \
   --arg runner "$(sha "$CTL/fake-runner")" --arg server "$(sha "$STATE/bin/server")" \
   --arg launcher "$(sha "$SCRIPT")" --arg browser_runner "$(sha "$BROWSER/run.sh")" \
@@ -824,10 +819,9 @@ for changed in playwright.config.ts mcp-sdk.spec.ts harness-lib.ts network-polic
 done
 
 restore_release
-sed -i 's/^  network-policy.ts$/  network-policy.ts\n  extra-helper.ts/' "$BROWSER/run.sh"
+printf 'extra-helper.ts\n' >>"$BROWSER/spec-sources.txt"
 printf '// extra\n' >"$BROWSER/extra-helper.ts"
 refresh_image_manifest
-edit_attestation ".browser_runner_sha256 = \"$(sha "$BROWSER/run.sh")\""
 run_production
 expect_rejection 'added manifest member' 'attestation rejected: browser source mismatch'
 
@@ -1028,18 +1022,18 @@ check 'a mode change changes the digest' [ "$(digest a.ts b.ts)" != "$base_diges
 chmod 0600 "$digest_dir/b.ts"
 printf 'b2\n' >"$digest_dir/b.ts"
 check 'a content change changes the digest' [ "$(digest a.ts b.ts)" != "$base_digest" ]
-manifest=$( (source "$SCRIPT" && spec_manifest "$BROWSER/run.sh") | tr '\n' ' ')
-check 'manifest is read from the launcher and sorted' \
-  [ "$manifest" = 'harness-lib.ts mcp-sdk.spec.ts mcp.spec.ts network-policy.ts playwright.config.ts ' ]
-printf 'readonly -a SPEC_SOURCES=(\n  b.spec.ts\n  a-shards.mjs\n)\n' >"$T/mjs-run.sh"
+manifest=$( (source "$SCRIPT" && spec_manifest "$BROWSER/spec-sources.txt") | tr '\n' ' ')
+check 'manifest is read from the source list and sorted' \
+  [ "$manifest" = "$(printf '%s\n' "${SPEC_SOURCES[@]}" | LC_ALL=C sort | tr '\n' ' ')" ]
+printf 'b.spec.ts\na-shards.mjs\n' >"$T/mjs-sources.txt"
 check 'manifest accepts an ES module source' \
-  [ "$( (source "$SCRIPT" && spec_manifest "$T/mjs-run.sh") | tr '\n' ' ')" = 'a-shards.mjs b.spec.ts ' ]
-printf 'readonly -a SPEC_SOURCES=(\n  b.spec.ts\n  a-shards.js\n)\n' >"$T/js-run.sh"
+  [ "$( (source "$SCRIPT" && spec_manifest "$T/mjs-sources.txt") | tr '\n' ' ')" = 'a-shards.mjs b.spec.ts ' ]
+printf 'b.spec.ts\na-shards.js\n' >"$T/js-sources.txt"
 check 'manifest rejects a source that is neither TypeScript nor an ES module' \
-  [ -z "$( (source "$SCRIPT" && spec_manifest "$T/js-run.sh") || true)" ]
-printf 'readonly -a SPEC_SOURCES=(\n  ../escape.ts\n)\n' >"$T/bad-run.sh"
+  [ -z "$( (source "$SCRIPT" && spec_manifest "$T/js-sources.txt") || true)" ]
+printf '../escape.ts\n' >"$T/bad-sources.txt"
 check 'manifest rejects a path outside the staging root' \
-  [ -z "$( (source "$SCRIPT" && spec_manifest "$T/bad-run.sh") || true)" ]
+  [ -z "$( (source "$SCRIPT" && spec_manifest "$T/bad-sources.txt") || true)" ]
 
 if [ "$failures" -ne 0 ]; then
   printf 'mcp-owner-workflow test: %d failure(s)\n' "$failures" >&2

@@ -113,8 +113,13 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,mcp-sdk.spec.ts,mcp-ts-sdk.spec.ts,second-factor.spec.ts,totp.spec.ts,totp-fixture.ts,totp-production.spec.ts,production.config.ts,entry.spec.ts,publish.spec.ts,exports.spec.ts,privacy.spec.ts,sample-start.spec.ts,linkedin.spec.ts,linkedin-import.spec.ts,linkedin-import-fixtures.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,second-factor-lib.ts,second-factor-pages.ts,proof-shards.mjs,run.sh,verify-evidence.mjs} \
-  "$HTTPS_REPO/deploy/dev-https-browser/"
+mapfile -t spec_sources <"$ROOT/deploy/dev-https-browser/spec-sources.txt"
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+  spec-sources.txt "${spec_sources[@]}"; do
+  cp "$ROOT/deploy/dev-https-browser/$file" "$HTTPS_REPO/deploy/dev-https-browser/"
+done
+mkdir -p "$HTTPS_REPO/scripts/lib"
+cp "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$HTTPS_REPO/scripts/lib/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
@@ -304,26 +309,27 @@ cp "$WORK/transport.spec.ts.clean" \
   "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
 
 # Image-side drift must still block before any runtime call.
-cp "$HTTPS_REPO/deploy/dev-https-browser/run.sh" "$WORK/run.sh.clean"
-printf '%s\n' '# image-source-drift' >> \
-  "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
-: >"$HTTPS_CALLS"
-if run_https_make dev-https-auth-check \
-  >"$WORK/https-image-source-drift.out" 2>&1; then
-  printf 'makefile-safety-test: image source drift was accepted\n' >&2
-  exit 1
-fi
-grep -Fq 'browser image sources changed after image build' \
-  "$WORK/https-image-source-drift.out" || {
-  printf 'makefile-safety-test: image drift returned the wrong diagnostic\n' >&2
-  exit 1
-}
-if read_https_calls | grep -Fxq podman; then
-  printf 'makefile-safety-test: image source drift reached the browser runtime\n' >&2
-  exit 1
-fi
-cp "$WORK/run.sh.clean" "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
-chmod 0755 "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
+for image_source in run.sh spec-sources.txt; do
+  cp "$HTTPS_REPO/deploy/dev-https-browser/$image_source" "$WORK/$image_source.clean"
+  printf '%s\n' '# image-source-drift' >> \
+    "$HTTPS_REPO/deploy/dev-https-browser/$image_source"
+  : >"$HTTPS_CALLS"
+  if run_https_make dev-https-auth-check \
+    >"$WORK/https-image-source-drift.out" 2>&1; then
+    printf 'makefile-safety-test: image source drift was accepted\n' >&2
+    exit 1
+  fi
+  grep -Fq 'browser image sources changed after image build' \
+    "$WORK/https-image-source-drift.out" || {
+    printf 'makefile-safety-test: image drift returned the wrong diagnostic\n' >&2
+    exit 1
+  }
+  if read_https_calls | grep -Fxq podman; then
+    printf 'makefile-safety-test: image source drift reached the browser runtime\n' >&2
+    exit 1
+  fi
+  cp "$WORK/$image_source.clean" "$HTTPS_REPO/deploy/dev-https-browser/$image_source"
+done
 rm -rf "$HTTPS_REPO/.dev/native-https/evidence"
 
 rm -f "$HTTPS_MANIFEST"
