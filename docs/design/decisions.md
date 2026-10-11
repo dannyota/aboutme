@@ -31,10 +31,10 @@ record.
 | [0022](../adr/0022-viewer-privacy-and-counting.md)              | Accepted | No viewer data kept; seven-layer anonymous counts; sign in to view with a signed pass                                               | [Viewer analytics](viewer-analytics/README.md)                                                                              |
 | [0023](../adr/0023-linkedin-import.md)                          | Accepted | Import reads the English Save to PDF with pdf.js in a worker; the file never leaves the browser                                     | [LinkedIn import](linkedin-import.md)                                                                                       |
 | [0024](../adr/0024-delivery-gates.md)                           | Accepted | Failing test first, one fresh review, exact green GitHub CI commit before tag and deploy                                            | [`AGENTS.md`](../../AGENTS.md)                                                                                              |
-| [0025](../adr/0025-single-host-production.md)                   | Accepted | One AWS Singapore host, no hosted UAT until about 500 users, CloudFront edge, Route 53 DNS                                          | [Single-host production](single-host-production.md), [CloudFront edge](cloudfront-edge.md)                                  |
+| [0025](../adr/0025-single-host-production.md)                   | Accepted | Undeployed AWS reference; ADR 0027 governs production                                                                               | [Single-host production](single-host-production.md), [CloudFront edge](cloudfront-edge.md)                                  |
 | [0026](../adr/0026-replica-scaling.md)                          | Accepted | One serving replica; the scaling design returns before a second                                                                     | [Scaling](scaling/README.md)                                                                                                |
-| [0027](../adr/0027-vietnam-hosted-production.md)                | Accepted | Vietnam-hosted production on GreenNode and Bizfly; AWS becomes test only                                                            | [Vietnam production](vietnam-production.md)                                                                                 |
-| [0028](../adr/0028-deployment-transparency-observer.md)         | Accepted | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                              | [Deployment transparency](deployment-transparency/README.md)                                                                |
+| [0027](../adr/0027-vietnam-hosted-production.md)                | Accepted | Production on GreenNode and Bizfly, Cloudflare DNS-only; no deployed AWS environment                                                | [Vietnam production](vietnam-production.md)                                                                                 |
+| [0028](../adr/0028-deployment-transparency-observer.md)         | Accepted | A host reporter and observer publish running digests checked against signed provenance; `/verify` states the host trust limit       | [Deployment transparency](deployment-transparency/README.md)                                                                |
 | [0029](../adr/0029-community-showcase.md)                       | Accepted | Opt-in showcase of published resumes, listed without review; uncached listing; never indexed                                        | [Community showcase](showcase.md)                                                                                           |
 
 ## Remaining gates
@@ -45,8 +45,10 @@ record.
 | Privacy and disclosure text                            | Human owner approves agent-reviewed text | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
-[ADR 0025](../adr/0025-single-host-production.md) is the production approval;
-hosting cost, topology, and the release path follow it.
+[ADR 0027](../adr/0027-vietnam-hosted-production.md) is the production approval;
+the [Vietnam production design](vietnam-production.md) and
+[production runbook](../runbooks/production.md) define the topology and release
+path. ADR 0025 records the undeployed AWS reference.
 
 Known document limits, such as no template identity or section visibility, are
 listed in [template limits](templates/limitations.md). A later document version
@@ -55,9 +57,13 @@ renderer never invents an out-of-contract field.
 
 ## Change process
 
-A changed decision needs a new ADR; a structural rewrite needs a v5 revision of
-this design. Neither silently rewrites approved text, and no accepted ADR line
-is edited to make history look consistent. A correction that fixes an error,
-ambiguity, or contradiction without changing a decision is an ordinary edit.
-Status words are exact: "approved" means the decision is settled; "landed"
-describes repository state and does not imply that a gate passed.
+To change a decision in force, edit its topic ADR with the owner's approval and
+add a History entry naming what changed and why. Open a new ADR only for a new
+topic. Update the design text that applies the decision; see the
+[engineering standard](../standards/engineering.md#keeping-text-current) and
+[ADR policy](../adr/README.md).
+
+A correction that fixes an error, ambiguity, or contradiction without changing a
+decision is an ordinary edit. Status words are exact: "approved" means the
+decision is settled; "landed" describes repository state and does not imply that
+a gate passed.
