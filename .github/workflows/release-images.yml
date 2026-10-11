@@ -156,7 +156,7 @@ jobs:
           scripts/security-scan.sh report "trivy-$NAME-$ARCH.json"
       - name: Upload Trivy report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-report-${{ matrix.name }}-${{ matrix.arch }}
           path: trivy-${{ matrix.name }}-${{ matrix.arch }}.json
@@ -201,13 +201,13 @@ jobs:
           push-to-registry: true
           create-storage-record: false
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.name }}-${{ matrix.arch }}
           path: digest-${{ matrix.name }}-${{ matrix.arch }}.txt
           if-no-files-found: error
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-${{ matrix.name }}-${{ matrix.arch }}
           path: aboutme-${{ matrix.name }}-${{ matrix.arch }}.spdx.json
@@ -250,7 +250,7 @@ jobs:
           COMMIT: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-${{ matrix.name }}-*
           path: artifacts
@@ -287,7 +287,7 @@ jobs:
           subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
           subject-digest: ${{ steps.index.outputs.digest }}
           push-to-registry: true
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: index-${{ matrix.name }}
           path: index-${{ matrix.name }}.txt
@@ -358,7 +358,7 @@ jobs:
           scripts/security-scan.sh report "trivy-$NAME.json"
       - name: Upload Trivy report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-report-observer
           path: trivy-observer.json
@@ -403,13 +403,13 @@ jobs:
           push-to-registry: true
           create-storage-record: false
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-observer
           path: digest-observer.txt
           if-no-files-found: error
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-observer
           path: aboutme-observer.spdx.json
@@ -466,7 +466,7 @@ jobs:
           scripts/security-scan.sh report "trivy-$NAME.json"
       - name: Upload Trivy report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-report-observer-amd64
           path: trivy-observer-amd64.json
@@ -508,13 +508,13 @@ jobs:
           push-to-registry: true
           create-storage-record: false
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-observer-amd64
           path: digest-observer-amd64.txt
           if-no-files-found: error
       - if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-observer-amd64
           path: aboutme-observer-amd64.spdx.json
@@ -556,17 +556,17 @@ jobs:
           COMMIT: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-*
           path: artifacts
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: sbom-*
           path: artifacts
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: index-*
           path: artifacts
