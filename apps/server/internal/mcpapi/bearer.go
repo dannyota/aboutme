@@ -4,7 +4,6 @@ package mcpapi
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -42,7 +41,7 @@ type Bearer struct {
 
 // NewBearer builds a bearer boundary from the configured canonical origin.
 func NewBearer(dependencies BearerDependencies) (*Bearer, error) {
-	if isNil(dependencies.Queries) || dependencies.Clock == nil || !canonicalOrigin(dependencies.PublicOrigin) {
+	if isNil(dependencies.Queries) || dependencies.Clock == nil || !oauthsrv.IsCanonicalOrigin(dependencies.PublicOrigin) {
 		return nil, errors.New("mcp bearer: invalid dependencies")
 	}
 	return &Bearer{queries: dependencies.Queries, clock: dependencies.Clock, publicOrigin: dependencies.PublicOrigin}, nil
@@ -116,34 +115,4 @@ func isNil(value any) bool {
 	default:
 		return false
 	}
-}
-
-func canonicalOrigin(raw string) bool {
-	if raw == "" || len(raw) > 512 {
-		return false
-	}
-	for i := range raw {
-		if raw[i] < 0x21 || raw[i] > 0x7e {
-			return false
-		}
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.Host == "" || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.Fragment != "" {
-		return false
-	}
-	scheme := strings.ToLower(u.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	if host == "" {
-		return false
-	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	if port := u.Port(); port != "" && (scheme != "http" || port != "80") && (scheme != "https" || port != "443") {
-		host += ":" + port
-	}
-	return raw == scheme+"://"+host
 }
