@@ -16,7 +16,8 @@ can support setup while leaving key rotation open.
 | [Production](production.md)                 | Supported                           | Deploy, rollback, access, edge settings, and secrets                       |
 | [DNS](dns.md)                               | Supported                           | Cloudflare DNS-only records and DNSSEC                                     |
 | [CloudFront](cloudfront.md)                 | Reference                           | Certificates and edge checks for the undeployed AWS path                   |
-| [Deployment observer](observer.md)          | Supported; AWS reference            | Operate the Vietnam host reporter and observer                             |
+| [Deployment observer](observer.md)          | Supported                           | Operate the Vietnam host reporter and observer                             |
+| [AWS deployment observer](aws-observer.md)  | Reference                           | Setup, update, checks, and failures for the undeployed AWS observer        |
 | [Privacy and media cleanup](privacy.md)     | Supported; AWS reference            | Four host lifecycle jobs; retained AWS snapshot sweep                      |
 | [Account delete](account-delete.md)         | Open host procedure                 | Required checks for operator deletion after an abuse report                |
 | [Authenticator-app keys](totp-keys.md)      | Supported setup; open host rotation | Bootstrap and enrollment; rotation safeguards pending a reviewed procedure |
