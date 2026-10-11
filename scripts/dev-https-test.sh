@@ -1334,6 +1334,24 @@ run_browser_staging_checks() (
     fail 'staging accepted a symlink source'
   fi
   assert_contains "$output" 'missing or not a regular file'
+  mkdir -p "$work/context/nested" "$work/invalid-stage"
+  printf 'fixture\n' >"$work/source.ts"
+  printf 'fixture\n' >"$work/context/nested/source.mjs"
+  for name in ../source.ts nested/source.mjs; do
+    printf '%s\n' "${sources[0]}" "$name" >"$work/context/spec-sources.txt"
+    : >"$work/copy-calls"
+    if output=$({
+      cp() {
+        printf 'copy\n' >>"$work/copy-calls"
+        return 1
+      }
+      stage_dev_https_browser_specs "$work/context" "$work/invalid-stage"
+    } 2>&1); then
+      fail "staging accepted an invalid source name: $name"
+    fi
+    [ ! -s "$work/copy-calls" ] || fail 'invalid source name reached copy'
+    assert_contains "$output" "dev-https-browser-stage: spec source $name is not a plain .ts or .mjs basename"
+  done
 )
 
 # Every check function in this file, in the order an unsharded run uses.
