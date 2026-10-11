@@ -41,6 +41,15 @@ status=0
 bash "$BG" wait never 1 >/dev/null 2>&1 || status=$?
 [ "$status" -eq 1 ] || fail "waiting for a name never started exited $status, want 1"
 
+# A log without an exit-status file cannot count as a completed command.
+mkdir -p "$CI_BACKGROUND_DIR"
+printf 'command output without completion\n' >"$CI_BACKGROUND_DIR/lost.log"
+status=0
+bash "$BG" wait lost 0 >"$WORK/lost.out" 2>&1 || status=$?
+[ "$status" -eq 1 ] || fail "a lost background exit status passed"
+grep -Fq 'lost did not finish within 0s' "$WORK/lost.out" ||
+  fail "a lost background exit status was not reported"
+
 for args in 'start Bad true' 'start ../x true' 'start ok' 'wait ok x' 'run ok'; do
   status=0
   # shellcheck disable=SC2086 # each case is a word list on purpose
