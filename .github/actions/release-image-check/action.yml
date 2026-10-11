@@ -1,0 +1,83 @@
+name: Release image check
+description: Build, smoke-test, and scan one native release image without publication.
+inputs:
+  report-name:
+    description: Public image and platform name for the scan report.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Build
+      shell: bash
+      run: |
+        case "$NAME" in
+          observer*)
+            # Lambda requires a single-platform manifest without buildx provenance.
+            docker build --platform "linux/$ARCH" --provenance=false \
+              --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
+              -f "$DOCKERFILE" -t "$IMAGE" .
+            ;;
+          *)
+            docker build --platform "linux/$ARCH" -f "$DOCKERFILE" -t "$IMAGE" .
+            ;;
+        esac
+    - name: Smoke
+      shell: bash
+      run: |
+        [ "$(docker inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE")" = "linux/$ARCH" ]
+        case "$NAME" in
+          server)
+            # The server exits on its missing configuration, which proves the
+            # binary runs on this platform. Chromium then renders one page
+            # headless; the smoke container has no user namespaces for the
+            # sandbox, which production keeps.
+            docker run --rm --entrypoint sh -e MACHINE="$MACHINE" "$IMAGE" -c '
+              set -e
+              test "$(uname -m)" = "$MACHINE"
+              if out=$(/usr/local/bin/server 2>&1); then exit 1; fi
+              case "$out" in *"load config"*) ;; *) printf "%s\n" "$out"; exit 1 ;; esac
+              /opt/chromium/chrome --version
+              timeout 60 /opt/chromium/chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+                --dump-dom "data:text/html,<title>smoke-ok</title>" | grep -q smoke-ok
+              test -s /etc/ssl/rds/global-bundle.pem
+              test -x /usr/local/bin/db-setup'
+            ;;
+          web)
+            docker run -d --name smoke -e HOST=0.0.0.0 -e PORT=3000 -p 127.0.0.1:3000:3000 "$IMAGE"
+            for _ in $(seq 1 30); do
+              curl -fsS -o /dev/null http://127.0.0.1:3000/ && exit 0
+              sleep 1
+            done
+            docker logs smoke
+            exit 1
+            ;;
+          caddy)
+            # The entrypoint's adapt mode assembles the edge listeners and
+            # parses both route tables without the runtime TLS files.
+            docker run --rm "$IMAGE" adapt
+            docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
+            ;;
+          observer*)
+            docker run --rm "$IMAGE" version
+            ;;
+        esac
+    - name: Install Trivy
+      shell: bash
+      run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
+    # Reports cover public image packages only and expire after seven days.
+    - name: Scan for fixable HIGH/CRITICAL vulnerabilities
+      shell: bash
+      env:
+        REPORT_NAME: ${{ inputs.report-name }}
+      run: |
+        scripts/security-scan.sh scan-image \
+          "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$REPORT_NAME.json"
+        scripts/security-scan.sh report "trivy-$REPORT_NAME.json"
+    - name: Upload Trivy report
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: trivy-report-${{ inputs.report-name }}
+        path: trivy-${{ inputs.report-name }}.json
+        if-no-files-found: warn
+        retention-days: 7
