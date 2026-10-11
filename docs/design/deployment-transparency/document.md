@@ -84,8 +84,8 @@ carries full values.
 }
 ```
 
-`caddy` follows the same shape. `maintenance` appears only while its service
-runs a task.
+`caddy` follows the same shape. `maintenance` appears only while its serving
+container runs.
 
 ## Fields
 
@@ -100,7 +100,7 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `site`                             | `"https://aboutme.vn"`                                                                                  | Observer configuration                   |
 | `source_repository`                | `"https://github.com/dannyota/aboutme"`                                                                 | Constant                                 |
 | `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
-| `platform.orchestrator`            | `ecs` or `kubernetes`                                                                                   | Observer platform adapter                |
+| `platform.orchestrator`            | `ecs`, `kubernetes`, or `podman`                                                                        | Observer platform adapter                |
 | `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
 | `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock                           |
 | `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
@@ -110,7 +110,7 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `running_images[]`                 | One entry per distinct digest, ordered by `running_since`, at most 8                                    | Platform                                 |
 | `running_images[].digest`          | `^sha256:[0-9a-f]{64}$`                                                                                 | Platform                                 |
 | `running_images[].replicas`        | Integer 1 to 64                                                                                         | Platform, counted by the observer        |
-| `running_images[].running_since`   | RFC 3339 UTC; earliest start among that digest's running tasks or pods                                  | Platform                                 |
+| `running_images[].running_since`   | RFC 3339 UTC; earliest start among that digest's running containers                                     | Platform                                 |
 | `running_images[].version`         | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                   | Signed certificate's source ref          |
 | `running_images[].commit`          | `^[0-9a-f]{40}$` or `null`                                                                              | Signed certificate's source digest       |
 | `signature.status`                 | `verified`, `not_found`, `invalid`, or `unchecked`                                                      | Observer verification                    |
@@ -181,6 +181,11 @@ reports many digests.
 
 ## Sanitizer
 
+The [host reporter](host.md) uses formatted Podman inspection and a closed
+builder. Its output is checked against this schema in the schema tests. Its
+signature and SBOM statuses are unchecked, and its signed build claims stay
+null. The ECS and Kubernetes observer follows the sanitizer below.
+
 The sanitizer is an allowlist. The observer never serializes a platform object.
 Platform adapters return one internal type holding only component name, digest,
 replica count, and start time; the document builder fills a closed output type
@@ -215,6 +220,9 @@ The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 
 ## Versions
 
+- Version 1's `podman` orchestrator is an additive enum value. Existing ECS and
+  Kubernetes documents remain valid. A reader that rejects Podman shows
+  Unavailable until the updated page loads; it never labels the host as ECS.
 - A field added to version 1 must be optional for readers, and is added to the
   schema, the allowlist test, and the page in one change. Readers ignore unknown
   fields.

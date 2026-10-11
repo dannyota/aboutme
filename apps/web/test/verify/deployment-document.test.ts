@@ -19,6 +19,7 @@ import {
   componentRows,
   defaultTarget,
   readDigestsCommand,
+  reportingPlatform,
   shortDigest,
   verifyImageCommand,
 } from '../../app/utils/verifyView';
@@ -63,6 +64,47 @@ function clone(name: string): Loose {
 }
 
 describe('page state from each fixture', () => {
+  it('renders a Podman host report with unchecked evidence', () => {
+    const value = clone('verified');
+    value.platform = {
+      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
+    };
+    value.release = null;
+    value.summary = 'unverified';
+    for (const entry of value.components) {
+      for (const image of entry.running_images) {
+        image.version = null;
+        image.commit = null;
+        image.signature.status = 'unchecked';
+        image.sbom.status = 'unchecked';
+      }
+    }
+    const document = decoded(value);
+    expect(reportingPlatform(document)).toBe('host');
+    expect(pageState(
+      { kind: 'decoded', result: { kind: 'document', document } },
+      freshNow(value),
+    ).kind).toBe('unverified');
+    expect(commandTargets(document)[0]!.image.digest)
+      .toBe(value.components[0].running_images[0].digest);
+  });
+
+  it('distinguishes ECS, Kubernetes, and an absent report', () => {
+    expect(reportingPlatform(decoded(raw('verified')))).toBe('aws-ecs');
+    const value = clone('verified');
+    value.platform = {
+      provider: 'greennode', orchestrator: 'kubernetes', region: 'HCM03',
+    };
+    expect(reportingPlatform(decoded(value))).toBe('kubernetes');
+    expect(reportingPlatform(null)).toBe('unknown');
+    value.platform.orchestrator = 'unknown';
+    expect(decodeDeploymentDocument(value).kind).toBe('invalid');
+    value.platform = {
+      provider: 'aws', orchestrator: 'podman', region: 'ap-southeast-1',
+    };
+    expect(decodeDeploymentDocument(value).kind).toBe('invalid');
+  });
+
   it('shows loading, then unavailable after a failed fetch', () => {
     expect(pageState({ kind: 'pending' }, null).kind).toBe('loading');
     expect(pageState({ kind: 'failed' }, null).kind).toBe('unavailable');

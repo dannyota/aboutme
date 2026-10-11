@@ -17,6 +17,7 @@ Environment=DEPLOY_RELEASE_TAG=@MAINTENANCE_TAG@
 Environment=DEPLOY_RELEASE_NUMBER=@MAINTENANCE_NUMBER@
 Secret=crowdsec-bouncer-key,type=env,target=CROWDSEC_API_KEY
 Volume=/var/lib/aboutme-caddy:/data
+Volume=/var/lib/aboutme/deployment:/srv/deployment:ro
 Volume=/run/aboutme/caddy-log:/var/log/caddy
 PodmanArgs=--memory=128m
 LogDriver=journald
