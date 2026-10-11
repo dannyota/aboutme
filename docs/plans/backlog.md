@@ -15,19 +15,25 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Run `scripts/deployment-document-check.sh` once on production and record a denied-call test for the observer role (it cannot describe another cluster). Evidence: [deployment transparency](../design/deployment-transparency/README.md), `docs/runbooks/observer.md`.
 - Trigger every alarm once and confirm its email arrives (AC-OPS-019, `PLANNED`).
 - Record one successful run of each of the five scheduled jobs. Evidence: `docs/architecture.md` production section.
-- Restore a snapshot to a temporary instance, verify the data, delete the instance (AC-OPS-018, `PLANNED`).
-- Record the open CloudFront facts on the live distribution. Evidence: [CloudFront runbook](../runbooks/cloudfront.md#facts-to-verify).
+
+## Vietnam production
+
+- Put the Cloudflare DNS records under OpenTofu. The owner edits them by hand today.
+- Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
+- Add host-side signature verification for `/verify`.
+- Diagnose readiness after a hard reset. Readiness stayed failed once until `aboutme-server` restarted.
+- Add a static-asset flood scenario with a measured threshold.
+- Add and review a host procedure for TOTP key re-encryption.
+- Add and review a host procedure for abuse account deletion.
+- Add and review a host procedure for rotating the sign-in-to-view key.
 
 ## Before the public announcement
 
-- Move production to Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Announce only after the move.
 - Owner approves the agent-reviewed privacy, terms, and disclosure text.
 
 ## Acceptance evidence gaps
 
 - frontend: web test that an absent or malformed `totpEnabled` counts as false (AC-AUTH-029).
-- devops: exact IAM policy tests or a live IAM simulation (AC-INF-004, AC-SEC-008).
-- qa: retained production proof of fence state and TOTP with `scripts/totp-production-proof.sh totp-prod-enabled` (AC-SEC-007, AC-SEC-009); CloudFront edge probe (AC-OPS-015, AC-INF-002); direct-IP and spoofed-header probe (AC-INF-001, AC-OPS-002).
+- qa: retained production proof of fence state and TOTP with `scripts/totp-production-proof.sh totp-prod-enabled` (AC-SEC-007, AC-SEC-009); direct-IP and spoofed-header probe (AC-INF-001, AC-OPS-002).
