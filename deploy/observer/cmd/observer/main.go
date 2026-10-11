@@ -1,7 +1,7 @@
 // Command observer publishes https://aboutme.vn/.well-known/deployment.json
 // (docs/design/deployment-transparency/README.md). It asks the platform
 // which image digests are running, checks each one against the signed
-// GitHub build record, and writes the result to S3. It never reports the
+// GitHub build record, and publishes the result. It never reports the
 // application's own version; every claim comes from the platform or from
 // Sigstore-signed provenance.
 package main

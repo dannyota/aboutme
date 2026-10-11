@@ -1,7 +1,5 @@
-// Package publish writes the deployment document and the verification cache
-// to one S3 bucket (docs/design/deployment-transparency/README.md, "Serving
-// and caching"; docs/design/deployment-transparency/verification.md, "What
-// verified means").
+// Package publish writes the deployment document to S3 or a host directory.
+// S3 also stores the verification cache.
 package publish
 
 import (

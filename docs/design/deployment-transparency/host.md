@@ -1,9 +1,9 @@
 # Deployment document on the Vietnam host
 
-The GreenNode vServer reports its running Podman containers at
-`/.well-known/deployment.json`. The reporter runs on the host, outside the
-application containers. It is not an independent platform API. Its report is
-weaker evidence than the AWS ECS observer's report
+The GreenNode vServer reports its running Podman containers to an observer
+container, which checks their signed build records and publishes
+`/.well-known/deployment.json`. The root reporter and observer share the host.
+The report is weaker evidence than the AWS ECS observer's platform API report
 ([ADR 0028](../../adr/0028-deployment-transparency-observer.md)).
 
 ## Source and publication
@@ -18,21 +18,39 @@ whole UTC seconds and records one replica per running container.
 A systemd oneshot runs every minute and shortly after boot. A failed Podman
 read, malformed digest, or malformed timestamp stops publication. Missing or
 stopped required containers have empty image lists and produce `mismatch`.
-Maintenance appears only while running. The previous document remains on a
-failed read and ages into stale under the existing freshness rules.
+Maintenance appears only while running. The previous observation remains on a
+failed read. The observer rejects an observation older than 180 seconds or more
+than 60 seconds in the future, writes nothing, and lets the public document age
+into stale.
 
 The reporter builds the [document](document.md) from constants and the four
 allowed observation fields. It never reads container environment values or
 secret files. It uses formatted Podman output, discards command error output,
 and logs only fixed error messages. It writes a private temporary file in
-`/var/lib/aboutme/deployment`, checks the output bounds, sets mode `0644`, and
-renames the file atomically to `deployment.json`. A lock serializes writers.
+`/var/lib/aboutme/observation`, checks the output bounds, sets mode `0644`, and
+renames the file atomically to `observation.json`. A lock serializes writers.
+The root-owned directory has mode `0755`.
 
-The directory is root-owned with mode `0755`. Serving and maintenance Caddy
-mount that directory read-only at `/srv/deployment`. A directory mount keeps
-atomic replacements visible. The direct edge serves only the exact document path
-for GET and HEAD. Other methods get 405; a missing file gets 404. Responses
-carry `Content-Type: application/json`, `Cache-Control: public, max-age=30`,
+The observer reads that directory at `/observation` through a read-only mount.
+It validates the closed document schema, the component order, replica bounds,
+digests, and RFC 3339 timestamps, then passes only runtime observations to the
+existing aggregator and Sigstore verifier. The reporter's unchecked build claims
+never become verification evidence. Reads are capped at 64 KiB. The public
+document keeps the root reporter's `observed_at`; verification cannot extend a
+snapshot's freshness.
+
+The observer publishes to `/var/lib/aboutme/deployment`, owned by its uid
+`65532` with mode `0755`. It writes a temporary file beside `deployment.json`,
+sets mode `0644`, fsyncs and closes the file, renames it, and fsyncs the
+directory. A failure before rename removes the temporary file and preserves the
+previous document. A directory fsync failure after rename is logged as an error;
+the complete new document may be visible.
+
+Serving and maintenance Caddy mount the public directory read-only at
+`/srv/deployment`. A directory mount keeps atomic replacements visible. The
+direct edge serves only the exact document path for GET and HEAD. Other methods
+get 405; a missing file gets 404. Responses carry
+`Content-Type: application/json`, `Cache-Control: public, max-age=30`,
 `Access-Control-Allow-Origin: *`, HSTS `max-age=31536000`, and
 `X-Content-Type-Options: nosniff`. Caddy removes its `Server` and `Via` headers.
 The `www` host keeps its apex redirect.
@@ -46,33 +64,74 @@ value without changing field meanings or accepting extra properties. Existing
 ECS and Kubernetes documents retain their schema and behavior. Older pages that
 reject the new enum need a reload after the updated web image ships.
 
-The host reporter publishes signatures and SBOMs as `unchecked`. It does not
-copy deploy-time verification or release metadata into runtime evidence. The
-version, commit, signed links, and release stay null. A complete host report
-therefore shows the running digests with the page's Unverified state. The
-existing GitHub attestation and Sigstore verifier and independent commands
-remain unchanged. Automatic host verification requires integration with that
-verifier; a shell implementation must not invent a second verification policy.
+The root reporter writes signatures and SBOMs as `unchecked` and leaves build
+claims null. The observer checks each running digest with the existing
+[verification policy](verification.md#what-verified-means), using `sigstore-go`.
+It derives versions, commits, signed links, and the release from those checks. A
+fresh document whose signatures pass shows Verified; an unfinished check shows
+Unverified. Deploy-time checks and `release.json` are not runtime evidence. The
+independent commands use the same policy on every platform. Verified Podman
+images link to `aboutme-<name>-amd64.spdx.json` release assets. Maintenance uses
+the Caddy asset. ECS and Kubernetes keep the unsuffixed asset links.
 
 The page names the reporter in Vietnamese and English. It states that the host
-reports its own Podman state. The report does not prove host or operator
-honesty, runtime integrity, configuration, secrets, or source quality. Only an
-image whose signature was checked may carry a verified build claim.
+reports its own Podman state and an observer container on that host checks the
+signatures. The report does not prove host or operator honesty, runtime
+integrity, configuration, secrets, or source quality. Only an image whose
+signature was checked may carry a verified build claim.
 
 AWS ECS keeps its off-host observer, S3 document, CloudFront route, and
 verification cache. Kubernetes keeps its read-only pod adapter and the same
 verifier. Neither platform depends on the host reporter or its Caddy route.
 
+## Network isolation
+
+The observer uses the dedicated rootful Container Network Interface (CNI) bridge
+`aboutme-observer`, subnet `172.18.0.0/24`, with gateway `172.18.0.1` and
+network DNS disabled. The `aboutme-observer.network` Quadlet creates the network
+through `aboutme-observer-network.service`, using the same mechanism as the
+app's `aboutme` network. The container uses DNS resolvers `8.8.8.8` and
+`1.1.1.1`. IPv6 is disabled in the container's network namespace so all traffic
+uses the IPv4 firewall policy.
+
+`/etc/aboutme/observer-firewall.nft` owns only `table inet aboutme_observer`.
+Its input and forward chains run at `filter - 1`, before CNI's filter chains.
+Input accepts only established or related traffic from the observer subnet and
+drops the rest, covering every host address and listener. Forward allows
+established or related traffic, UDP and TCP DNS to the two resolvers, and TCP
+443 to public destinations. It drops private, shared, link-local, loopback,
+multicast, unspecified, and reserved destinations before the HTTPS rule. The
+cloud metadata address `169.254.169.254` is blocked. New forwarded connections
+to the observer subnet are dropped.
+
+The firewall file atomically adds, deletes, and defines its own table, so loads
+are idempotent and leave CNI and CrowdSec tables untouched. Installation enables
+and starts `aboutme-observer-firewall.service`. The observer requires that unit
+and starts after it; a failed firewall load prevents observer startup. Check the
+generated dependencies, network settings, live rules, and blocked connections
+with the [host checks](../../runbooks/observer.md#network-isolation-check).
+
 ## Operation and rollback
 
-Host installation installs and enables the timer and creates the public
-directory before either Caddy container starts. Refreshing the report does not
-start, stop, or change an application container. The timer also observes manual
-restarts and drift after deploys. A service failure uses the host's existing
-alert service.
+Host installation installs and enables the root reporter's timer, creates both
+directories, and installs the observer Quadlet template. Deploy verifies the
+single-platform `aboutme-observer:<tag>-amd64` image's provenance, pulls it by
+digest, renders the unit, and starts or restarts it. A tag without that image
+leaves the installed observer unit unchanged and reports that choice.
 
-Disabling the timer leaves the last document to become stale. Removing the
-public file produces 404. Rolling back the web image can make the page refuse
-the Podman enum; the machine document remains available for manual checks. No
-database or resume data changes, and overwriting a snapshot loses no stored
-history.
+The observer runs `observer run --interval 60s` as uid `65532` with a read-only
+root filesystem, all capabilities dropped, no-new-privileges, no secrets, and a
+128 MiB memory cap. Its TUF cache is a bounded tmpfs. The isolated bridge gives
+it outbound HTTPS for GitHub, the registry fallback, and Sigstore TUF; it has no
+published ports or Podman socket. Verification results stay in memory for the
+process lifetime and retain the daily recheck policy. No bucket is required.
+
+The reporter and observer keep running during maintenance. Refreshing evidence
+does not start, stop, or change application containers. The timer observes
+manual restarts and drift. A service failure uses the host's alert service.
+
+Disabling the timer or observer leaves the last document to become stale.
+Removing the public file produces 404. Rolling back the web image can make the
+page refuse the Podman enum; the machine document remains available for manual
+checks. No database or resume data changes, and overwriting a snapshot loses no
+stored history.

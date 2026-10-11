@@ -27,8 +27,8 @@ choice.
   minute; the verifier and its Sigstore trust root are built once and reused
   across warm invocations.
 - `observer run --interval 60s`: runs forever, performing one run per tick on a
-  Kubernetes Deployment. A failed run is logged and the loop continues; it never
-  exits on a single failed run.
+  Kubernetes Deployment or a Podman host container. A failed run is logged and
+  the loop continues; it never exits on a single failed run.
 - `observer version`: prints the binary's own version and commit and exits 0,
   for a smoke check that needs no cloud access.
 
@@ -41,26 +41,54 @@ a wrong one
 
 ## Configuration
 
-Every value comes from an environment variable, and every value is non-secret:
-the AWS access policy in the design restricts the observer's role to reading
-platform state and writing one bucket, so nothing it reads needs to be kept out
-of its own environment.
+Every configuration value comes from a non-secret environment variable. ECS and
+Kubernetes publish to a bucket. Podman reads an observation file and publishes
+to a host directory without cloud credentials.
 
-| Variable                       | Required                 | Meaning                                                  |
-| ------------------------------ | ------------------------ | -------------------------------------------------------- |
-| `OBSERVER_PLATFORM`            | always                   | `ecs` or `kubernetes`                                    |
-| `OBSERVER_CLUSTER`             | `ecs`                    | ECS cluster name                                         |
-| `OBSERVER_APP_SERVICE`         | `ecs`                    | Service running `server` and `caddy`                     |
-| `OBSERVER_WEB_SERVICE`         | `ecs`                    | Service running `web`                                    |
-| `OBSERVER_MAINTENANCE_SERVICE` | `ecs`                    | Service running maintenance `caddy`                      |
-| `OBSERVER_BUCKET`              | always                   | Bucket holding the document and the verification cache   |
-| `OBSERVER_REGION`              | always (or `AWS_REGION`) | AWS region, or the GreenNode region code                 |
-| `OBSERVER_NAMESPACE`           | no (`aboutme`)           | Kubernetes namespace to list pods in                     |
-| `OBSERVER_S3_ENDPOINT`         | no                       | S3-compatible endpoint override, for path-style requests |
-| `OBSERVER_TUF_CACHE`           | no (`/tmp/sigstore-tuf`) | Sigstore TUF metadata cache directory                    |
+| Variable                       | Required                             | Meaning                                                  |
+| ------------------------------ | ------------------------------------ | -------------------------------------------------------- |
+| `OBSERVER_PLATFORM`            | always                               | `ecs`, `kubernetes`, or `podman`                         |
+| `OBSERVER_CLUSTER`             | `ecs`                                | ECS cluster name                                         |
+| `OBSERVER_APP_SERVICE`         | `ecs`                                | Service running `server` and `caddy`                     |
+| `OBSERVER_WEB_SERVICE`         | `ecs`                                | Service running `web`                                    |
+| `OBSERVER_MAINTENANCE_SERVICE` | `ecs`                                | Service running maintenance `caddy`                      |
+| `OBSERVER_BUCKET`              | `ecs`, `kubernetes`                  | Bucket holding the document and the verification cache   |
+| `OBSERVER_REGION`              | always (or `AWS_REGION`)             | AWS region, or the GreenNode region code                 |
+| `OBSERVER_NAMESPACE`           | no (`aboutme`)                       | Kubernetes namespace to list pods in                     |
+| `OBSERVER_S3_ENDPOINT`         | no                                   | S3-compatible endpoint override, for path-style requests |
+| `OBSERVER_TUF_CACHE`           | no (`/tmp/sigstore-tuf`)             | Sigstore TUF metadata cache directory                    |
+| `OBSERVER_OBSERVATION_FILE`    | no (`/observation/observation.json`) | Podman root reporter's observation file                  |
+| `OBSERVER_OUTPUT_DIR`          | no (`/public`)                       | Podman directory receiving `deployment.json`             |
 
 The environment (`production`) and site (`https://aboutme.vn`) are constants,
 not configuration: the design fixes one observer to one site.
+
+## Podman host
+
+`OBSERVER_PLATFORM=podman` reads the root reporter's observation file. It
+requires the closed version 1 document shape with `greennode` / `podman`, known
+components in document order, valid digests, replica counts, and RFC 3339
+timestamps. Unknown or repeated JSON fields are rejected. Maintenance is omitted
+when stopped. The read is capped at 64 KiB. An observation older than 180
+seconds or more than 60 seconds in the future is a platform read failure, so the
+run publishes nothing. The public document preserves the root reporter's
+`observed_at`, so signature checks cannot extend an old snapshot's freshness.
+
+Only the runtime fields enter the existing aggregator, verifier, and document
+builder. The reporter's signature statuses and build claims are not evidence.
+Verification results stay in memory for the process lifetime, with the same
+24-hour recheck policy. Podman requires no bucket, AWS configuration, or secret.
+
+The publisher writes a temporary file in `OBSERVER_OUTPUT_DIR`, sets mode
+`0644`, fsyncs and closes it, renames it to `deployment.json`, and fsyncs the
+directory. A failure before rename removes the temporary file and keeps the
+previous document. A directory fsync failure after rename returns an error; the
+complete new document may be visible. The run loop logs that error.
+
+The [host design](../../docs/design/deployment-transparency/host.md) defines the
+root timer, Quadlet restrictions, Caddy mounts, and weaker host trust limit. The
+host image is the single-platform amd64 `<tag>-amd64` tag. The plain version tag
+remains single-platform arm64 for Lambda.
 
 ## Package layout
 
@@ -76,6 +104,8 @@ not configuration: the design fixes one observer to one site.
   API, with no `client-go` dependency. Reads pods labeled
   `app.kubernetes.io/component` and takes the `@sha256:<hex>` suffix of a
   running container's `imageID`.
+- `internal/platform/podman`: reads and validates the root reporter's file,
+  without Podman or socket access.
 - `internal/verify`: checks one running digest against the Sigstore-signed
   provenance and SBOM attestations `release-images.yml` produced for it, and a
   cache so the check runs about once a day per digest.
@@ -83,7 +113,7 @@ not configuration: the design fixes one observer to one site.
   verification evidence, and constants only, and encodes it against the JSON
   Schema in `schema/`.
 - `internal/publish`: writes the document and the verification cache to one S3
-  (or S3-compatible) bucket.
+  (or S3-compatible) bucket, or atomically replaces a host document file.
 - `internal/leakscan`: the forbidden identifier patterns. The leak test and
   `cmd/document-check` share them.
 - `cmd/observer`: the three subcommands, environment configuration, and the
@@ -105,10 +135,12 @@ cd deploy/observer && GOWORK=off go test ./...
 additionally runs `go build`, `go vet`, `golangci-lint`, a `go mod tidy` no-op
 check, and `govulncheck` (`.github/workflows/ci.yml`, the `observer` job).
 
-The platform adapters are tested against `httptest` servers standing in for the
-ECS control plane and the in-cluster Kubernetes API, using recorded-shape
-fixtures under `testdata/ecs/` and `testdata/kubernetes/`. `internal/publish` is
-tested against an `httptest` server standing in for S3. `internal/document`
+The ECS and Kubernetes adapters are tested against `httptest` servers standing
+in for the ECS control plane and the in-cluster Kubernetes API, using
+recorded-shape fixtures under `testdata/ecs/` and `testdata/kubernetes/`.
+`internal/publish` is tested against an `httptest` server standing in for S3 and
+temporary directories for atomic file replacement. Podman tests cover strict
+parsing, size bounds, timestamps, and the maintenance rule. `internal/document`
 carries `TestDocumentLeaksNothing`, which asserts that no infrastructure
 identifier a platform adapter might read can reach the published bytes.
 

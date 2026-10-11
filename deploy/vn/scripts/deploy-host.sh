@@ -16,7 +16,7 @@
 #   status                      release and unit state
 #   running-release             DEPLOY_RELEASE_NUMBER of the running server
 #   release-json                the installed release, shape-checked
-#   pull <server> <web> <caddy> pull images by digest; require linux/amd64
+#   pull <server> <web> <caddy> [observer] pull digests; require linux/amd64
 #   backup                      pgBackRest incremental annotated with <tag>
 #   timers-stop | timers-start  the scheduled job timers
 #   fail-closed                 maintenance up; app and jobs stopped
@@ -25,7 +25,7 @@
 #   cutover-fail-closed         enforce maintenance with app and jobs stopped
 #   maintenance-up <caddy>      render and start maintenance beside Caddy
 #   app-down                    stop Caddy and the server; prove both stopped
-#   render <server> <web> <caddy>  write release.env and the app units
+#   render <server> <web> <caddy> [observer] write units; restart observer
 #   restore-previous [record]   render the saved release again
 #   secrets-check               every secret the next render names exists
 #   ban-test add|del <ip>       short CrowdSec decision for the outside smoke
@@ -226,6 +226,7 @@ render_all() { # tag number server web caddy maintenance-image maintenance-tag m
   install -d -m 0755 "$units"
   install -m 0644 "$templates/aboutme.network" "$units/aboutme.network"
   for t in "$templates"/*.container.in; do
+    [[ $(basename "$t") != aboutme-observer.container.in ]] || continue
     name=$(basename "$t" .in)
     render_unit "$t" "$units/$name" "$@"
   done
@@ -236,7 +237,7 @@ render_all() { # tag number server web caddy maintenance-image maintenance-tag m
 step_status() {
   local u
   if [[ -f $release_json ]]; then release_read "$release_json" | jq .; else echo "no release installed"; fi
-  for u in aboutme-caddy aboutme-server aboutme-web aboutme-maintenance; do
+  for u in aboutme-caddy aboutme-server aboutme-web aboutme-maintenance aboutme-observer; do
     printf '%s %s\n' "$u" "$(systemctl is-active "$u" || true)"
   done
 }
@@ -255,9 +256,10 @@ step_release_json() {
   echo
 }
 
-step_pull() { # server web caddy
-  local name ref arch
-  for name in server web caddy; do
+step_pull() { # server web caddy [observer]
+  local name ref arch names=(server web caddy)
+  [[ -z ${4:-} ]] || names+=(observer)
+  for name in "${names[@]}"; do
     ref=$1
     shift
     image_ok "$name" "$ref"
@@ -345,7 +347,23 @@ step_app_down() {
   say "app down"
 }
 
-step_render() { # server web caddy
+render_observer() { # observer image, or empty to keep the installed unit
+  local ref=${1:-} output=$units/aboutme-observer.container
+  if [[ -z $ref ]]; then
+    say "observer image absent; keeping the installed observer unit"
+    return
+  fi
+  image_ok observer "$ref"
+  sed "s|@OBSERVER_IMAGE@|$ref|g" "$templates/aboutme-observer.container.in" >"$output.tmp"
+  ! grep -q '@[A-Z_]*@' "$output.tmp" || die "unrendered placeholder in observer unit"
+  chmod 0644 "$output.tmp"
+  mv -f "$output.tmp" "$output"
+  systemctl daemon-reload
+  systemctl restart aboutme-observer
+  active aboutme-observer || die "aboutme-observer did not start"
+}
+
+step_render() { # server web caddy [observer]
   local number mimage mtag mnumber
   number=$(release_number "$tag") || die "'$tag' is not a release tag"
   image_ok server "$1"
@@ -361,6 +379,7 @@ step_render() { # server web caddy
   mnumber=$(release_number "$mtag") || die "the recorded maintenance release has a malformed tag"
   checkpoint
   render_all "$tag" "$number" "$1" "$2" "$3" "$mimage" "$mtag" "$mnumber"
+  render_observer "${4:-}"
   say "rendered $tag"
 }
 
@@ -498,7 +517,7 @@ case "$step:$#" in
   status:0) step_status ;;
   running-release:0) step_running_release ;;
   release-json:0) step_release_json ;;
-  pull:3) step_pull "$@" ;;
+  pull:3 | pull:4) step_pull "$@" ;;
   backup:0) step_backup ;;
   timers-stop:0) step_timers stop ;;
   timers-start:0) step_timers start ;;
@@ -509,7 +528,7 @@ case "$step:$#" in
   maintenance-up:1) step_maintenance_up "$1" ;;
   ban-test:2) step_ban_test "$@" ;;
   app-down:0) step_app_down ;;
-  render:3) step_render "$@" ;;
+  render:3 | render:4) step_render "$@" ;;
   restore-previous:0 | restore-previous:1) step_restore_previous "$@" ;;
   secrets-check:0) step_secrets_check ;;
   db-setup:0) step_oneshot aboutme-db-setup ;;

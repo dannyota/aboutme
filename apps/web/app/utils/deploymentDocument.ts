@@ -101,7 +101,7 @@ const LINK_PATTERNS = {
     + 'sha256:[0-9a-f]{64}\\?predicate_type=provenance$', 'u'),
   sbom: new RegExp(
     `^${REPO}/releases/download/${SEMVER}/aboutme-(?:server|web|caddy)`
-    + '\\.spdx\\.json$', 'u'),
+    + '(?:-amd64)?\\.spdx\\.json$', 'u'),
   transparencyLog: /^https:\/\/search\.sigstore\.dev\/\?logIndex=[0-9]{1,20}$/u,
 } as const;
 
