@@ -78,6 +78,24 @@ function inlineText(tokens = []) {
     .join("");
 }
 
+function srcsetURLs(value) {
+  const urls = [];
+  let position = 0;
+  while (position < value.length) {
+    while (position < value.length && /[\t\n\f\r ,]/u.test(value[position])) position++;
+    const start = position;
+    while (position < value.length && !/[\t\n\f\r ]/u.test(value[position])) position++;
+    const url = value.slice(start, position);
+    if (!url) break;
+    // Commas inside URLs belong to the URL, including data URL payloads.
+    urls.push(url.replace(/,+$/u, ""));
+    if (url.endsWith(",")) continue;
+    // Skip width or density descriptors up to the next candidate.
+    while (position < value.length && value[position] !== ",") position++;
+  }
+  return urls;
+}
+
 function parse(text) {
   const links = [];
   const anchors = new Set();
@@ -88,10 +106,12 @@ function parse(text) {
     for (const tag of visible.matchAll(/<[a-z][^>]*>/giu)) {
       const attributes = /\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/gu;
       for (const attr of tag[0].matchAll(attributes)) {
-        if (!/^(?:href|src|id|name)$/iu.test(attr[1])) continue;
+        if (!/^(?:href|src|srcset|id|name)$/iu.test(attr[1])) continue;
         const value = markdown.utils.unescapeAll(attr[2] ?? attr[3] ?? attr[4] ?? "");
         if (/^(?:id|name)$/iu.test(attr[1])) anchors.add(value);
-        else links.push({ href: value, line });
+        else if (/^srcset$/iu.test(attr[1])) {
+          for (const href of srcsetURLs(value)) links.push({ href, line });
+        } else links.push({ href: value, line });
       }
     }
   };
