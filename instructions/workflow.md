@@ -27,6 +27,7 @@ Design proposals cover benefits, trade-offs, dependencies, limits, alternatives,
 6. The primary inspects each diff and report, runs `make pre-push` and approved capped checks, and reads exact-commit CI evidence. It never repeats checks just to confirm a report.
 7. Push the branch and open a pull request against `main`. CI and GitHub Copilot review must cover the change. Fix each Copilot finding or reply in its thread with the reason it does not apply. A push starts its next review; Copilot adds to independent review and never replaces it.
 8. If `main` moved, merge `origin/main` into the branch and push so CI and review cover the combination. The primary merges locally with a signed `--no-ff` merge, pushes `main`, and deletes the branch locally and remotely. Follow [releases](releases.md) for tags and deploys.
+9. Close the GitHub notifications the work produced: review each thread for this repository (pull request, review, and failed-run threads), then mark it done with `gh api -X DELETE notifications/threads/<id>`. Close, never just mark read. A failed-run thread closes only after its cause is fixed or explained in the report.
 
 ## Reviews
 
