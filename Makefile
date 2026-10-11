@@ -33,10 +33,10 @@ DEV_HTTPS_BROWSER_SOURCES := \
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
 
-ci: ## Full local non-security gate, including DB-backed suites; integration owner runs it before integration
+ci: ## Local build, test, lint, and drift reproduction without hosted browser proofs; prohibited by ADR 0024
 	bash scripts/ci.sh
 
-check: ## Fast gate — the same checks minus the web build and DB-backed suites; for the inner development loop
+check: ## Fast local subset; skips web checks, database-backed suites, S3 suites, and route-table tests
 	bash scripts/ci.sh --fast
 
 pre-push: ## Static checks on the files this branch changed (ESLint, Prettier, markdownlint, gofmt, golangci-lint, lengths, shell) under the local-check lock and memory cap; run before every push
