@@ -19,7 +19,7 @@ For security-relevant work, trace the relevant attackers in instructions/workflo
 Run once after the last code task, or for a requested fix confirmation. Review in this order:
 1. Design and accepted ADR compliance, including schema, API, deployment configuration, and OpenAPI agreement.
 2. Correctness: results, races, idempotency, bounds, error handling, resource leaks, migrations, and rollback behavior.
-3. Security: auth, sessions, CSRF, sanitizing, media privacy, publish revocation, credentials, keys, signing, production writes, deploys, and release workflows. These changes require the adversarial pass before merge.
+3. Security: auth, sessions, CSRF, sanitizing, media privacy, publish revocation, credentials, keys, signing, production writes, deploys, and release workflows. These changes require the adversarial pass before merge, except one-line changes under the ADR 0024 exemption.
 4. Regression coverage and tests that actually exercise the changed mechanism.
 5. Writing rules, stale docs, generated sources, and brief ownership.
 

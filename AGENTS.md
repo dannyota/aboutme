@@ -18,7 +18,6 @@ Direct user instructions and platform safety rules come first.
 |Open follow-ups|`docs/plans/backlog.md`|
 |Acceptance-criterion ownership|`docs/plans/traceability/`|
 |Writing rules|`docs/standards/engineering.md`|
-|Agent workflow, resources, verification, releases, tools|`instructions/`|
 
 |Doing|Read first|
 |-|-|
@@ -50,7 +49,7 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 
 |Tool|Where|Agents with model and effort|
 |-|-|-|
-|Claude Code|`.claude/agents/`|`manager` (Fable medium, primary), `designer` (Fable high, design and first-party research)|
+|Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model), `designer` (Fable high, design and first-party research)|
 |Codex|`.codex/agents/`|`implementer` (`gpt-6.1-sol` medium, workspace-write), `code_reviewer` (`gpt-6-astra` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-sol` medium, workspace-write), `explorer` (`gpt-6-luna` low, read-only)|
 
 When Fable is unavailable, a separate Codex `gpt-6-astra` worker at `high` writes designs. Set model and effort explicitly on every dispatch. Review routing and fix confirmations follow [workflow](instructions/workflow.md#reviews); a reviewer never reviews work written by the same model or implements what it reviews. Track these agent definitions; keep other local tool settings ignored.
@@ -61,7 +60,7 @@ The primary assigns a lane and exact owned paths to each implementer brief. Desi
 |-|-|-|
 |backend|`apps/server/`, `packages/schema/` sources and Go output, `docs/api/`, migrations, MCP|Edits web UI files or production infrastructure|
 |frontend|`apps/web/`: pages, editor, renderer, i18n, render workers, web tests and baselines|Edits Go, migrations, or production infrastructure|
-|devops|`deploy/`, `.github/workflows/`, Caddy, OpenTofu, Cloudflare, AWS, release scripts|Reads secret values or applies infrastructure unreviewed|
+|devops|`deploy/` (`vn/` host, `caddy/`, `observer/`, and the kept `aws/` reference), `.github/workflows/`, OpenTofu, Cloudflare, release scripts|Reads secret values or applies infrastructure unreviewed|
 
 A path outside these lanes belongs to the primary, which assigns it in a brief. Renderer CSS and template tokens are frontend implementation; the designer supplies visual direction and UI specs.
 
