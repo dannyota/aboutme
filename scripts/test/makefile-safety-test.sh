@@ -86,6 +86,204 @@ assert_web_e2e_rejected unknown-shard web-e2e \
   'WEB_E2E_SHARD must be all, preview-gap, or rest' \
   WEB_E2E_RUN_ID=valid WEB_E2E_SHARD=harness
 
+# Exercise the public diagnostic collector without a browser or container.
+python3 - "$ROOT/Makefile" "$ROOT/scripts/collect-browser-diagnostics.py" "$WORK" <<'PYTHON'
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import struct
+import subprocess
+import sys
+import tarfile
+import zlib
+
+makefile, collector, work = map(Path, sys.argv[1:4])
+signature = b"\x89PNG\r\n\x1a\n"
+def chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+header = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+pixels = b"\x00\x12\x34\x56\xff"
+png = signature + header + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
+sentinel = b"ARTIFACT_SECRET_SENTINEL"
+metadata_png = signature + header + chunk(b"tEXt", b"Comment\x00" + sentinel) + png[len(signature + header):]
+archive = work / "candidate.tar"
+with tarfile.open(archive, "w") as tar:
+    for name, data in [("apps/web/e2e/baselines/card--no-name.png", png),
+                       ("apps/web/public/templates/pages/engineer-compact-en-p1.png", metadata_png),
+                       ("apps/web/e2e/card.spec.ts", b"fixture")]:
+        info = tarfile.TarInfo(name)
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+for fixture in ["mismatch", "symlink", "unknown-image", "raw-response", "malformed-report",
+                "special-file", "non-png", "print-actual", "forged-metadata", "template-page",
+                "signature-secret", "png-metadata", "png-appended", "bad-crc",
+                "truncated-png", "oversized-pixels", "invalid-filter", "invalid-zlib", "inflated-pixels"]:
+    mode = work / fixture
+    artifacts = mode / "harness/artifacts/private-title-token"
+    artifacts.mkdir(parents=True)
+    for kind in ["expected", "actual", "diff"]:
+        (artifacts / f"card--no-name-{kind}.png").write_bytes(png)
+    (artifacts / "test-failed-1.png").write_bytes(png)
+    (artifacts / "trace.zip").write_text("private-token")
+    (artifacts / "response.json").write_text("private-token")
+    (artifacts / "unknown-actual.png").write_bytes(png)
+    if fixture == "symlink":
+        (artifacts / "card--no-name-actual.png").unlink()
+        (artifacts / "card--no-name-actual.png").symlink_to(artifacts / "response.json")
+    if fixture in ["special-file", "non-png"]:
+        actual = artifacts / "card--no-name-actual.png"
+        actual.unlink()
+        if fixture == "special-file":
+            os.mkfifo(actual)
+        else:
+            actual.write_text("private-token")
+    if fixture == "print-actual":
+        (artifacts / "card--no-name-actual.png").rename(artifacts / "card--no-name.png")
+        (artifacts / "card--no-name-expected.png").unlink()
+    hostile = {
+        "signature-secret": signature + sentinel,
+        "png-metadata": metadata_png,
+        "png-appended": png + sentinel,
+        "bad-crc": png[:-1] + bytes([png[-1] ^ 1]),
+        "truncated-png": png[:-12],
+        "oversized-pixels": signature + chunk(b"IHDR", struct.pack(">IIBBBBB", 100000, 100000, 8, 6, 0, 0, 0)) + png[len(signature + header):],
+        "invalid-filter": signature + header + chunk(b"IDAT", zlib.compress(b"\x05" + pixels[1:])) + chunk(b"IEND", b""),
+        "inflated-pixels": signature + header + chunk(b"IDAT", zlib.compress(pixels * 10000)) + chunk(b"IEND", b""),
+        "invalid-zlib": signature + header + chunk(b"IDAT", b"invalid") + chunk(b"IEND", b""),
+    }
+    if fixture in hostile:
+        (artifacts / "card--no-name-actual.png").write_bytes(hostile[fixture])
+    if fixture == "template-page":
+        (artifacts / "engineer-compact-en-p1.png").write_bytes(png)
+        (artifacts / "engineer-compact-en-p1-diff.png").write_bytes(png)
+    if fixture == "forged-metadata":
+        (mode / "diagnostics").mkdir()
+        (mode / "diagnostics/source-metadata.txt").write_text("private-token")
+        (mode / "diagnostics/response.json").write_text("private-token")
+    normal = mode / "normal/artifacts/private-title-token"
+    normal.mkdir(parents=True)
+    (normal / "card--no-name-diff.png").write_bytes(png)
+    report = {"suites": [{"specs": [{"file": "card.spec.ts", "line": 12,
+              "title": "private-token", "tests": [{"results": [{"status": "failed",
+              "error": {"message": "private-token"}, "stdout": ["private-token"]}]}]}]}]}
+    (mode / "harness/results.json").write_text("invalid" if fixture == "malformed-report" else json.dumps(report))
+    result = subprocess.run(["python3", "-I", str(collector), str(mode), str(archive), "a" * 40,
+                             "sha256:" + "b" * 64, "c" * 64, "d" * 64, "1"],
+                            capture_output=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    public = mode / "diagnostics"
+    files = list(public.rglob("*"))
+    assert not any(path.is_symlink() for path in files)
+    assert not any("private" in path.relative_to(public).as_posix() for path in files)
+    assert not any(b"private-token" in path.read_bytes() for path in files if path.is_file())
+    assert not any(sentinel in path.read_bytes() for path in files if path.is_file())
+    for path in files:
+        if path.suffix == ".png":
+            assert path.read_bytes() == png, path
+    assert not any(path.suffix in [".zip", ".html"] for path in files)
+    images = [path.name for path in files if path.suffix == ".png" and "harness" in path.parts]
+    rejected = ["symlink", "special-file", "non-png", "signature-secret", "bad-crc",
+                "truncated-png", "oversized-pixels", "invalid-filter", "invalid-zlib", "inflated-pixels"]
+    assert sorted(images) == sorted(["card--no-name-expected.png", "card--no-name-diff.png"] +
+                                   ([] if fixture in rejected else ["card--no-name-actual.png"]) +
+                                   (["engineer-compact-en-p1-expected.png", "engineer-compact-en-p1-actual.png",
+                                     "engineer-compact-en-p1-diff.png"] if fixture == "template-page" else []))
+    assert (public / "normal/0/card--no-name-diff.png").is_file()
+    assert (public / "normal/0/card--no-name-expected.png").is_file()
+    summary = json.loads((public / "failure-summary.json").read_text())
+    assert summary["exit_status"] == 1
+    assert summary["surfaces"]["harness"]["report"] == ("unavailable" if fixture == "malformed-report" else "available")
+    assert "commit=" + "a" * 40 in (public / "source-metadata.txt").read_text()
+    assert "browser_image_digest=sha256:" + "b" * 64 in (public / "source-metadata.txt").read_text()
+# Every PNG filter must reconstruct the same RGB pixels.
+rgb_header = chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+rgb_pixels = bytes([0, 10, 20, 30, 40, 50, 60, 0, 70, 80, 90, 100, 110, 120])
+rgb_png = signature + rgb_header + chunk(b"IDAT", zlib.compress(rgb_pixels)) + chunk(b"IEND", b"")
+filtered_rows = [
+    ([10, 20, 30, 40, 50, 60], [70, 80, 90, 100, 110, 120]),
+    ([10, 20, 30, 30, 30, 30], [70, 80, 90, 30, 30, 30]),
+    ([10, 20, 30, 40, 50, 60], [60, 60, 60, 60, 60, 60]),
+    ([10, 20, 30, 35, 40, 45], [65, 70, 75, 45, 45, 45]),
+    ([10, 20, 30, 30, 30, 30], [60, 60, 60, 30, 30, 30]),
+]
+for filter_type, (first, second) in enumerate(filtered_rows):
+    mode = work / f"png-filter-{filter_type}"
+    artifacts = mode / "harness/artifacts/fixture"
+    artifacts.mkdir(parents=True)
+    filtered = bytes([filter_type, *first, filter_type, *second])
+    (artifacts / "card--no-name-actual.png").write_bytes(
+        signature + rgb_header + chunk(b"IDAT", zlib.compress(filtered)) + chunk(b"IEND", b""))
+    result = subprocess.run(["python3", "-I", str(collector), str(mode), str(archive), "a" * 40,
+                             "sha256:" + "b" * 64, "c" * 64, "d" * 64, "1"],
+                            capture_output=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert (mode / "diagnostics/harness/0/card--no-name-actual.png").read_bytes() == rgb_png
+# Run the actual Make recipes with source, Git, architecture, and browser stubs.
+repo = work / "browser-repo"
+bin_dir = work / "browser-bin"
+(repo / "scripts").mkdir(parents=True)
+bin_dir.mkdir()
+(repo / "Makefile").write_text(makefile.read_text())
+(repo / "scripts/collect-browser-diagnostics.py").write_bytes(collector.read_bytes())
+(repo / "scripts/web-e2e-source.manifest").write_text("fixture\n")
+def executable(path, text):
+    path.write_text(text)
+    path.chmod(0o755)
+executable(bin_dir / "git", "#!/bin/bash\nif [ \"$1\" = rev-parse ]; then printf '%s\\n' \"$FIXTURE_COMMIT\"; fi\n")
+executable(bin_dir / "uname", "#!/bin/bash\nprintf 'x86_64\\n'\n")
+executable(repo / "scripts/web-e2e-source.sh", "#!/bin/bash\ncp -- \"$FIXTURE_ARCHIVE\" \"$3\"\n")
+executable(bin_dir / "podman", """#!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+mount = next(arg for arg in sys.argv if arg.endswith(":/results:rw"))
+mode = Path(mount.removesuffix(":/results:rw"))
+artifacts = mode / "harness/artifacts/fixture"
+artifacts.mkdir(parents=True)
+(artifacts / "card--no-name-actual.png").write_bytes(Path(os.environ["FIXTURE_PNG"]).read_bytes())
+if mode.name == "update":
+    (mode / "candidate-baselines").mkdir()
+sys.exit(int(os.environ["FIXTURE_STATUS"]))
+""")
+(work / "fixture.png").write_bytes(png)
+for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e-update", "all")]:
+    for status in [42, 0]:
+        run_id = f"{target}-{shard}-{status}"
+        result = subprocess.run(["/usr/bin/make", "--no-print-directory", target], cwd=repo, env={
+            **os.environ, "PATH": str(bin_dir) + ":/usr/bin:/bin",
+            "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
+            "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
+            "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
+        }, capture_output=True, timeout=10)
+        assert result.returncode == (2 if status else 0), result.stderr
+        mode = repo / ".dev/web-e2e-results" / ("a" * 40) / run_id / ("update" if target.endswith("update") else "compare")
+        summary = json.loads((mode / "diagnostics/failure-summary.json").read_text())
+        assert summary["exit_status"] == status
+        assert (mode / "diagnostics/harness/0/card--no-name-actual.png").read_bytes() == png
+        metadata = (mode / "diagnostics/source-metadata.txt").read_text()
+        assert "commit=" + "a" * 40 in metadata
+        image = next(line.split(" := ", 1)[1] for line in makefile.read_text().splitlines() if line.startswith("WEB_E2E_IMAGE := "))
+        assert metadata == (f"commit={'a' * 40}\n"
+                            f"manifest_sha256={hashlib.sha256((repo / 'scripts/web-e2e-source.manifest').read_bytes()).hexdigest()}\n"
+                            f"tar_sha256={hashlib.sha256(archive.read_bytes()).hexdigest()}\n"
+                            f"browser_image_digest={image.split('@')[1]}\n")
+        candidate_metadata = mode / "candidate-baselines/source-metadata.txt"
+        assert candidate_metadata.exists() == (target == "web-e2e-update" and status == 0)
+        if candidate_metadata.exists():
+            assert candidate_metadata.read_text() == metadata
+# Metadata joins only successful, validated candidates.
+mode = work / "update"
+(mode / "candidate-baselines").mkdir(parents=True)
+for status in [1, 0]:
+    result = subprocess.run(["python3", "-I", str(collector), str(mode), str(archive), "a" * 40,
+                             "sha256:" + "b" * 64, "c" * 64, "d" * 64, str(status)],
+                            capture_output=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert (mode / "candidate-baselines/source-metadata.txt").exists() == (status == 0)
+PYTHON
+
 : >"$CALLS"
 if (
   cd "$REPO"
