@@ -220,6 +220,44 @@ sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
 
+## Vulnerability scans
+
+[The security scan](../../.github/workflows/security-scan.yml) runs weekly. Go
+checks cover the server, generated schema module, observer, and Caddy build
+module. npm audits cover the root, web, schema, and browser-proof dependencies.
+Dependency checks use the workflow checkout: the default branch on scheduled
+runs, or the selected branch on manual runs.
+
+Image scans cover both arm64 and amd64 for server, web, Caddy, and observer. The
+scan selects GitHub's latest published release and reads its `digests.txt` asset
+by asset ID. Every image scan uses the listed platform digest. The observer's
+arm64 digest belongs to the plain version tag; its amd64 digest belongs to
+`<tag>-amd64`. The job summary records the selected app and observer releases
+and each scanned digest. JSON reports and release digest lists remain in the
+workflow artifact for seven days.
+
+To check a rollback release or an observer retained from an older release,
+dispatch with explicit versions:
+
+```sh
+gh workflow run security-scan.yml --ref main \
+  -f release_tag=<app-release> -f observer_release_tag=<observer-release>
+```
+
+Omit `release_tag` to select the latest published release. Omit
+`observer_release_tag` to use the selected app release for both observer
+platforms. Both inputs require a published `vMAJOR.MINOR.PATCH` release and its
+digest asset. A reachable tag alone does not qualify.
+
+Missing or duplicate platform digests, invalid reports, scan-engine errors, and
+fixable HIGH or CRITICAL image findings fail the scan. Other targets still run.
+Observer publication is optional, so a release missing either observer digest
+fails coverage unless an explicit observer release supplies both.
+
+These are release scans, not deployed-version checks. The workflow does not read
+the host's installed release or retained observer version. Use the host's
+release record and observer unit to choose those versions before dispatching.
+
 ## Reboot
 
 Use the GreenNode API to reboot the server. An in-guest `systemctl reboot` hung

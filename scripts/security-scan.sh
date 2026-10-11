@@ -51,8 +51,8 @@ install_trivy() {
   "$dest/trivy" --version
 }
 
-# Scans one image into a JSON report and never fails on its own; `report`
-# below decides pass/fail from that file, so the scan and the
+# Scans one image into a JSON report. Engine errors fail here; `report`
+# below decides pass/fail from findings in that file, so the scan and the
 # failing-findings table read the same data instead of two divergent Trivy
 # calls (one for the exit code, one for the printed table).
 scan_image() {
@@ -62,7 +62,7 @@ scan_image() {
   local report=${4:?scan-image needs a report output path}
   local -a args=(
     image --scanners vuln --ignore-unfixed
-    --severity HIGH,CRITICAL --format json --output "$report"
+    --severity 'HIGH,CRITICAL' --format json --output "$report"
   )
   [ -n "$platform" ] && args+=(--platform "$platform")
   args+=("$ref")
@@ -77,20 +77,18 @@ scan_image() {
 # artifact instead.
 report_findings() {
   local report=${1:?report needs a report path}
-  local has_results artifact_name count
-  has_results=$(jq 'has("Results")' "$report")
-  if [ "$has_results" != "true" ]; then
-    printf 'security-scan: %s has no Results array; the image was never scanned\n' \
+  local count
+  if ! jq -e '
+    (.ArtifactName | type == "string" and length > 0) and
+    (.Results | type == "array") and
+    all(.Results[]; type == "object" and
+      (.Vulnerabilities == null or (.Vulnerabilities | type == "array")))
+  ' "$report" >/dev/null; then
+    printf 'security-scan: %s is not a valid image scan report\n' \
       "$report" >&2
     return 1
   fi
-  artifact_name=$(jq -r '.ArtifactName // ""' "$report")
-  if [ -z "$artifact_name" ]; then
-    printf 'security-scan: %s has an empty ArtifactName; the image was never scanned\n' \
-      "$report" >&2
-    return 1
-  fi
-  count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")
+  count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report") || return 1
   if [ "$count" -eq 0 ]; then
     printf 'security-scan: no fixable HIGH/CRITICAL findings in %s\n' "$report"
     return 0
@@ -103,39 +101,115 @@ report_findings() {
   return 1
 }
 
-# The most recent released version tag, for the weekly scan's image targets.
-# Needs full tag history (a shallow or single-branch checkout will not do).
-latest_release_tag() {
-  git describe --tags --abbrev=0 --match 'v*'
+# Resolve GitHub's latest published release, or an explicit version, and fetch
+# its digest asset by ID. A reachable Git tag does not prove publication.
+release_assets() {
+  local requested=$1 dest=$2 endpoint=latest metadata selection tag asset_id
+  mkdir -p "$dest" || return 1
+  rm -f "$dest/tag.txt" "$dest/digests.txt" || return 1
+  if [ -n "$requested" ]; then
+    [[ $requested =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+      printf 'security-scan: expected a vMAJOR.MINOR.PATCH release\n' >&2
+      return 1
+    }
+    endpoint="tags/$requested"
+  fi
+  metadata=$(gh api "repos/dannyota/aboutme/releases/$endpoint") || return 1
+  selection=$(jq -er --arg requested "$requested" '
+    select(.draft == false and .prerelease == false)
+    | select(.published_at | type == "string" and length > 0)
+    | select(.tag_name | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+    | select($requested == "" or .tag_name == $requested)
+    | [.tag_name, ([.assets[] | select(.name == "digests.txt")]
+        | select(length == 1) | .[0] | select(.state == "uploaded")
+        | .id | select(type == "number" and . > 0 and . == floor))]
+    | select(length == 2) | @tsv
+  ' <<<"$metadata") || {
+    printf 'security-scan: release lacks published version metadata or a unique digest asset\n' >&2
+    return 1
+  }
+  read -r tag asset_id <<<"$selection"
+  [[ $asset_id =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$tag" >"$dest/tag.txt" || return 1
+  gh api "repos/dannyota/aboutme/releases/assets/$asset_id" \
+    -H Accept:application/octet-stream >"$dest/digests.txt" || return 1
+  [ -s "$dest/digests.txt" ]
 }
 
-# The weekly scan's target list: both released platforms of the three app
-# images at the latest tag, each into its own report under $2. Base images are
-# not scanned on their own: the runtime stages remove packages the bases ship
-# (the npm CLI), so a
-# base finding may not reach production, and the released images already show
-# every fixable finding that does. Continues past a failing target so one run
-# shows the complete picture, then exits non-zero if any target had a fixable
-# HIGH/CRITICAL finding or a scan error. summary.txt and failed.txt under the
-# report directory are the job summary's source.
+# Require exactly one platform manifest, never the app's multi-platform index.
+release_image_ref() {
+  local manifest=$1 name=$2 arch=$3 line ref platform extra
+  line=$(awk -v image="ghcr.io/dannyota/aboutme-$name@" -v platform="linux/$arch" '
+    index($1, image) == 1 && $2 == platform { print }
+  ' "$manifest") || return 1
+  [ -n "$line" ] && [[ $line != *$'\n'* ]] || return 1
+  read -r ref platform extra <<<"$line"
+  [ -z "$extra" ] && [ "$platform" = "linux/$arch" ] || return 1
+  [[ $ref =~ ^ghcr\.io/dannyota/aboutme-$name@sha256:[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$ref"
+}
+
+# Scan published platform digests. The observer may be retained from a separate
+# release. Missing assets, findings, and engine errors fail the run without
+# preventing collection of other targets. This is not deployed-version inventory.
 weekly_scan() {
   local trivy_bin=${1:?weekly-scan needs the trivy binary path}
   local report_dir=${2:?weekly-scan needs a report directory}
+  local requested=${3:-} observer_requested=${4:-}
+  local fail=0 app_ready=0 observer_ready=0 name arch ref report source ready
   mkdir -p "$report_dir"
   : >"$report_dir/summary.txt"
-  local fail=0 tag name arch ref report
+  : >"$report_dir/failed.txt"
+  rm -f "$report_dir/observer/tag.txt" "$report_dir/observer/digests.txt"
 
-  tag=$(latest_release_tag)
-  printf 'security-scan: scanning released images at %s\n' "$tag"
-  for name in server web caddy; do
-    ref="ghcr.io/dannyota/aboutme-${name}:${tag}"
+  if release_assets "$requested" "$report_dir/app"; then
+    app_ready=1
+  else
+    printf 'App release resolution failed\n' | tee -a "$report_dir/summary.txt" >>"$report_dir/failed.txt"
+    fail=1
+  fi
+  local observer_source="$report_dir/app"
+  observer_ready=$app_ready
+  if [ -n "$observer_requested" ]; then
+    observer_source="$report_dir/observer"
+    observer_ready=0
+    if release_assets "$observer_requested" "$observer_source"; then
+      observer_ready=1
+    else
+      printf 'Observer release resolution failed\n' | tee -a "$report_dir/summary.txt" >>"$report_dir/failed.txt"
+      fail=1
+    fi
+  fi
+  if [ -f "$report_dir/app/tag.txt" ]; then
+    printf 'App release: %s\n' "$(cat "$report_dir/app/tag.txt")" >>"$report_dir/summary.txt"
+  fi
+  if [ -f "$observer_source/tag.txt" ]; then
+    printf 'Observer release: %s\n' "$(cat "$observer_source/tag.txt")" >>"$report_dir/summary.txt"
+  fi
+
+  for name in server web caddy observer; do
+    source="$report_dir/app"
+    ready=$app_ready
+    if [ "$name" = observer ]; then
+      source=$observer_source
+      ready=$observer_ready
+    fi
     for arch in arm64 amd64; do
       report="$report_dir/released-${name}-${arch}.json"
-      scan_image "$trivy_bin" "$ref" "linux/$arch" "$report" || fail=1
-      printf 'security-scan: result for %s on linux/%s\n' "$ref" "$arch" |
-        tee -a "$report_dir/summary.txt"
-      if ! report_findings "$report" >>"$report_dir/summary.txt"; then
-        printf '%s linux/%s\n' "$ref" "$arch" >>"$report_dir/failed.txt"
+      rm -f "$report"
+      if [ "$ready" -ne 1 ] || ! ref=$(release_image_ref "$source/digests.txt" "$name" "$arch"); then
+        printf '%s linux/%s: missing or invalid release digest\n' "$name" "$arch" |
+          tee -a "$report_dir/summary.txt" >>"$report_dir/failed.txt"
+        fail=1
+        continue
+      fi
+      printf 'Scanning %s linux/%s\n' "$ref" "$arch" >>"$report_dir/summary.txt"
+      if ! scan_image "$trivy_bin" "$ref" "linux/$arch" "$report"; then
+        printf '%s linux/%s: scan engine error\n' "$ref" "$arch" |
+          tee -a "$report_dir/summary.txt" >>"$report_dir/failed.txt"
+        fail=1
+      elif ! report_findings "$report" >>"$report_dir/summary.txt" 2>&1; then
+        printf '%s linux/%s: findings or invalid report\n' "$ref" "$arch" >>"$report_dir/failed.txt"
         fail=1
       fi
     done
@@ -158,15 +232,11 @@ report)
   shift
   report_findings "$@"
   ;;
-latest-tag)
-  shift
-  latest_release_tag "$@"
-  ;;
 weekly-scan)
   shift
   weekly_scan "$@"
   ;;
 *)
-  die "usage: $0 {install-trivy|scan-image|report|latest-tag|weekly-scan} [args...]"
+  die "usage: $0 {install-trivy|scan-image|report|weekly-scan} [args...]"
   ;;
 esac
