@@ -1275,6 +1275,37 @@ run_missing_tool_check() (
   [ ! -s "$FAKE_MUTATIONS" ] || fail "missing-tool rejection performed a mutation"
 )
 
+run_browser_staging_checks() (
+  work=$(mktemp -d)
+  trap 'rm -rf -- "$work"' EXIT
+  mkdir -p "$work/context" "$work/staged"
+  cp "$SOURCE_ROOT/deploy/dev-https-browser/spec-sources.txt" "$work/context/"
+  mapfile -t sources <"$work/context/spec-sources.txt"
+  for name in "${sources[@]}"; do printf 'fixture\n' >"$work/context/$name"; done
+  # A new list member must be staged without changing another shell array.
+  printf 'additional.spec.ts\n' >>"$work/context/spec-sources.txt"
+  printf 'fixture\n' >"$work/context/additional.spec.ts"
+  # shellcheck source=scripts/lib/dev-https-browser-stage.sh
+  source "$SOURCE_LIB_DIR/dev-https-browser-stage.sh"
+  stage_dev_https_browser_specs "$work/context" "$work/staged"
+  [ "$(stat -c %a "$work/staged")" = 700 ] || fail 'staging directory is not private'
+  [ "$(find "$work/staged" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)" = \
+    "$(sort "$work/context/spec-sources.txt")" ] || fail 'staging differs from the source list'
+  for path in "$work/staged/"*; do
+    [ "$(stat -c '%u %a' "$path")" = "$(id -u) 600" ] || fail 'staged source owner or mode differs'
+  done
+  rm "$work/context/additional.spec.ts"
+  if output=$(stage_dev_https_browser_specs "$work/context" "$work/staged" 2>&1); then
+    fail 'staging accepted a missing source'
+  fi
+  assert_contains "$output" 'missing or not a regular file'
+  ln -s "$work/context/${sources[0]}" "$work/context/additional.spec.ts"
+  if output=$(stage_dev_https_browser_specs "$work/context" "$work/staged" 2>&1); then
+    fail 'staging accepted a symlink source'
+  fi
+  assert_contains "$output" 'missing or not a regular file'
+)
+
 # Every check function in this file, in the order an unsharded run uses.
 # DEV_HTTPS_TEST_SHARD=<i>/<n> runs only the checks whose index in this array
 # (0-based) is congruent to i mod n; unset runs every one, in this order.
@@ -1311,6 +1342,7 @@ readonly CHECKS=(
   run_passkey_enrollment_flag_check
   run_totp_enrollment_flag_check
   run_missing_tool_check
+  run_browser_staging_checks
 )
 
 # Fails if a run_* function defined in this file is missing from CHECKS, or
@@ -1354,6 +1386,7 @@ main() {
   compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
   check_checks_array_is_complete
   case ${DEV_HTTPS_TEST_CASE-} in
+  browser-staging) run_browser_staging_checks; return ;;
   manifest) run_happy_path_and_lifecycle_checks; return ;;
   listener-probe) run_listener_probe_failure_checks; return ;;
   native-ports) run_normal_native_listener_without_pid_check; return ;;
