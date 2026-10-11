@@ -7,7 +7,6 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |Path|Holds|
 |-|-|
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
-|[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
@@ -15,7 +14,7 @@ A multi-release goal gets one plan file; its task briefs go in a directory of th
 
 ## Shipped
 
-Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELEASE_TAG` on one AWS Singapore host ([ADR 0025](../adr/0025-single-host-production.md)), live since v0.1.1.
+Production runs on one GreenNode host in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Release verification follows the [production runbook](../runbooks/production.md).
 
 |Tag|Shipped|
 |-|-|
@@ -36,11 +35,10 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Remaining
 
-- Release order, next: [Vietnam production migration](vietnam-production.md), the 0.7 line. Mobile display fixes stay in 0.6.x. The public announcement waits for the migration. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside it.
-- [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
-- [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
+- The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) remain open. Mobile display fixes stay in 0.6.x.
+- [backlog.md](backlog.md): open follow-ups, Vietnam production work, acceptance evidence, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
 
 ## Gates
 
-[ADR 0024](../adr/0024-delivery-gates.md) governs: failing test first, one fresh review per plan or release, green GitHub CI on the exact commit before tag and deploy. Authentication, sessions, CSRF, concurrency, idempotency, migrations, sanitizing, publish revocation, secrets, and production deploys are high risk; the reviewer confirms those invariants by name.
+[ADR 0024](../adr/0024-delivery-gates.md) governs: failing test first, independent review under [workflow](../../instructions/workflow.md), green GitHub CI on the exact commit before tag and deploy. Authentication, sessions, CSRF, concurrency, idempotency, migrations, sanitizing, publish revocation, secrets, and production deploys are high risk; the code reviewer confirms those invariants by name.
