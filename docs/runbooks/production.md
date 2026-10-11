@@ -89,12 +89,12 @@ failed matching run blocks an older success. Missing evidence or a fetch/API
 error also blocks.
 
 The image workflow runs the helper from a separate checkout of
-`dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's event
-commit. A read-only job checks eligibility before publishing jobs start. Every
-write-capable job repeats the check before other work, so a partial rerun must
-pass fresh eligibility. Candidate checkouts supply build inputs only. The
-workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64
-and pins image digests. GitHub holds no cloud credentials.
+`dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's
+event commit. A read-only job checks eligibility before publishing jobs start.
+Every write-capable job repeats the check before other work, so a partial rerun
+must pass fresh eligibility. Candidate checkouts supply build inputs only. The
+workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and
+pins image digests. GitHub holds no cloud credentials.
 
 Before SSH or registry access, the deployer also requires its checkout to be on
 `main`, clean (including untracked files), and equal to freshly fetched
