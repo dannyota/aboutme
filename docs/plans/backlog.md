@@ -32,10 +32,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Add and review a host procedure for abuse account deletion.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 
-## Before the public announcement
-
-- Owner approves the agent-reviewed privacy, terms, and disclosure text.
-
 ## Acceptance evidence gaps
 
 - frontend: web test that an absent or malformed `totpEnabled` counts as false (AC-AUTH-029).

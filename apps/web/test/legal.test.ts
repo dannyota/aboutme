@@ -95,7 +95,19 @@ describe('privacy and terms pages', () => {
       + 'trang (họ tên, tiêu đề và ảnh của bạn), và có thể giữ bản sao riêng '
       + 'của họ sau khi bạn hủy xuất bản.',
     );
-    expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
+    expect(wrapper.text()).toContain(
+      'Cloudflare cung cấp DNS có thẩm quyền. Tất cả bản ghi đều ở chế độ '
+      + 'chỉ DNS (DNS-only), không dùng proxy.',
+    );
+    expect(wrapper.text()).toContain(
+      'Bản xuất gồm hồ sơ, nội dung CV và ảnh trong CV của bạn. '
+      + 'Để lấy lịch sử phiên đăng nhập, hãy liên hệ qua email.',
+    );
+    expect(wrapper.text()).toContain(
+      'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp (chỉ '
+      + 'gồm loại sự kiện và thời điểm) được giữ trong 180 ngày, sau đó '
+      + 'được xóa trong các đợt dọn dẹp hằng ngày.',
+    );
     expect(wrapper.text()).toContain(
       'Google (Hoa Kỳ) và LinkedIn (Hoa Kỳ) cung cấp lựa chọn đăng nhập.',
     );
@@ -104,7 +116,7 @@ describe('privacy and terms pages', () => {
       + 'chọn. Chúng tôi không nhận tệp này; chúng tôi chỉ lưu CV bạn tạo từ '
       + 'nó.',
     );
-    expect(wrapper.text()).not.toContain('Cloudflare');
+    expect(wrapper.text()).not.toContain('Amazon Route 53');
     expect(wrapper.text()).toContain(
       'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng số '
       + 'theo ngày.',
@@ -222,7 +234,23 @@ describe('privacy and terms pages', () => {
       + '(your name, headline, and photo), and may keep its own copy after '
       + 'you unpublish.',
     );
-    expect(wrapper.text()).toContain('Amazon Route 53 provides DNS.');
+    expect(wrapper.text()).toContain(
+      'Cloudflare provides authoritative DNS. Every record is DNS-only, '
+      + 'with no proxying.',
+    );
+    expect(wrapper.text()).toContain(
+      'The export includes your profile, resume content, and resume photos. '
+      + 'Email us for session history.',
+    );
+    expect(wrapper.text()).toContain(
+      'Records of account deletions and provider unlinks, holding only '
+      + 'the event type and time, are kept for 180 days, then removed by '
+      + 'the daily cleanup.',
+    );
+    expect(wrapper.text()).toContain(
+      'When you delete a resume or change its web address, we keep its '
+      + 'old web address reserved for 180 days',
+    );
     expect(wrapper.text()).toContain(
       'Google (United States) and LinkedIn (United States) provide optional '
       + 'sign-in.',
@@ -232,7 +260,7 @@ describe('privacy and terms pages', () => {
       + 'pick. We never receive the file; we store only the resume you '
       + 'create from it.',
     );
-    expect(wrapper.text()).not.toContain('Cloudflare');
+    expect(wrapper.text()).not.toContain('Amazon Route 53');
     expect(wrapper.text()).toContain(
       'Views of public resumes: we count views and keep only daily totals.',
     );

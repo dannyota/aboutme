@@ -133,8 +133,8 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     options: 'Tùy chọn xuất bản',
     live: 'CV công khai',
     liveHelp:
-      'CV công khai có thể được phân phối qua mạng phân phối '
-      + 'nội dung toàn cầu.',
+      'CV công khai được gửi trực tiếp từ máy chủ của chúng tôi '
+      + 'tại Việt Nam.',
     download: 'Tải PDF',
     downloadHelp:
       'Khách truy cập có thể tải PDF. Bạn luôn có thể xuất bản PDF của mình.',
@@ -262,8 +262,7 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     options: 'Publish options',
     live: 'Public resume',
     liveHelp:
-      'Public resumes may be delivered through a global '
-      + 'content-delivery network.',
+      'Public resumes are delivered directly from our host in Vietnam.',
     download: 'PDF download',
     downloadHelp:
       'Whether visitors can download the PDF. You can always export your own.',
