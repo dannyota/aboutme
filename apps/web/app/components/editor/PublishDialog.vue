@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 
-import AppSeal from '@/components/app/AppSeal.vue';
 import FormDialog from '@/components/app/FormDialog.vue';
 import SwitchField from '@/components/app/SwitchField.vue';
 import TextField from '@/components/app/TextField.vue';
@@ -11,30 +10,23 @@ import {
   canonicalPublicPath,
   type PublishCommand,
 } from '../../editor/publishApi';
-import {
-  blockedMessage,
-  failureMessage,
-  issueMessage,
-} from '../../editor/publishMessages';
-import {
-  isShowcaseIssuePath,
-  usePublishShowcase,
-} from '../../editor/publishShowcase';
+import { usePublishShowcase } from '../../editor/publishShowcase';
 import {
   changedPublicPageFields,
   defaultPublicTitle,
   faviconEmojiIssue,
-  publicPageIssueField,
   publicTitleIssue,
 } from '../../editor/publicPageMeta';
 import type { ResumeMetadata } from '../../editor/types';
 import LocaleToggle from '@/components/app/LocaleToggle.vue';
 import { editorShellCopy } from '@/i18n/editor-shell';
 import { publishCopy } from '../../i18n/publish';
-import { workspaceCopy } from '../../i18n/workspace';
 import PublishAccess from './PublishAccess.vue';
+import PublishFeedback from './PublishFeedback.vue';
 import PublishPageFields from './PublishPageFields.vue';
 import PublishPreview from './PublishPreview.vue';
+import PublishReauthentication from './PublishReauthentication.vue';
+import PublishResult from './PublishResult.vue';
 import PublishShowcase from './PublishShowcase.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 import { useCapabilities } from '../../composables/useCapabilities';
@@ -70,10 +62,8 @@ const actionBusy = ref(false);
 const providerLinkActivated = ref(false);
 const initialLive = ref(false);
 const restoreFocus = ref(true);
-const copyState = ref<'idle' | 'copied' | 'failed'>('idle');
 const slugInputId = `publish-slug-${useId()}`;
 const slugPrefixId = `${slugInputId}-prefix`;
-let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
 
 const state = computed(() => props.actions.publish.state.value);
 const busy = computed(
@@ -114,13 +104,6 @@ const showSignInToView = computed(
 const pageFieldsValid = computed(() =>
   publicTitleIssue(pageTitle.value) === null
   && faviconEmojiIssue(tabIcon.value) === null);
-// Issues on the tab fields show at the fields; the rest keep their list.
-const listedIssues = computed(() =>
-  state.value.kind === 'invalid'
-    ? state.value.issues.filter((issue) =>
-        publicPageIssueField(issue.path) === null
-        && !isShowcaseIssuePath(issue.path))
-    : []);
 const submitDisabled = computed(
   () =>
     busy.value
@@ -148,16 +131,6 @@ const primaryAction = computed(() => {
   if (!live.value && initialLive.value) return copy.value.unpublish;
   if (live.value && initialLive.value) return copy.value.update;
   return copy.value.publish;
-});
-const publicHref = computed(() => {
-  const result = state.value;
-  return result.kind === 'accepted' && result.resume.metadata.live
-    ? canonicalPublicPath(result.resume.metadata.slug)
-    : null;
-});
-const publicSealLabel = computed(() => {
-  const link = publicHref.value;
-  return link === null ? '' : workspaceCopy[locale.value].publicAt(link);
 });
 
 function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
@@ -199,8 +172,6 @@ watch(state, (next) => {
     syncMetadata(props.record.accepted.metadata);
   }
 });
-
-watch(publicHref, () => resetCopyState());
 
 function setLive(value: boolean): void {
   live.value = value;
@@ -276,32 +247,6 @@ function focusIssue(path: string): void {
   close();
   emit('focus-issue', path);
 }
-
-async function copyLink(): Promise<void> {
-  const path = publicHref.value;
-  if (path === null) return;
-  resetCopyState();
-  try {
-    await navigator.clipboard.writeText(`${location.origin}${path}`);
-    copyState.value = 'copied';
-    copyResetTimer = setTimeout(() => {
-      copyState.value = 'idle';
-      copyResetTimer = undefined;
-    }, 2_000);
-  } catch {
-    copyState.value = 'failed';
-  }
-}
-
-function resetCopyState(): void {
-  if (copyResetTimer !== undefined) {
-    clearTimeout(copyResetTimer);
-    copyResetTimer = undefined;
-  }
-  copyState.value = 'idle';
-}
-
-onBeforeUnmount(resetCopyState);
 </script>
 
 <template>
@@ -426,207 +371,28 @@ onBeforeUnmount(resetCopyState);
         />
       </fieldset>
 
-      <div
-        v-if="passwordReauth"
-        class="grid gap-3"
-      >
-        <TextField
-          v-model="password"
-          :label="copy.currentPassword"
-          type="password"
-          autocomplete="current-password"
-          :disabled="busy"
-          :control-attrs="{ 'data-action': 'publish-password' }"
-        />
-        <Button
-          type="button"
-          data-action="publish-password-reauth"
-          :disabled="busy || password === ''"
-          @click="submitPassword"
-        >
-          {{ copy.passwordAction }}
-        </Button>
-      </div>
-
-      <div
-        v-else-if="
-          (state.kind === 'reauth-required'
-            || state.kind === 'reauth-rate-limited')
-            && state.method === 'provider'
-        "
-        class="grid gap-3"
-      >
-        <p>{{ copy.providerContinue }}</p>
-        <Button
-          type="button"
-          data-action="publish-provider-start"
-          :disabled="busy"
-          @click="startProvider"
-        >
-          {{ copy.providerStart }}
-        </Button>
-      </div>
-
-      <div
-        v-else-if="state.kind === 'provider-started'"
-        class="grid gap-3"
-      >
-        <a
-          :href="state.authorizeUrl"
-          class="text-link underline underline-offset-4"
-          data-action="publish-provider-link"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click="providerLinkActivated = true"
-        >
-          {{ copy.providerLink }}
-        </a>
-        <p v-if="providerLinkActivated">
-          {{ copy.providerReturn }}
-        </p>
-        <Button
-          v-if="providerLinkActivated"
-          type="button"
-          data-action="publish-provider-retry"
-          :disabled="busy"
-          @click="retryProvider"
-        >
-          {{ copy.providerRetry }}
-        </Button>
-      </div>
-
-      <p
-        v-if="state.kind === 'reauth-wrong-password'"
-        role="alert"
-      >
-        {{ copy.wrongPassword }}
-      </p>
-      <p
-        v-if="
-          state.kind === 'reauth-rate-limited'
-            || state.kind === 'provider-started-rate-limited'
-        "
-        role="alert"
-      >
-        {{ copy.reauthRateLimited }}
-      </p>
-      <p
-        v-if="
-          state.kind === 'reauth-unavailable'
-            || state.kind === 'provider-start-invalid'
-        "
-        role="alert"
-      >
-        {{ copy.reauthUnavailable }}
-      </p>
-
-      <p
-        v-if="state.kind === 'blocked'"
-        role="alert"
-      >
-        {{ blockedMessage(copy, state.reason) }}
-      </p>
-      <div
-        v-if="listedIssues.length > 0"
-        role="alert"
-        class="grid gap-2"
-      >
-        <p>{{ copy.invalid }}</p>
-        <Button
-          v-for="issue in listedIssues"
-          :key="`${issue.path}-${issue.code}`"
-          type="button"
-          variant="outline"
-          data-action="focus-publish-issue"
-          :disabled="busy"
-          @click="focusIssue(issue.path)"
-        >
-          {{ issueMessage(copy, issue.code) }}
-        </Button>
-      </div>
-      <p
-        v-if="state.kind === 'slug-taken'"
-        role="alert"
-      >
-        {{ copy.slugTaken }}
-      </p>
-      <p
-        v-if="state.kind === 'stale'"
-        role="alert"
-      >
-        {{ copy.stale }}
-      </p>
-      <p
-        v-if="
-          state.kind === 'rate-limited' || state.kind === 'public-state-busy'
-        "
-        role="alert"
-      >
-        {{ copy.rateLimited }}
-      </p>
-      <p
-        v-if="state.kind === 'unknown'"
-        role="alert"
-      >
-        {{ copy.unknown }}
-      </p>
-      <p
-        v-if="state.kind === 'session-lost'"
-        role="alert"
-      >
-        {{ copy.sessionLost }}
-      </p>
-      <p
-        v-if="state.kind === 'failed'"
-        role="alert"
-      >
-        {{ failureMessage(copy, state.code) }}
-      </p>
-
-      <div
-        v-if="state.kind === 'accepted'"
-        class="publish-dialog__success grid justify-items-start gap-3"
-      >
-        <p
-          aria-live="polite"
-          role="status"
-        >
-          <template v-if="state.resume.metadata.live">
-            {{ copy.published }}
-          </template>
-          <template v-else>
-            {{ copy.private }}
-          </template>
-        </p>
-        <template v-if="publicHref !== null">
-          <AppSeal
-            :link="publicHref"
-            :label="publicSealLabel"
-            :locale="locale"
-            size="stamp"
-          />
-          <a
-            :href="publicHref"
-            class="text-link underline underline-offset-4"
-            data-action="view-public-resume"
-          >aboutme.vn{{ publicHref }}</a>
-          <Button
-            data-action="copy-link"
-            type="button"
-            variant="secondary"
-            @click="copyLink"
-          >
-            {{ copyState === 'copied' ? copy.copied : copy.copyLink }}
-          </Button>
-          <p
-            v-if="copyState === 'failed'"
-            data-testid="copy-link-error"
-            role="alert"
-          >
-            {{ copy.copyFailed }}
-          </p>
-        </template>
-      </div>
+      <PublishReauthentication
+        v-model:password="password"
+        v-model:provider-link-activated="providerLinkActivated"
+        :state="state"
+        :copy="copy"
+        :busy="busy"
+        :password-reauth="passwordReauth"
+        @submit-password="submitPassword"
+        @start-provider="startProvider"
+        @retry-provider="retryProvider"
+      />
+      <PublishFeedback
+        :state="state"
+        :copy="copy"
+        :busy="busy"
+        @focus-issue="focusIssue"
+      />
+      <PublishResult
+        :state="state"
+        :copy="copy"
+        :locale="locale"
+      />
 
       <p
         v-if="busy"
