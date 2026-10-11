@@ -173,11 +173,6 @@ for f in fence.sh deploy-host.sh deploy-safety.sh; do
   }
 done
 
-manifest() { # image accept
-  local token
-  token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-$1:pull&service=ghcr.io" | jq -r .token)
-  curl -fsS -H "Authorization: Bearer $token" -H "Accept: $2" "https://ghcr.io/v2/$repo-$1/manifests/$tag"
-}
 digest_of() { # image
   local token
   token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-$1:pull&service=ghcr.io" | jq -r .token)
@@ -193,13 +188,20 @@ for name in server web caddy; do
     say "no $name image index for $tag"
     exit 1
   }
-  manifest "$name" 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' |
-    jq -e '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64")] | length == 1' >/dev/null || {
+  # Pin the linux/amd64 image inside this index, never the index: its own
+  # provenance and SBOM attestations name that digest, and Podman reports it
+  # as the running image (docs/design/deployment-transparency/host.md).
+  token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-$name:pull&service=ghcr.io" | jq -er .token)
+  platform=$(curl -fsS -H "Authorization: Bearer $token" \
+    -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+    "https://ghcr.io/v2/$repo-$name/manifests/$d" |
+    jq -er '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64")]
+      | select(length == 1) | .[0].digest | select(test("^sha256:[0-9a-f]{64}$"))') || {
     say "$name for $tag has no single linux/amd64 image"
     exit 1
   }
-  provenance_verify "$name" "$d" "$tag" "$commit" || exit 1
-  image[$name]="ghcr.io/$repo-$name@$d"
+  provenance_verify "$name" "$platform" "$tag" "$commit" || exit 1
+  image[$name]="ghcr.io/$repo-$name@$platform"
 done
 
 # The observer has a separate single-platform tag. Only a missing tag permits

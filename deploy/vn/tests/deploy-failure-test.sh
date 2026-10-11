@@ -104,7 +104,7 @@ elif [[ $args == *'ghcr.io/token'* ]]; then
 elif [[ $args == *'ghcr.io/v2/'* && $args == *'fsSI'* ]]; then
   printf 'Docker-Content-Digest: sha256:%s\r\n' "$digest"
 elif [[ $args == *'ghcr.io/v2/'* ]]; then
-  printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"}}]}\n'
+  printf '{"manifests":[{"digest":"sha256:%s","platform":{"os":"linux","architecture":"amd64"}}]}\n' "$(printf '%064d' 0 | tr 0 d)"
 elif [[ $args == *'/healthz'* || $args == *'/readyz'* ]]; then
   printf '200'
 elif [[ $args == *'fsSI'* ]]; then
@@ -195,6 +195,9 @@ for OBSERVER_CASE in good arm64 index bad-provenance transport-error; do
     grep -q -- 'pull .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
     grep -q -- 'render .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
     grep -q -- '--source-ref refs/tags/v0.7.5' "$work/observer-verify.log"
+    # App images pin the linux/amd64 digest inside the index, not the index.
+    grep -q -- "render .*ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 0 | tr 0 d)" "$work/host.log"
+    if grep -q -- "aboutme-server@sha256:$(printf '%064d' 0 | tr 0 b)" "$work/host.log"; then exit 1; fi
   else
     [[ ! -s $work/host.log ]] || { echo "changed host on $OBSERVER_CASE observer" >&2; exit 1; }
   fi
