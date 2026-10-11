@@ -36,12 +36,14 @@ async function copyLink(): Promise<void> {
   resetCopyState();
   try {
     await navigator.clipboard.writeText(`${location.origin}${path}`);
+    if (publicHref.value !== path) return;
     copyState.value = 'copied';
     copyResetTimer = setTimeout(() => {
       copyState.value = 'idle';
       copyResetTimer = undefined;
     }, 2_000);
   } catch {
+    if (publicHref.value !== path) return;
     copyState.value = 'failed';
   }
 }
