@@ -457,6 +457,58 @@ test("CI separates event concurrency and keeps every main push run", () => {
   assert.equal(ci.concurrency["cancel-in-progress"], "${{ github.event_name != 'push' }}");
 });
 
+test("browser artifacts contain only staged diagnostics and candidate metadata", () => {
+  checkBrowserArtifacts(readWorkflow("ci"), readWorkflow("baselines"));
+});
+
+test("browser artifact contract rejects unsafe uploads and masked failures", () => {
+  const fixtures = [
+    ["raw results", (ci) => { browserUpload(ci).with.path = ".dev/web-e2e-results/"; }],
+    ["success-only upload", (ci) => { browserUpload(ci).if = "success()"; }],
+    ["shared shard name", (ci) => { browserUpload(ci).with.name = "browser-diagnostics"; }],
+    ["hidden files excluded", (ci) => { browserUpload(ci).with["include-hidden-files"] = false; }],
+    ["masked browser failure", (ci) => { ci.jobs["web-e2e"]["continue-on-error"] = true; }],
+    ["raw candidate upload", (_ci, baselines) => { baselines.jobs["web-e2e-update"].steps.at(-1).with.path = ".dev/web-e2e-results/"; }],
+    ["failed candidate upload", (_ci, baselines) => { baselines.jobs["web-e2e-update"].steps.at(-1).if = "always()"; }],
+    ["write permission", (ci) => { ci.jobs["web-e2e"].permissions = { contents: "write" }; }],
+  ];
+  for (const [name, mutate] of fixtures) {
+    const ci = readWorkflow("ci");
+    const baselines = readWorkflow("baselines");
+    mutate(ci, baselines);
+    assert.throws(() => checkBrowserArtifacts(ci, baselines), undefined, name);
+  }
+});
+
+function browserUpload(ci) {
+  const upload = ci.jobs["web-e2e"].steps.find((step) => step.with?.name === "browser-diagnostics-${{ matrix.shard }}");
+  assert.ok(upload, "both browser shards need diagnostics");
+  return upload;
+}
+
+function checkBrowserArtifacts(ci, baselines) {
+  for (const [workflow, name] of [[ci, "web-e2e"], [baselines, "web-e2e-update"]]) {
+    assert.deepEqual(workflow.permissions, { contents: "read" });
+    assert.ok(!workflow.jobs[name].permissions || JSON.stringify(workflow.jobs[name].permissions) === JSON.stringify({ contents: "read" }));
+    assert.ok(!workflow.jobs[name]["continue-on-error"]);
+    assert.ok(workflow.jobs[name].steps.every((step) => !step["continue-on-error"]));
+  }
+  const upload = browserUpload(ci);
+  assert.equal(upload.if, "always()");
+  assert.equal(upload.with.path, ".dev/web-e2e-results/*/*/compare/diagnostics/");
+  assert.equal(upload.with["include-hidden-files"], true);
+  assert.equal(upload.with["retention-days"], 14);
+  const candidate = baselines.jobs["web-e2e-update"].steps.at(-1);
+  assert.equal(candidate.if, "success()");
+  assert.equal(candidate.with.path, ".dev/web-e2e-results/*/*/update/candidate-baselines/");
+  const updateDiagnostics = baselines.jobs["web-e2e-update"].steps.find((step) => step.with?.name === "browser-diagnostics-update");
+  assert.ok(updateDiagnostics);
+  assert.equal(updateDiagnostics.if, "always()");
+  assert.equal(updateDiagnostics.with.path, ".dev/web-e2e-results/*/*/update/diagnostics/");
+  assert.equal(updateDiagnostics.with["include-hidden-files"], true);
+  assert.equal(updateDiagnostics.with["retention-days"], 14);
+}
+
 function comparisonStep(ci) {
   const step = ci.jobs.preflight.steps.find((step) => step.id === "comparison");
   assert.ok(step, "preflight needs a comparison step");
