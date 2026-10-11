@@ -31,11 +31,11 @@ be recalled.
   plan or release before push. Local-only, test-only, and one-line changes skip
   this review. For one-line changes, including production DNS, the manager shows
   plan or diff evidence instead. Findings return to the author, and the same
-  reviewer confirms each fix at `xhigh`. Only when that reviewer shares the fix
-  author's model does another reviewer of a different model confirm at `xhigh`.
-  A security-sensitive change beyond one line (authentication, sessions, CSRF,
-  sanitizing, concurrency and CAS, idempotency, media privacy, publish
-  revocation) needs the reviewer to confirm those invariants by name.
+  reviewer confirms each fix at `xhigh`. The reviewer runs as a separate job
+  from the author and may use the author's model. A security-sensitive change
+  beyond one line (authentication, sessions, CSRF, sanitizing, concurrency and
+  CAS, idempotency, media privacy, publish revocation) needs the reviewer to
+  confirm those invariants by name.
 - **GitHub CI is the full gate.** It runs `make ci`, Semgrep, and full-history
   gitleaks, plus heavy builds, typechecks, full suites, race tests, linters, and
   browser suites. A red run is fixed forward at once.
@@ -85,10 +85,6 @@ production DNS. The manager shows plan or diff evidence instead. Hosted CI and
 the exact green commit gate still apply. The exemption keeps review effort
 proportional to the change.
 
-Fix confirmation stays with the original reviewer unless the reviewer shares the
-fix author's model. In that case, another reviewer of a different model confirms
-at `xhigh` to preserve independent review.
-
 ## History
 
 - Former ADR 0011 (2026-08-11): risk-tiered review, two phase gates, local
@@ -104,3 +100,6 @@ at `xhigh` to preserve independent review.
   from the reviewer pass and required manager plan or diff evidence instead. Fix
   confirmation uses the original reviewer unless cross-model routing requires a
   replacement.
+- 2026-10-11: The owner moved every review and fix confirmation to one model,
+  `gpt-6.1-sol` at `xhigh`, run as a separate job from the author. Reviews no
+  longer alternate by author model; `gpt-6-astra` writes designs only.
