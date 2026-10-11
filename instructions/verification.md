@@ -29,6 +29,14 @@ Reusable browser automation is scripted headless Playwright. To author it, use t
 
 ## GitHub CI
 
+### Pin maintenance
+
+Dependabot opens one grouped GitHub Actions update PR each week. External actions and reusable workflows keep full commit SHA pins with version comments. `scripts/test/workflow-contract.test.mjs`, called by `scripts/test/toolchain-contract-test.sh` in `make operational-test-fast`, checks those pins, the Dependabot configuration, and every hosted tool-version mirror against `.tool-versions`.
+
+The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including Baselines for browser changes and manual release build checks for image changes. Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright and pip caches never reach main.
+
+### Runs and evidence
+
 GitHub CI runs every build and test. `main` and other branches run it differently:
 
 | | `main` | Other branches |
