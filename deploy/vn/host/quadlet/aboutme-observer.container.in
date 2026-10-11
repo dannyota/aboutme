@@ -20,7 +20,8 @@ NoNewPrivileges=true
 Environment=OBSERVER_PLATFORM=podman
 Environment=OBSERVER_REGION=HCM03
 Environment=OBSERVER_TUF_CACHE=/tmp/sigstore-tuf
-Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,uid=65532,gid=65532,mode=0700
+# Podman 4.9 has no tmpfs uid= option; U chowns the mount to the container user.
+Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,mode=0700,U
 Volume=/var/lib/aboutme/observation:/observation:ro
 Volume=/var/lib/aboutme/deployment:/public:rw
 # The firewall policy covers IPv4; disable IPv6 in this network namespace.

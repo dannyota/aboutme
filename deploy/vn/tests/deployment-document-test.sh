@@ -98,7 +98,7 @@ for setting in 'User=65532:65532' 'Network=aboutme-observer' 'ReadOnly=true' 'Dr
 done
 [[ $(grep -c '^Volume=' "$observer") == 2 ]] || fail 'observer has unexpected host mounts'
 grep -q -- '--memory=128m' "$observer" || fail 'observer memory is not capped'
-grep -qxF -- 'Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,uid=65532,gid=65532,mode=0700' \
+grep -qxF -- 'Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,mode=0700,U' \
   "$observer" || fail 'observer TUF cache is not bounded tmpfs'
 if grep -Ei -- 'podman.sock|Secret=|EnvironmentFile=|AddCapability=|PublishPort=|Network=host' "$observer"; then
   fail 'observer exposes host access, ports, or secrets'
