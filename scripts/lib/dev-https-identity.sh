@@ -99,31 +99,55 @@ group_members() {
   ps -eo pid=,pgid=,sid= | awk -v pgid="$pgid" -v sid="$sid" '$2 == pgid && $3 == sid { print $1 }'
 }
 
+proc_member_environ_path() { printf '/proc/%s/environ' "$1"; }
+
+proc_member_exists() { [ -d "/proc/$1" ]; }
+
 member_has_token() {
-  local pid=$1 token=$2 environment
-  [ -r "/proc/$pid/environ" ] || return 1
-  environment=$(tr '\0' '\n' <"/proc/$pid/environ") || return 1
+  local pid=$1 token=$2 environment path
+  path=$(proc_member_environ_path "$pid") || return 1
+  environment=$(tr '\0' '\n' 2>/dev/null <"$path") || return 1
   grep -Fx "ABOUTME_DEV_HTTPS_IDENTITY=$token" <<<"$environment" >/dev/null
 }
 
+# Keep group IDs, state, and exit flags in one snapshot after a failed token read.
+proc_member_state() {
+  local pid=$1 stat stat_flags
+  local -a fields=()
+  if ! stat=$(cat "/proc/$pid/stat" 2>/dev/null); then
+    ! proc_member_exists "$pid" || return 1
+    return 0
+  fi
+  read -ra fields <<<"${stat##*) }" || return 1
+  stat_flags=${fields[6]-}
+  [[ ${fields[2]-} =~ ^[0-9]+$ && ${fields[3]-} =~ ^[0-9]+$ ]] || return 1
+  [[ ${fields[0]-} =~ ^[RSDZTtWXxKPI]$ ]] || return 1
+  [[ $stat_flags =~ ^[0-9]+$ ]] || return 1
+  printf '%s %s %s %s\n' "${fields[2]}" "${fields[3]}" "${fields[0]}" "$stat_flags"
+}
+
 validate_group_member() {
-  local pid=$1 pgid=$2 sid=$3 token=$4 actual actual_pgid actual_sid state
+  local pid=$1 pgid=$2 sid=$3 token=$4 actual actual_pgid actual_sid state flags
   actual=$(ps -o pgid=,sid=,stat= -p "$pid" 2>/dev/null) || return 0
   [ -n "$actual" ] || return 0
   read -r actual_pgid actual_sid state <<<"$actual"
-  [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 1
-  [[ $state == Z* ]] && return 0
+  [[ $actual_pgid =~ ^[0-9]+$ && $actual_sid =~ ^[0-9]+$ ]] || return 1
+  [[ $state == [RSDZTtWXxKPI]* ]] || return 1
+  # A listed PID can exit or be reused outside this group before this probe.
+  [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 0
+  [[ $state == [ZXx]* ]] && return 0
   if member_has_token "$pid" "$token"; then
     return 0
   fi
-  # A short-lived child can disappear or become a zombie between the group
-  # snapshot and its environ read. Recheck its state before treating it as an
-  # unmarked live member of the owned group.
-  actual=$(ps -o pgid=,sid=,stat= -p "$pid" 2>/dev/null) || return 0
+  # An exiting child can lose its readable environment before becoming a
+  # zombie. Only a live member of this group must still prove the token.
+  actual=$(proc_member_state "$pid") || return 1
   [ -n "$actual" ] || return 0
-  read -r actual_pgid actual_sid state <<<"$actual"
+  read -r actual_pgid actual_sid state flags <<<"$actual"
   [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 0
-  [[ $state == Z* ]] && return 0
+  [[ $state == [ZXx]* ]] && return 0
+  # PF_EXITING is bit 2 of stat field 9 (Linux include/linux/sched.h).
+  (( (flags & 4) != 0 )) && return 0
   return 1
 }
 
