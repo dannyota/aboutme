@@ -12,20 +12,20 @@ This laptop has 30 GB RAM. An individual MCP test consumed over 20 GiB and cause
 - Check available memory and active project processes before a local exception. Do not start below 8 GiB available memory or alongside another local check. Do not stop unrelated applications, other repositories, or the shared DB.
 - After an OOM or cap failure, stop the task and inspect the cause without executing it. Do not rerun the same command, raise the cap, or move an unbounded allocation into CI without fixing it first.
 - The primary verifies diffs and exact-commit CI evidence instead of rerunning an author's checks. Reviewers read code and existing evidence by default; they do not launch tests or delegate test execution.
-- Never run Nuxt tests, installs, typechecks, or builds in a checkout used by a browser proof or native stack. Those commands can change `.nuxt` mid-proof.
+- Never run Nuxt tooling in a checkout with an active browser proof. Never run Nuxt tests, installs, typechecks, or builds in a checkout used by a browser proof or native stack. Those commands can change `.nuxt` mid-proof.
 - Keep only one aboutme development stack active. Start it only for a named interaction check, subject to the same memory budget, and stop it when the proof ends. Do not start a stack during ordinary editing or review.
 - Reconfiguring the database container is scheduled work: announce it, wait for an idle window, recreate, then verify both databases and a host-port test.
 
 Development ports are localhost `20000`–`21000`:
 
-| Port | Service |
+|Port|Service|
 |-|-|
-| 20432 | Shared PostgreSQL container |
-| 20080 | Native Caddy origin |
-| 20081 | Native Go server |
-| 20082 | Private print redemption |
-| 20030 | Nuxt development server |
-| 20090–21000 | Test harnesses and explicitly pinned stub servers |
+|20432|Shared PostgreSQL container|
+|20080|Native Caddy origin|
+|20081|Native Go server|
+|20082|Private print redemption|
+|20030|Nuxt development server|
+|20090–21000|Test harnesses and explicitly pinned stub servers|
 
 Test DSN: `postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable`. Native DSN: `postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable`. Rootless port 443 needs `net.ipv4.ip_unprivileged_port_start <= 443`; only a host administrator changes that. Agents and scripts never use `sudo`.
 
