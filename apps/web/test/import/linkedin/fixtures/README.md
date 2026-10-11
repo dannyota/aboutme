@@ -1,8 +1,8 @@
 # LinkedIn "Save to PDF" layout fixtures
 
 These fixtures reproduce the structure, sizes, and baseline gaps recorded in
-[docs/design/linkedin-import.md](../../../../../../docs/design/linkedin-import.md),
-"Save to PDF structure" and "Tests", and
+[Save to PDF structure](../../../../../../docs/design/linkedin-import-parser.md#save-to-pdf-structure)
+and [Tests](../../../../../../docs/design/linkedin-import-verification.md#tests), and
 [ADR 0023](../../../../../../docs/adr/0023-linkedin-import.md).
 Every name, employer, and contact detail is invented; no real profile's text
 or file is used.

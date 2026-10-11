@@ -336,8 +336,8 @@ serves) uses a policy scoped to the app's own origin instead
 `worker-src` is `'none'` on the locked-down policy and `'self'` on the app
 policy, so only a same-origin script file can start a worker, never a `blob:` or
 `data:` URL. `script-src 'self'` already runs same-origin code, so `'self'` adds
-no code source. The [LinkedIn import](linkedin-import.md#security) page is the
-only page that starts one: a module worker that runs pdf.js
+no code source. The [LinkedIn import](linkedin-import-parser.md#security) page
+is the only page that starts one: a module worker that runs pdf.js
 ([ADR 0023](../adr/0023-linkedin-import.md)).
 
 `script-src` never carries `'unsafe-inline'` on either policy: Nuxt's own

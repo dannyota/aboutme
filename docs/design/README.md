@@ -50,6 +50,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Deployment transparency](deployment-transparency/README.md)           | Running digests, signed provenance, SBOMs, and the verify page |
 | Other   | [LinkedIn sign-in](linkedin-sign-in.md)                                | LinkedIn OIDC flow, account linking, and app setup             |
 | Other   | [LinkedIn import](linkedin-import.md)                                  | New resume from an English LinkedIn Save to PDF                |
+| Other   | [LinkedIn import parser](linkedin-import-parser.md)                    | Extraction, lines, detection, mapping, dates, and bounds       |
+| Other   | [LinkedIn import verification](linkedin-import-verification.md)        | Fixtures, test cases, compatibility, and open facts            |
 | Other   | [LinkedIn import page](linkedin-import-ui.md)                          | Import page states, layout, accessibility, and copy            |
 | Other   | [Viewer analytics](viewer-analytics/README.md)                         | View counts and sign in to view, with no viewer data kept      |
 | Other   | [Public page bar and theme](public-page-theme.md)                      | Page bar, owner color scheme, and the dark palette rule        |
