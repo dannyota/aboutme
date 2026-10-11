@@ -266,7 +266,8 @@ describe('verify page states', () => {
       for (const locale of ['vi', 'en'] as const) {
         setSiteLocale(locale);
         const signed = locale === 'vi'
-          ? 'đã được GitHub ký' : 'signed by GitHub';
+          ? 'đã được GitHub ký'
+          : 'signed by GitHub';
         for (const name of [
           'verified', 'rolling-out', 'unverified', 'mismatch-not-found',
           'mismatch-invalid',
@@ -290,7 +291,8 @@ describe('verify page states', () => {
             running_images: component.running_images.map((image) => ({
               ...image,
               signature: component.name === 'maintenance'
-                ? { status: 'unchecked' } : image.signature,
+                ? { status: 'unchecked' }
+                : image.signature,
             })),
           })),
         };
@@ -393,12 +395,13 @@ describe('verify page states', () => {
         const wrapper = await mountVerify();
         expect(status(wrapper).text()).toContain(locale === 'vi'
           ? 'Chưa kiểm tra xong chữ ký của caddy. '
-            + 'Trang tự làm mới sau một phút.'
+          + 'Trang tự làm mới sau một phút.'
           : 'The signature check for caddy hasn\'t finished. '
             + 'The page refreshes in a minute.');
         expect(wrapper.get('[data-step="image"]').text())
           .not.toContain(locale === 'vi'
-            ? 'đã được GitHub ký' : 'signed by GitHub');
+            ? 'đã được GitHub ký'
+            : 'signed by GitHub');
       }
     }
   });

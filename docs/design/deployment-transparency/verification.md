@@ -59,9 +59,9 @@ such as an admission controller on a future Kubernetes cluster. Revisit it then.
 ## What "verified" means
 
 The [host reporter](host.md) does not run signature checks. It publishes
-`unchecked` and leaves signed build claims null. The verifier below remains
-the policy for the ECS and Kubernetes observers. Independent checks use the
-same GitHub and Sigstore commands on every platform.
+`unchecked` and leaves signed build claims null. The verifier below remains the
+policy for the ECS and Kubernetes observers. Independent checks use the same
+GitHub and Sigstore commands on every platform.
 
 For one running digest, the observer uses `sigstore-go` with the public-good
 trust root (refreshed through TUF) and requires all of:

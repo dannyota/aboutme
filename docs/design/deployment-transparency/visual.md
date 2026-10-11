@@ -292,10 +292,10 @@ px icon column 10 px from the text.
 
 "Chứng minh" / "It proves", with `check` in `--link`:
 
-The following AWS wording applies to ECS reports. Podman and Kubernetes use
-the reporter-specific text in [page.md](page.md#limits). Podman states that the
-host reports itself, with weaker trust than ECS. A GitHub build claim applies
-only to an image whose signature was checked.
+The following AWS wording applies to ECS reports. Podman and Kubernetes use the
+reporter-specific text in [page.md](page.md#limits). Podman states that the host
+reports itself, with weaker trust than ECS. A GitHub build claim applies only to
+an image whose signature was checked.
 
 - AWS báo cáo đúng các mã băm này đang chạy, với số bản sao như trên. / AWS
   reports these exact digests as running, with these replica counts.

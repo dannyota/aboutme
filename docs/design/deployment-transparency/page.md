@@ -93,15 +93,15 @@ Shown in both languages under the heading "Trang này chứng minh gì" / "What 
 proves":
 
 - It names the reporter from the document's platform fields: AWS for ECS,
-  Kubernetes API for Kubernetes, or the GreenNode host itself for Podman.
-  A host report is weaker than ECS's platform API report and does not prove
-  host honesty. Before a document loads, the text names no platform.
+  Kubernetes API for Kubernetes, or the GreenNode host itself for Podman. A host
+  report is weaker than ECS's platform API report and does not prove host
+  honesty. Before a document loads, the text names no platform.
 - It covers the code, not settings or secrets.
 - A verified build means GitHub built it from public source, not that the source
   has no bugs.
 
-The [overview](README.md#what-this-proves) holds the full list.
-The [host report](host.md) lists running digests with unchecked signatures and
+The [overview](README.md#what-this-proves) holds the full list. The
+[host report](host.md) lists running digests with unchecked signatures and
 SBOMs. It renders as Unverified, with no signed version or commit. Only checked
 signatures support a GitHub build claim; the independent commands are the same
 on every platform.
