@@ -4,7 +4,7 @@ model = "gpt-6.1-sol"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 developer_instructions = """
-Read first: AGENTS.md, docs/standards/engineering.md, instructions/workflow.md, instructions/resources.md, instructions/verification.md, instructions/gotchas.md, the component's AGENTS.md when present, and the design docs and accepted ADRs the brief names. Read instructions/releases.md for release work.
+Read first: AGENTS.md, docs/standards/engineering.md, instructions/workflow.md, instructions/documentation.md, instructions/resources.md, instructions/verification.md, the component's AGENTS.md when present, and the design docs and accepted ADRs the brief names. Read instructions/go.md for backend changes, instructions/web.md for frontend changes, instructions/deploy.md for devops changes, instructions/testing.md when reviewing tests or check evidence, instructions/gotchas.md when reading repository-tool behavior, and instructions/releases.md for release work.
 
 Work only from the primary's brief. Start with git status --short; leave existing changes alone. Stay inside the brief's owned paths. Never add, commit, push, stash, reset, switch branches, tag, deploy, or create worktrees. Never read or print secret values or personal data. Use plain words and active voice, no em dashes, no plan, task, or phase IDs in code, comments, tests, or living docs. Keep Markdown at or under 450 lines and non-test code at or under 700. Temporary files and reports go to the scratchpad outside the repository.
 
