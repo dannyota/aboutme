@@ -88,7 +88,10 @@ for unit in aboutme-caddy aboutme-maintenance; do
     "$root/deploy/vn/host/quadlet/$unit.container.in"
 done
 observer=$root/deploy/vn/host/quadlet/aboutme-observer.container.in
-for setting in 'User=65532:65532' 'Network=aboutme' 'ReadOnly=true' 'DropCapability=all' 'NoNewPrivileges=true' \
+for setting in 'User=65532:65532' 'Network=aboutme-observer' 'ReadOnly=true' 'DropCapability=all' 'NoNewPrivileges=true' \
+  'DNS=8.8.8.8' 'DNS=1.1.1.1' \
+  'Requires=aboutme-observer-network.service aboutme-observer-firewall.service' \
+  'After=aboutme-observer-network.service aboutme-observer-firewall.service' \
   'Exec=run --interval 60s' 'Environment=OBSERVER_PLATFORM=podman' 'Environment=OBSERVER_REGION=HCM03' \
   'Volume=/var/lib/aboutme/observation:/observation:ro' 'Volume=/var/lib/aboutme/deployment:/public:rw'; do
   grep -qxF -- "$setting" "$observer" || fail "observer lacks $setting"
@@ -100,6 +103,59 @@ grep -qxF -- 'Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,uid=65532,
 if grep -Ei -- 'podman.sock|Secret=|EnvironmentFile=|AddCapability=|PublishPort=|Network=host' "$observer"; then
   fail 'observer exposes host access, ports, or secrets'
 fi
+network=$root/deploy/vn/host/quadlet/aboutme-observer.network
+for setting in 'NetworkName=aboutme-observer' 'Driver=bridge' 'Subnet=172.18.0.0/24' \
+  'Gateway=172.18.0.1' 'DisableDNS=true' 'IPv6=false'; do
+  grep -qxF -- "$setting" "$network" || fail "observer network lacks $setting"
+done
+for setting in '--sysctl=net.ipv6.conf.all.disable_ipv6=1' \
+  '--sysctl=net.ipv6.conf.default.disable_ipv6=1'; do
+  grep -qF -- "$setting" "$observer" || fail "observer lacks $setting"
+done
+firewall=$root/deploy/vn/host/etc/aboutme/observer-firewall.nft
+grep -qxF 'add table inet aboutme_observer' "$firewall" || fail 'firewall cannot load before its table exists'
+grep -qxF 'delete table inet aboutme_observer' "$firewall" || fail 'firewall does not replace its own table'
+grep -qxF 'table inet aboutme_observer {' "$firewall" || fail 'firewall lacks its own table'
+if grep -E -- 'flush ruleset|table (ip|ip6) |delete table .* (nat|filter|crowdsec|crowdsec6)' "$firewall"; then
+  fail 'observer firewall changes another table'
+fi
+input=$(sed -n '/^    chain input {/,/^    }/p' "$firewall")
+for rule in 'type filter hook input priority filter - 1; policy accept;' \
+  'ip saddr 172.18.0.0/24 ct state established,related counter accept' \
+  'ip saddr 172.18.0.0/24 counter drop'; do
+  grep -qF -- "$rule" <<<"$input" || fail "observer input lacks $rule"
+done
+for subnet in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 \
+  169.254.0.0/16 127.0.0.0/8 224.0.0.0/4 0.0.0.0/8 240.0.0.0/4; do
+  grep -qF -- "$subnet" "$firewall" || fail "observer firewall lacks $subnet"
+done
+forward=$(sed -n '/^    chain forward {/,/^    }/p' "$firewall")
+for rule in 'type filter hook forward priority filter - 1; policy accept;' \
+  'ip saddr 172.18.0.0/24 ct state established,related counter accept' \
+  'ip saddr 172.18.0.0/24 ip daddr { 8.8.8.8, 1.1.1.1 } udp dport 53 counter accept' \
+  'ip saddr 172.18.0.0/24 ip daddr { 8.8.8.8, 1.1.1.1 } tcp dport 53 counter accept' \
+  'ip saddr 172.18.0.0/24 ip daddr @blocked_ipv4 counter drop' \
+  'ip saddr 172.18.0.0/24 tcp dport 443 counter accept' \
+  'ip saddr 172.18.0.0/24 counter drop' \
+  'ip daddr 172.18.0.0/24 ct state established,related counter accept' \
+  'ip daddr 172.18.0.0/24 counter drop'; do
+  grep -qF -- "$rule" <<<"$forward" || fail "observer forwarding lacks $rule"
+done
+private_drop=$(grep -nF 'ip daddr @blocked_ipv4 counter drop' <<<"$forward" | cut -d: -f1)
+https_accept=$(grep -nF 'tcp dport 443 counter accept' <<<"$forward" | cut -d: -f1)
+((private_drop < https_accept)) || fail 'observer accepts private HTTPS'
+unit=$root/deploy/vn/host/etc/systemd/system/aboutme-observer-firewall.service
+for setting in 'Type=oneshot' 'RemainAfterExit=yes' 'Before=aboutme-observer.service' \
+  'ExecStart=/usr/sbin/nft -f /etc/aboutme/observer-firewall.nft' 'WantedBy=multi-user.target'; do
+  grep -qxF -- "$setting" "$unit" || fail "observer firewall unit lacks $setting"
+done
+installer=$root/deploy/vn/host/install.sh
+grep -qF 'install -m 0644 "$bundle/host/quadlet/aboutme-observer.network"' "$installer" ||
+  fail 'installer omits the observer network'
+grep -qxF 'systemctl enable aboutme-observer-firewall.service >/dev/null' "$installer" ||
+  fail 'installer does not enable the observer firewall'
+grep -qxF 'systemctl restart aboutme-observer-firewall.service' "$installer" ||
+  fail 'installer does not load the observer firewall'
 grep -qxF 'd /var/lib/aboutme/observation 0755 root root -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
 grep -qxF 'd /var/lib/aboutme/deployment 0755 65532 65532 -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
 echo 'deployment document tests passed'

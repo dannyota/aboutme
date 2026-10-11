@@ -1,0 +1,8 @@
+# The observer needs public HTTPS and DNS, not application or host access.
+[Network]
+NetworkName=aboutme-observer
+Driver=bridge
+Subnet=172.18.0.0/24
+Gateway=172.18.0.1
+DisableDNS=true
+IPv6=false

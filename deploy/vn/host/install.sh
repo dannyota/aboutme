@@ -317,11 +317,14 @@ if [ -d "$bundle/host/quadlet" ]; then
 else
   say "skipping missing $bundle/host/quadlet"
 fi
-# The bridge network does not depend on a release, so it exists before the
-# first deploy renders the app units; probe.sh tests it.
+# The bridge networks do not depend on a release. The observer's firewall
+# must load before any observer starts, including after a reboot.
 install -d -m 0755 /etc/containers/systemd
 install -m 0644 "$bundle/host/quadlet/aboutme.network" /etc/containers/systemd/aboutme.network
+install -m 0644 "$bundle/host/quadlet/aboutme-observer.network" /etc/containers/systemd/aboutme-observer.network
 systemctl daemon-reload
+systemctl enable aboutme-observer-firewall.service >/dev/null
+systemctl restart aboutme-observer-firewall.service
 for f in "$bundle"/host/env/*.env; do
   [ -f "$f" ] && install -m 0644 "$f" "/etc/aboutme/$(basename "$f")"
 done

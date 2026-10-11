@@ -70,7 +70,9 @@ claims null. The observer checks each running digest with the existing
 It derives versions, commits, signed links, and the release from those checks. A
 fresh document whose signatures pass shows Verified; an unfinished check shows
 Unverified. Deploy-time checks and `release.json` are not runtime evidence. The
-independent commands use the same policy on every platform.
+independent commands use the same policy on every platform. Verified Podman
+images link to `aboutme-<name>-amd64.spdx.json` release assets. Maintenance uses
+the Caddy asset. ECS and Kubernetes keep the unsuffixed asset links.
 
 The page names the reporter in Vietnamese and English. It states that the host
 reports its own Podman state and an observer container on that host checks the
@@ -82,6 +84,33 @@ AWS ECS keeps its off-host observer, S3 document, CloudFront route, and
 verification cache. Kubernetes keeps its read-only pod adapter and the same
 verifier. Neither platform depends on the host reporter or its Caddy route.
 
+## Network isolation
+
+The observer uses the dedicated rootful Container Network Interface (CNI) bridge
+`aboutme-observer`, subnet `172.18.0.0/24`, with gateway `172.18.0.1` and
+network DNS disabled. The `aboutme-observer.network` Quadlet creates the network
+through `aboutme-observer-network.service`, using the same mechanism as the
+app's `aboutme` network. The container uses DNS resolvers `8.8.8.8` and
+`1.1.1.1`. IPv6 is disabled in the container's network namespace so all traffic
+uses the IPv4 firewall policy.
+
+`/etc/aboutme/observer-firewall.nft` owns only `table inet aboutme_observer`.
+Its input and forward chains run at `filter - 1`, before CNI's filter chains.
+Input accepts only established or related traffic from the observer subnet and
+drops the rest, covering every host address and listener. Forward allows
+established or related traffic, UDP and TCP DNS to the two resolvers, and TCP
+443 to public destinations. It drops private, shared, link-local, loopback,
+multicast, unspecified, and reserved destinations before the HTTPS rule. The
+cloud metadata address `169.254.169.254` is blocked. New forwarded connections
+to the observer subnet are dropped.
+
+The firewall file atomically adds, deletes, and defines its own table, so loads
+are idempotent and leave CNI and CrowdSec tables untouched. Installation enables
+and starts `aboutme-observer-firewall.service`. The observer requires that unit
+and starts after it; a failed firewall load prevents observer startup. Check the
+generated dependencies, network settings, live rules, and blocked connections
+with the [host checks](../../runbooks/observer.md#network-isolation-check).
+
 ## Operation and rollback
 
 Host installation installs and enables the root reporter's timer, creates both
@@ -92,7 +121,7 @@ leaves the installed observer unit unchanged and reports that choice.
 
 The observer runs `observer run --interval 60s` as uid `65532` with a read-only
 root filesystem, all capabilities dropped, no-new-privileges, no secrets, and a
-128 MiB memory cap. Its TUF cache is a bounded tmpfs. The bridge network gives
+128 MiB memory cap. Its TUF cache is a bounded tmpfs. The isolated bridge gives
 it outbound HTTPS for GitHub, the registry fallback, and Sigstore TUF; it has no
 published ports or Podman socket. Verification results stay in memory for the
 process lifetime and retain the daily recheck policy. No bucket is required.
