@@ -15,7 +15,7 @@ Non-obvious facts about this repository's tools. Implementers and QA read this f
 - Update pixel baselines by dispatching the `Baselines` workflow (`.github/workflows/baselines.yml`, manual dispatch only) on the branch, downloading its `candidate-baselines` artifact, copying the files into place, and committing. It runs `make web-e2e-update` on a clean hosted checkout (the target itself still refuses a dirty tree) and never commits or pushes.
 - `make docs-lint` runs Prettier over every Markdown file, ignored ones too.
 - `deploy/web.Dockerfile` copies named paths only. When the web app starts importing a new directory, add it there too; CI builds from the full checkout and cannot catch the gap, only the release image build does.
-- A push to `main` cancels the CI run of any earlier commit still in progress. Do not push while a release candidate's CI runs; release the newer commit instead if you must.
+- Each push to `main` has its own CI concurrency group and never cancels an earlier push run. Tag and deploy only after the push run for the exact release commit succeeds.
 - Browser proofs withhold console output. A failure line ends with fixed diagnostic words (`lang-`, `header-`, `hydrated-`, `path-`, `el-`); read them before adding a debug branch.
 - Avoid `podman ps | grep -q` under `pipefail`; capture output first.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the container; rootless pasta can lose its forward.

@@ -21,42 +21,17 @@ const APPROVED_OLD_V1_SHA256 =
 const APPROVED_NEW_V1_SHA256 =
   "879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866";
 
-const appendOnlyScript = (oldHash: string, newHash: string) =>
-  `if ! base=$(git rev-parse --verify --quiet "$BASE_SHA^{commit}") ||
-  ! head=$(git rev-parse --verify --quiet "HEAD^{commit}"); then
-  echo "Could not resolve released-schema comparison commits." >&2
-  exit 1
-fi
-approved_old_v1_sha256="APPROVED_OLD_HASH"
-approved_new_v1_sha256="APPROVED_NEW_HASH"
-# Compare the event base and candidate trees directly. A merge-base
-# diff can hide a released-schema reversion after rewritten history.
-if ! diff=$(git diff --name-status "$base" "$head" -- 'packages/schema/resume.v*.schema.json'); then
-  echo "Could not compare released schemas with base." >&2
-  exit 1
-fi
-changed=$(printf '%s\\n' "$diff" | grep -E '^(M|D|R|T)' || true)
-approved_v1_change=$(printf 'M\\tpackages/schema/resume.v1.schema.json')
-if [ "$changed" = "$approved_v1_change" ]; then
-  base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-  head_v1_sha256=$(git show "$head:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-  if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ] && [ "$head_v1_sha256" = "$approved_new_v1_sha256" ]; then
-    changed=""
-  fi
-fi
-if [ -n "$changed" ]; then
-  echo "Released schemas are immutable; only a new version file may be added:"
-  echo "$changed"
-  exit 1
-fi
-`
-    .replace("APPROVED_OLD_HASH", oldHash)
-    .replace("APPROVED_NEW_HASH", newHash);
-
-const APPEND_ONLY_SCRIPT = appendOnlyScript(
-  APPROVED_OLD_V1_SHA256,
-  APPROVED_NEW_V1_SHA256,
+const APPEND_ONLY_SCRIPT = readFileSync(
+  "../../scripts/check-released-schemas.sh",
+  "utf8",
 );
+const appendOnlyScript = (oldHash: string, newHash: string) =>
+  'set -- --commits "$BASE_SHA" HEAD\n'.concat(
+    APPEND_ONLY_SCRIPT.replaceAll(APPROVED_OLD_V1_SHA256, oldHash).replaceAll(
+      APPROVED_NEW_V1_SHA256,
+      newHash,
+    ),
+  );
 
 const OLD_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "old"}\n';
@@ -87,7 +62,7 @@ const testLocalGateScript = localGateFunction
   .concat("\nreleased_schema_append_only\n");
 
 const gateScripts: Array<{ name: string; script: string }> = [
-  { name: "workflow guard contract", script: TEST_APPEND_ONLY_SCRIPT },
+  { name: "hosted released-schema script", script: TEST_APPEND_ONLY_SCRIPT },
 ];
 if (localGateFunction !== "") {
   gateScripts.push({
@@ -580,25 +555,10 @@ describe("local guard against uncommitted released-schema changes", () => {
 });
 
 describe("installed released-schema guards", () => {
-  // Keep package tests runnable in a checkout without the workflow. When the
-  // job exists, its script must match the tested guard byte for byte.
-  const ciWorkflowPath = "../../.github/workflows/ci.yml";
-  const ciWorkflow = existsSync(ciWorkflowPath)
-    ? readFileSync(ciWorkflowPath, "utf8")
-    : "";
-  const jobPresent = ciWorkflow.includes(
-    "name: Reject modified or deleted released schemas",
-  );
-
-  it.skipIf(!jobPresent)(
-    "keeps ci.yml's job script identical to the script proven here",
-    () => {
-      const indented = APPEND_ONLY_SCRIPT.split("\n")
-        .map((line) => (line === "" ? line : `          ${line}`))
-        .join("\n");
-      expect(ciWorkflow).toContain(indented);
-    },
-  );
+  it("pins the approved transition in the hosted guard", () => {
+    expect(APPEND_ONLY_SCRIPT).toContain(APPROVED_OLD_V1_SHA256);
+    expect(APPEND_ONLY_SCRIPT).toContain(APPROVED_NEW_V1_SHA256);
+  });
 
   it.skipIf(localCi === "")(
     "pins the same approved transition in scripts/ci.sh",
