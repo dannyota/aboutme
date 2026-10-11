@@ -17,6 +17,6 @@
 
 - Before every push: `make pre-push` (static checks only, capped).
 - Land: `gh pr create --draft --base main` while iterating (CI runs); `gh pr ready <n>` when complete starts the one Copilot review; after material fixes `gh pr edit <n> --add-reviewer @copilot`. Then a signed local `git merge -S --no-ff` and `git push`.
-- Close notifications after landing: list with `gh api 'notifications?per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
+- Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
 - Pixel baselines: `gh workflow run baselines.yml --ref <branch>`, then download `candidate-baselines`.
 - Deploy: `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh vX.Y.Z` after green `main` CI and release-images ([releases](instructions/releases.md)).
