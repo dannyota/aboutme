@@ -76,8 +76,11 @@ apps/web/app/components/editor/PanelResizeHandle.vue
 apps/web/app/components/editor/PreviewZoomControls.vue
 apps/web/app/components/editor/PublishAccess.vue
 apps/web/app/components/editor/PublishDialog.vue
+apps/web/app/components/editor/PublishFeedback.vue
 apps/web/app/components/editor/PublishPageFields.vue
 apps/web/app/components/editor/PublishPreview.vue
+apps/web/app/components/editor/PublishReauthentication.vue
+apps/web/app/components/editor/PublishResult.vue
 apps/web/app/components/editor/PublishShowcase.vue
 apps/web/app/components/editor/SaveStatus.vue
 apps/web/app/components/editor/customization/ColorField.vue
