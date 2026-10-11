@@ -120,8 +120,11 @@ build)
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
-  ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|second-factor-(lib|pages)\.ts|proof-shards\.mjs|playwright\.config\.ts' \
-    "$context/Dockerfile"
+  while IFS= read -r file; do
+    if grep -Fq "$file" "$context/Dockerfile"; then
+      exit 1
+    fi
+  done <"$context/spec-sources.txt"
   grep -Fq 'COPY run.sh verify-evidence.mjs spec-sources.txt' "$context/Dockerfile"
   [ -f "$context/verify-evidence.mjs" ] && [ ! -L "$context/verify-evidence.mjs" ]
   printf '%s\n' built >"$FAKE_IMAGE_META"
@@ -808,7 +811,7 @@ for (const [actual, expected] of cases) {
 }
 NETWORK_POLICY_TEST
 
-node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" "$SOURCE/editor.spec.ts" <<'ROUTING_SCOPE_TEST'
+node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" "$SOURCE/editor.spec.ts" "$SOURCE/editor-diagnostics.ts" <<'ROUTING_SCOPE_TEST'
 import { readFile } from 'node:fs/promises';
 
 for (const path of process.argv.slice(2, 4)) {
@@ -840,12 +843,14 @@ const nextTest = editor.indexOf('\ntest(', editorTestStart + editorTestTitle.len
 if (editorTestStart === -1 || nextTest === -1) process.exit(1);
 const editorTestBody = editor.slice(editorTestStart, nextTest);
 const diagnosticsInstall = editorTestBody.indexOf(
-  'await prepareEditor(() => installDiagnostics(context, page))',
+  'await prepareEditor(state, () => installDiagnostics(state, context, page))',
 );
 const editorLogin = editorTestBody.indexOf('await loginAsDevelopmentUser(page)');
 if (diagnosticsInstall === -1 || editorLogin === -1 || diagnosticsInstall > editorLogin) {
   process.exit(1);
 }
+const editorDiagnostics = await readFile(process.argv[5], 'utf8');
+if (!editor.includes("from './editor-diagnostics';")) process.exit(1);
 for (const required of [
   'await context.route(',
   'await context.routeWebSocket(',
@@ -855,7 +860,7 @@ for (const required of [
   "context.on('serviceworker'",
   "openedPage.on('download'",
 ]) {
-  if (!editor.includes(required)) process.exit(1);
+  if (!editorDiagnostics.includes(required)) process.exit(1);
 }
 ROUTING_SCOPE_TEST
 
