@@ -16,14 +16,14 @@ stage_dev_https_browser_specs() {
   local context=$1 dest=$2 path
   local -a sources=()
   mapfile -t sources <"$context/spec-sources.txt" || return 1
-  chmod 0700 "$dest"
+  chmod 0700 "$dest" || return 1
   for path in "${sources[@]}"; do
     if [ ! -f "$context/$path" ] || [ -L "$context/$path" ]; then
       printf 'dev-https-browser-stage: spec source %s is missing or not a regular file\n' \
         "$path" >&2
       return 1
     fi
-    cp -- "$context/$path" "$dest/$path"
-    chmod 0600 "$dest/$path"
+    cp -- "$context/$path" "$dest/$path" || return 1
+    chmod 0600 "$dest/$path" || return 1
   done
 }

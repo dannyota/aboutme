@@ -111,7 +111,22 @@ flock -u "$HELD_FD"
 exec {HELD_FD}>&-
 
 # Exercise the wrapper's staging through the real runner's validation.
-cp "$ROOT/deploy/dev-https-browser/"* "$REPO/deploy/dev-https-browser/"
+copy_browser_sources() {
+  local source=$1 destination=$2 file
+  local -a spec_sources=()
+  mapfile -t spec_sources <"$source/spec-sources.txt"
+  for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+    spec-sources.txt "${spec_sources[@]}"; do
+    cp "$source/$file" "$destination/"
+  done
+}
+mkdir -p "$WORK/browser-source"
+copy_browser_sources "$ROOT/deploy/dev-https-browser" "$WORK/browser-source"
+mkdir "$WORK/browser-source/node_modules"
+printf 'unrelated\n' >"$WORK/browser-source/node_modules/unrelated.js"
+copy_browser_sources "$WORK/browser-source" "$REPO/deploy/dev-https-browser"
+[ ! -e "$REPO/deploy/dev-https-browser/node_modules" ] ||
+  fail 'fixture copied an unrelated source directory'
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/podman" <<'STUB'
 #!/usr/bin/env bash
