@@ -151,6 +151,13 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make docs-lint
       - if: ${{ !cancelled() }}
+        run: make docs-links-test
+      - if: ${{ !cancelled() }}
+        name: Check changed Markdown and affected indexes
+        env:
+          DOC_LINK_BASE: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+        run: make docs-links-check
+      - if: ${{ !cancelled() }}
         run: make lengths-check
       - if: ${{ !cancelled() }}
         run: make operational-test-fast
