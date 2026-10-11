@@ -9,9 +9,34 @@ mkdir -p "$work/bin"
 
 cat >"$work/bin/git" <<'STUB'
 #!/usr/bin/env bash
-case " $* " in
-  *' rev-list '*) printf '%040d\n' 0 | tr 0 a ;;
-  *) exit 0 ;;
+set -euo pipefail
+[[ $1 != -C ]] || shift 2
+case $1 in
+  status)
+    case ${CHECKOUT_CASE:-} in
+      dirty) echo ' M deploy/vn/scripts/deploy.sh' ;;
+      staged) echo 'M  deploy/vn/scripts/deploy.sh' ;;
+      untracked) echo '?? deploy/vn/scripts/local.sh' ;;
+      status-error) exit 1 ;;
+    esac
+    ;;
+  symbolic-ref)
+    case ${CHECKOUT_CASE:-} in
+      branch) echo feature ;;
+      detached) exit 1 ;;
+      *) echo main ;;
+    esac
+    ;;
+  rev-parse)
+    if [[ $* == *HEAD && ${CHECKOUT_CASE:-} == stale ]]; then
+      printf '%040d\n' 0 | tr 0 b
+    else
+      printf '%040d\n' 0 | tr 0 a
+    fi
+    ;;
+  fetch) [[ ${RELEASE_CASE:-} != fetch-error ]] ;;
+  merge-base) [[ ${RELEASE_CASE:-} != off-main ]] ;;
+  *) echo "unexpected git command: $*" >&2; exit 2 ;;
 esac
 STUB
 
@@ -19,7 +44,17 @@ cat >"$work/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $1 == run ]]; then
-  printf '[{"conclusion":"success","status":"completed","event":"push","headBranch":"main","headSha":"%040d"}]\n' 0 | tr 0 a
+  [[ ${RELEASE_CASE:-} != api-error ]] || exit 1
+  printf '[{"conclusion":"success","status":"completed","event":"push","headBranch":"main","databaseId":1,"headSha":"%040d"}]\n' 0 | tr 0 a |
+    jq --arg case "${RELEASE_CASE:-}" '
+      if $case == "wrong-sha" then .[0].headSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      elif $case == "branch-only" then .[0].headBranch = "feature"
+      elif $case == "dispatch-only" then .[0].event = "workflow_dispatch"
+      elif $case == "cancelled" then .[0].conclusion = "cancelled"
+      elif $case == "red" then .[0].conclusion = "failure"
+      elif $case == "pending" then .[0].status = "in_progress"
+      elif $case == "no-run" then []
+      else . end'
   exit 0
 fi
 uri=$3
@@ -41,6 +76,7 @@ STUB
 cat >"$work/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/external.log"
 args=" $* "
 [[ $args == *" -p $EXPECTED_SSH_PORT "* ]] || { echo "SSH port missing" >&2; exit 1; }
 case $args in
@@ -68,6 +104,7 @@ STUB
 cat >"$work/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/external.log"
 args=" $* "
 digest=$(printf '%064d' 0 | tr 0 b)
 if [[ $args == *'aboutme-observer/manifests/'* ]]; then
@@ -122,6 +159,34 @@ export DEPLOY_HOST=vn.example.test
 export DEPLOY_SITE=https://vn.example.test
 unset SSH_PORT
 export EXPECTED_SSH_PORT=22922
+
+for CHECKOUT_CASE in dirty staged untracked stale branch detached status-error; do
+  export CHECKOUT_CASE
+  : >"$work/external.log"
+  if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/checkout.out" 2>&1; then
+    echo "$CHECKOUT_CASE checkout was accepted" >&2; exit 1
+  fi
+  [[ ! -s $work/external.log ]] || {
+    echo "$CHECKOUT_CASE checkout reached SSH or the registry" >&2; exit 1
+  }
+  grep -q 'release-eligibility:.*checkout' "$work/checkout.out"
+  echo "rejected $CHECKOUT_CASE checkout before SSH or registry access"
+done
+unset CHECKOUT_CASE
+
+for RELEASE_CASE in off-main fetch-error api-error wrong-sha branch-only dispatch-only cancelled pending red no-run; do
+  export RELEASE_CASE
+  : >"$work/external.log"
+  if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/eligibility.out" 2>&1; then
+    echo "$RELEASE_CASE release was accepted" >&2; exit 1
+  fi
+  [[ ! -s $work/external.log ]] || {
+    echo "$RELEASE_CASE reached SSH or the registry" >&2; exit 1
+  }
+  grep -q 'release-eligibility:' "$work/eligibility.out"
+  echo "rejected $RELEASE_CASE before SSH or registry access"
+done
+unset RELEASE_CASE
 
 if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/out" 2>&1; then
   echo "deploy unexpectedly passed without HSTS" >&2

@@ -80,10 +80,26 @@ and delivery checks.
 
 ## Deploy
 
-Use the current reviewed checkout's deployer. A release tag must be on `main`
-with a green push run of `ci.yml` on its exact commit. The image workflow
-publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and pins
-image digests. GitHub holds no cloud credentials.
+Use the current reviewed checkout's deployer. Publication and deployment share
+`scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
+resolve to a commit on `main` fetched from `dannyota/aboutme`, and have a
+completed, successful latest matching `ci.yml` push run on `main` for that exact
+commit. A branch or manual run never counts. A newer pending, cancelled, or
+failed matching run blocks an older success. Missing evidence or a fetch/API
+error also blocks.
+
+The image workflow runs the helper from a separate checkout of
+`dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's
+event commit. A read-only job checks eligibility before publishing jobs start.
+Every write-capable job repeats the check before other work, so a partial rerun
+must pass fresh eligibility. Candidate checkouts supply build inputs only. The
+workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and
+pins image digests. GitHub holds no cloud credentials.
+
+Before SSH or registry access, the deployer also requires its checkout to be on
+`main`, clean (including untracked files), and equal to freshly fetched
+`origin/main`. Use that checkout for rollbacks and activation too; the target
+tag may be older. Ignored local configuration does not make the checkout dirty.
 
 ```sh
 DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>
@@ -219,6 +235,44 @@ never raw journal lines or personal data. Read details on the host:
 sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
+
+## Vulnerability scans
+
+[The security scan](../../.github/workflows/security-scan.yml) runs weekly. Go
+checks cover the server, generated schema module, observer, and Caddy build
+module. npm audits cover the root, web, schema, and browser-proof dependencies.
+Dependency checks use the workflow checkout: the default branch on scheduled
+runs, or the selected branch on manual runs.
+
+Image scans cover both arm64 and amd64 for server, web, Caddy, and observer. The
+scan selects GitHub's latest published release and reads its `digests.txt` asset
+by asset ID. Every image scan uses the listed platform digest. The observer's
+arm64 digest belongs to the plain version tag; its amd64 digest belongs to
+`<tag>-amd64`. The job summary records the selected app and observer releases
+and each scanned digest. JSON reports and release digest lists remain in the
+workflow artifact for seven days.
+
+To check a rollback release or an observer retained from an older release,
+dispatch with explicit versions:
+
+```sh
+gh workflow run security-scan.yml --ref main \
+  -f release_tag=<app-release> -f observer_release_tag=<observer-release>
+```
+
+Omit `release_tag` to select the latest published release. Omit
+`observer_release_tag` to use the selected app release for both observer
+platforms. Both inputs require a published `vMAJOR.MINOR.PATCH` release and its
+digest asset. A reachable tag alone does not qualify.
+
+Missing or duplicate platform digests, invalid reports, scan-engine errors, and
+fixable HIGH or CRITICAL image findings fail the scan. Other targets still run.
+Observer publication is optional, so a release missing either observer digest
+fails coverage unless an explicit observer release supplies both.
+
+These are release scans, not deployed-version checks. The workflow does not read
+the host's installed release or retained observer version. Use the host's
+release record and observer unit to choose those versions before dispatching.
 
 ## Reboot
 

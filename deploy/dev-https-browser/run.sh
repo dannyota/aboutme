@@ -8,37 +8,10 @@ readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
 readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
 readonly MCP_CLIENT_NAME_RE='^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
-# Mounted read-only per run; both sides validate this exact set.
-readonly -a SPEC_SOURCES=(
-  playwright.config.ts
-  auth.spec.ts
-  transport.spec.ts
-  editor.spec.ts
-  public.spec.ts
-  password-auth.spec.ts
-  mcp.spec.ts
-  mcp-sdk.spec.ts
-  mcp-ts-sdk.spec.ts
-  entry.spec.ts
-  publish.spec.ts
-  exports.spec.ts
-  privacy.spec.ts
-  sample-start.spec.ts
-  linkedin.spec.ts
-  linkedin-import.spec.ts
-  linkedin-import-fixtures.ts
-  second-factor.spec.ts
-  totp.spec.ts
-  totp-fixture.ts
-  totp-production.spec.ts
-  production.config.ts
-  editor-fixtures.ts
-  network-policy.ts
-  harness-lib.ts
-  second-factor-lib.ts
-  second-factor-pages.ts
-  proof-shards.mjs
-)
+# Use the runner's trusted list, baked beside this script in the image.
+# The mounted spec directory never supplies its own allowlist.
+mapfile -t SPEC_SOURCES <"$(dirname "${BASH_SOURCE[0]}")/spec-sources.txt"
+readonly -a SPEC_SOURCES
 
 validate_spec_dir() {
   # validate_spec_dir <directory> <expected-owner-uid>
