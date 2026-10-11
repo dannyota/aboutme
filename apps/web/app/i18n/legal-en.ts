@@ -131,10 +131,10 @@ export const legalEn: LegalCopy = {
           'A resume is private until you publish it. Each resume has its '
           + 'own link. Search engine and AI indexing stays off until you '
           + 'turn it on. When you unpublish, the public link stops '
-          + 'working right away. When you delete or rename a resume, we '
-          + 'keep its old web address reserved for 180 days so no one '
-          + 'else can take over your link. The reservation is not linked '
-          + 'to your account, and we delete it after the 180 days.',
+          + 'working right away. When you delete a resume or change its web '
+          + 'address, we keep its old web address reserved for 180 days so '
+          + 'no one else can take over your link. The reservation is not '
+          + 'linked to your account, and we delete it after the 180 days.',
           'Public pages are delivered directly from our host in Vietnam. '
           + 'While a resume is public, anyone who can see it can save or '
           + 'screenshot it. By default, viewers can also download the '
@@ -161,8 +161,9 @@ export const legalEn: LegalCopy = {
         paragraphs: [
           'Your account, resumes, photos, backups, and logs are stored on '
           + 'GreenNode infrastructure in Ho Chi Minh City, Vietnam. Bizfly '
-          + 'Email Transaction sends account emails over SMTP. Amazon '
-          + 'Route 53 provides DNS.',
+          + 'Email Transaction sends account emails over SMTP. Cloudflare '
+          + 'provides authoritative DNS. Every record is DNS-only, with '
+          + 'no proxying.',
           'Google (United States) and LinkedIn (United States) provide '
           + 'optional sign-in. When you use one to sign in to your account, '
           + 'you sign in at that provider and we receive your name, email, '
@@ -196,9 +197,8 @@ export const legalEn: LegalCopy = {
           'You can export your account data, edit or delete your '
           + 'resumes, and delete your account. We keep your account, '
           + 'resumes, and photos until you delete them or your account. '
-          + 'The export holds your '
-          + 'profile and resume content; email us for photos or session '
-          + 'history.',
+          + 'The export includes your profile, resume content, and resume '
+          + 'photos. Email us for session history.',
           'When you delete your account:',
         ],
         items: [
@@ -208,7 +208,8 @@ export const legalEn: LegalCopy = {
           + 'after that (a 30-day recovery window plus the weekly full '
           + 'backup it needs); they are used only for disaster recovery.',
           'Records of account deletions and provider unlinks, holding only '
-          + 'the event type and time, are kept for up to 180 days.',
+          + 'the event type and time, are kept for 180 days, then removed by '
+          + 'the daily cleanup.',
           'If we delete an account for a breach of our Terms of Service, we '
           + 'keep a record of the account ID, the web addresses of its '
           + 'resumes, and the time, for up to 180 days.',
