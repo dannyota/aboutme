@@ -30,8 +30,8 @@ var (
 )
 
 // registerAdmission is the narrow rate-admission boundary for registration.
-// T09 implements it with the canonical Caddy client address; this service
-// deliberately neither reads cookies nor derives an address itself.
+// It uses the canonical Caddy client address; this service neither reads
+// cookies nor derives an address itself.
 type registerAdmission interface {
 	AdmitRegister(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
 }
@@ -59,8 +59,7 @@ const (
 	grantAttemptSuccess
 )
 
-// ServiceDependencies are the shared OAuth service dependencies. T05 and T06
-// extend Service on this stable surface without re-plumbing their handlers.
+// ServiceDependencies are the shared OAuth service dependencies.
 type ServiceDependencies struct {
 	Pool              *store.Pool
 	Queries           store.OAuthQueries
@@ -72,7 +71,7 @@ type ServiceDependencies struct {
 	LiveGrantLimit    int
 }
 
-// Service is the OAuth authorization-server service shared by Phase PM tasks.
+// Service is the OAuth authorization-server service.
 type Service struct {
 	pool              *store.Pool
 	queries           store.OAuthQueries
@@ -84,7 +83,7 @@ type Service struct {
 	liveGrantLimit    int
 }
 
-// NewService validates its fixed dependencies and performs the startup M1
+// NewService validates its fixed dependencies and performs the idle-client
 // cleanup sweep before making the service available to routes.
 func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service, error) {
 	switch {
@@ -96,7 +95,7 @@ func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service
 		return nil, errors.New("oauth service: nil clock")
 	case isNilDependency(dependencies.Entropy):
 		return nil, errors.New("oauth service: nil entropy")
-	case !canonicalOrigin(dependencies.PublicOrigin):
+	case !IsCanonicalOrigin(dependencies.PublicOrigin):
 		return nil, errors.New("oauth service: noncanonical public origin")
 	case isNilDependency(dependencies.RegisterAdmission):
 		return nil, errors.New("oauth service: nil register admission")
@@ -133,37 +132,6 @@ func isNilDependency(value any) bool {
 	default:
 		return false
 	}
-}
-
-func canonicalOrigin(raw string) bool {
-	if raw == "" || len(raw) > 512 {
-		return false
-	}
-	for i := range raw {
-		if raw[i] < 0x21 || raw[i] > 0x7e {
-			return false
-		}
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.Host == "" || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.Fragment != "" {
-		return false
-	}
-	scheme := strings.ToLower(u.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	if host == "" {
-		return false
-	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	port := u.Port()
-	if port != "" && (scheme != "http" || port != "80") && (scheme != "https" || port != "443") {
-		host += ":" + port
-	}
-	return raw == scheme+"://"+host
 }
 
 // HandleRegister registers a public OAuth client. It intentionally never
