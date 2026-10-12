@@ -8,6 +8,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |-|-|
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
+|[restore-drill.md](restore-drill.md)|Isolated backup restore drill and its remaining safety proofs|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
 A multi-release goal gets one plan file; its task briefs go in a directory of the same name while work is open. Delete both when the work ships, after moving any still-open item to `backlog.md`.

@@ -13,3 +13,16 @@ output "data_volume_id" {
 output "security_group_id" {
   value = vngcloud_vserver_secgroup.main.id
 }
+
+output "drill_security_group_ids" {
+  description = "Detached drill group IDs for reconciliation before attachment"
+  value = var.drill_network == null ? null : {
+    bootstrap = vngcloud_vserver_secgroup.drill["bootstrap"].id
+    restore   = vngcloud_vserver_secgroup.drill["restore"].id
+  }
+}
+
+output "drill_security_group_rules" {
+  description = "Exact managed drill rule tuples for reconciliation before attachment"
+  value       = var.drill_network == null ? null : values(local.drill_rules)
+}

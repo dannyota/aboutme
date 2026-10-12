@@ -113,3 +113,102 @@ resource "vngcloud_vserver_volume_attach" "data" {
   volume_id  = vngcloud_vserver_volume.data.id
   server_id  = vngcloud_vserver_server.main.id
 }
+
+locals {
+  drill_groups = var.drill_network == null ? {} : {
+    bootstrap = "aboutme-drill-bootstrap"
+    restore   = "aboutme-drill-restore"
+  }
+  drill_production_private_cidr = var.drill_network == null ? "" : (var.drill_network.production_private_cidr == null ? "" : var.drill_network.production_private_cidr)
+  drill_resolver_cidrs          = var.drill_network == null ? toset([]) : (var.drill_network.resolver_cidrs == null ? toset([]) : var.drill_network.resolver_cidrs)
+  drill_time_service_cidrs      = var.drill_network == null ? toset([]) : (var.drill_network.time_service_cidrs == null ? toset([]) : var.drill_network.time_service_cidrs)
+  drill_package_cidrs           = var.drill_network == null ? toset([]) : (var.drill_network.package_cidrs == null ? toset([]) : var.drill_network.package_cidrs)
+  drill_hcm04_cidrs             = var.drill_network == null ? toset([]) : (var.drill_network.hcm04_cidrs == null ? toset([]) : var.drill_network.hcm04_cidrs)
+
+  drill_rule_tuples = var.drill_network == null ? [] : concat(
+    [
+      for group in ["bootstrap", "restore"] : {
+        group            = group
+        direction        = "ingress"
+        ethertype        = "IPv4"
+        protocol         = "TCP"
+        port_min         = 22922
+        port_max         = 22922
+        remote_ip_prefix = local.drill_production_private_cidr
+      }
+    ],
+    flatten([
+      for cidr in local.drill_resolver_cidrs : [
+        for protocol in ["TCP", "UDP"] : {
+          group            = "bootstrap"
+          direction        = "egress"
+          ethertype        = "IPv4"
+          protocol         = protocol
+          port_min         = 53
+          port_max         = 53
+          remote_ip_prefix = cidr
+        }
+      ]
+    ]),
+    [
+      for cidr in local.drill_time_service_cidrs : {
+        group            = "bootstrap"
+        direction        = "egress"
+        ethertype        = "IPv4"
+        protocol         = "UDP"
+        port_min         = 123
+        port_max         = 123
+        remote_ip_prefix = cidr
+      }
+    ],
+    flatten([
+      for cidr in local.drill_package_cidrs : [
+        for port in [80, 443] : {
+          group            = "bootstrap"
+          direction        = "egress"
+          ethertype        = "IPv4"
+          protocol         = "TCP"
+          port_min         = port
+          port_max         = port
+          remote_ip_prefix = cidr
+        }
+      ]
+    ]),
+    [
+      for cidr in local.drill_hcm04_cidrs : {
+        group            = "restore"
+        direction        = "egress"
+        ethertype        = "IPv4"
+        protocol         = "TCP"
+        port_min         = 443
+        port_max         = 443
+        remote_ip_prefix = cidr
+      }
+    ],
+  )
+
+  drill_rules = {
+    for rule in local.drill_rule_tuples :
+    join("|", [rule.group, rule.direction, rule.protocol, tostring(rule.port_min), rule.remote_ip_prefix]) => rule
+  }
+}
+
+resource "vngcloud_vserver_secgroup" "drill" {
+  for_each    = local.drill_groups
+  project_id  = var.project_id
+  name        = each.value
+  description = "${each.value} detached and untrusted until default egress is removed"
+}
+
+resource "vngcloud_vserver_secgrouprule" "drill" {
+  for_each          = local.drill_rules
+  project_id        = var.project_id
+  direction         = each.value.direction
+  ethertype         = each.value.ethertype
+  port_range_min    = each.value.port_min
+  port_range_max    = each.value.port_max
+  protocol          = each.value.protocol
+  remote_ip_prefix  = each.value.remote_ip_prefix
+  security_group_id = vngcloud_vserver_secgroup.drill[each.value.group].id
+  description       = "aboutme-drill-${each.value.group}-${lower(each.value.protocol)}-${each.value.port_min}"
+}
