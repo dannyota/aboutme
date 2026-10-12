@@ -87,7 +87,21 @@ case $operation in
       printf 'An error occurred (AccessDenied) when calling the GetObject operation: denied\n' >&2
       exit 1
     fi
-    cp -- "$mock_store" "${!#}"
+    range=
+    for ((i = 1; i <= $#; i++)); do
+      if [[ ${!i} == --range ]]; then
+        next=$((i + 1))
+        range=${!next}
+      fi
+    done
+    [[ $range == bytes=0-66 ]] || {
+      printf 'expected GetObject range bytes=0-66, got %s\n' "$range" >&2
+      exit 2
+    }
+    if [[ $mock_case == oversized-foreign ]]; then
+      printf '%0200d\n' 0 >"$mock_store"
+    fi
+    head -c 67 -- "$mock_store" >"${!#}"
     if [[ $mock_case == foreign-after-read && $count -eq 1 ]]; then
       printf '{"foreign":true}\n' >"$mock_store"
     fi
@@ -184,5 +198,20 @@ grep -q 's3://aboutme-tfstate/restore-drill/probes/123e4567-e89b-42d3-a456-42661
   "$work/foreign.out" || fail 'foreign replacement omitted recovery key'
 grep -q 'delete-object' "$work/foreign-after-read.log" && fail 'foreign bytes were deleted'
 [[ -e $work/foreign-after-read.object ]] || fail 'foreign bytes were not retained'
+
+printf '%s\n' oversized-foreign >"$work/current.case"
+: >"$work/oversized-foreign.log"
+rm -f -- "$work/oversized-foreign.object" "$work/get-count"
+if PATH=$work/bin:$PATH DRILL_STATE_CREDENTIALS_FILE=$work/credentials \
+  bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" \
+  >"$work/oversized.out" 2>&1; then
+  fail 'oversized foreign object succeeded'
+fi
+[[ $(grep -c -- '--range bytes=0-66' "$work/oversized-foreign.log") -eq 2 ]] ||
+  fail 'proof reads were not both bounded'
+grep -q 's3://aboutme-tfstate/restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' \
+  "$work/oversized.out" || fail 'oversized object omitted recovery key'
+grep -q 'delete-object' "$work/oversized-foreign.log" && fail 'oversized foreign bytes were deleted'
+[[ -e $work/oversized-foreign.object ]] || fail 'oversized foreign bytes were not retained'
 
 printf 'restore drill state proof tests: ok\n'
