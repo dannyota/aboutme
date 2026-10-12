@@ -35,6 +35,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CloudFront verification](cloudfront-verification.md)                  | AWS reference migration, parity, tests, and unresolved facts              |
 | 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, and abuse detection                    |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                           |
+| 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                    |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                 |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks               |
