@@ -65,10 +65,16 @@ drill_journal_aws() {
     AWS_CLI_AUTO_PROMPT=off \
     timeout --foreground --signal=KILL 60s \
     aws --profile default --endpoint-url https://hcm04.vstorage.vngcloud.vn \
-    --region HCM04 --no-cli-pager --no-cli-auto-prompt \
+    --region HCM04 --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy \
     s3api "$@" || rc=$?
   rm -f -- "$config"
   return "${rc:-0}"
+}
+
+drill_journal_put_conflict() {
+  local pattern='^(aws: \[ERROR\]: )?An error occurred \((PreconditionFailed|412)\) '
+  pattern+='when calling the PutObject operation( \(reached max retries: 0\))?:'
+  grep -Eq "$pattern" "$1"
 }
 
 # drill_journal_get <record-path> <new-output-file>
@@ -144,7 +150,7 @@ drill_journal_put_create() {
     rm -f -- "$errors" "$snapshot"
     return 0
   fi
-  if grep -Eq '^An error occurred \((PreconditionFailed|412)\) when calling the PutObject operation:' "$errors"; then
+  if drill_journal_put_conflict "$errors"; then
     rm -f -- "$errors" "$snapshot"
     drill_journal_error 'record already exists; create-only write refused'
     return 3

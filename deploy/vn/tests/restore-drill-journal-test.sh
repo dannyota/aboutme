@@ -40,7 +40,15 @@ case $operation in
     [[ ! -e $mock_root/mutate-input ]] || printf '{"changed":true}\n' >"$(cat "$mock_root/mutate-input")"
     case $mock_case in
       conflict)
-        printf 'An error occurred (PreconditionFailed) when calling the PutObject operation: 412\n' >&2
+        printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 0): conflict\n' >&2
+        exit 1
+        ;;
+      plain-conflict)
+        printf 'An error occurred (PreconditionFailed) when calling the PutObject operation: conflict\n' >&2
+        exit 1
+        ;;
+      wrong-retry-conflict)
+        printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 1): conflict\n' >&2
         exit 1
         ;;
       misleading-conflict)
@@ -113,6 +121,7 @@ grep -q -- '--endpoint-url https://hcm04.vstorage.vngcloud.vn' "$work/aws.log" |
 grep -q -- '--region HCM04' "$work/aws.log" || fail 'region missing'
 grep -q -- '--profile default' "$work/aws.log" || fail 'default profile was not selected'
 grep -q -- '--no-cli-pager' "$work/aws.log" || fail 'pager was not disabled'
+grep -q -- '--cli-error-format legacy' "$work/aws.log" || fail 'legacy error format was not selected'
 
 for key in \
   '../locks/1.json' \
@@ -155,6 +164,17 @@ expect_fail drill_journal_put_create 'releases/1.json' "$record"
 [[ $(wc -l <"$work/aws.log") -eq 1 ]] || fail 'conflict caused another request'
 grep -q 'put-object' "$work/aws.log" || fail 'conflict test did not put'
 grep -q 'delete-object' "$work/aws.log" && fail 'journal transport issued delete'
+
+reset_mock
+set_case plain-conflict
+expect_fail drill_journal_put_create 'releases/1.json' "$record"
+[[ $(wc -l <"$work/aws.log") -eq 1 ]] || fail 'plain conflict caused another request'
+
+reset_mock
+set_case wrong-retry-conflict
+expect_fail drill_journal_put_create 'releases/1.json' "$record"
+[[ $(grep -c 'get-object' "$work/aws.log") -eq 1 ]] ||
+  fail 'nonzero retry annotation was treated as a definite conflict'
 
 reset_mock
 set_case misleading-conflict

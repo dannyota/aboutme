@@ -55,7 +55,15 @@ case $operation in
       printf 'proxy failed after unrelated 404 Not Found HeadObject text\n' >&2
       exit 1
     fi
-    printf 'An error occurred (404) when calling the HeadObject operation: Not Found\n' >&2
+    if [[ $mock_case == wrong-retry-absence ]]; then
+      printf 'aws: [ERROR]: An error occurred (404) when calling the HeadObject operation (reached max retries: 1): Not Found\n' >&2
+      exit 1
+    fi
+    if [[ $mock_case == plain-errors ]]; then
+      printf 'An error occurred (404) when calling the HeadObject operation: Not Found\n' >&2
+      exit 1
+    fi
+    printf 'aws: [ERROR]: An error occurred (404) when calling the HeadObject operation (reached max retries: 0): Not Found\n' >&2
     exit 1
     ;;
   put-object)
@@ -70,7 +78,15 @@ case $operation in
         printf 'proxy cached 412 PreconditionFailed after PutObject transport failure\n' >&2
         exit 1
       fi
-      printf 'An error occurred (PreconditionFailed) when calling the PutObject operation: 412\n' >&2
+      if [[ $mock_case == wrong-retry-conflict ]]; then
+        printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 1): conflict\n' >&2
+        exit 1
+      fi
+      if [[ $mock_case == plain-errors ]]; then
+        printf 'An error occurred (PreconditionFailed) when calling the PutObject operation: conflict\n' >&2
+        exit 1
+      fi
+      printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 0): conflict\n' >&2
       exit 1
     fi
     cp -- "$body" "$mock_store"
@@ -141,12 +157,16 @@ success_log=$work/success.log
 [[ $(grep -c 'put-object' "$success_log") -eq 2 ]] || fail 'proof did not make two puts'
 grep -q -- '--if-none-match \\*' "$success_log" || fail 'proof put was not conditional'
 grep -q -- '--profile default' "$success_log" || fail 'proof did not select the default profile'
+grep -q -- '--cli-error-format legacy' "$success_log" || fail 'proof did not select legacy errors'
 [[ $(grep -c 'get-object' "$success_log") -eq 2 ]] || fail 'proof did not verify bytes before cleanup'
 [[ $(grep -c 'delete-object' "$success_log") -eq 1 ]] || fail 'proof did not clean its object'
 [[ $(grep -c 'head-object' "$success_log") -eq 2 ]] || fail 'proof did not prove initial and final absence'
 grep -q -- '--key restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' "$success_log" ||
   fail 'proof key escaped disposable namespace'
 [[ ! -e $work/success.object ]] || fail 'proof object remains after success'
+
+run_case plain-errors >/dev/null
+[[ ! -e $work/plain-errors.object ]] || fail 'plain-error proof object remains after success'
 
 expect_case_failure preexisting
 grep -q 'delete-object' "$work/preexisting.log" && fail 'proof deleted a preexisting object'
@@ -157,6 +177,10 @@ grep -q 'put-object' "$work/denied.log" && fail 'denied head was treated as abse
 
 expect_case_failure misleading-absence
 grep -q 'put-object' "$work/misleading-absence.log" && fail 'misleading 404 was treated as absence'
+
+expect_case_failure wrong-retry-absence
+grep -q 'put-object' "$work/wrong-retry-absence.log" &&
+  fail 'nonzero retry annotation was treated as absence'
 
 expect_case_failure create-ambiguous
 [[ -e $work/create-ambiguous.object ]] || fail 'ambiguous create fixture lost recovery object'
@@ -185,6 +209,10 @@ expect_case_failure overwrite-accepted
 expect_case_failure misleading-conflict
 [[ $(grep -c 'delete-object' "$work/misleading-conflict.log") -eq 1 ]] ||
   fail 'misleading conflict failure did not clean its owned object'
+
+expect_case_failure wrong-retry-conflict
+[[ $(grep -c 'delete-object' "$work/wrong-retry-conflict.log") -eq 1 ]] ||
+  fail 'nonzero retry conflict failure did not clean its owned object'
 
 printf '%s\n' foreign-after-read >"$work/current.case"
 : >"$work/foreign-after-read.log"
