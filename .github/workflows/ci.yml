@@ -669,8 +669,8 @@ jobs:
           cache-key: ${{ steps.setup.outputs.go-cache-key }}
           toolchain-hit: ${{ steps.setup.outputs.go-toolchain-hit }}
 
-  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
-  # Chain (SCA for Go + npm), and Secrets, all free for public repositories.
+  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis) and Supply
+  # Chain (SCA for Go + npm). gitleaks owns secret scanning.
   # Each product set runs as its own `semgrep ci` scan in its own job, so the
   # two scans overlap instead of adding up. Every scan uploads to the same
   # Semgrep project and ref. The platform policy decides what fails `semgrep
@@ -679,8 +679,6 @@ jobs:
   # on any Code finding of severity ERROR, HIGH, or CRITICAL, and on any
   # reachable Supply Chain finding of those severities. A reviewed false
   # positive is suppressed in place with `nosemgrep: <rule-id>` and a reason.
-  # Secrets runs with Code: both use the Pro engine, and a scan that selects
-  # only products the Semgrep deployment does not enable stops with an error.
   # The scans authenticate with SEMGREP_APP_TOKEN, which
   # GitHub withholds from FORK pull requests, so they run on pushes, manual
   # runs, and same-repo PRs only. A fork PR would have no token and fail.
@@ -705,7 +703,7 @@ jobs:
           key: pip-semgrep-1.178.0-${{ runner.os }}
       - run: pip install semgrep==1.178.0
       - run: scripts/test/semgrep-gate-test.sh
-      - run: semgrep ci --code --secrets --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
+      - run: semgrep ci --code --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
       - name: Block on ERROR, HIGH, and CRITICAL Code findings
