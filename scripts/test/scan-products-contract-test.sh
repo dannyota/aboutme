@@ -32,7 +32,7 @@ printf '|%s' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
 
 [ "${1:-}" = ci ] || exit 64
-for required in --code --supply-chain --secrets --no-suppress-errors; do
+for required in --code --supply-chain --no-suppress-errors; do
   count=0
   for argument in "$@"; do
     if [ "$argument" = "$required" ]; then
@@ -42,6 +42,12 @@ for required in --code --supply-chain --secrets --no-suppress-errors; do
   if [ "$count" -ne 1 ]; then
     printf 'required Semgrep product option %s appeared %s times\n' \
       "$required" "$count" >&2
+    exit 64
+  fi
+done
+for argument in "$@"; do
+  if [ "$argument" = --secrets ]; then
+    printf 'Semgrep Secrets must remain disabled; gitleaks owns secret scanning\n' >&2
     exit 64
   fi
 done
@@ -108,4 +114,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf 'ok - phase scan selects Code, Supply Chain, and Secrets and propagates scanner failures\n'
+printf 'ok - phase scan selects Code and Supply Chain, rejects Secrets, and propagates scanner failures\n'

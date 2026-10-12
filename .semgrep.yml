@@ -14,7 +14,6 @@
 #     --config p/typescript \
 #     --config p/javascript \
 #     --config p/owasp-top-ten \
-#     --config p/secrets \
 #     --config p/dockerfile \
 #     --config p/docker-compose \
 #     --config .semgrep.yml \
@@ -24,9 +23,9 @@
 # Nuxt/Vue app's TS/JS (there is no published Vue-template-aware pack —
 # semgrep's TS/JS parsers do not parse .vue SFC blocks at all, which is why
 # the custom rules below use `languages: [generic]` for .vue files);
-# p/owasp-top-ten = cross-language OWASP coverage; p/secrets = credential/
-# key leak detection; p/dockerfile + p/docker-compose = deploy/*.Dockerfile
-# and deploy/compose.yml.
+# p/owasp-top-ten = cross-language OWASP coverage; p/dockerfile +
+# p/docker-compose = deploy/*.Dockerfile and deploy/compose.yml. gitleaks owns
+# credential leak detection.
 #
 # Generated/vendored code (except tracked dependency manifests), node_modules,
 # .nuxt, and .output are excluded via .semgrepignore. Tracked manifests and
