@@ -88,6 +88,122 @@ variable "ssh_allowlist" {
   }
 }
 
+variable "drill_network" {
+  type = object({
+    production_private_cidr = string
+    resolver_cidrs          = set(string)
+    time_service_cidrs      = set(string)
+    package_cidrs           = set(string)
+    hcm04_cidrs             = set(string)
+  })
+  description = "Reviewed IPv4 destinations for optional detached restore-drill security groups"
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      var.drill_network.production_private_cidr != null &&
+      var.drill_network.resolver_cidrs != null &&
+      var.drill_network.time_service_cidrs != null &&
+      var.drill_network.package_cidrs != null &&
+      var.drill_network.hcm04_cidrs != null,
+      false,
+    )
+    error_message = "drill_network fields must not be null."
+  }
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      cidrnetmask(var.drill_network.production_private_cidr) != "" &&
+      tonumber(split("/", var.drill_network.production_private_cidr)[1]) == 32 &&
+      (
+        cidrcontains("10.0.0.0/8", cidrhost(var.drill_network.production_private_cidr, 0)) ||
+        cidrcontains("172.16.0.0/12", cidrhost(var.drill_network.production_private_cidr, 0)) ||
+        cidrcontains("192.168.0.0/16", cidrhost(var.drill_network.production_private_cidr, 0))
+      ),
+      false,
+    )
+    error_message = "drill_network.production_private_cidr must be a private IPv4 /32."
+  }
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      length(var.drill_network.resolver_cidrs) > 0 &&
+      length(var.drill_network.time_service_cidrs) > 0 &&
+      length(var.drill_network.package_cidrs) > 0 &&
+      length(var.drill_network.hcm04_cidrs) > 0,
+      false,
+    )
+    error_message = "Every drill_network destination set must contain at least one CIDR."
+  }
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      alltrue([
+        for cidr in setunion(var.drill_network.resolver_cidrs, var.drill_network.time_service_cidrs) : try(
+          cidrnetmask(cidr) != "" && tonumber(split("/", cidr)[1]) == 32,
+          false,
+        )
+      ]),
+      false,
+    )
+    error_message = "Every resolver and time-service destination must be an IPv4 /32."
+  }
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      alltrue([
+        for cidr in setunion(var.drill_network.package_cidrs, var.drill_network.hcm04_cidrs) : try(
+          cidrnetmask(cidr) != "" && alltrue([
+            for reserved in [
+              "0.0.0.0/8",
+              "10.0.0.0/8",
+              "100.64.0.0/10",
+              "127.0.0.0/8",
+              "169.254.0.0/16",
+              "172.16.0.0/12",
+              "192.0.0.0/24",
+              "192.0.2.0/24",
+              "192.88.99.0/24",
+              "192.168.0.0/16",
+              "198.18.0.0/15",
+              "198.51.100.0/24",
+              "203.0.113.0/24",
+              "224.0.0.0/4",
+              "240.0.0.0/4",
+              ] : !(
+              cidrcontains(reserved, cidrhost(cidr, 0)) ||
+              cidrcontains(cidr, cidrhost(reserved, 0))
+            )
+          ]),
+          false,
+        )
+      ]),
+      false,
+    )
+    error_message = "Package and HCM04 destinations must be public IPv4 CIDRs that do not overlap private or special-use ranges."
+  }
+
+  validation {
+    condition = var.drill_network == null ? true : try(
+      alltrue([
+        for cidr in setunion(
+          var.drill_network.resolver_cidrs,
+          var.drill_network.time_service_cidrs,
+          var.drill_network.package_cidrs,
+          var.drill_network.hcm04_cidrs,
+          ) : try(
+          !cidrcontains(cidr, cidrhost(var.drill_network.production_private_cidr, 0)) &&
+          !cidrcontains(cidr, "169.254.169.254"),
+          false,
+        )
+      ]),
+      false,
+    )
+    error_message = "Drill egress destinations must not include production or the metadata endpoint."
+  }
+}
+
 variable "admin_ssh_public_key" {
   type        = string
   description = "Admin ssh-ed25519 public key (docs/design/vietnam-production.md, Host)"

@@ -138,6 +138,21 @@ schedule, notification recipient, and limits.
 
 ## Restore drill
 
+The production OpenTofu root can create two persistent, detached security groups
+for a restore drill. Set the nullable `drill_network` object in the ignored
+`prod.tfvars` with production's private IPv4 `/32`, nonempty resolver and
+time-service IPv4 `/32` sets, and reviewed public package and HCM04 IPv4 CIDR
+sets. The default is `null`, which creates no drill groups. The configuration
+has no live endpoint defaults.
+
+The optional groups are named `aboutme-drill-bootstrap` and
+`aboutme-drill-restore`. OpenTofu does not attach either group to a server or
+allocate a drill resource. The provider adds unmanaged default egress to each
+new group, so treat both groups as untrusted. Remove the default egress and
+audit the exact rules and attachments before any attachment. The OpenTofu
+configuration and mocked plan tests do not perform that reconciliation and do
+not make a live drill safe to run.
+
 `scripts/restore-drill.sh` creates a temporary encrypted server and data volume,
 reaches its private IP through the production host as an SSH jump host, installs
 PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
