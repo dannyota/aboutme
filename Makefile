@@ -42,7 +42,7 @@ check: ## Fast local subset; skips web checks, database-backed suites, S3 suites
 pre-push: ## Static checks on the files this branch changed (ESLint, Prettier, markdownlint, gofmt, golangci-lint, lengths, shell) under the local-check lock and memory cap; run before every push
 	bash scripts/pre-push.sh
 
-scan: ## Batched security scan: Semgrep (SAST + Supply Chain SCA + secrets) then gitleaks over full history
+scan: ## Batched security scan: Semgrep Code/SAST + Supply Chain/SCA, then gitleaks secrets over full history
 	scripts/test/semgrep-sca-inputs-test.sh
 	bash scripts/scan.sh
 
@@ -522,11 +522,11 @@ server-test-integration: ## Run server integration tests (needs test-db-up or TE
 
 semgrep: ## Offline SAST scan with registry packs + project rules (no account needed; quick local check)
 	semgrep --config p/golang --config p/gosec --config p/typescript --config p/javascript \
-	  --config p/owasp-top-ten --config p/secrets --config p/dockerfile --config p/docker-compose \
+	  --config p/owasp-top-ten --config p/dockerfile --config p/docker-compose \
 	  --config .semgrep.yml --error .
 
-semgrep-ci: ## Connected Semgrep — Code (Pro rules) + Supply Chain (SCA) + Secrets; free for public repos. Needs SEMGREP_APP_TOKEN in the environment. This is what CI runs.
-	semgrep ci --code --supply-chain --secrets --no-suppress-errors
+semgrep-ci: ## Connected Semgrep: Code/SAST (Pro rules) + Supply Chain/SCA. gitleaks scans secrets. Needs SEMGREP_APP_TOKEN. This is what CI runs.
+	semgrep ci --code --supply-chain --no-suppress-errors
 
 sqlc-gen: ## Regenerate the typed data layer from migrations/ and sql/ query sources
 	cd apps/server && sqlc generate

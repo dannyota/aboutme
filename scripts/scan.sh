@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Batched security scan: Semgrep (SAST + Supply Chain SCA + secrets) and
-# gitleaks over full history. Run this at a phase gate, not on every commit --
+# Batched security scan: Semgrep Code/SAST and Supply Chain/SCA, plus gitleaks
+# secret scanning over full history. Run this at a phase gate, not on every commit --
 # per-commit secret protection is the .githooks/pre-commit hook instead.
 #
 # Semgrep's connected mode needs SEMGREP_APP_TOKEN. It is read from the
@@ -45,7 +45,6 @@ elif [ -n "${SEMGREP_APP_TOKEN:-}" ]; then
     TMPDIR="$SEMGREP_TMP_ROOT" semgrep ci \
       --code \
       --supply-chain \
-      --secrets \
       --no-suppress-errors || STATUS=1
     cleanup_semgrep_tmp
     SEMGREP_TMP_ROOT=
@@ -55,7 +54,7 @@ elif [ -n "${SEMGREP_APP_TOKEN:-}" ]; then
   fi
 else
   echo "SEMGREP_APP_TOKEN is required for the phase gate." >&2
-  echo "Connected Supply Chain and Pro analysis did not run; this gate will fail." >&2
+  echo "Connected Code/SAST and Supply Chain/SCA analysis did not run; this gate will fail." >&2
   echo "Running the offline rule packs only as supplemental diagnostics."
   STATUS=1
   make semgrep || STATUS=1
