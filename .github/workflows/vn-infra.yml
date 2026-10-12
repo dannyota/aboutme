@@ -25,6 +25,8 @@ jobs:
         run: |
           tofu -chdir=deploy/vn/prod init -backend=false -input=false >/dev/null
           tofu -chdir=deploy/vn/prod validate
+      - name: Test mocked infrastructure plans
+        run: tofu -chdir=deploy/vn/prod test
       - name: Check shell scripts
         run: |
           shellcheck --version
