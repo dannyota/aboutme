@@ -282,9 +282,9 @@ grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs passkey \' <<<"
 grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
   fail "ci gate does not require the dev-https-proofs job"
 
-# Hosted Semgrep runs one scan per product set, each in its own job. Together
-# the jobs select every product and fail closed, the gate requires each job,
-# and the gate lets exactly these jobs, and no other, be skipped.
+# Hosted Semgrep runs one scan per selected product, each in its own job. The
+# jobs select Code and Supply Chain, fail closed, and leave secret scanning to
+# gitleaks. The gate requires each job and permits only these jobs to skip.
 semgrep_jobs=(semgrep-code semgrep-supply-chain)
 semgrep_if="    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository"
 actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_ALL=C sort)
@@ -297,8 +297,8 @@ semgrep_job_body() { # job-id
 # in the repository, whatever the Semgrep platform policy marks as blocking.
 semgrep_json='"$RUNNER_TEMP/semgrep.json"'
 SEMGREP_CODE_JOB=$(semgrep_job_body semgrep-code)
-grep -Fxq "      - run: semgrep ci --code --secrets --no-suppress-errors --json-output=$semgrep_json" <<<"$SEMGREP_CODE_JOB" ||
-  fail "semgrep-code does not select Code and Secrets, fail closed, and write its JSON"
+grep -Fxq "      - run: semgrep ci --code --no-suppress-errors --json-output=$semgrep_json" <<<"$SEMGREP_CODE_JOB" ||
+  fail "semgrep-code does not select Code, fail closed, and write its JSON"
 grep -Fxq -- '      - run: scripts/test/semgrep-gate-test.sh' <<<"$SEMGREP_CODE_JOB" ||
   fail "semgrep-code does not test its blocking gate"
 SEMGREP_SCA_JOB=$(semgrep_job_body semgrep-supply-chain)
@@ -328,6 +328,8 @@ for job in "${semgrep_jobs[@]}"; do
     fail "$job does not scan with the Semgrep platform token"
   ! grep -Fq 'continue-on-error' <<<"$body" ||
     fail "$job must block the release"
+  ! grep -Fq -- '--secrets' <<<"$body" ||
+    fail "$job must leave secret scanning to gitleaks"
   grep -Fxq "      - $job" <<<"$CI_JOB" ||
     fail "ci gate does not require the $job job"
 done
