@@ -28,19 +28,26 @@ s3_call() {
     AWS_CLI_AUTO_PROMPT=off \
     timeout --foreground --signal=KILL 60s \
     aws --profile default --endpoint-url "$ENDPOINT" --region "$REGION" \
-    --no-cli-pager --no-cli-auto-prompt s3api "$@"
+    --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy s3api "$@"
 }
 
 # Returns 0 only for a definite absence, 1 for an existing object, and 2 when
 # the response cannot prove either result.
 object_absent() {
-  local errors=$1
+  local errors=$1 pattern='^(aws: \[ERROR\]: )?An error occurred \((NoSuchKey|404)\) '
+  pattern+='when calling the HeadObject operation( \(reached max retries: 0\))?:'
   : >"$errors"
   if s3_call head-object --bucket "$BUCKET" --key "$key" >/dev/null 2>"$errors"; then
     return 1
   fi
-  grep -Eq '^An error occurred \((NoSuchKey|404)\) when calling the HeadObject operation:' "$errors" && return 0
+  grep -Eq "$pattern" "$errors" && return 0
   return 2
+}
+
+put_conflict() {
+  local pattern='^(aws: \[ERROR\]: )?An error occurred \((PreconditionFailed|412)\) '
+  pattern+='when calling the PutObject operation( \(reached max retries: 0\))?:'
+  grep -Eq "$pattern" "$1"
 }
 
 cleanup_probe() {
@@ -141,7 +148,7 @@ if s3_call put-object --bucket "$BUCKET" --key "$key" --body "$work/second.json"
   second_written=1
   die 'conditional overwrite unexpectedly succeeded'
 fi
-grep -Eq '^An error occurred \((PreconditionFailed|412)\) when calling the PutObject operation:' "$work/errors" ||
+put_conflict "$work/errors" ||
   die 'conditional overwrite did not return a definite precondition conflict'
 
 if ! s3_call get-object --bucket "$BUCKET" --key "$key" \

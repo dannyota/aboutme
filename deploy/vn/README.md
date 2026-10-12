@@ -163,6 +163,9 @@ file when the operator configuration is elsewhere. The caller owns record
 fields, chain validation, fencing, and secret-free content. The transport has no
 delete operation and is not a distributed lock.
 
+The journal and proof use the reviewed AWS CLI 2.37.9 runtime and select its
+legacy error format so exact service codes remain classifiable.
+
 Before using the journal, run `scripts/drill-state-proof.sh` from an attended
 operator machine. The command creates one unique nonsecret object under
 `restore-drill/probes/`, proves that a second conditional write is refused,
