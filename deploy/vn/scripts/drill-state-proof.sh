@@ -12,6 +12,7 @@ key=
 created=0
 cleanup_attempted=0
 second_written=0
+probe_max_bytes=0
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'drill state proof: %s\n' "$*" >&2; exit 1; }
@@ -43,12 +44,18 @@ object_absent() {
 }
 
 cleanup_probe() {
-  local errors=$work/cleanup-errors readback=$work/cleanup-readback owned=0
+  local errors=$work/cleanup-errors readback=$work/cleanup-readback owned=0 readback_size
   ((created == 1 && cleanup_attempted == 0)) || return 0
   cleanup_attempted=1
-  if ! s3_call get-object --bucket "$BUCKET" --key "$key" "$readback" \
+  if ! s3_call get-object --bucket "$BUCKET" --key "$key" \
+    --range "bytes=0-$probe_max_bytes" "$readback" \
     >/dev/null 2>"$errors"; then
     say "cleanup retained an unreadable probe; inspect the nonsecret recovery key: s3://$BUCKET/$key" >&2
+    return 1
+  fi
+  if ! readback_size=$(stat -c %s -- "$readback") ||
+    ((readback_size == 0 || readback_size > probe_max_bytes)); then
+    say "cleanup retained oversized or invalid bytes; inspect the nonsecret recovery key: s3://$BUCKET/$key" >&2
     return 1
   fi
   cmp -s -- "$work/first.json" "$readback" && owned=1
@@ -93,6 +100,11 @@ uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
 key=$PREFIX/$uuid.json
 printf '{"probe":"%s","value":"first"}\n' "$uuid" >"$work/first.json"
 printf '{"probe":"%s","value":"second"}\n' "$uuid" >"$work/second.json"
+first_size=$(stat -c %s -- "$work/first.json") || die 'first probe payload size is unavailable'
+second_size=$(stat -c %s -- "$work/second.json") || die 'second probe payload size is unavailable'
+probe_max_bytes=$first_size
+if ((second_size > probe_max_bytes)); then probe_max_bytes=$second_size; fi
+((probe_max_bytes > 0)) || die 'probe payloads must not be empty'
 
 if ! s3_call get-bucket-versioning --bucket "$BUCKET" \
   >"$work/versioning" 2>"$work/errors"; then
@@ -132,10 +144,14 @@ fi
 grep -Eq '^An error occurred \((PreconditionFailed|412)\) when calling the PutObject operation:' "$work/errors" ||
   die 'conditional overwrite did not return a definite precondition conflict'
 
-if ! s3_call get-object --bucket "$BUCKET" --key "$key" "$work/readback.json" \
+if ! s3_call get-object --bucket "$BUCKET" --key "$key" \
+  --range "bytes=0-$probe_max_bytes" "$work/readback.json" \
   >/dev/null 2>"$work/errors"; then
   die 'original probe could not be read back'
 fi
+readback_size=$(stat -c %s -- "$work/readback.json") || die 'probe read-back size is unavailable'
+((readback_size > 0 && readback_size <= probe_max_bytes)) ||
+  die 'probe read-back exceeds the attributable payload bound'
 cmp -s -- "$work/first.json" "$work/readback.json" ||
   die 'stored probe bytes differ from the original write'
 
