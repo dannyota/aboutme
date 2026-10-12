@@ -45,41 +45,38 @@ drill_journal_input_valid() {
   }
 }
 
-drill_journal_aws() {
-  local config credentials rc
-  credentials=$(drill_journal_credentials_file)
+drill_journal_native() {
+  local config credentials rc=0
+  credentials=$(drill_journal_credentials_file) || return 1
   [[ -f $credentials && ! -L $credentials ]] || {
     drill_journal_error "credential file is not a regular file: $credentials"
     return 1
   }
-  config=$(mktemp "${TMPDIR:-/tmp}/aboutme-drill-aws.XXXXXX") || return 1
-  chmod 0600 "$config"
-  printf '[default]\ns3 =\n    addressing_style = path\n' >"$config"
-  env -i PATH="$PATH" \
-    AWS_SHARED_CREDENTIALS_FILE="$credentials" \
-    AWS_CONFIG_FILE="$config" \
-    AWS_EC2_METADATA_DISABLED=true \
-    AWS_MAX_ATTEMPTS=1 \
-    AWS_RETRY_MODE=standard \
-    AWS_PAGER= \
-    AWS_CLI_AUTO_PROMPT=off \
+  config=$(mktemp "${TMPDIR:-/tmp}/aboutme-drill-native.XXXXXX") || return 1
+  if ! chmod 0600 "$config" || ! printf '[default]\n' >"$config"; then
+    rm -f -- "$config"
+    return 1
+  fi
+  env -i PATH="$PATH" VNGCLOUD_CONFIG_FILE="$config" \
     timeout --foreground --signal=KILL 60s \
-    aws --profile default --endpoint-url https://hcm04.vstorage.vngcloud.vn \
-    --region HCM04 --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy \
-    s3api "$@" || rc=$?
-  rm -f -- "$config"
-  return "${rc:-0}"
+    vngcloud --profile default --output json storage "$@" \
+    --s3-region HCM04 --s3-credentials-file "$credentials" \
+    --transfer-timeout 60s || rc=$?
+  rm -f -- "$config" || rc=1
+  return "$rc"
 }
 
 drill_journal_put_conflict() {
-  local pattern='^(aws: \[ERROR\]: )?An error occurred \((PreconditionFailed|412)\) '
-  pattern+='when calling the PutObject operation( \(reached max retries: 0\))?:'
-  grep -Eq "$pattern" "$1"
+  [[ $2 == 1 ]] || return 1
+  jq -e -s 'length == 1 and
+    (.[0].error | type == "object" and
+      .code == "ObjectExists" and .status == 412 and
+      .operation == "storage.PutObject")' "$1" >/dev/null 2>&1
 }
 
 # drill_journal_get <record-path> <new-output-file>
 drill_journal_get() {
-  local record=${1:-} output=${2:-} key parent temp rc=0 size
+  local record=${1:-} output=${2:-} key parent temp_dir temp rc=0 size
   drill_journal_record_path_valid "$record" || {
     drill_journal_error 'record path is outside the canonical journal namespace'
     return 2
@@ -93,29 +90,34 @@ drill_journal_get() {
     drill_journal_error 'output directory does not exist'
     return 2
   }
-  temp=$(mktemp "$parent/.drill-journal-read.XXXXXX") || return 1
+  temp_dir=$(mktemp -d "$parent/.drill-journal-read.XXXXXX") || return 1
+  temp=$temp_dir/record.json
   key=restore-drill/v1/$record
-  drill_journal_aws get-object --bucket aboutme-tfstate --key "$key" \
-    --range 'bytes=0-1048576' "$temp" >/dev/null 2>&1 || rc=$?
+  drill_journal_native get-object --bucket aboutme-tfstate --key "$key" \
+    --destination "$temp" --max-download-bytes 1048576 >/dev/null 2>&1 || rc=$?
   if ((rc != 0)); then
-    rm -f -- "$temp"
+    rm -rf -- "$temp_dir"
     drill_journal_error 'GetObject failed; absence was not proved'
     return 1
   fi
+  [[ -f $temp && ! -L $temp ]] || rc=1
   size=$(stat -c '%s' -- "$temp") || rc=1
   if ((rc != 0 || size == 0 || size > 1048576)) ||
     ! jq -e -s 'length == 1' "$temp" >/dev/null 2>&1; then
-    rm -f -- "$temp"
+    rm -rf -- "$temp_dir"
     drill_journal_error 'stored record is not bounded valid JSON'
     return 1
   fi
-  chmod 0600 "$temp"
+  if ! chmod 0600 "$temp"; then
+    rm -rf -- "$temp_dir"
+    return 1
+  fi
   if ! ln -T -- "$temp" "$output" >/dev/null 2>&1; then
-    rm -f -- "$temp"
+    rm -rf -- "$temp_dir"
     drill_journal_error 'output path was claimed before publication'
     return 1
   fi
-  rm -f -- "$temp"
+  rm -rf -- "$temp_dir"
 }
 
 # drill_journal_put_create <record-path> <JSON-file>
@@ -144,13 +146,15 @@ drill_journal_put_create() {
     rm -f -- "$snapshot"
     return 1
   fi
-  if drill_journal_aws put-object --bucket aboutme-tfstate --key "$key" \
-    --body "$snapshot" --content-type application/json --if-none-match '*' \
+  if drill_journal_native put-object --bucket aboutme-tfstate --key "$key" \
+    --body "$snapshot" \
     >/dev/null 2>"$errors"; then
     rm -f -- "$errors" "$snapshot"
     return 0
+  else
+    rc=$?
   fi
-  if drill_journal_put_conflict "$errors"; then
+  if drill_journal_put_conflict "$errors" "$rc"; then
     rm -f -- "$errors" "$snapshot"
     drill_journal_error 'record already exists; create-only write refused'
     return 3
@@ -167,6 +171,7 @@ drill_journal_put_create() {
     drill_journal_error 'PutObject outcome is unproved; do not retry the write'
     return 1
   fi
+  rc=0
   cmp -s -- "$snapshot" "$readback" || rc=1
   rm -f -- "$readback" "$snapshot"
   if ((rc != 0)); then
