@@ -163,8 +163,14 @@ file when the operator configuration is elsewhere. The caller owns record
 fields, chain validation, fencing, and secret-free content. The transport has no
 delete operation and is not a distributed lock.
 
-The journal and proof use the reviewed AWS CLI 2.37.9 runtime and select its
-legacy error format so exact service codes remain classifiable.
+The journal uses reviewed `vngcloud` v0.78.0 native object GET and create-only
+PUT with a fixed HCM04 endpoint, isolated configuration, and bounded transfers.
+Its credential file must be a regular non-symlink file owned by the operator,
+mode 0600, containing only the static `[default]` key pair. The standalone proof
+uses the reviewed AWS CLI 2.37.9 runtime and selects its legacy error format.
+Its migration waits for native HEAD, DELETE, and bucket-versioning operations
+with S3 credentials; the AWS CLI empty-message conditional-conflict failure
+still blocks that proof.
 
 Before using the journal, run `scripts/drill-state-proof.sh` from an attended
 operator machine. The command creates one unique nonsecret object under
