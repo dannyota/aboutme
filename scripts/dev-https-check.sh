@@ -158,7 +158,22 @@ linkedin_input=
 mcp_fixture=
 mcp_client_name=
 mcp_seeded=0
+factor_fixture=
+factor_input=
+factor_proof=
+factor_seeded=0
+cleanup_factor_accounts() {
+  [ "$factor_seeded" -eq 1 ] || return 0
+  factor_seeded=0
+  if [ -e "$factor_input/second-factor-accounts.json" ]; then
+    ENV=dev "$factor_fixture" second-factor-cleanup --database-url "$NATIVE_DSN" \
+      --proof "$factor_proof" --credential-file "$factor_input/second-factor-accounts.json" \
+      >/dev/null 2>&1 || { printf '%s: fixture cleanup failed\n' "$TARGET" >&2; return 1; }
+  fi
+}
 cleanup() {
+  local result=$?
+  cleanup_factor_accounts || result=1
   [ -z "$staging" ] || rm -rf -- "$staging"
   [ -z "$password_input" ] || rm -rf -- "$password_input"
   [ -z "$mcp_input" ] || rm -rf -- "$mcp_input"
@@ -169,8 +184,22 @@ cleanup() {
     "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
       --client-name "$mcp_client_name" >/dev/null 2>&1 || true
   fi
+  exit "$result"
 }
 trap cleanup EXIT
+
+prepare_factor_accounts() {
+  factor_input=$1
+  factor_proof=$2
+  factor_fixture=$REPO/.dev/bin/password-auth-fixture
+  install -d -m 0700 "$REPO/.dev/bin"
+  (cd "$REPO/apps/server" && go build -o "$factor_fixture" ./cmd/password-auth-fixture) \
+    >/dev/null 2>&1 || fail 'factor fixture build failed'
+  factor_seeded=1
+  ENV=dev "$factor_fixture" second-factor-seed --database-url "$NATIVE_DSN" \
+    --proof "$factor_proof" --credential-file "$factor_input/second-factor-accounts.json" \
+    >/dev/null 2>&1 || fail 'factor fixture seed failed'
+}
 
 # new_client_name prints a fresh, uniquely named local OAuth client for a run
 # that registers a connected agent.
@@ -234,6 +263,7 @@ if [ "$MODE" = passkey ]; then
   printf '%s\n' "$mcp_client_name" >"$passkey_input/mcp-client-name"
   chmod 0600 "$passkey_input/caddy-root.crt" \
     "$passkey_input/mail-capture-token" "$passkey_input/mcp-client-name"
+  prepare_factor_accounts "$passkey_input" passkey
 
   install -d -m 0700 "$REPO/.dev/bin"
   mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
@@ -289,6 +319,7 @@ if [ "$MODE" = passkey ]; then
   else
     status=1
   fi
+  cleanup_factor_accounts || status=1
   prune_evidence passkey-enabled
   prune_evidence passkey-disabled
   [ "$status" -eq 0 ] || fail 'browser proof failed'
@@ -318,6 +349,7 @@ if [ "$MODE" = totp ]; then
   printf '%s\n' "$mcp_client_name" >"$totp_input/mcp-client-name"
   chmod 0600 "$totp_input/caddy-root.crt" \
     "$totp_input/mail-capture-token" "$totp_input/mcp-client-name"
+  prepare_factor_accounts "$totp_input" totp
 
   install -d -m 0700 "$REPO/.dev/bin"
   mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
@@ -376,6 +408,7 @@ if [ "$MODE" = totp ]; then
   else
     status=1
   fi
+  cleanup_factor_accounts || status=1
   prune_evidence totp-enabled
   prune_evidence totp-disabled
   [ "$status" -eq 0 ] || fail 'browser proof failed'

@@ -36,7 +36,6 @@ import {
   type Page,
   type Route,
 } from '@playwright/test';
-import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { freshCSRF } from './editor-fixtures';
 import {
@@ -109,8 +108,8 @@ import {
   passwordSignIn,
   type PendingLocaleCase,
   readRevealedCodes,
+  readSecondFactorAccounts,
   reauthenticateWithPassword,
-  registerVerified,
   setLocale,
   signOut,
   SIGNED_IN_WARM_ROUTES,
@@ -217,17 +216,6 @@ function classifySecondFactorConsole(message: ConsoleMessage): string | null {
         ?? (url.pathname.startsWith('/api/') ? 'api'
           : url.pathname.startsWith('/_nuxt/') ? 'asset' : 'other');
   return `${path}-${status}`;
-}
-
-// --- Fictional run identity -----------------------------------------------
-
-const RUN_MARKER = randomBytes(6).toString('hex');
-let accountSequence = 0;
-
-/** A fictional, per-run address in the reserved invalid top-level domain. */
-function runEmail(role: string): string {
-  accountSequence += 1;
-  return `pk-${role}-${RUN_MARKER}-${accountSequence}@example.invalid`;
 }
 
 // --- Page helpers -----------------------------------------------------------
@@ -375,6 +363,12 @@ test('proves the passkey second factor over native HTTPS', async ({
   context.on('page', attach);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
+  // Account preparation must work when live registration is unavailable.
+  let registrations = 0;
+  await context.route(`${ORIGIN}/api/v1/auth/password/register`, async (route) => {
+    registrations += 1;
+    await route.abort();
+  });
   await setLocale(context, 'en');
   await page.setViewportSize(DESKTOP);
 
@@ -390,12 +384,10 @@ test('proves the passkey second factor over native HTTPS', async ({
   stage('virtual-authenticator');
   const pool = await AuthenticatorPool.attach(context, page);
 
-  const primaryEmail = runEmail('primary');
-  const primaryPassword = runPassword();
-  const recoveryEmail = runEmail('recovery');
-  const recoveryPassword = runPassword();
-  const attemptsEmail = runEmail('attempts');
-  const attemptsPassword = runPassword();
+  const accountFor = await readSecondFactorAccounts('passkey');
+  const { email: primaryEmail, password: primaryPassword } = accountFor('primary');
+  const { email: recoveryEmail, password: recoveryPassword } = accountFor('recovery');
+  const { email: attemptsEmail, password: attemptsPassword } = accountFor('attempts');
 
   let authPrimary = '';
   let authRecovery = '';
@@ -405,26 +397,17 @@ test('proves the passkey second factor over native HTTPS', async ({
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
-  // Set right before each role's registerVerified call, so teardown can tell
-  // a role whose account creation was never attempted (for example a shard's
-  // first role failing before it gets that far) from one whose account
-  // exists and needs deleting.
-  const createdAccounts: Partial<Record<AccountRole, true>> = {};
+  // Browser cleanup covers the roles this shard visits. The host fixture
+  // removes every remaining seeded account by its exact identity.
+  const visitedAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider.
     if (runsRole('primary')) {
-    createdAccounts.primary = true;
+    visitedAccounts.primary = true;
     authPrimary = await pool.add();
     role('primary');
-    stage('primary-register');
-    await registerVerified(
-      page,
-      capture,
-      primaryEmail,
-      primaryPassword,
-      'Passkey Proof',
-    );
+    stage('primary-account');
     stage('primary-first-sign-in');
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('session');
@@ -731,18 +714,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     // 14. A second fictional account carries the recovery-code and ceremony
     //     cases, which need their own attempt budget.
     if (runsRole('recovery')) {
-    createdAccounts.recovery = true;
+    visitedAccounts.recovery = true;
     role('recovery');
     stage('recovery-account');
     await signOut(page);
     authRecovery = await pool.add();
-    await registerVerified(
-      page,
-      capture,
-      recoveryEmail,
-      recoveryPassword,
-      'Recovery Proof',
-    );
     expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
       .toBe('session');
     const codes = await enrollFirstPasskey(page, recoveryPassword);
@@ -826,18 +802,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     // 15. A third fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
     if (runsRole('attempts')) {
-    createdAccounts.attempts = true;
+    visitedAccounts.attempts = true;
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
     authAttempts = await pool.add();
-    await registerVerified(
-      page,
-      capture,
-      attemptsEmail,
-      attemptsPassword,
-      'Attempts Proof',
-    );
     expect(await passwordSignIn(page, attemptsEmail, attemptsPassword))
       .toBe('session');
     const attemptsCodes = await enrollFirstPasskey(page, attemptsPassword);
@@ -862,16 +831,17 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
     }
+    expect(registrations).toBe(0);
   } finally {
     // Read the page before teardown navigates away from a failure.
     failurePageState = await pageStateWords(page)
       + `-path-${landingCategory(page.url()).replace(/^landing-/u, '')}`;
     beginTeardown();
-    // Deletes only the accounts the active shard created (every account on
+    // Deletes only the accounts the active shard visited (every account on
     // the unsharded default), so a shard's cleanup step reports on exactly
     // its own accounts.
     const removed: boolean[] = [];
-    if (createdAccounts.primary) {
+    if (visitedAccounts.primary) {
       removed.push(await deletePasskeyAccount(page, pool, {
         authenticatorId: authPrimary,
         email: primaryEmail,
@@ -879,7 +849,7 @@ test('proves the passkey second factor over native HTTPS', async ({
         recoveryCode: primaryCleanupCode,
       }));
     }
-    if (createdAccounts.recovery) {
+    if (visitedAccounts.recovery) {
       removed.push(await deletePasskeyAccount(page, pool, {
         authenticatorId: authRecovery,
         email: recoveryEmail,
@@ -887,7 +857,7 @@ test('proves the passkey second factor over native HTTPS', async ({
         recoveryCode: recoveryCleanupCode,
       }));
     }
-    if (createdAccounts.attempts) {
+    if (visitedAccounts.attempts) {
       removed.push(await deletePasskeyAccount(page, pool, {
         authenticatorId: authAttempts,
         email: attemptsEmail,

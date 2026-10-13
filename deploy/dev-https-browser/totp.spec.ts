@@ -29,7 +29,6 @@ import {
   type Request,
   type Route,
 } from '@playwright/test';
-import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { freshCSRF } from './editor-fixtures';
 import {
@@ -104,8 +103,8 @@ import {
   passwordSignIn,
   type PendingLocaleCase,
   readRevealedCodes,
+  readSecondFactorAccounts,
   reauthenticateWithPassword,
-  registerVerified,
   setLocale,
   signOut,
   SIGNED_IN_WARM_ROUTES,
@@ -289,16 +288,6 @@ function classifyTotpConsole(message: ConsoleMessage): string | null {
   if (allowed !== undefined && allowed.includes(status)) return null;
   const index = [...EXPECTED_PAGE_FAILURES.keys()].indexOf(url.pathname);
   return `${index < 0 ? 'other' : `path${index}`}-${status}`;
-}
-
-// --- Fictional run identity --------------------------------------------
-
-const RUN_MARKER = randomBytes(6).toString('hex');
-let accountSequence = 0;
-
-function runEmail(role: string): string {
-  accountSequence += 1;
-  return `totp-${role}-${RUN_MARKER}-${accountSequence}@example.invalid`;
 }
 
 // --- Page helpers ------------------------------------------------------
@@ -668,6 +657,12 @@ async function provesEnabledJourney(
   context.on('page', attach);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
+  // Account preparation must work when live registration is unavailable.
+  let registrations = 0;
+  await context.route(`${ORIGIN}/api/v1/auth/password/register`, async (route) => {
+    registrations += 1;
+    await route.abort();
+  });
   await setLocale(context, 'en');
   await page.setViewportSize(DESKTOP);
 
@@ -682,24 +677,16 @@ async function provesEnabledJourney(
     (await readFile(CAPTURE_TOKEN_PATH, 'utf8')).trim(),
   );
 
-  const primaryEmail = runEmail('primary');
-  const primaryPassword = runPassword();
-  const skewEmail = runEmail('skew');
-  const skewPassword = runPassword();
-  const replayEmail = runEmail('replay');
-  const replayPassword = runPassword();
-  const concurrentEmail = runEmail('concurrent');
-  const concurrentPassword = runPassword();
-  const replaceEmail = runEmail('replace');
-  const replacePassword = runPassword();
-  const epochEmail = runEmail('epoch');
-  const epochPassword = runPassword();
-  const localeEmail = runEmail('locale');
-  const localePassword = runPassword();
-  const recoveryEmail = runEmail('recovery');
-  const recoveryPassword = runPassword();
-  const attemptsEmail = runEmail('attempts');
-  const attemptsPassword = runPassword();
+  const accountFor = await readSecondFactorAccounts('totp');
+  const { email: primaryEmail, password: primaryPassword } = accountFor('primary');
+  const { email: skewEmail, password: skewPassword } = accountFor('skew');
+  const { email: replayEmail, password: replayPassword } = accountFor('replay');
+  const { email: concurrentEmail, password: concurrentPassword } = accountFor('concurrent');
+  const { email: replaceEmail, password: replacePassword } = accountFor('replace');
+  const { email: epochEmail, password: epochPassword } = accountFor('epoch');
+  const { email: localeEmail, password: localePassword } = accountFor('locale');
+  const { email: recoveryEmail, password: recoveryPassword } = accountFor('recovery');
+  const { email: attemptsEmail, password: attemptsPassword } = accountFor('attempts');
 
   const primaryTracker = newStepTracker();
   const skewTracker = newStepTracker();
@@ -722,11 +709,9 @@ async function provesEnabledJourney(
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
-  // Set right before each role's registerVerified call, so teardown can
-  // tell a role whose account creation was never attempted (for example a
-  // shard's first role failing before it gets that far) from one whose
-  // account exists and needs deleting.
-  const createdAccounts: Partial<Record<AccountRole, true>> = {};
+  // Browser cleanup covers the roles this shard visits. The host fixture
+  // removes every remaining seeded account by its exact identity.
+  const visitedAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider,
@@ -734,15 +719,8 @@ async function provesEnabledJourney(
     //    enrollment so completion's epoch change can be proved against them.
     if (runsRole('primary')) {
     role('primary');
-    stage('primary-register');
-    createdAccounts.primary = true;
-    await registerVerified(
-      page,
-      capture,
-      primaryEmail,
-      primaryPassword,
-      'TOTP Proof',
-    );
+    stage('primary-account');
+    visitedAccounts.primary = true;
     stage('primary-first-sign-in');
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('session');
@@ -1041,14 +1019,7 @@ async function provesEnabledJourney(
     role('skew');
     stage('skew-account');
     await signOut(page);
-    createdAccounts.skew = true;
-    await registerVerified(
-      page,
-      capture,
-      skewEmail,
-      skewPassword,
-      'TOTP Skew Proof',
-    );
+    visitedAccounts.skew = true;
     expect(await passwordSignIn(page, skewEmail, skewPassword))
       .toBe('session');
     const skewEnrolled = await enrollFirstTotp(
@@ -1094,14 +1065,7 @@ async function provesEnabledJourney(
     role('replay');
     stage('replay-account');
     await signOut(page);
-    createdAccounts.replay = true;
-    await registerVerified(
-      page,
-      capture,
-      replayEmail,
-      replayPassword,
-      'TOTP Replay Proof',
-    );
+    visitedAccounts.replay = true;
     expect(await passwordSignIn(page, replayEmail, replayPassword))
       .toBe('session');
     const replayEnrolled = await enrollFirstTotp(
@@ -1145,14 +1109,7 @@ async function provesEnabledJourney(
     role('concurrent');
     stage('concurrent-account');
     await signOut(page);
-    createdAccounts.concurrent = true;
-    await registerVerified(
-      page,
-      capture,
-      concurrentEmail,
-      concurrentPassword,
-      'TOTP Concurrent Proof',
-    );
+    visitedAccounts.concurrent = true;
     expect(await passwordSignIn(page, concurrentEmail, concurrentPassword))
       .toBe('session');
     const concurrentEnrolled = await enrollFirstTotp(
@@ -1201,14 +1158,7 @@ async function provesEnabledJourney(
     role('replace');
     stage('replace-account');
     await signOut(page);
-    createdAccounts.replace = true;
-    await registerVerified(
-      page,
-      capture,
-      replaceEmail,
-      replacePassword,
-      'TOTP Replace Proof',
-    );
+    visitedAccounts.replace = true;
     expect(await passwordSignIn(page, replaceEmail, replacePassword))
       .toBe('session');
     const replaceEnrolled = await enrollFirstTotp(
@@ -1267,14 +1217,7 @@ async function provesEnabledJourney(
     role('epoch');
     stage('epoch-account');
     await signOut(page);
-    createdAccounts.epoch = true;
-    await registerVerified(
-      page,
-      capture,
-      epochEmail,
-      epochPassword,
-      'TOTP Epoch Proof',
-    );
+    visitedAccounts.epoch = true;
     expect(await passwordSignIn(page, epochEmail, epochPassword))
       .toBe('session');
     const epochEnrolled = await enrollFirstTotp(
@@ -1332,14 +1275,7 @@ async function provesEnabledJourney(
     role('locale');
     stage('locale-account');
     await signOut(page);
-    createdAccounts.locale = true;
-    await registerVerified(
-      page,
-      capture,
-      localeEmail,
-      localePassword,
-      'TOTP Locale Proof',
-    );
+    visitedAccounts.locale = true;
     expect(await passwordSignIn(page, localeEmail, localePassword))
       .toBe('session');
     const localeEnrolled = await enrollFirstTotp(
@@ -1396,14 +1332,7 @@ async function provesEnabledJourney(
     role('recovery');
     stage('recovery-account');
     await signOut(page);
-    createdAccounts.recovery = true;
-    await registerVerified(
-      page,
-      capture,
-      recoveryEmail,
-      recoveryPassword,
-      'TOTP Recovery Proof',
-    );
+    visitedAccounts.recovery = true;
     expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
       .toBe('session');
     const recoveryEnrolled = await enrollFirstTotp(
@@ -1427,14 +1356,7 @@ async function provesEnabledJourney(
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
-    createdAccounts.attempts = true;
-    await registerVerified(
-      page,
-      capture,
-      attemptsEmail,
-      attemptsPassword,
-      'TOTP Attempts Proof',
-    );
+    visitedAccounts.attempts = true;
     expect(await passwordSignIn(page, attemptsEmail, attemptsPassword))
       .toBe('session');
     const attemptsEnrolled = await enrollFirstTotp(
@@ -1460,6 +1382,7 @@ async function provesEnabledJourney(
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
     }
+    expect(registrations).toBe(0);
   } finally {
     // Snapshot the page before teardown navigates away from the failure.
     try {
@@ -1470,67 +1393,67 @@ async function provesEnabledJourney(
       // A closed page leaves the defaults.
     }
     beginTeardown();
-    // Deletes only the accounts the active shard created (every account on
+    // Deletes only the accounts the active shard visited (every account on
     // the unsharded default), so a shard's cleanup step reports on exactly
     // its own accounts.
     const removed: boolean[] = [];
-    if (createdAccounts.primary) {
+    if (visitedAccounts.primary) {
       removed.push(await deleteAccount(page, {
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.skew) {
+    if (visitedAccounts.skew) {
       removed.push(await deleteAccount(page, {
         email: skewEmail,
         password: skewPassword,
         recoveryCode: skewCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.replay) {
+    if (visitedAccounts.replay) {
       removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.concurrent) {
+    if (visitedAccounts.concurrent) {
       removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.replace) {
+    if (visitedAccounts.replace) {
       removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.epoch) {
+    if (visitedAccounts.epoch) {
       removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.locale) {
+    if (visitedAccounts.locale) {
       removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.recovery) {
+    if (visitedAccounts.recovery) {
       removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
       }, CLEANUP_LANDING_MS));
     }
-    if (createdAccounts.attempts) {
+    if (visitedAccounts.attempts) {
       removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
