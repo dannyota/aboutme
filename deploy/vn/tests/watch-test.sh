@@ -87,7 +87,7 @@ EOF
 run_watch "$base" "$work/base.alerts"
 run_watch "$with_diagnostic" "$work/diagnostic.alerts"
 cmp "$work/base.alerts" "$work/diagnostic.alerts"
-grep -qxF 'coraza-matches|Coraza matched 1 requests in the last hour' "$work/diagnostic.alerts"
+grep -qxF 'coraza-matches|Coraza recorded 1 rule matches in the last hour' "$work/diagnostic.alerts"
 grep -qxF 'coraza-unparsed|Coraza wrote 1 unparsed match records in the last hour' "$work/diagnostic.alerts"
 grep -qxF 'coraza-log-invalid|the Coraza match log has 1 unknown records in the last hour' "$work/diagnostic.alerts"
 [[ $(wc -l <"$work/diagnostic.alerts") == 3 ]] || {
