@@ -168,18 +168,22 @@ PUT with a fixed HCM04 endpoint, isolated configuration, and bounded transfers.
 Its credential file must be a regular non-symlink file owned by the operator,
 mode 0600, containing only the static `[default]` key pair. The standalone proof
 uses reviewed `vngcloud` v0.81.0 native HEAD, create-only PUT, bounded GET, and
-DELETE. Its only AWS CLI 2.37.9 operation is the isolated read-only bucket
-versioning preflight. Native bucket versioning with S3 credentials is
-unavailable in v0.81.0. Live proof waits for native versioning support; source
-review does not establish live success.
+DELETE with the existing state key. Its read-only management versioning check
+uses the operator's environment credentials or `VNG_PROFILE`, following
+[the laptop credential convention](#credentials-on-the-laptop). Management
+credentials remain outside each isolated object-operation environment.
 
-Before using the journal, run `scripts/drill-state-proof.sh` from an attended
-operator machine. The command creates one unique nonsecret object under
-`restore-drill/probes/`, proves that a second conditional write is refused,
-reads back the original bytes, and deletes only that object. It refuses a
-version-enabled or version-suspended bucket because deletion could retain an
-older object version. Its final absence check covers the current object key; it
-does not claim physical erasure by the storage provider.
+Before using the journal, run
+`scripts/drill-state-proof.sh --storage-project-id <existing-HCM04-project-id>`
+from an attended operator machine with those management credentials loaded. Use
+the existing state bucket's storage project ID, as passed to `buckets.sh`. The
+explicit management region `hcm-3` selects HCM04. The check accepts only
+`{"Enabled":false,"Status":"Off"}` as never configured and rejects every other
+versioning result before writing. The command creates one unique nonsecret
+object under `restore-drill/probes/`, proves that a second conditional write is
+refused, reads back the original bytes, and deletes only that object. Its final
+absence check covers the current object key; it does not claim physical erasure
+by the storage provider. Source review does not establish live proof success.
 
 During the short proof, no other process may mutate its printed, unpredictable
 probe key and no administrator may change bucket versioning. Unrelated state and

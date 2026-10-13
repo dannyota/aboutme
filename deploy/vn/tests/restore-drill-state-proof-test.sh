@@ -19,29 +19,7 @@ exec "$@"
 STUB
 cat >"$work/bin/aws" <<'STUB'
 #!/usr/bin/env bash
-set -euo pipefail
-root=$(cd "$(dirname "$0")/.." && pwd)
-name=$(cat "$root/current.case")
-printf '%q ' "$@" >>"$root/$name.aws.log"
-printf '\n' >>"$root/$name.aws.log"
-[[ $AWS_SHARED_CREDENTIALS_FILE == "$root/credentials" ]]
-[[ $(cat "$AWS_CONFIG_FILE") == $'[default]\ns3 =\n    addressing_style = path' ]]
-[[ $AWS_MAX_ATTEMPTS == 1 && $AWS_EC2_METADATA_DISABLED == true ]]
-[[ $* == '--profile default --endpoint-url https://hcm04.vstorage.vngcloud.vn --region HCM04 --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy s3api get-bucket-versioning --bucket aboutme-tfstate' ]]
-while IFS='=' read -r variable _; do
-  case $variable in
-    PATH | AWS_SHARED_CREDENTIALS_FILE | AWS_CONFIG_FILE | AWS_EC2_METADATA_DISABLED | \
-      AWS_MAX_ATTEMPTS | AWS_RETRY_MODE | AWS_PAGER | AWS_CLI_AUTO_PROMPT | PWD | SHLVL | _) : ;;
-    *) exit 2 ;;
-  esac
-done < <(env)
-case $name in
-  versioned) printf '{"Status":"Enabled"}\n' ;;
-  suspended) printf '{"Status":"Suspended"}\n' ;;
-  versioning-unknown) printf '{"Status":"Paused"}\n' ;;
-  versioning-error) exit 1 ;;
-  *) : ;;
-esac
+exit 2
 STUB
 cat >"$work/bin/vngcloud" <<'STUB'
 #!/usr/bin/env bash
@@ -50,6 +28,35 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 name=$(cat "$root/current.case")
 store=$root/$name.object
 log=$root/$name.log
+if [[ $* == *get-bucket-versioning* ]]; then
+  printf '%q ' "$@" >>"$root/$name.management.log"
+  printf '\n' >>"$root/$name.management.log"
+  if [[ $name == success-profile ]]; then
+    [[ $1 == --profile && $2 == operator ]]
+    shift 2
+  else
+    [[ $1 != --profile ]]
+  fi
+  [[ $# == 13 && $1 == --region && $2 == hcm-3 && $3 == --output && $4 == json ]]
+  [[ $5 == --query && -z $6 && $7 == --read-only && $8 == storage && $9 == get-bucket-versioning ]]
+  [[ ${10} == --project-id && ${11} == storage-fixture && ${12} == --bucket && ${13} == aboutme-tfstate ]]
+  [[ $VNGCLOUD_CLIENT_SECRET == poison && $VNGCLOUD_CONFIG_FILE == "$root/poison" ]]
+  case $name in
+    versioned) printf '{"Enabled":true,"Status":"Enabled"}\n' ;;
+    suspended) printf '{"Enabled":false,"Status":"Suspended"}\n' ;;
+    versioning-unknown) printf '{"Enabled":false,"Status":"Unknown"}\n' ;;
+    versioning-error) printf '{"Enabled":false,"Status":"Off"}\n'; exit 1 ;;
+    versioning-inconsistent) printf '{"Enabled":true,"Status":"Off"}\n' ;;
+    versioning-type) printf '{"Enabled":"false","Status":"Off"}\n' ;;
+    versioning-missing) printf '{"Status":"Off"}\n' ;;
+    versioning-extra) printf '{"Enabled":false,"Status":"Off","extra":true}\n' ;;
+    versioning-empty) : ;;
+    versioning-malformed) printf '{bad}\n' ;;
+    versioning-concat) printf '{"Enabled":false,"Status":"Off"}\n{"Enabled":false,"Status":"Off"}\n' ;;
+    *) printf '{"Enabled":false,"Status":"Off"}\n' ;;
+  esac
+  exit 0
+fi
 printf '%q ' "$@" >>"$log"
 printf '\n' >>"$log"
 [[ $(cat "$VNGCLOUD_CONFIG_FILE") == '[default]' ]]
@@ -150,16 +157,19 @@ STUB
 chmod +x "$work/bin/"*
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 run_case() {
-  local name=$1
+  local name=$1 project=storage-fixture profile=
+  [[ $name != success-profile ]] || profile=operator
+  [[ $name != missing-project ]] || project=
+  [[ $name != invalid-project ]] || project='bad project'
   : >"$work/$name.log"
-  : >"$work/$name.aws.log"
+  : >"$work/$name.management.log"
   printf '%s\n' "$name" >"$work/current.case"
   rm -f "$work/$name.object" "$work/get-count" "$work/deleted"
   PATH=$work/bin:$PATH DRILL_STATE_CREDENTIALS_FILE=$work/credentials \
     AWS_ACCESS_KEY_ID=poison AWS_SECRET_ACCESS_KEY=poison AWS_PROFILE=poison \
-    VNGCLOUD_CONFIG_FILE=$work/poison VNGCLOUD_PROFILE=poison \
+    VNG_PROFILE=$profile VNGCLOUD_CONFIG_FILE=$work/poison VNGCLOUD_PROFILE=poison \
     VNGCLOUD_READ_ONLY=true VNGCLOUD_CLIENT_SECRET=poison HTTPS_PROXY=http://poison \
-    bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" >"$work/$name.out" 2>&1
+    bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" --storage-project-id "$project" >"$work/$name.out" 2>&1
 }
 expect_failure() { if run_case "$1"; then fail "$1 succeeded"; fi; }
 no_call() { if grep -q "$2" "$work/$1.log"; then fail "$1 made forbidden $2"; fi; }
@@ -169,13 +179,16 @@ recovery() {
   no_call "$1" delete-object
 }
 run_case success || fail 'success failed'
-[[ $(wc -l <"$work/success.aws.log") == 1 ]] || fail 'AWS read was not isolated'
+[[ $(wc -l <"$work/success.management.log") == 1 ]] || fail 'management read was not isolated'
+run_case success-profile || fail 'operator profile failed'
 for tuple in 'put-object 2' 'get-object 2' 'delete-object 1' 'head-object 2'; do
   read -r operation expected <<<"$tuple"
   [[ $(grep -c "$operation" "$work/success.log") == "$expected" ]] || fail "$operation count"
 done
 [[ ! -e $work/success.object ]] || fail 'successful probe remains'
-for name in versioned suspended versioning-unknown versioning-error preexisting denied \
+for name in versioned suspended versioning-unknown versioning-error versioning-inconsistent \
+  versioning-type versioning-missing versioning-extra versioning-empty versioning-malformed \
+  versioning-concat missing-project invalid-project preexisting denied \
   head-text head-malformed head-concat head-type head-code head-op head-exit head-timeout head-array; do
   expect_failure "$name"
   no_call "$name" put-object
