@@ -107,8 +107,11 @@ Restore the shared database only after `make dev-down`, and only when later work
 needs it.
 
 An updated checkout rebuilds images and applies pending embedded goose
-migrations on the next `make dev`. Released migrations are append-only. Back up
-operator data before an update; a tested restore procedure is not yet shipped.
+migrations on the next `make dev`. Migration history is editable before the
+application v1 baseline under [ADR 0005](../adr/0005-database-migrations.md).
+Repository edits do not change already-applied database history; reconcile that
+state during an update. Back up operator data before an update; a tested restore
+procedure is not yet shipped.
 
 Do not delete the Compose volume as a routine stop or update step.
 
