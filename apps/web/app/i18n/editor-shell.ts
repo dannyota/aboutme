@@ -34,6 +34,7 @@ export type EditorShellCopy = {
   readonly addSection: string;
   readonly resumeOutline: string;
   readonly sections: string;
+  readonly close: string;
   readonly resumeSections: string;
   readonly edit: string;
   readonly preview: string;
@@ -93,6 +94,7 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     addSection: 'Thêm phần',
     resumeOutline: 'Dàn ý CV',
     sections: 'Phần',
+    close: 'Đóng',
     resumeSections: 'Các phần trong CV',
     edit: 'Chỉnh sửa',
     preview: 'Xem trước',
@@ -178,6 +180,7 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     addSection: 'Add section',
     resumeOutline: 'Resume outline',
     sections: 'Sections',
+    close: 'Close',
     resumeSections: 'Resume sections',
     edit: 'Edit',
     preview: 'Preview',
