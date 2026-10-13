@@ -162,6 +162,8 @@ else
   esac
 fi
 
+say "nonsecret probe recovery key: s3://$BUCKET/$key"
+
 if ! native_call put-object --bucket "$BUCKET" --key "$key" --body "$work/first.json" >/dev/null 2>"$work/errors"; then
   die "create response is ambiguous; inspect the nonsecret recovery key: s3://$BUCKET/$key"
 fi
