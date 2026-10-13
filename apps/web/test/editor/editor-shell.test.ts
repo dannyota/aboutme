@@ -621,11 +621,11 @@ describe('EditorShell', () => {
   });
 
   it.each([
-    ['vi', 'Đóng', 'en', 'Close'],
-    ['en', 'Close', 'vi', 'Đóng'],
+    ['vi', 'Đóng', 'English', 'Close'],
+    ['en', 'Close', 'Tiếng Việt', 'Đóng'],
   ] as const)(
     'keeps the %s sheet close named and reachable across a locale change',
-    async (locale, label, nextLocale, nextLabel) => {
+    async (locale, label, nextLanguage, nextLabel) => {
       setSiteLocale(locale);
       const wrapper = mountShell({}, { attachTo: document.body });
       try {
@@ -648,7 +648,7 @@ describe('EditorShell', () => {
           .toBe('true');
         close.focus();
         sheet.querySelector<HTMLButtonElement>(
-          `[data-testid="workspace-locale-${nextLocale}"]`,
+          `button[aria-label="${nextLanguage}"]`,
         )!.click();
         await wrapper.vm.$nextTick();
 
