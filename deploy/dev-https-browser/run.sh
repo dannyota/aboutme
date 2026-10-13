@@ -61,7 +61,7 @@ mode_input_entries() {
   password-auth | sample-start | linkedin) printf 'caddy-root.crt\nmail-capture-token' ;;
   mcp | privacy | mcp-ts-sdk) printf 'caddy-root.crt\nmcp-client-name' ;;
   second-factor | totp)
-    printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name'
+    printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name\nsecond-factor-accounts.json'
     ;;
   totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup)
     printf 'account.env'
@@ -80,7 +80,7 @@ mode_input_diagnostic() {
     printf 'MCP input must contain the Caddy root and the run client name'
     ;;
   second-factor | totp)
-    printf 'CA input must contain the Caddy root, the capture token, and the run client name'
+    printf 'CA input must contain the Caddy root, capture token, run client name, and private factor accounts'
     ;;
   totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup)
     printf 'production input must contain exactly the fictional account file'
@@ -133,9 +133,23 @@ validate_mode_input_files() {
     validate_mcp_client_name_file "$dir/mcp-client-name" "$uid"
     ;;
   esac
+  case $mode in
+  second-factor | totp)
+    validate_factor_accounts_file "$dir/second-factor-accounts.json" "$uid"
+    ;;
+  esac
   if mode_is_totp_production "$mode"; then
     validate_account_file "$dir/account.env" "$uid"
   fi
+}
+
+validate_factor_accounts_file() {
+  local path=$1 uid=$2
+  [ -f "$path" ] && [ ! -L "$path" ] || fail 'factor accounts are not a regular file'
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'factor accounts owner mismatch'
+  [ "$(stat -c %a "$path")" = 600 ] || fail 'factor accounts mode must be 0600'
+  [ "$(stat -c %h "$path")" = 1 ] || fail 'factor accounts must have one hard link'
+  [ "$(stat -c %s "$path")" -le 8192 ] || fail 'factor accounts exceed their bound'
 }
 
 validate_account_file() {

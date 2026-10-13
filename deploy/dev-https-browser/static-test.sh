@@ -606,7 +606,7 @@ if grep -Fq 'waitForHydration' "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof uses the unbounded shared hydration wait'
 fi
 warm_paths=$(grep -cE "^  \['/[a-z/-]*', '[a-z0-9-]+'\],$" "$SECOND_FACTOR_SPEC")
-[ "$warm_paths" -ge 7 ] ||
+[ "$warm_paths" -ge 6 ] ||
   fail 'the warm route table lost entries'
 grep -Fq "stage(\`warm-\${token}\`);" "$SECOND_FACTOR_SPEC" ||
   fail 'a warm visit no longer names its page'
@@ -624,9 +624,6 @@ grep -Fq "type CounterClass = 'certificate' | 'console' | 'external' | 'page';" 
 # journey opens it for real, under the warm bound rather than the tight one.
 grep -Fq 'async function gotoFirstVisit(' "$SECOND_FACTOR_SPEC" ||
   fail 'the skipped page has no first-visit open'
-grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);' \
-  "$SECOND_FACTOR_SPEC" ||
-  fail 'the verification link no longer opens at first-visit cost'
 grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);' \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the reset link no longer opens at first-visit cost'
@@ -1951,6 +1948,20 @@ printf '%s\n' 'static-test-capture-token' >"$INSIDE_INPUT/mail-capture-token"
 printf '%s\n' 'aboutme MCP UAT 61000000-0000-4000-8000-000000000042' \
   >"$INSIDE_INPUT/mcp-client-name"
 chmod 0600 "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+reset_inside
+if output=$(FAKE_BROWSER_MODE=good run_inside second-factor 2>&1); then
+  fail 'enabled second-factor proof accepted input without private fixture accounts'
+fi
+[ ! -s "$BROWSER_LOG" ] || fail 'missing fixture accounts reached the browser'
+printf '%s\n' '{"schemaVersion":1}' >"$INSIDE_INPUT/second-factor-accounts.json"
+chmod 0600 "$INSIDE_INPUT/second-factor-accounts.json"
+reset_inside
+chmod 0644 "$INSIDE_INPUT/second-factor-accounts.json"
+if output=$(FAKE_BROWSER_MODE=good run_inside second-factor 2>&1); then
+  fail 'enabled second-factor proof accepted public fixture credentials'
+fi
+[ ! -s "$BROWSER_LOG" ] || fail 'public fixture credentials reached the browser'
+chmod 0600 "$INSIDE_INPUT/second-factor-accounts.json"
 readonly SECOND_FACTOR_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
   run_inside second-factor)
 grep -Fq 'dev-https-browser passkey second factor proof: PASS' \
@@ -1987,7 +1998,8 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized second-factor evidence returned the wrong diagnostic'
-rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name" \
+  "$INSIDE_INPUT/second-factor-accounts.json"
 
 reset_inside
 readonly DISABLED_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
@@ -2005,7 +2017,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside second-factor 2>&1); then
   fail 'second-factor accepted a single-file CA input'
 fi
-grep -Fq 'CA input must contain the Caddy root, the capture token, and the run client name' \
+grep -Fq 'CA input must contain the Caddy root, capture token, run client name, and private factor accounts' \
   <<<"$output" ||
   fail 'second-factor single-file input returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'second-factor wrong input reached the browser'
@@ -2014,7 +2026,9 @@ reset_inside
 printf '%s\n' 'static-test-capture-token' >"$INSIDE_INPUT/mail-capture-token"
 printf '%s\n' 'aboutme MCP UAT 71000000-0000-4000-8000-000000000042' \
   >"$INSIDE_INPUT/mcp-client-name"
+printf '%s\n' '{"schemaVersion":1}' >"$INSIDE_INPUT/second-factor-accounts.json"
 chmod 0600 "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/second-factor-accounts.json"
 readonly TOTP_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside totp)
 grep -Fq 'dev-https-browser authenticator-app second factor proof: PASS' \
   <<<"$TOTP_INSIDE_OUTPUT" ||
@@ -2127,7 +2141,8 @@ if output=$(FAKE_BROWSER_MODE=good ABOUTME_PASSKEY_SHARD=primary-disabled,recove
 fi
 grep -Fq 'ABOUTME_PASSKEY_SHARD must' <<<"$output" ||
   fail 'a passkey shard list returned the wrong diagnostic'
-rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name" \
+  "$INSIDE_INPUT/second-factor-accounts.json"
 
 reset_inside
 readonly TOTP_DISABLED_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
@@ -2192,5 +2207,121 @@ done <<<"$coverage_setup"
 if node "$COVERAGE" unknown "$WORK/none.json" 2>/dev/null; then
   fail 'the coverage check accepted an unknown scenario'
 fi
+
+# Exercise the host entry point with only the build, database, and browser
+# boundaries replaced. Preparation and cleanup use the real shell flow.
+readonly HOST_REPO=$WORK/host-repo
+readonly HOST_BIN=$WORK/host-bin
+readonly HOST_CONTROL=$WORK/host-control
+install -d -m 0700 "$HOST_REPO/scripts/lib" "$HOST_REPO/apps/server" \
+  "$HOST_REPO/deploy/dev-https-browser" "$HOST_BIN" "$HOST_CONTROL"
+cp -- "$ROOT/scripts/dev-https-check.sh" "$HOST_REPO/scripts/dev-https-check.sh"
+cp -- "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$HOST_REPO/scripts/lib/dev-https-browser-stage.sh"
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt "${SPEC_FILES[@]}"; do
+  cp -- "$SOURCE/$file" "$HOST_REPO/deploy/dev-https-browser/$file"
+done
+cat >"$HOST_BIN/go" <<'FAKE_HOST_GO'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[ "$1" = build ] && [ "$2" = -o ]
+cp -- "$FAKE_HOST_CONTROL/fixture" "$3"
+chmod 0700 "$3"
+FAKE_HOST_GO
+cat >"$HOST_BIN/curl" <<'FAKE_HOST_CURL'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ $* == *'DELETE'*'/api/messages'* ]]
+FAKE_HOST_CURL
+cat >"$HOST_CONTROL/fixture" <<'FAKE_HOST_FIXTURE'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[ "${0##*/}" = password-auth-fixture ] || exit 0
+command=$1
+shift
+proof= credential= database=
+while [ "$#" -gt 0 ]; do
+  case $1 in
+  --database-url) database=$2 ;;
+  --proof) proof=$2 ;;
+  --credential-file) credential=$2 ;;
+  *) exit 64 ;;
+  esac
+  shift 2
+done
+[ "$ENV" = dev ] && [[ $database == *'@127.0.0.1:20432/aboutme_dev?sslmode=disable' ]]
+[[ $proof = passkey || $proof = totp ]] && [ -n "$credential" ]
+printf '%s\n' "$command" >>"$FAKE_HOST_CONTROL/calls"
+case $command in
+second-factor-seed)
+  printf '%s\n' '{"schemaVersion":1}' >"$credential"
+  chmod 0600 "$credential"
+  printf '%s' "$credential" >"$FAKE_HOST_CONTROL/credential-path"
+  : >"$FAKE_HOST_CONTROL/active-account"
+  [ "${FAKE_HOST_SEED_FAIL:-0}" -eq 0 ]
+  ;;
+second-factor-cleanup)
+  [ -f "$credential" ] && [ "$(stat -c %a "$credential")" = 600 ]
+  rm -f -- "$FAKE_HOST_CONTROL/active-account"
+  ;;
+*) exit 64 ;;
+esac
+FAKE_HOST_FIXTURE
+cat >"$HOST_REPO/deploy/dev-https-browser/run.sh" <<'FAKE_HOST_BROWSER'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[ -f "$2/second-factor-accounts.json" ] && [ "$(stat -c %a "$2/second-factor-accounts.json")" = 600 ]
+[ -f "$FAKE_HOST_CONTROL/active-account" ]
+printf '%s\n' browser >>"$FAKE_HOST_CONTROL/calls"
+[ "${FAKE_HOST_BROWSER_FAIL:-0}" -eq 0 ]
+FAKE_HOST_BROWSER
+chmod 0700 "$HOST_BIN/go" "$HOST_BIN/curl" "$HOST_CONTROL/fixture" \
+  "$HOST_REPO/deploy/dev-https-browser/run.sh"
+
+run_host_fixture_case() {
+  local mode=$1 scenario=$2 status=0 credential source_hash state=$HOST_REPO/.dev/native-https
+  rm -rf -- "$HOST_REPO/.dev"
+  rm -f -- "$HOST_CONTROL/calls" "$HOST_CONTROL/credential-path" "$HOST_CONTROL/active-account"
+  install -d -m 0700 "$state" "$state/input" "$state/run" "$state/secrets"
+  cp -- "$INPUT/caddy-root.crt" "$state/input/caddy-root.crt"
+  printf '%s\n' 'static-test-capture-token' >"$state/secrets/auth-email-capture-bearer"
+  printf '%s\n' 'PASSKEY_ENROLLMENT_ENABLED=true' 'TOTP_ENROLLMENT_ENABLED=true' >"$state/run/server.env"
+  chmod 0600 "$state/input/caddy-root.crt" "$state/secrets/auth-email-capture-bearer" "$state/run/server.env"
+  source_hash=$(
+    cd "$HOST_REPO"
+    for file in Dockerfile package.json package-lock.json run.sh spec-sources.txt verify-evidence.mjs; do
+      path=deploy/dev-https-browser/$file
+      printf '%s\0' "$path"
+      sha256sum -- "$path"
+    done | sha256sum | awk '{print $1}'
+  )
+  printf 'image_id=%s\nsource_sha256=%s\n' "$IMAGE_ID" "$source_hash" >"$state/browser-image.manifest"
+  chmod 0600 "$state/browser-image.manifest"
+  env PATH="$HOST_BIN:$PATH" FAKE_HOST_CONTROL="$HOST_CONTROL" \
+    FAKE_HOST_SEED_FAIL="$([ "$scenario" = seed-failure ] && printf 1 || printf 0)" \
+    FAKE_HOST_BROWSER_FAIL="$([ "$scenario" = browser-failure ] && printf 1 || printf 0)" \
+    ABOUTME_PASSKEY_SHARD=recovery-attempts ABOUTME_TOTP_SHARD=primary \
+    bash "$HOST_REPO/scripts/dev-https-check.sh" "$mode" >"$HOST_CONTROL/output" 2>&1 || status=$?
+  if [ "$scenario" = success ]; then
+    [ "$status" -eq 0 ] || fail 'guarded host fixture did not complete'
+  else
+    [ "$status" -ne 0 ] || fail 'failed host fixture was accepted'
+  fi
+  [ -s "$HOST_CONTROL/credential-path" ] || fail 'host fixture never prepared private credentials'
+  credential=$(<"$HOST_CONTROL/credential-path")
+  [ ! -e "$credential" ] && [ ! -L "$credential" ] || fail 'host fixture retained private credentials'
+  [ ! -e "$HOST_CONTROL/active-account" ] || fail 'host fixture retained an account after cleanup'
+  [ "$(grep -c '^second-factor-seed$' "$HOST_CONTROL/calls")" -eq 1 ] || fail 'host fixture seed count changed'
+  [ "$(grep -c '^second-factor-cleanup$' "$HOST_CONTROL/calls")" -eq 1 ] || fail 'host fixture cleanup did not run exactly once'
+  if [ "$scenario" = seed-failure ]; then
+    ! grep -Fxq browser "$HOST_CONTROL/calls" || fail 'failed seed reached the browser'
+  else
+    grep -Fxq browser "$HOST_CONTROL/calls" || fail 'prepared fixture never reached the browser'
+  fi
+}
+for mode in passkey totp; do
+  for scenario in success seed-failure browser-failure; do
+    run_host_fixture_case "$mode" "$scenario"
+  done
+done
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

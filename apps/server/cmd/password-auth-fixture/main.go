@@ -1,8 +1,7 @@
 // Command password-auth-fixture seeds and cleans native HTTPS proof state in
 // the shared native development database (aboutme_dev). It prepares three
-// fixed accounts and the MCP proof's runtime-random reserved account. Browser
-// proofs create their own runtime-random accounts. Cleanup removes the fixed
-// accounts and reserved test rows.
+// fixed accounts and the MCP and second-factor proofs' runtime-random reserved
+// accounts. Cleanup removes the fixed accounts and reserved test rows.
 //
 // Usage:
 //
@@ -10,9 +9,12 @@
 //	password-auth-fixture mcp-seed --database-url <dsn> --credential-file <path>
 //	password-auth-fixture cleanup --database-url <dsn>
 //	password-auth-fixture linkedin-cleanup --database-url <dsn>
+//	password-auth-fixture second-factor-seed --database-url <dsn> --proof passkey|totp --credential-file <path>
+//	password-auth-fixture second-factor-cleanup --database-url <dsn> --proof passkey|totp --credential-file <path>
 //
 // linkedin-cleanup removes the rows the LinkedIn browser proof creates.
 // mcp-seed requires ENV=dev and the MCP proof's private credential file.
+// Second-factor commands require ENV=dev and a private run-scoped account file.
 package main
 
 import (
