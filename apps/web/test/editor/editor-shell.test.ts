@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { computed, defineComponent, inject, type ComputedRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -658,9 +658,11 @@ describe('EditorShell', () => {
         expect(document.activeElement).toBe(close);
         close.click();
         await wrapper.vm.$nextTick();
-        await wrapper.vm.$nextTick();
+        await flushPromises();
 
         expect(trigger.attributes('aria-expanded')).toBe('false');
+        expect(document.body.querySelector('[data-slot="sheet-content"]'))
+          .toBeNull();
         expect(document.activeElement).toBe(trigger.element);
       } finally {
         wrapper.unmount();
@@ -682,9 +684,11 @@ describe('EditorShell', () => {
           cancelable: true,
         }));
         await wrapper.vm.$nextTick();
-        await wrapper.vm.$nextTick();
+        await flushPromises();
 
         expect(trigger.attributes('aria-expanded')).toBe('false');
+        expect(document.body.querySelector('[data-slot="sheet-content"]'))
+          .toBeNull();
         expect(document.activeElement).toBe(trigger.element);
       } finally {
         wrapper.unmount();
