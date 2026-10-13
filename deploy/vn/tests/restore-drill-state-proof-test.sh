@@ -115,6 +115,7 @@ case $op in
       error ObjectExists 412 PutObject ; exit 1
     fi
     cp "$body" "$store"
+    if [[ $name == create-interrupted ]]; then kill -TERM "$PPID"; fi
     [[ $name != create-ambiguous ]] || { error ObjectWriteUnconfirmed 500 PutObject ; exit 1; }
     ;;
   get-object)
@@ -183,6 +184,10 @@ done
 expect_failure create-ambiguous
 recovery create-ambiguous
 [[ $(grep -c put-object "$work/create-ambiguous.log") == 1 ]] || fail 'ambiguous create retried'
+expect_failure create-interrupted
+recovery create-interrupted
+[[ $(grep -c put-object "$work/create-interrupted.log") == 1 ]] || fail 'interrupted create retried'
+no_call create-interrupted get-object
 for name in overwrite-accepted conflict-text conflict-malformed conflict-concat conflict-type conflict-code conflict-op conflict-exit conflict-timeout; do
   expect_failure "$name"
   [[ $(grep -c delete-object "$work/$name.log") == 1 ]] || fail "$name did not clean attributable bytes"
