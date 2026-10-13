@@ -111,7 +111,14 @@ from_name=${from_name//\"/\\\"}
   printf 'Content-Type: text/plain; charset=utf-8\n\n'
   printf 'Host: %s\nKey: %s\nTime (UTC): %s\n\n' "$(hostname)" "$key" "$(date -u +%FT%TZ)"
   [[ -z $detail ]] || printf '%s\n\n' "$detail"
-  printf 'Read the details on the host with journalctl.\n'
+  case "$key" in
+    coraza-matches|coraza-unparsed|coraza-log-invalid)
+      printf 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.\n'
+      printf 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.\n'
+      printf 'One request can trigger several rule matches. Check the configured Coraza mode before treating matches as blocked requests.\n'
+      ;;
+    *) printf 'Read the details on the host with journalctl.\n' ;;
+  esac
 } >"$work/message"
 if ! msmtp -C "$work/msmtprc" -t <"$work/message" >/dev/null 2>"$work/err"; then
   rm -f "$stamp"

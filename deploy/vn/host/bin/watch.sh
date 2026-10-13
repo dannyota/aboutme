@@ -114,7 +114,7 @@ if ((${#waf_logs[@]})); then
   read -r matches unparsed unknown <<<"$counts"
   ((unknown == 0)) || alert coraza-log-invalid "the Coraza match log has $unknown unknown records in the last hour"
 fi
-((matches <= coraza_matches_per_hour)) || alert coraza-matches "Coraza matched $matches requests in the last hour"
+((matches <= coraza_matches_per_hour)) || alert coraza-matches "Coraza recorded $matches rule matches in the last hour"
 ((unparsed == 0)) || alert coraza-unparsed "Coraza wrote $unparsed unparsed match records in the last hour"
 
 # totp_unavailable in the server journal since the last run.
