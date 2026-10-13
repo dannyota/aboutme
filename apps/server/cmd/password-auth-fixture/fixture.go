@@ -28,18 +28,20 @@ const testEmailPrefix = "pa-test-"
 type Config struct {
 	DatabaseURL    string
 	CredentialFile string
+	Proof          string
 }
 
 func parseConfig(args []string) (string, Config, error) {
 	if len(args) == 0 {
-		return "", Config{}, errors.New("subcommand is required (seed, mcp-seed, cleanup, or linkedin-cleanup)")
+		return "", Config{}, errors.New("subcommand is required")
 	}
 	cmd := args[0]
-	if cmd != "seed" && cmd != "cleanup" && cmd != "linkedin-cleanup" && cmd != "mcp-seed" {
+	factorCommand := cmd == "second-factor-seed" || cmd == "second-factor-cleanup"
+	if cmd != "seed" && cmd != "cleanup" && cmd != "linkedin-cleanup" && cmd != "mcp-seed" && !factorCommand {
 		return "", Config{}, errors.New("unknown subcommand")
 	}
 
-	var databaseURL, credentialFile string
+	var databaseURL, credentialFile, proof string
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--database-url":
@@ -49,8 +51,8 @@ func parseConfig(args []string) (string, Config, error) {
 			}
 			databaseURL = args[i]
 		case "--credential-file":
-			if cmd != "mcp-seed" {
-				return "", Config{}, errors.New("--credential-file is allowed only mcp-seed")
+			if cmd != "mcp-seed" && !factorCommand {
+				return "", Config{}, errors.New("--credential-file is allowed only private fixture commands")
 			}
 			i++
 			if i >= len(args) {
@@ -60,6 +62,18 @@ func parseConfig(args []string) (string, Config, error) {
 				return "", Config{}, errors.New("--credential-file must occur once")
 			}
 			credentialFile = args[i]
+		case "--proof":
+			if !factorCommand {
+				return "", Config{}, errors.New("--proof is allowed only second-factor commands")
+			}
+			i++
+			if i >= len(args) {
+				return "", Config{}, errors.New("--proof requires a value")
+			}
+			if proof != "" {
+				return "", Config{}, errors.New("--proof must occur once")
+			}
+			proof = args[i]
 		default:
 			return "", Config{}, errors.New("unknown argument")
 		}
@@ -68,10 +82,13 @@ func parseConfig(args []string) (string, Config, error) {
 	if err := devdb.ValidateURL(databaseURL, fixtureDatabase); err != nil {
 		return "", Config{}, err
 	}
-	if cmd == "mcp-seed" && credentialFile == "" {
+	if factorCommand && proof != "passkey" && proof != "totp" {
+		return "", Config{}, errors.New("--proof must be passkey or totp")
+	}
+	if (cmd == "mcp-seed" || factorCommand) && credentialFile == "" {
 		return "", Config{}, errors.New("--credential-file is required")
 	}
-	return cmd, Config{DatabaseURL: databaseURL, CredentialFile: credentialFile}, nil
+	return cmd, Config{DatabaseURL: databaseURL, CredentialFile: credentialFile, Proof: proof}, nil
 }
 
 // providerIdentity is one linked OAuth identity for a fixture account.
@@ -127,6 +144,8 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 		return runLinkedInCleanup(ctx, cfg)
 	case "mcp-seed":
 		return runMCPSeed(ctx, cfg)
+	case "second-factor-seed", "second-factor-cleanup":
+		return runSecondFactorFixture(ctx, cfg, cmd == "second-factor-cleanup")
 	default:
 		return fmt.Errorf("unknown subcommand %q", cmd)
 	}
