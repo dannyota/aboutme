@@ -205,16 +205,18 @@ from backup configuration alone.
 ## Alarms
 
 [`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) checks
-`https://aboutme.vn/readyz` every five minutes. It tries three times, 20 seconds
-apart, and passes only on HTTP 200. A failed run makes GitHub email the account
-that last changed the cron line.
+`https://aboutme.vn/readyz` on a requested five-minute schedule. It tries three
+times, 20 seconds apart, and passes only on HTTP 200. A failed run makes GitHub
+email the account that last changed the cron line.
 
-GitHub documents that scheduled runs can be delayed under load, five minutes is
-the shortest interval, and scheduled workflows in a public repository are
-disabled after 60 days without repository activity. See
+GitHub documents that scheduled runs can be delayed or dropped under load, five
+minutes is the shortest interval, and scheduled workflows in a public repository
+are disabled after 60 days without repository activity. See
 [GitHub's schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 A delayed or disabled workflow does not prove the site healthy. Check the
-workflow's enabled state and run history after an idle period.
+workflow's enabled state and run history after an idle period. The
+[recorded October 2026 gaps](../plans/traceability/vietnam-operations.md#external-readiness-monitoring)
+leave the intended monitoring interval unproved.
 
 Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 `aboutme-alert@.service`. The watcher runs every five minutes and checks:

@@ -43,7 +43,19 @@ The subject incorrectly labels rule records as requests. The generic footer poin
 
 ## External readiness monitoring
 
-On 2026-10-13, `uptime.yml` was active and had eight successful scheduled executions since 2026-10-11. The latest three starts were 2026-10-12 09:28:59 UTC, 2026-10-12 19:15:15 UTC, and 2026-10-13 01:23:44 UTC. These gaps do not match its five-minute cron and leave monitoring cadence unproved. A separate public `/readyz` check returned 200 at about 2026-10-13 03:49 UTC. Successful samples establish readiness only when sampled; they do not establish uninterrupted availability or notification delivery.
+On 2026-10-13, `uptime.yml` was active and had nine successful scheduled executions since 2026-10-11. The latest starts were 2026-10-12 19:15:15 UTC, 2026-10-13 01:23:44 UTC, and 2026-10-13 07:55:21 UTC. The eight successive gaps range from 3:12:21 to 9:46:16. Each run started when created and completed within 7 to 10 seconds. There were no failed, pending, skipped, or canceled runs in the complete ten-run inventory, which also included one successful manual execution. The missing intervals precede recorded run creation; the API does not establish the scheduler's internal cause.
+
+These gaps do not match the requested five-minute cron and leave monitoring cadence unproved. [GitHub documents possible delay or dropped scheduled runs](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), without a maximum delivery delay. Changing cron offsets would not establish the interval. A separate public `/readyz` check returned 200 at about 2026-10-13 03:49 UTC. Successful samples establish readiness only when sampled; they do not establish uninterrupted availability or notification delivery.
+
+## Historical readiness failure
+
+Retained metadata for the 2026-10-10 19:12 UTC boot shows the network, web, and PostgreSQL start jobs completing before the server starts. Before the server's explicit restart at 19:18 UTC, 41 `/readyz` samples returned 503 while all 27 collected `/healthz` samples returned 200. The first readiness failure took 5,040 milliseconds; the next 40 took less than one reported millisecond. After restart, readiness returned 503 once, then 200. No PostgreSQL stop coincided with that restart.
+
+Those timings are consistent with a cached browser readiness failure, but they do not identify the failing dependency. The private browser probe intentionally caches its result for the process lifetime. An earlier boot recorded a browser initialization failure and recovered through an automatic restart; that separate event does not prove this failure's cause. Current green readiness does not close the incident. Recovery policy or closed reason diagnostics require a separate reviewed change; no boot-order or retry change was made from this evidence.
+
+## Restore prerequisites
+
+The existing management account returned HTTP 403 for the read-only `storage.ListProjects` call on 2026-10-13. The state project ID could not be verified, so the independent conditional-write proof was not started and no probe object was created. The [restore design](../../design/restore-drill-networking.md) still requires region-specific permanent deletion and complete active, pending, and recoverable resource inventories. Published provider documentation does not establish those guarantees. No restore resources were allocated, and backup restoration remains unproved.
 
 ## Supporting host metadata
 
