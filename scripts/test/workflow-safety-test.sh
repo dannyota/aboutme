@@ -32,6 +32,8 @@ assert_preflight_guards() { # job-body
 }
 
 assert_migration_guard() { # script-body
+  grep -Fq 'BASELINE=.v1-baseline' <<<"$1" ||
+    fail "migration guard does not use the application v1 marker"
   grep -Fq 'base=$(resolve_commit "$1") || fail "base is not a commit: $1"' <<<"$1" ||
     fail "migration guard does not reject an invalid base"
   grep -Fq 'git diff --quiet "$base" "$head"' <<<"$1" ||
@@ -42,6 +44,10 @@ assert_migration_guard() { # script-body
 }
 
 assert_released_schema_guard() { # script-body
+  grep -Fq 'git cat-file -e "$base:.v1-baseline"' <<<"$1" ||
+    fail "released-schema guard does not use the trusted v1 base marker"
+  grep -Fq 'git diff --quiet "$base" "$head" -- .v1-baseline' <<<"$1" ||
+    fail "released-schema guard does not freeze the v1 marker"
   local count
   count=$(grep -Fc 'if ! diff=$(git diff --name-status' <<<"$1" || true)
   [ "$count" -eq 1 ] ||
@@ -88,6 +94,7 @@ while IFS='|' read -r pattern diagnostic; do
   expect_guard_drift assert_migration_guard \
     "$(grep -Fv -- "$pattern" <<<"$MIGRATION_GUARD")" "$diagnostic"
 done <<'CASES'
+BASELINE=.v1-baseline|migration guard does not use the application v1 marker
 base=$(resolve_commit "$1")|migration guard does not reject an invalid base
 git diff --quiet "$base" "$head"|migration guard does not compare push and dispatch trees directly
 CASES
@@ -100,6 +107,8 @@ while IFS='|' read -r pattern diagnostic; do
   expect_guard_drift assert_released_schema_guard \
     "$(grep -Fv -- "$pattern" <<<"$SCHEMA_GUARD")" "$diagnostic"
 done <<'CASES'
+git cat-file -e "$base:.v1-baseline"|released-schema guard does not use the trusted v1 base marker
+git diff --quiet "$base" "$head" -- .v1-baseline|released-schema guard does not freeze the v1 marker
 if ! diff=$(git diff --name-status|want one fail-closed released-schema diff capture, found 0
 Could not compare released schemas with base.|released-schema guard lacks an explicit diff-failure result
 git rev-parse --verify --quiet "$2^{commit}"|released-schema guard does not validate the base commit
@@ -107,7 +116,7 @@ git rev-parse --verify --quiet "$3^{commit}"|released-schema guard does not vali
 CASES
 expect_guard_drift assert_released_schema_guard \
   "$(sed 's/"$base" "$head"/"$base"/' <<<"$SCHEMA_GUARD")" \
-  'released-schema guard does not compare push and dispatch trees directly'
+  'released-schema guard does not freeze the v1 marker'
 expect_guard_drift assert_released_schema_guard \
   "$SCHEMA_GUARD
 git diff --name-status \"\$base\"...\"\$head\"" \
