@@ -41,10 +41,10 @@ write_env() { # root sender-name [extra-line]
   printf 'password' >"$root/secrets/smtp-password"
 }
 
-run_alert() { # root capture
-  local root=$1 capture=$2
+run_alert() { # root capture [key subject]
+  local root=$1 capture=$2 key=${3:-test-key} subject=${4:-test-subject}
   ABOUTME_ALERT_TEST_ROOT=$root ALERT_TEST_CAPTURE=$capture \
-    "$alert" test-key test-subject </dev/null >"$capture.out" 2>"$capture.err"
+    "$alert" "$key" "$subject" </dev/null >"$capture.out" 2>"$capture.err"
 }
 
 valid=$work/valid
@@ -66,6 +66,35 @@ grep -qxF 'From: "Danny from aboutme.vn" <no-reply@example.test>' "$capture.mess
   echo "documented sender name did not reach the message" >&2
   exit 1
 }
+grep -qxF 'Read the details on the host with journalctl.' "$capture.message"
+
+for key in coraza-matches coraza-unparsed coraza-log-invalid; do
+  root=$work/$key
+  capture=$work/$key-capture
+  write_env "$root" 'aboutme.vn'
+  printf 'username' >"$root/secrets/smtp-username"
+  run_alert "$root" "$capture" "$key" 'Coraza diagnostic test'
+  grep -qxF 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.' "$capture.message"
+  grep -qxF 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.' "$capture.message"
+  grep -qxF 'One request can trigger several rule matches. Check the configured Coraza mode before treating matches as blocked requests.' "$capture.message"
+  if grep -qF 'journalctl' "$capture.message"; then
+    echo "Coraza metadata was routed to journald" >&2
+    exit 1
+  fi
+done
+
+for key in aboutme-server.service coraza coraza-other coraza-matches-extra coraza-unparsed-extra coraza-log-invalid-extra; do
+  root=$work/$key
+  capture=$work/$key-capture
+  write_env "$root" 'aboutme.vn'
+  printf 'username' >"$root/secrets/smtp-username"
+  run_alert "$root" "$capture" "$key" 'Unit diagnostic test'
+  grep -qxF 'Read the details on the host with journalctl.' "$capture.message"
+  if grep -qF '/run/aboutme/caddy-log/waf' "$capture.message"; then
+    echo "an unrelated key was routed to Coraza metadata" >&2
+    exit 1
+  fi
+done
 
 expect_rejected() { # label sender-name extra username-writer
   local label=$1 name=$2 extra=$3 username=$4 root capture
