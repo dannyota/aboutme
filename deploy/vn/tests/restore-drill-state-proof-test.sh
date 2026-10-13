@@ -1,245 +1,205 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 printf '[default]\naws_access_key_id = fixture\naws_secret_access_key = fixture\n' >"$work/credentials"
-
+chmod 0600 "$work/credentials"
 cat >"$work/bin/uuidgen" <<'STUB'
 #!/usr/bin/env bash
 printf '123e4567-e89b-42d3-a456-426614174000\n'
 STUB
-
+cat >"$work/bin/timeout" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $1 == --foreground && $2 == --signal=KILL && $3 == 60s ]]
+shift 3
+exec "$@"
+STUB
 cat >"$work/bin/aws" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-mock_root=$(cd "$(dirname "$0")/.." && pwd)
-mock_case=$(cat "$mock_root/current.case")
-mock_log=$mock_root/$mock_case.log
-mock_store=$mock_root/$mock_case.object
-printf '%q ' "$@" >>"$mock_log"
-printf '\n' >>"$mock_log"
-grep -q 'addressing_style = path' "$AWS_CONFIG_FILE"
-[[ $AWS_SHARED_CREDENTIALS_FILE == "$mock_root/credentials" ]]
-[[ -z ${HOME+x} ]]
-for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE \
-  AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE \
-  AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_CREDENTIALS_FULL_URI \
-  AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE; do
-  [[ -z ${!name+x} ]] || { printf 'ambient credential variable survived: %s\n' "$name" >&2; exit 2; }
-done
-operation=
-for arg in "$@"; do
-  case $arg in
-    get-bucket-versioning | head-object | put-object | get-object | delete-object) operation=$arg ;;
+root=$(cd "$(dirname "$0")/.." && pwd)
+name=$(cat "$root/current.case")
+printf '%q ' "$@" >>"$root/$name.aws.log"
+printf '\n' >>"$root/$name.aws.log"
+[[ $AWS_SHARED_CREDENTIALS_FILE == "$root/credentials" ]]
+[[ $(cat "$AWS_CONFIG_FILE") == $'[default]\ns3 =\n    addressing_style = path' ]]
+[[ $AWS_MAX_ATTEMPTS == 1 && $AWS_EC2_METADATA_DISABLED == true ]]
+[[ $* == '--profile default --endpoint-url https://hcm04.vstorage.vngcloud.vn --region HCM04 --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy s3api get-bucket-versioning --bucket aboutme-tfstate' ]]
+while IFS='=' read -r variable _; do
+  case $variable in
+    PATH | AWS_SHARED_CREDENTIALS_FILE | AWS_CONFIG_FILE | AWS_EC2_METADATA_DISABLED | \
+      AWS_MAX_ATTEMPTS | AWS_RETRY_MODE | AWS_PAGER | AWS_CLI_AUTO_PROMPT | PWD | SHLVL | _) : ;;
+    *) exit 2 ;;
+  esac
+done < <(env)
+case $name in
+  versioned) printf '{"Status":"Enabled"}\n' ;;
+  suspended) printf '{"Status":"Suspended"}\n' ;;
+  versioning-unknown) printf '{"Status":"Paused"}\n' ;;
+  versioning-error) exit 1 ;;
+  *) : ;;
+esac
+STUB
+cat >"$work/bin/vngcloud" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+name=$(cat "$root/current.case")
+store=$root/$name.object
+log=$root/$name.log
+printf '%q ' "$@" >>"$log"
+printf '\n' >>"$log"
+[[ $(cat "$VNGCLOUD_CONFIG_FILE") == '[default]' ]]
+[[ $(stat -c %a "$VNGCLOUD_CONFIG_FILE") == 600 ]]
+while IFS='=' read -r variable _; do
+  case $variable in PATH | VNGCLOUD_CONFIG_FILE | PWD | SHLVL | _) : ;; *) exit 2 ;; esac
+done < <(env)
+[[ $1 == --profile && $2 == default && $3 == --output && $4 == json && $5 == storage ]]
+op=$6
+shift 6
+bucket= key= body= destination= limit= region= credentials= deadline= yes=0
+while (($#)); do
+  case $1 in
+    --bucket) bucket=$2 ; shift 2 ;;
+    --key) key=$2 ; shift 2 ;;
+    --body) body=$2 ; shift 2 ;;
+    --destination) destination=$2 ; shift 2 ;;
+    --max-download-bytes) limit=$2 ; shift 2 ;;
+    --s3-region) region=$2 ; shift 2 ;;
+    --s3-credentials-file) credentials=$2 ; shift 2 ;;
+    --transfer-timeout) deadline=$2 ; shift 2 ;;
+    --yes) yes=1 ; shift ;;
+    *) exit 2 ;;
   esac
 done
-case $operation in
-  get-bucket-versioning)
-    case $mock_case in
-      versioned) printf '{"Status":"Enabled"}\n' ;;
-      suspended) printf '{"Status":"Suspended"}\n' ;;
-      versioning-unknown) printf '{"Status":"Paused"}\n' ;;
-      *) : ;;
-    esac
-    ;;
+[[ $bucket == aboutme-tfstate && $key == restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json ]]
+[[ $region == HCM04 && $credentials == "$root/credentials" && $deadline == 60s ]]
+error() { printf '{"error":{"code":"%s","status":%s,"operation":"storage.%s","message":"fixture"}}\n' "$1" "$2" "$3" >&2; }
+case $op in
   head-object)
-    if [[ $mock_case == preexisting || -e $mock_store ]]; then exit 0; fi
-    if [[ $mock_case == denied ]]; then
-      printf 'An error occurred (AccessDenied) when calling the HeadObject operation: denied\n' >&2
-      exit 1
-    fi
-    if [[ $mock_case == misleading-absence ]]; then
-      printf 'proxy failed after unrelated 404 Not Found HeadObject text\n' >&2
-      exit 1
-    fi
-    if [[ $mock_case == wrong-retry-absence ]]; then
-      printf 'aws: [ERROR]: An error occurred (404) when calling the HeadObject operation (reached max retries: 1): Not Found\n' >&2
-      exit 1
-    fi
-    if [[ $mock_case == plain-errors ]]; then
-      printf 'An error occurred (404) when calling the HeadObject operation: Not Found\n' >&2
-      exit 1
-    fi
-    printf 'aws: [ERROR]: An error occurred (404) when calling the HeadObject operation (reached max retries: 0): Not Found\n' >&2
-    exit 1
+    [[ $yes == 0 ]]
+    [[ $name != preexisting && ! -e $store ]] || exit 0
+    if [[ $name == final-head-unknown && -f $root/deleted ]]; then error RequestFailed 500 HeadObject; exit 1; fi
+    case $name in
+      denied) error RequestFailed 403 HeadObject ; exit 1 ;;
+      head-text) printf '404 HeadObject\n' >&2 ; exit 4 ;;
+      head-malformed) printf '{bad}\n' >&2 ; exit 4 ;;
+      head-concat) error NotFound 404 HeadObject ; error NotFound 404 HeadObject ; exit 4 ;;
+      head-type) error NotFound '"404"' HeadObject ; exit 4 ;;
+      head-code) error RequestFailed 404 HeadObject ; exit 4 ;;
+      head-op) error NotFound 404 GetObject ; exit 4 ;;
+      head-exit) error NotFound 404 HeadObject ; exit 1 ;;
+      head-timeout) exit 137 ;;
+      head-array) printf '{"error":[]}\n' >&2 ; exit 4 ;;
+    esac
+    error NotFound 404 HeadObject ; exit 4
     ;;
   put-object)
-    body=
-    while (($#)); do
-      [[ $1 != --body ]] || { body=$2; break; }
-      shift
-    done
-    if [[ -e $mock_store ]]; then
-      if [[ $mock_case == overwrite-accepted ]]; then cp -- "$body" "$mock_store"; exit 0; fi
-      if [[ $mock_case == misleading-conflict ]]; then
-        printf 'proxy cached 412 PreconditionFailed after PutObject transport failure\n' >&2
-        exit 1
-      fi
-      if [[ $mock_case == wrong-retry-conflict ]]; then
-        printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 1): conflict\n' >&2
-        exit 1
-      fi
-      if [[ $mock_case == plain-errors ]]; then
-        printf 'An error occurred (PreconditionFailed) when calling the PutObject operation: conflict\n' >&2
-        exit 1
-      fi
-      printf 'aws: [ERROR]: An error occurred (PreconditionFailed) when calling the PutObject operation (reached max retries: 0): conflict\n' >&2
-      exit 1
+    [[ $yes == 0 && -f $body ]]
+    if [[ -e $store ]]; then
+      case $name in
+        overwrite-accepted) cp "$body" "$store" ; exit 0 ;;
+        conflict-text) printf '412 ObjectExists\n' >&2 ; exit 1 ;;
+        conflict-malformed) printf '{bad}\n' >&2 ; exit 1 ;;
+        conflict-concat) error ObjectExists 412 PutObject ; error ObjectExists 412 PutObject ; exit 1 ;;
+        conflict-type) error ObjectExists '"412"' PutObject ; exit 1 ;;
+        conflict-code) error PreconditionFailed 412 PutObject ; exit 1 ;;
+        conflict-op) error ObjectExists 412 HeadObject ; exit 1 ;;
+        conflict-exit) error ObjectExists 412 PutObject ; exit 2 ;;
+        conflict-timeout) exit 137 ;;
+        second-ambiguous) cp "$body" "$store" ; exit 1 ;;
+      esac
+      error ObjectExists 412 PutObject ; exit 1
     fi
-    cp -- "$body" "$mock_store"
-    if [[ $mock_case == create-ambiguous ]]; then
-      printf 'connection closed\n' >&2
-      exit 1
-    fi
+    cp "$body" "$store"
+    [[ $name != create-ambiguous ]] || { error ObjectWriteUnconfirmed 500 PutObject ; exit 1; }
     ;;
   get-object)
-    count=$(cat "$mock_root/get-count" 2>/dev/null || printf 0)
+    [[ $yes == 0 && $limit == 66 && ! -e $destination && ! -L $destination ]]
+    count=$(cat "$root/get-count" 2>/dev/null || printf 0)
     count=$((count + 1))
-    printf '%s\n' "$count" >"$mock_root/get-count"
-    if [[ $mock_case == cleanup-read-failure && $count -eq 2 ]]; then
-      printf 'An error occurred (AccessDenied) when calling the GetObject operation: denied\n' >&2
-      exit 1
-    fi
-    range=
-    for ((i = 1; i <= $#; i++)); do
-      if [[ ${!i} == --range ]]; then
-        next=$((i + 1))
-        range=${!next}
-      fi
-    done
-    [[ $range == bytes=0-66 ]] || {
-      printf 'expected GetObject range bytes=0-66, got %s\n' "$range" >&2
-      exit 2
-    }
-    if [[ $mock_case == oversized-foreign ]]; then
-      printf '%0200d\n' 0 >"$mock_store"
-    fi
-    head -c 67 -- "$mock_store" >"${!#}"
-    if [[ $mock_case == foreign-after-read && $count -eq 1 ]]; then
-      printf '{"foreign":true}\n' >"$mock_store"
-    fi
+    printf '%s\n' "$count" >"$root/get-count"
+    [[ $name != cleanup-read-failure || $count != 2 ]] || exit 1
+    case $name in
+      oversized-foreign) printf '%0200d\n' 0 >"$store" ; head -c 67 "$store" >"$destination" ; exit 1 ;;
+      symlink-read) ln -s "$store" "$destination" ; exit 0 ;;
+      directory-read) mkdir "$destination" ; exit 0 ;;
+      empty-read) : >"$destination" ; exit 0 ;;
+      oversized-success) head -c 67 /dev/zero >"$destination" ; exit 0 ;;
+    esac
+    cp "$store" "$destination"
+    [[ $name != read-output-failure ]] || exit 1
+    if [[ $name == interrupted && $count == 1 ]]; then kill -TERM "$PPID"; fi
+    if [[ $name == foreign-after-read && $count == 1 ]]; then printf '{"foreign":true}\n' >"$store"; fi
     ;;
   delete-object)
-    [[ $mock_case != cleanup-failure ]] || {
-      printf 'An error occurred (AccessDenied) when calling the DeleteObject operation: denied\n' >&2
-      exit 1
-    }
-    rm -f -- "$mock_store"
+    [[ $yes == 1 ]]
+    [[ $name != cleanup-failure ]] || exit 1
+    rm "$store"
+    : >"$root/deleted"
+    [[ $name != delete-ambiguous ]] || exit 137
+    [[ $name != delete-output-failure ]] || exit 1
     ;;
-  *) printf 'unexpected operation: %s\n' "$operation" >&2; exit 2 ;;
+  *) exit 2 ;;
 esac
 STUB
 chmod +x "$work/bin/"*
-
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 run_case() {
   local name=$1
   : >"$work/$name.log"
+  : >"$work/$name.aws.log"
   printf '%s\n' "$name" >"$work/current.case"
-  rm -f -- "$work/$name.object" "$work/get-count"
+  rm -f "$work/$name.object" "$work/get-count" "$work/deleted"
   PATH=$work/bin:$PATH DRILL_STATE_CREDENTIALS_FILE=$work/credentials \
-    AWS_ACCESS_KEY_ID=poison AWS_SECRET_ACCESS_KEY=poison AWS_SESSION_TOKEN=poison \
-    AWS_PROFILE=poison AWS_DEFAULT_PROFILE=poison AWS_ROLE_ARN=poison \
-    AWS_WEB_IDENTITY_TOKEN_FILE=$work/poison-token \
-    AWS_CONTAINER_CREDENTIALS_RELATIVE_URI=/poison \
-    AWS_CONTAINER_CREDENTIALS_FULL_URI=http://127.0.0.1/poison \
-    AWS_CONTAINER_AUTHORIZATION_TOKEN=poison \
-    AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE=$work/poison-auth \
-    bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh"
+    AWS_ACCESS_KEY_ID=poison AWS_SECRET_ACCESS_KEY=poison AWS_PROFILE=poison \
+    VNGCLOUD_CONFIG_FILE=$work/poison VNGCLOUD_PROFILE=poison \
+    VNGCLOUD_READ_ONLY=true VNGCLOUD_CLIENT_SECRET=poison HTTPS_PROXY=http://poison \
+    bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" >"$work/$name.out" 2>&1
 }
-expect_case_failure() { run_case "$1" >/dev/null 2>&1 && fail "$1 succeeded" || return 0; }
-
-run_case success >/dev/null
-success_log=$work/success.log
-[[ $(grep -c 'put-object' "$success_log") -eq 2 ]] || fail 'proof did not make two puts'
-grep -q -- '--if-none-match \\*' "$success_log" || fail 'proof put was not conditional'
-grep -q -- '--profile default' "$success_log" || fail 'proof did not select the default profile'
-grep -q -- '--cli-error-format legacy' "$success_log" || fail 'proof did not select legacy errors'
-[[ $(grep -c 'get-object' "$success_log") -eq 2 ]] || fail 'proof did not verify bytes before cleanup'
-[[ $(grep -c 'delete-object' "$success_log") -eq 1 ]] || fail 'proof did not clean its object'
-[[ $(grep -c 'head-object' "$success_log") -eq 2 ]] || fail 'proof did not prove initial and final absence'
-grep -q -- '--key restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' "$success_log" ||
-  fail 'proof key escaped disposable namespace'
-[[ ! -e $work/success.object ]] || fail 'proof object remains after success'
-
-run_case plain-errors >/dev/null
-[[ ! -e $work/plain-errors.object ]] || fail 'plain-error proof object remains after success'
-
-expect_case_failure preexisting
-grep -q 'delete-object' "$work/preexisting.log" && fail 'proof deleted a preexisting object'
-grep -q 'put-object' "$work/preexisting.log" && fail 'proof wrote over a preexisting object'
-
-expect_case_failure denied
-grep -q 'put-object' "$work/denied.log" && fail 'denied head was treated as absence'
-
-expect_case_failure misleading-absence
-grep -q 'put-object' "$work/misleading-absence.log" && fail 'misleading 404 was treated as absence'
-
-expect_case_failure wrong-retry-absence
-grep -q 'put-object' "$work/wrong-retry-absence.log" &&
-  fail 'nonzero retry annotation was treated as absence'
-
-expect_case_failure create-ambiguous
-[[ -e $work/create-ambiguous.object ]] || fail 'ambiguous create fixture lost recovery object'
-grep -q 'delete-object' "$work/create-ambiguous.log" && fail 'ambiguous create was deleted'
-
-expect_case_failure cleanup-failure
-[[ -e $work/cleanup-failure.object ]] || fail 'cleanup failure fixture lost recovery object'
-
-expect_case_failure cleanup-read-failure
-grep -q 'delete-object' "$work/cleanup-read-failure.log" && fail 'unreadable cleanup object was deleted'
-[[ -e $work/cleanup-read-failure.object ]] || fail 'unreadable cleanup object was not retained'
-
-expect_case_failure versioned
-grep -q 'put-object' "$work/versioned.log" && fail 'versioned bucket received probe object'
-
-expect_case_failure suspended
-grep -q 'put-object' "$work/suspended.log" && fail 'suspended bucket received probe object'
-
-expect_case_failure versioning-unknown
-grep -q 'put-object' "$work/versioning-unknown.log" && fail 'unknown versioning state received probe object'
-
-expect_case_failure overwrite-accepted
-[[ $(grep -c 'delete-object' "$work/overwrite-accepted.log") -eq 1 ]] ||
-  fail 'failed overwrite proof did not clean its owned key'
-
-expect_case_failure misleading-conflict
-[[ $(grep -c 'delete-object' "$work/misleading-conflict.log") -eq 1 ]] ||
-  fail 'misleading conflict failure did not clean its owned object'
-
-expect_case_failure wrong-retry-conflict
-[[ $(grep -c 'delete-object' "$work/wrong-retry-conflict.log") -eq 1 ]] ||
-  fail 'nonzero retry conflict failure did not clean its owned object'
-
-printf '%s\n' foreign-after-read >"$work/current.case"
-: >"$work/foreign-after-read.log"
-rm -f -- "$work/foreign-after-read.object" "$work/get-count"
-if PATH=$work/bin:$PATH DRILL_STATE_CREDENTIALS_FILE=$work/credentials \
-  bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" \
-  >"$work/foreign.out" 2>&1; then
-  fail 'foreign replacement succeeded'
-fi
-grep -q 's3://aboutme-tfstate/restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' \
-  "$work/foreign.out" || fail 'foreign replacement omitted recovery key'
-grep -q 'delete-object' "$work/foreign-after-read.log" && fail 'foreign bytes were deleted'
-[[ -e $work/foreign-after-read.object ]] || fail 'foreign bytes were not retained'
-
-printf '%s\n' oversized-foreign >"$work/current.case"
-: >"$work/oversized-foreign.log"
-rm -f -- "$work/oversized-foreign.object" "$work/get-count"
-if PATH=$work/bin:$PATH DRILL_STATE_CREDENTIALS_FILE=$work/credentials \
-  bash "$repo_root/deploy/vn/scripts/drill-state-proof.sh" \
-  >"$work/oversized.out" 2>&1; then
-  fail 'oversized foreign object succeeded'
-fi
-[[ $(grep -c -- '--range bytes=0-66' "$work/oversized-foreign.log") -eq 2 ]] ||
-  fail 'proof reads were not both bounded'
-grep -q 's3://aboutme-tfstate/restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' \
-  "$work/oversized.out" || fail 'oversized object omitted recovery key'
-grep -q 'delete-object' "$work/oversized-foreign.log" && fail 'oversized foreign bytes were deleted'
-[[ -e $work/oversized-foreign.object ]] || fail 'oversized foreign bytes were not retained'
-
+expect_failure() { if run_case "$1"; then fail "$1 succeeded"; fi; }
+no_call() { if grep -q "$2" "$work/$1.log"; then fail "$1 made forbidden $2"; fi; }
+recovery() {
+  grep -q 's3://aboutme-tfstate/restore-drill/probes/123e4567-e89b-42d3-a456-426614174000.json' "$work/$1.out" || fail "$1 omitted recovery key"
+  [[ -e $work/$1.object ]] || fail "$1 lost recovery object"
+  no_call "$1" delete-object
+}
+run_case success || fail 'success failed'
+[[ $(wc -l <"$work/success.aws.log") == 1 ]] || fail 'AWS read was not isolated'
+for tuple in 'put-object 2' 'get-object 2' 'delete-object 1' 'head-object 2'; do
+  read -r operation expected <<<"$tuple"
+  [[ $(grep -c "$operation" "$work/success.log") == "$expected" ]] || fail "$operation count"
+done
+[[ ! -e $work/success.object ]] || fail 'successful probe remains'
+for name in versioned suspended versioning-unknown versioning-error preexisting denied \
+  head-text head-malformed head-concat head-type head-code head-op head-exit head-timeout head-array; do
+  expect_failure "$name"
+  no_call "$name" put-object
+  no_call "$name" delete-object
+done
+expect_failure create-ambiguous
+recovery create-ambiguous
+[[ $(grep -c put-object "$work/create-ambiguous.log") == 1 ]] || fail 'ambiguous create retried'
+for name in overwrite-accepted conflict-text conflict-malformed conflict-concat conflict-type conflict-code conflict-op conflict-exit conflict-timeout; do
+  expect_failure "$name"
+  [[ $(grep -c delete-object "$work/$name.log") == 1 ]] || fail "$name did not clean attributable bytes"
+done
+for name in cleanup-read-failure read-output-failure foreign-after-read oversized-foreign symlink-read directory-read empty-read oversized-success second-ambiguous; do
+  expect_failure "$name"
+  recovery "$name"
+done
+expect_failure cleanup-failure
+[[ -e $work/cleanup-failure.object ]] || fail 'failed delete lost recovery object'
+[[ $(grep -c delete-object "$work/cleanup-failure.log") == 1 ]] || fail 'delete retried'
+expect_failure final-head-unknown
+[[ $(grep -c delete-object "$work/final-head-unknown.log") == 1 ]] || fail 'unknown final HEAD retried deletion'
+expect_failure interrupted
+[[ $(grep -c delete-object "$work/interrupted.log") == 1 && ! -e $work/interrupted.object ]] || fail 'signal cleanup did not run exactly once'
+run_case delete-output-failure || fail 'final HEAD did not settle delete output failure'
+[[ $(grep -c delete-object "$work/delete-output-failure.log") == 1 ]] || fail 'delete output failure retried'
+run_case delete-ambiguous || fail 'final HEAD did not settle ambiguous delete'
+[[ $(grep -c delete-object "$work/delete-ambiguous.log") == 1 ]] || fail 'ambiguous delete retried'
 printf 'restore drill state proof tests: ok\n'

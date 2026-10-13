@@ -17,7 +17,7 @@ probe_max_bytes=0
 say() { printf '%s\n' "$*"; }
 die() { printf 'drill state proof: %s\n' "$*" >&2; exit 1; }
 
-s3_call() {
+versioning_call() {
   env -i PATH="$PATH" \
     AWS_SHARED_CREDENTIALS_FILE="$credentials" \
     AWS_CONFIG_FILE="$work/aws-config" \
@@ -28,41 +28,63 @@ s3_call() {
     AWS_CLI_AUTO_PROMPT=off \
     timeout --foreground --signal=KILL 60s \
     aws --profile default --endpoint-url "$ENDPOINT" --region "$REGION" \
-    --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy s3api "$@"
+    --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy \
+    s3api get-bucket-versioning --bucket "$BUCKET"
 }
 
-# Returns 0 only for a definite absence, 1 for an existing object, and 2 when
-# the response cannot prove either result.
+native_call() {
+  env -i PATH="$PATH" VNGCLOUD_CONFIG_FILE="$work/native-config" \
+    timeout --foreground --signal=KILL 60s \
+    vngcloud --profile default --output json storage "$@" \
+    --s3-region "$REGION" --s3-credentials-file "$credentials" \
+    --transfer-timeout 60s
+}
+
+native_error() {
+  local errors=$1 code=$2 status=$3 operation=$4
+  jq -e -s --arg code "$code" --argjson status "$status" --arg operation "$operation" '
+    length == 1 and (.[0] | type == "object") and
+    (.[0].error | type == "object") and
+    .[0].error.code == $code and .[0].error.status == $status and
+    .[0].error.operation == $operation
+  ' "$errors" >/dev/null 2>&1
+}
+
+# Returns 0 only for a definite absence, 1 for existence, and 2 for uncertainty.
 object_absent() {
-  local errors=$1 pattern='^(aws: \[ERROR\]: )?An error occurred \((NoSuchKey|404)\) '
-  pattern+='when calling the HeadObject operation( \(reached max retries: 0\))?:'
-  : >"$errors"
-  if s3_call head-object --bucket "$BUCKET" --key "$key" >/dev/null 2>"$errors"; then
+  local errors=$1 rc=0
+  if native_call head-object --bucket "$BUCKET" --key "$key" >/dev/null 2>"$errors"; then
     return 1
+  else
+    rc=$?
   fi
-  grep -Eq "$pattern" "$errors" && return 0
+  if [[ $rc == 4 ]] && native_error "$errors" NotFound 404 storage.HeadObject; then
+    return 0
+  fi
   return 2
 }
 
 put_conflict() {
-  local pattern='^(aws: \[ERROR\]: )?An error occurred \((PreconditionFailed|412)\) '
-  pattern+='when calling the PutObject operation( \(reached max retries: 0\))?:'
-  grep -Eq "$pattern" "$1"
+  [[ $2 == 1 ]] && native_error "$1" ObjectExists 412 storage.PutObject
+}
+
+read_probe() {
+  local destination=$1 errors=$2 size
+  [[ ! -e $destination && ! -L $destination ]] || return 1
+  native_call get-object --bucket "$BUCKET" --key "$key" \
+    --destination "$destination" --max-download-bytes "$probe_max_bytes" \
+    >/dev/null 2>"$errors" || return 1
+  [[ -f $destination && ! -L $destination ]] || return 1
+  size=$(stat -c %s -- "$destination") || return 1
+  ((size > 0 && size <= probe_max_bytes))
 }
 
 cleanup_probe() {
-  local errors=$work/cleanup-errors readback=$work/cleanup-readback owned=0 readback_size
+  local errors=$work/cleanup-errors readback=$work/cleanup-readback owned=0
   ((created == 1 && cleanup_attempted == 0)) || return 0
   cleanup_attempted=1
-  if ! s3_call get-object --bucket "$BUCKET" --key "$key" \
-    --range "bytes=0-$probe_max_bytes" "$readback" \
-    >/dev/null 2>"$errors"; then
+  if ! read_probe "$readback" "$errors"; then
     say "cleanup retained an unreadable probe; inspect the nonsecret recovery key: s3://$BUCKET/$key" >&2
-    return 1
-  fi
-  if ! readback_size=$(stat -c %s -- "$readback") ||
-    ((readback_size == 0 || readback_size > probe_max_bytes)); then
-    say "cleanup retained oversized or invalid bytes; inspect the nonsecret recovery key: s3://$BUCKET/$key" >&2
     return 1
   fi
   cmp -s -- "$work/first.json" "$readback" && owned=1
@@ -71,7 +93,7 @@ cleanup_probe() {
     say "cleanup retained unowned bytes; inspect the nonsecret recovery key: s3://$BUCKET/$key" >&2
     return 1
   fi
-  s3_call delete-object --bucket "$BUCKET" --key "$key" >/dev/null 2>"$errors" || true
+  native_call delete-object --bucket "$BUCKET" --key "$key" --yes >/dev/null 2>"$errors" || true
   if object_absent "$errors"; then
     created=0
     return 0
@@ -91,7 +113,8 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-command -v aws >/dev/null || die 'AWS CLI is required'
+command -v aws >/dev/null || die 'AWS CLI is required for the versioning preflight'
+command -v vngcloud >/dev/null || die 'vngcloud v0.81.0 object operations are required'
 command -v jq >/dev/null || die 'jq is required'
 command -v uuidgen >/dev/null || die 'uuidgen is required'
 [[ -f $credentials && ! -L $credentials ]] || die "credential file is not a regular file: $credentials"
@@ -100,6 +123,8 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-drill-state-proof.XXXXXX")
 chmod 0700 "$work"
 printf '[default]\ns3 =\n    addressing_style = path\n' >"$work/aws-config"
 chmod 0600 "$work/aws-config"
+printf '[default]\n' >"$work/native-config"
+chmod 0600 "$work/native-config"
 
 uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
 [[ $uuid =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
@@ -113,7 +138,7 @@ probe_max_bytes=$first_size
 if ((second_size > probe_max_bytes)); then probe_max_bytes=$second_size; fi
 ((probe_max_bytes > 0)) || die 'probe payloads must not be empty'
 
-if ! s3_call get-bucket-versioning --bucket "$BUCKET" \
+if ! versioning_call \
   >"$work/versioning" 2>"$work/errors"; then
   die 'bucket versioning state could not be read'
 fi
@@ -137,28 +162,23 @@ else
   esac
 fi
 
-if ! s3_call put-object --bucket "$BUCKET" --key "$key" --body "$work/first.json" \
-  --content-type application/json --if-none-match '*' >/dev/null 2>"$work/errors"; then
+if ! native_call put-object --bucket "$BUCKET" --key "$key" --body "$work/first.json" >/dev/null 2>"$work/errors"; then
   die "create response is ambiguous; inspect the nonsecret recovery key: s3://$BUCKET/$key"
 fi
 created=1
 
-if s3_call put-object --bucket "$BUCKET" --key "$key" --body "$work/second.json" \
-  --content-type application/json --if-none-match '*' >/dev/null 2>"$work/errors"; then
+if native_call put-object --bucket "$BUCKET" --key "$key" --body "$work/second.json" >/dev/null 2>"$work/errors"; then
   second_written=1
   die 'conditional overwrite unexpectedly succeeded'
+else
+  conflict_rc=$?
 fi
-put_conflict "$work/errors" ||
+put_conflict "$work/errors" "$conflict_rc" ||
   die 'conditional overwrite did not return a definite precondition conflict'
 
-if ! s3_call get-object --bucket "$BUCKET" --key "$key" \
-  --range "bytes=0-$probe_max_bytes" "$work/readback.json" \
-  >/dev/null 2>"$work/errors"; then
-  die 'original probe could not be read back'
+if ! read_probe "$work/readback.json" "$work/errors"; then
+  die 'original probe could not be read back within its payload bound'
 fi
-readback_size=$(stat -c %s -- "$work/readback.json") || die 'probe read-back size is unavailable'
-((readback_size > 0 && readback_size <= probe_max_bytes)) ||
-  die 'probe read-back exceeds the attributable payload bound'
 cmp -s -- "$work/first.json" "$work/readback.json" ||
   die 'stored probe bytes differ from the original write'
 
