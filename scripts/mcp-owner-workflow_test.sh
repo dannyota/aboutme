@@ -116,7 +116,26 @@ chmod 0700 "$out"
 EOF
   write_fake "$CTL/fake-fixture" <<'EOF'
 #!/usr/bin/env bash
-printf 'fixture %s\n' "$1" >>__CTL__/calls
+set -eu
+ctl=__CTL__
+printf 'fixture %s\n' "$1" >>"$ctl/calls"
+[ "$1" = mcp-seed ] || exit 0
+[ "${ENV-}" = dev ] || exit 1
+shift
+credential=
+while [ "$#" -gt 0 ]; do
+  case $1 in
+  --database-url) [ "$2" = 'postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable' ] || exit 1; shift 2 ;;
+  --credential-file) credential=$2; shift 2 ;;
+  *) exit 1 ;;
+  esac
+done
+[ -f "$credential" ] && [ ! -L "$credential" ] && [ "$(stat -c %a "$credential")" = 600 ] || exit 1
+printf '%s\n' "$credential" >"$ctl/seed.credential-path"
+[ "$(cat "$ctl/fixture.behavior")" != fail ] || exit 1
+cp -- "$credential" "$ctl/seed.credentials"
+sed -n 's/^ABOUTME_TEST_EMAIL=//p' "$credential" >"$ctl/state/email"
+sed -n 's/^ABOUTME_TEST_PASSWORD=//p' "$credential" >"$ctl/state/password"
 EOF
   write_fake "$CTL/fake-runner" <<'EOF'
 #!/usr/bin/env bash
@@ -505,6 +524,7 @@ run_workflow() {
   echo "${RUNNER_BEHAVIOR:-ok}" >"$CTL/runner.behavior"
   echo "${CONTAINER_BEHAVIOR:-ok}" >"$CTL/container.behavior"
   echo "${CURL_BEHAVIOR:-ok}" >"$CTL/curl.behavior"
+  echo "${FIXTURE_BEHAVIOR:-ok}" >"$CTL/fixture.behavior"
   : >"$CTL/calls"
   : >"$CTL/curl.argv"
   : >"$CTL/curl.calls"
@@ -537,6 +557,12 @@ local_run_root() {
   sed -n 2p "$CTL/runner.args" 2>/dev/null || true
 }
 
+seed_credential_removed() {
+  local credential
+  credential=$(cat "$CTL/seed.credential-path" 2>/dev/null) && [ -n "$credential" ] &&
+    [ ! -e "$credential" ] && [ ! -L "$credential" ]
+}
+
 source_digest() {
   local name
   {
@@ -562,16 +588,45 @@ check 'usage runs nothing' [ ! -s "$CTL/calls" ]
 
 # 2. Local synthetic proof on an untagged checkout.
 setup_tree
+CURL_BEHAVIOR=register-unavailable run_workflow local
+check 'local MCP setup does not depend on live password registration' [ "$STATUS" -eq 0 ]
+check 'local MCP setup sends no password registration request' \
+  no_line 'POST /api/v1/auth/password/register' "$CTL/curl.calls"
+check 'local MCP setup sends no password verification request' \
+  no_line 'POST /api/v1/auth/password/verify' "$CTL/curl.calls"
+check 'local MCP setup uses the guarded fixture seed' called '^fixture mcp-seed$'
+check 'local MCP setup retains both real password sign-ins' \
+  [ "$(grep -c '^POST /api/v1/auth/password/login$' "$CTL/curl.calls")" -eq 2 ]
+
+setup_tree
+FIXTURE_BEHAVIOR=fail run_workflow local
+check 'failed guarded seed stops the MCP journey' [ "$STATUS" -eq 1 ]
+check 'failed guarded seed reports fixed words' has 'fixture seed failed' "$CTL/out"
+check 'failed guarded seed starts no runner or browser' not_called '^(runner|container)'
+check 'failed guarded seed preserves cleanup' [ "$(grep -c '^fixture cleanup$' "$CTL/calls")" -eq 2 ]
+check 'failed guarded seed removes the private credential' seed_credential_removed
+
+setup_tree
 DIAGNOSTIC=$REPO/.dev/proof-evidence/mcp-sdk-fixture/fixture-failure.json
+HELPER_SCRATCH=$T/fixture-request
+install -d -m 0700 "$HELPER_SCRATCH"
+printf '{}' >"$HELPER_SCRATCH/body"
+printf 'Content-Type: application/json\n' >"$HELPER_SCRATCH/headers"
 for behavior in register-unavailable register-rate-limited register-timeout register-partial \
   register-unknown register-malformed register-multiple register-bad-metrics \
   register-boundary register-oversized; do
-  CURL_BEHAVIOR=$behavior run_workflow local
-  check "$behavior fails the fixture" [ "$STATUS" -eq 1 ]
-  check "$behavior names the fixture step" has 'fixture request failed at register' "$CTL/out"
+  echo "$behavior" >"$CTL/curl.behavior"
+  : >"$CTL/curl.calls"
+  : >"$CTL/calls"
+  STATUS=0
+  PATH="$FAKE:$PATH" bash "$REPO/scripts/lib/mcp-workflow-fixture.sh" "$STATE/input" \
+    "$HELPER_SCRATCH" https://localhost:20443 "${DIAGNOSTIC%/*}" \
+    202 register POST /api/v1/auth/password/register "$HELPER_SCRATCH/body" \
+    "$HELPER_SCRATCH/headers" >"$CTL/out" 2>&1 || STATUS=$?
+  check "$behavior fails the fixture request" [ "$STATUS" -eq 1 ]
+  check "$behavior names the fixture step" has 'fixture response at register' "$CTL/out"
   check "$behavior sends registration once" [ "$(grep -c '^POST /api/v1/auth/password/register$' "$CTL/curl.calls")" -eq 1 ]
   check "$behavior starts no runner or browser" not_called '^(runner|container)'
-  check "$behavior still cleans the fixture" [ "$(grep -c '^fixture cleanup$' "$CTL/calls")" -eq 2 ]
   check "$behavior writes only redacted evidence" jqe '
     keys == ["curl_exit", "duration_seconds", "error_code", "expected_status", "http_status", "stage", "version"]
     and .version == 1 and .stage == "register" and .expected_status == 202' "$DIAGNOSTIC"
@@ -579,7 +634,9 @@ for behavior in register-unavailable register-rate-limited register-timeout regi
   check "$behavior withholds response content in output" no_secret_in "$CTL/out"
   check "$behavior withholds response content in evidence" no_secret_in "$DIAGNOSTIC"
   check "$behavior output uses fixed words" fixed_output
-  check "$behavior removes the private response" [ ! -e "$REPO/.dev/mcp-workflow-local/fixture/response" ]
+  if [ -e "$HELPER_SCRATCH/response" ]; then
+    check "$behavior keeps the response private" [ "$(mode_of "$HELPER_SCRATCH/response")" = 600 ]
+  fi
   case $behavior in
   register-unavailable)
     check 'unavailable response records status, code, and five-second duration' jqe \
@@ -654,8 +711,8 @@ check 'synthetic login uses the reserved fixture prefix' \
 check 'candidate and review are private' [ "$(tr '\n' ' ' <"$CTL/candidate.modes")" = '600 600 ' ]
 check 'candidate translates only text' jqe '. == {personalDetails: {fullName: "Lan Fixture",
   headline: "Kỹ sư nền tảng hư cấu"}, content: {work: {displayName: "Kinh nghiệm"}}}' "$CTL/candidate.copy"
-check 'fixture flow registers, creates, uploads, signs out, and inspects' [ "$(tr '\n' ' ' <"$CTL/curl.calls")" = \
-  "DELETE /api/messages POST /api/v1/auth/password/register GET /api/messages POST /api/v1/auth/password/verify POST /api/v1/auth/password/login GET /api/v1/me POST /api/v1/resumes GET /api/v1/me POST /api/v1/resumes/src-id/photo GET /api/v1/me POST /api/v1/auth/logout POST /api/v1/auth/password/login GET /api/v1/resumes GET /api/v1/resumes/tgt-id GET /api/v1/resumes/tgt-id/photo GET /api/v1/me POST /api/v1/auth/logout " ]
+check 'fixture flow signs in, creates, uploads, signs out, and inspects' [ "$(tr '\n' ' ' <"$CTL/curl.calls")" = \
+  "POST /api/v1/auth/password/login GET /api/v1/me POST /api/v1/resumes GET /api/v1/me POST /api/v1/resumes/src-id/photo GET /api/v1/me POST /api/v1/auth/logout POST /api/v1/auth/password/login GET /api/v1/resumes GET /api/v1/resumes/tgt-id GET /api/v1/resumes/tgt-id/photo GET /api/v1/me POST /api/v1/auth/logout " ]
 check 'fixture photo comes from the tracked fixture' \
   has "file=@$REPO/apps/server/cmd/native-http-fixture/testdata/photo.png;type=image/png" "$CTL/photo.form"
 check 'fixture account is cleaned before and after' [ "$(grep -c '^fixture cleanup$' "$CTL/calls")" -eq 2 ]
