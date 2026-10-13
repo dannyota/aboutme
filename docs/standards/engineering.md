@@ -42,9 +42,9 @@ Do not leave these in code, tests, or living docs:
 - claims about deleted files or retired tools;
 - line-by-line descriptions that repeat the code.
 
-Generated files and migrations frozen by `apps/server/migrations/.uat-baseline`
-are exceptions. Change generated sources or leave frozen migrations intact; do
-not hand-edit either to improve prose.
+Generated files and migrations frozen by root `.v1-baseline` are exceptions.
+Change generated sources or leave frozen migrations intact; do not hand-edit
+either to improve prose.
 
 ## Keeping text current
 

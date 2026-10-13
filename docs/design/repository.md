@@ -11,8 +11,8 @@ describes the running system. The component source maps live in the
 | `apps/server/`                | Go API, domain logic, and authorized render jobs                                                                          |
 | `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                                                           |
 | `apps/mobile/`                | Deferred Flutter client                                                                                                   |
-| `packages/schema/`            | Resume JSON Schema, immutable releases, generators, fixtures, and preset JSON                                             |
-| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the baseline marker                                                    |
+| `packages/schema/`            | Resume JSON Schema, released snapshots, generators, fixtures, and preset JSON                                             |
+| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the application v1 baseline marker                                     |
 | `apps/server/sql/queries.sql` | sqlc query source                                                                                                         |
 | `docs/api/openapi.yaml`       | Implemented HTTP contract                                                                                                 |
 | `docs/design/`                | Intended product and architecture                                                                                         |

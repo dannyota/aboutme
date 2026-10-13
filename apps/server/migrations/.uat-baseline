@@ -1,1 +1,0 @@
-Release migration baseline (ADR 0038): every migration on a base containing this marker is immutable.

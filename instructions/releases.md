@@ -8,6 +8,8 @@ Delivery and independent review follow [workflow](workflow.md).
 
 The primary releases; devops implementers own the scripts and infrastructure. Details live in [the production runbook](../docs/runbooks/production.md).
 
+The [pre-v1 compatibility policy](../AGENTS.md#how-we-work) permits breaking changes throughout application v0. Application SemVer is separate from resume document schema versions. The first application `v1.0.0` release candidate records supported API and document contracts and adds root `.v1-baseline`. Keep the marker absent in v0 releases. [ADR 0004](../docs/adr/0004-resume-document-contract.md) and [ADR 0005](../docs/adr/0005-database-migrations.md) own the resulting freeze. Deployments that change pre-v1 migration history reconcile existing database state explicitly.
+
 1. Commit each feature as its own exact file set (see [Git](../AGENTS.md#git)).
 2. A renderer change moves pixel baselines. Generate them in hosted CI from the exact candidate, inspect the artifacts, and commit the changed images. If no hosted generation path exists, add one instead of running an uncapped local build. Every release commit must carry its own baselines.
 3. Order commits so each release commit holds only that release. Hold commits for a later release (for example routes for pages not yet built) above it.

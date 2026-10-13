@@ -141,9 +141,12 @@ Migrations run as a separate deploy step, never at server startup
 nonzero migration exit blocks the update. The runner uses goose's Provider with
 a PostgreSQL session advisory locker, which takes the lock before reading the
 pending set, so a second concurrent runner is safe. Every migration runs as the
-fixed `aboutme_migrator` role that `db-setup` creates.
-`apps/server/migrations/.uat-baseline` keeps existing migrations immutable
-([ADR 0005](../adr/0005-database-migrations.md)).
+fixed `aboutme_migrator` role that `db-setup` creates. Before application
+`v1.0.0`, migration history may be edited, deleted, or collapsed without
+backwards compatibility. Repository SQL edits do not change applied database
+history or stored state; deployment reconciles that state explicitly. The first
+v1 candidate adds root `.v1-baseline`; trusted comparison bases containing it
+freeze existing migrations ([ADR 0005](../adr/0005-database-migrations.md)).
 
 The [release fence](passkey-release-fence.md) keeps every supported deploy,
 rollback, and restoration at or above the second-factor floor. Every supported
@@ -151,11 +154,12 @@ path runs the current deployer, not a script from the target release. OpenTofu
 and host administration remain privileged bypasses that need a compatibility
 proof.
 
-A breaking schema change uses expand, backfill, and contract across releases, so
-the previous server keeps working against the migrated schema. The deploy script
-does not test that, so redeploying an earlier image is a supported rollback only
-when the failed release applied no migration. Otherwise recovery is a forward
-fix or a point-in-time restore.
+After the application v1 baseline, a breaking schema change uses expand,
+backfill, and contract across releases, so the previous server keeps working
+against the migrated schema. The deploy script does not test that, so
+redeploying an earlier image is a supported rollback only when the failed
+release applied no migration. Otherwise recovery is a forward fix or a
+point-in-time restore.
 
 Application secrets are root-owned 0400 host files on the encrypted data volume,
 supplied as named Podman secrets only to the units that need them. An
