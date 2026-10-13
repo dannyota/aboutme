@@ -236,6 +236,12 @@ sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
 
+Coraza alerts count rule matches, not distinct requests. Their metadata lives in
+`/run/aboutme/caddy-log/waf/` on tmpfs, in current and rotated serving and
+maintenance logs. Summarize timestamps, levels, message kinds, and rule IDs;
+these records do not establish response status or successful access. Check the
+configured Coraza mode before interpreting a match as a blocked request.
+
 ## Vulnerability scans
 
 [The security scan](../../.github/workflows/security-scan.yml) runs weekly. Go
