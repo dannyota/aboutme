@@ -18,8 +18,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Trigger every alarm once and confirm its email arrives (AC-OPS-019, `PLANNED`).
-- Record one successful run of each of the four Vietnam application jobs: `idempotency-expiry-sweep`, `media-deletion-sweep`, `privacy-retention-sweep`, and `media-orphan-sweep`. Evidence: [Vietnam scheduled jobs](../design/vietnam-production.md#scheduled-jobs), `deploy/vn/scripts/deploy-host.sh`. Open: AC-INF-006 still describes five AWS EventBridge jobs, including the retired `release-snapshot-sweep`.
+- Document safe trigger methods for the accepted Vietnam alarm inventory, exercise each detector or failure action, and record a matching mailbox receipt timestamp per alarm (AC-OPS-019, `PLANNED`). Per-alarm delivery evidence is missing. Evidence: [Vietnam operations evidence](./traceability/vietnam-operations.md#alarm-acceptance-remains-open).
+- Investigate the GitHub uptime workflow cadence gap against its five-minute cron. Successful samples do not prove monitoring at the intended interval. Evidence: [external readiness monitoring collected 2026-10-13](./traceability/vietnam-operations.md#external-readiness-monitoring).
 
 ## Vietnam production
 
