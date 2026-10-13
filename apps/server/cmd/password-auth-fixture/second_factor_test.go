@@ -98,11 +98,20 @@ func TestSecondFactorCredentialsHaveClosedRolesAndReservedAccounts(t *testing.T)
 	}
 }
 
+func privateFactorDirectory(t *testing.T) string {
+	t.Helper()
+	path := t.TempDir()
+	if modeErr := os.Chmod(path, 0o700); modeErr != nil {
+		t.Fatal(modeErr)
+	}
+	return path
+}
+
 func TestSecondFactorCredentialFileRejectsUnsafePaths(t *testing.T) {
 	doc := factorTestAccounts(t, "passkey")
 	for _, mutation := range []string{"valid", "existing", "relative", "public-parent", "symlink-parent", "public-file", "symlink", "hardlink", "oversized", "extra-field", "duplicate-field"} {
 		t.Run(mutation, func(t *testing.T) {
-			parent := t.TempDir()
+			parent := privateFactorDirectory(t)
 			path := filepath.Join(parent, "accounts.json")
 			if mutation == "relative" {
 				path = "relative-accounts.json"
@@ -113,7 +122,7 @@ func TestSecondFactorCredentialFileRejectsUnsafePaths(t *testing.T) {
 				}
 			}
 			if mutation == "symlink-parent" {
-				link := filepath.Join(t.TempDir(), "parent")
+				link := filepath.Join(privateFactorDirectory(t), "parent")
 				if err := os.Symlink(parent, link); err != nil {
 					t.Fatal(err)
 				}
@@ -140,7 +149,7 @@ func TestSecondFactorCredentialFileRejectsUnsafePaths(t *testing.T) {
 					t.Fatal(chmodErr)
 				}
 			case "symlink", "hardlink":
-				link := filepath.Join(t.TempDir(), "accounts.json")
+				link := filepath.Join(privateFactorDirectory(t), "accounts.json")
 				if mutation == "symlink" {
 					err = os.Symlink(path, link)
 				} else {
