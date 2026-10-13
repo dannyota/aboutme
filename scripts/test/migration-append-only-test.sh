@@ -16,9 +16,12 @@ new_repo() {
   git -C "$repo" config user.name "migration gate test"
   printf '%s\n' '-- released migration' >"$repo/apps/server/migrations/00001_released.sql"
   if [ "$baseline" = true ]; then
-    printf '%s\n' 'First UAT migration baseline.' >"$repo/apps/server/migrations/.uat-baseline"
+    printf '%s\n' 'First v1 migration baseline.' >"$repo/.v1-baseline"
   fi
   git -C "$repo" add -- apps/server/migrations
+  if [ "$baseline" = true ]; then
+    git -C "$repo" add -- .v1-baseline
+  fi
   git -C "$repo" commit -qm "test: release migration"
   git -C "$repo" update-ref refs/remotes/origin/main HEAD
 }
@@ -131,53 +134,88 @@ assert_local_sql_rename_out_rejected rename-out-hidden-index hidden-index
 
 repo=$WORK/baseline-deleted
 new_repo "$repo" true
-rm "$repo/apps/server/migrations/.uat-baseline"
+rm "$repo/.v1-baseline"
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: deleting the UAT baseline passed" >&2
+  echo "migration-append-only-test: deleting the v1 baseline passed" >&2
   exit 1
 fi
 
 repo=$WORK/baseline-modified
 new_repo "$repo" true
-printf '%s\n' 'weakened marker' >"$repo/apps/server/migrations/.uat-baseline"
+printf '%s\n' 'weakened marker' >"$repo/.v1-baseline"
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: modifying the UAT baseline passed" >&2
+  echo "migration-append-only-test: modifying the v1 baseline passed" >&2
   exit 1
 fi
 
 repo=$WORK/baseline-deleted-staged
 new_repo "$repo" true
-git -C "$repo" rm -q -- apps/server/migrations/.uat-baseline
+git -C "$repo" rm -q -- .v1-baseline
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: staged UAT baseline deletion passed" >&2
+  echo "migration-append-only-test: staged v1 baseline deletion passed" >&2
   exit 1
 fi
 
 repo=$WORK/baseline-deleted-hidden-index
 new_repo "$repo" true
-git -C "$repo" rm -q -- apps/server/migrations/.uat-baseline
-git -C "$repo" show HEAD:apps/server/migrations/.uat-baseline \
-  >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" rm -q -- .v1-baseline
+git -C "$repo" show HEAD:.v1-baseline \
+  >"$repo/.v1-baseline"
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: hidden-index UAT baseline deletion passed" >&2
+  echo "migration-append-only-test: hidden-index v1 baseline deletion passed" >&2
   exit 1
 fi
 
 repo=$WORK/baseline-modified-hidden-index
 new_repo "$repo" true
-printf '%s\n' 'weakened marker' >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations/.uat-baseline
-git -C "$repo" show HEAD:apps/server/migrations/.uat-baseline \
-  >"$repo/apps/server/migrations/.uat-baseline"
+printf '%s\n' 'weakened marker' >"$repo/.v1-baseline"
+git -C "$repo" add -- .v1-baseline
+git -C "$repo" show HEAD:.v1-baseline \
+  >"$repo/.v1-baseline"
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: hidden-index UAT baseline modification passed" >&2
+  echo "migration-append-only-test: hidden-index v1 baseline modification passed" >&2
   exit 1
 fi
 
-repo=$WORK/pre-uat-edit
+repo=$WORK/pre-v1-edit
 new_repo "$repo"
-printf '%s\n' '-- corrected before first UAT' >"$repo/apps/server/migrations/00001_released.sql"
+printf '%s\n' '-- corrected before first v1' >"$repo/apps/server/migrations/00001_released.sql"
 run_local "$repo" >/dev/null
+
+# An obsolete UAT marker does not freeze a pre-v1 base.
+for mode in modified deleted renamed type-changed; do
+  repo=$WORK/pre-v1-$mode
+  new_repo "$repo"
+  printf '%s\n' 'obsolete marker' >"$repo/apps/server/migrations/.uat-baseline"
+  git -C "$repo" add -- apps/server/migrations/.uat-baseline
+  git -C "$repo" commit -qm "test: obsolete UAT marker"
+  base=$(git -C "$repo" rev-parse HEAD)
+  case "$mode" in
+  modified) printf '%s\n' '-- changed' >"$repo/apps/server/migrations/00001_released.sql" ;;
+  deleted) rm "$repo/apps/server/migrations/00001_released.sql" ;;
+  renamed) mv "$repo/apps/server/migrations/00001_released.sql" "$repo/apps/server/migrations/00001_renamed.sql" ;;
+  type-changed)
+    rm "$repo/apps/server/migrations/00001_released.sql"
+    ln -s missing.sql "$repo/apps/server/migrations/00001_released.sql"
+    ;;
+  esac
+  run_local "$repo" >/dev/null
+  git -C "$repo" add -A -- apps/server/migrations
+  run_local "$repo" >/dev/null
+  git -C "$repo" commit -qm "test: pre-v1 $mode"
+  run_commits "$repo" "$base" HEAD >/dev/null
+done
+
+repo=$WORK/pre-v1-collapse
+new_repo "$repo"
+base=$(git -C "$repo" rev-parse HEAD)
+rm "$repo/apps/server/migrations/00001_released.sql"
+printf '%s\n' '-- collapsed baseline' >"$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' 'Application v1 baseline.' >"$repo/.v1-baseline"
+git -C "$repo" add -A -- .v1-baseline apps/server/migrations
+run_local "$repo" >/dev/null
+git -C "$repo" commit -qm "test: establish v1 with collapsed history"
+run_commits "$repo" "$base" HEAD >/dev/null
 
 repo=$WORK/addition
 new_repo "$repo" true
@@ -187,7 +225,7 @@ run_local "$repo" >/dev/null
 repo=$WORK/hosted-invalid-base
 new_repo "$repo" true
 if run_commits "$repo" not-a-commit HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: invalid hosted base passed as pre-UAT" >&2
+  echo "migration-append-only-test: invalid hosted base passed as pre-v1" >&2
   exit 1
 fi
 if run_commits "$repo" HEAD not-a-commit >/dev/null 2>&1; then
@@ -213,11 +251,11 @@ assert_hosted_sql_rejected type-changed
 repo=$WORK/hosted-marker-tamper
 new_repo "$repo" true
 base=$(git -C "$repo" rev-parse HEAD)
-printf '%s\n' 'weakened marker' >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations/.uat-baseline
-git -C "$repo" commit -qm "test: tamper with UAT baseline"
+printf '%s\n' 'weakened marker' >"$repo/.v1-baseline"
+git -C "$repo" add -- .v1-baseline
+git -C "$repo" commit -qm "test: tamper with v1 baseline"
 if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: hosted UAT baseline tamper passed" >&2
+  echo "migration-append-only-test: hosted v1 baseline tamper passed" >&2
   exit 1
 fi
 
@@ -225,9 +263,9 @@ repo=$WORK/hosted-non-ancestor
 new_repo "$repo"
 root=$(git -C "$repo" rev-parse HEAD)
 printf '%s\n' '-- corrected before baseline' >"$repo/apps/server/migrations/00001_released.sql"
-printf '%s\n' 'First UAT migration baseline.' >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations
-git -C "$repo" commit -qm "test: establish UAT baseline"
+printf '%s\n' 'First v1 migration baseline.' >"$repo/.v1-baseline"
+git -C "$repo" add -- .v1-baseline apps/server/migrations
+git -C "$repo" commit -qm "test: establish v1 baseline"
 base=$(git -C "$repo" rev-parse HEAD)
 git -C "$repo" switch -q --detach "$root"
 printf '%s\n' '-- rewritten migration' >"$repo/apps/server/migrations/00001_released.sql"
@@ -258,8 +296,8 @@ new_marked_repo() { # repo
   git -C "$repo" config user.name "migration gate test"
   printf '%s\n' '-- migration one' >"$repo/apps/server/migrations/00001_one.sql"
   printf '%s\n' '-- migration two' >"$repo/apps/server/migrations/00002_two.sql"
-  printf '%s\n' 'baseline marker' >"$repo/apps/server/migrations/.uat-baseline"
-  git -C "$repo" add -- apps/server/migrations scripts
+  printf '%s\n' 'baseline marker' >"$repo/.v1-baseline"
+  git -C "$repo" add -- .v1-baseline apps/server/migrations scripts
   git -C "$repo" commit -qm "test: marked baseline"
 }
 
@@ -267,8 +305,8 @@ collapse_migrations() { # repo
   local repo=$1
   rm -f "$repo"/apps/server/migrations/*.sql
   printf '%s\n' '-- collapsed baseline' >"$repo/apps/server/migrations/00001_baseline.sql"
-  printf '%s\n' 'new baseline marker' >"$repo/apps/server/migrations/.uat-baseline"
-  git -C "$repo" add -A -- apps/server/migrations
+  printf '%s\n' 'new baseline marker' >"$repo/.v1-baseline"
+  git -C "$repo" add -A -- .v1-baseline apps/server/migrations
 }
 
 repo=$WORK/hosted-baseline-reset-rejected

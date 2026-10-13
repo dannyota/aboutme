@@ -1,6 +1,7 @@
 # 0004: Resume document validation, code generation, order, and versions
 
-Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19, 2026-09-27).
+Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19, 2026-09-27,
+2026-10-13).
 
 ## Context
 
@@ -62,9 +63,21 @@ placement. `content` is an unordered map keyed by section key.
 
 ### Versions and converters
 
-Each released document version has an immutable JSON Schema and retained Go and
-TypeScript types. A checked-in manifest names every released version and the
-current version. Unknown versions fail closed.
+Application SemVer is separate from resume document schema version numbers.
+Before application `v1.0.0`, API contracts, released document schemas and their
+manifest, and older-client support may change without backwards compatibility.
+Fallback machinery is not required solely for older v0 releases. Existing
+converters may remain; this policy does not require removing them.
+
+The first application v1 release candidate records supported API and document
+contracts and adds root `.v1-baseline`. Once the trusted comparison base
+contains it, existing released JSON Schemas and retained versioned types are
+immutable, and the manifest appends releases. The snapshot guard freezes the
+marker and existing schema files, not manifest history. A checked-in manifest
+names the current supported versions; unknown versions fail closed.
+
+The following converter and older-client rules describe the implemented support.
+Before application v1 they may change with the supported contract.
 
 Conversions are pure, deterministic functions between adjacent versions. The
 service composes them to project a stored document into the current shape for
@@ -116,9 +129,9 @@ An older client write never erases a field it cannot express:
 - The store treats the three `jsonb` columns as byte-comparable after
   normalization. Codec tests assert stability of the assembled document, never
   of `content` key order.
-- Released schema files and versioned generated outputs never change. Adding a
-  field to a released version needs a new version; widening a released enum is
-  not allowed.
+- After the application v1 baseline, released schema files and versioned
+  generated outputs never change. Adding a field or widening an enum requires a
+  new document version.
 - Converter tests prove exact round trips where lossless, and each declared loss
   exactly. Any other loss fails closed.
 - A release that stores a new version cannot be rolled back to an older release,
@@ -140,3 +153,8 @@ An older client write never erases a field it cannot express:
   (2026-09-19), which released those versions.
 - Accepted (2026-09-27): document v5 with the optional
   `customization.colorScheme`, its v4 loss, and its older-client write rule.
+
+- Accepted (2026-10-13): allow breaking API, document, manifest, and
+  older-client support changes before application v1; establish root
+  `.v1-baseline` in its first release candidate. Document schema numbering
+  remains independent.

@@ -172,10 +172,15 @@ aggregate.
 
 ## Document versions
 
-Every released document version retains an immutable `resume.v<N>.schema.json`
-and generated Go and TypeScript types. A reviewed manifest declares the current,
-accepted, and emitted versions; generators do not discover releases by scanning
-filenames.
+Application SemVer is separate from resume document schema version numbers.
+[ADR 0004](../adr/0004-resume-document-contract.md) defines the pre-v1 breaking
+change policy and the application v1 freeze. The first application v1 candidate
+records supported contracts and adds root `.v1-baseline`.
+
+A reviewed manifest declares current, accepted, and emitted versions; generators
+do not discover releases by scanning filenames. The converter and older-client
+rules below describe implemented support, which may change before application v1
+([ADR 0004](../adr/0004-resume-document-contract.md)).
 
 Reads project old stored documents in memory and never write. A user write
 persists the projected current shape with revision compare-and-swap (CAS).
@@ -217,13 +222,13 @@ print stay light.
 ## Schema and migrations
 
 - `packages/schema/resume.schema.json` is the editable document-shape source.
-- `packages/schema/released-versions.json` declares immutable releases.
+- `packages/schema/released-versions.json` declares released document versions.
 - Code generation derives discriminators and entry definitions from the schema;
   conformance tests keep JSON Schema, TypeScript, and Go aligned
   ([ADR 0004](../adr/0004-resume-document-contract.md)).
 - `apps/server/migrations/*.sql` is the sole relational schema source. Migration
   DDL is hand-written, applied by the embedded goose command, read by sqlc, and
-  is append-only under the baseline marker
+  is append-only once the trusted base contains root `.v1-baseline`
   ([ADR 0005](../adr/0005-database-migrations.md)).
 - Generated artifacts are committed and changed only through their source and
   generator.
@@ -232,7 +237,10 @@ There is no separate declarative relational schema file. Reading migrations and
 sqlc queries together gives the applied schema and typed access layer without a
 second schema source that can drift.
 
-`apps/server/migrations/.uat-baseline` freezes existing migrations. The
-integration gate rejects changing the marker or any existing migration; only new
-forward migrations may be added. Goose tracks applied versions, not file
-checksums, at runtime.
+Before application v1, migration history may be edited, deleted, or collapsed.
+Once a trusted comparison base contains root `.v1-baseline`, the guards reject
+changes to that marker, existing migration SQL, and released schema snapshots;
+new forward migrations and document versions remain allowed. Goose tracks
+applied versions, not file checksums, at runtime. Editing repository SQL does
+not change applied database history or stored state; deployments reconcile that
+state explicitly.

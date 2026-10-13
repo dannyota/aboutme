@@ -1,6 +1,6 @@
 # 0005: Goose migrations as the schema source, one baseline, deploy-step migrator
 
-Status: Accepted (2026-08-11, 2026-08-12, 2026-09-08, 2026-09-17).
+Status: Accepted (2026-08-11, 2026-08-12, 2026-09-08, 2026-09-17, 2026-10-13).
 
 ## Context
 
@@ -12,8 +12,8 @@ and other objects this schema depends on. sqlc parses goose-format migration
 files directly, so the migration directory can feed both goose and sqlc.
 
 Migration history also needs an exact point after which files are immutable.
-Before the first release, history was disposable; after it, a durable database
-depends on the bytes.
+Before application `v1.0.0`, repository history is disposable. A database that
+has applied it still retains its own migration history and stored state.
 
 Running migrations from inside a running fleet needs a recorded wake, a write
 gate, and a separate migrator session. Running them as a deploy step before the
@@ -31,20 +31,26 @@ data layer. Migration DDL is hand-written.
 - `sqlc.yaml` carries an explicit `public.citext` type override, because sqlc
   degrades the schema-qualified spelling to `interface{}` without it.
 
-**One baseline.** `00001_baseline.sql` holds the schema as of the first release,
+**One baseline.** `00001_baseline.sql` holds the consolidated database schema,
 keeping every table, column order, constraint, index, function, and trigger
 name. It grants `aboutme_app` exactly SELECT, INSERT, UPDATE, and DELETE on each
 business table. Every later migration grants explicitly, and a catalog test
 enforces the grants.
 
-**Immutable after the marker.** `apps/server/migrations/.uat-baseline` marks the
-release baseline. Once a comparison base contains it, the marker cannot change
-or be removed, every migration on that base is immutable, and schema changes use
-new forward migrations. Local and hosted guards compare the two trees directly
-and fail closed when a baselined migration or the marker changes, including
-across rewritten, non-ancestor history. Rollback never edits old files; it uses
-a forward corrective migration and keeps the candidate and prior server
-compatible for the rollback window.
+**Editable before v1, immutable after the marker.** Before application `v1.0.0`,
+migrations may be edited, deleted, renamed, or collapsed without a backwards
+compatibility promise. The first v1 release candidate records the supported
+contracts and adds root `.v1-baseline`. Once a trusted comparison base contains
+it, the marker cannot change or be removed, every migration on that base is
+immutable, and schema changes use new forward migrations. Local and hosted
+guards compare trees directly, including rewritten, non-ancestor history; a
+candidate cannot disable the freeze by removing its marker. After that boundary,
+rollback uses a forward corrective migration and keeps candidate and prior
+servers compatible for the rollback window.
+
+Editing repository SQL does not change an existing database's applied versions
+or stored state. Any deployment that changes pre-v1 history explicitly
+reconciles that state. The policy does not reset production data.
 
 **Plain migrator, deploy step.** The migrator is plain goose under a PostgreSQL
 session advisory lock. It always runs as `aboutme_migrator`, which owns every
@@ -85,3 +91,6 @@ the only migrator; the advisory lock guarantees it if two ever run.
   migrator, two roles, and `db-setup`. It removed migrations 00013 to 00023 (the
   replica coordination runtime and staged migrator). The one-time guard
   exemption for the reset and the withdrawn `v0.1.0` tag were one-off steps.
+
+- Accepted (2026-10-13): allow breaking changes throughout application v0;
+  replace the UAT freeze with root `.v1-baseline` in the first v1 candidate.

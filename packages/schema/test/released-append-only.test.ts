@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -13,53 +12,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-// Released schemas are immutable except for this one approved documentation
-// path rewrite. The exception is one-way and byte-exact, so it cannot permit a
-// later v1 edit. See docs/design/data.md.
-const APPROVED_OLD_V1_SHA256 =
-  "2da37bb75297fefe32a920e3fae960100f0a99236ba4dc21ef25ae6b3f61f13f";
-const APPROVED_NEW_V1_SHA256 =
-  "879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866";
-
 const APPEND_ONLY_SCRIPT = readFileSync(
   "../../scripts/check-released-schemas.sh",
   "utf8",
 );
-const appendOnlyScript = (oldHash: string, newHash: string) =>
-  'set -- --commits "$BASE_SHA" HEAD\n'.concat(
-    APPEND_ONLY_SCRIPT.replaceAll(APPROVED_OLD_V1_SHA256, oldHash).replaceAll(
-      APPROVED_NEW_V1_SHA256,
-      newHash,
-    ),
-  );
+const TEST_APPEND_ONLY_SCRIPT = 'set -- --commits "$BASE_SHA" HEAD\n'.concat(
+  APPEND_ONLY_SCRIPT,
+);
 
 const OLD_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "old"}\n';
-const APPROVED_SCHEMA_BYTES =
+const CHANGED_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "current"}\n';
-const UNAPPROVED_OLD_SCHEMA_BYTES =
+const OTHER_BASE_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "unknown"}\n';
 const DIVERGED_BASE_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "diverged-base"}\n';
-const sha256 = (bytes: string) =>
-  createHash("sha256").update(bytes).digest("hex");
-const TEST_OLD_V1_SHA256 = sha256(OLD_SCHEMA_BYTES);
-const TEST_NEW_V1_SHA256 = sha256(APPROVED_SCHEMA_BYTES);
-const TEST_APPEND_ONLY_SCRIPT = appendOnlyScript(
-  TEST_OLD_V1_SHA256,
-  TEST_NEW_V1_SHA256,
-);
-
 const localCiPath = "../../scripts/ci.sh";
 const localCi = existsSync(localCiPath)
   ? readFileSync(localCiPath, "utf8")
   : "";
 const localGateFunction =
   localCi.match(/^released_schema_append_only\(\) \{[\s\S]*?^\}/m)?.[0] ?? "";
-const testLocalGateScript = localGateFunction
-  .replaceAll(APPROVED_OLD_V1_SHA256, TEST_OLD_V1_SHA256)
-  .replaceAll(APPROVED_NEW_V1_SHA256, TEST_NEW_V1_SHA256)
-  .concat("\nreleased_schema_append_only\n");
+const testLocalGateScript = localGateFunction.concat(
+  "\nreleased_schema_append_only\n",
+);
 
 const gateScripts: Array<{ name: string; script: string }> = [
   { name: "hosted released-schema script", script: TEST_APPEND_ONLY_SCRIPT },
@@ -85,11 +62,23 @@ function git(repo: string, args: string[]): string {
 
 // Build a repository with released v1 and working schema files, then return the
 // base commit used by the append-only comparison.
-function baseRepo(options: { v1Bytes?: string; v2Bytes?: string } = {}): {
+type BaseOptions = {
+  v1Bytes?: string;
+  v2Bytes?: string;
+  marked?: boolean;
+  oldMarker?: boolean;
+};
+
+function baseRepo(options: BaseOptions = {}): {
   repo: string;
   base: string;
 } {
-  const { v1Bytes = OLD_SCHEMA_BYTES, v2Bytes } = options;
+  const {
+    v1Bytes = OLD_SCHEMA_BYTES,
+    v2Bytes,
+    marked = true,
+    oldMarker = false,
+  } = options;
   const repo = mkdtempSync(join(tmpdir(), "aboutme-released-append-only-"));
   repos.push(repo);
   git(repo, ["init", "-q", "-b", "main"]);
@@ -102,6 +91,15 @@ function baseRepo(options: { v1Bytes?: string; v2Bytes?: string } = {}): {
     writeFileSync(join(repo, "packages/schema/resume.v2.schema.json"), v2Bytes);
   }
   writeFileSync(join(repo, "packages/schema/resume.schema.json"), v1Bytes);
+  if (oldMarker) {
+    mkdirSync(join(repo, "apps/server/migrations"), { recursive: true });
+    writeFileSync(
+      join(repo, "apps/server/migrations/.uat-baseline"),
+      "obsolete\n",
+    );
+  }
+  if (marked)
+    writeFileSync(join(repo, ".v1-baseline"), "Application v1 baseline\n");
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-qm", "base: release v1"]);
   const base = git(repo, ["rev-parse", "HEAD"]).trim();
@@ -112,7 +110,7 @@ function baseRepo(options: { v1Bytes?: string; v2Bytes?: string } = {}): {
 function runGate(
   script: string,
   mutate: (repo: string) => void,
-  baseOptions: { v1Bytes?: string; v2Bytes?: string } = {},
+  baseOptions: BaseOptions = {},
 ): {
   status: number;
   output: string;
@@ -194,7 +192,7 @@ function runHostedGateWithInvalidRef(
   script: string,
   invalidRef: "base" | "head",
 ): { status: number; output: string } {
-  const { repo, base } = baseRepo();
+  const { repo, base } = baseRepo({ marked: false });
   if (invalidRef === "head") {
     git(repo, ["update-ref", "-d", "refs/heads/main"]);
   }
@@ -219,7 +217,7 @@ function runHostedGateWithNonCommitBase(script: string): {
   status: number;
   output: string;
 } {
-  const { repo } = baseRepo();
+  const { repo } = baseRepo({ marked: false });
   const tree = git(repo, ["rev-parse", "HEAD^{tree}"]).trim();
   const scriptPath = join(repo, "gate.sh");
   writeFileSync(scriptPath, script);
@@ -239,7 +237,7 @@ function runHostedGateWithNonCommitBase(script: string): {
 // HEAD. The workflow guard remains commit-based and uses runGate above.
 function runLocalWorktreeGate(
   mutate: (repo: string) => void,
-  baseOptions: { v1Bytes?: string; v2Bytes?: string } = {},
+  baseOptions: BaseOptions = {},
 ): { status: number; output: string } {
   const { repo } = baseRepo(baseOptions);
   mutate(repo);
@@ -258,27 +256,66 @@ function runLocalWorktreeGate(
 }
 
 describe.each(gateScripts)("$name", ({ script }) => {
-  it("allows only the approved old-to-new v1 byte transition", () => {
-    const { status, output } = runGate(script, (repo) => {
-      writeFileSync(
-        join(repo, "packages/schema/resume.v1.schema.json"),
-        APPROVED_SCHEMA_BYTES,
+  it.each(["modified", "deleted", "renamed", "type-changed"])(
+    "allows a pre-v1 %s despite an obsolete UAT marker",
+    (mode) => {
+      const { status } = runGate(
+        script,
+        (repo) => {
+          const path = join(repo, "packages/schema/resume.v1.schema.json");
+          if (mode === "modified") writeFileSync(path, "changed\n");
+          if (mode === "deleted") rmSync(path);
+          if (mode === "renamed")
+            git(repo, [
+              "mv",
+              "packages/schema/resume.v1.schema.json",
+              "packages/schema/resume.v3.schema.json",
+            ]);
+          if (mode === "type-changed") {
+            rmSync(path);
+            symlinkSync("resume.schema.json", path);
+          }
+        },
+        { marked: false, oldMarker: true },
       );
-    });
+      expect(status).toBe(0);
+    },
+  );
+
+  it("allows schema edits while establishing the first v1 baseline", () => {
+    const { status } = runGate(
+      script,
+      (repo) => {
+        writeFileSync(join(repo, ".v1-baseline"), "Application v1 baseline\n");
+        writeFileSync(
+          join(repo, "packages/schema/resume.v1.schema.json"),
+          "changed\n",
+        );
+      },
+      { marked: false },
+    );
     expect(status).toBe(0);
-    expect(output).toBe("");
   });
 
-  it("rejects the approved new v1 bytes when the base bytes are not approved", () => {
+  it.each(["deleted", "modified"])("rejects a %s v1 marker", (mode) => {
+    const { status } = runGate(script, (repo) => {
+      const marker = join(repo, ".v1-baseline");
+      if (mode === "deleted") rmSync(marker);
+      else writeFileSync(marker, "weakened\n");
+    });
+    expect(status).toBe(1);
+  });
+
+  it("rejects the changed v1 bytes over another base", () => {
     const { status, output } = runGate(
       script,
       (repo) => {
         writeFileSync(
           join(repo, "packages/schema/resume.v1.schema.json"),
-          APPROVED_SCHEMA_BYTES,
+          CHANGED_SCHEMA_BYTES,
         );
       },
-      { v1Bytes: UNAPPROVED_OLD_SCHEMA_BYTES },
+      { v1Bytes: OTHER_BASE_SCHEMA_BYTES },
     );
     expect(status).toBe(1);
     expect(output).toContain("Released schemas are immutable");
@@ -331,13 +368,13 @@ describe.each(gateScripts)("$name", ({ script }) => {
     expect(output).toMatch(/^T\s+packages\/schema\/resume\.v1\.schema\.json$/m);
   });
 
-  it("rejects the approved v1 transition with another forbidden released-schema change", () => {
+  it("rejects the v1 edit with another released-schema change", () => {
     const { status } = runGate(
       script,
       (repo) => {
         writeFileSync(
           join(repo, "packages/schema/resume.v1.schema.json"),
-          APPROVED_SCHEMA_BYTES,
+          CHANGED_SCHEMA_BYTES,
         );
         writeFileSync(
           join(repo, "packages/schema/resume.v2.schema.json"),
@@ -374,21 +411,6 @@ describe.each(gateScripts)("$name", ({ script }) => {
     expect(output).toBe("");
   });
 
-  it("allows the approved v1 transition alongside an added version", () => {
-    const { status, output } = runGate(script, (repo) => {
-      writeFileSync(
-        join(repo, "packages/schema/resume.v1.schema.json"),
-        APPROVED_SCHEMA_BYTES,
-      );
-      writeFileSync(
-        join(repo, "packages/schema/resume.v2.schema.json"),
-        '{"released": 2}\n',
-      );
-    });
-    expect(status).toBe(0);
-    expect(output).toBe("");
-  });
-
   it("allows ordinary edits to the working resume.schema.json", () => {
     const { status } = runGate(script, (repo) => {
       writeFileSync(
@@ -401,6 +423,14 @@ describe.each(gateScripts)("$name", ({ script }) => {
 });
 
 describe("hosted guard across rewritten history", () => {
+  it("rejects marker tampering across non-ancestor history", () => {
+    const result = runDivergedHostedGate(TEST_APPEND_ONLY_SCRIPT, (repo) => {
+      writeFileSync(join(repo, ".v1-baseline"), "different baseline\n");
+    });
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("baseline is immutable");
+  });
+
   it("rejects a released schema reverted by a non-ancestor head", () => {
     const result = runDivergedHostedGate(TEST_APPEND_ONLY_SCRIPT, (repo) => {
       writeFileSync(
@@ -460,20 +490,6 @@ describe("hosted guard across rewritten history", () => {
 
 describe("local guard against uncommitted released-schema changes", () => {
   it.skipIf(localGateFunction === "")(
-    "allows the exact approved transition in the unstaged worktree",
-    () => {
-      const { status, output } = runLocalWorktreeGate((repo) => {
-        writeFileSync(
-          join(repo, "packages/schema/resume.v1.schema.json"),
-          APPROVED_SCHEMA_BYTES,
-        );
-      });
-      expect(status).toBe(0);
-      expect(output).toBe("");
-    },
-  );
-
-  it.skipIf(localGateFunction === "")(
     "rejects an arbitrary unstaged modification",
     () => {
       const { status, output } = runLocalWorktreeGate((repo) => {
@@ -508,16 +524,16 @@ describe("local guard against uncommitted released-schema changes", () => {
   });
 
   it.skipIf(localGateFunction === "")(
-    "rejects approved new bytes over an unapproved worktree base",
+    "rejects changed bytes over another worktree base",
     () => {
       const { status, output } = runLocalWorktreeGate(
         (repo) => {
           writeFileSync(
             join(repo, "packages/schema/resume.v1.schema.json"),
-            APPROVED_SCHEMA_BYTES,
+            CHANGED_SCHEMA_BYTES,
           );
         },
-        { v1Bytes: UNAPPROVED_OLD_SCHEMA_BYTES },
+        { v1Bytes: OTHER_BASE_SCHEMA_BYTES },
       );
       expect(status).toBe(1);
       expect(output).toContain("Released schemas are immutable");
@@ -554,17 +570,46 @@ describe("local guard against uncommitted released-schema changes", () => {
   );
 });
 
-describe("installed released-schema guards", () => {
-  it("pins the approved transition in the hosted guard", () => {
-    expect(APPEND_ONLY_SCRIPT).toContain(APPROVED_OLD_V1_SHA256);
-    expect(APPEND_ONLY_SCRIPT).toContain(APPROVED_NEW_V1_SHA256);
+describe("local baseline enforcement", () => {
+  it("allows hidden staged schema edits before v1", () => {
+    const { status } = runLocalWorktreeGate(
+      (repo) => {
+        const path = "packages/schema/resume.v1.schema.json";
+        writeFileSync(join(repo, path), "changed\n");
+        git(repo, ["add", "--", path]);
+        writeFileSync(join(repo, path), OLD_SCHEMA_BYTES);
+      },
+      { marked: false, oldMarker: true },
+    );
+    expect(status).toBe(0);
   });
 
-  it.skipIf(localCi === "")(
-    "pins the same approved transition in scripts/ci.sh",
-    () => {
-      expect(localGateFunction).toContain(APPROVED_OLD_V1_SHA256);
-      expect(localGateFunction).toContain(APPROVED_NEW_V1_SHA256);
+  it.each(["deleted", "modified"])(
+    "rejects hidden staged marker %s",
+    (mode) => {
+      const { status } = runLocalWorktreeGate((repo) => {
+        const path = join(repo, ".v1-baseline");
+        const original = readFileSync(path, "utf8");
+        if (mode === "deleted") rmSync(path);
+        else writeFileSync(path, "changed\n");
+        git(repo, ["add", "-A", "--", ".v1-baseline"]);
+        writeFileSync(path, original);
+      });
+      expect(status).toBe(1);
     },
   );
+
+  it("rejects a local non-commit base before v1", () => {
+    const { status } = runLocalWorktreeGate(
+      (repo) => {
+        git(repo, [
+          "update-ref",
+          "refs/remotes/origin/main",
+          git(repo, ["rev-parse", "HEAD^{tree}"]).trim(),
+        ]);
+      },
+      { marked: false },
+    );
+    expect(status).toBe(1);
+  });
 });
