@@ -1,16 +1,18 @@
-// Command password-auth-fixture seeds and cleans the deterministic Phase PA
-// native-HTTPS proof state in the shared native development database
-// (aboutme_dev). It is the only authority that mutates the three fixed
-// fixture accounts; the browser proof creates its own runtime-random account
-// and the cleanup removes both the fixed accounts and any leftover test rows.
+// Command password-auth-fixture seeds and cleans native HTTPS proof state in
+// the shared native development database (aboutme_dev). It prepares three
+// fixed accounts and the MCP proof's runtime-random reserved account. Browser
+// proofs create their own runtime-random accounts. Cleanup removes the fixed
+// accounts and reserved test rows.
 //
 // Usage:
 //
 //	password-auth-fixture seed    --database-url <dsn>
+//	password-auth-fixture mcp-seed --database-url <dsn> --credential-file <path>
 //	password-auth-fixture cleanup --database-url <dsn>
 //	password-auth-fixture linkedin-cleanup --database-url <dsn>
 //
 // linkedin-cleanup removes the rows the LinkedIn browser proof creates.
+// mcp-seed requires ENV=dev and the MCP proof's private credential file.
 package main
 
 import (
