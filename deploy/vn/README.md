@@ -153,6 +153,44 @@ audit the exact rules and attachments before any attachment. The OpenTofu
 configuration and mocked plan tests do not perform that reconciliation and do
 not make a live drill safe to run.
 
+`scripts/drill-journal.sh` is a standalone transport for bounded JSON records
+under `restore-drill/v1/`. Source it, then call
+`drill_journal_put_create <record-path> <file>` or
+`drill_journal_get <record-path> <new-file>`. It uses the existing
+`~/.config/aboutme/vn/tfstate-s3-credentials` file without printing its values.
+Set `DRILL_STATE_CREDENTIALS_FILE` to an alternate reviewed state credential
+file when the operator configuration is elsewhere. The caller owns record
+fields, chain validation, fencing, and secret-free content. The transport has no
+delete operation and is not a distributed lock.
+
+The journal uses reviewed `vngcloud` v0.78.0 native object GET and create-only
+PUT with a fixed HCM04 endpoint, isolated configuration, and bounded transfers.
+Its credential file must be a regular non-symlink file owned by the operator,
+mode 0600, containing only the static `[default]` key pair. The standalone proof
+uses reviewed `vngcloud` v0.81.0 native HEAD, create-only PUT, bounded GET, and
+DELETE with the existing state key. Its read-only management versioning check
+uses the operator's environment credentials or `VNG_PROFILE`, following
+[the laptop credential convention](#credentials-on-the-laptop). Management
+credentials remain outside each isolated object-operation environment.
+
+Before using the journal, run
+`scripts/drill-state-proof.sh --storage-project-id <existing-HCM04-project-id>`
+from an attended operator machine with those management credentials loaded. Use
+the existing state bucket's storage project ID, as passed to `buckets.sh`. The
+explicit management region `hcm-3` selects HCM04. The check accepts only
+`{"Enabled":false,"Status":"Off"}` as never configured and rejects every other
+versioning result before writing. The command creates one unique nonsecret
+object under `restore-drill/probes/`, proves that a second conditional write is
+refused, reads back the original bytes, and deletes only that object. Its final
+absence check covers the current object key; it does not claim physical erasure
+by the storage provider. Source review does not establish live proof success.
+
+During the short proof, no other process may mutate its printed, unpredictable
+probe key and no administrator may change bucket versioning. Unrelated state and
+journal writes may continue. Cleanup reads the probe again and deletes it only
+when its bytes match a payload written successfully by that proof. An unreadable
+or foreign value remains at the printed recovery key for attended resolution.
+
 `scripts/restore-drill.sh` creates a temporary encrypted server and data volume,
 reaches its private IP through the production host as an SSH jump host, installs
 PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
