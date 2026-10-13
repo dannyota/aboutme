@@ -18,7 +18,6 @@ import {
 import {
   Sheet,
   SheetClose,
-  SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -32,6 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import AppLogo from '../app/AppLogo.vue';
+import AppSheetContent from '../app/AppSheetContent.vue';
 import IconButton from '../app/IconButton.vue';
 import StateMark from '../app/StateMark.vue';
 import { iconFor } from '../resume/icons';
@@ -521,8 +521,9 @@ async function discardAndSignIn(): Promise<void> {
             <ChevronDown aria-hidden="true" />
           </Button>
         </SheetTrigger>
-        <SheetContent
+        <AppSheetContent
           class="w-[calc(100%-2rem)] max-w-sm"
+          :close-label="copy.close"
           side="left"
           @open-auto-focus="onSheetOpenAutoFocus"
         >
@@ -581,7 +582,7 @@ async function discardAndSignIn(): Promise<void> {
               + {{ copy.addSection }}
             </Button>
           </SheetClose>
-        </SheetContent>
+        </AppSheetContent>
       </Sheet>
       <ErrorSummary
         :issues="issues"
