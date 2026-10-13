@@ -1,7 +1,7 @@
 /**
  * Page journeys shared by the two second-factor browser proofs: warming and
- * hydration, registration, password sign-in and sign-out, recovery codes,
- * reauthentication, agent grants, and account teardown. They record stages
+ * hydration, private fixture accounts, password sign-in and sign-out, recovery
+ * codes, reauthentication, agent grants, and account teardown. They record stages
  * through the harness in `second-factor-lib.ts`.
  */
 import {
@@ -11,12 +11,12 @@ import {
   type Route,
 } from '@playwright/test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, readFile } from 'node:fs/promises';
 import { freshCSRF } from './editor-fixtures';
 import { type DiagnosticCounters } from './harness-lib';
 import {
   APP_LANDINGS,
-  type CaptureClient,
   CLIENT_NAME_PATH,
   cookieValue,
   isSharded,
@@ -54,18 +54,15 @@ export async function setLocale(
  * a cold route. None of these issues a request while signed out beyond the
  * reads each proof's console filter already accepts.
  *
- * The two pages that take their token from the URL fragment are deliberately
- * absent. Each reads the fragment during setup, on the client only, because
- * the token must never reach the server, and with no fragment each sets its
+ * The reset page takes its token from the URL fragment and is deliberately
+ * absent. It reads the fragment during setup, on the client only, because
+ * the token must never reach the server, and with no fragment it sets its
  * own failure state before hydration. The server render and the first client
  * render then disagree and the development build says so on the console.
- * Every other page here starts in the same state on both sides: the ones
- * that fetch do it after mount or with server rendering turned off. The
- * journey only opens the fragment pages with a real token, where they are
- * clean, so each takes its first visit there instead.
+ * Every other page here starts in the same state on both sides. The journey
+ * opens the reset page with a real token under the first-visit bound.
  */
 export const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/register', 'register'],
   ['/login', 'login'],
   ['/login/second-factor', 'login-second-factor'],
   ['/forgot-password', 'forgot-password'],
@@ -161,35 +158,74 @@ export async function meStatus(page: Page): Promise<number> {
 
 // --- Account journeys ------------------------------------------------------
 
-/** Registers a fictional account and verifies it through the captured mail. */
-export async function registerVerified(
-  page: Page,
-  capture: CaptureClient,
-  email: string,
-  password: string,
-  name: string,
-): Promise<void> {
-  stage('register-open');
-  await gotoHydrated(page, '/register');
-  // The form is inert and invisible until the capabilities read resolves, so
-  // this is the first step that depends on the page's own data.
-  stage('register-form-ready');
-  await expect(page.getByTestId('register-form')).toBeVisible();
-  stage('register-fill');
-  await page.getByLabel('Name').fill(name);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByLabel('Confirm password', { exact: true }).fill(password);
-  stage('register-submit');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  stage('register-accepted');
-  await expect(page.getByTestId('register-success')).toBeVisible();
-  stage('register-await-mail');
-  const token = await capture.waitForToken('verify', email);
-  stage('register-verify-open');
-  await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);
-  stage('register-verified');
-  await expect(page.getByTestId('verify-success')).toBeVisible();
+interface FactorLogin {
+  readonly email: string;
+  readonly password: string;
+}
+
+/** Reads only the private run-scoped accounts prepared by the local fixture. */
+export async function readSecondFactorAccounts(
+  proof: 'passkey' | 'totp',
+): Promise<(role: string) => FactorLogin> {
+  stage('fixture-accounts');
+  const invalid = (): Error => new Error('invalid private second-factor accounts');
+  const file = await open('/uat-input/second-factor-accounts.json',
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    .catch(() => { throw invalid(); });
+  let body: string;
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || (info.mode & 0o7777) !== 0o600
+      || info.uid !== process.getuid?.() || info.nlink !== 1 || info.size > 8192) {
+      throw invalid();
+    }
+    const bytes = Buffer.alloc(8193);
+    let size = 0;
+    while (size < bytes.length) {
+      const { bytesRead } = await file.read(bytes, size, bytes.length - size, size);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    if (size > 8192) throw invalid();
+    body = bytes.subarray(0, size).toString('utf8');
+  } finally {
+    await file.close();
+  }
+  let doc: unknown;
+  try { doc = JSON.parse(body); } catch { throw invalid(); }
+  if (JSON.stringify(doc) + '\n' !== body || doc === null || typeof doc !== 'object') {
+    throw invalid();
+  }
+  const document = doc as Record<string, unknown>;
+  const roles = proof === 'passkey' ? ['primary', 'recovery', 'attempts']
+    : ['primary', 'skew', 'replay', 'concurrent', 'replace', 'epoch', 'locale', 'recovery', 'attempts'];
+  if (Object.keys(document).sort().join(',') !== 'accounts,proof,schemaVersion'
+    || document.schemaVersion !== 1 || document.proof !== proof
+    || !Array.isArray(document.accounts) || document.accounts.length !== roles.length) {
+    throw invalid();
+  }
+  const accounts = new Map<string, FactorLogin>();
+  const identities = new Set<string>();
+  for (const [index, entry] of document.accounts.entries()) {
+    if (entry === null || typeof entry !== 'object') throw invalid();
+    const account = entry as Record<string, unknown>;
+    const role = roles[index] as string;
+    if (Object.keys(account).sort().join(',') !== 'email,id,password,role'
+      || account.role !== role || typeof account.id !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(account.id)
+      || identities.has(account.id) || typeof account.email !== 'string'
+      || !new RegExp(`^pa-test-${proof}-${role}-[0-9a-f]{16}@example\\.invalid$`, 'u').test(account.email)
+      || typeof account.password !== 'string' || !/^[A-Za-z0-9_-]{32}$/u.test(account.password)) {
+      throw invalid();
+    }
+    identities.add(account.id);
+    accounts.set(role, { email: account.email, password: account.password });
+  }
+  return (role) => {
+    const account = accounts.get(role);
+    if (account === undefined) throw invalid();
+    return account;
+  };
 }
 
 /**
