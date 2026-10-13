@@ -13,7 +13,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 - The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
 - `e2e/chrome.spec.ts:188` (hero sheet centered on phones, WebKit light vi) timed out once at 20 s in run 38134235232 and passed on the next run; five widths, each launching WebKit, navigating, and awaiting fonts, share one 20 s budget. If it recurs, troubleshoot with both runs' logs. Evidence: `apps/web/e2e/chrome.spec.ts`.
-- An MCP fixture register failure (run 38115886452) now leaves a redacted `fixture-failure.json` in the `shard-evidence-mcp` artifact; on the next occurrence, check whether it is a 503 `authentication_unavailable` from the five-second Have I Been Pwned deadline. Evidence: `scripts/lib/mcp-workflow-fixture.sh`.
+- Investigate intermittent TOTP and passkey proof setup failures at password registration in [run 38344180949](https://github.com/dannyota/aboutme/actions/runs/38344180949). Two isolated diagnostic runs captured twenty successful registrations and did not reproduce the failures; their original response status and cause remain unknown. Evidence: runs 38346048110 and 38347236418.
 
 ## Production acceptance
 
