@@ -8,11 +8,12 @@ This page describes implemented behavior. See the
 The relational domain and transaction primitives back the complete private
 resume HTTP surface. The implemented boundary provides:
 
-- immutable resume schemas, retained generated types, explicit adjacent
+- released resume schemas, retained generated types, explicit adjacent
   converters, and released/accepted/emitted version registries derived from the
-  [release manifest](../../packages/schema/released-versions.json);
-- hand-written, append-only Goose migrations as the sole relational schema
-  source, with the frozen baseline described in
+  [release manifest](../../packages/schema/released-versions.json), under the
+  [pre-v1 policy](../adr/0004-resume-document-contract.md#versions-and-converters);
+- hand-written Goose migrations as the sole relational schema source, editable
+  before the application v1 baseline under
   [ADR 0005](../adr/0005-database-migrations.md);
 - sqlc-generated data access from those migrations and `sql/` query sources;
 - schema-derived bounds, aggregate validation, and a bounded codec;
