@@ -1,6 +1,6 @@
 # Resume schema package
 
-`packages/schema` owns the resume document contract, immutable releases,
+`packages/schema` owns the resume document contract, released snapshots,
 generated Go and TypeScript types, shared validation fixtures, and template
 preset data. The [data design](../../docs/design/data.md) defines the intended
 model.
@@ -10,14 +10,22 @@ model.
 | Path                     | Role                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
 | `resume.schema.json`     | Working JSON Schema 2020-12 source for the current document version   |
-| `resume.v*.schema.json`  | Immutable released snapshots                                          |
-| `released-versions.json` | Append-only manifest of released snapshots and retained types         |
+| `resume.v*.schema.json`  | Released document snapshots                                           |
+| `released-versions.json` | Manifest of released snapshots and retained types                     |
 | `scripts/generate.mjs`   | Sole generator entry point                                            |
 | `gen/go/` and `gen/ts/`  | Committed current and retained generated types and version registries |
 
-Do not hand-edit generated files. Release a new document version by adding its
-snapshot and manifest entry, updating the working schema, then regenerating.
-Never change a released snapshot or manifest entry.
+Do not hand-edit generated files. Before application `v1.0.0`, snapshots and
+manifest entries may change without backwards compatibility. Application SemVer
+is separate from document schema version numbers. Existing converters may
+remain; fallback machinery is not required solely for older v0 clients.
+
+After the application v1 baseline, add new document versions through a snapshot
+and manifest entry, update the working schema, then regenerate. Existing
+released snapshots and manifest entries remain unchanged.
+[ADR 0004](../../docs/adr/0004-resume-document-contract.md) owns this boundary,
+and [release rules](../../instructions/releases.md) define the first v1
+candidate.
 
 The [release manifest](released-versions.json) names the current, accepted, and
 emitted document versions. See

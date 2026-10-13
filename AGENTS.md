@@ -94,6 +94,7 @@ A path outside these lanes belongs to the primary, which assigns it in a brief. 
 
 ## How we work
 
+- **Pre-1.0 compatibility.** Before application `v1.0.0`, API contracts, migration history, released document schemas and their manifest, and older-client support may change without backwards compatibility. Do not require fallback machinery solely for older v0 releases. Application SemVer and resume document schema versions are separate. The first `v1.0.0` candidate records supported contracts and adds root `.v1-baseline`; trusted comparison bases containing it freeze existing migrations and released schemas. See [ADR 0004](docs/adr/0004-resume-document-contract.md), [ADR 0005](docs/adr/0005-database-migrations.md), and [release rules](instructions/releases.md).
 - **Small releases.** One feature per patch release (`v0.x.y`). Ship a feature as soon as it is done and green; do not batch features.
 - **GitHub CI is the full gate.** Locally, each commit runs only the pre-commit `gitleaks` scan; builds and test suites run in GitHub CI. `ci.yml` runs checks per job, including browser proofs and two Semgrep jobs; `contracts` runs full-history gitleaks. The aggregate `ci` job is the only required check on `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once. A tag and a deploy need green CI on that exact commit.
 - Branch CI and `main` CI differ; follow [GitHub CI](instructions/verification.md#github-ci) when running CI on a branch.
