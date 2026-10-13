@@ -22,7 +22,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Vietnam production
 
-- Correct the Coraza alert subject to count rule matches and its diagnostic guidance to identify the RAM-only metadata logs instead of `journalctl`. Evidence: [122-match alert checked 2026-10-13](./traceability/vietnam-operations.md#coraza-alert-at-0640-utc).
 - Put the Cloudflare DNS records under OpenTofu. The owner edits them by hand today.
 - Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
 - Then run the restore drill end to end and record it: provider purge/inventory guarantees remain unproved, and the existing management account cannot list the state storage project for the independent object proof. No successful drill is recorded. Evidence: [restore prerequisites](./traceability/vietnam-operations.md#restore-prerequisites) and [restore drill](../../deploy/vn/README.md#restore-drill).

@@ -39,7 +39,7 @@ A read-only aggregate of the three retained RAM-only WAF log files reproduced al
 
 The filename rules and short burst are consistent with an automated file scan. This is an inference; the retained metadata has no request identifiers, response status, raw paths, or client addresses. It cannot establish distinct request totals, blocked responses, or successful access. Coraza's live detection-only configuration does not block on these matches.
 
-The subject incorrectly labels rule records as requests. The generic footer points to `journalctl`, but Coraza rule metadata is in `/run/aboutme/caddy-log/waf/` on tmpfs, not the journal.
+The received subject incorrectly labels rule records as requests. Its generic footer points to `journalctl`, but Coraza rule metadata is in `/run/aboutme/caddy-log/waf/` on tmpfs, not the journal. The alert implementation now says "rule matches" and directs only the three Coraza alert keys to safe metadata inspection; unit and host alerts keep their journal guidance. Rule counts, thresholds, throttling, and the detection mode are unchanged.
 
 ## External readiness monitoring
 
