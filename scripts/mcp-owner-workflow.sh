@@ -16,7 +16,6 @@ readonly ATTESTATION_MAX_AGE=86400
 readonly RUN_LIMIT_SECONDS=3000
 readonly STOP_GRACE_SECONDS=30
 readonly NATIVE_DSN='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
-readonly CAPTURE_URL=http://127.0.0.1:20444/api/messages
 readonly TARGET_TITLE='CV tiếng Việt'
 readonly TARGET_HEADLINE='Kỹ sư nền tảng hư cấu'
 readonly TARGET_SECTION='Kinh nghiệm'
@@ -395,35 +394,14 @@ fixture_cleanup() {
   "$BIN/password-auth-fixture" cleanup --database-url "$NATIVE_DSN" >/dev/null 2>&1
 }
 
-# seed_fixture registers and verifies the reserved-prefix password account,
-# creates one fictional English resume with a photo, and signs out.
+# seed_fixture creates the reserved local password account, then proves real
+# sign-in, creates one fictional English resume with a photo, and signs out.
 seed_fixture() {
-  local capture=$STATE/secrets/auth-email-capture-bearer token= deadline revision message
-  [ -f "$capture" ] && [ ! -L "$capture" ] && [ "$(stat -c %u -- "$capture")" = "$UID_NOW" ] ||
-    fail 'invalid capture secret'
+  local revision
   fixture_cleanup || fail 'fixture cleanup failed'
   FIXTURE_SEEDED=1
-  printf 'Authorization: Bearer %s\n' "$(base64 -w0 -- "$capture" | tr '+/' '-_' | tr -d '=')" >"$SCRATCH/capture-header"
-  curl -fsS --max-time 10 -X DELETE -H "@$SCRATCH/capture-header" "$CAPTURE_URL" >/dev/null 2>&1 ||
-    fail 'fixture request failed at capture reset'
-  printf '{"name":"Fictional Workflow Owner","email":"%s","password":"%s"}' \
-    "$FIXTURE_EMAIL" "$FIXTURE_PASSWORD" >"$SCRATCH/body"
-  api 202 register POST /api/v1/auth/password/register "$SCRATCH/body" "$SCRATCH/json-header"
-
-  deadline=$((SECONDS + 30))
-  while [ -z "$token" ] && ((SECONDS < deadline)); do
-    if curl -fsS --max-time 10 -H "@$SCRATCH/capture-header" -o "$SCRATCH/messages" \
-      "$CAPTURE_URL" 2>/dev/null; then
-      message=$(jq -r --arg to "$FIXTURE_EMAIL" \
-        'first(.messages[] | select(.kind == "verify" and .to == $to) | .text_body) // ""' "$SCRATCH/messages") || message=
-      if [[ $message =~ \#token=([A-Za-z0-9_-]+) ]]; then token=${BASH_REMATCH[1]}; fi
-    fi
-    [ -n "$token" ] || sleep 0.5
-  done
-  rm -f -- "$SCRATCH/messages" "$SCRATCH/capture-header"
-  [ -n "$token" ] || fail 'fixture request failed at verification mail'
-  printf '{"token":"%s"}' "$token" >"$SCRATCH/body"
-  api 204 verify POST /api/v1/auth/password/verify "$SCRATCH/body" "$SCRATCH/json-header"
+  ENV=dev "$BIN/password-auth-fixture" mcp-seed --database-url "$NATIVE_DSN" \
+    --credential-file "$CREDENTIAL" >/dev/null 2>&1 || fail 'fixture seed failed'
   sign_in
   source_document | jq -c --arg title 'Fictional English resume' '{title: $title, lng: "en", document: .}' \
     >"$SCRATCH/body"

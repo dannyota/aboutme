@@ -26,19 +26,20 @@ const testEmailPrefix = "pa-test-"
 
 // Config holds the validated seed/cleanup input.
 type Config struct {
-	DatabaseURL string
+	DatabaseURL    string
+	CredentialFile string
 }
 
 func parseConfig(args []string) (string, Config, error) {
 	if len(args) == 0 {
-		return "", Config{}, errors.New("subcommand is required (seed, cleanup, or linkedin-cleanup)")
+		return "", Config{}, errors.New("subcommand is required (seed, mcp-seed, cleanup, or linkedin-cleanup)")
 	}
 	cmd := args[0]
-	if cmd != "seed" && cmd != "cleanup" && cmd != "linkedin-cleanup" {
-		return "", Config{}, fmt.Errorf("unknown subcommand %q (want seed, cleanup, or linkedin-cleanup)", cmd)
+	if cmd != "seed" && cmd != "cleanup" && cmd != "linkedin-cleanup" && cmd != "mcp-seed" {
+		return "", Config{}, errors.New("unknown subcommand")
 	}
 
-	var databaseURL string
+	var databaseURL, credentialFile string
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--database-url":
@@ -47,15 +48,30 @@ func parseConfig(args []string) (string, Config, error) {
 				return "", Config{}, errors.New("--database-url requires a value")
 			}
 			databaseURL = args[i]
+		case "--credential-file":
+			if cmd != "mcp-seed" {
+				return "", Config{}, errors.New("--credential-file is allowed only mcp-seed")
+			}
+			i++
+			if i >= len(args) {
+				return "", Config{}, errors.New("--credential-file requires a value")
+			}
+			if credentialFile != "" {
+				return "", Config{}, errors.New("--credential-file must occur once")
+			}
+			credentialFile = args[i]
 		default:
-			return "", Config{}, fmt.Errorf("unknown argument %q", args[i])
+			return "", Config{}, errors.New("unknown argument")
 		}
 	}
 
 	if err := devdb.ValidateURL(databaseURL, fixtureDatabase); err != nil {
 		return "", Config{}, err
 	}
-	return cmd, Config{DatabaseURL: databaseURL}, nil
+	if cmd == "mcp-seed" && credentialFile == "" {
+		return "", Config{}, errors.New("--credential-file is required")
+	}
+	return cmd, Config{DatabaseURL: databaseURL, CredentialFile: credentialFile}, nil
 }
 
 // providerIdentity is one linked OAuth identity for a fixture account.
@@ -109,6 +125,8 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 		return runCleanup(ctx, cfg)
 	case "linkedin-cleanup":
 		return runLinkedInCleanup(ctx, cfg)
+	case "mcp-seed":
+		return runMCPSeed(ctx, cfg)
 	default:
 		return fmt.Errorf("unknown subcommand %q", cmd)
 	}
