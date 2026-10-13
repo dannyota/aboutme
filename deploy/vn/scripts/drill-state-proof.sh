@@ -3,7 +3,6 @@
 set -euo pipefail
 
 BUCKET=aboutme-tfstate
-ENDPOINT=https://hcm04.vstorage.vngcloud.vn
 REGION=HCM04
 PREFIX=restore-drill/probes
 credentials=${DRILL_STATE_CREDENTIALS_FILE:-${HOME:-}/.config/aboutme/vn/tfstate-s3-credentials}
@@ -18,18 +17,11 @@ say() { printf '%s\n' "$*"; }
 die() { printf 'drill state proof: %s\n' "$*" >&2; exit 1; }
 
 versioning_call() {
-  env -i PATH="$PATH" \
-    AWS_SHARED_CREDENTIALS_FILE="$credentials" \
-    AWS_CONFIG_FILE="$work/aws-config" \
-    AWS_EC2_METADATA_DISABLED=true \
-    AWS_MAX_ATTEMPTS=1 \
-    AWS_RETRY_MODE=standard \
-    AWS_PAGER= \
-    AWS_CLI_AUTO_PROMPT=off \
-    timeout --foreground --signal=KILL 60s \
-    aws --profile default --endpoint-url "$ENDPOINT" --region "$REGION" \
-    --no-cli-pager --no-cli-auto-prompt --cli-error-format legacy \
-    s3api get-bucket-versioning --bucket "$BUCKET"
+  local profile=()
+  [[ -z ${VNG_PROFILE:-} ]] || profile=(--profile "$VNG_PROFILE")
+  timeout --foreground --signal=KILL 60s \
+    vngcloud "${profile[@]}" --region hcm-3 --output json --query '' --read-only \
+    storage get-bucket-versioning --project-id "$project" --bucket "$BUCKET"
 }
 
 native_call() {
@@ -113,7 +105,11 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-command -v aws >/dev/null || die 'AWS CLI is required for the versioning preflight'
+[[ $# == 2 && ${1:-} == --storage-project-id ]] ||
+  die 'usage: drill-state-proof.sh --storage-project-id <existing-HCM04-project-id>'
+project=$2
+[[ ${#project} -le 128 && $project =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]] ||
+  die 'storage project ID is invalid'
 command -v vngcloud >/dev/null || die 'vngcloud v0.81.0 object operations are required'
 command -v jq >/dev/null || die 'jq is required'
 command -v uuidgen >/dev/null || die 'uuidgen is required'
@@ -121,8 +117,6 @@ command -v uuidgen >/dev/null || die 'uuidgen is required'
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-drill-state-proof.XXXXXX")
 chmod 0700 "$work"
-printf '[default]\ns3 =\n    addressing_style = path\n' >"$work/aws-config"
-chmod 0600 "$work/aws-config"
 printf '[default]\n' >"$work/native-config"
 chmod 0600 "$work/native-config"
 
@@ -142,16 +136,11 @@ if ! versioning_call \
   >"$work/versioning" 2>"$work/errors"; then
   die 'bucket versioning state could not be read'
 fi
-if [[ -s $work/versioning ]]; then
-  status=$(jq -er '
-    if type == "object"
-      and ((keys_unsorted - ["Status", "MFADelete"]) | length == 0)
-      and (.Status == "Enabled" or .Status == "Suspended")
-      and ((has("MFADelete") | not) or .MFADelete == "Enabled" or .MFADelete == "Disabled")
-    then .Status else error("invalid versioning response") end
-  ' "$work/versioning" 2>/dev/null) || die 'bucket versioning response is invalid'
-  die "bucket versioning is $status; deletion could leave a recoverable probe version"
-fi
+jq -e -s '
+  length == 1 and (.[0] | type == "object") and
+  .[0] == {"Enabled":false,"Status":"Off"}
+' "$work/versioning" >/dev/null 2>&1 ||
+  die 'bucket versioning is not proved never configured; refusing object writes'
 
 if object_absent "$work/errors"; then
   :
