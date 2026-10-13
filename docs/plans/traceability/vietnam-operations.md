@@ -21,7 +21,25 @@ AC-OPS-019 follows the [Vietnam alarm inventory](../../design/vietnam-production
 
 The 2026-10-13 03:44:20 UTC collection found daily alert stamps for host and unit conditions. The latest `failed-units` stamp was 2026-10-13 00:00:00 UTC; the latest `coraza-unparsed` stamp was 2026-10-13 00:10:04 UTC. A stamp is created before sending and normally removed when `msmtp` fails. An interrupted send can retain it. SMTP output is discarded, so stamps alone do not prove SMTP acceptance or mailbox delivery. The watcher ignores send failures, so a successful watcher exit also does not prove delivery.
 
-The owner reported receiving operations mail. No per-alarm receipt metadata was collected. Acceptance still needs a documented safe trigger for each applicable alarm, evidence that its detector or failure action ran, and a matching mailbox receipt timestamp. A direct synthetic mail proves the sender path only. Production retention failures stop the edge and must not be induced solely for notification proof.
+The owner supplied a screenshot of the `coraza-matches` alert received at 13:40 Vietnam time on 2026-10-13. The message records event time `2026-10-13T06:40:01Z` and a count of 122. This verifies receipt for the Coraza match-threshold alert. The watcher counts rule-match records, not distinct requests, so the subject's use of "requests" is inaccurate. The live serving container's configuration was checked and uses `SecRuleEngine DetectionOnly`.
+
+The remaining alarm-inventory acceptance work is to document safe triggers and connect the other applicable detectors or failure actions to their receipt evidence. A direct synthetic mail proves the sender path only. Production retention failures stop the edge and must not be induced solely for notification proof.
+
+### Coraza alert at 06:40 UTC
+
+A read-only aggregate of the three retained RAM-only WAF log files reproduced all 122 matches in the hour ending `2026-10-13T06:40:01Z`. The matches occurred between `06:37:56.786Z` and `06:37:57.916Z`. There were no invalid or unparsed records in that window. The watcher correctly excluded 231 engine diagnostics from the match count. Public readiness returned HTTP 200 during the investigation.
+
+|Rule|Records|Meaning in the pinned CRS 4.25.0 rules|
+|-|-|-|
+|930130|55|Restricted file path|
+|930140|2|AI coding assistant artifact path|
+|920440|7|Restricted filename extension|
+|920500|1|Backup or working-file path|
+|949110|57|Inbound anomaly score exceeded|
+
+The filename rules and short burst are consistent with an automated file scan. This is an inference; the retained metadata has no request identifiers, response status, raw paths, or client addresses. It cannot establish distinct request totals, blocked responses, or successful access. Coraza's live detection-only configuration does not block on these matches.
+
+The subject incorrectly labels rule records as requests. The generic footer points to `journalctl`, but Coraza rule metadata is in `/run/aboutme/caddy-log/waf/` on tmpfs, not the journal.
 
 ## External readiness monitoring
 

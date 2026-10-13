@@ -17,11 +17,12 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Document safe trigger methods for the accepted Vietnam alarm inventory, exercise each detector or failure action, and record a matching mailbox receipt timestamp per alarm (AC-OPS-019, `PLANNED`). Per-alarm delivery evidence is missing. Evidence: [Vietnam operations evidence](./traceability/vietnam-operations.md#alarm-acceptance-remains-open).
+- Complete safe trigger methods and detector or failure-action evidence for the accepted Vietnam alarm inventory, with matching receipt evidence per alarm (AC-OPS-019, `PLANNED`). The owner confirmed operations alert email receipt on 2026-10-13; inventory coverage remains open. Evidence: [Vietnam operations evidence](./traceability/vietnam-operations.md#alarm-acceptance-remains-open).
 - Investigate the GitHub uptime workflow cadence gap against its five-minute cron. Successful samples do not prove monitoring at the intended interval. Evidence: [external readiness monitoring collected 2026-10-13](./traceability/vietnam-operations.md#external-readiness-monitoring).
 
 ## Vietnam production
 
+- Correct the Coraza alert subject to count rule matches and its diagnostic guidance to identify the RAM-only metadata logs instead of `journalctl`. Evidence: [122-match alert checked 2026-10-13](./traceability/vietnam-operations.md#coraza-alert-at-0640-utc).
 - Put the Cloudflare DNS records under OpenTofu. The owner edits them by hand today.
 - Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
 - Then run the restore drill end to end and record it: no successful drill is recorded yet, so the backups are unproven. Evidence: [restore drill](../../deploy/vn/README.md#restore-drill).
