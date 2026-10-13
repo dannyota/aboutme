@@ -620,6 +620,77 @@ describe('EditorShell', () => {
     wrapper.unmount();
   });
 
+  it.each([
+    ['vi', 'Đóng', 'English', 'Close'],
+    ['en', 'Close', 'Tiếng Việt', 'Đóng'],
+  ] as const)(
+    'keeps the %s sheet close named and reachable across a locale change',
+    async (locale, label, nextLanguage, nextLabel) => {
+      setSiteLocale(locale);
+      const wrapper = mountShell({}, { attachTo: document.body });
+      try {
+        const trigger = wrapper.get('[data-action="open-sections"]');
+        await trigger.trigger('click');
+        await wrapper.vm.$nextTick();
+        await wrapper.vm.$nextTick();
+        const sheet = document.body.querySelector(
+          '[data-slot="sheet-content"]',
+        )!;
+        const close = sheet.querySelector<HTMLButtonElement>(
+          `button[aria-label="${label}"]`,
+        )!;
+
+        expect(close).not.toBeNull();
+        expect(close.classList.contains('size-11')).toBe(true);
+        expect(close.querySelector('svg')?.classList.contains('size-4'))
+          .toBe(true);
+        expect(close.querySelector('svg')?.getAttribute('aria-hidden'))
+          .toBe('true');
+        close.focus();
+        sheet.querySelector<HTMLButtonElement>(
+          `button[aria-label="${nextLanguage}"]`,
+        )!.click();
+        await wrapper.vm.$nextTick();
+
+        expect(document.body.querySelector('[data-slot="sheet-content"]'))
+          .toBe(sheet);
+        expect(close.getAttribute('aria-label')).toBe(nextLabel);
+        expect(document.activeElement).toBe(close);
+        close.click();
+        await wrapper.vm.$nextTick();
+        await wrapper.vm.$nextTick();
+
+        expect(trigger.attributes('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(trigger.element);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it('dismisses the phone sheet with Escape and restores its trigger',
+    async () => {
+      const wrapper = mountShell({}, { attachTo: document.body });
+      try {
+        const trigger = wrapper.get('[data-action="open-sections"]');
+        await trigger.trigger('click');
+        await wrapper.vm.$nextTick();
+        await wrapper.vm.$nextTick();
+        document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await wrapper.vm.$nextTick();
+        await wrapper.vm.$nextTick();
+
+        expect(trigger.attributes('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(trigger.element);
+      } finally {
+        wrapper.unmount();
+      }
+    });
+
   it('focuses discard inside the session-lost dialog', async () => {
     const wrapper = mountShell(
       { sessionLost: true },

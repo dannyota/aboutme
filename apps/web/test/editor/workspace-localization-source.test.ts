@@ -43,6 +43,7 @@ const vueSources = [
   'components/app/AccountMenu.vue',
   'components/app/AppSeal.vue',
   'components/app/AppShell.vue',
+  'components/app/AppSheetContent.vue',
   'components/app/LocaleToggle.vue',
   'components/app/StateMark.vue',
   'components/editor/ConflictPanel.vue',
