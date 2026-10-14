@@ -180,8 +180,9 @@ done
 [ -f "$config" ] || exit 64
 count() { grep -Foc -- "$1" "$config"; }
 [ "$(count 'https://localhost:20443 {')" = 1 ]
-[ "$(count 'bind 127.0.0.1')" = 1 ]
-[ "$(count 'tls internal')" = 1 ]
+[ "$(count 'https://client.example:20443 {')" = 1 ]
+[ "$(count 'bind 127.0.0.1')" = 2 ]
+[ "$(count 'tls internal')" = 2 ]
 [ "$(count 'skip_install_trust')" = 1 ]
 [ "$(count 'auto_https disable_redirects')" = 1 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 2 ]
@@ -367,7 +368,7 @@ fixture_env() {
 }
 
 run_happy_path_and_lifecycle_checks() (
-  local fixture output before after mode lines manifest service
+  local fixture output before after mode lines manifest service caddy_config
   fixture=$(new_fixture)
   trap 'cleanup_fixture "$fixture"' EXIT
   fixture_env "$fixture"
@@ -415,6 +416,14 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_URL=http://127.0.0.1:20444'
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
   assert_contains "$server_env" 'MCP_ENABLED=true'
+  assert_contains "$server_env" 'OAUTH_CIMD_ENABLED=true'
+  assert_contains "$server_env" 'OAUTH_CIMD_DEV_STUB_ADDR=127.0.0.1:20443'
+  assert_contains "$server_env" "SSL_CERT_FILE=$fixture/repo/.dev/native-https/caddy/data/caddy/pki/authorities/local/root.crt"
+  caddy_config=$(<.dev/native-https/Caddyfile)
+  assert_contains "$caddy_config" 'https://client.example:20443 {'
+  assert_contains "$caddy_config" 'client_id'
+  assert_contains "$caddy_config" 'http://localhost/callback'
+  assert_not_contains "$caddy_config" 'tls_insecure_skip_verify'
   # The env file is written with printf %q, which escapes the comma; the
   # supervisor sources it, so check the value the server receives.
   [ "$(set -a && source .dev/native-https/run/server.env && printf '%s' "$PROVIDER_LOGIN_ENABLED")" = google,linkedin ] ||
@@ -438,6 +447,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'linkedin_client_id=aboutme-local-linkedin'
   assert_contains "$manifest" 'linkedin_issuer_url=http://127.0.0.1:20442/linkedin'
   assert_contains "$manifest" 'mcp_enabled=true'
+  assert_contains "$manifest" 'oauth_cimd_enabled=true'
+  assert_contains "$manifest" 'oauth_cimd_dev_stub_addr=127.0.0.1:20443'
   assert_contains "$manifest" 'public_render_origin=http://127.0.0.1:20440'
   assert_contains "$manifest" 'app_build_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   assert_contains "$manifest" 'public_renderer_build_digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'

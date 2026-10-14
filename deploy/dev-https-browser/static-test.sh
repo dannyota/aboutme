@@ -6,7 +6,7 @@ readonly ROOT=$PWD
 readonly SOURCE=$ROOT/deploy/dev-https-browser
 readonly IMAGE=aboutme-dev-https-browser:static-test
 readonly IMAGE_ID=sha256:1111111111111111111111111111111111111111111111111111111111111111
-readonly BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac'
+readonly BASE='mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
 
 fail() {
   printf 'dev-https-browser static test: %s\n' "$*" >&2
@@ -112,12 +112,12 @@ build)
   grep -Fq 'io.aboutme.dev-https-browser.contract="2"' "$context/Dockerfile"
   grep -Fq "io.aboutme.dev-https-browser.base=\"$FAKE_EXPECTED_BASE\"" \
     "$context/Dockerfile"
-  grep -Fq 'io.aboutme.dev-https-browser.playwright="1.62.1"' \
+  grep -Fq 'io.aboutme.dev-https-browser.playwright="1.64.0"' \
     "$context/Dockerfile"
   grep -Fq 'io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.2"' \
     "$context/Dockerfile"
-  grep -Fq '"@playwright/test": "1.62.1"' "$context/package.json"
-  grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
+  grep -Fq '"@playwright/test": "1.64.0"' "$context/package.json"
+  grep -Fq '"@playwright/test": "1.64.0"' "$context/package-lock.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
   while IFS= read -r file; do
@@ -140,7 +140,7 @@ image)
   esac
   contract=2
   base=$FAKE_EXPECTED_BASE
-  playwright=1.62.1
+  playwright=1.64.0
   nss='2:3.98-1ubuntu0.2'
   case ${FAKE_INSPECT_MODE:-good} in
   missing-label) contract='' ;;
@@ -2416,4 +2416,9 @@ for mode in passkey totp; do
   done
 done
 
+# CIMD proof evidence must name the real SDK flow, beyond the DCR proof.
+for step in cimdDiscovered cimdConsentApproved cimdTokenExchanged cimdToolsListed cimdRefreshed cimdGrantRevoked cimdRevokedRejected; do
+  grep -Fq "$step: true" "$SOURCE/verify-evidence.mjs" || fail "CIMD evidence omits $step"
+  grep -Fq "$step: true" "$SOURCE/mcp-ts-sdk.spec.ts" || fail "CIMD SDK proof omits $step"
+done
 printf '%s\n' 'dev-https-browser static tests: PASS'

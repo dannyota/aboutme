@@ -79,6 +79,21 @@ generate_caddyfile() {
   content=$(replace_exact "$content" 'reverse_proxy web:3000' \
     "reverse_proxy 127.0.0.1:${WEB_PORT}" 2) || return 1
   printf '%s\n' "$content"
+  # The resolver preserves client.example as Host and SNI while dialing the
+  # development-only loopback address. No browser visits this metadata host.
+  printf '\nhttps://client.example:%s {\n' "$CADDY_PORT"
+  cat <<'CIMD'
+	bind 127.0.0.1
+	tls internal
+	@metadata path_regexp cimd ^/oauth/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$
+	handle @metadata {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=300"
+		respond `{"client_id":"https://client.example{http.request.uri.path}","client_name":"aboutme MCP UAT {http.regexp.cimd.1}","redirect_uris":["http://localhost/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}` 200
+	}
+	respond 404
+}
+CIMD
 }
 
 render_effective_config() {
@@ -97,7 +112,7 @@ render_effective_config() {
   printf 'google_issuer_url=%s\n' "$GOOGLE_ISSUER_URL"
   printf 'linkedin_client_id=%s\n' "$LINKEDIN_CLIENT_ID"
   printf 'linkedin_issuer_url=%s\n' "$LINKEDIN_ISSUER_URL"
-  printf 'mcp_enabled=true\n'
+  printf 'mcp_enabled=true\noauth_cimd_enabled=true\noauth_cimd_dev_stub_addr=127.0.0.1:%s\n' "$CADDY_PORT"
   printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\nmail_capture_port=%s\n' \
     "$WEB_PORT" "$SERVER_PORT" "$MOCK_PORT" "$CADDY_PORT" "$MAIL_CAPTURE_PORT"
   printf 'stop_term_attempts=%s\nstop_kill_attempts=%s\n' "$STOP_TERM_ATTEMPTS" "$STOP_KILL_ATTEMPTS"

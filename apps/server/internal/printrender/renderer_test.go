@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,14 +18,14 @@ import (
 
 func TestNewValidatesConfigurationWithoutGeneratingAuthority(t *testing.T) {
 	origin := testRenderOrigin(t)
-	executable := writeExecutable(t, "#!/bin/sh\nprintf 'Google Chrome for Testing 151.0.7922.34\\n'\n")
+	executable := writeExecutable(t, "#!/bin/sh\nprintf 'Google Chrome for Testing 156.0.8078.4\\n'\n")
 
 	var versionCalls atomic.Int32
 	hooks := defaultHooks()
 	hooks.euid = func() int { return 1000 }
 	hooks.version = func(context.Context, string) (string, error) {
 		versionCalls.Add(1)
-		return "Google Chrome for Testing 151.0.7922.34", nil
+		return "Google Chrome for Testing 156.0.8078.4", nil
 	}
 	hooks.sandboxSupported = func() bool { return true }
 	hooks.ready = func(context.Context, *Renderer) error { return nil }
@@ -47,13 +48,13 @@ func TestDefaultVersionProbeDoesNotInheritParentEnvironment(t *testing.T) {
 if [ -n "${ABOUTME_PARENT_SECRET_SENTINEL+x}" ]; then
 	exit 9
 fi
-printf 'Google Chrome for Testing 151.0.7922.34\n'
+printf 'Google Chrome for Testing 156.0.8078.4\n'
 `)
 	got, err := defaultHooksWithSupervisor(testSupervisorCommand(t)).version(context.Background(), executable)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "Google Chrome for Testing 151.0.7922.34" {
+	if got != "Google Chrome for Testing 156.0.8078.4" {
 		t.Fatalf("version = %q", got)
 	}
 }
@@ -91,7 +92,7 @@ func TestNewRejectsUnsafeRuntimeAndWrongBrowser(t *testing.T) {
 	}
 }
 
-func TestReadyProbesBrowserOnce(t *testing.T) {
+func TestReadyCachesSuccessAndRechecksFailureAfterCooldown(t *testing.T) {
 	origin := testRenderOrigin(t)
 	executable := writeExecutable(t, "#!/bin/sh\nexit 0\n")
 	var calls atomic.Int32
@@ -99,9 +100,13 @@ func TestReadyProbesBrowserOnce(t *testing.T) {
 	hooks.euid = func() int { return 1000 }
 	hooks.sandboxSupported = func() bool { return true }
 	hooks.version = func(context.Context, string) (string, error) { return expectedBrowserVersion, nil }
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	hooks.now = func() time.Time { return now }
 	hooks.ready = func(context.Context, *Renderer) error {
-		calls.Add(1)
-		return errors.New("browser startup detail")
+		if calls.Add(1) == 1 {
+			return errors.New("browser startup detail")
+		}
+		return nil
 	}
 	renderer, err := New(Config{BrowserExecutable: executable, RenderOrigin: origin, testHooks: hooks})
 	if err != nil {
@@ -116,6 +121,15 @@ func TestReadyProbesBrowserOnce(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("readiness probes = %d, want 1", calls.Load())
+	}
+	now = now.Add(5 * time.Second)
+	for range 2 {
+		if readyErr := renderer.Ready(); readyErr != nil {
+			t.Fatalf("Ready() after cooldown = %v", readyErr)
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("readiness probes = %d, want 2", calls.Load())
 	}
 }
 

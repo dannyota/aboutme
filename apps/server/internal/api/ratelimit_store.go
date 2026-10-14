@@ -11,7 +11,7 @@ import (
 // for expired keys once the store is saturated: at most once per this
 // interval of cfg.Clock's time, never once per request. Without this, a
 // sustained flood of distinct new keys against a full store would pay an
-// O(MaxKeys) map scan, holding l.mu, on every single request — a
+// O(MaxKeys) map scan, holding l.mu, on every single request, a
 // denial-of-service vector in its own right.
 // One second is frequent enough to reclaim capacity for genuine key
 // turnover promptly, while bounding the added scan cost to a small,
@@ -121,11 +121,26 @@ func (b *BoundedRateLimiter) Admit(now time.Time, key string) (allowed bool, ret
 	return false, retryAfterSeconds(wait)
 }
 
+// Check reports the same availability and retry delay as Admit without taking a
+// token. It still tracks key activity, expiry, and bounded overflow. It reserves
+// nothing: callers must serialize a combined decision or admit again before work.
+func (b *BoundedRateLimiter) Check(now time.Time, key string) (allowed bool, retrySeconds int) {
+	allowed, wait := b.inner.decide(key, now, false)
+	if allowed {
+		return true, 0
+	}
+	return false, retryAfterSeconds(wait)
+}
+
 // allow reports whether the request for key is allowed at time now, and if
 // not, how long the caller should wait before retrying. See the rateLimiter
 // doc comment for why lookup, the expiry decision, and the first admission
 // check below all happen under one continuous hold of l.mu.
 func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
+	return l.decide(key, now, true)
+}
+
+func (l *rateLimiter) decide(key string, now time.Time, consume bool) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -152,17 +167,27 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 			// The store is full of entries that are not expired (see
 			// evictExpiredLocked): key shares the overflow limiter rather
 			// than evicting one of them or being admitted unbounded.
-			// admitNow below runs on this same shared limiter while l.mu
+			// decideNow runs on this same shared limiter while l.mu
 			// is still held, exactly like a per-key entry's own first
-			// admission — no separate code path, no separate gap.
-			return admitNow(l.overflow, now)
+			// admission, without a separate lock gap.
+			return decideNow(l.overflow, now, consume)
 		}
 	}
 
 	// Activity, not admission, owns idle expiry. A rejected request proves the
 	// key is still active and must not let it age into a fresh private bucket.
 	entry.lastRequest = now
-	return admitNow(entry.limiter, now)
+	return decideNow(entry.limiter, now, consume)
+}
+
+func decideNow(lim *clampedLimiter, now time.Time, consume bool) (bool, time.Duration) {
+	if consume {
+		return admitNow(lim, now)
+	}
+	if lim.TokensAt(now) >= 1 {
+		return true, 0
+	}
+	return false, tokenWait(lim, now)
 }
 
 // evictExpiredLocked drops every entry whose bucket is fully refilled at
@@ -201,23 +226,23 @@ func admitNow(lim *clampedLimiter, now time.Time) (bool, time.Duration) {
 	if lim.AllowN(now, 1) {
 		return true, 0
 	}
-	// AllowN just declined without mutating lim (see above), so this reads
-	// pure, undisturbed-by-this-call state: how many tokens are missing
-	// divided by the refill rate is exactly how long until the next one is
-	// due.
+	return false, tokenWait(lim, now)
+}
+
+func tokenWait(lim *clampedLimiter, now time.Time) time.Duration {
+	// Neither Check nor a refused AllowN takes a token. The missing tokens
+	// divided by the refill rate give the delay until the next token is due.
 	limit := lim.Limit()
 	if limit <= 0 {
-		return false, time.Second
+		return time.Second
 	}
 	deficit := 1 - lim.TokensAt(now)
 	if deficit <= 0 {
-		// AllowN and TokensAt agree the limiter's own mutex serializes
-		// these two calls against each other, so this should be
-		// unreachable; kept as a defensive, always-a-full-second fallback
-		// rather than a zero or negative Retry-After.
-		return false, time.Second
+		// The store lock serializes this read with admission. Keep a positive
+		// delay even if the bucket unexpectedly reports no deficit.
+		return time.Second
 	}
-	return false, time.Duration(deficit / float64(limit) * float64(time.Second))
+	return time.Duration(deficit / float64(limit) * float64(time.Second))
 }
 
 // monotonicClamp turns a possibly-backward wall clock into a per-instance

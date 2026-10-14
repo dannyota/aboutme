@@ -23,7 +23,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
 - Then run the restore drill end to end and record it: the deletion contract and the state-bucket object proof are settled, and the remaining steps are in [restore drill delivery](./restore-drill.md). No successful drill is recorded. Evidence: [restore prerequisites](./traceability/vietnam-operations.md#restore-prerequisites) and [restore drill](../../deploy/vn/README.md#restore-drill).
-- Diagnose readiness after a hard reset: retained samples show persistent 503s until the server restarted, but no failed dependency reason. Startup ordering was present. Evidence: [historical readiness failure](./traceability/vietnam-operations.md#historical-readiness-failure).
+- Diagnose readiness after a hard reset: the retained 503 timings are consistent with a cached failed browser probe. Failure recovery and closed initialization diagnostics await review and exact-head CI; the original Chromium failure reason remains unknown. Evidence: [historical readiness failure](./traceability/vietnam-operations.md#historical-readiness-failure) and CI run 38520217491, account proofs, privacy restart.
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
 - Add and review a host procedure for rotating the sign-in-to-view key.

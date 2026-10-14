@@ -58,6 +58,9 @@ write_service_env() {
       "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" true "google,linkedin" "$passkey_enrollment" \
       "$TOTP_ACTIVE_KEY_B64" "$totp_enrollment" \
       "$dev_https_view_pass_key" true true >"$file"
+    # Go reads this root on its first TLS request, after Caddy starts.
+    printf 'OAUTH_CIMD_ENABLED=%q\nOAUTH_CIMD_DEV_STUB_ADDR=%q\nSSL_CERT_FILE=%q\n' \
+      true "127.0.0.1:$CADDY_PORT" "$CADDY_ROOT" >>"$file"
     local chromium_path
     chromium_path=$(node "$ROOT/scripts/chromium-path.mjs") || return 1
     printf 'PRINT_LISTEN_ADDR=%q\nCHROMIUM_PATH=%q\n' "$PRINT_LISTEN_ADDR" "$chromium_path" >>"$file"
