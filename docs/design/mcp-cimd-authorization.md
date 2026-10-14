@@ -57,8 +57,8 @@ Client lookup failures caused by the database produce the existing generic
 `500`, never an unknown-client error. Token errors keep the existing fixed
 `error_description`, `The request is invalid.` Code, resource, form, scope,
 PKCE, and failed-grant checks retain their existing precedence except the
-required URL-to-row lookup and the grant identity rule below. CIMD never
-consumes a client secret or assertion. The closed token form rejects
+required URL-to-row lookup and the grant identity and refusal rules below. CIMD
+never consumes a client secret or assertion. The closed token form rejects
 `client_secret`, `client_assertion`, and `client_assertion_type` as unknown
 fields. An HTTP Authorization header supplies no client identity or authority;
 all public-client code, PKCE, token, and claimed-client checks still apply.
@@ -106,11 +106,71 @@ processing, count pending reservations against the limit, retain a failure only
 for the existing counted `invalid_grant` outcomes, and release neutral outcomes.
 Success clears only that tracked grant's window; stale completions cannot
 restore cleared debt. Expiry, monotonic time, maximum keys, shared overflow,
-overflow-success behavior, `429`, and `Retry-After` stay unchanged. Numeric
-limits live in [Budgets](budgets.md). Unknown guesses cannot fill this map;
-holders of enough real grants can still reach the shared overflow boundary of
+overflow-success behavior stay unchanged. A refusal blocks token issue even when
+its public response hides the refusal, as defined below. Numeric limits live in
+[Budgets](budgets.md). Unknown guesses cannot fill this map; holders of enough
+real grants can still reach the shared overflow boundary of
 [ADR 0007](../adr/0007-bounded-rate-limiter.md). Requests sharing an IP still
 share the separate token-IP budget.
+
+### Refusal response and client recovery
+
+A grant-bucket refusal must not reveal whether a candidate credential has a
+stored row. Determine the response through the existing token validation rules,
+without token mutations. A request that lacks valid authority keeps the error it
+would receive without the grant limiter. In particular, stored and never-issued
+candidates that fail with `invalid_grant` must have identical status, body
+bytes, and headers before and after exhaustion:
+
+- Status `400`; body exactly
+  `{"error":"invalid_grant","error_description":"The request is invalid."}`.
+- `Content-Type: application/json` and `Cache-Control: no-store`.
+- No `Retry-After`, rate-limit header, cookie, or other signal of grant state.
+  All other response headers follow the same path as ordinary `invalid_grant`;
+  transport-generated dates and request IDs must be independent of credential
+  existence and admission outcome.
+
+The [error matrix](#errors) still governs malformed requests and unknown
+clients; grant refusal cannot override their errors either. Token-IP refusal
+remains before lookup and keeps its `429` and `Retry-After` for all candidates.
+
+Return the existing `429 invalid_request` with its fixed error description and
+positive `Retry-After` only if the request would otherwise be authorized to
+receive tokens. Row existence alone is insufficient. For a code, require the
+correct public client, exact redirect, S256 verifier, live unconsumed code, live
+grant and user, and matching authentication epoch. For refresh, require a
+current live refresh token and family, live grant and user, matching epoch, and
+a matching public client when supplied; omission remains allowed. Both paths
+must pass all existing form, resource, scope, and binding checks.
+
+On refusal, run those checks under the existing token transaction lock order,
+re-reading state rather than trusting the admission lookup. Use the same
+validation predicates as issuance, but stop before any write. Do not consume a
+code, issue or rotate tokens, revoke a code's tokens or a reused refresh family,
+clear debt, or finish a nonexistent reservation. End the transaction without
+business changes. A database failure remains generic `500`, never evidence of
+valid authority. An admitted request keeps normal token processing, including
+reuse revocation. A concurrent consume, rotation, revocation, or epoch change
+that wins the locks must prevent a subsequent valid-authority classification.
+
+A client presenting valid authority still learns to wait from `Retry-After`, the
+remaining grant window rounded up to at least one second. It must not retry
+before that delay. The delay does not extend credential lifetime: an expired
+code requires fresh authorization, and refresh can be retried only while its
+authority remains live. A client presenting invalid authority receives no
+throttle hint; it must stop retrying the unchanged request and correct its
+parameters or obtain fresh authorization through its ordinary `invalid_grant`
+recovery. Older clients need no new error or header handling.
+
+This preserves useful backoff without creating buckets for unknown guesses. The
+cost is read-only authority validation even for a refused stored grant; token-IP
+admission still bounds that work per address. It promises response equivalence,
+not constant-time database access. Returning `400` for every refusal would also
+hide existence but would tell a client with live authority to reconnect
+unnecessarily. Returning `429` before authority validation would expose stored
+credentials. Shared overflow follows the same response rules.
+
+### Scope and rollout
 
 DCR has the same flaw: its public UUID identifies a client, not the caller or
 the grant owner. It therefore receives this same limiter correction; its

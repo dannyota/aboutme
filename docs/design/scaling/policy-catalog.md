@@ -67,7 +67,10 @@ Responses that differ from the default:
 - P12 maps a denial to 429 with `Retry-After: 1`.
 - P14 and P18 render saturation returns 503 with `Retry-After: 1`.
 - P17 and P18 use the public representation's own 429.
-- P20 to P22 return OAuth JSON `error=invalid_request`.
+- P20 and P21 return OAuth JSON `error=invalid_request`.
+- P22 follows the authority-dependent
+  [refusal response](../mcp-cimd-authorization.md#refusal-response-and-client-recovery),
+  including identical errors for stored and never-issued invalid credentials.
 - P23 and P24 return the MCP rate error.
 
 ## Concurrency caps

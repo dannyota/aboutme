@@ -71,7 +71,11 @@ The seed creates both partitions disabled, full overflow buckets and no keys.
   different outcome conflicts. The bucket key uses the
   [typed encoder](#key-identity) with policy ID `oauth.failed_grant` and one
   OAuth grant component containing the stored grant UUID. Codes and refresh
-  tokens for that grant share its bucket across the fleet.
+  tokens for that grant share its bucket across the fleet. A refused reservation
+  still blocks issuance, but the token caller selects its public response under
+  [refusal response and client recovery](../mcp-cimd-authorization.md#refusal-response-and-client-recovery).
+  Complete the rate transaction before that read-only authority check; rate
+  functions never acquire business locks or determine token authority.
 
 ### Allocation and cleanup
 
@@ -239,6 +243,10 @@ lock no membership, transition or business row. Claims follow the
 - Exact token boundaries, jump caps and clock clamps for every policy.
 - P07, P12 and P22 window, debt and clear rules, including overflow and
   concurrent reservations.
+- P22 paired stored/never-issued response comparisons and valid-authority
+  backoff from
+  [CIMD verification](../mcp-cimd-verification.md#acceptance-checks), across
+  replicas and shared overflow, below token-IP admission.
 - The 10,000-key boundary, disabled partitions, overflow, and cleanup page
   limits of 1 and 256.
 - Exact claim caps with two pools, atomic SSE denial, promotion order, late
