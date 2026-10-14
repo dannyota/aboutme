@@ -185,17 +185,18 @@ try:
     safe(root,True)
     if mode not in ('new','save','prune','read','load'): raise ValueError('mode')
     if mode not in ('new','prune') and not identifier(request_id): raise ValueError('id')
-    if mode == 'read':
-        path=root+'/'+request_id; safe(path,True)
+    if mode in ('read','load'):
+        path=root+'/'+request_id
+        try: safe(path,True)
+        except FileNotFoundError:
+            print('not_found',file=sys.stderr); sys.exit(1)
         x=state(read(path+'/state.json'))
         if x['requestId'] != request_id: raise ValueError('identity')
-        output(x); sys.exit(0)
-    if mode == 'load':
-        path=root+'/'+request_id; safe(path,True)
-        x=state(read(path+'/state.json'))
-        if x['requestId'] != request_id: raise ValueError('identity')
-        if expired(x): x=erase(x)
-        print(json.dumps(x,separators=(',',':'))); sys.exit(0)
+        if mode == 'read': output(x)
+        else:
+            if expired(x): x=erase(x)
+            print(json.dumps(x,separators=(',',':')))
+        sys.exit(0)
     lockpath=root+'/.admission.lock'
     fd=os.open(lockpath,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
     safe(lockpath); fcntl.flock(fd,fcntl.LOCK_EX)
