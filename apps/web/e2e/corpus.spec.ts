@@ -22,11 +22,11 @@ const inlineHandlerViolation = {
 // https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/csp/csp_directive_list.cc
 const inlineHandlerError
   = 'Executing inline event handler violates the following Content Security '
-    + "Policy directive 'script-src 'self''."
-    + " Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a "
-    + "nonce ('nonce-...') is required to enable inline execution."
+    + 'Policy directive \'script-src \'self\'\'.'
+    + ' Either the \'unsafe-inline\' keyword, a hash (\'sha256-...\'), or a '
+    + 'nonce (\'nonce-...\') is required to enable inline execution.'
     + ' Note that hashes do not apply to event handlers, style attributes '
-    + "and javascript: navigations unless the 'unsafe-hashes' keyword is "
+    + 'and javascript: navigations unless the \'unsafe-hashes\' keyword is '
     + 'present. The action has been blocked.';
 
 interface BrowserSignals {
