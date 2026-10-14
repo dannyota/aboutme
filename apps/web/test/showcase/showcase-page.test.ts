@@ -826,6 +826,35 @@ describe('showcase count line', () => {
       expect(textNode(wrapper)).not.toBe(before);
     });
 
+    it.each(['en', 'vi'] as const)(
+      'announces a control change after same-total URL navigation in %s',
+      async (locale) => {
+        setSiteLocale(locale);
+        const reply = page([item('ada-lovelace')], { total: 5 });
+        stubListing(reply, reply, reply);
+        const wrapper = await mountPage();
+        const before = textNode(wrapper);
+
+        await useRouter().replace({
+          path: '/showcase', query: { role: 'qa' },
+        });
+        await settleLoad(wrapper);
+        expect(listingUrls().at(-1)).toBe(`${LISTING_PATH}?role=qa`);
+        expect(countText(wrapper)).toBe(showcaseCopy[locale].countLine(5));
+        expect(textNode(wrapper)).toBe(before);
+
+        await wrapper.get('[data-role="all"]').trigger('click');
+        await expectQuery({});
+        await vi.waitFor(() => expect(calls).toHaveLength(3));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+          .exists()).toBe(false));
+        await flushPromises();
+        expect(listingUrls().at(-1)).toBe(LISTING_PATH);
+        expect(countText(wrapper)).toBe(showcaseCopy[locale].countLine(5));
+        expect(textNode(wrapper)).not.toBe(before);
+      },
+    );
+
     it('keeps the text node through a pager move', async () => {
       const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
       stubListing(reply, reply);

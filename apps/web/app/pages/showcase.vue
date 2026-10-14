@@ -90,14 +90,14 @@ const countHead = computed(() => (
 // (docs/design/ui/showcase.md, Count line and Sheet status).
 const announceKey = ref(0);
 const announcePending = ref(false);
-let lastAnnouncedFilters: Filters = query.value;
+let lastLoadedFilters: Filters = query.value;
 watch(settled, () => {
-  if (!announcePending.value) return;
   // A failed load keeps the last text and the mark, so the Retry that
   // succeeds announces the count for the new filters.
   if (view.value === 'failed') return;
+  lastLoadedFilters = query.value;
+  if (!announcePending.value) return;
   announcePending.value = false;
-  lastAnnouncedFilters = query.value;
   announceKey.value += 1;
 });
 // The sheet's Show results label: the live total once loaded.
@@ -145,9 +145,9 @@ function onSheetCloseAutoFocus(event: Event): void {
 // the control.
 async function onFilters(next: Filters): Promise<void> {
   // Reverting an unfinished change keeps the last announced count node.
-  announcePending.value = next.role !== lastAnnouncedFilters.role
-    || next.lang !== lastAnnouncedFilters.lang
-    || next.template !== lastAnnouncedFilters.template;
+  announcePending.value = next.role !== lastLoadedFilters.role
+    || next.lang !== lastLoadedFilters.lang
+    || next.template !== lastLoadedFilters.template;
   pending.value = next;
   try {
     await router.replace({
