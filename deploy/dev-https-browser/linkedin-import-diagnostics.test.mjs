@@ -130,3 +130,86 @@ assert.equal(liveWorker.listenerCount('close'), 0);
 for (const event of ['request', 'response', 'requestfailed', 'crash', 'worker']) {
   assert.equal(page.listenerCount(event), 0);
 }
+
+// Same-origin development sockets and reload messages need their own evidence.
+const socketPage = new EventEmitter();
+const socketDiagnostic = observeImportNetwork(socketPage, () => 'title-filled', () => 0);
+const socket = new EventEmitter();
+socket.url = () => 'wss://localhost:20443/_nuxt/?token=private-value';
+socketPage.emit('websocket', socket);
+assert.equal(socketDiagnostic.snapshot().events.at(-1).resource, 'nuxt-socket');
+assert.equal(socketDiagnostic.snapshot().events.at(-1).stage, 'title-filled');
+socket.emit('framereceived', { payload: '{"type":"connected","token":"private-value"}' });
+socket.emit('framereceived', { payload: '{"type":"full-reload","path":"private-value"}' });
+assert.equal(socketDiagnostic.snapshot().events.at(-1).event, 'vite-full-reload');
+assert.deepEqual(socketDiagnostic.snapshot().sockets, {
+  opened: 1, nuxt: 1, connected: 1, fullReloads: 1,
+});
+socket.emit('socketerror', 'WebSocket network error: Network process crashed. private-value');
+assert.equal(socketDiagnostic.snapshot().events.at(-1).failure, 'network-process-crash');
+socketDiagnostic.console({
+  text: () => `WebSocket connection to '${socket.url()}' failed: WebSocket network error: Network process crashed.`,
+  location: () => ({ url: '' }),
+});
+assert.equal(socketDiagnostic.snapshot().consoleErrors.at(-1).resource, 'nuxt-socket');
+assert.equal(socketDiagnostic.snapshot().consoleErrors.at(-1).kind, 'network-process-crash');
+assert.equal(socketDiagnostic.snapshot().consoleErrors.at(-1).priorEvents.at(-1).event, 'socket-error');
+socket.emit('close');
+assert.equal(socketDiagnostic.snapshot().events.at(-1).event, 'socket-close');
+for (const event of ['close', 'framereceived', 'socketerror']) {
+  assert.equal(socket.listenerCount(event), 0);
+}
+
+for (const [url, resource] of [
+  ['wss://localhost:20443/', 'local-socket'],
+  ['wss://other.invalid/_nuxt/', 'external'],
+  ['ws://localhost:20443/_nuxt/', 'external'],
+]) {
+  const otherSocket = new EventEmitter();
+  otherSocket.url = () => url;
+  socketPage.emit('websocket', otherSocket);
+  assert.equal(socketDiagnostic.snapshot().events.at(-1).resource, resource);
+  if (resource === 'local-socket') {
+    otherSocket.emit('framereceived', { payload: '{"type":"connected"}' });
+    assert.equal(socketDiagnostic.snapshot().events.at(-1).event, 'vite-connected');
+  }
+  otherSocket.emit('framereceived', { payload: '{"type":"private-value"}' });
+  otherSocket.emit('framereceived', { payload: 'private-value' });
+  otherSocket.emit('framereceived', { payload: Buffer.from('private-value') });
+  otherSocket.emit('close');
+}
+const retainedSocket = new EventEmitter();
+retainedSocket.url = socket.url;
+socketPage.emit('websocket', retainedSocket);
+for (let index = 0; index < 100; index++) {
+  retainedSocket.emit('framereceived', { payload: '{"type":"full-reload","path":"private-value"}' });
+}
+assert.equal(socketDiagnostic.snapshot().events.length, 24);
+assert.equal(socketDiagnostic.snapshot().sockets.fullReloads, 101);
+assert.equal(JSON.stringify(socketDiagnostic.snapshot()).includes('private-value'), false);
+assert.equal(JSON.stringify(socketDiagnostic.snapshot()).includes('localhost'), false);
+assert.ok(Buffer.byteLength(JSON.stringify(socketDiagnostic.snapshot())) < 8192);
+socketDiagnostic.stop();
+for (const event of ['close', 'framereceived', 'socketerror']) {
+  assert.equal(retainedSocket.listenerCount(event), 0);
+}
+assert.equal(socketPage.listenerCount('websocket'), 0);
+
+const crowdedPage = new EventEmitter();
+const crowdedDiagnostic = observeImportNetwork(crowdedPage, () => 'cap', () => 0);
+const crowdedSockets = Array.from({ length: 9 }, () => {
+  const candidate = new EventEmitter();
+  candidate.url = socket.url;
+  crowdedPage.emit('websocket', candidate);
+  return candidate;
+});
+assert.equal(crowdedDiagnostic.snapshot().droppedSockets, 1);
+assert.equal(crowdedSockets[8].listenerCount('framereceived'), 0);
+crowdedSockets[0].emit('framereceived', { payload: 'private-value'.repeat(1000) });
+assert.equal(crowdedDiagnostic.snapshot().sockets.fullReloads, 0);
+crowdedDiagnostic.stop();
+for (const candidate of crowdedSockets) {
+  for (const event of ['close', 'framereceived', 'socketerror']) {
+    assert.equal(candidate.listenerCount(event), 0);
+  }
+}

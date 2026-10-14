@@ -1,5 +1,9 @@
 const ORIGIN = 'https://localhost:20443';
-const STAGES = ['sign-in', 'not-linkedin', 'not-english', 'timeout', 'cap', 'done'];
+const STAGES = [
+  'sign-in', 'not-linkedin', 'not-english', 'timeout', 'cap', 'done',
+  'navigate-list', 'ready', 'open-dialog', 'blank-selected', 'title-filled',
+  'submitted', 'response-created', 'response-cap-exceeded', 'response-other',
+];
 const EVENT_LIMIT = 24;
 const CONSOLE_LIMIT = 8;
 
@@ -12,6 +16,11 @@ function resourceOf(value) {
     url = new URL(token);
   } catch {
     return 'unknown';
+  }
+  if (url.protocol === 'wss:') {
+    url.protocol = 'https:';
+    if (url.origin !== ORIGIN) return 'external';
+    return url.pathname.startsWith('/_nuxt/') ? 'nuxt-socket' : 'local-socket';
   }
   if (url.origin !== ORIGIN) return 'external';
   const path = url.pathname;
@@ -31,6 +40,7 @@ function resourceOf(value) {
 }
 
 function failureOf(text) {
+  if (/Network process crashed/u.test(text)) return 'network-process-crash';
   if (/ERR_INSUFFICIENT_RESOURCES/u.test(text)) return 'resources';
   if (/ERR_CERT|certificate/iu.test(text)) return 'certificate';
   if (/ERR_CONNECTION_REFUSED/u.test(text)) return 'connection-refused';
@@ -46,6 +56,10 @@ export function observeImportNetwork(page, getStage, clock = () => performance.n
   const requests = new WeakMap();
   const urls = new Map();
   const workers = new Map();
+  const socketHandlers = new Map();
+  const sockets = { opened: 0, nuxt: 0, connected: 0, fullReloads: 0 };
+  const increment = (key) => { sockets[key] = Math.min(10_000, sockets[key] + 1); };
+  let droppedSockets = 0;
   let requestCount = 0;
   let droppedEvents = 0;
   let droppedConsoleErrors = 0;
@@ -98,15 +112,47 @@ export function observeImportNetwork(page, getStage, clock = () => performance.n
     workers.set(worker, onClose);
     worker.on('close', onClose);
   };
+  const onSocket = (socket) => {
+    const resource = resourceOf(socket.url());
+    increment('opened');
+    if (resource === 'nuxt-socket') increment('nuxt');
+    append({ ...stamp(), event: 'socket-open', resource });
+    if (socketHandlers.size === 8) {
+      droppedSockets++;
+      return;
+    }
+    const onFrame = ({ payload }) => {
+      if (!['nuxt-socket', 'local-socket'].includes(resource)
+        || typeof payload !== 'string' || payload.length > 4096) return;
+      let type;
+      try { type = JSON.parse(payload)?.type; } catch { return; }
+      if (type !== 'connected' && type !== 'full-reload') return;
+      increment(type === 'connected' ? 'connected' : 'fullReloads');
+      append({ ...stamp(), event: `vite-${type}`, resource });
+    };
+    const onError = (text) => append({
+      ...stamp(), event: 'socket-error', resource, failure: failureOf(text),
+    });
+    const onClose = () => {
+      append({ ...stamp(), event: 'socket-close', resource });
+      for (const [event, handler] of Object.entries(handlers)) socket.off(event, handler);
+      socketHandlers.delete(socket);
+    };
+    const handlers = { framereceived: onFrame, socketerror: onError, close: onClose };
+    socketHandlers.set(socket, handlers);
+    for (const [event, handler] of Object.entries(handlers)) socket.on(event, handler);
+  };
   const handlers = {
     request: onRequest, response: onResponse, requestfailed: onFailed,
-    crash: onCrash, worker: onWorker,
+    crash: onCrash, worker: onWorker, websocket: onSocket,
   };
   for (const [event, handler] of Object.entries(handlers)) page.on(event, handler);
   return {
     console(message) {
       const text = message.text();
-      const token = /(\S+) due to access control checks\.$/u.exec(text)?.[1];
+      const accessControlToken = /(\S+) due to access control checks\.$/u.exec(text)?.[1];
+      const socketToken = /WebSocket connection to '([^']+)' failed:/u.exec(text)?.[1];
+      const token = accessControlToken ?? socketToken;
       const target = token ?? message.location().url;
       if (consoleErrors.length === CONSOLE_LIMIT) {
         consoleErrors.shift();
@@ -116,20 +162,25 @@ export function observeImportNetwork(page, getStage, clock = () => performance.n
       // request and the nearby events before later cap checks replace them.
       consoleErrors.push({
         ...stamp(), resource: resourceOf(target), lastRequest: urls.get(target) ?? 0,
-        kind: token === undefined ? 'other' : 'access-control',
+        kind: accessControlToken !== undefined ? 'access-control'
+          : socketToken !== undefined ? failureOf(text) : 'other',
         priorEvents: events.slice(-3),
       });
     },
     snapshot() {
       return {
         events: events.slice(), consoleErrors: consoleErrors.slice(),
-        droppedEvents, droppedConsoleErrors,
+        sockets: { ...sockets }, droppedEvents, droppedConsoleErrors, droppedSockets,
       };
     },
     stop() {
       for (const [event, handler] of Object.entries(handlers)) page.off(event, handler);
       for (const [worker, handler] of workers) worker.off('close', handler);
       workers.clear();
+      for (const [socket, handlers] of socketHandlers) {
+        for (const [event, handler] of Object.entries(handlers)) socket.off(event, handler);
+      }
+      socketHandlers.clear();
     },
   };
 }

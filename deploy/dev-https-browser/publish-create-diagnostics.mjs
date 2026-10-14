@@ -1,4 +1,5 @@
 import { writeFile } from 'node:fs/promises';
+import { observeImportNetwork } from './linkedin-import-diagnostics.mjs';
 
 // Record creation stages, request outcomes, and control state at Enter to
 // distinguish intermittent failures without retaining volatile browser output.
@@ -109,6 +110,7 @@ export async function observePublishCreate(page) {
     createFailed: false, meStatus: 0, listStatus: 0,
   };
   let lastStage = 'navigate-list';
+  const lifecycle = observeImportNetwork(page, () => lastStage);
   const route = (request) => {
     const url = new URL(request.url());
     if (url.origin !== 'https://localhost:20443') return 'other';
@@ -138,12 +140,14 @@ export async function observePublishCreate(page) {
     async failed(error) {
       const state = await page.evaluate(readPageState).catch(() => null);
       const evidence = createFailureEvidence(lastStage, error, network, state);
+      evidence.lifecycle = lifecycle.snapshot();
       await writeFile('/evidence/publish-create-failure.json', `${JSON.stringify(evidence)}\n`, {
         flag: 'wx', mode: 0o600,
       });
       return evidence.lastStage;
     },
     stop() {
+      lifecycle.stop();
       page.off('request', onRequest);
       page.off('response', onResponse);
       page.off('requestfailed', onFailed);
