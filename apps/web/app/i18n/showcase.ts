@@ -7,6 +7,7 @@ import type {
   ShowcaseRole,
 } from '../lib/showcaseContract';
 import type { Locale } from './locale';
+import { filterControls } from './filters';
 import { galleryCopy } from './templates';
 
 export interface ShowcaseCopy {
@@ -84,16 +85,16 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     countTail: VI_COUNT_TAIL,
     countLine: (total) => `${viCountHead(total)} · ${VI_COUNT_TAIL}`,
     countNoTotal: 'Sớm nhất trước',
-    filters: 'Bộ lọc',
-    filtersActive: (count) => `Bộ lọc, ${count} đang bật`,
+    filters: filterControls.vi.filters,
+    filtersActive: filterControls.vi.filtersActive,
     roleHeading: 'Vị trí',
-    close: 'Đóng',
-    clearFilters: 'Xóa bộ lọc',
+    close: filterControls.vi.close,
+    clearFilters: filterControls.vi.clearFilters,
     showResults: (total) => `Xem ${NUMBER_FORMAT.vi.format(total)} CV`,
     showResultsLoading: 'Xem kết quả',
-    activeFilters: 'Bộ lọc đang bật',
-    removeFilter: (label) => `${label}, gỡ bộ lọc`,
-    clearAll: 'Xóa hết',
+    activeFilters: filterControls.vi.activeFilters,
+    removeFilter: filterControls.vi.removeFilter,
+    clearAll: filterControls.vi.clearAll,
     inviteTitle: 'Muốn CV của bạn ở đây?',
     inviteBody:
       'Khi xuất bản CV, bật Hiện trong trang Cộng đồng. Bạn tắt lúc nào '
@@ -133,16 +134,16 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     countTail: EN_COUNT_TAIL,
     countLine: (total) => `${englishCount(total)} · ${EN_COUNT_TAIL}`,
     countNoTotal: 'Earliest added first',
-    filters: 'Filters',
-    filtersActive: (count) => `Filters, ${count} active`,
+    filters: filterControls.en.filters,
+    filtersActive: filterControls.en.filtersActive,
     roleHeading: 'Role',
-    close: 'Close',
-    clearFilters: 'Clear filters',
+    close: filterControls.en.close,
+    clearFilters: filterControls.en.clearFilters,
     showResults: (total) => `Show ${englishCount(total)}`,
     showResultsLoading: 'Show results',
-    activeFilters: 'Active filters',
-    removeFilter: (label) => `${label}, remove filter`,
-    clearAll: 'Clear all',
+    activeFilters: filterControls.en.activeFilters,
+    removeFilter: filterControls.en.removeFilter,
+    clearAll: filterControls.en.clearAll,
     inviteTitle: 'Want your resume here?',
     inviteBody:
       'When you publish, turn on Show in the community showcase. You can '

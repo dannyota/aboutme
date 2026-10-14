@@ -18,6 +18,7 @@ import {
   parseRole,
   ROLE_MEMBERS,
   ROLES,
+  withGalleryFilters,
   withRole,
 } from '../../app/templates/catalog';
 import { galleryDocument } from '../../app/templates/documents';
@@ -138,6 +139,25 @@ describe('gallery catalog', () => {
       .toEqual({ filter: 'ats' });
     expect(withRole({}, 'frontend')).toEqual({ role: 'frontend' });
     expect(original).toEqual({ filter: 'ats' });
+  });
+
+  it('normalizes filter keys and preserves unrelated values', () => {
+    const query = { role: ['backend', 'qa'], filter: 'nope', source: 'a & b' };
+    expect(withGalleryFilters(query, undefined, 'ats')).toEqual({
+      source: 'a & b',
+      filter: 'ats',
+    });
+    expect(
+      withGalleryFilters(
+        { role: 'backend', filter: 'ats', source: 'x' },
+        'frontend',
+        undefined,
+      ),
+    ).toEqual({ source: 'x', role: 'frontend' });
+    expect(withGalleryFilters(query, undefined, undefined)).toEqual({
+      source: 'a & b',
+    });
+    expect(query.role).toEqual(['backend', 'qa']);
   });
 
   it('serves the gallery pages in the site language and to search', () => {

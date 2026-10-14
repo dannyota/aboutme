@@ -711,6 +711,9 @@ describe('showcase privacy', () => {
       const root = join(process.cwd(), 'app');
       const files = [
         'pages/showcase.vue',
+        'components/app/FilterBar.vue',
+        'components/app/FilterSheet.vue',
+        'components/app/ActiveFilters.vue',
         'components/showcase/ShowcaseActiveFilters.vue',
         'components/showcase/ShowcaseFilterBar.vue',
         'components/showcase/ShowcaseFilterSheet.vue',
@@ -1475,20 +1478,20 @@ describe('showcase page frame', () => {
     mounted.push(app);
     await flushPromises();
     await vi.waitFor(() => expect(document.documentElement.classList
-      .contains('showcase-scroll-padding')).toBe(true));
+      .contains('filter-bar-scroll-padding')).toBe(true));
     app.unmount();
     await vi.waitFor(() => expect(document.documentElement.classList
-      .contains('showcase-scroll-padding')).toBe(false));
+      .contains('filter-bar-scroll-padding')).toBe(false));
   });
 
   it('sets the 68 px scroll padding only below 1024 px', () => {
     const source = readFileSync(
-      join(process.cwd(), 'app/pages/showcase.vue'),
+      join(process.cwd(), 'app/components/app/FilterBar.vue'),
       'utf8',
     );
     const rule = new RegExp([
       '@media \\(width < 1024px\\) \\{\\s+',
-      'html\\.showcase-scroll-padding \\{\\s+',
+      'html\\[data-ui="app"\\]\\.filter-bar-scroll-padding \\{\\s+',
       'scroll-padding-top: 68px;',
     ].join(''), 'u');
     expect(source).toMatch(rule);
