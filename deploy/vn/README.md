@@ -144,13 +144,14 @@ aboutme unit, and the PostgreSQL, CrowdSec, and SSH services, names
 `aboutme-alert@.service` in `OnFailure=`, and `aboutme-watch.timer` runs
 `host/bin/watch.sh` every five minutes: root and data volume use above 70%,
 failed units, PostgreSQL on its socket, WAL archive failures, the newest backup
-at least 26 hours old, the CrowdSec alert count and Coraza match count in the
-last hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh`
-mails the support mailbox through Bizfly SMTP with msmtp, at most once per
-condition per UTC day, with names and counts only. The external app-down check
-is the GitHub uptime workflow. The
-[production runbook](../../docs/runbooks/production.md#alarms) owns its
-schedule, notification recipient, and limits.
+at least 26 hours old, the CrowdSec alert count, invalid Coraza logs, and
+`totp_unavailable` in the server journal. Each watcher run records the last
+hour's Coraza match and unparsed counts in the journal without mail; only
+`coraza-log-invalid` sends Coraza mail. `host/bin/alert.sh` mails the support
+mailbox through Bizfly SMTP with msmtp, at most once per condition per UTC day,
+with names and counts only. The external app-down check is the GitHub uptime
+workflow. The [production runbook](../../docs/runbooks/production.md#alarms)
+owns its schedule, notification recipient, and limits.
 
 ## Restore drill
 
