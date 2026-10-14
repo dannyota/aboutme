@@ -221,12 +221,20 @@ the deferred mobile client will make the same one-time choice.
 ## Agent authorization and the bearer world
 
 `internal/oauthsrv` is a first-party OAuth 2.1 authorization server. Agents are
-public clients that register dynamically, then obtain tokens through
-authorization code with PKCE. `code_challenge_method=S256` is required and
-`plain` is rejected. The authorize request is validated in full: `client_id`,
-exact registered `redirect_uri`, `response_type`, requested scopes, and the
-challenge. Validation finishes before any redirect or user interaction, so an
-open-redirect or `redirect_uri` substitution attempt fails closed.
+public clients that register dynamically or identify themselves with a metadata
+URL, then obtain tokens through authorization code with PKCE.
+`code_challenge_method=S256` is required and `plain` is rejected. The authorize
+request is validated in full: `client_id`, validated `redirect_uri`,
+`response_type`, requested scopes, and the challenge. Validation finishes before
+any redirect or user interaction, so an open-redirect or `redirect_uri`
+substitution attempt fails closed.
+
+[Client ID Metadata Documents](mcp-cimd.md) add startup-gated URL clients.
+[The fetch contract](mcp-cimd-fetch.md) owns URL, DNS, pinned TLS, document,
+cache, and admission rules. [Authorization](mcp-cimd-authorization.md) owns
+host-first consent, mandatory loopback consent, exact public identity, and
+transactional approval. Token use and revocation never fetch metadata. Full
+metadata URLs, remote names, bodies, and redirects stay out of telemetry.
 
 Authorization codes are single-use, expire in 60 seconds, and bind the client,
 user, scopes, challenge, and exact redirect URI. Replaying a consumed code
@@ -251,11 +259,11 @@ Cookie isolation is explicit: `/mcp`, `/oauth/token`, `/oauth/register`, and
 authorize and consent surfaces keep the full session, CSRF, and exact-Origin
 chain. Client-supplied names are bounded, sanitized text rendered as text, never
 markup. Token material, code material, PKCE verifiers, and resume content never
-enter logs, traces, metrics labels, errors, or panic text; logs carry client ID,
-grant ID, token row ID, tool name, resume ID, and closed outcomes only. Existing
-per-user resume caps, sanitizer versioning, and media privacy bounds apply to
-agent writes unchanged. [ADR 0018](../adr/0018-mcp-agent-access.md) records this
-boundary.
+enter logs, traces, metrics labels, errors, or panic text; logs carry internal
+client ID, grant ID, token row ID, tool name, resume ID, and closed outcomes
+only. Existing per-user resume caps, sanitizer versioning, and media privacy
+bounds apply to agent writes unchanged.
+[ADR 0018](../adr/0018-mcp-agent-access.md) records this boundary.
 
 ## Client address and rate limits
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -338,7 +338,7 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     // the consent page must show the loopback line
     // (docs/design/mcp-client-compatibility.md, gap 6).
     await expect(page.getByTestId('consent-return-to')).toHaveText(
-      'After you approve, you return to an app on this computer.',
+      'After you approve, you return to an app on this computer (localhost).',
     );
 
     stage('approve-consent');
@@ -413,6 +413,8 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     const refreshedAccessToken = provider.tokens()?.access_token;
     expect(refreshedAccessToken).toBeTruthy();
     expect(refreshedAccessToken).not.toBe(liveTokens.access_token);
+
+    await proveCIMDPresentation(page);
 
     stage('revoke-grant');
     const settings = await page.goto('/app/settings/sessions');
@@ -517,3 +519,101 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     );
   }
 });
+
+// UI fixtures exercise text isolation and keyboard decisions without creating
+// another client or grant in the SDK's real account.
+async function proveCIMDPresentation(page: Page): Promise<void> {
+  const host = `${'a'.repeat(60)}.client.example`;
+  const name = '<img src=x>\u202EClaude';
+  const decisionValues: string[] = [];
+  const originalViewport = page.viewportSize();
+  const consentPattern = /\/api\/v1\/oauth\/consent(?:\?|$)/;
+  const grantPattern = /\/api\/v1\/me\/agents$/;
+  const consentRoute = async (route: Route): Promise<void> => {
+    if (new URL(route.request().url()).origin !== ORIGIN) {
+      await route.fallback();
+      return;
+    }
+    if (route.request().method() === 'POST') {
+      decisionValues.push(route.request().postDataJSON().decision);
+      await route.fulfill({
+        json: { data: { redirectTo: `${ORIGIN}/app/settings/sessions` } },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        data: {
+          clientKind: 'cimd', clientHost: host, clientName: name,
+          scopes: ['resumes:read'],
+        },
+      },
+    });
+  };
+  const grantRoute = async (route: Route): Promise<void> => {
+    if (new URL(route.request().url()).origin !== ORIGIN) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: { data: { grants: [{
+        id: randomUUID(), clientKind: 'cimd', clientHost: host,
+        clientName: name, scopes: ['resumes:read'],
+        createdAt: '2026-10-14T00:00:00Z', lastUsedAt: null,
+      }] } },
+    });
+  };
+  await page.route(consentPattern, consentRoute);
+  await page.route(grantPattern, grantRoute);
+  try {
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const locale of ['vi', 'en'] as const) {
+        await page.context().addCookies([
+          { name: 'aboutme-locale', value: locale, url: ORIGIN },
+        ]);
+        const query = new URLSearchParams({
+          client_id: `https://${host}/metadata`, redirect_uri: REDIRECT_URI,
+          response_type: 'code', scope: 'resumes:read',
+          code_challenge: 'A'.repeat(43), code_challenge_method: 'S256',
+        });
+        await page.goto(`/authorize?${query}`);
+        await waitForHydration(page);
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+          locale === 'vi'
+            ? `${host} muốn truy cập CV của bạn.`
+            : `${host} wants access to your resumes.`,
+        );
+        await expect(page.getByTestId('consent-client-host'))
+          .toHaveAttribute('dir', 'ltr');
+        await expect(page.getByTestId('consent-client-name')).toHaveText(name);
+        await expect(page.getByTestId('authorize-page').locator('img'))
+          .toHaveCount(0);
+        await expect(page.getByTestId('consent-loopback-warning')).toHaveText(
+          locale === 'vi'
+            ? 'Chỉ cho phép nếu bạn vừa bắt đầu đăng nhập từ một ứng dụng trên máy tính này.'
+            : 'Approve only if you just started this sign-in from an app on this computer.',
+        );
+        await expect(page.getByTestId('consent-return-to')).toContainText(
+          '(localhost).',
+        );
+        expect(await page.evaluate(() =>
+          document.documentElement.scrollWidth <= window.innerWidth,
+        )).toBe(true);
+        const decision = locale === 'vi' ? 'approve' : 'deny';
+        await page.locator(`[data-decision="${decision}"]`).focus();
+        await Promise.all([
+          page.waitForURL('**/app/settings/sessions'),
+          page.keyboard.press('Enter'),
+        ]);
+        await expect(page.getByTestId('agent-client-host')).toHaveText(host);
+      }
+    }
+    expect(decisionValues).toEqual(['approve', 'deny', 'approve', 'deny']);
+  } finally {
+    await page.unroute(consentPattern, consentRoute);
+    await page.unroute(grantPattern, grantRoute);
+    await pinEnglish(page.context());
+    if (originalViewport !== null) await page.setViewportSize(originalViewport);
+  }
+}

@@ -33,6 +33,7 @@ const me = {
 const grant = {
   id: 'grant-1',
   clientName: '<img src=x onerror=alert(1)>',
+  clientKind: 'cimd', clientHost: 'client.example',
   scopes: ['resumes:read', 'resumes:write'],
   createdAt: '2026-09-01T09:00:00Z',
   lastUsedAt: null,
@@ -97,6 +98,8 @@ describe('ConnectedAgents', () => {
         wrapper.find('[data-testid="connected-agents"] [as]').exists(),
       ).toBe(false);
       expect(wrapper.text()).toContain(grant.clientName);
+      expect(wrapper.get('[data-testid="agent-client-host"]').text())
+        .toBe('client.example');
       expect(wrapper.find('[onerror]').exists()).toBe(false);
     },
   );
@@ -269,6 +272,8 @@ describe('ConnectedAgents', () => {
       expect(dialog.textContent).toContain('Revoke access');
       expect(agentRequests).toBe(1);
       expect(wrapper.text()).toContain(grant.clientName);
+      expect(wrapper.get('[data-testid="agent-client-host"]').text())
+        .toBe('client.example');
 
       document.body.querySelector<HTMLButtonElement>(
         '[data-action="agent-revoke-cancel"]',

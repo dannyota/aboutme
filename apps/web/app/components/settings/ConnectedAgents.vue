@@ -172,8 +172,13 @@ async function refreshAfterAction(): Promise<void> {
           data-testid="agent-row"
           class="grid gap-3 border-b py-4 last:border-b-0"
         >
-          <h3 class="font-medium">
-            {{ grant.clientName }}
+          <h3 class="font-medium [overflow-wrap:anywhere]">
+            <bdi>{{ grant.clientName }}</bdi>
+            <template v-if="grant.clientKind === 'cimd'">
+              (<bdi dir="ltr" data-testid="agent-client-host">{{
+                grant.clientHost
+              }}</bdi>)
+            </template>
           </h3>
           <div class="flex flex-wrap gap-2">
             <Badge

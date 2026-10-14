@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,8 +28,10 @@ const (
 var errAgentGrantNotFound = errors.New("oauth agent grant not found")
 
 type consentViewData struct {
-	ClientName string `json:"clientName"`
-	Scopes     Scopes `json:"scopes"`
+	ClientKind string  `json:"clientKind"`
+	ClientHost *string `json:"clientHost"`
+	ClientName string  `json:"clientName"`
+	Scopes     Scopes  `json:"scopes"`
 }
 
 type consentDecisionData struct {
@@ -35,6 +39,8 @@ type consentDecisionData struct {
 }
 
 type agentGrantData struct {
+	ClientKind string     `json:"clientKind"`
+	ClientHost *string    `json:"clientHost"`
 	ID         string     `json:"id"`
 	ClientName string     `json:"clientName"`
 	Scopes     Scopes     `json:"scopes"`
@@ -108,6 +114,7 @@ func (s *Service) handleConsentContext(w http.ResponseWriter, r *http.Request) {
 		writeConsentInvalid(w)
 		return
 	}
+	query.address = s.requestAddress(r)
 	view, err := s.ConsentContext(r.Context(), session.UserID, query)
 	if err != nil {
 		writeConsentSessionError(w, err)
@@ -126,6 +133,7 @@ func (s *Service) handleConsentDecision(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return
 	}
+	decision.address = s.requestAddress(r)
 	redirectTo, err := s.ConsentDecision(r.Context(), session, decision)
 	if err != nil {
 		writeConsentSessionError(w, err)
@@ -152,12 +160,13 @@ func decodeConsentDecision(w http.ResponseWriter, r *http.Request) (ConsentDecis
 		return ConsentDecision{}, err
 	}
 	clientID, err := uuid.Parse(fields["client_id"])
-	if err != nil || clientID == uuid.Nil {
+	if (err != nil || clientID == uuid.Nil) && !strings.HasPrefix(fields["client_id"], "https://") {
 		writeConsentInvalid(w)
 		return ConsentDecision{}, ErrConsentInvalid
 	}
 	return ConsentDecision{ConsentQuery: ConsentQuery{
-		ClientID: clientID, RedirectURI: fields["redirect_uri"], ResponseType: fields["response_type"],
+		PublicClientID: fields["client_id"],
+		ClientID:       clientID, RedirectURI: fields["redirect_uri"], ResponseType: fields["response_type"],
 		Scope: fields["scope"], State: fields["state"], CodeChallenge: fields["code_challenge"],
 		CodeChallengeMethod: fields["code_challenge_method"],
 	}, Decision: fields["decision"]}, nil
@@ -219,6 +228,7 @@ func (s *Service) handleAgentGrants(w http.ResponseWriter, r *http.Request) {
 	}
 	grants := make([]agentGrantData, 0, len(rows))
 	for _, row := range rows {
+		kind, host := clientDisplay(row.MetadataUrl)
 		scopes, parseErr := ParseScopes(row.Scopes)
 		if parseErr != nil {
 			writeSessionInternalError(w)
@@ -230,6 +240,7 @@ func (s *Service) handleAgentGrants(w http.ResponseWriter, r *http.Request) {
 			lastUsedAt = &value
 		}
 		grants = append(grants, agentGrantData{
+			ClientKind: kind, ClientHost: host,
 			ID: row.ID.String(), ClientName: row.ClientName, Scopes: scopes,
 			CreatedAt: row.CreatedAt.UTC(), LastUsedAt: lastUsedAt,
 		})
@@ -320,6 +331,12 @@ func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUI
 const reauthRequiredCode = "reauth_required"
 
 func writeConsentSessionError(w http.ResponseWriter, err error) {
+	var limited *CIMDRateError
+	if errors.As(err, &limited) {
+		w.Header().Set("Retry-After", strconv.Itoa(limited.RetryAfter))
+		api.WriteError(w, 429, "rate_limited", "too many requests")
+		return
+	}
 	switch {
 	case errors.Is(err, ErrConsentNotFound):
 		api.WriteError(w, http.StatusNotFound, "not_found", "no such authorization client")

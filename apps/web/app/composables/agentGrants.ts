@@ -73,11 +73,17 @@ function isGrant(value: unknown): value is AgentGrant {
   const candidate = value as {
     id?: unknown;
     clientName?: unknown;
+    clientKind?: unknown;
+    clientHost?: unknown;
     scopes?: unknown;
     createdAt?: unknown;
     lastUsedAt?: unknown;
   };
   return typeof candidate.id === 'string'
+    && ((candidate.clientKind === 'dcr' && candidate.clientHost === null)
+      || (candidate.clientKind === 'cimd'
+        && typeof candidate.clientHost === 'string'
+        && candidate.clientHost !== ''))
     && candidate.id !== ''
     && typeof candidate.clientName === 'string'
     && candidate.clientName !== ''

@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// OAuthQueries is the exact data-layer surface Phase PM's OAuth authorization
-// server and MCP resource server (T04–T09) consume. It freezes the row-lock
+// OAuthQueries is the data-layer surface the OAuth authorization server and
+// MCP resource server consume. It defines the row-lock
 // protocol the design requires and hides every raw-SQL detail behind one
 // transactional contract; the broader Querier interface keeps the unrelated
 // session, resume, and password methods off this surface.
@@ -31,9 +31,12 @@ import (
 // Every list and cleanup method is bounded by an explicit row limit, so a
 // request-path sweep costs a constant rather than a function of table size.
 type OAuthQueries interface {
-	// Clients (M1). The primary key is the public client_id; there is no
-	// secret. Deleting a client cascades its codes, grants, and tokens.
+	// Clients retain UUID foreign keys. DCR exposes the UUID; CIMD exposes the
+	// exact metadata URL. Deleting a client cascades its codes, grants, and tokens.
 	CreateOAuthClient(context.Context, CreateOAuthClientParams) (OAuthClient, error)
+	GetDCRClient(context.Context, uuid.UUID) (OAuthClient, error)
+	GetOAuthClientByMetadataURL(context.Context, string) (OAuthClient, error)
+	UpsertOAuthMetadataClient(context.Context, UpsertOAuthMetadataClientParams) (OAuthClient, error)
 	GetOAuthClient(context.Context, uuid.UUID) (OAuthClient, error)
 	GetOAuthClientForUpdate(context.Context, uuid.UUID) (OAuthClient, error)
 	TouchOAuthClientLastUsed(context.Context, TouchOAuthClientLastUsedParams) (int64, error)
