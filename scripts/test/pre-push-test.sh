@@ -53,6 +53,10 @@ log "golangci-lint $* (in ${PWD##*/}, GOWORK=${GOWORK:-unset})"
 ! fails golangci-lint'
 stub shellcheck "$stub_lib"'
 log "shellcheck $*"
+# Model a warning-only diagnostic when the fixture asks for one.
+if [[ -n ${STUB_SHELLCHECK_WARNING:-} && " $* " == *" -S warning "* ]]; then
+  exit 1
+fi
 ! fails shellcheck'
 
 node_tool() { # node_tool <node_modules> <bin name> <package> <version>
@@ -246,12 +250,38 @@ check "$REPO" 2 STUB_GOLANGCI_VERSION=2.13.0
 has_line 'golangci-lint +REFUSED +installed 2.13.0'
 git -C "$REPO" reset -q --hard
 
-# Shell: bash -n catches syntax errors; shellcheck runs at error severity.
+# Shell: bash -n catches syntax errors; other scripts use error severity.
 printf 'if then\n' >"$REPO/scripts/bad.sh"
 check "$REPO" 1
 has_line 'bash-n +FAIL'
 has_call "shellcheck -S error -- scripts/bad.sh"
 rm -f "$REPO/scripts/bad.sh"
+
+# SC2043 is a warning: the same script passes outside deploy/vn and fails
+# under deploy/vn, including nested paths, with CI's shellcheck flags.
+printf '#!/usr/bin/env bash\nfor value in one; do echo "$value"; done\n' \
+  >"$REPO/scripts/warning.sh"
+check "$REPO" 0 STUB_SHELLCHECK_WARNING=1
+has_call "shellcheck -S error -- scripts/warning.sh"
+has_line 'shellcheck +pass +outside deploy/vn: 1 file\(s\), errors only'
+
+mkdir -p "$REPO/deploy/vn/tests"
+cp "$REPO/scripts/warning.sh" "$REPO/deploy/vn/warning.sh"
+check "$REPO" 0
+has_call "shellcheck -x -S warning -- deploy/vn/warning.sh"
+has_call "shellcheck -S error -- scripts/warning.sh"
+has_line 'shellcheck +pass +deploy/vn: 1 file\(s\), warnings and errors'
+check "$REPO" 1 STUB_SHELLCHECK_WARNING=1
+has_line 'bash-n +pass +2 file'
+has_line 'shellcheck +FAIL +deploy/vn: 1 file\(s\), warnings and errors'
+has_line 'shellcheck +pass +outside deploy/vn: 1 file\(s\), errors only'
+
+mv "$REPO/deploy/vn/warning.sh" "$REPO/deploy/vn/tests/warning.sh"
+check "$REPO" 1 STUB_SHELLCHECK_WARNING=1
+has_call "shellcheck -x -S warning -- deploy/vn/tests/warning.sh"
+has_call "shellcheck -S error -- scripts/warning.sh"
+rm -rf "$REPO/deploy/vn"
+rm -f "$REPO/scripts/warning.sh"
 
 # check-lengths.sh runs over the whole tree.
 seq 451 | sed 's/^/line /' >"$REPO/docs/long.md"

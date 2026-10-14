@@ -341,6 +341,7 @@ check_go() {
 
 check_shell() {
   local -a files
+  local -a vn_files=() other_files=()
   mapfile -t files < <(list "${CHANGED[@]}" | filter '\.sh$')
   if ((${#files[@]} == 0)); then
     record bash-n skip "no changed shell scripts"
@@ -352,11 +353,23 @@ check_shell() {
   if ((ok)); then record bash-n pass "${#files[@]} file(s)"; else
     record bash-n FAIL "${#files[@]} file(s)"
   fi
-  # Error severity only: CI does not run shellcheck, and older scripts carry
-  # warnings a one-line edit should not have to fix.
+  # .github/workflows/vn-infra.yml runs bash -n and shellcheck -x -S warning
+  # on tracked deploy/vn scripts. Match its flags for changed deploy/vn files;
+  # other changed shell scripts keep error severity only.
+  for f in "${files[@]}"; do
+    if [[ $f == deploy/vn/* ]]; then vn_files+=("$f"); else
+      other_files+=("$f")
+    fi
+  done
   if command -v shellcheck >/dev/null; then
-    run shellcheck "${#files[@]} file(s), errors only" shellcheck -S error \
-      -- "${files[@]}"
+    if ((${#vn_files[@]})); then
+      run shellcheck "deploy/vn: ${#vn_files[@]} file(s), warnings and errors" \
+        shellcheck -x -S warning -- "${vn_files[@]}"
+    fi
+    if ((${#other_files[@]})); then
+      run shellcheck "outside deploy/vn: ${#other_files[@]} file(s), errors only" \
+        shellcheck -S error -- "${other_files[@]}"
+    fi
   else
     record shellcheck skip "shellcheck is not installed"
   fi
