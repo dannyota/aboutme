@@ -108,15 +108,15 @@ Limit the manifest to 1 MiB, keys to 4096 entries, and decrypted tar to 8 MiB;
 refuse export overflow without pruning keys. Manifest JSON has exactly these
 required fields:
 
-| Field                       | Contract                                                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion`             | Integer 1. Unknown versions refuse restore.                                                                           |
-| `requestId`, `kind`         | Existing request grammar; kind is `totp-rotate` or `view-pass-rotate`.                                                |
-| `createdAt`, `purpose`      | UTC RFC3339; `switch` or `retire` (TOTP only).                                                                        |
-| `release`, `minimumRelease` | Closed saved release-json; nonnegative integer host floor at export.                                                  |
-| `totpBefore`, `totpAfter`   | Each exactly `{active,previous}`; active is `{slot,keyId}`, previous is that shape or null. Slot is `a                | b`; ID uses the TOTP derived-ID grammar. |
-| `viewKeys`                  | Array of exactly `{sha256,restoreState}`; state is always `retired`. Includes current, staged and archived view keys. |
-| `files`                     | Array of exactly `{path,sha256}`; digests are 64 lowercase hex over the normalized file bytes.                        |
+| Field                       | Contract                                                                                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`             | Integer 1. Unknown versions refuse restore.                                                                                                          |
+| `requestId`, `kind`         | Existing request grammar; kind is `totp-rotate` or `view-pass-rotate`.                                                                               |
+| `createdAt`, `purpose`      | UTC RFC3339; `switch` or `retire` (TOTP only).                                                                                                       |
+| `release`, `minimumRelease` | Closed saved release-json; nonnegative integer host floor at export.                                                                                 |
+| `totpBefore`, `totpAfter`   | Each exactly `{active,previous}`; active is `{slot,keyId}`, previous is that shape or null. Slot is `a` or `b`; ID uses the TOTP derived-ID grammar. |
+| `viewKeys`                  | Array of exactly `{sha256,restoreState}`; state is always `retired`. Includes current, staged and archived view keys.                                |
+| `files`                     | Array of exactly `{path,sha256}`; digests are 64 lowercase hex over the normalized file bytes.                                                       |
 
 TOTP paths are exactly `keys/totp/<derived-id>`; view paths are exactly
 `keys/view/<sha256>`. Sort files by path and `viewKeys` by digest; reject
