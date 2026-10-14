@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -26,14 +28,25 @@ const (
 // HandleAuthorize validates an authorization-code request before redirecting
 // either to login, stateless consent, or an exact registered redirect URI.
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-transform")
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	values, parseErr := url.ParseQuery(r.URL.RawQuery)
-	query, client, trusted, err := s.authorizeRequest(r.Context(), values, r.URL.RawQuery, parseErr)
+	query, client, trusted, err := s.authorizeRequest(r.Context(), values, r.URL.RawQuery, parseErr, s.requestAddress(r))
 	if err != nil {
+		var limited *CIMDRateError
+		if errors.As(err, &limited) {
+			w.Header().Set("Retry-After", strconv.Itoa(limited.RetryAfter))
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			return
+		}
+		if !errors.Is(err, ErrConsentInvalid) && !errors.Is(err, ErrScopeInvalid) {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		if !trusted {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -48,8 +61,12 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loginPath+"?next="+url.QueryEscape(next), http.StatusFound)
 		return
 	}
+	if client.ID == uuid.Nil || query.metadata != nil && nativeLoopbackRedirect(query.RedirectURI) {
+		redirectInternal(w, consentPath+"?"+query.values().Encode())
+		return
+	}
 	grant, err := s.queries.GetLiveOAuthGrant(r.Context(), store.GetLiveOAuthGrantParams{UserID: session.UserID, ClientID: client.ID})
-	if err == nil && grantAllows(grant.Scopes, query.Scopes) {
+	if err == nil && grant.AuthEpoch == session.AuthEpoch && grantAllows(grant.Scopes, query.Scopes) {
 		redirectTo, issueErr := s.issueCode(r.Context(), session, query)
 		if issueErr == nil {
 			redirectIssuedCode(w, client, query, s.publicOrigin, redirectTo)
@@ -84,31 +101,28 @@ func oauthErrorFor(err error) string {
 	return "invalid_request"
 }
 
-func (s *Service) authorizeRequest(ctx context.Context, values url.Values, rawQuery string, parseErr error) (ConsentQuery, store.OAuthClient, bool, error) {
+func (s *Service) authorizeRequest(ctx context.Context, values url.Values, rawQuery string, parseErr error, address netip.Addr) (ConsentQuery, store.OAuthClient, bool, error) {
 	if len(values["client_id"]) != 1 || len(values["redirect_uri"]) != 1 {
 		return ConsentQuery{}, store.OAuthClient{}, false, ErrConsentInvalid
 	}
-	clientID, err := uuid.Parse(values.Get("client_id"))
+	resolved, client, err := s.resolveConsent(ctx, ConsentQuery{PublicClientID: values.Get("client_id"), RedirectURI: values.Get("redirect_uri"), address: address})
 	if err != nil {
-		return ConsentQuery{}, store.OAuthClient{}, false, ErrConsentInvalid
+		return ConsentQuery{}, store.OAuthClient{}, false, err
 	}
-	client, err := s.queries.GetOAuthClient(ctx, clientID)
-	if err != nil {
-		return ConsentQuery{}, store.OAuthClient{}, false, ErrConsentInvalid
-	}
-	if !registeredRedirect(client, values.Get("redirect_uri")) {
-		return ConsentQuery{}, store.OAuthClient{}, false, ErrConsentInvalid
-	}
+	resolved.State = values.Get("state")
 	if parseErr != nil {
-		return ConsentQuery{ClientID: clientID, RedirectURI: values.Get("redirect_uri"), State: values.Get("state")}, client, true, ErrConsentInvalid
+		return resolved, client, true, ErrConsentInvalid
 	}
 	if !s.canonicalResource(values, rawQuery) {
-		return ConsentQuery{ClientID: clientID, RedirectURI: values.Get("redirect_uri"), State: values.Get("state")}, client, true, ErrConsentInvalid
+		return resolved, client, true, ErrConsentInvalid
 	}
 	query, err := consentQueryFromValues(values)
 	if err != nil {
-		return ConsentQuery{ClientID: clientID, RedirectURI: values.Get("redirect_uri"), State: values.Get("state")}, client, true, err
+		return resolved, client, true, err
 	}
+	query.ClientID = resolved.ClientID
+	query.metadata = resolved.metadata
+	query.address = address
 	if err := validateConsentQuery(query); err != nil {
 		return query, client, true, err
 	}
@@ -150,7 +164,7 @@ func (s *Service) canonicalResource(values url.Values, raw string) bool {
 // separate from request-derived values.
 func redirectIssuedCode(w http.ResponseWriter, client store.OAuthClient, request ConsentQuery, issuer, target string) {
 	targetURL, err := url.Parse(target)
-	if err != nil || !registeredRedirect(client, request.RedirectURI) {
+	if err != nil || !consentRedirectMatches(client, request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -195,11 +209,13 @@ func consentQueryFromValues(values url.Values) (ConsentQuery, error) {
 	if len(values[stateKey]) > 1 {
 		return ConsentQuery{}, ErrConsentInvalid
 	}
-	clientID, err := uuid.Parse(values.Get(clientIDKey))
-	if err != nil {
+	publicID := values.Get(clientIDKey)
+	clientID, err := uuid.Parse(publicID)
+	if err != nil && !strings.HasPrefix(publicID, "https://") {
 		return ConsentQuery{}, ErrConsentInvalid
 	}
 	return ConsentQuery{
+		PublicClientID:      publicID,
 		ClientID:            clientID,
 		RedirectURI:         values.Get(redirectKey),
 		ResponseType:        values.Get(responseKey),

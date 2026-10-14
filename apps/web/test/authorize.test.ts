@@ -58,7 +58,7 @@ beforeEach(() => {
   consentMocks.get.mockReset();
   consentMocks.decide.mockReset();
   consentMocks.get.mockResolvedValue({
-    clientName: 'Resume agent',
+    clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
     scopes: ['resumes:read'],
   });
   consentMocks.decide.mockResolvedValue({
@@ -67,6 +67,47 @@ beforeEach(() => {
 });
 
 describe('/authorize', () => {
+  for (const language of ['vi', 'en'] as const) {
+    it(`isolates the CIMD host and name in ${language}`, async () => {
+      setSiteLocale(language);
+      const host = `${'long'.repeat(12)}.example`;
+      const name = '<img src=x>\u202EClaude';
+      consentMocks.get.mockResolvedValue({
+        clientKind: 'cimd',
+        clientHost: host,
+        clientName: name,
+        scopes: ['resumes:read'],
+      });
+      const wrapper = await mountSuspended(AuthorizePage, {
+        route: routeWithRedirectURI('http://localhost:20095/callback'),
+      });
+      await flushPromises();
+      expect(wrapper.get('[data-page-title]').text()).toBe(
+        language === 'vi'
+          ? `${host} muốn truy cập CV của bạn.`
+          : `${host} wants access to your resumes.`,
+      );
+      expect(
+        wrapper.get('[data-testid="consent-client-host"]').attributes('dir'),
+      ).toBe('ltr');
+      expect(wrapper.get('[data-testid="consent-client-name"]').text()).toBe(
+        name,
+      );
+      expect(wrapper.get('p').text()).toBe(language === 'vi'
+        ? `Ứng dụng tự gọi là “${name}”.`
+        : `The app calls itself “${name}”.`);
+      expect(wrapper.find('img').exists()).toBe(false);
+      expect(
+        wrapper.get('[data-testid="consent-loopback-warning"]').text(),
+      ).toBe(
+        language === 'vi'
+          ? 'Chỉ cho phép nếu bạn vừa bắt đầu đăng nhập '
+          + 'từ một ứng dụng trên máy tính này.'
+          : 'Approve only if you just started this sign-in '
+            + 'from an app on this computer.',
+      );
+    });
+  }
   it('composes the consent page and shared banner', async () => {
     const wrapper = await mountSuspended(AuthorizePage, {
       route: '/authorize?client_id=only-one-field',
@@ -86,6 +127,7 @@ describe('/authorize', () => {
   it('renders hostile client names as text and displays scopes', async () => {
     consentMocks.get.mockResolvedValue({
       clientName: '<img src=x onerror=alert(1)>',
+      clientKind: 'dcr', clientHost: null,
       scopes: ['resumes:read', 'resumes:write'],
     });
     const wrapper = await mountSuspended(AuthorizePage, { route: route() });
@@ -112,7 +154,7 @@ describe('/authorize', () => {
     async () => {
       setSiteLocale('vi');
       consentMocks.get.mockResolvedValue({
-        clientName: 'Resume agent',
+        clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
         scopes: ['resumes:read', 'resumes:write'],
       });
       const wrapper = await mountSuspended(AuthorizePage, { route: route() });
@@ -318,16 +360,26 @@ describe('consent return-to line', () => {
   );
 
   it.each([
-    'http://127.0.0.1:51234/callback',
-    'http://localhost:51234/callback',
-    'http://[::1]:51234/callback',
-  ])('shows the loopback line for %s', async (redirectURI) => {
+    ['en', 'http://127.0.0.1:51234/callback'],
+    ['en', 'http://localhost:51234/callback'],
+    ['en', 'http://[::1]:51234/callback'],
+    ['vi', 'http://127.0.0.1:51234/callback'],
+    ['vi', 'http://localhost:51234/callback'],
+    ['vi', 'http://[::1]:51234/callback'],
+  ] as const)('shows the %s loopback line for %s', async (
+    locale, redirectURI,
+  ) => {
+    setSiteLocale(locale);
     const wrapper = await mountSuspended(AuthorizePage, {
       route: routeWithRedirectURI(redirectURI),
     });
     await flushPromises();
+    const host = new URL(redirectURI).hostname;
     expect(wrapper.get('[data-testid="consent-return-to"]').text()).toBe(
-      'After you approve, you return to an app on this computer.',
+      locale === 'en'
+        ? `After you approve, you return to an app on this computer (${host}).`
+        : 'Sau khi cho phép, bạn quay lại một ứng dụng trên máy tính này '
+          + `(${host}).`,
     );
   });
 

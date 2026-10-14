@@ -70,22 +70,23 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest)
 		return
 	}
-	clientID, hasClientID := s.grantRateClientID(r.Context(), form)
+	grantID, hasGrantID, err := s.grantRateID(r.Context(), form)
+	if err != nil && !errors.Is(err, errOAuthNoStoredGrant) {
+		writeOAuthServerError(w)
+		return
+	}
 	var attempt grantAttempt
 	attemptResult := grantAttemptRelease
-	if hasClientID && s.tokenAdmission != nil {
+	grantRetry := 0
+	if hasGrantID && s.tokenAdmission != nil {
 		var allowed bool
 		var retryAfter int
-		attempt, allowed, retryAfter = s.tokenAdmission.AdmitGrant(clientID, admissionTime)
+		attempt, allowed, retryAfter = s.tokenAdmission.AdmitGrant(grantID, admissionTime)
 		if !allowed {
-			if retryAfter < 1 {
-				retryAfter = 1
-			}
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-			writeOAuthError(w, http.StatusTooManyRequests)
-			return
+			grantRetry = max(1, retryAfter)
+		} else {
+			defer func() { s.tokenAdmission.FinishGrant(attempt, attemptResult) }()
 		}
-		defer func() { s.tokenAdmission.FinishGrant(attempt, attemptResult) }()
 	}
 	var response tokenResponse
 	switch form.Get("grant_type") {
@@ -98,7 +99,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_grant", "The request is invalid.")
 			return
 		}
-		response, err = s.exchangeAuthorizationCode(r.Context(), form)
+		response, err = s.processAuthorizationCode(r.Context(), form, grantRetry == 0)
 	case "refresh_token":
 		if !exactRefreshForm(form) {
 			writeOAuthError(w, http.StatusBadRequest)
@@ -108,7 +109,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_grant", "The request is invalid.")
 			return
 		}
-		response, err = s.rotateRefreshToken(r.Context(), form.Get("refresh_token"), form["client_id"])
+		response, err = s.processRefreshToken(r.Context(), form.Get("refresh_token"), form["client_id"], grantRetry == 0)
 	default:
 		writeOAuthErrorBody(w, http.StatusBadRequest, "unsupported_grant_type", "The request is invalid.")
 		return
@@ -131,6 +132,11 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if grantRetry > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(grantRetry))
+		writeOAuthError(w, http.StatusTooManyRequests)
+		return
+	}
 	attemptResult = grantAttemptSuccess
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -140,23 +146,49 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.UUID, bool) {
+// Only a stored credential selects failed-grant debt. Public client identifiers
+// cannot select an owner's budget; token processing rechecks authority under locks.
+// errOAuthNoStoredGrant leaves ordinary token validation to classify the request.
+func (s *Service) grantRateID(ctx context.Context, form url.Values) (uuid.UUID, bool, error) {
+	if isNilDependency(s.queries) {
+		return uuid.Nil, false, errOAuthNoStoredGrant
+	}
 	switch form.Get("grant_type") {
 	case "authorization_code":
-		clientID, err := uuid.Parse(form.Get("client_id"))
-		return clientID, err == nil && clientID != uuid.Nil
+		digest, err := ParseCode(form.Get("code"))
+		if err != nil {
+			return uuid.Nil, false, errOAuthNoStoredGrant
+		}
+		code, err := s.queries.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, errOAuthNoStoredGrant
+		}
+		if err != nil {
+			return uuid.Nil, false, err
+		}
+		if code.GrantID == uuid.Nil {
+			return uuid.Nil, false, errOAuthNoStoredGrant
+		}
+		return code.GrantID, true, nil
 	case "refresh_token":
 		kind, digest, err := ParseToken(form.Get("refresh_token"))
-		if err != nil || kind != TokenKindRefresh || isNilDependency(s.queries) {
-			return uuid.Nil, false
+		if err != nil || kind != TokenKindRefresh {
+			return uuid.Nil, false, errOAuthNoStoredGrant
 		}
 		authority, err := s.queries.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
-		if err != nil || authority.OAuthToken.ClientID == uuid.Nil {
-			return uuid.Nil, false
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, errOAuthNoStoredGrant
 		}
-		return authority.OAuthToken.ClientID, true
+		if err != nil {
+			return uuid.Nil, false, err
+		}
+		token := authority.OAuthToken
+		if token.Kind != string(TokenKindRefresh) || token.GrantID == uuid.Nil {
+			return uuid.Nil, false, errOAuthNoStoredGrant
+		}
+		return token.GrantID, true, nil
 	default:
-		return uuid.Nil, false
+		return uuid.Nil, false, errOAuthNoStoredGrant
 	}
 }
 
@@ -165,6 +197,7 @@ var (
 	errOAuthUnknownClient = errors.New("oauth unknown client")
 	errOAuthInvalidGrant  = errors.New("oauth invalid grant")
 	errOAuthResourceParse = errors.New("oauth resource parse")
+	errOAuthNoStoredGrant = errors.New("oauth credential has no stored grant")
 )
 
 func decodeOAuthForm(r *http.Request, allowed map[string]bool) (url.Values, error) {
@@ -276,57 +309,62 @@ func exactAuthorizationCodeForm(form url.Values) bool {
 }
 
 func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values) (response tokenResponse, err error) {
+	return s.processAuthorizationCode(ctx, form, true)
+}
+
+// A refused grant uses the issuance checks under the same locks, then rolls
+// back without any credential write. See docs/design/mcp-cimd-authorization.md.
+func (s *Service) processAuthorizationCode(ctx context.Context, form url.Values, issue bool) (response tokenResponse, err error) {
 	digest, err := ParseCode(form.Get("code"))
 	if err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	clientID, err := uuid.Parse(form.Get("client_id"))
-	if err != nil {
-		return tokenResponse{}, errOAuthInvalidClient
-	}
 	// A code belongs to its client and is deleted with it, so the client is
 	// looked up first: a swept client must get invalid_client, not the
 	// invalid_grant of a missing code. The row is locked again below.
-	if _, err = s.queries.GetOAuthClient(ctx, clientID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, errOAuthUnknownClient
-		}
+	client, err := s.storedPublicClient(ctx, s.queries, form.Get("client_id"))
+	if err != nil {
 		return tokenResponse{}, err
 	}
+	clientID := client.ID
 	// This unlocked lookup only discovers the lock-order identities. The row is
 	// loaded again under lock before any validation or mutation.
 	preCode, err := s.queries.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
 	if err != nil {
-		return tokenResponse{}, errOAuthInvalidGrant
+		return tokenResponse{}, tokenStateError(err)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return tokenResponse{}, err
 	}
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && err == nil {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && (err == nil || !issue) {
 			response = tokenResponse{}
 			err = rollbackErr
 		}
 	}()
 	q := store.New(tx)
-	if _, err = q.GetOAuthClientForUpdate(ctx, clientID); err != nil {
+	lockedClient, err := q.GetOAuthClientForUpdate(ctx, clientID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tokenResponse{}, errOAuthUnknownClient
 		}
 		return tokenResponse{}, err
 	}
+	if !publicClientMatches(lockedClient, form.Get("client_id")) {
+		return tokenResponse{}, errOAuthUnknownClient
+	}
 	user, err := q.GetUserForUpdate(ctx, preCode.UserID)
 	if err != nil {
-		return tokenResponse{}, err
+		return tokenResponse{}, tokenStateError(err)
 	}
 	grant, err := q.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: preCode.UserID, ClientID: preCode.ClientID})
 	if err != nil {
-		return tokenResponse{}, errOAuthInvalidGrant
+		return tokenResponse{}, tokenStateError(err)
 	}
 	grant, err = q.GetOAuthGrantForUpdate(ctx, grant.ID)
 	if err != nil {
-		return tokenResponse{}, err
+		return tokenResponse{}, tokenStateError(err)
 	}
 	// A grant revoked between the unlocked read above and this lock -- by a
 	// concurrent RFC 7009 revoke or an authentication-epoch change -- must
@@ -336,13 +374,16 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	}
 	code, err := q.GetOAuthAuthorizationCodeByDigestForUpdate(ctx, digest[:])
 	if err != nil {
-		return tokenResponse{}, errOAuthInvalidGrant
+		return tokenResponse{}, tokenStateError(err)
 	}
 	now := s.clock()
 	if code.ClientID != clientID || code.RedirectURI != form.Get("redirect_uri") || !VerifyS256(code.CodeChallenge, form.Get("code_verifier")) {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	if code.ConsumedAt != nil {
+		if !issue {
+			return tokenResponse{}, errOAuthInvalidGrant
+		}
 		if code.IssuedFamilyID != nil {
 			if _, err = q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: *code.IssuedFamilyID, RevokedAt: now}); err != nil {
 				return tokenResponse{}, err
@@ -358,8 +399,12 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	// replaced since issue) and a stale epoch (an intervening factor change)
 	// both close the exchange without consuming the code. See
 	// docs/design/second-factor-authentication.md.
-	if code.GrantID != grant.ID || code.AuthEpoch != user.AuthEpoch || code.Scopes != grant.Scopes || code.ExpiresAt.Compare(now) <= 0 {
+	if code.UserID != user.ID || code.GrantID != grant.ID || grant.UserID != user.ID || grant.ClientID != clientID ||
+		code.AuthEpoch != user.AuthEpoch || grant.AuthEpoch != user.AuthEpoch || code.Scopes != grant.Scopes || code.ExpiresAt.Compare(now) <= 0 {
 		return tokenResponse{}, errOAuthInvalidGrant
+	}
+	if !issue {
+		return tokenResponse{}, nil
 	}
 	familyID := uuid.New()
 	if _, err = q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{CodeDigest: digest[:], ConsumedAt: now, IssuedFamilyID: familyID}); err != nil {
@@ -400,16 +445,20 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 // docs/design/mcp-client-compatibility.md); when the token is not found and the
 // client_id names no stored client, the result is errOAuthUnknownClient.
 func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedClientIDs []string) (response tokenResponse, err error) {
+	return s.processRefreshToken(ctx, raw, claimedClientIDs, true)
+}
+
+func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedClientIDs []string, issue bool) (response tokenResponse, err error) {
 	kind, digest, err := ParseToken(raw)
 	if err != nil || kind != TokenKindRefresh {
-		return tokenResponse{}, missingRefreshTokenError(ctx, s.queries, claimedClientIDs)
+		return tokenResponse{}, s.missingRefreshTokenError(ctx, s.queries, claimedClientIDs)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return tokenResponse{}, err
 	}
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && err == nil {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && (err == nil || !issue) {
 			response = tokenResponse{}
 			err = rollbackErr
 		}
@@ -418,45 +467,46 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 	authority, err := q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, missingRefreshTokenError(ctx, q, claimedClientIDs)
+			return tokenResponse{}, s.missingRefreshTokenError(ctx, q, claimedClientIDs)
 		}
 		return tokenResponse{}, err
 	}
-	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
-		return tokenResponse{}, err
+	client, err := q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID)
+	if err != nil {
+		return tokenResponse{}, tokenStateError(err)
 	}
 	user, err := q.GetUserForUpdate(ctx, authority.OAuthToken.UserID)
 	if err != nil {
-		return tokenResponse{}, err
+		return tokenResponse{}, tokenStateError(err)
 	}
 	grant, err := q.GetOAuthGrantForUpdate(ctx, authority.OAuthToken.GrantID)
 	if err != nil {
-		return tokenResponse{}, err
+		return tokenResponse{}, tokenStateError(err)
 	}
 	authority, err = q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if err != nil {
-		return tokenResponse{}, errOAuthInvalidGrant
+		return tokenResponse{}, tokenStateError(err)
 	}
 	now := s.clock()
 	token := authority.OAuthToken
 	// A client_id naming another client, or none, must not rotate or revoke
 	// the family, so it fails before the reuse check below and the deferred
 	// rollback discards the transaction.
-	if len(claimedClientIDs) == 1 {
-		claimed, parseErr := uuid.Parse(claimedClientIDs[0])
-		if parseErr != nil || claimed != token.ClientID {
-			return tokenResponse{}, errOAuthInvalidGrant
-		}
+	if len(claimedClientIDs) == 1 && !publicClientMatches(client, claimedClientIDs[0]) {
+		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	// The refresh token's grant must still be live, belong to this account,
 	// and carry the account's current authentication epoch. A stale epoch --
 	// an intervening factor change -- rejects rotation exactly like a revoked
 	// grant. See docs/design/second-factor-authentication.md.
-	if grant.RevokedAt != nil || token.RevokedAt != nil || token.ExpiresAt.Compare(now) <= 0 || token.FamilyExpiresAt.Compare(now) <= 0 ||
-		token.UserID != user.ID || token.GrantID != grant.ID || grant.AuthEpoch != user.AuthEpoch {
+	if token.Kind != string(TokenKindRefresh) || grant.RevokedAt != nil || token.RevokedAt != nil || token.ExpiresAt.Compare(now) <= 0 || token.FamilyExpiresAt.Compare(now) <= 0 ||
+		token.ClientID != client.ID || token.UserID != user.ID || token.GrantID != grant.ID || grant.UserID != user.ID || grant.ClientID != client.ID || grant.AuthEpoch != user.AuthEpoch {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	if token.SupersededAt != nil {
+		if !issue {
+			return tokenResponse{}, errOAuthInvalidGrant
+		}
 		if _, err = q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: token.FamilyID, RevokedAt: now}); err != nil {
 			return tokenResponse{}, err
 		}
@@ -464,6 +514,9 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 			return tokenResponse{}, err
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
+	}
+	if !issue {
+		return tokenResponse{}, nil
 	}
 	oauthEntropyMu.Lock()
 	access, accessDigest, err := NewToken(TokenKindAccess, s.entropy)
@@ -497,26 +550,34 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: refresh, Scope: grant.Scopes}, nil
 }
 
+func tokenStateError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errOAuthInvalidGrant
+	}
+	return err
+}
+
+func publicClientMatches(client store.OAuthClient, raw string) bool {
+	if client.MetadataUrl != nil {
+		return raw == *client.MetadataUrl
+	}
+	id, err := uuid.Parse(raw)
+	return err == nil && id == client.ID
+}
+
 // missingRefreshTokenError classifies a refresh token that does not exist. A
 // client_id naming no stored client is errOAuthUnknownClient; every other case
 // is errOAuthInvalidGrant.
-func missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
+func (s *Service) missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
 	if len(claimedClientIDs) != 1 {
 		return errOAuthInvalidGrant
 	}
-	clientID, err := uuid.Parse(claimedClientIDs[0])
-	if err != nil {
+	_, err := s.storedPublicClient(ctx, q, claimedClientIDs[0])
+	if errors.Is(err, errOAuthInvalidClient) {
 		return errOAuthInvalidGrant
 	}
-	if _, err = q.GetOAuthClient(ctx, clientID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errOAuthUnknownClient
-		}
+	if err != nil {
 		return err
 	}
 	return errOAuthInvalidGrant
-}
-
-type oauthClientReader interface {
-	GetOAuthClient(context.Context, uuid.UUID) (store.OAuthClient, error)
 }
