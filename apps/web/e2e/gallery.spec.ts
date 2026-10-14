@@ -705,6 +705,43 @@ test('sheet traps links and resize repairs hidden focus', async ({
   await expect(card).toBeFocused();
 });
 
+for (const locale of ['vi', 'en']) {
+  for (const width of [390, 1440]) {
+    test(`Library hydrates without mismatches in ${locale} at ${width}`,
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.context().addCookies([
+          {
+            name: 'aboutme-locale',
+            value: locale,
+            url: 'http://127.0.0.1:20092',
+          },
+        ]);
+        const mismatches: string[] = [];
+        page.on('console', (message) => {
+          if (/hydration.*mismatch/iu.test(message.text())) {
+            mismatches.push(message.text());
+          }
+        });
+
+        for (const query of ['', '?role=backend&filter=technical']) {
+          await page.goto(`/templates${query}`);
+          await expect(
+            page.locator('[data-action="gallery-filters-open"]'),
+          ).toBeEnabled();
+          const fallback = page.locator('noscript');
+          await expect(fallback).toHaveCount(1);
+          expect(await fallback.evaluate((element) => ({
+            elements: element.childElementCount,
+            markup: element.textContent?.includes('gallery-fallback'),
+          }))).toEqual({ elements: 0, markup: true });
+          await expect(page.locator('[data-template]')).toHaveCount(20);
+          expect(mismatches).toEqual([]);
+        }
+      });
+  }
+}
+
 for (const width of [390, 1440]) {
   test(`Style filters and Clear all work without scripts at ${width}`, async ({
     browser,
