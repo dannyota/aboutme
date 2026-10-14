@@ -1,9 +1,7 @@
 /**
- * Browser baseline: mcr.microsoft.com/playwright:v1.62.1-noble
+ * Browser baseline: mcr.microsoft.com/playwright:v1.64.0-noble
  * AMD64 digest:
- * sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
- * Executable: /ms-playwright/chromium-1234/chrome-linux64/chrome
- * Version: Google Chrome for Testing 151.0.7922.34
+ * sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
  */
 import { defineConfig } from '@playwright/test';
 import { isAbsolute, resolve } from 'node:path';
