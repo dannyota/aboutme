@@ -84,6 +84,7 @@ bash "$maintenance_render" "$maintenance_html" >/dev/null ||
 want_csp=$(bash "$maintenance_render" "$maintenance_html" |
   grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
+python3 -B "$root/deploy/caddy/production/test/module_download_test.py"
 python3 -B "$root/deploy/caddy/production/test/waf_stderr_diagnostic_test.py"
 (cd "$root/deploy/caddy/production/build" && GOWORK=off go test ./...)
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null

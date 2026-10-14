@@ -15,7 +15,14 @@ WORKDIR /src
 RUN apk add --no-cache ca-certificates
 
 COPY deploy/observer/go.mod deploy/observer/go.sum ./
-RUN GOWORK=off go mod download
+# Retry proxy transport failures without changing module checksum verification.
+RUN for attempt in 1 2 3; do \
+      GOWORK=off go mod download && exit 0; \
+      status=$?; \
+      if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
+      echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
+      sleep "$((attempt * 5))" || exit $?; \
+    done
 
 COPY deploy/observer/ ./
 
