@@ -212,14 +212,16 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         scrollLabel: 'Lệnh thêm máy chủ aboutme.vn',
       },
       loginStep: {
-        line: [t('Đăng nhập. Trình duyệt mở aboutme.vn; chọn '),
-          b('Cho phép'), t('. Trong Claude Code, bạn cũng có thể gõ '),
-          c('/mcp'), t(' rồi chọn aboutme.')],
+        line: [t('Đăng nhập. Trên trang aboutme.vn, kiểm tra bên yêu cầu '
+          + 'truy cập là claude.ai và nơi quay lại là ứng dụng trên máy '
+          + 'tính này (localhost), rồi chọn '), b('Cho phép'),
+        t('. Bạn cần cho phép mỗi lần đăng nhập lại.')],
         command: loginCommand,
         scrollLabel: 'Lệnh đăng nhập máy chủ aboutme',
       },
       removeStep: [t('Để gỡ, chạy '), c('claude mcp remove aboutme'),
-        t(', rồi thu hồi quyền trong Cài đặt của aboutme.vn.')],
+        t(', rồi vào '), b('Cài đặt'), t(' > '), b('Tác nhân đã kết nối'),
+        t(' trên aboutme.vn để thu hồi quyền của Claude Code.')],
       copyCommandLabel: 'Sao chép lệnh',
       commandCopied: 'Đã sao chép lệnh.',
       commandCopyFailed: 'Không sao chép được. Hãy chọn lệnh và tự sao '
@@ -260,9 +262,10 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
     otherApps: {
       heading: 'Ứng dụng khác',
       requirements: [
-        t('Ứng dụng hỗ trợ máy chủ MCP từ xa (Streamable HTTP) với đăng '
-          + 'nhập OAuth và tự đăng ký ứng dụng có thể dùng cùng địa chỉ '),
-        c(mcpServerUrl), t('.'),
+        t('Để dùng '), c(mcpServerUrl),
+        t(', ứng dụng cần hỗ trợ MCP từ xa (Streamable HTTP) và đăng nhập '
+          + 'OAuth. Ứng dụng phải tự đăng ký hoặc dùng tài liệu mô tả ứng '
+          + 'dụng (client ID metadata document) qua HTTPS.'),
       ],
       limits: plain('Ứng dụng chỉ chạy máy chủ MCP cục bộ, chỉ nhận khóa '
         + 'API, hoặc quay về một địa chỉ riêng của ứng dụng thay vì https '
@@ -391,14 +394,16 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         scrollLabel: 'Command to add the aboutme.vn server',
       },
       loginStep: {
-        line: [t('Sign in. Your browser opens aboutme.vn; choose '),
-          b('Approve'), t('. Inside Claude Code you can also run '),
-          c('/mcp'), t(' and pick aboutme.')],
+        line: [t('Sign in. On the aboutme.vn page, check that claude.ai '
+          + 'is requesting access and approval returns to an app on this '
+          + 'computer (localhost), then choose '), b('Approve'),
+        t('. You need to approve each time you sign in again.')],
         command: loginCommand,
         scrollLabel: 'Command to sign in to aboutme',
       },
       removeStep: [t('To remove it, run '), c('claude mcp remove aboutme'),
-        t(', then revoke access in aboutme.vn Settings.')],
+        t(', then revoke Claude Code\'s access in aboutme.vn '), b('Settings'),
+        t(' > '), b('Connected agents'), t('.')],
       copyCommandLabel: 'Copy command',
       commandCopied: 'Copied the command.',
       commandCopyFailed: 'Could not copy. Select the command and copy it '
@@ -438,10 +443,10 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
     otherApps: {
       heading: 'Other apps',
       requirements: [
-        t('An app that supports remote MCP servers (Streamable HTTP) '
-          + 'with OAuth sign-in and automatic client registration can use '
-          + 'the same URL, '),
-        c(mcpServerUrl), t('.'),
+        t('To use '), c(mcpServerUrl),
+        t(', an app needs remote MCP support (Streamable HTTP) and OAuth '
+          + 'sign-in. It must support automatic client registration or '
+          + 'use a client ID metadata document served over HTTPS.'),
       ],
       limits: plain('Apps that only run local MCP servers, only accept '
         + 'API keys, or return to an app-specific address instead of '

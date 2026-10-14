@@ -17,6 +17,13 @@
         "isHidden": false
       },
       {
+        "id": "e8174ec7-365c-5a60-b88f-876d92bdfb94",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
         "id": "9ce29225-844c-59ab-b9b0-d53b3513b7f8",
         "type": "location",
         "value": "TP. Hồ Chí Minh",
