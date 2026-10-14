@@ -13,6 +13,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 - The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
 - `e2e/chrome.spec.ts:188` (hero sheet centered on phones, WebKit light vi) timed out once at 20 s in run 38134235232 and passed on the next run; five widths, each launching WebKit, navigating, and awaiting fonts, share one 20 s budget. If it recurs, troubleshoot with both runs' logs. Evidence: `apps/web/e2e/chrome.spec.ts`.
+- Diagnose the intermittent publish proof failure at blank resume creation in main run 38496027207 (commit d39263fa); PR run 38494981442 on the same commit passed. The next creation failure records redacted evidence at `.dev/proof-evidence/publish-create/publish-create-failure.json` in `shard-evidence-entry`.
 
 ## Production acceptance
 

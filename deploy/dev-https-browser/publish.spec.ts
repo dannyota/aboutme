@@ -16,6 +16,7 @@ import {
   createBlankResume,
   deleteRecordedResume,
   readRemoteResumeRevision,
+  type AcceptedResume,
 } from "./editor-fixtures";
 import {
   installExternalRequestFirewall,
@@ -30,6 +31,7 @@ import {
   httpFailureStatus,
   isExpectedAnonymousMeConsole,
 } from "./network-policy";
+import { observePublishCreate } from "./publish-create-diagnostics.mjs";
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/publish-proof.json";
@@ -333,14 +335,30 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.auth = true;
     stage("signed-in");
 
-    const created = await createBlankResume(
-      page,
-      `Publish proof ${crypto.randomUUID()}`,
-      undefined,
-      (accepted) => {
-        resumeID = accepted.metadata.id;
-      },
-    );
+    const createDiagnostic = await observePublishCreate(page);
+    let created: AcceptedResume;
+    try {
+      created = await createBlankResume(
+        page,
+        `Publish proof ${crypto.randomUUID()}`,
+        (name) => {
+          createDiagnostic.stage(name);
+          stage(`create-${name}`);
+        },
+        (accepted) => {
+          resumeID = accepted.metadata.id;
+        },
+      );
+    } catch (error) {
+      try {
+        stage(`fail-create-${await createDiagnostic.failed(error)}`);
+      } catch {
+        stage("fail-create-diagnostic-unavailable");
+      }
+      throw error;
+    } finally {
+      createDiagnostic.stop();
+    }
     resumeID = created.metadata.id;
     stage("resume-created");
     await page.getByTestId("workspace-locale-vi").press("Enter");

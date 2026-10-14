@@ -17,6 +17,7 @@ mcp-sdk.spec.ts
 mcp-ts-sdk.spec.ts
 entry.spec.ts
 publish.spec.ts
+publish-create-diagnostics.mjs
 exports.spec.ts
 privacy.spec.ts
 sample-start.spec.ts
