@@ -28,8 +28,8 @@ remain in the approved [budgets](../../design/budgets.md). See
 ## Client metadata documents
 
 These rows are in progress. Test sources exist; CI, independent
-review, hosted HTTPS proof execution, and the owner production proof remain
-required.
+review, and hosted HTTPS proof execution remain required. The owner production
+proof with Claude Code passed on 2026-10-14; hosted Claude remains unproven.
 
 | ID | Design clause | Statement | State | Test / acceptance reference |
 |-|-|-|-|-|
@@ -37,4 +37,4 @@ required.
 | AC-MCP-012 | CIMD: fetch | URL grammar, full address refusals, pinned TLS, closed documents, deadlines, cache and bounded admission fail closed | in progress | `oauthsrv/cimd_test.go`; `oauthsrv/cimd_fetch_test.go` |
 | AC-MCP-013 | CIMD: authorization | Reads and denial write no row; approval commits client, grant and code together; loopback always shows consent; token operations never fetch or accept internal UUID aliases | in progress | `oauthsrv/cimd_authorization_test.go`; token and consent tests |
 | AC-MCP-014 | CIMD: interface | Both languages lead with the isolated host, quote the name, warn for loopback, and name the redirect hostname; Settings shows the host | in progress | Web authorize, consent and connected-agent tests; `mcp-ts-sdk.spec.ts` phone and desktop proof source; execution pending |
-| AC-MCP-015 | CIMD: deployment and proof | Default off; older binary startup checks stopped-app URL rows and MCP configuration; trusted HTTPS SDK proof and owner enablement proof | in progress | `deploy/vn/scripts/cimd-rollback-test.sh`; VN safety/failure tests; `mcp-ts-sdk.spec.ts` CIMD flow; hosted and owner proof execution pending |
+| AC-MCP-015 | CIMD: deployment and proof | Default off; older binary startup checks stopped-app URL rows and MCP configuration; trusted HTTPS SDK proof and owner enablement proof | in progress | `deploy/vn/scripts/cimd-rollback-test.sh`; VN safety/failure tests; `mcp-ts-sdk.spec.ts` CIMD flow; owner production proof passed 2026-10-14 with Claude Code 2.1.296 (consent, list and read, reconnect with consent and one grant, refresh after expiry, Settings revoke then refused request and refresh); hosted Claude proof pending |
