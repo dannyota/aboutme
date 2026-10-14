@@ -11,9 +11,9 @@ rule, schema, or API. Its full Vietnamese and English text is in
 [MCP guide copy](mcp-guide-copy.md).
 
 The Claude steps rely on
-[MCP client compatibility](mcp-client-compatibility.md), which shipped in
-v0.6.18. The guide ships after an owner-run proof that Claude on the web and
-Claude Code connect in production.
+[MCP client compatibility](mcp-client-compatibility.md). The proposed
+[CIMD copy update](#cimd-copy-update) follows the consent contract in
+[MCP Client ID Metadata Documents](mcp-cimd.md).
 
 ## Route
 
@@ -26,29 +26,13 @@ HTML there would break clients and the protected-resource contract.
 `/guide/mcp` adds one registry root, `guide`, with dispatch `nuxt`. The registry
 moves to its next version, which regenerates the Caddy matcher, the Go
 slug-claim set, the web root list, and the parity fixtures, as every new root
-has. `guide` becomes a reserved slug. Before release, a read-only production
-check confirms no resume holds or tombstones the slug `guide`; if one does, the
-release stops for an owner decision.
+has. `guide` becomes a reserved slug.
 
-The check runs as an operator-only ECS one-shot from the candidate server image.
-It uses the existing jobs task's database connection and runtime-resolved app
-password. In one repeatable-read, read-only transaction, it returns only the
-`resumeOccupied` and `tombstoneOccupied` booleans from indexed existence reads.
-Its syntax is `server check-public-root <root>`, with exactly one root that the
-candidate image reserves. Exit 0 means neither table holds the root, 10 means
-only a resume holds it, 11 means only a tombstone holds it, and 12 means both
-do. Invalid invocation, configuration, or query failure exits 1. The command
-logs no resume, account, title, time, database address, or secret. The deploy
-script maps the fixed exit codes to the same two booleans, so it needs no
-database or CloudWatch log access.
-
-The operator runs the check once before deployment. The deploy runs it again
-after maintenance is confirmed and the old app has stopped, before any
-migration. The second check closes the interval in which the old app could
-accept a new `guide` claim. An occupied result follows the existing
-pre-migration recovery path and restores the old app without changing resume
-data. The one-shot creates normal ECS task-definition, task, and CloudWatch log
-records; only its database transaction is read-only.
+Production runs on the Vietnam host under
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). Deployment and recovery
+follow the [Vietnam production design](vietnam-production.md#deploy) and the
+[production runbook](../runbooks/production.md#deploy). The
+[host logging contract](vietnam-production.md#logs-metrics-and-alarms) applies.
 
 `/guide` itself has no page and returns the normal not-found page. A later guide
 takes another path under `/guide/` without a registry change.
@@ -111,9 +95,45 @@ The page never promises a response time, a specific model, or that changes
 appear live in an open editor.
 
 Claude step 5 and privacy point 1 name where approval returns, and
-troubleshooting pair 3 quotes the grant-limit message, matching the consent page
-copy that shipped with items 6 and 7 of
-[MCP client compatibility](mcp-client-compatibility.md).
+troubleshooting pair 3 quotes the grant-limit message, matching
+[MCP client compatibility](mcp-client-compatibility.md#6-where-approval-returns).
+
+### CIMD copy update
+
+Only three keys in `apps/web/app/i18n/guide.ts` change: `claude.loginStep.line`,
+`claude.removeStep`, and `otherApps.requirements`. Their Vietnamese and English
+strings live in [MCP guide copy](mcp-guide-copy.md). Commands, layout, other
+copy, and client eligibility stay unchanged.
+
+- **Sign-in.** Lead the check with the client ID host and the loopback return
+  destination, following [CIMD consent](mcp-cimd-authorization.md#consent). Do
+  not make the self-asserted app name a trust check. Keep the reminder that
+  signing in again needs approval. Remove the optional `/mcp` route from this
+  step so the phone reader has one sign-in path and three sentences. The consent
+  page owns the loopback warning; Privacy and control owns the instruction to
+  approve only a request the reader just started.
+- **Removal.** Name the exact Settings section in each language, then refer to
+  Claude Code's access. Do not quote the full Connected agents row as a fixed
+  label: Anthropic supplies the display name, and a later approval can update it
+  under [Stored clients](mcp-cimd-authorization.md#stored-clients). A fixed row
+  label would become stale without any guide change. The host suffix helps
+  identify the client, but `claude.ai` alone cannot distinguish Claude Code from
+  another Claude client. Keep local removal and server-side revocation as
+  separate actions.
+- **Other apps.** State both supported client identification methods as
+  requirements, not a guarantee that an untested app works. Use “tài liệu mô tả
+  ứng dụng” as a plain Vietnamese description, followed by the exact English
+  protocol term. “Tài liệu định danh” could imply proof of the app's identity,
+  which a public metadata URL does not provide. Split the transport and sign-in
+  requirements from client identification into two sentences.
+
+Release remains gated by [CIMD release order](mcp-cimd.md#release-order) and the
+[production enablement proof](mcp-cimd-verification.md#production-enablement-proof).
+The observations below do not complete that proof. The existing 390 px layout
+applies to both languages; this proposal does not change spacing or type size to
+fit longer copy. This copy change adds no data, dependency, or authorization
+behavior. Cached older copy keeps the same commands; there is no migration or
+data loss.
 
 ### Other clients
 
@@ -123,16 +143,30 @@ Code MCP][claude-code-mcp]). The page names another client only after a proof
 shows it connects, reads, writes, refreshes after one hour, and stops after
 revoke.
 
+- **Claude Code** connects with the client ID URL
+  `https://claude.ai/oauth/claude-code-client-metadata` and a loopback redirect
+  at `http://localhost:<port>/callback`, without registration, as the owner's
+  production observations on 2026-10-14 showed with Claude Code 2.1.296. With
+  `OAUTH_CIMD_ENABLED` on, the consent page led with the host `claude.ai`,
+  quoted the self-given name `Claude Code`, named the loopback return
+  destination, and showed the loopback warning and two scopes. List and read
+  worked. Logout and login showed consent again and kept one grant; Settings
+  showed `Claude Code (claude.ai)`. Refresh after one hour and revocation remain
+  unproven. These observations support only Claude Code's demonstrated behavior,
+  not a completed CIMD proof.
+- **Hosted Claude** (web, desktop, and mobile) is not proven over a client ID
+  URL. Its existing guide steps stay unchanged and make no CIMD claim.
 - **Visual Studio Code** [documents][vscode-mcp] remote HTTP servers, OAuth with
   dynamic client registration, and the redirects `http://127.0.0.1:33418` and
   `https://vscode.dev/redirect`, both inside aboutme's redirect grammar. Its
-  registration body is not documented, so it may hit the same gaps as Claude.
-  Candidate for the list after proof.
+  compatibility with aboutme.vn remains unproven, including CIMD. Keep its copy
+  out of the published guide until its own proof passes.
 - **ChatGPT** is not named. This design could not confirm from OpenAI's own
   documentation which plans add a remote MCP server with OAuth.
-- **Cursor and other apps with custom-scheme redirects** cannot register:
-  aboutme accepts only `https` redirects and `http` loopback redirects. The
-  Other apps section says so without naming apps.
+- **Cursor and other apps with custom-scheme redirects** cannot connect: aboutme
+  accepts only `https` redirects and `http` loopback redirects, for registered
+  clients and client ID URLs alike. The Other apps section says so without
+  naming apps.
 
 ## Layout
 
