@@ -6,7 +6,7 @@ variables {
   dkim_values                = { dkim = "test-bizfly-verification", etrans = "test-bizfly-signing", google_dkim = "test-google-signing" }
   google_verification_name   = "verification.aboutme.vn"
   google_verification_target = "verification.example.com"
-  record_ttls                = { caa = 1, mx = 3600, spf = 300, dmarc = 300, dkim = 300, etrans = 300, google_dkim = 300, google_verification = 300 }
+  record_ttls                = { caa = 1, mx = 3600, spf = 300, dmarc = 600, dkim = 900, etrans = 1200, google_dkim = 1800, google_verification = 7200 }
   mx_priority                = 1
   state_passphrase           = "test-only-passphrase"
 }
@@ -27,12 +27,12 @@ run "records_match_inventory" {
   }
 
   assert {
-    condition     = cloudflare_dns_record.caa.name == "aboutme.vn" && cloudflare_dns_record.caa.type == "CAA" && cloudflare_dns_record.caa.proxied == false && cloudflare_dns_record.caa.ttl == 1 && cloudflare_dns_record.caa.data.flags == 0 && cloudflare_dns_record.caa.data.tag == "issue" && cloudflare_dns_record.caa.data.value == "letsencrypt.org"
+    condition     = cloudflare_dns_record.caa.name == "aboutme.vn" && cloudflare_dns_record.caa.type == "CAA" && cloudflare_dns_record.caa.proxied == false && cloudflare_dns_record.caa.ttl == var.record_ttls.caa && cloudflare_dns_record.caa.data.flags == 0 && cloudflare_dns_record.caa.data.tag == "issue" && cloudflare_dns_record.caa.data.value == "letsencrypt.org"
     error_message = "The managed CAA record must allow Let's Encrypt."
   }
 
   assert {
-    condition     = cloudflare_dns_record.mx.name == "aboutme.vn" && cloudflare_dns_record.mx.type == "MX" && cloudflare_dns_record.mx.proxied == false && cloudflare_dns_record.mx.ttl == 3600 && cloudflare_dns_record.mx.content == "smtp.google.com" && cloudflare_dns_record.mx.priority == 1
+    condition     = cloudflare_dns_record.mx.name == "aboutme.vn" && cloudflare_dns_record.mx.type == "MX" && cloudflare_dns_record.mx.proxied == false && cloudflare_dns_record.mx.ttl == var.record_ttls.mx && cloudflare_dns_record.mx.content == "smtp.google.com" && cloudflare_dns_record.mx.priority == 1
     error_message = "The MX record must preserve the inventoried TTL and priority."
   }
 
@@ -44,13 +44,13 @@ run "records_match_inventory" {
         dkim        = { name = "dkim._domainkey.aboutme.vn", content = "test-bizfly-verification" }
         etrans      = { name = "etrans._domainkey.aboutme.vn", content = "test-bizfly-signing" }
         google_dkim = { name = "google._domainkey.aboutme.vn", content = "test-google-signing" }
-      } : cloudflare_dns_record.txt[key].name == expected.name && cloudflare_dns_record.txt[key].type == "TXT" && cloudflare_dns_record.txt[key].proxied == false && cloudflare_dns_record.txt[key].ttl == 300 && cloudflare_dns_record.txt[key].content == expected.content
+      } : cloudflare_dns_record.txt[key].name == expected.name && cloudflare_dns_record.txt[key].type == "TXT" && cloudflare_dns_record.txt[key].proxied == false && cloudflare_dns_record.txt[key].ttl == var.record_ttls[key] && cloudflare_dns_record.txt[key].content == expected.content
     ])
     error_message = "The five TXT records must match the mail inventory."
   }
 
   assert {
-    condition     = cloudflare_dns_record.google_verification.name == "verification.aboutme.vn" && cloudflare_dns_record.google_verification.type == "CNAME" && cloudflare_dns_record.google_verification.ttl == 300 && cloudflare_dns_record.google_verification.proxied == false && cloudflare_dns_record.google_verification.content == "verification.example.com"
+    condition     = cloudflare_dns_record.google_verification.name == "verification.aboutme.vn" && cloudflare_dns_record.google_verification.type == "CNAME" && cloudflare_dns_record.google_verification.ttl == var.record_ttls.google_verification && cloudflare_dns_record.google_verification.proxied == false && cloudflare_dns_record.google_verification.content == "verification.example.com"
     error_message = "Google verification must remain a DNS-only CNAME."
   }
 }
