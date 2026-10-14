@@ -104,6 +104,61 @@ describe('guide mcp page structure', () => {
     expect(loginCommand).toBe('claude mcp login aboutme');
   });
 
+  it.each([
+    {
+      locale: 'vi',
+      login: 'Đăng nhập. Trên trang aboutme.vn, kiểm tra bên yêu cầu truy '
+        + 'cập là claude.ai và nơi quay lại là ứng dụng trên máy tính này '
+        + '(localhost), rồi chọn Cho phép. Bạn cần cho phép mỗi lần đăng '
+        + 'nhập lại.',
+      approve: 'Cho phép',
+      remove: 'Để gỡ, chạy claude mcp remove aboutme, rồi vào Cài đặt > '
+        + 'Tác nhân đã kết nối trên aboutme.vn để thu hồi quyền của Claude '
+        + 'Code.',
+      settings: ['Cài đặt', 'Tác nhân đã kết nối'],
+      requirements: 'Để dùng https://aboutme.vn/mcp, ứng dụng cần hỗ trợ '
+        + 'MCP từ xa (Streamable HTTP) và đăng nhập OAuth. Ứng dụng phải '
+        + 'tự đăng ký hoặc dùng tài liệu mô tả ứng dụng (client ID metadata '
+        + 'document) qua HTTPS.',
+    },
+    {
+      locale: 'en',
+      login: 'Sign in. On the aboutme.vn page, check that claude.ai is '
+        + 'requesting access and approval returns to an app on this '
+        + 'computer (localhost), then choose Approve. You need to approve '
+        + 'each time you sign in again.',
+      approve: 'Approve',
+      remove: 'To remove it, run claude mcp remove aboutme, then revoke '
+        + 'Claude Code\'s access in aboutme.vn Settings > Connected agents.',
+      settings: ['Settings', 'Connected agents'],
+      requirements: 'To use https://aboutme.vn/mcp, an app needs remote '
+        + 'MCP support (Streamable HTTP) and OAuth sign-in. It must support '
+        + 'automatic client registration or use a client ID metadata '
+        + 'document served over HTTPS.',
+    },
+  ] as const)('renders Claude Code consent, removal, and app requirements '
+    + 'in $locale', async (copy) => {
+    setSiteLocale(copy.locale);
+    const wrapper = await mountGuide();
+    const codeSteps = wrapper.get('[data-testid="guide-claude"]')
+      .findAll('ol')[1]!.findAll('li');
+    const login = codeSteps[1]!.get('p');
+    expect(login.text()).toBe(copy.login);
+    expect(login.get('.font-semibold').text()).toBe(copy.approve);
+    expect(login.find('code').exists()).toBe(false);
+
+    const remove = codeSteps[2]!.get('p');
+    expect(remove.text()).toBe(copy.remove);
+    expect(remove.get('code').text()).toBe('claude mcp remove aboutme');
+    expect(remove.findAll('.font-semibold').map((part) => part.text()))
+      .toEqual(copy.settings);
+
+    const requirements = wrapper.get('[data-testid="guide-other-apps"]')
+      .findAll('p')[0]!;
+    expect(requirements.text()).toBe(copy.requirements);
+    expect(requirements.get('code').text()).toBe(mcpServerUrl);
+  });
+
   it('names the copy buttons in Vietnamese and English', async () => {
     const wrapper = await mountGuide();
     expect(wrapper.findAll('[aria-label="Sao chép địa chỉ"]')).toHaveLength(1);
