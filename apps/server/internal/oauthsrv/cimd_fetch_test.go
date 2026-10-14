@@ -63,7 +63,9 @@ func TestCIMDFetchBoundaries(t *testing.T) {
 				return
 			}
 		}, true},
-		{"redirect", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "https://example.com/other", 302) }, false},
+		{"redirect", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://example.com/other", http.StatusFound)
+		}, false},
 		{"status", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }, false},
 		{"type", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/plain")
@@ -309,7 +311,7 @@ func TestCIMDFetchRateAdmissionPrecedesDNS(t *testing.T) {
 	calls := 0
 	f.lookup = func(context.Context, string) ([]netip.Addr, error) { calls++; return nil, errCIMDInvalid }
 	for range 6 {
-		if _, err := f.Resolve(context.Background(), "https://client.example/metadata", netip.MustParseAddr("8.8.8.8")); err == nil {
+		if _, resolveErr := f.Resolve(context.Background(), "https://client.example/metadata", netip.MustParseAddr("8.8.8.8")); resolveErr == nil {
 			t.Fatal("failed DNS lookup succeeded")
 		}
 	}
@@ -340,9 +342,9 @@ func TestCIMDFetchAddressAndGlobalBudgets(t *testing.T) {
 			calls := 0
 			f.lookup = func(context.Context, string) ([]netip.Addr, error) { calls++; return nil, errCIMDInvalid }
 			for i := range tc.limit {
-				_, err := f.Resolve(context.Background(), fmt.Sprintf("https://client.example/%d", i), tc.address(i))
-				if !errors.Is(err, errCIMDInvalid) {
-					t.Fatalf("fetch attempt %d: %v", i, err)
+				_, resolveErr := f.Resolve(context.Background(), fmt.Sprintf("https://client.example/%d", i), tc.address(i))
+				if !errors.Is(resolveErr, errCIMDInvalid) {
+					t.Fatalf("fetch attempt %d: %v", i, resolveErr)
 				}
 			}
 			_, err = f.Resolve(context.Background(), "https://client.example/excess", tc.address(tc.limit))

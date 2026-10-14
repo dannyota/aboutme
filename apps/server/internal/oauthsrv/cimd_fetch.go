@@ -222,6 +222,7 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 	for _, address := range addresses {
 		approved[address] = true
 	}
+	pinnedTarget := netip.AddrPortFrom(addresses[0], port).String()
 	dialer := &net.Dialer{ControlContext: func(_ context.Context, _ string, address string, _ syscall.RawConn) error {
 		return f.checkConnectAddress(address, port, approved)
 	}}
@@ -229,7 +230,7 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 		Proxy: nil, DisableCompression: true, DisableKeepAlives: true, ForceAttemptHTTP2: false,
 		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
 		DialTLSContext: func(_ context.Context, network, target string) (net.Conn, error) {
-			if target != net.JoinHostPort(u.Hostname(), "443") {
+			if target != pinnedTarget {
 				return nil, errCIMDInvalid
 			}
 			for _, address := range addresses {
@@ -259,13 +260,16 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
+	// Preserve the exact path spelling while targeting an approved literal.
+	requestTarget := "https://" + pinnedTarget + raw[len("https://")+len(u.Host):]
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestTarget, nil) //nolint:gosec // The address policy and pinned dial validate every destination; see docs/design/mcp-cimd-fetch.md.
 	if err != nil {
 		return bad()
 	}
+	req.Host = u.Host
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "aboutme-cimd/1")
-	response, err := client.Do(req)
+	response, err := client.Do(req) //nolint:gosec // The address policy and pinned dial validate every destination; see docs/design/mcp-cimd-fetch.md.
 	if err != nil {
 		return bad()
 	}
@@ -286,7 +290,7 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 		return bad()
 	}
 	kind, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || kind != "application/json" && !(strings.HasPrefix(kind, "application/") && len(kind) > len("application/+json") && strings.HasSuffix(kind, "+json")) {
+	if err != nil || kind != "application/json" && (!strings.HasPrefix(kind, "application/") || len(kind) <= len("application/+json") || !strings.HasSuffix(kind, "+json")) {
 		return bad()
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, f.cfg.MaxBodyBytes+1))

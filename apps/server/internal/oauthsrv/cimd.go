@@ -51,13 +51,13 @@ func parseCIMDURL(raw, publicHost string) (*url.URL, error) {
 			return nil, errCIMDInvalid
 		}
 		for _, c := range []byte(label) {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 				return nil, errCIMDInvalid
 			}
 		}
 		_, decimalErr := strconv.ParseUint(label, 10, 64)
 		_, hexErr := strconv.ParseUint(strings.TrimPrefix(label, "0x"), 16, 64)
-		if decimalErr != nil && !(strings.HasPrefix(label, "0x") && hexErr == nil) {
+		if decimalErr != nil && (!strings.HasPrefix(label, "0x") || hexErr != nil) {
 			allNumeric = false
 		}
 	}
@@ -257,7 +257,7 @@ func validateCIMDDocument(raw []byte, id, host string) (CIMDMetadata, error) {
 		return bad, errCIMDInvalid
 	}
 	if _, ok := fields["scope"]; ok {
-		if _, err := ParseScopes(scope); err != nil {
+		if _, scopeErr := ParseScopes(scope); scopeErr != nil {
 			return bad, errCIMDInvalid
 		}
 	}
@@ -368,7 +368,11 @@ func cimdCacheLifetime(header string, floor, ceiling time.Duration) time.Duratio
 	if err != nil {
 		return floor
 	}
-	if seconds > uint64(ceiling/time.Second) {
+	limit := int64(ceiling / time.Second)
+	if limit < 0 {
+		return floor
+	}
+	if seconds > uint64(limit) {
 		return ceiling
 	}
 	duration := time.Duration(seconds) * time.Second

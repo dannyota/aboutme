@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 func TestCIMDCodeExchangeAndRefreshUseOnlyStoredIdentity(t *testing.T) {
@@ -51,11 +52,11 @@ func TestCIMDCodeExchangeAndRefreshUseOnlyStoredIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.s.rotateRefreshToken(context.Background(), response.RefreshToken, []string{f.clientID.String()}); !errors.Is(err, errOAuthInvalidGrant) {
-		t.Fatalf("UUID alias refresh: %v", err)
+	if _, refreshErr := f.s.rotateRefreshToken(context.Background(), response.RefreshToken, []string{f.clientID.String()}); !errors.Is(refreshErr, errOAuthInvalidGrant) {
+		t.Fatalf("UUID alias refresh: %v", refreshErr)
 	}
-	if _, err := f.s.rotateRefreshToken(context.Background(), response.RefreshToken, []string{"https://other.example/metadata"}); !errors.Is(err, errOAuthInvalidGrant) {
-		t.Fatalf("wrong-client refresh: %v", err)
+	if _, refreshErr := f.s.rotateRefreshToken(context.Background(), response.RefreshToken, []string{"https://other.example/metadata"}); !errors.Is(refreshErr, errOAuthInvalidGrant) {
+		t.Fatalf("wrong-client refresh: %v", refreshErr)
 	}
 	rotated, err := f.s.rotateRefreshToken(context.Background(), response.RefreshToken, []string{id})
 	if err != nil {
@@ -98,7 +99,7 @@ func TestCIMDTokenUnknownAndMalformedIdentityErrors(t *testing.T) {
 func TestCIMDTokenFormNeverAcceptsClientCredentials(t *testing.T) {
 	s := &Service{}
 	for _, field := range []string{"client_secret", "client_assertion", "client_assertion_type"} {
-		r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=unsupported&"+field+"=ignored"))
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=unsupported&"+field+"=ignored"))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		s.HandleToken(w, r)

@@ -442,7 +442,7 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 	// the family, so it fails before the reuse check below and the deferred
 	// rollback discards the transaction.
 	if len(claimedClientIDs) == 1 {
-		matches := false
+		var matches bool
 		if client.MetadataUrl != nil {
 			matches = claimedClientIDs[0] == *client.MetadataUrl
 		} else {

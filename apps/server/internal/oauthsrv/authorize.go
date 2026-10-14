@@ -40,11 +40,11 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		var limited *CIMDRateError
 		if errors.As(err, &limited) {
 			w.Header().Set("Retry-After", strconv.Itoa(limited.RetryAfter))
-			http.Error(w, "Too Many Requests", 429)
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 			return
 		}
 		if !errors.Is(err, ErrConsentInvalid) && !errors.Is(err, ErrScopeInvalid) {
-			http.Error(w, "Internal Server Error", 500)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 		if !trusted {

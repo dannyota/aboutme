@@ -14,10 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 func cimdAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.User, ConsentQuery) {
@@ -43,8 +44,8 @@ func cimdAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.User, C
 			t.Error(err)
 			return
 		}
-		if _, err := q.DeleteOAuthClient(context.Background(), client.ID); err != nil {
-			t.Error(err)
+		if _, deleteErr := q.DeleteOAuthClient(context.Background(), client.ID); deleteErr != nil {
+			t.Error(deleteErr)
 		}
 	})
 	return s, q, user, request
@@ -57,7 +58,7 @@ func TestCIMDNoWritesBeforeApprovalAndAtomicConcurrentApprovals(t *testing.T) {
 	if _, err := s.ConsentContext(ctx, user.ID, request); err != nil {
 		t.Fatal(err)
 	}
-	anonymous := httptest.NewRequest(http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
+	anonymous := httptest.NewRequestWithContext(context.Background(), http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
 	anonymous.RemoteAddr = "8.8.8.8:1234"
 	w := httptest.NewRecorder()
 	s.HandleAuthorize(w, anonymous)
@@ -67,7 +68,7 @@ func TestCIMDNoWritesBeforeApprovalAndAtomicConcurrentApprovals(t *testing.T) {
 	if _, err := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: request, Decision: "deny"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(err, pgx.ErrNoRows) {
+	if _, lookupErr := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(lookupErr, pgx.ErrNoRows) {
 		t.Fatal("consent read or denial wrote a client")
 	}
 	var wg sync.WaitGroup
@@ -133,7 +134,7 @@ func TestCIMDLoopbackNeverIssuesSilently(t *testing.T) {
 	if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest(http.MethodGet, "https://aboutme.example/oauth/authorize?"+request.values().Encode(), nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "https://aboutme.example/oauth/authorize?"+request.values().Encode(), nil)
 	r.RemoteAddr = "8.8.8.8:1234"
 	r = r.WithContext(auth.ContextWithSession(r.Context(), sess))
 	w := httptest.NewRecorder()
@@ -164,7 +165,7 @@ func TestCIMDGrantCapRollsBackNewClient(t *testing.T) {
 	if _, err := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, ErrGrantLimit) {
 		t.Fatalf("grant cap: %v", err)
 	}
-	if _, err := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(err, pgx.ErrNoRows) {
+	if _, lookupErr := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(lookupErr, pgx.ErrNoRows) {
 		t.Fatal("grant cap retained URL row")
 	}
 }
@@ -211,7 +212,7 @@ func TestCIMDHTTPSGrantFromAnotherEpochRequiresConsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	fresh := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
-	r := httptest.NewRequest(http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
 	r.RemoteAddr = "8.8.8.8:1234"
 	r = r.WithContext(auth.ContextWithSession(r.Context(), fresh))
 	w := httptest.NewRecorder()
@@ -229,21 +230,21 @@ func TestCIMDConcurrentOwnersShareOnlyClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if _, err := s.pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, other.ID); err != nil {
-			t.Error(err)
+		if _, deleteErr := s.pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, other.ID); deleteErr != nil {
+			t.Error(deleteErr)
 		}
 	})
 	sessions := []store.Session{issueTestSession(t, s.pool, user.ID, s.clock(), nil), issueTestSession(t, s.pool, other.ID, s.clock(), nil)}
 	errorsOut := make(chan error, 2)
 	for _, session := range sessions {
 		go func() {
-			_, err := s.ConsentDecision(ctx, session, ConsentDecision{ConsentQuery: request, Decision: "approve"})
-			errorsOut <- err
+			_, decisionErr := s.ConsentDecision(ctx, session, ConsentDecision{ConsentQuery: request, Decision: "approve"})
+			errorsOut <- decisionErr
 		}()
 	}
 	for range 2 {
-		if err := <-errorsOut; err != nil {
-			t.Fatal(err)
+		if decisionErr := <-errorsOut; decisionErr != nil {
+			t.Fatal(decisionErr)
 		}
 	}
 	client, err := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID)
@@ -279,7 +280,7 @@ func TestCIMDExpiredRedirectAndFailedMetadataUpdate(t *testing.T) {
 	}
 	changed.Store(true)
 	f.clock = func() time.Time { return s.clock().Add(6 * time.Minute) }
-	r := httptest.NewRequest(http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, s.publicOrigin+"/oauth/authorize?"+request.values().Encode(), nil)
 	r.RemoteAddr = "8.8.8.8:1234"
 	r = r.WithContext(auth.ContextWithSession(r.Context(), sess))
 	w := httptest.NewRecorder()
@@ -309,8 +310,8 @@ func TestCIMDCodeWriteFailureRollsBackClientAndGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if _, err := q.DeleteOAuthClient(context.Background(), client.ID); err != nil {
-			t.Error(err)
+		if _, deleteErr := q.DeleteOAuthClient(context.Background(), client.ID); deleteErr != nil {
+			t.Error(deleteErr)
 		}
 	})
 	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: s.clock()})
@@ -323,8 +324,8 @@ func TestCIMDCodeWriteFailureRollsBackClientAndGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	epoch := user.AuthEpoch
-	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: strings.Repeat("A", 43), RedirectURI: "http://localhost/callback", CreatedAt: s.clock(), GrantID: &grant.ID, AuthEpoch: &epoch}); err != nil {
-		t.Fatal(err)
+	if _, codeErr := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: strings.Repeat("A", 43), RedirectURI: "http://localhost/callback", CreatedAt: s.clock(), GrantID: &grant.ID, AuthEpoch: &epoch}); codeErr != nil {
+		t.Fatal(codeErr)
 	}
 	s.entropy = bytes.NewReader(entropy)
 	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
@@ -332,7 +333,7 @@ func TestCIMDCodeWriteFailureRollsBackClientAndGrant(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "create authorization code") {
 		t.Fatal("code-write failure was not observed by the operation")
 	}
-	if _, err := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(err, pgx.ErrNoRows) {
+	if _, lookupErr := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID); !errors.Is(lookupErr, pgx.ErrNoRows) {
 		t.Fatal("code-write failure retained client")
 	}
 	count, err := q.CountLiveOAuthGrantsForUser(ctx, user.ID)

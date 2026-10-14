@@ -93,9 +93,9 @@ describe('/authorize', () => {
       expect(wrapper.get('[data-testid="consent-client-name"]').text()).toBe(
         name,
       );
-    expect(wrapper.get('p').text()).toBe(language === 'vi'
-    ? `Ứng dụng tự gọi là “${name}”.`
-    : `The app calls itself “${name}”.`);
+      expect(wrapper.get('p').text()).toBe(language === 'vi'
+        ? `Ứng dụng tự gọi là “${name}”.`
+        : `The app calls itself “${name}”.`);
       expect(wrapper.find('img').exists()).toBe(false);
       expect(
         wrapper.get('[data-testid="consent-loopback-warning"]').text(),
@@ -104,7 +104,7 @@ describe('/authorize', () => {
           ? 'Chỉ cho phép nếu bạn vừa bắt đầu đăng nhập '
           + 'từ một ứng dụng trên máy tính này.'
           : 'Approve only if you just started this sign-in '
-          + 'from an app on this computer.',
+            + 'from an app on this computer.',
       );
     });
   }
@@ -379,7 +379,7 @@ describe('consent return-to line', () => {
       locale === 'en'
         ? `After you approve, you return to an app on this computer (${host}).`
         : 'Sau khi cho phép, bạn quay lại một ứng dụng trên máy tính này '
-        + `(${host}).`,
+          + `(${host}).`,
     );
   });
 

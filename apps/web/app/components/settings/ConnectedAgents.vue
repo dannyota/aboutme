@@ -175,7 +175,10 @@ async function refreshAfterAction(): Promise<void> {
           <h3 class="font-medium [overflow-wrap:anywhere]">
             <bdi>{{ grant.clientName }}</bdi>
             <template v-if="grant.clientKind === 'cimd'">
-              (<bdi dir="ltr" data-testid="agent-client-host">{{
+              (<bdi
+                dir="ltr"
+                data-testid="agent-client-host"
+              >{{
                 grant.clientHost
               }}</bdi>)
             </template>
