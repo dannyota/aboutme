@@ -7,7 +7,12 @@ import {
   webkit,
 } from '@playwright/test';
 import { SAMPLES, type SampleLanguage } from '@aboutme/schema/samples';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import {
+  getDocument,
+  OPS,
+  type PDFOperatorList,
+  Util,
+} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -29,6 +34,8 @@ import { denyExternalRequests, waitForImages } from './support';
 // disagreement as a line-break, a page-break, or a missing/extra run.
 //
 // Both sides are read the same way so that only layout differences count:
+// - PDF tracking spaces absent from the glyphs are removed only when a
+//   complete text object matches one extracted item's text and position.
 // - Words are compared case-folded, because the PDF text layer carries a
 //   heading's CSS text-transform while DOM text does not.
 // - A word splits after each hyphen, because the PDF text layer splits a
@@ -400,6 +407,336 @@ function causesFor(engine: Engine): string[] {
 
 // --- PDF text extraction (pdfjs) -----------------------------------------
 
+test.describe('PDF word spacing', () => {
+  const transform = [11.55, 0, 0, 11.55, 404.8, 388.17];
+  const item = { str: 'CHỨ NG CHỈ', transform };
+  const operators = (text: string): PdfTextOperators => ({
+    fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.endText],
+    argsArray: [
+      [], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
+      [Array.from(text, (unicode) => ({ unicode }))], [],
+    ],
+  });
+  const words = (text: string) => Array.from(
+    text.matchAll(new RegExp(WORD_PATTERN, 'gu')), (match) => match[0],
+  );
+  const extract = (source: typeof item, ops: PdfTextOperators) =>
+    pdfWordMatches(source, pdfTextObjects(ops), WORD_PATTERN);
+
+  test('uses glyph spaces and retains original word offsets', () => {
+    expect(extract(item, operators('CHỨNG CHỈ'))).toEqual([
+      { text: 'CHỨNG', index: 0 }, { text: 'CHỈ', index: 7 },
+    ]);
+  });
+
+  test('reads tracked glyphs across fonts in one text object', () => {
+    const ops = operators('');
+    ops.fnArray = [OPS.save, OPS.transform, OPS.beginText,
+      OPS.setFont, OPS.setTextMatrix];
+    ops.argsArray = [[],
+      [0.74999996875, 0, 0, -0.74999996875,
+        39.74999834375, 805.16998153125],
+      [], ['heading', 15.3999996],
+      [new Float32Array([1, 0, 0, -1, 486.734375, 556])]];
+    const advances = [12.9286957, 12.1899414, 13.2062225, 12.4515839,
+      13.0825958, 4.4638367, 12.9286957, 12.1899414];
+    Array.from('CHỨNG CHỈ').forEach((unicode, index) => {
+      if (index > 0) {
+        ops.fnArray.push(OPS.moveText);
+        ops.argsArray.push([advances[index - 1], 0]);
+      }
+      if (unicode === ' ' || index === 6) {
+        ops.fnArray.push(OPS.setFont);
+        ops.argsArray.push([unicode === ' ' ? 'space' : 'heading', 15.3999996]);
+      }
+      ops.fnArray.push(OPS.showText);
+      ops.argsArray.push([[{ unicode }]]);
+    });
+    ops.fnArray.push(OPS.endText, OPS.restore);
+    ops.argsArray.push([], []);
+    expect(extract({
+      ...item,
+      transform: [11.549999218750012, 0, 0, 11.549999218750012,
+        404.8007681333006, 388.16999890625],
+    }, ops)).toEqual([
+      { text: 'CHỨNG', index: 0 }, { text: 'CHỈ', index: 7 },
+    ]);
+  });
+
+  test('normalizes the decoded PDF heading operator sequence', () => {
+    const sequence: [number, unknown[]][] = [
+      [OPS.save, []],
+      [OPS.transform, [0.74999996875, 0, 0, -0.74999996875,
+        39.74999834375, 805.16998153125]],
+      [OPS.beginText, []],
+      [OPS.setFont, ['g_d27_f5', 15.3999996]],
+      [OPS.setTextMatrix,
+        [new Float32Array([1, 0, 0, -1, 486.734375, 556])]],
+      [OPS.showText, [[{ unicode: 'C' }]]],
+      [OPS.moveText, [12.9286957, 0]],
+      [OPS.showText, [[{ unicode: 'H' }]]],
+      [OPS.moveText, [12.1899414, 0]],
+      [OPS.showText, [[{ unicode: 'Ứ' }]]],
+      [OPS.moveText, [13.2062225, 0]],
+      [OPS.showText, [[{ unicode: 'N' }]]],
+      [OPS.moveText, [12.4515839, 0]],
+      [OPS.showText, [[{ unicode: 'G' }]]],
+      [OPS.setFont, ['g_d27_f6', 15.3999996]],
+      [OPS.moveText, [13.0825958, 0]],
+      [OPS.showText, [[{ unicode: ' ' }]]],
+      [OPS.setFont, ['g_d27_f5', 15.3999996]],
+      [OPS.moveText, [4.4638367, 0]],
+      [OPS.showText, [[{ unicode: 'C' }]]],
+      [OPS.moveText, [12.9286957, 0]],
+      [OPS.showText, [[{ unicode: 'H' }]]],
+      [OPS.moveText, [12.1899414, 0]],
+      [OPS.showText, [[{ unicode: 'Ỉ' }]]],
+      [OPS.endText, []],
+      [OPS.restore, []],
+    ];
+    const ops = {
+      fnArray: sequence.map(([fn]) => fn),
+      argsArray: sequence.map(([, args]) => args),
+    };
+    expect(extract({
+      ...item,
+      transform: [11.549999218750012, 0, 0, 11.549999218750012,
+        404.8007681333006, 388.16999890625],
+    }, ops)).toEqual([
+      { text: 'CHỨNG', index: 0 }, { text: 'CHỈ', index: 7 },
+    ]);
+  });
+
+  test('preserves real spaces, hyphens, and unmatched glyphs', () => {
+    for (const text of ['CHỨ-NG CHỈ', 'CHỨNG CH', 'CHỨNGX CHỈ', 'CHỨNGCHỈ']) {
+      const source = { ...item, str: text };
+      expect(extract(source, operators('CHỨNG CHỈ'))
+        .map((word) => word.text)).toEqual(words(text));
+    }
+    expect(extract(item, operators(item.str))
+      .map((word) => word.text)).toEqual(words(item.str));
+  });
+
+  test('preserves spaces when glyphs come from another position', () => {
+    expect(extract({ ...item, transform: [11.55, 0, 0, 11.55, 404.8, 400] },
+      operators('CHỨNG CHỈ')).map((word) => word.text))
+      .toEqual(words(item.str));
+  });
+
+  test('preserves spacing across separate or ambiguous text objects', () => {
+    const parts = [operators('CHỨ'), operators('NG CHỈ')];
+    const separate = {
+      fnArray: parts.flatMap((part) => part.fnArray),
+      argsArray: parts.flatMap((part) => part.argsArray),
+    };
+    expect(extract(item, separate).map((word) => word.text))
+      .toEqual(words(item.str));
+    const repeated = operators('CHỨNG CHỈ');
+    repeated.fnArray.push(...repeated.fnArray);
+    repeated.argsArray.push(...repeated.argsArray);
+    expect(extract(item, repeated).map((word) => word.text))
+      .toEqual(words(item.str));
+  });
+
+  test('preserves spaces inferred from numeric or vertical positioning', () => {
+    const numeric = operators('');
+    numeric.argsArray[2] = [[{ unicode: 'CHỨ' }, -200,
+      { unicode: 'NG CHỈ' }]];
+    expect(extract(item, numeric).map((word) => word.text))
+      .toEqual(words(item.str));
+    const vertical = operators('CHỨNG CHỈ');
+    vertical.fnArray.splice(3, 0, OPS.moveText);
+    vertical.argsArray.splice(3, 0, [0, -20]);
+    expect(extract(item, vertical).map((word) => word.text))
+      .toEqual(words(item.str));
+  });
+
+  test('preserves positioning spaces between multi-character runs', () => {
+    const positioned = {
+      fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.moveText,
+        OPS.showText, OPS.endText],
+      argsArray: [[], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
+        [[{ unicode: 'CHỨ' }]], [25, 0], [[{ unicode: 'NG CHỈ' }]], []],
+    };
+    expect(extract(item, positioned).map((word) => word.text))
+      .toEqual(words(item.str));
+  });
+
+  test('preserves positioning spaces before multi-character runs', () => {
+    const positioned = {
+      fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.moveText,
+        OPS.showText, OPS.endText],
+      argsArray: [[], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
+        [[{ unicode: 'A' }]], [12, 0], [[{ unicode: 'BC' }]], []],
+    };
+    expect(extract({ ...item, str: 'A BC' }, positioned)).toEqual([
+      { text: 'A', index: 0 }, { text: 'BC', index: 2 },
+    ]);
+  });
+
+  test('preserves spaces when an unsafe object shares the origin', () => {
+    const safe = operators('CHỨNG CHỈ');
+    const unsafe = operators('');
+    unsafe.argsArray[2] = [[{ unicode: 'CHỨ NG' }, -200,
+      { unicode: ' CHỈ' }]];
+    for (const parts of [[safe, unsafe], [unsafe, safe]]) {
+      const ambiguous = {
+        fnArray: parts.flatMap((part) => part.fnArray),
+        argsArray: parts.flatMap((part) => part.argsArray),
+      };
+      expect(extract(item, ambiguous)).toEqual([
+        { text: 'CHỨ', index: 0 }, { text: 'NG', index: 4 },
+        { text: 'CHỈ', index: 7 },
+      ]);
+    }
+  });
+});
+
+type PdfTextOperators = Pick<PDFOperatorList, 'fnArray' | 'argsArray'>;
+
+interface PdfTextObject {
+  readonly valid: boolean;
+  readonly text: string;
+  readonly left: number;
+  readonly baseline: number;
+}
+
+function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
+  const objects: PdfTextObject[] = [];
+  let graphics = [1, 0, 0, 1, 0, 0];
+  const stack: number[][] = [];
+  let current: {
+    text: string;
+    matrix: number[];
+    origin: number[] | null;
+    valid: boolean;
+    singleGlyph: boolean;
+    pendingMove: boolean;
+  } | null = null;
+  operators.fnArray.forEach((fn, index) => {
+    const args = operators.argsArray[index] as unknown[];
+    if (fn === OPS.save) stack.push([...graphics]);
+    if (fn === OPS.restore) {
+      const saved = stack.pop();
+      if (saved === undefined) throw new Error('Unbalanced PDF graphics.');
+      graphics = saved;
+      if (current !== null) current.valid = false;
+    }
+    if (fn === OPS.transform) {
+      graphics = Util.transform(graphics, args);
+      if (current !== null) current.valid = false;
+    }
+    if (fn === OPS.beginText) {
+      current = {
+        text: '', matrix: [1, 0, 0, 1, 0, 0], origin: null, valid: true,
+        singleGlyph: false, pendingMove: false,
+      };
+    }
+    if (current === null) return;
+    if (fn === OPS.setTextMatrix) {
+      if (current.text !== '') current.valid = false;
+      // PDF.js passes the text matrix as one Float32Array operand.
+      current.matrix = Array.from(args[0] as Float32Array);
+    }
+    if (fn === OPS.moveText) {
+      // Glyph tracking needs single glyphs on both sides of each move.
+      // Whole runs can supply word spacing and must keep the extracted gaps.
+      if (args[1] !== 0 || !current.singleGlyph || (args[0] as number) <= 0) {
+        current.valid = false;
+      }
+      current.singleGlyph = false;
+      current.pendingMove = true;
+    }
+    if (fn === OPS.nextLine || fn === OPS.setLeadingMoveText
+      || fn === OPS.nextLineShowText || fn === OPS.nextLineSetSpacingShowText
+      || fn === OPS.setTextRise) {
+      current.valid = false;
+    }
+    if (fn === OPS.showText) {
+      const run = current;
+      if (graphics[1] !== 0 || graphics[2] !== 0
+        || run.matrix[1] !== 0 || run.matrix[2] !== 0) {
+        run.valid = false;
+      }
+      run.origin ??= Util.transform(graphics, run.matrix).slice(4, 6);
+      const glyphs = args[0] as (number | { unicode: string })[];
+      run.singleGlyph = glyphs.length === 1
+        && typeof glyphs[0] !== 'number'
+        && Array.from(glyphs[0]!.unicode).length === 1;
+      if (run.pendingMove && !run.singleGlyph) run.valid = false;
+      run.pendingMove = false;
+      for (const glyph of glyphs) {
+        if (typeof glyph === 'number') {
+          // Numeric positioning can encode a word space without a glyph.
+          if (glyph !== 0) run.valid = false;
+        } else {
+          run.text += glyph.unicode;
+        }
+      }
+    }
+    if (fn === OPS.endText) {
+      if (current.origin !== null && current.text !== '') {
+        objects.push({
+          valid: current.valid && !current.pendingMove,
+          text: current.text,
+          left: current.origin[0]!, baseline: current.origin[1]!,
+        });
+      }
+      current = null;
+    }
+  });
+  return objects;
+}
+
+function whitespaceOffsets(text: string): Set<number> {
+  const offsets = new Set<number>();
+  let compactOffset = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (/\s/u.test(text[index]!)) offsets.add(compactOffset);
+    else compactOffset += 1;
+  }
+  return offsets;
+}
+
+function pdfWordMatches(
+  item: { readonly str: string; readonly transform: readonly number[] },
+  objects: readonly PdfTextObject[],
+  wordPattern: string,
+): { text: string; index: number }[] {
+  const compact = (text: string) => text.replace(/\s/gu, '');
+  // Remove inferred whitespace only for one complete horizontal text object
+  // at this item's origin, with every non-space glyph unchanged. The decoded
+  // space glyphs retain word boundaries; separate objects and lines stay apart.
+  // Unsafe objects still block a unique association with a safe object.
+  const candidates = objects.filter((object) =>
+    Math.abs(object.left - item.transform[4]!) < 0.0001
+    && Math.abs(object.baseline - item.transform[5]!) < 0.0001
+    && compact(object.text) === compact(item.str));
+  const decoded = candidates.length === 1 && candidates[0]?.valid
+    ? candidates[0]
+    : undefined;
+  const glyphSpaces = decoded === undefined
+    ? whitespaceOffsets(item.str)
+    : whitespaceOffsets(decoded.text);
+  const extractedSpaces = whitespaceOffsets(item.str);
+  const canCorrect = [...glyphSpaces].every((gap) => extractedSpaces.has(gap));
+  let text = '';
+  let compactOffset = 0;
+  const originalOffsets: number[] = [];
+  for (let index = 0; index < item.str.length; index += 1) {
+    const character = item.str[index]!;
+    const isSpace = /\s/u.test(character);
+    if (!isSpace || !canCorrect || glyphSpaces.has(compactOffset)) {
+      text += character;
+      originalOffsets.push(index);
+    }
+    if (!isSpace) compactOffset += 1;
+  }
+  return Array.from(text.matchAll(new RegExp(wordPattern, 'gu')), (match) => ({
+    text: match[0], index: originalOffsets[match.index]!,
+  }));
+}
+
 interface RawWord {
   readonly text: string;
   readonly top: number;
@@ -443,7 +780,6 @@ async function readPdfPages(pdfBytes: Buffer): Promise<PdfPage[]> {
     isOffscreenCanvasSupported: false,
     useSystemFonts: false,
   });
-  const pattern = new RegExp(WORD_PATTERN, 'gu');
   try {
     const document = await loadingTask.promise;
     const pages: PdfPage[] = [];
@@ -452,6 +788,9 @@ async function readPdfPages(pdfBytes: Buffer): Promise<PdfPage[]> {
       const [viewLeft, , viewRight, viewTop] = pdfPage.view;
       const pageWidth = viewRight! - viewLeft!;
       const content = await pdfPage.getTextContent();
+      const objects = pdfTextObjects(await pdfPage.getOperatorList({
+        intent: 'print',
+      }));
       const words: PdfWord[] = [];
       for (const item of content.items) {
         if (!('str' in item) || item.str.trim() === '') continue;
@@ -460,12 +799,11 @@ async function readPdfPages(pdfBytes: Buffer): Promise<PdfPage[]> {
         const height = item.height > 0
           ? item.height
           : Math.abs(transform[3]!) || 10;
-        for (const match of item.str.matchAll(pattern)) {
-          if (match.index === undefined) continue;
+        for (const match of pdfWordMatches(item, objects, WORD_PATTERN)) {
           const fraction = match.index / Math.max(item.str.length, 1);
           const left = transform[4]! + fraction * item.width;
           words.push({
-            text: match[0],
+            text: match.text,
             top,
             left,
             bottom: top + height,
