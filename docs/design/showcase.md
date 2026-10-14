@@ -203,7 +203,8 @@ days, and CloudTrail keeping the task's arguments for 90 days, so the policy
 discloses that record; the audit needs both to tie a deletion to its report.
 
 Production uses the Vietnam host under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). CloudTrail is not its
-audit store. The host procedure for retaining and tying the deletion audit to
-its report remains unresolved; the approved disclosure and 180-day retention
-requirement remain unchanged.
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[root-only host audit](../runbooks/account-delete.md#audit-and-failures) retains
+UUIDs, reported, shown, and returned slugs, action, outcome, and event UTC for
+180 days. Tie a deletion to its report by reported slug and time. Server
+journald and CI are not the audit store.
