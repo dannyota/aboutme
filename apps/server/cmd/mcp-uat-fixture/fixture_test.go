@@ -145,3 +145,62 @@ func TestCleanFixtureLeavesAnotherRunClient(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanFixtureRemovesOnlyExactCIMDRun(t *testing.T) {
+	db, openErr := sql.Open("pgx", testutil.RequireMigratedTestDatabaseURL(t))
+	if openErr != nil {
+		t.Fatal(openErr)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	name := testClientName()
+	metadataURL := "https://client.example/oauth/" + strings.TrimPrefix(name, fixtureClientNamePrefix)
+	var ids []uuid.UUID
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		for _, id := range ids {
+			if _, cleanupErr := db.ExecContext(cleanupCtx, "DELETE FROM oauth_clients WHERE id=$1", id); cleanupErr != nil {
+				t.Error(cleanupErr)
+			}
+		}
+	})
+	for _, row := range []struct {
+		url       *string
+		redirects string
+	}{
+		{&metadataURL, `["http://localhost/callback"]`},
+		{nil, `["http://localhost:20097/callback"]`},
+		{nil, `["https://other.example/callback"]`},
+		{&metadataURL, `["http://localhost/callback"]`},
+	} {
+		// The last client has another run URL but the same display name.
+		if len(ids) == 3 {
+			other := "https://client.example/oauth/" + uuid.NewString()
+			row.url = &other
+		}
+		var id uuid.UUID
+		if insertErr := db.QueryRowContext(ctx, `INSERT INTO oauth_clients
+   (client_name, redirect_uris, metadata_url, created_at) VALUES ($1,$2::jsonb,$3,now()) RETURNING id`, name, row.redirects, row.url).Scan(&id); insertErr != nil {
+			t.Fatal(insertErr)
+		}
+		ids = append(ids, id)
+	}
+	if cleanupErr := cleanFixture(ctx, db, name); cleanupErr != nil {
+		t.Fatal(cleanupErr)
+	}
+	for i, id := range ids {
+		var exists bool
+		if queryErr := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM oauth_clients WHERE id=$1)", id).Scan(&exists); queryErr != nil {
+			t.Fatal(queryErr)
+		}
+		if exists != (i >= 2) {
+			t.Fatalf("client %d cleanup boundary differs", i)
+		}
+	}
+}

@@ -138,6 +138,7 @@ function mutationState(result: {
 interface RefreshObservation {
   seen: boolean;
   keys: readonly string[];
+  cimd?: { clientID: string; discovered: boolean; codeExchanged: boolean; refreshed: boolean };
 }
 
 // recordingFetch wraps the platform fetch so the transport, registration,
@@ -164,7 +165,25 @@ function makeRecordingFetch(observation: RefreshObservation): FetchLike {
       observation.seen = true;
       observation.keys = [...params.keys()].sort();
     }
-    return fetch(url, init);
+    if (observation.cimd !== undefined && target.origin === ORIGIN) {
+      if (target.pathname === '/oauth/register') {
+        throw new Error('CIMD client attempted dynamic registration');
+      }
+      if (target.pathname === '/oauth/token') {
+        expect(params?.get('client_id')).toBe(observation.cimd.clientID);
+        if (params?.get('grant_type') === 'authorization_code') observation.cimd.codeExchanged = true;
+        if (params?.get('grant_type') === 'refresh_token') observation.cimd.refreshed = true;
+      }
+    }
+    const response = await fetch(url, init);
+    if (observation.cimd !== undefined && target.origin === ORIGIN
+      && target.pathname === '/.well-known/oauth-authorization-server') {
+      const metadata = await response.clone().json();
+      expect(metadata.client_id_metadata_document_supported).toBe(true);
+      expect(metadata.token_endpoint_auth_methods_supported).toContain('none');
+      observation.cimd.discovered = true;
+    }
+    return response;
   };
 }
 
@@ -461,6 +480,8 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     });
     expect(rawRejected.status).toBe(401);
 
+    await proveCIMDSDK(page, clientName);
+
     stage('teardown');
     await deleteRecordedResume(page, resumeID);
     teardownComplete = true;
@@ -510,6 +531,13 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
             refreshedAfterForcedExpiry: true,
             grantRevoked: true,
             revokedRejected: true,
+            cimdDiscovered: true,
+            cimdConsentApproved: true,
+            cimdTokenExchanged: true,
+            cimdToolsListed: true,
+            cimdRefreshed: true,
+            cimdGrantRevoked: true,
+            cimdRevokedRejected: true,
           },
         },
         null,
@@ -615,5 +643,113 @@ async function proveCIMDPresentation(page: Page): Promise<void> {
     await page.unroute(grantPattern, grantRoute);
     await pinEnglish(page.context());
     if (originalViewport !== null) await page.setViewportSize(originalViewport);
+  }
+}
+
+// A native client supplies its published URL as client information. The SDK
+// still owns discovery, PKCE, code exchange, refresh, and MCP transport.
+async function proveCIMDSDK(page: Page, clientName: string): Promise<void> {
+  const clientID = `https://client.example/oauth/${clientName.slice('aboutme MCP UAT '.length)}`;
+  const provider = new ProofOAuthProvider(REDIRECT_URI, {
+    client_name: clientName, redirect_uris: [REDIRECT_URI],
+    grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
+    token_endpoint_auth_method: 'none', scope: 'resumes:read resumes:write',
+  });
+  provider.saveClientInformation({ ...provider.clientMetadata, client_id: clientID });
+  const observation: RefreshObservation = {
+    seen: false, keys: [],
+    cimd: { clientID, discovered: false, codeExchanged: false, refreshed: false },
+  };
+  const recordingFetch = makeRecordingFetch(observation);
+  const client = new Client({ name: 'aboutme-mcp-cimd-proof', version: '1.0.0' });
+  const transport = new StreamableHTTPClientTransport(new URL('/mcp', ORIGIN), {
+    authProvider: provider, fetch: recordingFetch,
+  });
+  let callback: URL | undefined;
+  const callbackRoute = async (route: Route): Promise<void> => {
+    callback = new URL(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'text/plain', body: 'Authorization complete.' });
+  };
+  await page.route(`${REDIRECT_URI}**`, callbackRoute);
+  try {
+    stage('cimd-discovery');
+    await expect(client.connect(transport)).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(observation.cimd?.discovered).toBe(true);
+    expect(provider.clientInformation()?.client_id).toBe(clientID);
+    const authorization = provider.authorizationURL;
+    if (authorization === undefined) throw new Error('CIMD authorization URL missing');
+    expect(authorization.searchParams.get('client_id')).toBe(clientID);
+    expect(authorization.searchParams.get('redirect_uri')).toBe(REDIRECT_URI);
+    stage('cimd-consent');
+    await page.goto(authorization.href);
+    await waitForHydration(page);
+    await expect(page.getByRole('heading', { level: 1 }))
+      .toHaveText('client.example wants access to your resumes.');
+    await expect(page.getByTestId('consent-client-host')).toHaveText('client.example');
+    await expect(page.getByTestId('consent-client-name')).toHaveText(clientName);
+    await expect(page.getByTestId('consent-loopback-warning')).toBeVisible();
+    await expect(page.getByTestId('consent-return-to')).toHaveText(
+      'After you approve, you return to an app on this computer (localhost).',
+    );
+    await Promise.all([
+      page.waitForURL(`${REDIRECT_URI}**`),
+      page.getByRole('button', { name: 'Approve', exact: true }).click(),
+    ]);
+    if (callback === undefined) throw new Error('CIMD callback missing');
+    expect(callback.searchParams.get('state')).toBe(provider.state());
+    expect(callback.searchParams.get('iss')).toBe(ORIGIN);
+    const code = callback.searchParams.get('code');
+    if (code === null) throw new Error('CIMD code missing');
+    stage('cimd-token');
+    await transport.finishAuth(code);
+    expect(observation.cimd?.codeExchanged).toBe(true);
+    await client.connect(new StreamableHTTPClientTransport(new URL('/mcp', ORIGIN), {
+      authProvider: provider, fetch: recordingFetch,
+    }));
+    expect((await client.listTools()).tools.map((tool) => tool.name).sort())
+      .toEqual([...EXPECTED_TOOLS].sort());
+    stage('cimd-refresh');
+    const tokens = provider.tokens();
+    if (tokens === undefined) throw new Error('CIMD tokens missing');
+    provider.saveTokens({ ...tokens, access_token: randomBytes(32).toString('base64url') });
+    expect((await client.callTool({ name: 'list_resumes', arguments: {} })).isError ?? false).toBe(false);
+    expect(observation.cimd?.refreshed).toBe(true);
+    expect(observation.keys).toEqual([...REFRESH_FORM_KEYS].sort());
+    const rotated = provider.tokens();
+    if (rotated === undefined) throw new Error('CIMD refreshed tokens missing');
+    expect(rotated.access_token).not.toBe(tokens.access_token);
+    stage('cimd-revoke');
+    await page.goto('/app/settings/sessions');
+    await waitForFirstVisitHydration(page);
+    const grant = page.getByTestId('agent-row').filter({ hasText: clientName });
+    await expect(grant).toHaveCount(1);
+    await expect(grant.getByTestId('agent-client-host')).toHaveText('client.example');
+    const revoked = page.waitForResponse((response) =>
+      response.request().method() === 'DELETE'
+      && new URL(response.url()).origin === ORIGIN
+      && /^\/api\/v1\/me\/agents\/[0-9a-f-]{36}$/i.test(new URL(response.url()).pathname));
+    await grant.getByTestId('agent-revoke').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke access' }).click();
+    expect((await revoked).status()).toBe(204);
+    await expect(grant).toHaveCount(0);
+    const rejected = await fetch(new URL('/mcp', ORIGIN), {
+      method: 'POST', headers: {
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${rotated.access_token}`, 'Content-Type': 'application/json',
+      }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+    });
+    expect(rejected.status).toBe(401);
+    const refreshRejected = await fetch(new URL('/oauth/token', ORIGIN), {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token', client_id: clientID,
+        refresh_token: rotated.refresh_token ?? '', resource: new URL('/mcp', ORIGIN).href,
+      }),
+    });
+    expect(refreshRejected.status).toBe(400);
+    expect((await refreshRejected.json()).error).toBe('invalid_grant');
+  } finally {
+    await page.unroute(`${REDIRECT_URI}**`, callbackRoute);
+    await client.close().catch(() => undefined);
   }
 }

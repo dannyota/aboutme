@@ -2324,4 +2324,9 @@ for mode in passkey totp; do
   done
 done
 
+# CIMD proof evidence must name the real SDK flow, beyond the DCR proof.
+for step in cimdDiscovered cimdConsentApproved cimdTokenExchanged cimdToolsListed cimdRefreshed cimdGrantRevoked cimdRevokedRejected; do
+  grep -Fq "$step: true" "$SOURCE/verify-evidence.mjs" || fail "CIMD evidence omits $step"
+  grep -Fq "$step: true" "$SOURCE/mcp-ts-sdk.spec.ts" || fail "CIMD SDK proof omits $step"
+done
 printf '%s\n' 'dev-https-browser static tests: PASS'

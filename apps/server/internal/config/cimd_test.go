@@ -41,18 +41,24 @@ func TestLoadCIMDStubRestriction(t *testing.T) {
 		{"prod", "127.0.0.1:20095", false},
 		{"staging", "127.0.0.1:20095", false},
 	} {
-		t.Run(tc.environment+tc.address, func(t *testing.T) {
-			vars := validDevEnv()
-			vars["ENV"] = tc.environment
-			vars["OAUTH_CIMD_DEV_STUB_ADDR"] = tc.address
-			_, err := config.Load(env(vars))
-			if (err == nil) != tc.valid {
-				t.Fatalf("Load error = %v, valid = %v", err, tc.valid)
-			}
-			if err != nil && !strings.Contains(err.Error(), "OAUTH_CIMD_DEV_STUB_ADDR") {
-				t.Fatalf("wrong rejection: %v", err)
-			}
-		})
+		for _, flags := range []struct{ mcp, cimd string }{
+			{"false", "false"}, {"false", "true"}, {"true", "false"}, {"true", "true"},
+		} {
+			t.Run(tc.environment+tc.address+flags.mcp+flags.cimd, func(t *testing.T) {
+				vars := validDevEnv()
+				vars["ENV"] = tc.environment
+				vars["OAUTH_CIMD_DEV_STUB_ADDR"] = tc.address
+				vars["MCP_ENABLED"] = flags.mcp
+				vars["OAUTH_CIMD_ENABLED"] = flags.cimd
+				_, loadErr := config.Load(env(vars))
+				if (loadErr == nil) != tc.valid {
+					t.Fatalf("Load error = %v, valid = %v", loadErr, tc.valid)
+				}
+				if loadErr != nil && !strings.Contains(loadErr.Error(), "OAUTH_CIMD_DEV_STUB_ADDR") {
+					t.Fatalf("wrong rejection: %v", loadErr)
+				}
+			})
+		}
 	}
 }
 
