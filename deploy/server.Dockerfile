@@ -48,6 +48,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade libssl3t64 openssl \
     && rm -rf /var/lib/apt/lists/* \
     && chromium=/ms-playwright/chromium-1248/chrome-linux64 \
+    && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1248/chrome-linux-arm64; } \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1248/chrome-linux; } \
     && ln -s "$chromium" /opt/chromium \
     && test -x /opt/chromium/chrome \
