@@ -1,0 +1,3 @@
+# Copy to ignored backend.hcl and replace both placeholders.
+bucket                   = "<state-bucket>"
+shared_credentials_files = ["<absolute-path-to-vstorage-s3-credentials>"]

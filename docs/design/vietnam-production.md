@@ -29,7 +29,7 @@ mails alarms through Bizfly.
 | Logs and alarms    | journald, host mail alert units, GitHub uptime workflow             |
 | Transactional mail | Bizfly Email Transaction over SMTP                                  |
 | Support mailbox    | Google Workspace                                                    |
-| Infrastructure     | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; manual DNS   |
+| Infrastructure     | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; DNS root     |
 
 Compute and network run in HCM03 and vStorage in HCM04, both Ho Chi Minh City
 (owner, 2026-10-10); vStorage exists only in HCM04 and HAN02.
@@ -89,9 +89,9 @@ and IPv6 on the floating IP (Q2).
 Cloudflare is authoritative for `aboutme.vn` on the Free plan. Every record is
 DNS-only. Apex and `www` are A records to the host's floating IP with TTL 300.
 Cloudflare signs the zone with DNSSEC algorithm 13; the owner adds its DS record
-at the `.vn` registrar. Records are edited by hand in Cloudflare; OpenTofu
-ownership remains open. The [DNS runbook](../runbooks/dns.md) owns the record
-inventory and signing checks.
+at the `.vn` registrar. The separate OpenTofu root `deploy/vn/dns/` owns the
+records; DNSSEC stays manual. The [DNS runbook](../runbooks/dns.md) owns the
+record inventory and signing checks.
 
 Google Workspace receives replies at `danny@aboutme.vn`. Bizfly Email
 Transaction sends application mail. The [email runbook](../runbooks/email.md)

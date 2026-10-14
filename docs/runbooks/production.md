@@ -34,10 +34,10 @@ operation state and audit live on the mounted data volume under
 ## Cloudflare DNS
 
 Cloudflare provides DNS-only records on the Free plan. Apex and `www` A records
-point to the floating IP with TTL 300. Records are edited by hand; OpenTofu
-ownership remains open. Follow the [DNS runbook](dns.md) for the record
-inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at the
-`.vn` registrar.
+point to the floating IP with TTL 300. The separate OpenTofu root
+`deploy/vn/dns/` owns the records. Follow the [DNS runbook](dns.md) for the
+record inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at
+the `.vn` registrar.
 
 Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80.
 DNS must point at the host before the edge starts so validation can reach it.
