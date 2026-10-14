@@ -27,6 +27,12 @@ jobs:
           tofu -chdir=deploy/vn/prod validate
       - name: Test mocked infrastructure plans
         run: tofu -chdir=deploy/vn/prod test
+      - name: Validate the DNS root
+        run: |
+          tofu -chdir=deploy/vn/dns init -backend=false -input=false >/dev/null
+          tofu -chdir=deploy/vn/dns validate
+      - name: Test mocked DNS plans
+        run: tofu -chdir=deploy/vn/dns test
       - name: Check shell scripts
         run: |
           shellcheck --version

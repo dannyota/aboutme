@@ -16,14 +16,12 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Complete safe trigger methods and detector or failure-action evidence for the accepted Vietnam alarm inventory, with matching receipt evidence per alarm (AC-OPS-019, `PLANNED`). The owner confirmed operations alert email receipt on 2026-10-13; inventory coverage remains open. Evidence: [Vietnam operations evidence](./traceability/vietnam-operations.md#alarm-acceptance-remains-open).
 - Resolve the GitHub uptime workflow cadence gap: nine scheduled runs succeeded, but creation gaps span 3:12:21 to 9:46:16 against a requested five-minute interval. The scheduler cause remains unavailable. Evidence: [external readiness monitoring collected 2026-10-13](./traceability/vietnam-operations.md#external-readiness-monitoring).
 
 ## Vietnam production
 
-- Put the Cloudflare DNS records under OpenTofu. The owner edits them by hand today.
 - Give the restore-drill server outbound networking without adding a Public NAT to the production VPC. Public NAT adds a `0.0.0.0/0` route for the whole VPC and sends every VM's outbound traffic through it.
-- Then run the restore drill end to end and record it: provider purge/inventory guarantees remain unproved, and the existing management account cannot list the state storage project for the independent object proof. No successful drill is recorded. Evidence: [restore prerequisites](./traceability/vietnam-operations.md#restore-prerequisites) and [restore drill](../../deploy/vn/README.md#restore-drill).
+- Then run the restore drill end to end and record it: the deletion contract and the state-bucket object proof are settled, and the remaining steps are in [restore drill delivery](./restore-drill.md). No successful drill is recorded. Evidence: [restore prerequisites](./traceability/vietnam-operations.md#restore-prerequisites) and [restore drill](../../deploy/vn/README.md#restore-drill).
 - Diagnose readiness after a hard reset: retained samples show persistent 503s until the server restarted, but no failed dependency reason. Startup ordering was present. Evidence: [historical readiness failure](./traceability/vietnam-operations.md#historical-readiness-failure).
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
