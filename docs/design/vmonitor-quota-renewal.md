@@ -10,9 +10,12 @@ before enabling writes.
 
 The [runbook](../runbooks/production.md#alarms) owns allowances, expiry dates,
 and the provider's three notification-quota actions per month. Provider docs
-limit renewal to the last seven days ([Synthetic], [Email]). Use the last 72
-hours until live renewal confirms the allowed window and whether renewal extends
-the old expiry or starts a new term. Early renewal may lose unused days.
+limit renewal to the last seven days ([Synthetic], [Email]). A live attempt on
+2026-10-14, 11 days before expiry, confirmed the window: the provider answered
+409 "You can only renew in the last 7 days of a free quota" and changed nothing.
+Treat that 409 as a proven no-send refusal that sets no hold. Use the last 72
+hours until a successful renewal shows whether it extends the old expiry or
+starts a new term. Early renewal may lose unused days.
 
 Schedule `37 5,17 * * *` UTC. Compute remaining time from fresh provider reads
 and current UTC time, never the scheduled timestamp or rounded calendar days.
