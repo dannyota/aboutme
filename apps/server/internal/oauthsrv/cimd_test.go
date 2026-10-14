@@ -11,7 +11,7 @@ func TestCIMDURLGrammar(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{
 		"https://client.example/metadata", "https://xn--bcher-kva.example/a%20b",
-		"https://client.example/" + strings.Repeat("a", 234),
+		"https://client.example/" + strings.Repeat("a", 233),
 	} {
 		if _, err := parseCIMDURL(raw, "aboutme.vn"); err != nil {
 			t.Fatalf("valid fixture rejected: %v", err)
@@ -27,7 +27,7 @@ func TestCIMDURLGrammar(t *testing.T) {
 		"https://127.0.0.1/a", "https://2130706433/a", "https://0x7f.0.0.1/a", "https://[::1]/a",
 		"https://localhost/a", "https://a.localhost/a", "https://a.local/a", "https://a.internal/a",
 		"https://a.home.arpa/a", "https://a.onion/a", "https://aboutme.vn/a", "https://sub.aboutme.vn/a",
-		"https://client.example/" + strings.Repeat("a", 235),
+		"https://client.example/" + strings.Repeat("a", 234),
 	} {
 		if _, err := parseCIMDURL(raw, "aboutme.vn"); err == nil {
 			t.Fatalf("invalid fixture accepted: %q", raw)
@@ -37,6 +37,20 @@ func TestCIMDURLGrammar(t *testing.T) {
 
 func TestCIMDAddressRefusals(t *testing.T) {
 	t.Parallel()
+	for _, fixture := range cimdAddressFixtures() {
+		if got := cimdAddressAllowed(fixture.address); got != fixture.allowed {
+			t.Fatalf("address %s: got %v, want %v", fixture.address, got, fixture.allowed)
+		}
+	}
+}
+
+type cimdAddressFixture struct {
+	address netip.Addr
+	allowed bool
+}
+
+func cimdAddressFixtures() []cimdAddressFixture {
+	var fixtures []cimdAddressFixture
 	// Every containing refusal range exercises its boundaries and an interior
 	// address. Mapped IPv4 fixtures exercise the same policy after unmapping.
 	fixtureRanges := strings.Fields(`0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.31.196.0/24 192.52.193.0/24 192.88.99.0/24 192.168.0.0/16 192.175.48.0/24 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4
@@ -62,11 +76,9 @@ func TestCIMDAddressRefusals(t *testing.T) {
 			addresses = append(addresses, first.Next())
 		}
 		for _, addr := range addresses {
-			if cimdAddressAllowed(addr) {
-				t.Fatalf("refused address allowed: %s", addr)
-			}
-			if addr.Is4() && cimdAddressAllowed(netip.AddrFrom16(addr.As16())) {
-				t.Fatalf("mapped refusal allowed: %s", addr)
+			fixtures = append(fixtures, cimdAddressFixture{addr, false})
+			if addr.Is4() {
+				fixtures = append(fixtures, cimdAddressFixture{netip.AddrFrom16(addr.As16()), false})
 			}
 		}
 		for _, neighbor := range []netip.Addr{first.Prev(), last.Next()} {
@@ -79,21 +91,19 @@ func TestCIMDAddressRefusals(t *testing.T) {
 					allowed = false
 				}
 			}
-			if got := cimdAddressAllowed(neighbor); got != allowed {
-				t.Fatalf("adjacent address %s: got %v, want %v", neighbor, got, allowed)
+			fixtures = append(fixtures, cimdAddressFixture{neighbor, allowed})
+			if neighbor.Is4() {
+				fixtures = append(fixtures, cimdAddressFixture{netip.AddrFrom16(neighbor.As16()), allowed})
 			}
 		}
 	}
 	for _, raw := range []string{"::7f00:1", "::8.8.8.8", "100:0:0:1::1", "5f00::1"} {
-		if cimdAddressAllowed(netip.MustParseAddr(raw)) {
-			t.Fatalf("special address allowed: %s", raw)
-		}
+		fixtures = append(fixtures, cimdAddressFixture{netip.MustParseAddr(raw), false})
 	}
 	for _, raw := range []string{"8.8.8.8", "::ffff:8.8.8.8", "2606:4700::1111"} {
-		if !cimdAddressAllowed(netip.MustParseAddr(raw)) {
-			t.Fatalf("public address refused: %s", raw)
-		}
+		fixtures = append(fixtures, cimdAddressFixture{netip.MustParseAddr(raw), true})
 	}
+	return fixtures
 }
 
 func TestCIMDDocumentValidation(t *testing.T) {

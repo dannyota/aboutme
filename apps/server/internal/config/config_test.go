@@ -130,6 +130,14 @@ func TestLoad_MCPEnableFlagAndFrozenBudgets(t *testing.T) {
 				t.Fatalf("AgentAccess.Enabled = %t, want %t", got.AgentAccess.Enabled, tc.enabled)
 			}
 			want := config.AgentAccessConfig{
+				CIMD: config.CIMDConfig{
+					MaxURLBytes: 256, MaxBodyBytes: 5120,
+					ConnectTimeout: 2 * time.Second, CompleteTimeout: 5 * time.Second,
+					ConcurrentFetches: 4, AddressRequests: 30, AddressWindow: time.Hour,
+					URLRequests: 6, URLWindow: time.Minute, GlobalRequests: 600, GlobalWindow: time.Hour,
+					CacheFloor: 5 * time.Minute, CacheCeiling: time.Hour,
+					MaxCacheEntries: 1000, MaxCacheBytes: 2 * 1024 * 1024,
+				},
 				Enabled:                     tc.enabled,
 				OAuthRegisterRequests:       5,
 				OAuthRegisterRangeRequests:  120,

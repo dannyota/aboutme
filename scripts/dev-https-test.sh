@@ -176,8 +176,9 @@ done
 [ -f "$config" ] || exit 64
 count() { grep -Foc -- "$1" "$config"; }
 [ "$(count 'https://localhost:20443 {')" = 1 ]
-[ "$(count 'bind 127.0.0.1')" = 1 ]
-[ "$(count 'tls internal')" = 1 ]
+[ "$(count 'https://client.example:20443 {')" = 1 ]
+[ "$(count 'bind 127.0.0.1')" = 2 ]
+[ "$(count 'tls internal')" = 2 ]
 [ "$(count 'skip_install_trust')" = 1 ]
 [ "$(count 'auto_https disable_redirects')" = 1 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 2 ]

@@ -13,7 +13,7 @@ import (
 )
 
 func TestCIMDIdleSweepKeepsLiveGrantAndCollectsIdleURLClient(t *testing.T) {
-	s, q, user, _ := newAuthorizeHarness(t)
+	s, q, _, user := newAuthorizeHarness(t)
 	ctx := context.Background()
 	clients := make([]store.OAuthClient, 0, 2)
 	for range 2 {
