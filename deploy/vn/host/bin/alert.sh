@@ -112,10 +112,10 @@ from_name=${from_name//\"/\\\"}
   printf 'Host: %s\nKey: %s\nTime (UTC): %s\n\n' "$(hostname)" "$key" "$(date -u +%FT%TZ)"
   [[ -z $detail ]] || printf '%s\n\n' "$detail"
   case "$key" in
-    coraza-matches|coraza-unparsed|coraza-log-invalid)
+    coraza-log-invalid)
       printf 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.\n'
       printf 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.\n'
-      printf 'One request can trigger several rule matches. Check the configured Coraza mode before treating matches as blocked requests.\n'
+      printf 'Check the WAF log format and reader. Match and unparsed counts are available with journalctl -u aboutme-watch; they do not trigger mail.\n'
       ;;
     *) printf 'Read the details on the host with journalctl.\n' ;;
   esac
