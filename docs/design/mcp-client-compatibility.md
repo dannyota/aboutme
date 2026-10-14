@@ -1,16 +1,16 @@
 # MCP client compatibility
 
-Status: implemented in v0.6.18 (2026-09-28). The owner approved every numbered
-choice below as written.
+Status: implemented in v0.6.18 (2026-09-28), except the approved
+loopback-hostname addition in rule 6, which ships with CIMD. The owner approved
+every numbered choice below as written.
 
-aboutme's OAuth server and MCP endpoint are proven with one client, the official
-Go SDK runner in the [MCP owner workflow](mcp-owner-workflow.md). Claude's
-clients, and other clients built on the official TypeScript SDK, send requests
-that the server rejects today. This proposal lists each gap with its evidence
-and the smallest rule change that closes it, so the [MCP guide](mcp-guide.md)
-can teach steps that work. It keeps [ADR 0018](../adr/0018-mcp-agent-access.md):
-one endpoint, first-party OAuth 2.1, public clients with PKCE, dynamic client
-registration (DCR), account-wide scopes, and no publish tool.
+aboutme's OAuth server and MCP endpoint support the compatibility rules below
+for Claude and clients built on the official TypeScript SDK. The
+[MCP owner workflow](mcp-owner-workflow.md) defines the Go SDK proof; the
+[MCP guide](mcp-guide.md) describes demonstrated client workflows. These rules
+keep [ADR 0018](../adr/0018-mcp-agent-access.md): one endpoint, first-party
+OAuth 2.1, public clients with PKCE, dynamic client registration (DCR),
+account-wide scopes, and no publish tool.
 
 ## Evidence
 
@@ -24,7 +24,8 @@ mobile, Claude Code, and Cowork:
   uses `http://localhost:PORT/callback` on an ephemeral port.
 - Claude uses DCR when the server does not advertise Client ID Metadata
   Documents (CIMD), and registers a new client on each fresh connection.
-  [MCP Client ID Metadata Documents](mcp-cimd.md) proposes CIMD support.
+  [MCP Client ID Metadata Documents](mcp-cimd.md) defines approved CIMD support;
+  implementation is next.
 - Refresh errors must be `invalid_grant`. Traffic comes from `160.79.104.0/21`.
 
 The [TypeScript SDK source][ts-auth] on `main` shows the request shapes. This
@@ -38,18 +39,7 @@ for the SDK and assumed for Claude until the proof in [Proofs](#proofs) runs:
 - Token requests, refresh included, add `resource` and, for a public client,
   `client_id`.
 
-## Gaps and proposed rules
-
-| Gap | Today                                            | Effect on Claude                |
-| --- | ------------------------------------------------ | ------------------------------- |
-| 1   | Metadata `resource` is `https://aboutme.vn`      | Not the URL entered; `/` added  |
-| 2   | Registration rejects any member outside four     | Registration fails              |
-| 3   | `native` registration rejects `localhost`        | Claude Code registration fails  |
-| 4   | Refresh accepts only `grant_type`, refresh token | Refresh fails; reconnect hourly |
-| 5   | Five registrations an hour per client address    | Shared egress exhausts it       |
-| 6   | Consent shows only the self-asserted client name | Impersonation is hard to spot   |
-| 7   | Grant limit shows the generic invalid message    | Reconnects hit a silent wall    |
-| 8   | Unknown client at the token endpoint returns 400 | Claude does not re-register     |
+## Compatibility rules
 
 ### 1. Resource identifier
 
@@ -115,8 +105,8 @@ registration with no grant after 24 hours. Token and tool limits do not change.
 
 CIMD would remove registration for clients that send a metadata document, but it
 needs a server-side fetch of client-supplied URLs with SSRF controls.
-[MCP Client ID Metadata Documents](mcp-cimd.md) holds that design, a proposal
-awaiting owner decisions.
+[MCP Client ID Metadata Documents](mcp-cimd.md) holds the approved design and
+approval record; implementation is next.
 
 ### 6. Where approval returns
 
@@ -126,11 +116,15 @@ redirect URI of the request:
 - `https` redirect: “Sau khi cho phép, bạn sẽ quay lại {host}.” / “After you
   approve, you return to {host}.”
 - Loopback redirect: “Sau khi cho phép, bạn quay lại một ứng dụng trên máy tính
-  này.” / “After you approve, you return to an app on this computer.”
+  này ({redirect_host}).” / “After you approve, you return to an app on this
+  computer ({redirect_host}).”
 
-The host is rendered as text. The [MCP authorization specification][mcp-auth]
-requires the redirect host on the consent screen. The consent API needs no
-change: the page already holds the validated `redirect_uri`.
+The host is rendered as text. Loopback omits the port and displays `localhost`,
+`127.0.0.1`, or `[::1]` from the validated redirect. The owner approved the
+loopback-hostname addition on 2026-10-14 for the CIMD release, including this
+shared DCR line. The [MCP authorization specification][mcp-auth] requires the
+redirect host on the consent screen. The consent API needs no change: the page
+already holds the validated `redirect_uri`.
 
 ### 7. Grant limit message
 
