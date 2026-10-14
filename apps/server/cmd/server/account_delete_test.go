@@ -326,7 +326,7 @@ func TestReportAccountDeleteUnknownOutcomeExits3WithoutEndLine(t *testing.T) {
 	args := accountDeleteArgs{confirm: true, slug: "valid-slug", userID: uuid.New()}
 	err := reportAccountDelete(&out, logger, args, accountapi.Account{}, fmt.Errorf("wrapped: %w", accountapi.ErrOutcomeUnknown))
 	assertExit(t, err, accountDeleteUnknownExitCode)
-	if want := "result unknown: run show valid-slug\n"; out.String() != want {
+	if want := "result unknown: run account-delete status " + args.userID.String() + " after proving the attempt stopped\n"; out.String() != want {
 		t.Fatalf("stdout = %q, want %q", out.String(), want)
 	}
 	if !strings.Contains(diag.String(), `"outcome":"unknown"`) {
@@ -365,4 +365,13 @@ func TestEvictDiscoveryOnDeleteDropsOnlyDiscoveryEntries(t *testing.T) {
 		t.Fatalf("forwarded %d changes, want 2", len(forwarded))
 	}
 	evictDiscoveryOnDelete(cache, nil)(realtime.Change{Deleted: true})
+}
+
+func TestAccountDeleteResultWriterFailureHasNoSuccessExit(t *testing.T) {
+	t.Parallel()
+	for _, code := range []int{0, accountDeleteNotFoundExitCode, accountDeleteMismatchExitCode} {
+		if err := accountDeleteResult(statusBrokenWriter{}, code, "fixed result"); err == nil || err.Error() != "account-delete result could not be written" {
+			t.Fatalf("write failure for exit %d = %v", code, err)
+		}
+	}
 }

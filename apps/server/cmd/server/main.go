@@ -74,10 +74,7 @@ func main() {
 	}
 }
 
-// dispatch routes the check-public-root, totp-key-reencrypt, and
-// account-delete one-shot commands to their entry points. It leaves every
-// other invocation, including the bare server, to runCommand
-// (privacy_command.go, privacy_jobs.go) unchanged.
+// dispatch handles operator commands before the default server and privacy jobs.
 func dispatch(args []string) error {
 	if len(args) > 0 && args[0] == checkPublicRootCommandName {
 		return runCheckPublicRoot(args[1:])
@@ -87,6 +84,9 @@ func dispatch(args []string) error {
 	}
 	if len(args) > 0 && args[0] == accountDeleteCommandName {
 		return runAccountDelete(args[1:])
+	}
+	if len(args) > 0 && args[0] == mediaDeletionStatusCommandName {
+		return runMediaDeletionStatus(args[1:])
 	}
 	return runCommand(args)
 }

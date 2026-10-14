@@ -227,6 +227,30 @@ Notes on rows whose reason is not obvious:
   unconditional read repairs it. The two-second write deadline fits inside the
   five-second revocation drain.
 
+## CIMD
+
+Approved limits for [Client ID Metadata Documents](mcp-cimd.md), awaiting
+implementation. The [fetch contract](mcp-cimd-fetch.md) owns admission, caching,
+and failure semantics.
+
+| Budget                               | Value                                                       |
+| ------------------------------------ | ----------------------------------------------------------- |
+| Client ID URL                        | 9 to 256 ASCII bytes                                        |
+| Fetched body                         | 5,120 bytes; read at most one extra byte to detect overflow |
+| Resolve and connect / complete fetch | 2 s / 5 s, body included                                    |
+| Concurrent fetches                   | 4 per process; no queue                                     |
+| Fetches per canonical client address | 30/hour; IPv6 keyed by `/64`                                |
+| Fetches per exact client ID URL      | 6/min                                                       |
+| Fetches across the process           | 600/hour                                                    |
+| Valid metadata cache lifetime        | Floor 5 min, ceiling 1 h                                    |
+| Valid metadata cache                 | At most 1,000 entries and 2 MiB accounted memory            |
+
+Cache memory includes retained strings, container capacity, entry overhead, and
+LRU bookkeeping. Evict least recently used entries until both bounds hold. The
+entry-count bound alone cannot guarantee the byte bound for maximum-size names
+and redirect lists. Rate-limiter key bounds and overflow remain the runtime
+bounds above; in-flight state contains only admitted fetches.
+
 ## Viewer analytics
 
 [Viewer analytics](viewer-analytics/README.md) adds these bounds.
