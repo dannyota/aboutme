@@ -50,11 +50,35 @@ mountpoint -q /srv/data || die "/srv/data is not a mountpoint; run host/data-vol
 # shellcheck source=crowdsec-offline.sh
 source "$bundle/host/crowdsec-offline.sh"
 
+# Serialize bundle replacement against every request entry and request unit.
+if [[ ! -e /srv/data/host-operations && ! -L /srv/data/host-operations ]]; then
+  install -d -o root -g root -m 0700 /srv/data/host-operations
+fi
+[[ -d /srv/data/host-operations && ! -L /srv/data/host-operations && $(stat -c '%u:%a' /srv/data/host-operations) == 0:700 ]] || die "unsafe operation state directory"
+[[ ! -L /srv/data/host-operations/.bundle.lock ]] || die "unsafe bundle lock"
+(umask 077; touch /srv/data/host-operations/.bundle.lock)
+[[ $(stat -c '%u:%a' /srv/data/host-operations/.bundle.lock) == 0:600 ]] || die "unsafe bundle lock"
+exec {operation_bundle_fd}>>/srv/data/host-operations/.bundle.lock
+flock -x -w 30 "$operation_bundle_fd" || die "an operation may run"
+[[ ! -e /srv/data/host-operations/key-change.json && ! -L /srv/data/host-operations/key-change.json ]] || die "key-change recovery must finish before installation"
+operation_units=$(systemctl list-units --all --no-legend 'aboutme-operation@*.service') || die "cannot inspect operation units"
+[[ ! $operation_units =~ (activating|active|deactivating) ]] || die "an operation unit may run"
+# Validate the saved protocol with the reviewed bundle before replacing files.
+# shellcheck source=operation-state.sh
+source "$bundle/host/operation-state.sh"
+for operation in /srv/data/host-operations/*; do
+  [[ -e $operation ]] || continue
+  [[ -d $operation && ! -L $operation && -f $operation/state.json && ! -L $operation/state.json ]] || die "malformed operation state"
+  operation_record=$(operation_state load "${operation##*/}") || die "malformed operation protocol"
+  jq -e '.closureQuiescent==true and .fenceHeld==false and (.action.writeOutcome!="unknown") and (.phase=="closed" or .phase=="planned" or .phase=="serving")' <<<"$operation_record" >/dev/null || die "an operation remains unresolved"
+done
+
 export DEBIAN_FRONTEND=noninteractive
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 timers=(
+  aboutme-operation-retention.timer
   aboutme-watch.timer
   aboutme-deployment-document.timer
   aboutme-crowdsec-retention.timer
@@ -303,6 +327,9 @@ copy_script "$bundle/host/crowdsec-retention.sh"
 copy_script "$bundle/host/crowdsec-retention-fail.sh"
 copy_script "$bundle/host/crowdsec-retention-lease-check.sh"
 copy_script "$bundle/host/crowdsec-window-check.sh"
+copy_script "$bundle/host/operation-run.sh"
+copy_script "$bundle/host/operation-state.sh"
+copy_script "$bundle/host/operation-account.sh"
 copy_script "$bundle/host/job-run.sh"
 copy_script "$bundle/host/deployment-document.sh"
 copy_script "$bundle/host/workload-lock.sh"

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -18,10 +20,14 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
+	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/realtime"
+	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -326,7 +332,7 @@ func TestReportAccountDeleteUnknownOutcomeExits3WithoutEndLine(t *testing.T) {
 	args := accountDeleteArgs{confirm: true, slug: "valid-slug", userID: uuid.New()}
 	err := reportAccountDelete(&out, logger, args, accountapi.Account{}, fmt.Errorf("wrapped: %w", accountapi.ErrOutcomeUnknown))
 	assertExit(t, err, accountDeleteUnknownExitCode)
-	if want := "result unknown: run show valid-slug\n"; out.String() != want {
+	if want := "result unknown: run account-delete status " + args.userID.String() + " after proving the attempt stopped\n"; out.String() != want {
 		t.Fatalf("stdout = %q, want %q", out.String(), want)
 	}
 	if !strings.Contains(diag.String(), `"outcome":"unknown"`) {
@@ -365,4 +371,93 @@ func TestEvictDiscoveryOnDeleteDropsOnlyDiscoveryEntries(t *testing.T) {
 		t.Fatalf("forwarded %d changes, want 2", len(forwarded))
 	}
 	evictDiscoveryOnDelete(cache, nil)(realtime.Change{Deleted: true})
+}
+
+func TestAccountDeleteResultWriterFailureHasNoSuccessExit(t *testing.T) {
+	t.Parallel()
+	for _, code := range []int{0, accountDeleteNotFoundExitCode, accountDeleteMismatchExitCode} {
+		if err := accountDeleteResult(statusBrokenWriter{}, code, "fixed result"); err == nil || err.Error() != "account-delete result could not be written" {
+			t.Fatalf("write failure for exit %d = %v", code, err)
+		}
+	}
+}
+
+// The known card version must pass before deletion and fail afterwards even
+// while the card collaborator still has its cached bytes.
+type deletionCards struct{}
+
+func (deletionCards) Version(publicresume.Snapshot) (string, error) {
+	return "0123456789abcdef", nil
+}
+
+func (deletionCards) Stored(context.Context, uuid.UUID) (previewcard.StoredCard, bool, error) {
+	return previewcard.StoredCard{Version: "0123456789abcdef", PNG: []byte("synthetic card")}, true, nil
+}
+
+func (deletionCards) Build(context.Context, publicresume.Snapshot, renderjob.Priority) ([]byte, error) {
+	return nil, errors.New("unexpected render")
+}
+
+func TestAccountDeletionRevokesKnownVersionedCard(t *testing.T) {
+	a := seedReportedAccount(t)
+	q := store.New(a.pool)
+	state, err := q.GetPublicState(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: state.DiscoveryGeneration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{
+		Store: q, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache, err := publiccache.New(8, time.Minute, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderOrigin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes, err := publicapi.NewService(publicapi.ServiceDependencies{
+		Reader: reader, DiscoveryStore: q, Coordinator: coordinator, Cache: cache,
+		Renderer: directrender.New(renderOrigin, http.DefaultClient), PublicOrigin: origin,
+		AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Cards: deletionCards{}, Clock: time.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(path string) int {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.RemoteAddr = "192.0.2.40:1234"
+		response := httptest.NewRecorder()
+		routes.ServeHTTP(response, request)
+		return response.Code
+	}
+	card := "/api/v1/public/resumes/" + a.slugs[0] + "/og/0123456789abcdef.png"
+	if code := read(card); code != http.StatusOK {
+		t.Fatalf("known card before deletion = %d", code)
+	}
+	if _, _, err := a.run(t, accountDeleteArgs{confirm: true, slug: a.slugs[0], userID: a.userID}); err != nil {
+		t.Fatal(err)
+	}
+	for _, slug := range a.slugs {
+		for _, path := range []string{
+			"/" + slug, "/" + slug + ".md", "/api/v1/public/resumes/" + slug,
+			"/api/v1/public/resumes/" + slug + "/photo", "/api/v1/public/resumes/" + slug + "/pdf",
+			"/api/v1/public/resumes/" + slug + "/og.png", "/api/v1/public/resumes/" + slug + "/og/0123456789abcdef.png",
+		} {
+			if code := read(path); code != http.StatusNotFound {
+				t.Errorf("deleted public route %s = %d", path, code)
+			}
+		}
+	}
 }
