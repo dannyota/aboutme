@@ -151,9 +151,9 @@ revoke.
   quoted the self-given name `Claude Code`, named the loopback return
   destination, and showed the loopback warning and two scopes. List and read
   worked. Logout and login showed consent again and kept one grant; Settings
-  showed `Claude Code (claude.ai)`. Refresh after one hour and revocation remain
-  unproven. These observations support only Claude Code's demonstrated behavior,
-  not a completed CIMD proof.
+  showed `Claude Code (claude.ai)`. Refresh after the one-hour expiry and
+  revocation from Settings passed the same day, completing the owner proof
+  recorded in AC-MCP-015. These observations cover Claude Code only.
 - **Hosted Claude** (web, desktop, and mobile) is not proven over a client ID
   URL. Its existing guide steps stay unchanged and make no CIMD claim.
 - **Visual Studio Code** [documents][vscode-mcp] remote HTTP servers, OAuth with
