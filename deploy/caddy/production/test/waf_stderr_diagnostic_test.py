@@ -15,28 +15,90 @@ CLEAN_LINES = (
     '{"duration":0.9411001,"elapsed":941100}',
     '{"ts":"2026-10-14T03:04:05.941100Z","duration":"941100ms"}',
     '2026-10-14T03:04:05.941100Z duration=0.9411001',
+    '{"ts":1791966300.949110,"duration":0.949110,"elapsed":949110}',
+    '2026-10-14T03:04:05.949110Z duration=949110ms',
     '{"msg":"941100","logger":"http941100","request_id":"941100"}',
+    '{"msg":"949110","request_id":"949110"}',
     '{"other_id":941100}',
-    '{"id":9411000}',
+    '{"other_rule_id":949110,"request_id":9411000}',
     '{"rule_id":941100.1}',
-    '{"id":"9411000"}',
-    '{"rule_id":"1941100"}',
-    'Coraza: Warning. [id "9411000"]',
+    '{"rule_id":"949110ms"}',
+    'rule_id=941100.1 chain_rule_id=949110ms other_rule_id=941100',
+    '{"client_ip_headers":["X-Forwarded-For"],"other_remote_ip":"benign"}',
+    '{"logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}',
+    'Coraza: engine initialized',
+    json.dumps({"msg": '{"ts":1791966300.949110,"duration":"941100ms"}'}),
 )
 LEAK_LINES = (
-    ("rule-id-text", 'Coraza: Warning. [id "941100"]'),
-    ("rule-id-text", r'Coraza: Warning. [id \"941100\"]'),
-    ("rule-id-text", json.dumps({"msg": 'Coraza: Warning. [id "941100"]'})),
-    ("rule-id-field", '{"rule_id":941100}'),
-    ("rule-id-field", '{"id":"941100"}'),
-    ("rule-id-field", '{"id":941100}'),
-    ("rule-id-field", '{"rule_id":"941100"}'),
-    ("rule-id-field", '{"rule_id" : 941100 , "msg":"waf_rule_match"}'),
-    ("rule-id-field", '{"rules":[{"id":"941100"}]}'),
-    ("rule-id-field", json.dumps({"msg": '{"rule_id":941100}'})),
-    ("rule-id-field", json.dumps({"msg": '{"id":"941100"}'})),
-    ("client-ip-key", '{"client_ip":"203.0.113.8"}'),
-    ("client-ip-key", 'Coraza diagnostic mentions "client_ip"'),
+    (("rule-id-text", "rule-match-marker"),
+     'Coraza: Warning. [id "941100"]', "coraza-rule-match"),
+    (("rule-id-text", "rule-match-marker"),
+     r'Coraza: Warning. [id \"949110\"]', "coraza-rule-match"),
+    (("rule-id-text", "rule-match-marker"),
+     'Coraza: Warning. [id "9411000"]', "coraza-rule-match"),
+    (("rule-id-text", "rule-match-marker", "client-address-text"),
+     json.dumps({"logger": "http.handlers.waf",
+                 "msg": '[client "203.0.113.8"] Coraza: Warning. [id "949110"]'}),
+     "coraza-rule-match"),
+    (("rule-id-field", "rule-match-marker"),
+     '{"logger":"http.handlers.waf","msg":"waf_rule_match","rule_id":949110}',
+     "waf-rule-match"),
+    (("rule-id-field",), '{"rule_id" : 941100 , "msg":"benign"}', "other"),
+    (("rule-id-field",), '{"rules":[{"id":"949110"}]}', "other"),
+    (("rule-id-field",),
+     '{"messages":[{"data":{"id":930130,"line":941100}}]}', "other"),
+    (("client-ip-key",), 'Coraza diagnostic mentions "client_ip"', "other"),
+    (("client-address-text",), '[client "203.0.113.8"]', "other"),
+    (("client-address-text",), r'[client \"2001:db8::8\"]', "other"),
+    (("client-address-text",), json.dumps({"msg": '[client ""]'}), "other"),
+    (("rule-match-marker",), 'Coraza: Warning.', "coraza-rule-match"),
+    (("rule-match-marker",), 'Coraza: Access allowed (phase 1).', "coraza-rule-match"),
+    (("rule-match-marker",), 'Coraza: Access denied (phase 2).', "coraza-rule-match"),
+    (("rule-match-marker",), 'Coraza: Access dropped (phase 2).', "coraza-rule-match"),
+    (("rule-match-marker",), 'Coraza: Access redirected (phase 3).', "coraza-rule-match"),
+    (("rule-match-marker",), 'Coraza: Custom disruptive action triggered (phase 4).',
+     "coraza-rule-match"),
+    (("rule-match-marker",), '{"msg":"Rule matched"}', "coraza-rule-match"),
+    (("rule-match-marker",), '{"msg":"waf_rule_match"}', "waf-rule-match"),
+    (("rule-match-marker",), '{"msg":"waf_rule_match_unparsed"}',
+     "waf-rule-match-unparsed"),
+    (("rule-id-text",), '[id "1001"]', "other"),
+    (("rule-id-text",), '[id "949110"]', "other"),
+    (("rule-id-text",), r'[id \"942100\"]', "other"),
+    (("rule-id-text",), json.dumps({"msg": '[id "1941100"]'}), "other"),
+    (("rule-id-text",),
+     json.dumps({"msg": json.dumps({"msg": '[id "949110"]'})}), "other"),
+)
+LEAK_LINES += tuple(
+    (("rule-id-field",), line, "other")
+    for key in ("rule_id", "chain_rule_id", "id")
+    for rule_id in (941100, 949110, 942100, 9411000, 1941100, 1001, 0)
+    for line in (
+        json.dumps({key: rule_id}),
+        json.dumps({key: str(rule_id)}),
+        json.dumps({"context": [{"rules": [{key: rule_id}]}]}),
+        json.dumps({"msg": json.dumps({key: rule_id})}),
+        json.dumps({"msg": json.dumps({"msg": json.dumps({key: str(rule_id)})})}),
+        f'{key}={rule_id}',
+        f'{key}="{rule_id}"',
+        json.dumps({"msg": f'{key}={rule_id}'}),
+    )
+)
+LEAK_LINES += tuple(
+    ((pattern,), line, "other")
+    for key, pattern in (("client_ip", "client-ip-key"),
+                         ("remote_ip", "remote-ip-key"),
+                         ("remote_addr", "remote-addr-key"),
+                         ("source_ip", "source-ip-key"))
+    for address in (("203.0.113.8:49152", "[2001:db8::8]:49152")
+                    if key == "remote_addr" else ("203.0.113.8", "2001:db8::8"))
+    for line in (
+        json.dumps({key: address}),
+        json.dumps({"request": {"context": [{key: address}]}}),
+        json.dumps({"msg": json.dumps({key: address})}),
+        json.dumps({"msg": json.dumps({"msg": json.dumps({key: address})})}),
+        f'{key}="{address}"',
+    )
 )
 
 
@@ -50,10 +112,21 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
                 self.assertEqual(self.records(line), [])
 
     def test_each_leaked_form_has_a_fixed_pattern_name(self):
-        for pattern, line in LEAK_LINES:
+        for patterns, line, _ in LEAK_LINES:
             with self.subTest(line=line):
                 self.assertEqual([record["pattern"] for record in self.records(line)],
-                                 [pattern])
+                                 list(patterns))
+
+    def test_encoded_markers_and_addresses_remain_detectable(self):
+        for patterns, line, _ in LEAK_LINES:
+            for _ in range(3):
+                line = json.dumps({"msg": line})
+                with self.subTest(line=line):
+                    records = self.records(line)
+                    self.assertEqual([record["pattern"] for record in records],
+                                     list(patterns))
+                    self.assertNotIn("203.0.113.8", json.dumps(records))
+                    self.assertNotIn("2001:db8", json.dumps(records))
 
     def test_rule_message_and_address_are_redacted(self):
         records = self.records(json.dumps({
@@ -63,7 +136,8 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
             "client_ip": "203.0.113.8",
         }))
         self.assertEqual({record["pattern"] for record in records},
-                         {"rule-id-text", "client-ip-key"})
+                         {"rule-id-text", "rule-match-marker", "client-ip-key",
+                          "client-address-text"})
         for record in records:
             self.assertEqual(record["logger"], "http.handlers.waf")
             self.assertEqual(record["message_kind"], "coraza-rule-match")
@@ -104,12 +178,12 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
     def test_only_matching_line_numbers_and_stream_reach_output(self):
         records = list(diagnostic.diagnose([
             '{"duration":0.9411001}\n',
-            '{"rule_id":941100,"msg":"waf_rule_match"}\n',
+            '{"rule_id":949110,"msg":"benign"}\n',
             '{"msg":"benign"}\n',
         ], "serving", "stdout"))
         self.assertEqual(records, [{
             "stream": "stdout", "line": 2, "pattern": "rule-id-field",
-            "logger": "other", "message_kind": "waf-rule-match",
+            "logger": "other", "message_kind": "other",
         }])
 
     def test_shell_gate_accepts_numeric_collisions_in_both_modes(self):
@@ -124,20 +198,21 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
     def test_shell_gate_rejects_each_leak_in_both_modes_and_streams(self):
         for mode in ("serving", "maintenance"):
             for stream in ("stdout", "stderr"):
-                for pattern, line in LEAK_LINES:
-                    with self.subTest(mode=mode, stream=stream, pattern=pattern):
+                for patterns, line, kind in LEAK_LINES:
+                    with self.subTest(mode=mode, stream=stream, line=line):
                         stdout = line if stream == "stdout" else ""
                         stderr = line if stream == "stderr" else ""
                         result = self.run_gate(mode, stdout, stderr)
                         self.assertEqual(result.returncode, 1)
                         self.assertEqual(result.stdout, "")
-                        self.assertEqual(json.loads(result.stderr), {
+                        records = [json.loads(record) for record in result.stderr.splitlines()]
+                        logger = "http.handlers.waf" if '"logger"' in line else "other"
+                        self.assertEqual(records, [{
                             "stream": stream, "line": 1, "pattern": pattern,
-                            "logger": "other", "message_kind": (
-                                "coraza-rule-match" if pattern == "rule-id-text"
-                                else "waf-rule-match" if "waf_rule_match" in line
-                                else "other"),
-                        })
+                            "logger": logger, "message_kind": kind,
+                        } for pattern in patterns])
+                        self.assertNotIn("203.0.113.8", result.stderr)
+                        self.assertNotIn("2001:db8", result.stderr)
 
     def test_shell_gate_preserves_maintenance_marker_detection(self):
         line = '{"msg":"maintmarker6e4d"}'

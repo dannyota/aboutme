@@ -18,19 +18,43 @@ LOGGERS = frozenset({
 MESSAGE_KINDS = {
     "waf_rule_match": "waf-rule-match",
     "waf_rule_match_unparsed": "waf-rule-match-unparsed",
+    "Rule matched": "coraza-rule-match",
     "waf_engine_diagnostic": "waf-engine-diagnostic",
     "WAF rule violation detected": "coraza-interruption",
     "serving initial configuration": "startup",
     "using config from file": "startup",
     "adapted config to JSON": "startup",
 }
-RULE_TEXT = re.compile(r'\[id[ \t]+(?:"941100"|\\"941100\\")\]')
+RULE_TEXT = re.compile(r'\[id[ \t]+(?P<quote>\\*")[0-9]+(?P=quote)\]')
 RULE_FIELD = re.compile(
-    r'(?P<key_quote>\\?")(?:rule_id|id)(?P=key_quote)[ \t]*:[ \t]*'
-    r'(?:(?P<value_quote>\\?")941100(?P=value_quote)|941100)'
+    r'(?<!\\)(?P<key_quote>\\*")(?:rule_id|chain_rule_id|id)(?P=key_quote)[ \t]*:[ \t]*'
+    r'(?:(?P<value_quote>\\*")[0-9]+(?P=value_quote)|[0-9]+)'
     r'(?=[ \t]*(?:[,}\]]|$))'
 )
-RULE_MESSAGE = re.compile(r'Coraza:.*\[id[ \t]+(?:"[0-9]+"|\\"[0-9]+\\")\]')
+RULE_LOG_FIELD = re.compile(
+    r'(?<![A-Za-z0-9_])(?:rule_id|chain_rule_id|id)[ \t]*=[ \t]*'
+    r'(?:(?P<quote>\\*")[0-9]+(?P=quote)|[0-9]+)'
+    r'(?=[ \t,}\]]|\\*"|$)'
+)
+CORAZA_MATCH = re.compile(
+    r'Coraza: (?:Warning\.|Access (?:allowed|denied|dropped|redirected) '
+    r'\(phase [0-9]+\)\.|Custom disruptive action triggered \(phase [0-9]+\)\.)'
+)
+RULE_MATCH_MARKER = re.compile(
+    r'(?<![A-Za-z0-9_])(?:waf_rule_match(?:_unparsed)?|Rule matched)(?![A-Za-z0-9_])'
+)
+ADDRESS_FIELDS = tuple(
+    (pattern, re.compile(
+        rf'(?<!\\)(?P<quote>\\*"){key}(?P=quote)|'
+        rf'(?<![A-Za-z0-9_]){key}[ \t]*='
+    ))
+    for key, pattern in (("client_ip", "client-ip-key"),
+                         ("remote_ip", "remote-ip-key"),
+                         ("remote_addr", "remote-addr-key"),
+                         ("source_ip", "source-ip-key"))
+)
+CLIENT_TEXT = re.compile(r'\[client[ \t]+\\*"')
+RULE_MESSAGE = re.compile(r'Coraza:.*\[id[ \t]+(?P<quote>\\*")[0-9]+(?P=quote)\]')
 
 
 def single_field(value, key):
@@ -41,7 +65,7 @@ def single_field(value, key):
 
 
 def message_kind(message):
-    if RULE_MESSAGE.search(message):
+    if RULE_MESSAGE.search(message) or CORAZA_MATCH.search(message):
         return "coraza-rule-match"
     return MESSAGE_KINDS.get(message, "other")
 
@@ -51,10 +75,15 @@ def diagnose(lines, mode, stream):
         patterns = []
         if RULE_TEXT.search(line):
             patterns.append("rule-id-text")
-        if RULE_FIELD.search(line):
+        if RULE_FIELD.search(line) or RULE_LOG_FIELD.search(line):
             patterns.append("rule-id-field")
-        if '"client_ip"' in line:
-            patterns.append("client-ip-key")
+        if CORAZA_MATCH.search(line) or RULE_MATCH_MARKER.search(line):
+            patterns.append("rule-match-marker")
+        for pattern, field in ADDRESS_FIELDS:
+            if field.search(line):
+                patterns.append(pattern)
+        if CLIENT_TEXT.search(line):
+            patterns.append("client-address-text")
         if mode == "maintenance" and "maintmarker6e4d" in line:
             patterns.append("probe-marker")
         if not patterns:
