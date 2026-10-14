@@ -134,7 +134,10 @@ func New(config Config) (*Renderer, error) {
 }
 
 // Ready caches a successful probe and rechecks failures after a cooldown.
-func (r *Renderer) Ready() error {
+func (r *Renderer) Ready() (resultErr error) {
+	started := time.Now()
+	DebugRenderDiagnostic("readiness-entry", nil, 0, 0)
+	defer func() { DebugRenderDiagnostic("readiness-exit", resultErr, 0, time.Since(started)) }()
 	if r == nil || r.hooks == nil {
 		return ErrUnavailable
 	}
@@ -180,7 +183,10 @@ func (r *Renderer) Ready() error {
 }
 
 // Render performs one controlled navigation and returns only validated bytes.
-func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) ([]byte, error) {
+func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) (output []byte, resultErr error) {
+	started := time.Now()
+	DebugRenderDiagnostic("renderer-entry", nil, 0, 0)
+	defer func() { DebugRenderDiagnostic("renderer-exit", resultErr, 0, time.Since(started)) }()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -193,8 +199,10 @@ func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) 
 		return nil, ErrRenderFailed
 	}
 	gate := r.browserGate()
+	DebugRenderDiagnostic("permit-wait", nil, 0, 0)
 	select {
 	case gate <- struct{}{}:
+		DebugRenderDiagnostic("permit-acquired", nil, 0, time.Since(started))
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/pdfname"
+	"github.com/dannyota/aboutme/apps/server/internal/printrender"
 	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
@@ -72,6 +73,7 @@ func (s *Service) wrapPDFAdmission(next http.Handler) http.Handler {
 }
 
 func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request) {
+	printrender.DebugRenderDiagnostic("owner-entry", nil, 0, 0)
 	w.Header().Set("Cache-Control", api.CacheControlNoStore)
 	if err := validateOwnerPDFRequest(r); err != nil {
 		writeResumeError(w, mapMutationError(err))
@@ -89,6 +91,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 	}
 	reader, ok := s.resumes.(ownerResumeReader)
 	if !ok || s.printQueue == nil {
+		printrender.DebugRenderDiagnostic("owner-dependencies", printrender.ErrUnavailable, 503, 0)
 		writeResumeError(w, ownerPDFUnavailableError())
 		return
 	}
@@ -101,6 +104,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 		Prepare: func(ctx context.Context) (renderjob.Snapshot, error) {
 			row, err := reader.Get(ctx, userID, resumeID)
 			if err != nil {
+				printrender.DebugRenderDiagnostic("owner-read", err, 0, 0)
 				if errors.Is(err, resume.ErrNotFound) {
 					preparation.Store(uint32(ownerPDFPreparationNotFound))
 				} else {
@@ -110,16 +114,19 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 			}
 			photo, contentType, err := s.readOwnerPDFPhoto(ctx, row)
 			if err != nil {
+				printrender.DebugRenderDiagnostic("owner-photo", err, 0, 0)
 				preparation.Store(uint32(ownerPDFPreparationUnavailable))
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
 			}
 			envelope, err := printsnapshot.FromOwner(row, photo, contentType)
 			if err != nil {
+				printrender.DebugRenderDiagnostic("owner-snapshot", err, 0, 0)
 				preparation.Store(uint32(ownerPDFPreparationUnavailable))
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
 			}
 			payload, err := printsnapshot.Marshal(envelope)
 			if err != nil {
+				printrender.DebugRenderDiagnostic("owner-marshal", err, 0, 0)
 				preparation.Store(uint32(ownerPDFPreparationUnavailable))
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
 			}
@@ -132,17 +139,20 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 			}, nil
 		},
 	})
+	printrender.DebugRenderDiagnostic("owner-queue", renderErr, 0, 0)
 	if renderErr != nil {
 		if ownerPDFPreparationFailure(preparation.Load()) == ownerPDFPreparationNotFound {
 			writeResumeError(w, mapMutationError(resume.ErrNotFound))
 			return
 		}
+		printrender.DebugRenderDiagnostic("owner-response", renderErr, 503, 0)
 		writeResumeError(w, ownerPDFUnavailableError())
 		return
 	}
 	fullName := preparedName.Load()
 	if len(result.Bytes) == 0 || len(result.Bytes) > maxOwnerPDFBytes || result.Revision <= 0 ||
 		result.Revision != preparedRevision.Load() || fullName == nil {
+		printrender.DebugRenderDiagnostic("owner-result", printrender.ErrRenderFailed, 503, 0)
 		writeResumeError(w, ownerPDFUnavailableError())
 		return
 	}
@@ -151,6 +161,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Disposition", pdfname.Disposition(*fullName))
 	w.Header().Set("Content-Length", strconv.Itoa(len(result.Bytes)))
 	w.Header().Set("Content-Type", "application/pdf")
+	printrender.DebugRenderDiagnostic("owner-response", nil, 200, 0)
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
 		return

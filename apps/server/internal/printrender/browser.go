@@ -252,6 +252,8 @@ func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 
 func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, diagnose bool, run func(context.Context) error) (resultErr error) {
 	started := time.Now()
+	DebugRenderDiagnostic("browser-entry", nil, 0, 0)
+	defer func() { DebugRenderDiagnostic("browser-exit", resultErr, 0, time.Since(started)) }()
 	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
 	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL, configure)...)
 	browserCtx, browserCancel := chromedp.NewContext(allocatorCtx)
@@ -282,10 +284,12 @@ func (r *Renderer) renderAttempt(parent context.Context, navigation renderjob.Na
 		capability: navigation.Capability, jobID: navigation.JobID.String(),
 	})
 	if err != nil {
+		DebugRenderDiagnostic("proxy-start", err, 0, 0)
 		return nil, ErrRenderFailed
 	}
 	defer func() {
 		if closeErr := proxy.close(); resultErr == nil && closeErr != nil {
+			DebugRenderDiagnostic("proxy-close", closeErr, 0, 0)
 			output, resultErr = nil, ErrRenderFailed
 		}
 	}()
@@ -342,7 +346,10 @@ func (f *attemptFailure) output() []byte {
 	return f.bytes
 }
 
-func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *joinGroup, failure *attemptFailure, initialURL string, navigation renderjob.Navigation) error {
+func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *joinGroup, failure *attemptFailure, initialURL string, navigation renderjob.Navigation) (resultErr error) {
+	stage := "launch"
+	started := time.Now()
+	defer func() { DebugRenderDiagnostic(stage, resultErr, 0, time.Since(started)) }()
 	if err := chromedp.Run(ctx); err != nil {
 		return err
 	}
@@ -366,16 +373,19 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 				status: value.Response.Status, headers: value.Response.Headers, mimeType: value.Response.MimeType,
 				charset: value.Response.Charset, serviceWorker: value.Response.FromServiceWorker,
 			})) {
+				DebugRenderDiagnostic("response-policy", ErrRenderFailed, 0, 0)
 				failure.fail()
 				cancel()
 			}
 		case *network.EventLoadingFinished:
 			if policy.tracks(value.RequestID) && !policy.finishResponse(value.RequestID) {
+				DebugRenderDiagnostic("loading-finished", ErrRenderFailed, 0, 0)
 				failure.fail()
 				cancel()
 			}
 		case *network.EventLoadingFailed:
 			if policy.failResponse(value.RequestID) {
+				DebugRenderDiagnostic("loading-failed", ErrRenderFailed, 0, 0)
 				failure.fail()
 				cancel()
 			}
@@ -385,17 +395,20 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 		switch value := event.(type) {
 		case *target.EventAttachedToTarget:
 			if unexpectedTarget(value.TargetInfo, mainTarget) {
+				DebugRenderDiagnostic("target-attached", ErrRenderFailed, 0, 0)
 				failure.fail()
 				cancel()
 			}
 		case *target.EventTargetCreated:
 			if unexpectedTarget(value.TargetInfo, mainTarget) {
+				DebugRenderDiagnostic("target-created", ErrRenderFailed, 0, 0)
 				failure.fail()
 				cancel()
 			}
 		}
 	})
 
+	stage = "network-setup"
 	if runErr := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(actionCtx context.Context) error {
 			browserCtx := cdp.WithExecutor(actionCtx, chromedp.FromContext(actionCtx).Browser)
@@ -409,25 +422,33 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 	if configureErr := configureCaptureEnvironment(targetCtx, navigation.Format); configureErr != nil {
 		return configureErr
 	}
+	stage = "navigation"
 	response, err := chromedp.RunResponse(targetCtx, chromedp.Navigate(initialURL))
 	if err != nil {
 		return err
 	}
+	if response != nil {
+		DebugRenderDiagnostic("document-status", nil, int(response.Status), 0)
+	}
+	stage = "document-validation"
 	if response == nil || validatePrintResponse(response.Status, response.FromServiceWorker, response.Headers) != nil {
 		return ErrRenderFailed
 	}
 	if configureErr := configureCaptureEnvironment(targetCtx, navigation.Format); configureErr != nil {
 		return configureErr
 	}
+	stage = "page-readiness"
 	if readinessErr := awaitPageReadiness(targetCtx); readinessErr != nil {
 		return readinessErr
 	}
 	if failure.failed() {
 		return ErrRenderFailed
 	}
+	stage = "assets-complete"
 	if !policy.assetsComplete() {
 		return ErrRenderFailed
 	}
+	stage = "capture"
 	var output []byte
 	switch navigation.Format {
 	case renderjob.PDF:
@@ -446,6 +467,7 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 	if failure.failed() {
 		return ErrRenderFailed
 	}
+	stage = "capture-complete"
 	failure.setOutput(output)
 	return nil
 }
@@ -497,6 +519,7 @@ func handlePausedRequest(ctx context.Context, cancel context.CancelFunc, failure
 		headers: event.Request.Headers, redirected: event.RedirectedRequestID != "",
 	})
 	if !decision.allow {
+		DebugRenderDiagnostic("request-policy", ErrRenderFailed, 0, 0)
 		failure.fail()
 		//nolint:errcheck // Denial already fails and cancels the whole render attempt.
 		fetch.FailRequest(event.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
@@ -504,6 +527,7 @@ func handlePausedRequest(ctx context.Context, cancel context.CancelFunc, failure
 		return
 	}
 	if err := fetch.ContinueRequest(event.RequestID).WithHeaders(decision.headers).Do(ctx); err != nil {
+		DebugRenderDiagnostic("request-continue", err, 0, 0)
 		failure.fail()
 		cancel()
 	}
@@ -547,13 +571,16 @@ func capturePDF(ctx context.Context, revisionTime time.Time) ([]byte, error) {
 		WithTransferMode(page.PrintToPDFTransferModeReturnAsStream).
 		Do(ctx)
 	if err != nil || len(data) != 0 || handle == "" {
+		DebugRenderDiagnostic("pdf-print", err, 0, 0)
 		return nil, ErrRenderFailed
 	}
 	output, err := readPDFStream(ctx, &cdpPDFStream{handle: handle}, pdfMaxBytes)
 	if err != nil {
+		DebugRenderDiagnostic("pdf-stream", err, 0, 0)
 		return nil, err
 	}
 	if err := setPDFMetadataDates(output, revisionTime); err != nil {
+		DebugRenderDiagnostic("pdf-metadata", err, 0, 0)
 		return nil, ErrRenderFailed
 	}
 	return output, nil
