@@ -101,7 +101,11 @@ case $command in
     case ${SSH_LOSS:-none} in
       before) exit 255 ;;
       after) touch "$CLIENT_FIXTURE/dispatched"; exit 255 ;;
-      *) cat "$CLIENT_FIXTURE/reply" ;;
+      *)
+        cat "$CLIENT_FIXTURE/reply"
+        [[ ! -f $CLIENT_FIXTURE/host-error ]] || cat "$CLIENT_FIXTURE/host-error" >&2
+        exit "${HOST_RC:-0}"
+        ;;
     esac
     ;;
   *) exit 1 ;;
@@ -137,6 +141,61 @@ for loss in before after; do
   else [[ -e $work/dispatched ]] || fail 'post-dispatch fixture failed'; fi
 done
 echo 'host operation eligibility, hash and SSH-loss cases passed'
+
+# Remote command failures keep their closed diagnostic. SSH errors alone use
+# transport_failed; malformed remote errors never expose raw diagnostics.
+: >"$work/reply"
+for verb in status resume verify abort apply; do
+  args=("$verb" "$valid_id")
+  [[ $verb != apply ]] || args+=(--confirm "delete-account:$valid_id:$valid_uuid:valid-slug")
+  printf 'not_found\n' >"$work/host-error"
+  rc=0
+  HOST_RC=1 bash "$wrapper" "${args[@]}" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output ]] || fail "unknown $verb exit or stdout"
+  cmp -s "$work/host-error" "$work/error" || fail "unknown $verb diagnostic"
+done
+for code in refused protocol_failed; do
+  printf '%s\n' "$code" >"$work/host-error"
+  rc=0
+  HOST_RC=1 bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output ]] || fail 'host failure exit or stdout'
+  cmp -s "$work/host-error" "$work/error" || fail 'host failure became transport failure'
+done
+for host_rc in 2 4 255 3; do
+  case $host_rc in
+    2) expected=invalid_request; expected_rc=2 ;;
+    4) expected=not_found; expected_rc=4 ;;
+    255) expected=transport_failed; expected_rc=1 ;;
+    *) expected=protocol_failed; expected_rc=1 ;;
+  esac
+  rc=0
+  HOST_RC=$host_rc bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == "$expected_rc" && ! -s $work/output && $(<"$work/error") == "$expected" ]] || fail "remote exit mapping: $host_rc"
+done
+for malformed in empty unknown multiline oversized no-newline nul stdout; do
+  : >"$work/reply"
+  case $malformed in
+    empty) : >"$work/host-error" ;;
+    unknown) printf 'raw fixture diagnostic\n' >"$work/host-error" ;;
+    multiline) printf 'not_found\nraw fixture diagnostic\n' >"$work/host-error" ;;
+    oversized) printf '%040d\n' 0 >"$work/host-error" ;;
+    no-newline) printf refused >"$work/host-error" ;;
+    nul) printf 'refused\0\n' >"$work/host-error" ;;
+    stdout) printf 'not_found\n' >"$work/host-error"; printf '{}\n' >"$work/reply" ;;
+  esac
+  rc=0
+  HOST_RC=1 bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == protocol_failed ]] || fail "malformed failure accepted: $malformed"
+done
+rm "$work/host-error"
+jq -cn --arg id "$valid_id" --arg user "$valid_uuid" --slurpfile release "$work/release" '
+  {schemaVersion:1,requestId:$id,kind:"account-delete",phase:"planned",outcome:"pending",release:$release[0],
+   expiresAt:"2099-01-01T00:00:00Z",confirmation:("delete-account:"+$id+":"+$user+":valid-slug"),
+   action:{userId:$user,reportedSlug:"valid-slug",shownSlugs:["valid-slug"],returnedSlugs:null,
+     writeOutcome:"not_started",publicVerification:"pending",physicalCleanup:"pending"},challenge:null,recoveryCopy:null}' >"$work/reply"
+bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail 'known status reply refused'
+[[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/reply")" ]] || fail 'known status reply changed'
+echo 'host operation remote errors and known status passed'
 
 # Exercise the installer's unit inventory guard without touching host paths.
 install_guard=$(sed -n '/^operation_units=/,/^# Validate the saved protocol/p' "$here/host/install.sh" | sed '$d')
