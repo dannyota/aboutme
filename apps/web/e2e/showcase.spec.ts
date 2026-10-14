@@ -610,6 +610,22 @@ test('closes the filter sheet with its own close button', async ({ page }) => {
   await expect(filtersButton(page)).toBeFocused();
 });
 
+test('overlay dismissal keeps filters and returns trigger focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await serve(page, () => ({ body: listing([item(1)]) }));
+  await open(page, '/showcase?role=backend');
+  await filtersButton(page).click();
+  await expect(sheet(page)).toBeVisible();
+  await page.locator('[data-slot="sheet-overlay"]').click({
+    position: { x: 1, y: 1 },
+  });
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/showcase\?role=backend$/u);
+  await expect(filtersButton(page)).toBeFocused();
+});
+
 test('names the sheet and its fields in Vietnamese', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await serve(page, () => ({ body: listing([item(1), item(2)]) }));

@@ -86,6 +86,7 @@ export default defineConfig({
     : [
         'normal-csp.spec.ts',
         'gallery.spec.ts',
+        'gallery-baselines.spec.ts',
         'chrome.spec.ts',
         'verify.spec.ts',
         'showcase.spec.ts',

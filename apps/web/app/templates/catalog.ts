@@ -524,3 +524,17 @@ export function withRole(
   }
   return next;
 }
+
+/** Normalized Library targets preserve unrelated query keys. */
+export function withGalleryFilters(
+  query: LocationQuery,
+  role: GalleryRole | undefined,
+  filter: GalleryFilter | undefined,
+): LocationQuery {
+  const next = { ...query };
+  delete next.role;
+  delete next.filter;
+  if (role !== undefined) next.role = role;
+  if (filter !== undefined) next.filter = filter;
+  return next;
+}

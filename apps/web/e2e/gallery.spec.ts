@@ -10,8 +10,8 @@ import {
 } from './support';
 
 // The template gallery and template pages in the production build: no
-// horizontal page scroll at phone or desktop width, the filter row scrolls on
-// phones, a filter narrows the grid, the template page tabs switch views, and
+// horizontal page scroll, wrapping desktop rows and a phone filter sheet,
+// intersecting filters, native Style links, template page tabs, and
 // an unknown template is a 404 (DESIGN.md, template gallery).
 
 // Templates with a sample show its stored page image; the rest render live.
@@ -20,79 +20,128 @@ const SAMPLE_TEMPLATES = new Set(SAMPLES.map(({ templateId }) => templateId));
 for (const width of [390, 1440]) {
   test(`gallery at ${width} px fits the viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.context().addCookies([{
-      name: 'aboutme-locale',
-      value: 'vi',
-      url: 'http://127.0.0.1:20092',
-    }]);
+    await page.context().addCookies([
+      {
+        name: 'aboutme-locale',
+        value: 'vi',
+        url: 'http://127.0.0.1:20092',
+      },
+    ]);
     const response = await page.goto('/templates');
     expect(response?.status()).toBe(200);
     await expect(page.locator('[data-template]')).toHaveCount(20);
-    const overflow = await page.evaluate(() =>
-      document.documentElement.scrollWidth
-      - document.documentElement.clientWidth);
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+    );
     expect(overflow).toBe(0);
-    const filters = page.locator('[data-testid="template-gallery"] nav');
-    const scrolls = await filters.evaluate((element) =>
-      element.scrollWidth > element.clientWidth);
-    expect(scrolls).toBe(width === 390);
-
-    await page.goto('/templates?filter=ats');
+    const trigger = page.locator('[data-action="gallery-filters-open"]');
+    if (width === 390) {
+      await expect(trigger).toBeVisible();
+      await expect(page.getByTestId('gallery-roles')).toBeHidden();
+      await trigger.click();
+    } else {
+      await expect(trigger).toBeHidden();
+    }
+    const fields
+      = width === 390
+        ? page.getByTestId('gallery-filter-sheet')
+        : page.locator('.gallery-desktop');
+    await expect(fields.getByTestId('gallery-styles')).toBeVisible();
+    expect(
+      await fields
+        .getByTestId('gallery-styles')
+        .evaluate((node) => node.scrollWidth > node.clientWidth),
+    ).toBe(false);
+    const ats = fields.locator('[data-filter="ats"]');
+    await expect(ats).toHaveAttribute('href', '/templates?filter=ats');
+    await ats.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/filter=ats$/u);
+    await expect(ats).toHaveAttribute('aria-current', 'page');
+    await expect(ats).toBeFocused();
+    if (width === 390) {
+      await expect(fields).toBeVisible();
+      await expect(fields.getByTestId('gallery-sheet-status')).toHaveText(
+        '7 mẫu',
+      );
+      await fields.locator('[data-action="gallery-filters-apply"]').click();
+      await expect(trigger).toBeFocused();
+    }
     await expect(page.locator('[data-template]:visible')).toHaveCount(7);
-    await expect(page.locator('[data-filter="ats"]'))
-      .toHaveAttribute('aria-current', 'page');
   });
 
-  test(`gallery at ${width} px filters by role`, async ({ page }) => {
+  test(`gallery at ${width} px filters by role and style`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.context().addCookies([{
-      name: 'aboutme-locale',
-      value: 'vi',
-      url: 'http://127.0.0.1:20092',
-    }]);
-
-    const response = await page.goto('/templates?role=backend');
-    expect(response?.status()).toBe(200);
-    await expect(page.locator('[data-template]:visible')).toHaveCount(1);
-    await expect(page.locator('[data-template]:visible'))
-      .toHaveAttribute('data-template', 'one-page-tight');
-    await expect(page.locator('[data-template]')).toHaveCount(20);
-    await expect(page.locator('[data-role="backend"]'))
-      .toHaveAttribute('aria-pressed', 'true');
-
-    const overflow = await page.evaluate(() =>
-      document.documentElement.scrollWidth
-      - document.documentElement.clientWidth);
-    expect(overflow).toBe(0);
-
-    if (width === 390) {
-      // The group itself is as wide as its chips; its parent scrolls.
-      const roles = page.locator('[data-testid="gallery-roles"]');
-      const scrolls = await roles.evaluate((element) => {
-        const row = element.parentElement!;
-        return row.scrollWidth > row.clientWidth;
-      });
-      expect(scrolls).toBe(true);
-    }
-
-    await page.getByRole('button', { name: 'Frontend' }).click();
-    await expect(page).toHaveURL(/\?role=frontend$/);
-    await expect(page.locator('[data-template]:visible'))
-      .toHaveAttribute('data-template', 'engineer-compact');
-
-    const frontendChip = page.getByRole('button', { name: 'Frontend' });
-    await frontendChip.focus();
+    await page.context().addCookies([
+      {
+        name: 'aboutme-locale',
+        value: 'en',
+        url: 'http://127.0.0.1:20092',
+      },
+    ]);
+    await page.goto('/templates?role=backend');
+    const trigger = page.locator('[data-action="gallery-filters-open"]');
+    if (width === 390) await trigger.click();
+    const fields
+      = width === 390
+        ? page.getByTestId('gallery-filter-sheet')
+        : page.locator('.gallery-desktop');
+    const backend = fields.locator('[data-role="backend"]');
+    await expect(backend).toHaveAttribute('aria-pressed', 'true');
+    await backend.focus();
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\?role=mobile$/);
-    const mobileChip = page.getByRole('button', { name: 'Mobile' });
-    await expect(mobileChip).toHaveAttribute('aria-pressed', 'true');
-    const outlineStyle = await mobileChip.evaluate((element) =>
-      getComputedStyle(element).outlineStyle);
-    expect(outlineStyle).not.toBe('none');
-
-    await page.getByRole('button', { name: 'Mọi vị trí' }).click();
-    await expect(page).toHaveURL(/\/templates$/);
+    await expect(page).toHaveURL(/role=frontend$/u);
+    const frontend = fields.locator('[data-role="frontend"]');
+    await expect(frontend).toHaveAttribute('aria-pressed', 'true');
+    await frontend.click();
+    await expect(page).toHaveURL(/role=frontend$/u);
+    const technical = fields.locator('[data-filter="technical"]');
+    await expect(technical).toHaveAttribute(
+      'href',
+      '/templates?role=frontend&filter=technical',
+    );
+    const [tab] = await Promise.all([
+      page.context().waitForEvent('page'),
+      technical.click({ button: 'middle' }),
+    ]);
+    await tab.waitForLoadState();
+    await expect(tab).toHaveURL(/role=frontend&filter=technical$/u);
+    await expect(page).toHaveURL(/role=frontend$/u);
+    await tab.close();
+    await technical.click();
+    await expect(page).toHaveURL(/role=frontend&filter=technical$/u);
+    if (width === 390) {
+      await expect(
+        fields.locator('[data-action="gallery-filters-apply"]'),
+      ).toHaveText('Show 1 template');
+    } else {
+      await expect(page.locator('[data-template]:visible')).toHaveAttribute(
+        'data-template',
+        'engineer-compact',
+      );
+    }
+    await fields.locator('[data-filter="ats"]').click();
+    if (width === 390) {
+      await expect(fields.getByTestId('gallery-sheet-status')).toHaveText(
+        '0 templates',
+      );
+      await fields.locator('[data-action="gallery-filters-apply"]').click();
+    }
+    await expect(page.getByTestId('gallery-count')).toHaveText('0 templates');
+    await expect(
+      page.getByText('No template matches this filter.'),
+    ).toBeVisible();
+    if (width === 390) {
+      await page.locator('[data-action="gallery-filters-clear-all"]').click();
+      await expect(trigger).toBeFocused();
+    } else {
+      await fields.locator('[data-role="all"]').click();
+      await fields.locator('[data-filter="all"]').click();
+    }
+    await expect(page).toHaveURL(/\/templates$/u);
     await expect(page.locator('[data-template]:visible')).toHaveCount(20);
   });
 
@@ -451,3 +500,249 @@ for (const width of WIDTHS) {
     );
   });
 }
+for (const locale of ['vi', 'en'] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`Library layouts fit in ${locale} ${theme}`, async ({ page }) => {
+      await page.context().addCookies([
+        {
+          name: 'aboutme-locale',
+          value: locale,
+          url: 'http://127.0.0.1:20092',
+        },
+        { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
+      ]);
+      await page.goto('/templates?role=fresher&filter=first-job');
+      for (const width of [
+        360, 390, 640, 641, 768, 900, 1023, 1024, 1179, 1180, 1440,
+      ]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(
+          await page.evaluate(
+            () =>
+              document.documentElement.scrollWidth
+              - document.documentElement.clientWidth,
+          ),
+        ).toBe(0);
+        const trigger = page.locator('[data-action="gallery-filters-open"]');
+        if (width < 1024) {
+          await expect(trigger).toBeVisible();
+          await expect(
+            page.getByTestId('gallery-active-filters'),
+          ).toBeVisible();
+          await expect(page.locator('.gallery-desktop')).toBeHidden();
+          await trigger.click();
+          const sheet = page.getByTestId('gallery-filter-sheet');
+          await expect(sheet).toBeVisible();
+          expect(
+            await sheet.evaluate((node) => node.scrollWidth > node.clientWidth),
+          ).toBe(false);
+          await sheet.locator('[data-action="gallery-filters-close"]').click();
+        } else {
+          await expect(trigger).toBeHidden();
+          await expect(page.getByTestId('gallery-active-filters')).toBeHidden();
+          await expect(page.locator('.gallery-desktop')).toBeVisible();
+        }
+        const expected
+          = width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5;
+        expect(
+          await page
+            .locator('.gallery-grid')
+            .evaluate(
+              (node) =>
+                getComputedStyle(node).gridTemplateColumns.split(' ').length,
+            ),
+        ).toBe(expected);
+      }
+    });
+  }
+}
+
+test('sheet traps links and resize repairs hidden focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await page.goto('/templates?role=backend&filter=technical');
+  const trigger = page.locator('[data-action="gallery-filters-open"]');
+  await trigger.click();
+  const sheet = page.getByTestId('gallery-filter-sheet');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-close"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.locator('[data-role="backend"]')).toBeFocused();
+  for (const value of [
+    'all',
+    'sample',
+    'ats',
+    'one-page',
+    'photo',
+    'first-job',
+    'technical',
+    'management',
+  ]) {
+    await page.keyboard.press('Tab');
+    await expect(sheet.locator(`[data-filter="${value}"]`)).toBeFocused();
+  }
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-clear"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-apply"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-close"]'),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(sheet).toHaveCount(0);
+  await expect(
+    page.locator('.gallery-desktop [data-role="backend"]'),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await expect(trigger).toBeFocused();
+  const roleChip = page.locator(
+    '[data-action="gallery-filter-remove"][data-filter="role"]',
+  );
+  const styleChip = page.locator(
+    '[data-action="gallery-filter-remove"][data-filter="style"]',
+  );
+  await roleChip.click();
+  await expect(styleChip).toBeFocused();
+  await styleChip.click();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await sheet.locator('[data-filter="technical"]').click();
+  await page
+    .locator('[data-slot="sheet-overlay"]')
+    .click({ position: { x: 1, y: 1 } });
+  await expect(sheet).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(page).toHaveURL(/filter=technical$/u);
+  const card = page.locator('[data-template]:visible').first();
+  await card.focus();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(card).toBeFocused();
+});
+
+for (const width of [390, 1440]) {
+  test(`Style filters and Clear all work without scripts at ${width}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width, height: 900 },
+    });
+    await context.addCookies([
+      { name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092' },
+    ]);
+    const page = await context.newPage();
+    await page.goto('http://127.0.0.1:20092/templates?role=backend');
+    await expect(page.locator('[data-template]')).toHaveCount(20);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(1);
+    await expect(
+      page.locator('.gallery-desktop [data-role="backend"]'),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('gallery-filters-badge')).toHaveText('1');
+    await expect(page.getByTestId('gallery-active-filters')).toContainText(
+      'Backend',
+    );
+    await expect(page.getByTestId('gallery-filter-sheet')).toHaveCount(0);
+    const styles
+      = width < 1024
+        ? page.locator('.gallery-fallback')
+        : page.locator('.gallery-desktop');
+    await styles.locator('[data-filter="ats"]').click();
+    await expect(page).toHaveURL(/role=backend&filter=ats$/u);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(0);
+    await page.getByRole('link', { name: 'Clear all', exact: true }).click();
+    await expect(page).toHaveURL(/\/templates$/u);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(20);
+    await expect(page.locator('[data-role="all"]')).toBeDisabled();
+    await context.close();
+  });
+}
+
+for (const width of [390, 768]) {
+  test(`sticky focus and route exit at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/templates');
+    const cards = page.locator('[data-template]');
+    await cards.nth(8).focus();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    const top = await cards
+      .nth(8)
+      .evaluate((node) => node.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(68);
+    expect(
+      await page
+        .locator('html')
+        .evaluate((node) => getComputedStyle(node).scrollPaddingTop),
+    ).toBe('68px');
+    await cards.nth(8).click();
+    await expect(page.locator('html')).not.toHaveClass(
+      /filter-bar-scroll-padding/u,
+    );
+  });
+}
+
+test('incoming URLs and history derive both groups without remounting', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
+  }]);
+  await page.goto(
+    '/templates?role=backend&filter=technical&source=a%20%26%20b',
+  );
+  const fields = page.locator('.gallery-desktop');
+  const count = page.getByTestId('gallery-count');
+  await fields.locator('[data-filter="ats"]').click();
+  await expect(page).toHaveURL(
+    /source=a(?:%20|\+)%(?:26)(?:%20|\+)b&role=backend&filter=ats$/u,
+  );
+  await expect(count).toContainText('0');
+  await page.evaluate(() => {
+    const node = document.querySelector('[data-testid="gallery-count"] span')!;
+    (window as Window & { countNode?: Element }).countNode = node;
+  });
+  await fields.locator('[data-filter="ats"]').click();
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector('[data-testid="gallery-count"] span')
+        === (window as Window & { countNode?: Element }).countNode,
+    ),
+  ).toBe(true);
+  await page.locator('[data-template="one-page-tight"]').evaluate((node) => {
+    node.setAttribute('data-retained', 'true');
+  });
+  await page
+    .getByRole('link', { name: 'Library', exact: true })
+    .first()
+    .click();
+  await expect(page.locator('[data-template]:visible')).toHaveCount(20);
+  await page.goBack();
+  await expect(count).toContainText('0');
+  await expect(fields.locator('[data-role="backend"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(fields.locator('[data-filter="ats"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await page.goForward();
+  await expect(fields.locator('[data-role="all"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.locator('[data-template="one-page-tight"]'),
+  ).toHaveAttribute('data-retained', 'true');
+});
