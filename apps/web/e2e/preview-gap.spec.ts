@@ -516,11 +516,41 @@ test.describe('PDF word spacing', () => {
     expect(extract(item, positioned).map((word) => word.text))
       .toEqual(words(item.str));
   });
+
+  test('preserves positioning spaces before multi-character runs', () => {
+    const positioned = {
+      fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.moveText,
+        OPS.showText, OPS.endText],
+      argsArray: [[], [1, 0, 0, 1, 404.8, 388.17],
+        [[{ unicode: 'A' }]], [12, 0], [[{ unicode: 'BC' }]], []],
+    };
+    expect(extract({ ...item, str: 'A BC' }, positioned)).toEqual([
+      { text: 'A', index: 0 }, { text: 'BC', index: 2 },
+    ]);
+  });
+
+  test('preserves spaces when an unsafe object shares the origin', () => {
+    const safe = operators('CHỨNG CHỈ');
+    const unsafe = operators('');
+    unsafe.argsArray[2] = [[{ unicode: 'CHỨ NG' }, -200,
+      { unicode: ' CHỈ' }]];
+    for (const parts of [[safe, unsafe], [unsafe, safe]]) {
+      const ambiguous = {
+        fnArray: parts.flatMap((part) => part.fnArray),
+        argsArray: parts.flatMap((part) => part.argsArray),
+      };
+      expect(extract(item, ambiguous)).toEqual([
+        { text: 'CHỨ', index: 0 }, { text: 'NG', index: 4 },
+        { text: 'CHỈ', index: 7 },
+      ]);
+    }
+  });
 });
 
 type PdfTextOperators = Pick<PDFOperatorList, 'fnArray' | 'argsArray'>;
 
 interface PdfTextObject {
+  readonly valid: boolean;
   readonly text: string;
   readonly left: number;
   readonly baseline: number;
@@ -536,6 +566,7 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
     origin: number[] | null;
     valid: boolean;
     singleGlyph: boolean;
+    pendingMove: boolean;
   } | null = null;
   operators.fnArray.forEach((fn, index) => {
     const args = operators.argsArray[index] as unknown[];
@@ -553,7 +584,7 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
     if (fn === OPS.beginText) {
       current = {
         text: '', matrix: [1, 0, 0, 1, 0, 0], origin: null, valid: true,
-        singleGlyph: false,
+        singleGlyph: false, pendingMove: false,
       };
     }
     if (current === null) return;
@@ -562,12 +593,13 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
       current.matrix = Array.from(args as number[]);
     }
     if (fn === OPS.moveText) {
-      // Tracked headings position individual glyphs horizontally. Positioning
-      // whole runs can supply word spacing and must keep the extracted gaps.
+      // Glyph tracking needs single glyphs on both sides of each move.
+      // Whole runs can supply word spacing and must keep the extracted gaps.
       if (args[1] !== 0 || !current.singleGlyph || (args[0] as number) <= 0) {
         current.valid = false;
       }
       current.singleGlyph = false;
+      current.pendingMove = true;
     }
     if (fn === OPS.nextLine || fn === OPS.setLeadingMoveText
       || fn === OPS.nextLineShowText || fn === OPS.nextLineSetSpacingShowText
@@ -585,6 +617,8 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
       run.singleGlyph = glyphs.length === 1
         && typeof glyphs[0] !== 'number'
         && Array.from(glyphs[0]!.unicode).length === 1;
+      if (run.pendingMove && !run.singleGlyph) run.valid = false;
+      run.pendingMove = false;
       for (const glyph of glyphs) {
         if (typeof glyph === 'number') {
           // Numeric positioning can encode a word space without a glyph.
@@ -595,8 +629,9 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
       }
     }
     if (fn === OPS.endText) {
-      if (current.valid && current.origin !== null && current.text !== '') {
+      if (current.origin !== null && current.text !== '') {
         objects.push({
+          valid: current.valid && !current.pendingMove,
           text: current.text,
           left: current.origin[0]!, baseline: current.origin[1]!,
         });
@@ -626,11 +661,14 @@ function pdfWordMatches(
   // Remove inferred whitespace only for one complete horizontal text object
   // at this item's origin, with every non-space glyph unchanged. The decoded
   // space glyphs retain word boundaries; separate objects and lines stay apart.
+  // Unsafe objects still block a unique association with a safe object.
   const candidates = objects.filter((object) =>
     Math.abs(object.left - item.transform[4]!) < 0.0001
     && Math.abs(object.baseline - item.transform[5]!) < 0.0001
     && compact(object.text) === compact(item.str));
-  const decoded = candidates.length === 1 ? candidates[0] : undefined;
+  const decoded = candidates.length === 1 && candidates[0]?.valid
+    ? candidates[0]
+    : undefined;
   const glyphSpaces = decoded === undefined
     ? whitespaceOffsets(item.str)
     : whitespaceOffsets(decoded.text);
