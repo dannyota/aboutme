@@ -80,15 +80,64 @@ wait
 count=$(find "$operations_dir" -mindepth 1 -maxdepth 1 -type d | wc -l)
 [[ $count == 32 ]] || fail 'concurrent admission overbooked or lost capacity'
 if operation_state new '' 3<<<"$(new_state "$id")" >/dev/null 2>&1; then fail 'restart lost reservation accounting'; fi
-# Compact, quiescent records retain audit but return unused reservation bytes.
-for path in "$operations_dir"/*; do
-  [[ -d $path ]] || continue
-  request=${path##*/}
-  state=$(jq '.reserved=false' "$path/state.json")
-  operation_state save "$request" 3<<<"$state" >/dev/null
-done
+# Finalizing successful shows releases fences while retaining plan capacity.
+(
+  lib=$work/plan-lib
+  mkdir -p "$lib"
+  printf 'operation_state() { cat "$RELEASE_STATE"; }\n' >"$lib/release-state.sh"
+  sed "s|/usr/local/lib/aboutme/operation-state.sh|$lib/release-state.sh|g" "$here/scripts/deploy-safety.sh" >"$lib/release-safety.sh"
+  export PLAN_SAFETY=$lib/release-safety.sh
+  cat >"$lib/fence.sh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+# shellcheck source=deploy/vn/scripts/deploy-safety.sh
+source "$PLAN_SAFETY"
+mountpoint() { return 0; }
+systemctl() { printf 'ActiveState=inactive\nJob=0\n'; }
+podman() { :; }
+timeout() { shift; "$@"; }
+runuser() { cat >/dev/null; printf '0\n'; }
+case $1 in
+  read) cat "$PLAN_FENCE" ;;
+  release)
+    aboutme_assert_operation_release "$2" || exit 1
+    printf '{"operation_id":null}\n' >"$PLAN_FENCE"
+    ;;
+  *) exit 1 ;;
+esac
+STUB
+  chmod +x "$lib/fence.sh"
+  export PLAN_FENCE=$work/plan-fence
+  systemctl() { printf 'ActiveState=inactive\nJob=0\n'; }
+  for path in "$operations_dir"/*; do
+    [[ -d $path ]] || continue
+    id=${path##*/}
+    operation_load "$id"
+    state=$(jq '.fenceHeld=true | .pendingVerb="show"' <<<"$state")
+    operation_save
+    jq -cn --arg id "$id" '{operation_id:$id}' >"$PLAN_FENCE"
+    export RELEASE_STATE=$operations_dir/$id/state.json
+    request_finish || fail 'successful show finalization refused'
+    [[ $(jq -r .fenceHeld <<<"$state") == false && $(jq -r .operation_id "$PLAN_FENCE") == null ]] || fail 'planning fence retained'
+    [[ $(jq -r .reserved <<<"$state") == true && $(jq -r .phase <<<"$state") == planned ]] || fail 'applicable plan lost reservation'
+  done
+  id=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  if operation_state new '' 3<<<"$(new_state "$id")" >/dev/null 2>&1; then fail '33rd applicable plan admitted'; fi
+  # Aborted plans close before returning their reservations.
+  for path in "$operations_dir"/*; do
+    [[ -d $path ]] || continue
+    id=${path##*/}
+    operation_load "$id"
+    state=$(jq '.pendingVerb="abort"' <<<"$state")
+    operation_save
+    request_finish || fail 'quiescent plan abort refused'
+    [[ $(jq -r .phase <<<"$state") == closed && $(jq -r .reserved <<<"$state") == false ]] || fail 'closed plan retained capacity'
+  done
+)
+# Compact, closed records retain audit but return unused reservation bytes.
+audit_count=$(find "$operations_dir" -name 'audit-*' | wc -l)
 operation_state new '' 3<<<"$(new_state "$id")" >/dev/null || fail '33rd compact record refused'
-[[ $(find "$operations_dir" -name 'audit-*' | wc -l) == 32 ]] || fail 'unexpired audit evicted'
+[[ $(find "$operations_dir" -name 'audit-*' | wc -l) == "$audit_count" ]] || fail 'unexpired audit evicted'
 # A held request lock makes retention skip that request, not race its writer.
 exec {held}>"$operations_dir/$id/.request.lock"
 flock "$held"
@@ -118,7 +167,7 @@ chmod 0700 "$operations_dir/$id"
 # Expired, quiescent attempt metadata is removed at 30 days without extending
 # or evicting personal audit. The attempt counter survives compaction.
 request=$(request_id 97)
-state=$(new_state "$request" | jq --arg id "$request" '.reserved=false | .attemptCount=1 | .attempts=[{number:1,container:("aboutme-operation-"+$id+"-1"),applicationName:("hostop:"+$id+":1"),startedAt:"2000-01-01T00:00:00Z",stopped:true}]')
+state=$(new_state "$request" | jq --arg id "$request" '.phase="closed" | .outcome="aborted" | .confirmation=null | .expiresAt=null | .reserved=false | .attemptCount=1 | .attempts=[{number:1,container:("aboutme-operation-"+$id+"-1"),applicationName:("hostop:"+$id+":1"),startedAt:"2000-01-01T00:00:00Z",stopped:true}]')
 operation_state new '' 3<<<"$state" >/dev/null
 operation_state prune '' >/dev/null
 [[ $(jq '.attempts|length' "$operations_dir/$request/state.json") == 0 && $(jq .attemptCount "$operations_dir/$request/state.json") == 1 ]] || fail '30-day metadata retention'
@@ -134,7 +183,7 @@ state=$(new_state "$id" | jq '.phase="accepted" | .confirmation=null | .expiresA
 operation_state new '' 3<<<"$state" >/dev/null
 operation_save() { printf '%s\n' "$state" >"$work/saved"; }
 account_live() { return 0; }
-request_release() { state=$(jq ' .fenceHeld=false | .reserved=false | .closureQuiescent=true | .pendingVerb="none"' <<<"$state"); operation_save; }
+request_release() { state=$(jq ' .fenceHeld=false | .reserved=(.phase=="planned") | .closureQuiescent=true | .pendingVerb="none"' <<<"$state"); operation_save; }
 request_fence() { return 0; }
 request_unit_stopped() { [[ ! -e $work/unit-active ]]; }
 account_attempts_stopped() { [[ ! -e $work/backend-active ]]; }
@@ -183,7 +232,7 @@ state=$(new_state "$id" | jq '.phase="accepted" | .confirmation=null | .expiresA
 operation_save
 rm "$work/commands"
 if (request_existing verify >/dev/null 2>&1); then fail 'expired verify accepted'; fi
-request_release() { state=$(jq '.fenceHeld=false | .reserved=false | .closureQuiescent=true' <<<"$state"); operation_save; }
+request_release() { state=$(jq '.fenceHeld=false | .reserved=(.phase=="planned") | .closureQuiescent=true' <<<"$state"); operation_save; }
 (request_existing abort >/dev/null) || fail 'expired abort refused'
 [[ ! -e $work/commands && $(jq -r .outcome "$work/saved") == unverified ]] || fail 'expired abort queried target'
 
@@ -251,7 +300,7 @@ if account_cleanup; then fail 'nonzero queue exit completed cleanup'; fi
 queue_rc=0 presence=present
 if account_cleanup; then fail 'present account completed cleanup'; fi
 presence=absent
-request_release() { printf 'release\n' >>"$work/order"; state=$(jq '.fenceHeld=false | .reserved=false | .closureQuiescent=true | .pendingVerb="none"' <<<"$state"); operation_save; }
+request_release() { printf 'release\n' >>"$work/order"; state=$(jq '.fenceHeld=false | .reserved=(.phase=="planned") | .closureQuiescent=true | .pendingVerb="none"' <<<"$state"); operation_save; }
 systemctl() { printf 'sweep\n' >>"$work/order"; }
 state=$(jq '.pendingVerb="resume"' <<<"$state")
 request_finish || fail 'known write could not release'

@@ -95,7 +95,7 @@ aboutme_assert_operation_release() { # request id
   [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || return 1
   [[ -r /usr/local/lib/aboutme/operation-state.sh && ! -L /usr/local/lib/aboutme/operation-state.sh ]] || return 1
   state=$(bash -c 'source /usr/local/lib/aboutme/operation-state.sh; operation_state load "$1"' bash "$id") || return 1
-  jq -e '.closureQuiescent==true and .fenceHeld==false and .reserved==false and .pendingVerb=="none" and .intent=="none" and (.phase=="planned" or .phase=="closed" or (.phase=="serving" and (.action.writeOutcome=="committed" or .action.writeOutcome=="absent_after_unknown"))) and (.action.writeOutcome!="unknown")' <<<"$state" >/dev/null || return 1
+  jq -e '.closureQuiescent==true and .fenceHeld==false and .reserved==(.phase=="planned") and .pendingVerb=="none" and .intent=="none" and (.phase=="planned" or .phase=="closed" or (.phase=="serving" and (.action.writeOutcome=="committed" or .action.writeOutcome=="absent_after_unknown"))) and (.action.writeOutcome!="unknown")' <<<"$state" >/dev/null || return 1
   unit_state=$(systemctl show --property=ActiveState --property=Job "aboutme-operation@$id.service") || return 1
   [[ $(wc -l <<<"$unit_state") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$unit_state" && grep -qxF 'Job=0' <<<"$unit_state" || return 1
   containers=$(podman ps -a --format '{{.Names}}') || return 1

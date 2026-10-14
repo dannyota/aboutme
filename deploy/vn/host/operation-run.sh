@@ -31,11 +31,12 @@ request_fence() {
   operation_save
 }
 request_release() {
-  # The controller closes after the request unit exits, never from an EXIT trap.
+  # The controller releases after the request unit exits, never from an EXIT trap.
+  # An applicable plan keeps its capacity until quiescent closure.
   request_unit_stopped && account_attempts_stopped || return 1
   local held owner
   held=$(jq -r .fenceHeld <<<"$state")
-  state=$(jq '.fenceHeld=false | .reserved=false | .closureQuiescent=true | .intent="none" | .pendingVerb="none"' <<<"$state")
+  state=$(jq '.fenceHeld=false | .reserved=(.phase=="planned") | .closureQuiescent=true | .intent="none" | .pendingVerb="none"' <<<"$state")
   operation_save || return 1
   owner=$("$lib/fence.sh" read 2>/dev/null | jq -er '.operation_id // "none"') || return 1
   if [[ $owner == "$id" ]]; then

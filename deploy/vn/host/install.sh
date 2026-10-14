@@ -61,8 +61,15 @@ fi
 exec {operation_bundle_fd}>>/srv/data/host-operations/.bundle.lock
 flock -x -w 30 "$operation_bundle_fd" || die "an operation may run"
 [[ ! -e /srv/data/host-operations/key-change.json && ! -L /srv/data/host-operations/key-change.json ]] || die "key-change recovery must finish before installation"
-operation_units=$(systemctl list-units --all --no-legend 'aboutme-operation@*.service') || die "cannot inspect operation units"
-[[ ! $operation_units =~ (activating|active|deactivating) ]] || die "an operation unit may run"
+operation_units=$(systemctl list-units --all --plain --no-legend 'aboutme-operation@*.service') || die "cannot inspect operation units"
+while read -r operation_unit _ operation_active_state _; do
+  [[ -n $operation_unit ]] || continue
+  [[ $operation_unit == aboutme-operation@*.service ]] || die "cannot inspect operation unit state"
+  case $operation_active_state in
+    inactive | failed) ;;
+    *) die "an operation unit may run" ;;
+  esac
+done <<<"$operation_units"
 # Validate the saved protocol with the reviewed bundle before replacing files.
 # shellcheck source=operation-state.sh
 source "$bundle/host/operation-state.sh"
