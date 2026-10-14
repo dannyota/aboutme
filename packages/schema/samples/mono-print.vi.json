@@ -17,6 +17,13 @@
         "isHidden": false
       },
       {
+        "id": "b4f2ffd1-5fd1-5cec-9721-61f32df1dad2",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
         "id": "66e3c149-39a3-5fa9-86df-86775be1dec5",
         "type": "location",
         "value": "Cầu Giấy, Hà Nội",
