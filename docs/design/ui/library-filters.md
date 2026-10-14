@@ -395,7 +395,19 @@ Hosted Baselines regenerates only the four Library images in
 | `gallery--filtered--en--light--1440.png` | Same filtered URL, desktop rows          |
 | `gallery--rows--vi--light--1024.png`     | `/templates`, rows and four columns      |
 
+Register the new spec and its files before running hosted CI or Baselines:
+
+- Add `gallery-baselines.spec.ts` to the normal-surface `testMatch` list in
+  `apps/web/e2e/playwright.config.ts` and `WEB_E2E_NORMAL_SPECS` in the root
+  `Makefile`, so comparison and update runs execute all five cases.
+- Add all five filenames above, each prefixed with `baselines/`, to the
+  expected-baseline file list in the root `Makefile`'s `web-e2e-update` recipe.
+  Its exact-file comparison must accept the new images before Baselines can
+  upload the candidate artifact.
+- Have the primary run `scripts/generate-web-e2e-source-manifest.sh --update`
+  after files move or are added, including the new spec and baseline images, and
+  include the regenerated `scripts/web-e2e-source.manifest`.
+
 Use the existing Gallery font/image/thumbnail waits for closed full-page
 captures; sheet captures use a fixed 900 px viewport height. Keep showcase,
-landing, template detail, renderer, and print baselines unchanged. Regenerate
-the web source manifest through the primary when files move or are added.
+landing, template detail, renderer, and print baselines unchanged.
