@@ -103,6 +103,10 @@ describe('ConnectedAgents', () => {
       );
       expect(wrapper.get('[data-testid="agent-client-host"]').text())
         .toBe('(client.example)');
+      const host = wrapper.get('[data-testid="agent-client-host"]');
+      expect(host.element.textContent).toBe(' (client.example)');
+      expect(host.element.tagName).toBe('BDI');
+      expect(host.attributes('dir')).toBe('ltr');
       expect(wrapper.find('[onerror]').exists()).toBe(false);
     },
   );
@@ -137,6 +141,10 @@ describe('ConnectedAgents', () => {
     expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
       `${grant.clientName} (client.example)`,
     );
+    const host = wrapper.get('[data-testid="agent-client-host"]');
+    expect(host.element.textContent).toBe(' (client.example)');
+    expect(host.element.tagName).toBe('BDI');
+    expect(host.attributes('dir')).toBe('ltr');
   });
 
   it(
