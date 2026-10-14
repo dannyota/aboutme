@@ -224,8 +224,8 @@ Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 - Root and data volume use above 70%, failed units, and PostgreSQL on its
   socket.
 - WAL archive failure, unreadable backups, and newest backup age at 26 hours.
-- CrowdSec retention timer and lease, CrowdSec alert counts, and Coraza match
-  counts and malformed records in the last hour.
+- CrowdSec retention timer and lease, CrowdSec alert counts, and malformed
+  Coraza logs or unknown record kinds in the last hour.
 - `totp_unavailable` in the server journal.
 
 Unit failures also trigger mail through `OnFailure=`. `alert.sh` sends through
@@ -238,7 +238,18 @@ sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
 
-Coraza alerts count rule matches, not distinct requests. Their metadata lives in
+`coraza-matches` and `coraza-unparsed` do not send mail. Each watcher run writes
+one journal line with match and unparsed counts for the preceding hour:
+
+```sh
+sudo journalctl -u aboutme-watch --since -1h -o cat
+```
+
+The line contains only `coraza counts in the last hour: matches=N unparsed=N`,
+including zeros. A malformed log or unknown record kind still sends
+`coraza-log-invalid` mail; inspect the WAF log format and reader on the host.
+
+Coraza counts rule-match records, not distinct requests. Its metadata lives in
 `/run/aboutme/caddy-log/waf/` on tmpfs, in current and rotated serving and
 maintenance logs. Summarize timestamps, levels, message kinds, and rule IDs;
 these records do not establish response status or successful access. Check the

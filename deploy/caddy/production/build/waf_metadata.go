@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	corazaMissingMacroMessage = "key not found in collection, returning the original text"
-	wafEngineMessage          = "waf_engine_diagnostic"
-	wafMatchMessage           = "waf_rule_match"
-	wafUnknownMessage         = "waf_rule_match_unparsed"
+	wafEngineMessage  = "waf_engine_diagnostic"
+	wafMatchMessage   = "waf_rule_match"
+	wafUnknownMessage = "waf_rule_match_unparsed"
 )
 
 var wafRuleIDPattern = regexp.MustCompile(`\[file "[^"\r\n]*"\] \[line "[0-9]+"\] \[id "([0-9]+)"\] \[rev "`)
@@ -74,7 +73,7 @@ func (e *wafMetadataEncoder) EncodeEntry(entry zapcore.Entry, _ []zapcore.Field)
 	matches := wafRuleIDPattern.FindAllStringSubmatch(entry.Message, 2)
 	var fields []zapcore.Field
 	switch {
-	case entry.Message == corazaMissingMacroMessage:
+	case isWAFEngineDiagnostic(entry.Message):
 		entry.Message = wafEngineMessage
 	case len(matches) == 1:
 		entry.Message = wafUnknownMessage
@@ -93,6 +92,45 @@ func (e *wafMetadataEncoder) EncodeEntry(entry zapcore.Entry, _ []zapcore.Field)
 		EncodeLevel: zapcore.LowercaseLevelEncoder,
 		EncodeTime:  zapcore.EpochTimeEncoder,
 	}).EncodeEntry(entry, fields)
+}
+
+// Coraza and its Caddy connector share the rule callback's logger. Recognize
+// only their fixed diagnostic messages; discard all context and error fields.
+func isWAFEngineDiagnostic(message string) bool {
+	switch message {
+	case "key not found in collection, returning the original text",
+		"error creating serial log writer",
+		"Failed to initialize audit log",
+		"Failed to write audit log",
+		"Error converting request length to integer",
+		"collection in setvar is not a map",
+		"collection in setvar is nil",
+		"Invalid value",
+		"Invalid range",
+		"Invalid status",
+		"Invalid audit log part",
+		"Unknown toggle",
+		"Invalid limit",
+		"Invalid rule ID",
+		"Invalid log level",
+		"attempted to use regex with non-selectable collection",
+		"attempted to use string with non-selectable collection",
+		"ProcessRequestHeaders has already been called",
+		"Calling ProcessRequestHeaders but there is a preexisting interruption",
+		"Calling ProcessRequestBody but there is a preexisting interruption",
+		"Failed to process request body",
+		"ProcessResponseHeaders has already been called",
+		"Calling ProcessResponseHeaders but there is a preexisting interruption",
+		"Calling ProcessResponseBody but there is a preexisting interruption",
+		"Failed to process response body",
+		"Failed to close the transaction",
+		// The connector reports any interruption, including body limits,
+		// with this summary. It does not establish a separate rule match.
+		"WAF rule violation detected":
+		return true
+	default:
+		return false
+	}
 }
 
 var (

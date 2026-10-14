@@ -66,15 +66,16 @@ Three host-level controls replace AWS WAF:
   `/var/log/caddy/waf/maintenance-match.log`; both are on tmpfs. Rule callbacks
   emit `msg=waf_rule_match` with numeric `rule_id`; other unknown shapes emit
   `msg=waf_rule_match_unparsed`. Coraza shares its engine logger with the rule
-  callback. Only its fixed missing-key macro warning,
-  `key not found in collection, returning the original text`, emits
-  `msg=waf_engine_diagnostic`. It has only `ts`, `level`, `logger`, and `msg`,
-  no `rule_id` or raw fields; the watcher excludes it from rule counts and
-  unknown alerts. Logs carry no raw fields or personal data and never reach disk
-  or journald. Files cap at 5 MiB plus two rolls; one-day expiry applies only to
-  rolled files, so a low-volume active file persists until rotation or reboot.
-  After two weeks, devops reviews matches, excludes false positives on resume
-  writes, and enables blocking.
+  callback. An exact allowlist of fixed engine and connector diagnostics,
+  including the missing-key macro warning, body processing errors, and the
+  connector's interruption summary, emits `msg=waf_engine_diagnostic`.
+  Diagnostics have only `ts`, `level`, `logger`, and `msg`, no `rule_id` or raw
+  fields; the watcher excludes them from rule counts. WAF records carry no raw
+  fields or personal data and stay on tmpfs. Only aggregate match and unparsed
+  counts reach the journal. Files cap at 5 MiB plus two rolls; one-day expiry
+  applies only to rolled files, so a low-volume active file persists until
+  rotation or reboot. After two weeks, devops reviews matches, excludes false
+  positives on resume writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -271,10 +272,17 @@ owns its schedule, notification recipient, and limits.
 | Host     | `watch.sh`: root and data volume above 70%                       |
 | Database | `watch.sh`: archive failure, newest backup at least 26 hours old |
 | Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                  |
-| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour        |
+| Edge     | `watch.sh`: CrowdSec bans and invalid Coraza logs                |
 | TOTP     | `watch.sh`: `totp_unavailable` in the server journal             |
 | Mail     | Bizfly delivery logs; see the email runbook                      |
 | Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
+
+Coraza match and unparsed counts do not trigger mail (owner, 2026-10-14). Each
+watcher run writes one journal line with both counts for the preceding hour,
+including zero counts. `coraza-log-invalid` still mails malformed logs or
+unknown record kinds. Rule-match counts are callback records, not distinct
+requests or blocked responses. The connector's interruption summary is an engine
+diagnostic because an interruption can also come from a body limit.
 
 ## Infrastructure code and state
 
