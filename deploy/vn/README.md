@@ -6,13 +6,14 @@ and the [Vietnam production design](../../docs/design/vietnam-production.md).
 `deploy/aws/` stays undeployed for a possible AWS ECS or Kubernetes path.
 
 Production serves from HCM03-1C. Cutover completed on 2026-10-11 with release
-v0.7.3, and AWS was removed. Cloudflare provides DNS-only records; the owner
-edits them by hand. Facts marked **Unconfirmed** need an account check.
+v0.7.3, and AWS was removed. Cloudflare provides DNS-only records managed by
+`dns/`. Facts marked **Unconfirmed** need an account check.
 
 ## Layout
 
 | Path                         | What                                                                          |
 | ---------------------------- | ----------------------------------------------------------------------------- |
+| `dns/`                       | OpenTofu root: Cloudflare DNS-only records                                    |
 | `prod/`                      | OpenTofu root: network, security group, server with floating IP, data volume  |
 | `host/cloud-init.yaml.tftpl` | First boot only: the admin user and SSH settings                              |
 | `host/data-volume.sh`        | Formats (on request) and mounts the encrypted data volume and its bind mounts |
@@ -24,6 +25,14 @@ edits them by hand. Facts marked **Unconfirmed** need an account check.
 | `edge/`                      | CrowdSec configuration and the vWAF escalation checklist                      |
 | `probe/`                     | Host fact checks                                                              |
 | `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, cutover               |
+
+## DNS root
+
+`dns/` manages Cloudflare DNS-only records separately from the host root, so
+host plans need no Cloudflare token. It uses encrypted HCM04 vStorage state at
+`dns/terraform.tfstate`. Follow the [DNS runbook](../../docs/runbooks/dns.md)
+for scoped credentials, private inputs, import-only adoption, and reviewed
+changes. DNSSEC and automatic Cloudflare CAA entries stay outside the root.
 
 ## Local files that are never committed
 

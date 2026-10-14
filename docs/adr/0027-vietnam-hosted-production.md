@@ -81,8 +81,8 @@ authorization, and every data invariant are unchanged.
   downtime until vWAF is switched on by a DNS change.
 - Release images must also build for `linux/amd64`.
 - Caddy provides TLS, Coraza, and CrowdSec. Cloudflare provides authoritative
-  DNS with proxying off. The owner edits records by hand; OpenTofu ownership
-  remains open.
+  DNS with proxying off. The OpenTofu root `deploy/vn/dns/` owns the records;
+  DNSSEC signing and the registrar DS record stay manual.
 - Cutover needs a maintenance window. Moving data back after Vietnam accepts
   writes would be a new transfer abroad, so recovery after that is forward only.
 - No AWS test environment remains deployed.
@@ -117,3 +117,7 @@ Email. 2026-10-10: the owner dropped vCDN, then vWAF, for host-level controls
 2026-10-11: Cloudflare DNS-only replaces Route 53; the AWS production stack,
 state bootstrap, and email stack are removed after the Vietnam cutover. AWS code
 remains undeployed for a possible AWS ECS or Kubernetes path.
+
+2026-10-13: the owner moved the Cloudflare DNS records from hand edits to a
+separate OpenTofu root, `deploy/vn/dns/`, so host plans need no Cloudflare
+token. DNSSEC signing and the registrar DS record stay manual.
