@@ -57,24 +57,10 @@ the 20 px feature radius, holding the h1 and a one-line lead. The page lists all
 other four templates with a sample, then the rest by English preset name. The
 surrounding copy, purpose, and sample tag follow the site language.
 
-A role chip row comes first: All roles, then Backend, Frontend, Mobile,
-DevOps/SRE, Data/AI, QA/Tester, Fresher/Intern, BrSE, and Security (Bảo mật in
-Vietnamese). One toggle group, one tab stop: arrow keys move focus, Enter or
-Space selects, and the pressed chip gets `aria-pressed="true"` and the active
-chip look. Each role shows the template whose sample is for that role. The
-choice is kept in the URL (`?role=backend`) and combines with the filter chips.
-Filtered-out cards stay in the HTML, hidden, so the server-rendered page always
-lists every template. The row scrolls sideways like the filter row.
-
-Filter chips are 36 px pills on the card color with a border. All comes first
-with the template count. Format chips (With a sample, ATS-friendly, One page,
-Suits a photo) carry a jade dot; audience chips (First job, Technical,
-Management) carry an ochre dot and sit after a thin divider. The dot is
-decorative; the chip text carries the meaning. A hovered chip takes the
-`--surface-indigo` tint. The active chip fills with `--primary`, its dot takes
-the text color, and it carries `aria-current="page"`. One chip is active at a
-time and is kept in the URL (`?filter=ats`). The chip row scrolls sideways
-without a scrollbar when needed.
+Role and Style narrow the list together. The
+[Library filters](library-filters.md) spec owns their values, URL behavior,
+controls, copy, focus, and announcements, including the proposed phone sheet and
+desktop rows. Each role selects the template whose sample is for that role.
 
 Each card is a link to the template page. A template with a sample shows the
 stored image of the sample's first PDF page; the rest show a live render of the
