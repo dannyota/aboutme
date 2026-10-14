@@ -127,13 +127,12 @@ copy, and client eligibility stay unchanged.
   which a public metadata URL does not provide. Split the transport and sign-in
   requirements from client identification into two sentences.
 
-Release remains gated by [CIMD release order](mcp-cimd.md#release-order) and the
-[production enablement proof](mcp-cimd-verification.md#production-enablement-proof).
-The observations below do not complete that proof. The existing 390 px layout
-applies to both languages; this proposal does not change spacing or type size to
-fit longer copy. This copy change adds no data, dependency, or authorization
-behavior. Cached older copy keeps the same commands; there is no migration or
-data loss.
+Release followed [CIMD release order](mcp-cimd.md#release-order) and the
+[production enablement proof](mcp-cimd-verification.md#production-enablement-proof),
+which Claude Code completed on 2026-10-14. The existing 390 px layout applies to
+both languages; this proposal does not change spacing or type size to fit longer
+copy. This copy change adds no data, dependency, or authorization behavior.
+Cached older copy keeps the same commands; there is no migration or data loss.
 
 ### Other clients
 
