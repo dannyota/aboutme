@@ -41,6 +41,8 @@ The filename rules and short burst are consistent with an automated file scan. T
 
 The received subject incorrectly labels rule records as requests. Its generic footer points to `journalctl`, but Coraza rule metadata is in `/run/aboutme/caddy-log/waf/` on tmpfs, not the journal. The alert implementation now says "rule matches" and directs only the three Coraza alert keys to safe metadata inspection; unit and host alerts keep their journal guidance. Rule counts, thresholds, throttling, and the detection mode are unchanged.
 
+2026-10-14: the owner decided that `coraza-matches` and `coraza-unparsed` must not send mail. The [alarm inventory](../../design/vietnam-production.md#logs-metrics-and-alarms) keeps their hourly counts in the watcher journal and retains `coraza-log-invalid` mail. This decision replaces the Coraza notification behavior described above; the 2026-10-13 delivery evidence and acceptance remain historical records.
+
 ## External readiness monitoring
 
 On 2026-10-13, `uptime.yml` was active and had nine successful scheduled executions since 2026-10-11. The latest starts were 2026-10-12 19:15:15 UTC, 2026-10-13 01:23:44 UTC, and 2026-10-13 07:55:21 UTC. The eight successive gaps range from 3:12:21 to 9:46:16. Each run started when created and completed within 7 to 10 seconds. There were no failed, pending, skipped, or canceled runs in the complete ten-run inventory, which also included one successful manual execution. The missing intervals precede recorded run creation; the API does not establish the scheduler's internal cause.
