@@ -127,7 +127,7 @@ func newBrowserCommand(executable, supervisor string, prefix []string) (func(*ex
 	if err != nil {
 		proof := &browserJoinProof{done: make(chan struct{}), readerDone: make(chan struct{})}
 		close(proof.readerDone)
-		return func(cmd *exec.Cmd) { cmd.Path = "" }, proof
+		return func(cmd *exec.Cmd) { cmd.Err = err }, proof
 	}
 	proof := &browserJoinProof{reader: reader, writer: writer, done: make(chan struct{}), readerDone: make(chan struct{})}
 	go proof.read()
@@ -140,7 +140,7 @@ func newBrowserCommand(executable, supervisor string, prefix []string) (func(*ex
 		cmd.Args = append([]string{supervisor}, prefix...)
 		passedFD, duplicateErr := unix.Dup(int(proof.writer.Fd()))
 		if duplicateErr != nil {
-			cmd.Path = ""
+			cmd.Err = duplicateErr
 			proof.noChildStarted()
 			return
 		}
@@ -220,7 +220,9 @@ func (p *browserJoinProof) closeWriters() {
 	p.closeOnce.Do(func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		ignoreProcessError(p.writer.Close())
+		if p.writer != nil {
+			ignoreProcessError(p.writer.Close())
+		}
 	})
 }
 
@@ -233,22 +235,23 @@ func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 		capability: "readiness-does-not-have-render-authority", jobID: "00000000-0000-0000-0000-000000000000",
 	})
 	if err != nil {
-		return ErrUnavailable
+		return diagnoseInitialization(ctx, ErrUnavailable, "proxy", err, nil, 0)
 	}
 	defer func() {
-		if err := proxy.close(); resultErr == nil && err != nil {
-			resultErr = ErrUnavailable
+		if closeErr := proxy.close(); resultErr == nil && closeErr != nil {
+			resultErr = diagnoseInitialization(ctx, ErrUnavailable, "proxy", closeErr, nil, 0)
 		}
 	}()
-	if err := withBrowser(ctx, renderer.executable, proxy.url(), renderer.supervisor, func(browserCtx context.Context) error {
+	if err := withBrowser(ctx, renderer.executable, proxy.url(), renderer.supervisor, true, func(browserCtx context.Context) error {
 		return chromedp.Run(browserCtx)
 	}); err != nil {
-		return ErrUnavailable
+		return err
 	}
 	return nil
 }
 
-func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, run func(context.Context) error) error {
+func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, diagnose bool, run func(context.Context) error) (resultErr error) {
+	started := time.Now()
 	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
 	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL, configure)...)
 	browserCtx, browserCancel := chromedp.NewContext(allocatorCtx)
@@ -257,6 +260,15 @@ func withBrowser(ctx context.Context, executable, proxyURL string, supervisor su
 		allocatorCancel()
 		proof.completeIfNotStarted()
 		proof.wait()
+		if diagnose && resultErr != nil {
+			proof.mu.Lock()
+			var state *os.ProcessState
+			if proof.cmd != nil {
+				state = proof.cmd.ProcessState
+			}
+			proof.mu.Unlock()
+			resultErr = diagnoseInitialization(ctx, ErrUnavailable, "launch", resultErr, state, time.Since(started))
+		}
 	}()
 	return run(browserCtx)
 }
@@ -285,7 +297,7 @@ func (r *Renderer) renderAttempt(parent context.Context, navigation renderjob.Na
 		cancel()
 		callbacks.wait()
 	}()
-	err = withBrowser(ctx, r.executable, proxy.url(), r.supervisor, func(browserCtx context.Context) error {
+	err = withBrowser(ctx, r.executable, proxy.url(), r.supervisor, false, func(browserCtx context.Context) error {
 		return runNavigation(browserCtx, cancel, &callbacks, &failure, initialURL, navigation)
 	})
 	if parentErr := parent.Err(); parentErr != nil {
