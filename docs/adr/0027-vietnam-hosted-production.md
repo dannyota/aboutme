@@ -32,8 +32,9 @@ Production uses providers that store and process data in Vietnam:
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
 - The release fence, secrets, jobs, logs, and alarms move to the host: journald
-  keeps the logs and a host timer mails alarms. The GitHub uptime workflow
-  checks `/readyz` from outside the host.
+  keeps the logs and a host timer mails alarms. A GreenNode vMonitor synthetic
+  check probes `/readyz` from outside the host and mails the owner; the GitHub
+  uptime workflow remains a slower backstop.
 
 The AWS production stack and its state bootstrap are removed. Nothing from
 `deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
@@ -121,3 +122,7 @@ remains undeployed for a possible AWS ECS or Kubernetes path.
 2026-10-13: the owner moved the Cloudflare DNS records from hand edits to a
 separate OpenTofu root, `deploy/vn/dns/`, so host plans need no Cloudflare
 token. DNSSEC signing and the registrar DS record stay manual.
+
+2026-10-14: GitHub's scheduled uptime runs arrived 3 to 10 hours apart, so the
+owner chose a GreenNode vMonitor synthetic check with free email notification as
+the site-down alarm. The free check and email quotas need monthly renewal.
