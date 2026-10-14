@@ -112,6 +112,8 @@ test("release contracts reject authority, dependency, timeout, and signing drift
     ["shared scan ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities")["continue-on-error"] = true; }, /must block/],
     ["shared scan conditional", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities").if = "false"; }, /unconditional/],
     ["shared scan omitted", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities").run = "true"; }, /scan command/],
+    ["shared command probe ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Probe host operation dispatch")["continue-on-error"] = true; }, /must block/],
+    ["shared command probe skipped", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Probe host operation dispatch").if = "false"; }, /server-only check/],
     ["shared publication", (_manual, _release, action) => { action.runs.steps.push({ run: 'docker push "$IMAGE"' }); }, /build-only/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
@@ -132,7 +134,7 @@ test("release contracts reject authority, dependency, timeout, and signing drift
   }
 });
 
-test("app build, smoke, or scan failure prevents a push", () => {
+test("app build, smoke, command probe, or scan failure prevents a push", () => {
   const steps = readImageCheck().runs.steps.filter((step) => step.run);
   const directory = mkdtempSync(join(tmpdir(), "release-check-contract-"));
   const trace = join(directory, "trace");
@@ -143,34 +145,72 @@ printf '%s\\n' "$1" >> "$TRACE_FILE"
 if [ "$1" = scan-image ] && [ "$FAIL_STAGE" = scan ]; then exit 1; fi
 `, { mode: 0o700 });
   const stub = `
+timeout() {
+  [ "$1" = 30 ] || return 125
+  shift
+  "$@"
+}
 docker() {
   printf 'docker %s\\n' "$1" >> "$TRACE_FILE"
   case "$1" in
     build) [ "$FAIL_STAGE" != build ] ;;
     inspect) printf 'linux/%s\\n' "$ARCH" ;;
-    run) [ "$FAIL_STAGE" != smoke ] ;;
+    run)
+      if [[ $* == *"--entrypoint /usr/local/bin/server"* ]]; then
+        local probe code output
+        case "\${*:8}" in
+          'account-delete status invalid')
+            probe=usage code=2
+            output='usage: server account-delete {show <slug> | confirm <slug> <user-id> | status <user-id>}' ;;
+          'account-delete status 018f5b6a-9a3e-7c21-8b1e-000000000030')
+            probe=status code=1 output='account-delete status failed' ;;
+          'media-deletion-status extra')
+            probe=queue code=2 output='usage: server media-deletion-status' ;;
+          'totp-key-reencrypt extra')
+            probe=reencrypt code=1 output='usage: server totp-key-reencrypt' ;;
+          *) return 125 ;;
+        esac
+        printf 'probe %s\\n' "$probe" >> "$TRACE_FILE"
+        [ "$FAIL_STAGE" != "probe-$probe" ] || return 99
+        [ "$FAIL_STAGE" != probe-timeout ] || return 124
+        [ "$FAIL_STAGE" != probe-output ] || output=unexpected
+        printf '%s\\n' "$output"
+        return "$code"
+      fi
+      [ "$FAIL_STAGE" != smoke ] ;;
   esac
 }
 `;
-  const script = steps.map((step) => `bash -e -o pipefail <<'CHECK_STEP'\n${stub}\n${step.run}\nCHECK_STEP`).join("\n") + '\nprintf "push\\n" >> "$TRACE_FILE"\n';
+  const script = steps.map((step) => {
+    const command = `bash -e -o pipefail <<'CHECK_STEP'\n${stub}\n${step.run}\nCHECK_STEP`;
+    if (step.if === undefined) return command;
+    assert.equal(step.if, "env.NAME == 'server'", `${step.name}: supported condition`);
+    return `if [[ "$NAME" == server ]]; then\n${command}\nfi`;
+  }).join("\n") + '\nprintf "push\\n" >> "$TRACE_FILE"\n';
   try {
-    for (const arch of ["arm64", "amd64"]) {
-      for (const stage of ["none", "build", "smoke", "scan"]) {
-        rmSync(trace, { force: true });
-        const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
-          cwd: directory,
-          env: { ...process.env, TRACE_FILE: trace, FAIL_STAGE: stage, NAME: "caddy",
-            ARCH: arch, IMAGE: "fixture", DOCKERFILE: "fixture", REPORT_NAME: "fixture", RUNNER_TEMP: directory },
-          encoding: "utf8", timeout: 5000,
-        });
-        assert.ifError(result.error);
-        assert.equal(result.status, stage === "none" ? 0 : 1, `${arch}/${stage}: ${result.stderr}`);
-        const commands = readFileSync(trace, "utf8").trim().split("\n");
-        assert.equal(commands.includes("push"), stage === "none", `${arch}/${stage}: publication`);
-        if (stage === "none") {
-          assert.ok(commands.includes("scan-image"), "scan must run");
-          assert.ok(commands.includes("report"), "report must run");
-          assert.ok(commands.indexOf("scan-image") < commands.indexOf("push"));
+    for (const name of ["caddy", "server"]) {
+      for (const arch of ["arm64", "amd64"]) {
+        for (const stage of ["none", "build", "smoke", "scan", "probe-usage", "probe-status", "probe-queue", "probe-reencrypt", "probe-output", "probe-timeout"]) {
+          rmSync(trace, { force: true });
+          const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+            cwd: directory,
+            env: { ...process.env, TRACE_FILE: trace, FAIL_STAGE: stage, NAME: name,
+              ARCH: arch, IMAGE: "fixture", DOCKERFILE: "fixture", REPORT_NAME: "fixture", RUNNER_TEMP: directory },
+            encoding: "utf8", timeout: 5000,
+          });
+          assert.ifError(result.error);
+          const succeeds = stage === "none" || (name !== "server" && stage.startsWith("probe-"));
+          assert.equal(result.status, succeeds ? 0 : 1, `${name}/${arch}/${stage}: ${result.stderr}`);
+          const commands = readFileSync(trace, "utf8").trim().split("\n");
+          assert.equal(commands.includes("push"), succeeds, `${name}/${arch}/${stage}: publication`);
+          if (succeeds) {
+            assert.ok(commands.includes("scan-image"), "scan must run");
+            assert.ok(commands.includes("report"), "report must run");
+            assert.ok(commands.indexOf("scan-image") < commands.indexOf("push"));
+            assert.deepEqual(commands.filter((command) => command.startsWith("probe ")),
+              name === "server" ? ["probe usage", "probe status", "probe queue", "probe reencrypt"] : [],
+              `${name}/${arch}/${stage}: server-only dispatch probes`);
+          }
         }
       }
     }
@@ -267,10 +307,14 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(release.jobs.eligibility.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(release.jobs.release.permissions, { actions: "read", contents: "write" });
   assert.equal(action.runs.using, "composite");
-  assert.deepEqual(action.runs.steps.map((step) => step.name), ["Build", "Smoke", "Install Trivy", "Scan for fixable HIGH/CRITICAL vulnerabilities", "Upload Trivy report"], "shared build-only steps");
+  assert.deepEqual(action.runs.steps.map((step) => step.name), ["Build", "Smoke", "Probe host operation dispatch", "Install Trivy", "Scan for fixable HIGH/CRITICAL vulnerabilities", "Upload Trivy report"], "shared build-only steps");
   for (const step of action.runs.steps) {
     assert.equal(step["continue-on-error"], undefined, `${step.name}: must block on failure`);
-    assert.equal(step.if, step.name === "Upload Trivy report" ? "always()" : undefined, `${step.name}: unconditional check`);
+    if (step.name === "Probe host operation dispatch") {
+      assert.equal(step.if, "env.NAME == 'server'", `${step.name}: server-only check`);
+    } else {
+      assert.equal(step.if, step.name === "Upload Trivy report" ? "always()" : undefined, `${step.name}: unconditional check`);
+    }
     if (step.run) assert.equal(step.shell, "bash");
   }
   const scan = action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities");

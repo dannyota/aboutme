@@ -885,7 +885,7 @@ func TestOperatorQueueSnapshotCountsDelayedAndLeasedJobs(t *testing.T) {
 		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET lease_id=$2, lease_expires_at=$3 WHERE id=$1`, ids[1], uuid.New(), h.now.Add(time.Hour)); err != nil {
 			return err
 		}
-		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at=$2 WHERE id=$1`, ids[2], h.now); err != nil {
+		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at=$2, outcome='absent' WHERE id=$1`, ids[2], h.now); err != nil {
 			return err
 		}
 		unchanged, err := q.GetMediaDeletionQueueState(ctx, args)

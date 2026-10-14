@@ -37,7 +37,7 @@ grep -qxF 'TimeoutStartSec=5min' \
 grep -qxF 'OnFailure=aboutme-crowdsec-retention-failure.service' \
   "$base/host/etc/systemd/system/aboutme-crowdsec-retention-startup.service"
 
-if rg -n 'http_path|http_user_agent|request_uri|request_body|headers' \
+if grep -RnE 'http_path|http_user_agent|request_uri|request_body|headers' \
   "$base/edge/crowdsec/parsers" "$base/edge/crowdsec/scenarios"; then
   echo "custom CrowdSec config retains an HTTP field outside the approved feed" >&2
   exit 1
