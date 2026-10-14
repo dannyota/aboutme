@@ -61,7 +61,8 @@ These stay outside the move:
 
 These stand through the move: the single-host shape, production without hosted
 UAT until about 500 users, laptop-run deploys by digest, public infrastructure
-code without secrets, GitHub without cloud credentials, one serving replica and
+code without secrets, GitHub without cloud credentials other than the vMonitor
+quota-renewal service account (History, 2026-10-14), one serving replica and
 deploy-step migrations (ADRs 0005 and 0026), the second-factor fence rules with
 a new store (ADR 0017), and the live-state gate (ADR 0010), with no edge cache.
 Public HTTP, SSE, and MCP contracts, privacy deadlines, private media
@@ -126,3 +127,10 @@ token. DNSSEC signing and the registrar DS record stay manual.
 2026-10-14: GitHub's scheduled uptime runs arrived 3 to 10 hours apart, so the
 owner chose a GreenNode vMonitor synthetic check with free email notification as
 the site-down alarm. The free check and email quotas need monthly renewal.
+
+2026-10-14: the owner amended the GitHub-without-cloud-credentials rule for one
+credential: a GreenNode service account limited to reading and renewing the free
+vMonitor Synthetic Test and Email Notification quotas, stored in a GitHub
+environment restricted to `main` and used by a scheduled workflow, because the
+free quotas cannot auto-renew and a lapse stops the site-down alarm. The
+[quota renewal design](../design/vmonitor-quota-renewal.md) states the controls.
