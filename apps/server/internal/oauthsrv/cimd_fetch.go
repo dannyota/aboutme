@@ -130,11 +130,20 @@ func (f *CIMDResolver) Resolve(ctx context.Context, raw string, address netip.Ad
 			limiter *api.BoundedRateLimiter
 			key     string
 		}{
-			{f.addressRate, registerAddressKey(address.Unmap())}, {f.urlRate, fmt.Sprintf("%x", digest)}, {f.globalRate, "global"},
+			{f.addressRate, registerAddressKey(address.Unmap())}, {f.urlRate, fmt.Sprintf("%x", digest)},
 		} {
 			if ok, seconds := admission.limiter.Admit(now, admission.key); !ok && seconds > retry {
 				retry = seconds
 			}
+		}
+		// Resolve holds f.mu through the combined decision. Inspect global debt
+		// on every refusal, but charge it only when the other buckets admit.
+		globalAdmission := f.globalRate.Admit
+		if retry > 0 {
+			globalAdmission = f.globalRate.Check
+		}
+		if ok, seconds := globalAdmission(now, "global"); !ok && seconds > retry {
+			retry = seconds
 		}
 		if retry > 0 {
 			f.mu.Unlock()

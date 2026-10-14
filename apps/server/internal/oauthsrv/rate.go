@@ -135,13 +135,13 @@ func (p *RatePolicies) AdmitToken(now time.Time, r *http.Request) (bool, int) {
 
 // AdmitGrant reserves one failed-grant budget slot before token processing, so
 // concurrent invalid grants cannot all pass an unchanged precheck.
-func (p *RatePolicies) AdmitGrant(clientID uuid.UUID, now time.Time) (GrantAttempt, bool, int) {
-	return p.grants.admit(clientID, now)
+func (p *RatePolicies) AdmitGrant(grantID uuid.UUID, now time.Time) (GrantAttempt, bool, int) {
+	return p.grants.admit(grantID, now)
 }
 
 // FinishGrant resolves one reserved attempt. Invalid grants retain one failure;
 // neutral outcomes release only their reservation; success clears a tracked
-// client's window. Overflow success cannot clear other clients' shared debt.
+// grant's window. Overflow success cannot clear other grants' shared debt.
 func (p *RatePolicies) FinishGrant(attempt grantAttempt, result grantAttemptResult) {
 	p.grants.finish(attempt, result)
 }
@@ -179,16 +179,16 @@ func (l *failedGrantLimiter) nowLocked(now time.Time) time.Time {
 	return now
 }
 
-func (l *failedGrantLimiter) admit(clientID uuid.UUID, now time.Time) (grantAttempt, bool, int) {
+func (l *failedGrantLimiter) admit(grantID uuid.UUID, now time.Time) (grantAttempt, bool, int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now = l.nowLocked(now)
-	bucket, tracked := l.entries[clientID]
+	bucket, tracked := l.entries[grantID]
 	if !tracked {
 		l.evictExpiredLocked(now)
 		if len(l.entries) < l.maxKeys {
 			bucket = &failedGrantBucket{}
-			l.entries[clientID] = bucket
+			l.entries[grantID] = bucket
 			tracked = true
 		} else {
 			bucket = &l.overflow
@@ -211,7 +211,7 @@ func (l *failedGrantLimiter) admit(clientID uuid.UUID, now time.Time) (grantAtte
 		l.nextLease++
 	}
 	bucket.pending[l.nextLease] = struct{}{}
-	return grantAttempt{clientID: clientID, leaseID: l.nextLease, overflow: !tracked}, true, 0
+	return grantAttempt{clientID: grantID, leaseID: l.nextLease, overflow: !tracked}, true, 0
 }
 
 func (l *failedGrantLimiter) finish(attempt grantAttempt, result grantAttemptResult) {
@@ -251,9 +251,9 @@ func (l *failedGrantLimiter) finish(attempt grantAttempt, result grantAttemptRes
 }
 
 func (l *failedGrantLimiter) evictExpiredLocked(now time.Time) {
-	for clientID, bucket := range l.entries {
+	for grantID, bucket := range l.entries {
 		if l.expiredLocked(bucket, now) {
-			delete(l.entries, clientID)
+			delete(l.entries, grantID)
 		}
 	}
 }
