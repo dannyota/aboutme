@@ -45,7 +45,7 @@ rows are never split by number range.
 | `AC-REN`    | 9    | [ac-ren.md](./ac-ren.md)       |
 | `AC-FONT`   | 1    | [ac-font.md](./ac-font.md)     |
 | `AC-EDITOR` | 18   | [ac-editor.md](./ac-editor.md) |
-| `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
+| `AC-MCP`    | 15   | [ac-mcp.md](./ac-mcp.md)       |
 | `AC-UI`     | 14   | [ac-ui.md](./ac-ui.md)         |
 | `AC-VIEW`   | 10   | [ac-view.md](./ac-view.md)     |
 | `AC-SHOW`   | 15   | [ac-showcase.md](./ac-showcase.md) |

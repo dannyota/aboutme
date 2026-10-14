@@ -284,6 +284,8 @@ type Querier interface {
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
 	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
+	// Public UUID resolution excludes the internal UUID of a URL client.
+	GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
 	GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error)
 	// Inputs for the capacity Retry-After decision: while an expired retained
 	// row remains the caller retries in one second (the next mutation's
@@ -322,6 +324,7 @@ type Querier interface {
 	// family it issued, so the revocation and the row it read cannot interleave.
 	GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
 	GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
+	GetOAuthClientByMetadataURL(ctx context.Context, metadataUrl string) (OAuthClient, error)
 	// The client-row lock the authorize, consent, and token paths take before
 	// writing a grant, code, or token for that client. Holding it is what lets
 	// ListIdleOAuthClientCandidates skip (rather than collect) a client that is
@@ -739,6 +742,9 @@ type Querier interface {
 	// list shows when the agent was first connected, not when it was last
 	// re-approved.
 	UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantParams) (OAuthGrant, error)
+	// Approval alone calls this query, before user and session locks. The unique
+	// URL index serializes concurrent approvals and preserves the internal UUID.
+	UpsertOAuthMetadataClient(ctx context.Context, arg UpsertOAuthMetadataClientParams) (OAuthClient, error)
 	// Insert-or-replace the single credential under the row lock the caller
 	// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
 	// bumping changed_at on the conflict arm.

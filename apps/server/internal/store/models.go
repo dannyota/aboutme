@@ -114,6 +114,7 @@ type OAuthClient struct {
 	RedirectURIs json.RawMessage
 	CreatedAt    time.Time
 	LastUsedAt   time.Time
+	MetadataUrl  *string
 }
 
 type OAuthGrant struct {

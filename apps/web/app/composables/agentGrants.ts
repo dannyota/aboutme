@@ -68,16 +68,29 @@ function isIsoDate(value: unknown): value is string {
     && Number.isFinite(Date.parse(value));
 }
 
+function isClientIdentity(candidate: {
+  clientKind?: unknown;
+  clientHost?: unknown;
+}): boolean {
+  if (candidate.clientKind === 'dcr') return candidate.clientHost === null;
+  return candidate.clientKind === 'cimd'
+    && typeof candidate.clientHost === 'string'
+    && candidate.clientHost !== '';
+}
+
 function isGrant(value: unknown): value is AgentGrant {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as {
     id?: unknown;
     clientName?: unknown;
+    clientKind?: unknown;
+    clientHost?: unknown;
     scopes?: unknown;
     createdAt?: unknown;
     lastUsedAt?: unknown;
   };
   return typeof candidate.id === 'string'
+    && isClientIdentity(candidate)
     && candidate.id !== ''
     && typeof candidate.clientName === 'string'
     && candidate.clientName !== ''

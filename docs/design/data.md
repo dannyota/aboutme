@@ -19,7 +19,7 @@ intended model, not replacement DDL.
 | `password_registrations`         | Pending email verification: unique canonical email, name, hash, token digest, 24-hour expiry                              |
 | `password_reset_tokens`          | Single-use reset token digest with 30-minute expiry; unique per user                                                      |
 | `auth_email_jobs`                | Encrypted verification/reset/notification payload with bounded lease, retry, and terminal state                           |
-| `oauth_clients`                  | Public agent client ID, bounded name, bounded redirect-URI list, created and last-used times                              |
+| `oauth_clients`                  | Internal UUID, nullable exact metadata URL, bounded name and redirect list, created and last-used times                   |
 | `oauth_authorization_codes`      | Unique code digest, client/user/grant, epoch, scopes, S256 challenge, redirect URI, 60-second expiry, consumed time       |
 | `oauth_grants`                   | Unique live (user, client) pair, epoch, granted scopes, created and revoked times                                         |
 | `oauth_tokens`                   | Unique token digest, closed kind, family ID, rotated-from lineage, client/user/grant, expiry, revoked and last-used times |
