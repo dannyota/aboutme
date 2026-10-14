@@ -26,7 +26,7 @@ mails alarms through Bizfly.
 | Secrets            | Root-only host files, age-encrypted copy in `aboutme-infra`         |
 | Release fence      | Root-owned host file plus a start-time check                        |
 | Jobs               | systemd timers running one-shot containers                          |
-| Logs and alarms    | journald, host mail alert units, GitHub uptime workflow             |
+| Logs and alarms    | journald, host mail alert units, vMonitor; GitHub backstop          |
 | Transactional mail | Bizfly Email Transaction over SMTP                                  |
 | Support mailbox    | Google Workspace                                                    |
 | Infrastructure     | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; DNS root     |
@@ -66,15 +66,16 @@ Three host-level controls replace AWS WAF:
   `/var/log/caddy/waf/maintenance-match.log`; both are on tmpfs. Rule callbacks
   emit `msg=waf_rule_match` with numeric `rule_id`; other unknown shapes emit
   `msg=waf_rule_match_unparsed`. Coraza shares its engine logger with the rule
-  callback. Only its fixed missing-key macro warning,
-  `key not found in collection, returning the original text`, emits
-  `msg=waf_engine_diagnostic`. It has only `ts`, `level`, `logger`, and `msg`,
-  no `rule_id` or raw fields; the watcher excludes it from rule counts and
-  unknown alerts. Logs carry no raw fields or personal data and never reach disk
-  or journald. Files cap at 5 MiB plus two rolls; one-day expiry applies only to
-  rolled files, so a low-volume active file persists until rotation or reboot.
-  After two weeks, devops reviews matches, excludes false positives on resume
-  writes, and enables blocking.
+  callback. An exact allowlist of fixed engine and connector diagnostics,
+  including the missing-key macro warning, body processing errors, and the
+  connector's interruption summary, emits `msg=waf_engine_diagnostic`.
+  Diagnostics have only `ts`, `level`, `logger`, and `msg`, no `rule_id` or raw
+  fields; the watcher excludes them from rule counts. WAF records carry no raw
+  fields or personal data and stay on tmpfs. Only aggregate match and unparsed
+  counts reach the journal. Files cap at 5 MiB plus two rolls; one-day expiry
+  applies only to rolled files, so a low-volume active file persists until
+  rotation or reboot. After two weeks, devops reviews matches, excludes false
+  positives on resume writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -269,28 +270,36 @@ expires release backups; the command stays for the AWS path.
 
 ## Logs, metrics, and alarms
 
-There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
 journald keeps 30 days on the data volume, capped at 2 GB. Ordinary Caddy logs
 drop addresses, URIs, and request headers. Its RAM-only feed and logs follow
 [HTTP privacy contract](crowdsec-http-privacy.md). `aboutme-watch.timer` runs
 `watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
 both mail the support mailbox through Bizfly SMTP with `msmtp`, at most one
-message per condition per UTC day, from the sender the app uses. The GitHub
-[uptime workflow](../../.github/workflows/uptime.yml) checks `/readyz` from
-outside the host. The [production runbook](../runbooks/production.md#alarms)
-owns its schedule, notification recipient, and limits.
+message per condition per UTC day, from the sender the app uses. GreenNode
+vMonitor is the external readiness alarm: it checks `/readyz` every minute from
+two public locations and mails the owner. The GitHub
+[uptime workflow](../../.github/workflows/uptime.yml) is a slower backstop. The
+[production runbook](../runbooks/production.md#alarms) owns check settings,
+notification delivery, and monthly quota renewal.
 
 | Signal   | Mechanism                                                        |
 | -------- | ---------------------------------------------------------------- |
-| App down | GitHub uptime workflow on `/readyz`, failed-run mail             |
+| App down | vMonitor on `/readyz`, email; GitHub uptime backstop             |
 | Units    | `OnFailure=` mail; `watch.sh` lists failed units                 |
 | Host     | `watch.sh`: root and data volume above 70%                       |
 | Database | `watch.sh`: archive failure, newest backup at least 26 hours old |
 | Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                  |
-| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour        |
+| Edge     | `watch.sh`: CrowdSec bans and invalid Coraza logs                |
 | TOTP     | `watch.sh`: `totp_unavailable` in the server journal             |
 | Mail     | Bizfly delivery logs; see the email runbook                      |
 | Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
+
+Coraza match and unparsed counts do not trigger mail (owner, 2026-10-14). Each
+watcher run writes one journal line with both counts for the preceding hour,
+including zero counts. `coraza-log-invalid` still mails malformed logs or
+unknown record kinds. Rule-match counts are callback records, not distinct
+requests or blocked responses. The connector's interruption summary is an engine
+diagnostic because an interruption can also come from a body limit.
 
 ## Infrastructure code and state
 
@@ -338,7 +347,8 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
    at `127.0.0.1:8080` from the host. Start Caddy beside maintenance, then stop
    maintenance and prove it stopped. The readiness check does not depend on
    which Caddy takes an external connection.
-9. Start the job timers. The external uptime workflow runs throughout deploys.
+9. Start the job timers. vMonitor and the uptime backstop run throughout
+   deploys.
 10. Smoke from outside: health, TLS, security headers, and a 403 for a
     CrowdSec-banned test address. Release the lock.
 

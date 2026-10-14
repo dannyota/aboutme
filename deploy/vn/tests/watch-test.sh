@@ -49,7 +49,7 @@ printf '[]\n'
 STUB
 cat >"$work/bin/find" <<'STUB'
 #!/usr/bin/env bash
-if [[ $* == *serving-match.log* ]]; then
+if [[ ${WATCH_TEST_NO_WAF_LOGS:-0} == 0 && $* == *serving-match.log* ]]; then
   printf '2000000000 %s\n' "$WATCH_TEST_FIXTURE"
 fi
 STUB
@@ -59,7 +59,6 @@ exit 0
 STUB
 chmod +x "$work/bin/"* "$work/lib/"*.sh
 export PATH=$work/bin:$PATH ABOUTME_WATCH_TEST_LIB=$work/lib
-export CORAZA_MATCHES_PER_HOUR=0
 export ABOUTME_RETENTION_SUCCESS_MARKER=$work/retention-ok
 : >"$ABOUTME_RETENTION_SUCCESS_MARKER"
 
@@ -67,7 +66,7 @@ run_watch() { # fixture alerts
   export WATCH_TEST_FIXTURE=$1 WATCH_TEST_ALERTS=$2 WATCH_TEST_RETENTION_FAILURES=$work/retention-failures
   : >"$WATCH_TEST_ALERTS"
   : >"$WATCH_TEST_RETENTION_FAILURES"
-  "$watch"
+  "$watch" >"$WATCH_TEST_ALERTS.journal"
   [[ ! -s $WATCH_TEST_RETENTION_FAILURES ]] || { echo "fresh retention lease failed" >&2; exit 1; }
   sort -o "$WATCH_TEST_ALERTS" "$WATCH_TEST_ALERTS"
 }
@@ -78,22 +77,51 @@ cat >"$base" <<'EOF'
 {"ts":1999999999,"level":"warn","logger":"http.handlers.waf","msg":"waf_rule_match","rule_id":1001}
 {"ts":1999999999,"level":"warn","logger":"http.handlers.waf","msg":"waf_rule_match_unparsed"}
 {"ts":1999999999,"level":"warn","logger":"http.handlers.waf","msg":"unexpected"}
+{"ts":1999996399,"level":"error","logger":"http.handlers.waf","msg":"waf_rule_match","rule_id":1002}
+{"ts":1999996399,"level":"error","logger":"http.handlers.waf","msg":"waf_rule_match_unparsed"}
 EOF
 {
   cat "$base"
-  printf '%s\n' '{"ts":1999999999,"level":"warn","logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}'
+  printf '%s\n' '{"ts":1999999999,"level":"error","logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}'
 } >"$with_diagnostic"
 
 run_watch "$base" "$work/base.alerts"
 run_watch "$with_diagnostic" "$work/diagnostic.alerts"
 cmp "$work/base.alerts" "$work/diagnostic.alerts"
-grep -qxF 'coraza-matches|Coraza recorded 1 rule matches in the last hour' "$work/diagnostic.alerts"
-grep -qxF 'coraza-unparsed|Coraza wrote 1 unparsed match records in the last hour' "$work/diagnostic.alerts"
 grep -qxF 'coraza-log-invalid|the Coraza match log has 1 unknown records in the last hour' "$work/diagnostic.alerts"
-[[ $(wc -l <"$work/diagnostic.alerts") == 3 ]] || {
+[[ $(wc -l <"$work/diagnostic.alerts") == 1 ]] || {
   echo "the watcher raised an unexpected alert" >&2
   exit 1
 }
+cmp "$work/base.alerts.journal" "$work/diagnostic.alerts.journal"
+grep -qxF 'coraza counts in the last hour: matches=1 unparsed=1' "$work/diagnostic.alerts.journal"
+[[ $(wc -l <"$work/diagnostic.alerts.journal") == 1 ]] || {
+  echo "the watcher did not write exactly one Coraza count line" >&2
+  exit 1
+}
+
+noise=$work/noise.log
+for ((i=0; i<280; i++)); do
+  printf '%s\n' '{"ts":1999999999,"level":"error","logger":"http.handlers.waf","msg":"waf_rule_match","rule_id":1001}'
+done >"$noise"
+printf '%s\n' '{"ts":1999999999,"level":"error","logger":"http.handlers.waf","msg":"waf_rule_match_unparsed"}' >>"$noise"
+run_watch "$noise" "$work/noise.alerts"
+[[ ! -s $work/noise.alerts ]] || { echo "Coraza noise triggered mail" >&2; exit 1; }
+grep -qxF 'coraza counts in the last hour: matches=280 unparsed=1' "$work/noise.alerts.journal"
+
+: >"$work/empty.log"
+run_watch "$work/empty.log" "$work/empty.alerts"
+[[ ! -s $work/empty.alerts ]] || { echo "an empty Coraza log triggered mail" >&2; exit 1; }
+grep -qxF 'coraza counts in the last hour: matches=0 unparsed=0' "$work/empty.alerts.journal"
+
+WATCH_TEST_NO_WAF_LOGS=1 run_watch "$base" "$work/missing.alerts"
+[[ ! -s $work/missing.alerts ]] || { echo "absent Coraza logs triggered mail" >&2; exit 1; }
+grep -qxF 'coraza counts in the last hour: matches=0 unparsed=0' "$work/missing.alerts.journal"
+
+printf '%s\n' 'not-json' >"$work/malformed.log"
+run_watch "$work/malformed.log" "$work/malformed.alerts"
+grep -qxF 'coraza-log-invalid|the Coraza match log is malformed' "$work/malformed.alerts"
+[[ $(wc -l <"$work/malformed.alerts") == 1 ]] || { echo "malformed Coraza log alerts changed" >&2; exit 1; }
 
 touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
 WATCH_TEST_FIXTURE=$base \

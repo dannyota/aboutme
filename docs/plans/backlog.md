@@ -16,7 +16,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Resolve the GitHub uptime workflow cadence gap: nine scheduled runs succeeded, but creation gaps span 3:12:21 to 9:46:16 against a requested five-minute interval. The scheduler cause remains unavailable. Evidence: [external readiness monitoring collected 2026-10-13](./traceability/vietnam-operations.md#external-readiness-monitoring).
+- Renew the free vMonitor Synthetic Test and email quotas each month, and automate renewal once the `vngcloud` CLI supports it; current expiries are Synthetic 2026-10-25 21:43 UTC and email 2026-11-13 03:10 UTC. Evidence: [external readiness monitoring](./traceability/vietnam-operations.md#external-readiness-monitoring).
 
 ## Vietnam production
 
@@ -25,7 +25,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Diagnose readiness after a hard reset: retained samples show persistent 503s until the server restarted, but no failed dependency reason. Startup ordering was present. Evidence: [historical readiness failure](./traceability/vietnam-operations.md#historical-readiness-failure).
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
-- Add and review a host procedure for abuse account deletion.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 
 ## Acceptance evidence gaps

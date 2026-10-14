@@ -39,7 +39,8 @@ Current behavior lives in code, deployment configuration, and
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                 |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks               |
-| 9a      | [Vietnam host operations](vietnam-host-operations.md)                  | Key rotation, account deletion, recovery, and verification                |
+| 9a      | [Vietnam host operations](vietnam-host-operations.md)                  | Account deletion, key rotation, recovery, and verification                |
+| Other   | [Host operations delivery](vietnam-host-operations-delivery.md)        | Wire protocol, proof transport, and hosted checks                         |
 | 10      | [Decision status](decisions.md)                                        | ADR index, open gates, and change process                                 |
 | Other   | [Numeric budgets](budgets.md)                                          | Hard limits, rate policies, SLOs, and benchmark protocol                  |
 | Other   | [Vietnam tech resumes](vietnam-tech-resumes.md)                        | Resume language and writing rules for developers in Vietnam               |
