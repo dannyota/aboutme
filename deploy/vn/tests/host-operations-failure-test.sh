@@ -52,9 +52,10 @@ pathlib.Path(sys.argv[2]).write_text(source.replace('s.st_uid != 0', 's.st_uid !
 PY
 operations_dir=$work/records
 mkdir -m 0700 "$operations_dir"
-# Load runner functions without invoking root entry. Fixed installed paths are
-# redirected only in this private test copy.
-sed "s|^lib=/usr/local/lib/aboutme$|lib=$here/host|" "$here/host/operation-run.sh" >"$work/runner.sh"
+# Redirect installed paths and the root UID expectation only in this private
+# test copy; modes, links, state IO and request dispatch stay real.
+sed -e "s|^lib=/usr/local/lib/aboutme$|lib=$here/host|" \
+  -e "s|EUID == 0|EUID == $(id -u)|" "$here/host/operation-run.sh" >"$work/runner.sh"
 # shellcheck source=deploy/vn/host/operation-run.sh
 source "$work/runner.sh"
 # Use the fixture state driver after loading installed helper definitions.
@@ -72,6 +73,64 @@ new_state() {
     challenge:null,recoveryCopy:null,proofReceipt:null,attemptCount:0,attempts:[],intent:"none",pendingVerb:"none",fenceHeld:false,reserved:true,closureQuiescent:true}'
 }
 request_id() { printf '%042dA' "$1"; }
+# Unknown requests have no state, lock, fence or unit to change. Missing or
+# unsafe files inside an existing request are protocol failures, not absence.
+(
+  operations_dir=$work/lookup-records
+  mkdir -m 0700 "$operations_dir"
+  operation_initialize() { :; }
+  request_start() { touch "$work/unknown-dispatch"; }
+  request_fence() { touch "$work/unknown-fence"; }
+  expect_error() {
+    local expected=$1 rc=0
+    shift
+    ("$@") >"$work/lookup-output" 2>"$work/lookup-error" || rc=$?
+    [[ $rc == 1 && ! -s $work/lookup-output ]] || fail "lookup exit or stdout: $expected"
+    printf '%s\n' "$expected" >"$work/expected-error"
+    cmp -s "$work/expected-error" "$work/lookup-error" || fail "lookup diagnostic: $expected"
+  }
+  for mode in read load; do expect_error not_found operation_state "$mode" "$id"; done
+  for verb in status resume verify abort apply proof; do
+    envelope=$(jq -cn --arg verb "$verb" --arg id "$id" --arg user "$user" '
+      {verb:$verb,requestId:$id} +
+      (if $verb=="apply" then {confirmation:("delete-account:"+$id+":"+$user+":valid-slug")}
+       elif $verb=="proof" then {phase:"serving",nonce:$id,result:"pass"} else {} end)')
+    expect_error not_found operation_main request <<<"$envelope"
+  done
+  expect_error not_found operation_main run "$id"
+  [[ ! -e $operations_dir/$id && ! -e $work/unknown-dispatch && ! -e $work/unknown-fence ]] || fail 'unknown lookup created work'
+  mkdir -m 0700 "$operations_dir/$id"
+  for mode in read load; do
+    expect_error protocol_failed operation_state "$mode" "$id"
+    printf '{}\n' >"$operations_dir/$id/state.json"
+    expect_error protocol_failed operation_state "$mode" "$id"
+    rm "$operations_dir/$id/state.json"
+    ln -s "$work/absent-state" "$operations_dir/$id/state.json"
+    expect_error protocol_failed operation_state "$mode" "$id"
+    rm "$operations_dir/$id/state.json"
+  done
+  envelope=$(jq -cn --arg id "$id" '{verb:"status",requestId:$id}')
+  expect_error protocol_failed operation_main request <<<"$envelope"
+  rmdir "$operations_dir/$id"
+  ln -s "$work/absent-request" "$operations_dir/$id"
+  expect_error protocol_failed operation_state read "$id"
+  expect_error refused request_existing resume
+  rm "$operations_dir/$id"
+  chmod 0755 "$operations_dir"
+  expect_error protocol_failed operation_state read "$id"
+  chmod 0700 "$operations_dir"
+  rmdir "$operations_dir"
+  expect_error protocol_failed operation_state read "$id"
+  mkdir -m 0700 "$operations_dir"
+  operation_state new '' 3<<<"$(new_state "$id")" >/dev/null
+  cp "$operations_dir/$id/state.json" "$work/known-state"
+  operation_main request <<<"$envelope" >"$work/known-output" 2>"$work/known-error" || fail 'known status refused'
+  [[ ! -s $work/known-error ]] || fail 'known status emitted an error'
+  operation_state wire '' 3<"$work/known-output" >/dev/null || fail 'known status changed its wire schema'
+  cmp -s "$work/known-state" "$operations_dir/$id/state.json" || fail 'status changed known state'
+)
+echo 'host operation unknown requests and damaged state passed'
+
 # Concurrent admission may reserve exactly 32 slots, even across restarts.
 for n in $(seq 1 36); do
   (request=$(request_id "$n"); operation_state new '' 3<<<"$(new_state "$request")" >"$work/admit-$n" 2>/dev/null || true) &
