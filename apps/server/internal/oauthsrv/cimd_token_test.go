@@ -988,9 +988,22 @@ func TestTokenWrongStoredKindNeverReservesOrRotates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			raw := tokens.RefreshToken
+			kind, digest, err := ParseToken(raw)
+			if err != nil || kind != TokenKindRefresh {
+				t.Fatal("fixture did not issue a valid refresh token")
+			}
+			// Keep the issued digest but store access kind with a valid access lifetime.
+			var storedKind string
+			if err := f.pool.QueryRow(t.Context(), `UPDATE oauth_tokens
+				SET kind='access', expires_at=created_at + interval '1 hour'
+				WHERE token_digest=$1 AND kind='refresh' RETURNING kind`, digest[:]).Scan(&storedKind); err != nil {
+				t.Fatal(err)
+			}
+			if storedKind != string(TokenKindAccess) {
+				t.Fatal("candidate did not match a stored access credential")
+			}
 			before := f.snapshot(t)
-			// A refresh spelling over an issued access digest has the wrong stored kind.
-			raw := refreshTokenPrefix + strings.TrimPrefix(tokens.AccessToken, accessTokenPrefix)
 			form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {raw}, "client_id": {f.form.Get("client_id")}}
 			assertClosedInvalidGrant(t, f.post(t, form))
 			form.Del("client_id")
