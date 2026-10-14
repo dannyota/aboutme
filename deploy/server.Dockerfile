@@ -13,7 +13,14 @@ COPY go.work ./
 COPY apps/server/go.mod apps/server/go.sum ./apps/server/
 COPY packages/schema/gen/go/go.mod ./packages/schema/gen/go/
 
-RUN go -C apps/server mod download
+# Retry proxy transport failures without changing module checksum verification.
+RUN for attempt in 1 2 3; do \
+      go -C apps/server mod download && exit 0; \
+      status=$?; \
+      if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
+      echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
+      sleep "$((attempt * 5))" || exit $?; \
+    done
 
 # Migrations are embedded in cmd/migrate. Generated schema sources are a real
 # module dependency, not build-time input only.
