@@ -514,6 +514,11 @@ apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--paged.png
 apps/web/e2e/baselines/engineer-compact--vn-full--paged.png
 apps/web/e2e/baselines/executive-band--vn-full--paged.png
+apps/web/e2e/baselines/gallery--filtered--en--light--1440.png
+apps/web/e2e/baselines/gallery--filtered--vi--dark--390.png
+apps/web/e2e/baselines/gallery--rows--vi--light--1024.png
+apps/web/e2e/baselines/gallery--sheet--en--light--390.png
+apps/web/e2e/baselines/gallery--sheet--vi--dark--390.png
 apps/web/e2e/baselines/guide--dark--1280.png
 apps/web/e2e/baselines/guide--dark--390.png
 apps/web/e2e/baselines/guide--en--dark--1280.png
