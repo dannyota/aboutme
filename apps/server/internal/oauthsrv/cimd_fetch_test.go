@@ -454,7 +454,9 @@ func TestCIMDAddressFixturesAtDNSAndConnect(t *testing.T) {
 			t.Fatalf("connect fixture %s: %v", fixture.address, err)
 		}
 		dialed = nil
-		_, _ = f.connect(t.Context(), "tcp", netip.AddrPortFrom(fixture.address, 443).String(), 443, approved)
+		if _, err := f.connect(t.Context(), "tcp", netip.AddrPortFrom(fixture.address, 443).String(), 443, approved); !errors.Is(err, errCIMDInvalid) {
+			t.Fatalf("connect fixture %s: %v", fixture.address, err)
+		}
 		if fixture.allowed && (len(dialed) != 1 || dialed[0] != netip.AddrPortFrom(fixture.address.Unmap(), 443).String()) || !fixture.allowed && len(dialed) != 0 {
 			t.Fatalf("connect fixture %s dialed %v", fixture.address, dialed)
 		}
@@ -471,7 +473,9 @@ func TestCIMDInvalidCacheEntryReleasesLock(t *testing.T) {
 				t.Error("invalid cache entry did not panic")
 			}
 		}()
-		_, _ = f.Resolve(t.Context(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8"))
+		if _, err := f.Resolve(t.Context(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8")); err != nil {
+			t.Error("invalid cache entry returned an error instead of panicking", err)
+		}
 	}()
 	if !f.mu.TryLock() {
 		t.Fatal("invalid cache entry retained the resolver lock")
