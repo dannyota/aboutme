@@ -1,6 +1,6 @@
 # Vietnam host operations
 
-Status: Proposed (2026-10-12), revised 2026-10-13. The owner approved building
+Status: Proposed (2026-10-12), revised 2026-10-14. The owner approved building
 these operations on 2026-10-13; independent design review precedes
 implementation. [ADR 0027](../adr/0027-vietnam-hosted-production.md) owns the
 host boundary, [ADR 0029](../adr/0029-community-showcase.md) requires operator
@@ -23,16 +23,20 @@ Each release includes its commands, tests, and shipping docs listed in
 [delivery](vietnam-host-operations-delivery.md). Publish the reviewed image,
 install its reviewed host bundle, deploy that image normally, then enable use of
 its operations. Installation must preserve live secrets, flags, and unresolved
-requests. Refuse runner replacement while a request may run or a key marker
-exists. A reviewed bundle update may repair a safely suspended request only
-after proving unit/container/backend quiescence and safe serving with no fence
-owner. It must preserve schema-version-1 state and both keys, support that
+requests. Ordinary installation refuses runner replacement while a request may
+run or a key marker exists. A reviewed bundle update may repair a suspended
+request after proving unit/container/backend quiescence and safe serving with no
+fence owner. It must preserve schema-version-1 state and both keys, support that
 request's saved protocol, and pass installed-hash checks before any resume. An
 incompatible state change requires its own reviewed migration; never erase an
-unresolved request to make installation succeed. The scripts refuse commands
-absent from the live release; installing host scripts alone never authorizes
-them. There is no schema migration, HTTP change, or document schema change.
-Older browser tabs keep their existing contracts.
+unresolved request to make installation succeed. A rotation that cannot serve
+uses the separate
+[quiescent repair](vietnam-host-operations-delivery.md#quiescent-repair)
+contract, shipped with TOTP rotation; account deletion does not depend on it.
+Ordinary commands must exist in the live release; repair binds a checked forward
+image before resume. Installing host scripts alone never authorizes new actions.
+There is no schema migration, HTTP change, or document schema change. Older
+browser tabs keep their existing contracts.
 
 This costs two short maintenance windows per TOTP rotation (switch and retire),
 one per view-pass rotation, and durable host state. Direct SQL bypasses target
@@ -205,20 +209,21 @@ read-only rootfs, 256 MiB memory and equal memory-swap limit, and no restart.
 Only the socket and bounded tmpfs are mounted. Use `--log-driver=none` and
 capture stdout privately before validation. Do not reuse job-run.sh wholesale.
 
-Before activation, encrypt a stable snapshot of staging, current keys, archive,
-and the recovery manifest on-host to the configured age recipient. The identity
-stays off-host. New `secrets-host.sh operation-copy <id>` takes no
-caller-selected recipient/path; it emits only ciphertext. Root-owned 0600
-`/etc/aboutme/operations.json` pins the recipient as the sole `ageRecipient`
-field, copied from `host/env/operations.json.example` only when missing. No
-identity is stored there. The wrapper uses the owner's configured
-`ABOUTME_INFRA_DIR` outside the checkout; no remote output path is accepted. The
-wrapper saves it to the owner's configured `aboutme-infra` directory, mode 0600,
-fsyncs file and directory, and sends `recovery-copy <id> <sha256>` to the
-runner. Hash the exported ciphertext, not plaintext. The receipt must match the
-saved export hash and staged key ID. Lost replies reuse that same export; export
-failure or missing receipt blocks activation. Only an authenticated operator can
-attest off-host durability.
+Before activation, encrypt a stable snapshot of rotation keys and their staging
+and archives in the closed
+[recovery archive](vietnam-host-operations-delivery.md#recovery-archive) format
+on-host to the configured age recipient. The identity stays off-host. New
+`secrets-host.sh operation-copy <id>` takes no caller-selected recipient/path;
+it emits only ciphertext. Root-owned 0600 `/etc/aboutme/operations.json` pins
+the recipient as the sole `ageRecipient` field, copied from
+`host/env/operations.json.example` only when missing. No identity is stored
+there. The wrapper uses the owner's configured `ABOUTME_INFRA_DIR` outside the
+checkout; no remote output path is accepted. The wrapper saves it to the owner's
+configured `aboutme-infra` directory, mode 0600, fsyncs file and directory, and
+sends `recovery-copy <id> <sha256>` to the runner. Hash the exported ciphertext,
+not plaintext. The receipt must match the saved export hash and staged key ID.
+Lost replies reuse that same export; export failure or missing receipt blocks
+activation. Only an authenticated operator can attest off-host durability.
 
 Before changing an active file, Podman secret, or flags, write
 `/srv/data/host-operations/key-change.json` with request ID, saved release, and
@@ -238,8 +243,9 @@ backup, observer change, or nested deploy.sh. It renders under the owner
 checkpoint, fsyncs `starting`, removes the marker only after all
 files/secrets/units agree, then starts web/Go/Caddy and checks local readiness.
 Finish by stopping maintenance, restoring timers and proving serving externally.
-Failed starts retain the fence and maintenance; resume uses the same keys and
-release, never old secrets.
+Failed starts retain the fence and maintenance; ordinary resume uses the same
+keys and release, never old secrets. An incompatible image or defective runner
+uses quiescent repair, without requiring successful startup or safe suspension.
 
 Release the workload lock while awaiting a proof or ten-minute wait, retaining
 the fence. Reacquire and revalidate before effects. The key marker blocks starts
@@ -308,9 +314,11 @@ replace/remove the factor. Never reset credentials as an operator
 Keep derived-ID archives and encrypted copies for every dependent backup/WAL
 restore target, at least 30 days. These releases do not implement key pruning;
 retain archives until a reviewed inventory-based disposal procedure exists.
-Restore needs the keys for its restored rows, at most two in runtime. Unknown
-IDs or unavailable keys block TOTP recovery, not permission to rewrite factors.
-A DB restore never restores the release floor or authorizes an older image.
+Restore follows the recovery archive's ring selection and validation rules,
+including staged keys after partial activation, with at most two in runtime.
+Unknown IDs or unavailable keys block TOTP recovery, never authorize rewriting
+factors. A DB restore never restores the release floor or authorizes an older
+image.
 
 ## Account deletion and recovery
 
@@ -369,8 +377,8 @@ those routes for the same resume ID and epoch, as specified in
 [proofs](vietnam-host-operations-delivery.md#external-proofs). An expired/lost
 witness or changed epoch is inconclusive: restore readiness, close `unverified`,
 then make a new plan/witness and rotate again. Do not claim revocation proof.
-Recovery manifests mark replaced view keys retired; restore always generates a
-fresh view key instead of loading one from a historical secret copy.
+Recovery manifests mark every exported view key retired for restore; restore
+always generates a fresh view key instead of loading any historical copy.
 
 ## Audit and threat boundaries
 
@@ -389,12 +397,24 @@ evidence, resume/verify refuse; a new report/show/confirmation is needed for
 another action. Pruning never releases a fence itself. Root can alter this audit
 and host loss can lose it.
 
-Reserve 2 MiB/request within 64 MiB before accepting work. Refuse capacity or
-audit-write failure; never evict unexpired records. Keep key archives/export
-ciphertext separate from this quota. Journal and alert output contain only
-request ID, kind, phase and closed outcome, never target or raw diagnostics. No
-personal audit export to CI. The 180-day root audit replaces the proposed use of
-30-day server journald for that purpose.
+Reserve 2 MiB/request within 64 MiB before planning or accepting work. Count
+each reserved request once at 2 MiB, including its records and temporary writes;
+count unreserved retained records at their actual bytes. Serialize admission,
+release and accounting so concurrent requests cannot overbook. Release unused
+capacity only after durable closure and proven attempt quiescence: expired or
+refused plans, aborted requests, completed rotations, and resolved deletion
+writes qualify even while public verification or media cleanup remains pending.
+Keep actual records until their event retention expires. Suspended or unresolved
+requests retain the reservation. Expiry never frees a running attempt's space. A
+later resume/verify must reacquire the reservation before writing; a saved read
+needs none. Crash recovery recomputes this accounting from durable state,
+charging an uncertain closure the full reservation. Compact closed state, not
+unexpired audit events; 32 small retained records must not prevent request 33.
+Refuse true capacity or audit-write failure; never evict unexpired records. Keep
+key archives/export ciphertext separate from this quota. Journal and alert
+output contain only request ID, kind, phase and closed outcome, never target or
+raw diagnostics. No personal audit export to CI. The 180-day root audit replaces
+the proposed use of 30-day server journald for that purpose.
 
 - Anonymous visitors, signed-in users, hostile resume content and stolen
   application/MCP sessions have no command route. Inputs never become shell
