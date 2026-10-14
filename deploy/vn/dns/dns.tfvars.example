@@ -1,0 +1,35 @@
+# Copy to ignored dns.tfvars and replace placeholders from the private inventory.
+# Load CLOUDFLARE_API_TOKEN and TF_VAR_state_passphrase through the environment.
+zone_id                    = "<aboutme.vn-zone-id>"
+host_ipv4                  = "<host-floating-ipv4>"
+google_verification_name   = "<verification-label>.aboutme.vn"
+google_verification_target = "<verification-target>"
+dkim_values = {
+  dkim        = "<exact-bizfly-verification-txt-content>"
+  etrans      = "<exact-bizfly-signing-txt-content>"
+  google_dkim = "<exact-google-dkim-txt-content>"
+}
+# Replace null with each existing numeric TTL and MX priority.
+mx_priority = null
+record_ttls = {
+  caa                 = null
+  mx                  = null
+  spf                 = null
+  dmarc               = null
+  dkim                = null
+  etrans              = null
+  google_dkim         = null
+  google_verification = null
+}
+record_ids = {
+  apex                = "<record-id>"
+  www                 = "<record-id>"
+  caa                 = "<record-id>"
+  mx                  = "<record-id>"
+  spf                 = "<record-id>"
+  dmarc               = "<record-id>"
+  dkim                = "<record-id>"
+  etrans              = "<record-id>"
+  google_dkim         = "<record-id>"
+  google_verification = "<record-id>"
+}
