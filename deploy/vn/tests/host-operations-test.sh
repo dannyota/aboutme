@@ -30,16 +30,16 @@ for envelope in \
   fi
 done
 # Invocation controls must stay outside generic jobs and their media secrets.
-! rg -q 'account-delete|media-deletion-status' "$here/host/job-run.sh" || fail 'generic job allowlist expanded'
+! grep -qE 'account-delete|media-deletion-status' "$here/host/job-run.sh" || fail 'generic job allowlist expanded'
 for text in '--network none' '--memory-swap 256m' '--log-driver none' '--ulimit core=0:0' '--cap-drop ALL' '--read-only' '--security-opt no-new-privileges'; do
-  rg -q -- "$text" "$here/host/operation-account.sh" || fail "missing isolation: $text"
+  grep -qF -- "$text" "$here/host/operation-account.sh" || fail "missing isolation: $text"
 done
-! rg -q 'secret (media-|smtp-|google-|linkedin-)' "$here/host/operation-account.sh" || fail 'credential overreach'
-rg -q 'v0.7.9' "$here/scripts/operations.sh" || fail 'supporting release missing'
-rg -q 'StrictHostKeyChecking=yes' "$here/scripts/operations.sh" || fail 'unpinned SSH'
-rg -q 'ForwardAgent=no' "$here/scripts/operations.sh" || fail 'SSH forwarding enabled'
-rg -q 'KillMode=control-group' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit kill boundary'
-rg -q 'Restart=no' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit automatic replay'
+! grep -qE 'secret (media-|smtp-|google-|linkedin-)' "$here/host/operation-account.sh" || fail 'credential overreach'
+grep -qF 'v0.7.9' "$here/scripts/operations.sh" || fail 'supporting release missing'
+grep -qF 'StrictHostKeyChecking=yes' "$here/scripts/operations.sh" || fail 'unpinned SSH'
+grep -qF 'ForwardAgent=no' "$here/scripts/operations.sh" || fail 'SSH forwarding enabled'
+grep -qF 'KillMode=control-group' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit kill boundary'
+grep -qF 'Restart=no' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit automatic replay'
 echo 'host operation grammar and isolation passed'
 
 # Bound input before looking at a target or calling a remote command.
@@ -55,17 +55,17 @@ for envelope in \
 done
 # The host must not accept an arbitrary supported command over the generic unit.
 for text in 'operation-run.sh run %i' 'TimeoutStartSec=45min' 'TimeoutStopSec=60s' 'LimitCORE=0' 'StandardOutput=null' 'StandardError=null'; do
-  rg -qF "$text" "$here/host/etc/systemd/system/aboutme-operation@.service" || fail "missing unit limit: $text"
+  grep -qF "$text" "$here/host/etc/systemd/system/aboutme-operation@.service" || fail "missing unit limit: $text"
 done
 for text in '--secret db-app-password,type=env,target=PGPASSWORD' '--volume /run/postgresql:/run/postgresql' '--restart no'; do
-  rg -qF -- "$text" "$here/host/operation-account.sh" || fail 'container authority changed'
+  grep -qF -- "$text" "$here/host/operation-account.sh" || fail 'container authority changed'
 done
 for text in operation-run.sh operation-state.sh operation-account.sh aboutme-operation@.service aboutme-operation-retention.service aboutme-operation-retention.timer; do
-  rg -qF "$text" "$here/scripts/operations.sh" || fail 'bundle hash omission'
+  grep -qF "$text" "$here/scripts/operations.sh" || fail 'bundle hash omission'
 done
-rg -qF 'mountpoint -q /srv/data' "$here/scripts/fence.sh" || fail 'missing mount accepted'
-rg -qF 'key-change.json' "$here/scripts/fence.sh" || fail 'marker not checked'
-rg -qF 'operation_release_guard' "$here/scripts/fence.sh" || fail 'direct release bypass'
+grep -qF 'mountpoint -q /srv/data' "$here/scripts/fence.sh" || fail 'missing mount accepted'
+grep -qF 'key-change.json' "$here/scripts/fence.sh" || fail 'marker not checked'
+grep -qF 'operation_release_guard' "$here/scripts/fence.sh" || fail 'direct release bypass'
 echo 'host operation bounds and bundle checks passed'
 
 # Run the real wrapper in a private checkout with fixed synthetic eligibility,

@@ -39,8 +39,8 @@ done
 # Resume must contain only the read command, never the destructive command.
 body=$(sed -n '/^account_reconcile()/,/^}/p' "$here/host/operation-account.sh")
 [[ $body == *'account-delete status'* && $body != *'account-delete confirm'* ]] || fail 'unknown replay'
-rg -q '180' "$here/host/operation-state.sh" || fail 'account evidence retention'
-rg -q '30' "$here/host/operation-state.sh" || fail 'attempt metadata retention'
+grep -qF '180' "$here/host/operation-state.sh" || fail 'account evidence retention'
+grep -qF '30' "$here/host/operation-state.sh" || fail 'attempt metadata retention'
 echo 'host operation result reconciliation passed'
 
 # Exercise the durable state implementation under the CI user's UID. Only the
