@@ -38,11 +38,27 @@ record=$(jq -n --arg d "$(printf '%064d' 0)" '{release_tag:"v0.1.0",release_numb
   caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+$d),
   maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+$d)}')
 release_read() { echo 'unexpected mutable release read' >&2; exit 1; }
-render_all() { printf '%s\n' "$@" >"$work/render"; }
+cimd_rollback_check() {
+  printf '%s\n' "$@" >"$work/rollback-check"
+  [[ ${REFUSE_CIMD_ROLLBACK:-0} == 0 ]] || die 'CIMD rollback refused'
+}
+render_all() {
+  [[ -s $work/rollback-check ]] || die 'rendered before CIMD rollback check'
+  printf '%s\n' "$@" >"$work/render"
+}
 step_restore_previous "$record"
+[[ $(cat "$work/rollback-check") == 1000 ]]
 [[ $(head -n 1 "$work/render") == v0.1.0 ]]
 [[ $(wc -l <"$work/render") == 8 ]]
+rm "$work/rollback-check" "$work/render"
 if (step_restore_previous "$(jq '.release_number=999' <<<"$record")") >"$work/out" 2>&1; then exit 1; fi
+grep -qxF 'saved release numbers do not match their tags' "$work/out"
+[[ ! -e $work/rollback-check && ! -e $work/render ]]
+if (REFUSE_CIMD_ROLLBACK=1 step_restore_previous "$record") >"$work/out" 2>&1; then
+  echo 'restored a release after CIMD rollback refusal' >&2; exit 1
+fi
+grep -qxF 'CIMD rollback refused' "$work/out"
+[[ $(cat "$work/rollback-check") == 1000 && ! -e $work/render ]]
 sed -n '/^render_observer() {/,/^}/p; /^image_ok() {/,/^}/p' "$host" >"$work/observer-functions"
 # shellcheck disable=SC1091
 source "$work/observer-functions"

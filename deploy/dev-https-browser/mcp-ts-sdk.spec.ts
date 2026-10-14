@@ -634,7 +634,13 @@ async function proveCIMDPresentation(page: Page): Promise<void> {
           page.waitForURL('**/app/settings/sessions'),
           page.keyboard.press('Enter'),
         ]);
-        await expect(page.getByTestId('agent-client-host')).toHaveText(host);
+        const agent = page.getByTestId('agent-row');
+        await expect(agent.getByRole('heading', { level: 3 }))
+          .toHaveText(`${name} (${host})`);
+        const agentHost = agent.getByTestId('agent-client-host');
+        await expect(agentHost).toHaveText(`(${host})`);
+        await expect(agentHost).toHaveAttribute('dir', 'ltr');
+        expect(await agentHost.textContent()).toBe(` (${host})`);
       }
     }
     expect(decisionValues).toEqual(['approve', 'deny', 'approve', 'deny']);
@@ -723,7 +729,11 @@ async function proveCIMDSDK(page: Page, clientName: string): Promise<void> {
     await waitForFirstVisitHydration(page);
     const grant = page.getByTestId('agent-row').filter({ hasText: clientName });
     await expect(grant).toHaveCount(1);
-    await expect(grant.getByTestId('agent-client-host')).toHaveText('client.example');
+    await expect(grant.getByRole('heading', { level: 3 }))
+      .toHaveText(`${clientName} (client.example)`);
+    const host = grant.getByTestId('agent-client-host');
+    await expect(host).toHaveText('(client.example)');
+    expect(await host.textContent()).toBe(' (client.example)');
     const revoked = page.waitForResponse((response) =>
       response.request().method() === 'DELETE'
       && new URL(response.url()).origin === ORIGIN

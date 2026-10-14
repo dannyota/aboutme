@@ -4,6 +4,12 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
+expect_mcp_flag() {
+  local expected=$1 context=$2 actual
+  actual=$(cimd_effective_mcp_flag) || fail "$context: cannot determine MCP_ENABLED"
+  [[ $actual == "$expected" ]] || fail "$context: expected MCP_ENABLED=$expected, got $actual"
+}
 export ABOUTME_TEST_STATE=$work/state
 mkdir -p "$ABOUTME_TEST_STATE/active" "$ABOUTME_TEST_STATE/enabled"
 
@@ -112,18 +118,18 @@ done
 unset CIMD_STATE
 for CIMD_QUERY in t f; do
   export CIMD_QUERY
-  [[ $(cimd_url_rows_exist) == "$CIMD_QUERY" ]] || exit 1
+  [[ $(cimd_url_rows_exist) == "$CIMD_QUERY" ]] || fail "URL-client query did not return $CIMD_QUERY"
 done
 if CIMD_QUERY=failure cimd_url_rows_exist; then echo 'database failure accepted' >&2; exit 1; fi
 unset CIMD_QUERY
 printf 'MCP_ENABLED=true\n' >"$work/cimd-server.env"
 : >"$work/cimd-flags.env"
 printf 'SMTP_HOST=smtp.example\n' >"$work/cimd-smtp.env"
-[[ $(cimd_effective_mcp_flag) == true ]] || exit 1
+expect_mcp_flag true 'base environment'
 printf 'MCP_ENABLED=false\n' >"$work/cimd-flags.env"
-[[ $(cimd_effective_mcp_flag) == false ]] || exit 1
+expect_mcp_flag false 'flags environment override'
 printf 'MCP_ENABLED=true\n' >>"$work/cimd-smtp.env"
-[[ $(cimd_effective_mcp_flag) == true ]] || { echo 'SMTP override was ignored' >&2; exit 1; }
+expect_mcp_flag true 'SMTP environment override'
 # The guard must refuse the pre-CIMD image under the actual effective flag.
 sed -n '/^cimd_rollback_check() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.sh" >"$work/cimd-guard.sh"
 (
@@ -133,10 +139,26 @@ sed -n '/^cimd_rollback_check() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.s
   CIMD_QUERY=t cimd_rollback_check 7999
 ) && { echo 'SMTP override allowed unsafe rollback' >&2; exit 1; }
 printf 'MCP_ENABLED=false\n' >"$work/cimd-smtp.env"
-[[ $(cimd_effective_mcp_flag) == false ]] || exit 1
-printf 'Environment=MCP_ENABLED=true\n' >>"$templates/aboutme-server.container.in"
+expect_mcp_flag false 'SMTP environment disablement'
+# Only Container entries set the container's environment.
+for section in Service Install; do
+  sed -i "/^\[$section\]$/a Environment=MCP_ENABLED=true" "$templates/aboutme-server.container.in"
+  expect_mcp_flag false "inline $section environment"
+  sed -i '/^Environment=MCP_ENABLED=/d' "$templates/aboutme-server.container.in"
+done
+sed -i '/^\[Container\]$/a Environment=MCP_ENABLED=true' "$templates/aboutme-server.container.in"
 # Inline container variables override every environment file.
-[[ $(cimd_effective_mcp_flag) == true ]] || exit 1
+expect_mcp_flag true 'inline Container environment override'
+if (
+  die() { printf '%s\n' "$*" >&2; exit 1; }
+  # shellcheck source=/dev/null
+  source "$work/cimd-guard.sh"
+  CIMD_QUERY=t cimd_rollback_check 7999
+) >"$work/inline-rollback.out" 2>&1; then
+  fail 'inline Container override allowed unsafe rollback'
+fi
+grep -qxF 'pre-CIMD rollback requires no URL clients or MCP_ENABLED=false' "$work/inline-rollback.out" ||
+  fail 'inline Container rollback failed without the URL-client guard refusal'
 sed -i '/^Environment=MCP_ENABLED=/d' "$templates/aboutme-server.container.in"
 for configuration in 'MCP_ENABLED=invalid' $'MCP_ENABLED=true\nMCP_ENABLED=false' 'MCP_ENABLED="true"'; do
   printf '%s\n' "$configuration" >"$work/cimd-smtp.env"
