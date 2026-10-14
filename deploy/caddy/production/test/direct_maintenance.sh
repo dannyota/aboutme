@@ -5,7 +5,7 @@
 
 test_direct_maintenance_log_isolation() {
   local serving_sum serving_feed_sum mdport mhport maintenance_ca code maintenance_matches
-  local maintenance_feed leak maintenance_logs
+  local maintenance_feed leak
 
   # Maintenance Caddy runs beside serving Caddy during a deploy. Both share the
   # host log mount, but each process owns and rotates a distinct diagnostic file.
@@ -62,10 +62,6 @@ test_direct_maintenance_log_isolation() {
   [[ $(podman exec "$name" sha256sum /var/log/caddy/crowdsec/serving.json) == "$serving_feed_sum" ]] ||
     { echo "direct maintenance: serving feed changed" >&2; exit 1; }
   podman exec "$name-maint" test ! -e /var/log/caddy/waf/match.log
-  maintenance_logs=$(podman logs "$name-maint" 2>&1)
-  if grep -qE 'maintmarker6e4d|941100|"client_ip"' <<<"$maintenance_logs"; then
-    echo "direct maintenance: WAF request data reached stderr" >&2
-    exit 1
-  fi
+  assert_waf_stderr_private "$name-maint" maintenance || exit 1
   podman rm -f --ignore "$name-maint" >/dev/null
 }
