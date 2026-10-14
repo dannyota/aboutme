@@ -6,7 +6,6 @@ type ConsentCopy = {
   readonly title: string;
   readonly allowClient: (clientName: string) => string;
   readonly clientRequest: string;
-  readonly hostRequestBefore: string;
   readonly hostRequestAfter: string;
   readonly selfNamedBefore: string;
   readonly selfNamedAfter: string;
@@ -39,7 +38,6 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
     title: 'Cấp quyền truy cập',
     allowClient: (clientName) => `Cho phép ${clientName} chỉnh sửa CV của bạn?`,
     clientRequest: 'đang yêu cầu quyền truy cập CV của bạn.',
-    hostRequestBefore: '',
     hostRequestAfter: ' muốn truy cập CV của bạn.',
     selfNamedBefore: 'Ứng dụng tự gọi là “',
     selfNamedAfter: '”.',
@@ -77,7 +75,6 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
     title: 'Allow access',
     allowClient: (clientName) => `Allow ${clientName} to edit your resumes?`,
     clientRequest: 'is requesting access to your resumes.',
-    hostRequestBefore: '',
     hostRequestAfter: ' wants access to your resumes.',
     selfNamedBefore: 'The app calls itself “',
     selfNamedAfter: '”.',

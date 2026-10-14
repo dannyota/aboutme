@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -103,6 +104,7 @@ func (f *CIMDResolver) Resolve(ctx context.Context, raw string, address netip.Ad
 	if element := f.cache[raw]; element != nil {
 		entry, ok := element.Value.(cimdCacheEntry)
 		if !ok {
+			f.mu.Unlock()
 			panic("oauth client metadata cache type invalid")
 		}
 		if now.Before(entry.expires) {
@@ -223,9 +225,6 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 		approved[address] = true
 	}
 	pinnedTarget := netip.AddrPortFrom(addresses[0], port).String()
-	dialer := &net.Dialer{ControlContext: func(_ context.Context, _ string, address string, _ syscall.RawConn) error {
-		return f.checkConnectAddress(address, port, approved)
-	}}
 	transport := &http.Transport{
 		Proxy: nil, DisableCompression: true, DisableKeepAlives: true, ForceAttemptHTTP2: false,
 		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
@@ -235,15 +234,11 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 			}
 			for _, address := range addresses {
 				targetAddress := netip.AddrPortFrom(address, port).String()
-				if err := f.checkConnectAddress(targetAddress, port, approved); err != nil {
-					return nil, errCIMDInvalid
-				}
-				dial := dialer.DialContext
-				if f.dialAddress != nil {
-					dial = f.dialAddress
-				}
-				conn, err := dial(connectCtx, network, targetAddress)
+				conn, err := f.connect(connectCtx, network, targetAddress, port, approved)
 				if err != nil {
+					if errors.Is(err, errCIMDInvalid) {
+						return nil, errCIMDInvalid
+					}
 					continue
 				}
 				tlsConn := tls.Client(conn, &tls.Config{MinVersion: tls.VersionTLS12, ServerName: u.Hostname(), RootCAs: f.roots})
@@ -303,6 +298,24 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 		return bad()
 	}
 	return metadata, cimdCacheLifetime(strings.Join(response.Header.Values("Cache-Control"), ","), f.cfg.CacheFloor, f.cfg.CacheCeiling), received, nil
+}
+
+func (f *CIMDResolver) connect(ctx context.Context, network, address string, port uint16, approved map[netip.Addr]bool) (net.Conn, error) {
+	if err := f.checkConnectAddress(address, port, approved); err != nil {
+		return nil, err
+	}
+	literal, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return nil, errCIMDInvalid
+	}
+	address = netip.AddrPortFrom(literal.Addr().Unmap(), port).String()
+	if f.dialAddress != nil {
+		return f.dialAddress(ctx, network, address)
+	}
+	dialer := &net.Dialer{ControlContext: func(_ context.Context, _ string, literal string, _ syscall.RawConn) error {
+		return f.checkConnectAddress(literal, port, approved)
+	}}
+	return dialer.DialContext(ctx, network, address)
 }
 
 func (f *CIMDResolver) checkConnectAddress(raw string, port uint16, approved map[netip.Addr]bool) error {

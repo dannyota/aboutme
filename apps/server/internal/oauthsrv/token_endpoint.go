@@ -70,13 +70,17 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest)
 		return
 	}
-	clientID, hasClientID := s.grantRateClientID(r.Context(), form)
+	grantID, hasGrantID, err := s.grantRateID(r.Context(), form)
+	if err != nil {
+		writeOAuthServerError(w)
+		return
+	}
 	var attempt grantAttempt
 	attemptResult := grantAttemptRelease
-	if hasClientID && s.tokenAdmission != nil {
+	if hasGrantID && s.tokenAdmission != nil {
 		var allowed bool
 		var retryAfter int
-		attempt, allowed, retryAfter = s.tokenAdmission.AdmitGrant(clientID, admissionTime)
+		attempt, allowed, retryAfter = s.tokenAdmission.AdmitGrant(grantID, admissionTime)
 		if !allowed {
 			if retryAfter < 1 {
 				retryAfter = 1
@@ -140,26 +144,36 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.UUID, bool) {
+// Only a stored credential selects failed-grant debt. Public client identifiers
+// cannot select an owner's budget; token processing rechecks authority under locks.
+func (s *Service) grantRateID(ctx context.Context, form url.Values) (uuid.UUID, bool, error) {
+	if isNilDependency(s.queries) {
+		return uuid.Nil, false, nil
+	}
 	switch form.Get("grant_type") {
 	case "authorization_code":
-		if isNilDependency(s.queries) {
-			return uuid.Nil, false
+		digest, err := ParseCode(form.Get("code"))
+		if err != nil {
+			return uuid.Nil, false, nil
 		}
-		client, err := s.storedPublicClient(ctx, s.queries, form.Get("client_id"))
-		return client.ID, err == nil
+		code, err := s.queries.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, nil
+		}
+		return code.GrantID, err == nil && code.GrantID != uuid.Nil, err
 	case "refresh_token":
 		kind, digest, err := ParseToken(form.Get("refresh_token"))
-		if err != nil || kind != TokenKindRefresh || isNilDependency(s.queries) {
-			return uuid.Nil, false
+		if err != nil || kind != TokenKindRefresh {
+			return uuid.Nil, false, nil
 		}
 		authority, err := s.queries.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
-		if err != nil || authority.OAuthToken.ClientID == uuid.Nil {
-			return uuid.Nil, false
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, nil
 		}
-		return authority.OAuthToken.ClientID, true
+		token := authority.OAuthToken
+		return token.GrantID, err == nil && token.Kind == string(TokenKindRefresh) && token.GrantID != uuid.Nil, err
 	default:
-		return uuid.Nil, false
+		return uuid.Nil, false, nil
 	}
 }
 

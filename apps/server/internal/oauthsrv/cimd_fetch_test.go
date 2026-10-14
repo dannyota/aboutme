@@ -397,21 +397,86 @@ func TestCIMDDNSRebindingCannotReplacePinnedAddress(t *testing.T) {
 
 func TestCIMDMixedDNSFailsBeforeConnect(t *testing.T) {
 	t.Parallel()
-	for _, answers := range [][]netip.Addr{
-		{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("127.0.0.1")},
-		{netip.MustParseAddr("192.31.196.1"), netip.MustParseAddr("8.8.8.8")},
-		{netip.MustParseAddr("2606:4700::1111"), netip.MustParseAddr("100:0:0:1::1")},
-	} {
-		f, err := NewCIMDResolver(cimdTestConfig(), "https://aboutme.vn", cimdTestNow, 10000)
-		if err != nil {
-			t.Fatal(err)
+	for _, fixture := range cimdAddressFixtures() {
+		if fixture.allowed {
+			continue
 		}
-		var calls int
-		f.lookup = func(context.Context, string) ([]netip.Addr, error) { calls++; return answers, nil }
-		if _, err := f.Resolve(context.Background(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8")); err == nil || calls != 1 {
-			t.Fatalf("mixed answer did not fail closed: %v", err)
+		for _, public := range []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2606:4700::1111")} {
+			for _, answers := range [][]netip.Addr{{public, fixture.address}, {fixture.address, public}} {
+				f := cimdPolicyResolver(t)
+				var lookups, dials int
+				f.lookup = func(context.Context, string) ([]netip.Addr, error) { lookups++; return answers, nil }
+				f.dialAddress = func(context.Context, string, string) (net.Conn, error) { dials++; return nil, errCIMDInvalid }
+				if _, err := f.Resolve(t.Context(), "https://example.com/metadata", public); err == nil || lookups != 1 || dials != 0 {
+					t.Fatalf("mixed answer %v: error %v, lookups %d, dials %d", answers, err, lookups, dials)
+				}
+			}
 		}
 	}
+}
+
+func cimdPolicyResolver(t *testing.T) *CIMDResolver {
+	t.Helper()
+	f, err := NewCIMDResolver(cimdTestConfig(), "https://aboutme.vn", cimdTestNow, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func TestCIMDAddressFixturesAtDNSAndConnect(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range cimdAddressFixtures() {
+		f := cimdPolicyResolver(t)
+		var lookups int
+		var dialed []string
+		f.lookup = func(context.Context, string) ([]netip.Addr, error) {
+			lookups++
+			return []netip.Addr{fixture.address}, nil
+		}
+		f.dialAddress = func(_ context.Context, _ string, address string) (net.Conn, error) {
+			dialed = append(dialed, address)
+			return nil, errCIMDInvalid
+		}
+		if _, err := f.Resolve(t.Context(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8")); err == nil || lookups != 1 {
+			t.Fatalf("DNS fixture %s: error %v, lookups %d", fixture.address, err, lookups)
+		}
+		if fixture.allowed {
+			if len(dialed) != 1 || dialed[0] != netip.AddrPortFrom(fixture.address.Unmap(), 443).String() {
+				t.Fatalf("allowed fixture %s dialed %v", fixture.address, dialed)
+			}
+		} else if len(dialed) != 0 {
+			t.Fatalf("refused fixture %s dialed %v", fixture.address, dialed)
+		}
+		// Membership alone cannot bypass the connect-time address policy.
+		approved := map[netip.Addr]bool{fixture.address.Unmap(): true}
+		if err := f.checkConnectAddress(netip.AddrPortFrom(fixture.address, 443).String(), 443, approved); (err == nil) != fixture.allowed {
+			t.Fatalf("connect fixture %s: %v", fixture.address, err)
+		}
+		dialed = nil
+		_, _ = f.connect(t.Context(), "tcp", netip.AddrPortFrom(fixture.address, 443).String(), 443, approved)
+		if fixture.allowed && (len(dialed) != 1 || dialed[0] != netip.AddrPortFrom(fixture.address.Unmap(), 443).String()) || !fixture.allowed && len(dialed) != 0 {
+			t.Fatalf("connect fixture %s dialed %v", fixture.address, dialed)
+		}
+	}
+}
+
+func TestCIMDInvalidCacheEntryReleasesLock(t *testing.T) {
+	t.Parallel()
+	f := cimdPolicyResolver(t)
+	f.cache["https://example.com/metadata"] = f.lru.PushFront("invalid")
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("invalid cache entry did not panic")
+			}
+		}()
+		_, _ = f.Resolve(t.Context(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8"))
+	}()
+	if !f.mu.TryLock() {
+		t.Fatal("invalid cache entry retained the resolver lock")
+	}
+	f.mu.Unlock()
 }
 
 func TestCIMDCoalescingCancellationAndSaturation(t *testing.T) {
@@ -501,5 +566,70 @@ func TestCIMDExpiryAndLRUEviction(t *testing.T) {
 	}
 	if err := resolve("/b"); err == nil || calls.Load() != 6 {
 		t.Fatal("failed refetch was cached")
+	}
+}
+
+func TestCIMDRefusedMissesPreserveOtherAddressesGlobalBudget(t *testing.T) {
+	t.Parallel()
+	for _, bucket := range []string{"address", "URL"} {
+		t.Run(bucket, func(t *testing.T) {
+			f := cimdPolicyResolver(t)
+			calls := 0
+			f.lookup = func(context.Context, string) ([]netip.Addr, error) { calls++; return nil, errCIMDInvalid }
+			first := netip.MustParseAddr("8.8.8.8")
+			limit := 30
+			if bucket == "URL" {
+				limit = 6
+			}
+			urlFor := func(i int) string {
+				if bucket == "URL" {
+					return "https://example.com/metadata"
+				}
+				return fmt.Sprintf("https://example.com/%d", i)
+			}
+			for i := range limit {
+				if _, err := f.Resolve(t.Context(), urlFor(i), first); !errors.Is(err, errCIMDInvalid) {
+					t.Fatal("admitted miss failed before DNS", err)
+				}
+			}
+			for i := range 600 {
+				address := first
+				if bucket == "URL" {
+					address = netip.AddrFrom4([4]byte{8, 9, byte(i / 250), byte(i%250 + 1)})
+				}
+				_, err := f.Resolve(t.Context(), urlFor(limit+i), address)
+				var limited *CIMDRateError
+				if !errors.As(err, &limited) {
+					t.Fatal("exhausted bucket admitted a miss")
+				}
+			}
+			if _, err := f.Resolve(t.Context(), "https://example.com/other", netip.MustParseAddr("1.1.1.1")); !errors.Is(err, errCIMDInvalid) || calls != limit+1 {
+				t.Fatal("refused misses spent another address's global fetch budget", err)
+			}
+		})
+	}
+}
+
+func TestCIMDCombinedAdmissionKeepsMaximumRetryAfter(t *testing.T) {
+	t.Parallel()
+	cfg := cimdTestConfig()
+	cfg.GlobalRequests, cfg.GlobalWindow = 1, 3*time.Hour
+	f, err := NewCIMDResolver(cfg, "https://aboutme.vn", cimdTestNow, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := cimdTestNow()
+	for range cfg.AddressRequests {
+		if ok, _ := f.addressRate.Admit(now, registerAddressKey(netip.MustParseAddr("8.8.8.8"))); !ok {
+			t.Fatal("address setup refused")
+		}
+	}
+	if ok, _ := f.globalRate.Admit(now, "global"); !ok {
+		t.Fatal("global setup refused")
+	}
+	_, err = f.Resolve(t.Context(), "https://example.com/metadata", netip.MustParseAddr("8.8.8.8"))
+	var limited *CIMDRateError
+	if !errors.As(err, &limited) || limited.RetryAfter != int((3*time.Hour).Seconds()) {
+		t.Fatal("combined admission lost the largest Retry-After", err)
 	}
 }

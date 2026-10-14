@@ -190,8 +190,7 @@ onMounted(() => {
       data-page-title
     >
       <template v-if="view?.clientKind === 'cimd'">
-        {{ copy.hostRequestBefore
-        }}<bdi
+        <bdi
           class="[overflow-wrap:anywhere]"
           dir="ltr"
           data-testid="consent-client-host"

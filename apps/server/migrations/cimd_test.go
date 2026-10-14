@@ -21,7 +21,7 @@ func TestCIMDMetadataURLConstraints(t *testing.T) {
 			VALUES ('Fixture', $1, $2, $2, $3)`, `["`+oauthRedirectURI+`"]`, oauthNow, metadataURL)
 		return err
 	}
-	for _, raw := range []string{"https://client.example/" + uuid.NewString(), "https://client.example/" + strings.Repeat("a", 234)} {
+	for _, raw := range []string{"https://client.example/" + uuid.NewString(), "https://client.example/" + strings.Repeat("a", 233)} {
 		if err := insert(tx, &raw); err != nil {
 			t.Fatal(err)
 		}

@@ -81,8 +81,12 @@ aboutme_assert_cutover_quiescent
 for helper in cimd_url_rows_exist cimd_serving_app_stopped; do
   sed -n "/^$helper() {/,/^}/p" "$root/deploy/vn/scripts/deploy-host.sh" >>"$work/cimd-helpers.sh"
 done
-sed -n '/^cimd_effective_mcp_flag() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.sh" |
-  sed "s|/etc/aboutme/server.env|$work/cimd-server.env|" >>"$work/cimd-helpers.sh"
+for helper in cimd_env_mcp_flag cimd_effective_mcp_flag; do
+  sed -n "/^$helper() {/,/^}/p" "$root/deploy/vn/scripts/deploy-host.sh" >>"$work/cimd-helpers.sh"
+done
+templates=$work/quadlet
+mkdir -p "$templates"
+sed "s|/etc/aboutme/|$work/cimd-|g" "$root/deploy/vn/host/quadlet/aboutme-server.container.in" >"$templates/aboutme-server.container.in"
 # shellcheck source=/dev/null
 source "$work/cimd-helpers.sh"
 systemctl() {
@@ -112,19 +116,34 @@ for CIMD_QUERY in t f; do
 done
 if CIMD_QUERY=failure cimd_url_rows_exist; then echo 'database failure accepted' >&2; exit 1; fi
 unset CIMD_QUERY
-flags_json() {
-  local flags=${CIMD_FLAGS_JSON-'{}'}
-  [[ $flags != failure ]] || return 1
-  printf '%s' "$flags"
-}
 printf 'MCP_ENABLED=true\n' >"$work/cimd-server.env"
+: >"$work/cimd-flags.env"
+printf 'SMTP_HOST=smtp.example\n' >"$work/cimd-smtp.env"
 [[ $(cimd_effective_mcp_flag) == true ]] || exit 1
-CIMD_FLAGS_JSON='{"MCP_ENABLED":"false"}'
+printf 'MCP_ENABLED=false\n' >"$work/cimd-flags.env"
 [[ $(cimd_effective_mcp_flag) == false ]] || exit 1
-for CIMD_FLAGS_JSON in failure '{"MCP_ENABLED":"invalid"}' 'invalid'; do
-  if cimd_effective_mcp_flag; then echo 'invalid rollback override accepted' >&2; exit 1; fi
+printf 'MCP_ENABLED=true\n' >>"$work/cimd-smtp.env"
+[[ $(cimd_effective_mcp_flag) == true ]] || { echo 'SMTP override was ignored' >&2; exit 1; }
+# The guard must refuse the pre-CIMD image under the actual effective flag.
+sed -n '/^cimd_rollback_check() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.sh" >"$work/cimd-guard.sh"
+(
+  die() { exit 1; }
+  # shellcheck source=/dev/null
+  source "$work/cimd-guard.sh"
+  CIMD_QUERY=t cimd_rollback_check 7999
+) && { echo 'SMTP override allowed unsafe rollback' >&2; exit 1; }
+printf 'MCP_ENABLED=false\n' >"$work/cimd-smtp.env"
+[[ $(cimd_effective_mcp_flag) == false ]] || exit 1
+printf 'Environment=MCP_ENABLED=true\n' >>"$templates/aboutme-server.container.in"
+# Inline container variables override every environment file.
+[[ $(cimd_effective_mcp_flag) == true ]] || exit 1
+sed -i '/^Environment=MCP_ENABLED=/d' "$templates/aboutme-server.container.in"
+for configuration in 'MCP_ENABLED=invalid' $'MCP_ENABLED=true\nMCP_ENABLED=false' 'MCP_ENABLED="true"'; do
+  printf '%s\n' "$configuration" >"$work/cimd-smtp.env"
+  if cimd_effective_mcp_flag; then echo 'invalid SMTP override accepted' >&2; exit 1; fi
 done
-unset CIMD_FLAGS_JSON
+: >"$work/cimd-smtp.env"
+: >"$work/cimd-flags.env"
 for configuration in '' 'MCP_ENABLED=invalid' $'MCP_ENABLED=true\nMCP_ENABLED=false' 'MCP_ENABLED="true"'; do
   printf '%s\n' "$configuration" >"$work/cimd-server.env"
   if cimd_effective_mcp_flag; then echo 'unproved MCP configuration accepted' >&2; exit 1; fi

@@ -451,7 +451,7 @@ step_app_up() {
   checkpoint
   local installed
   installed=$(release_read "$release_json")
-  cimd_rollback_check "$(jq -r .release_number <<<"$installed")"
+  cimd_rollback_check "$(jq -r .release_number <<<"$installed")" "$units/aboutme-server.container"
   systemctl restart aboutme-web
   http_ok http://127.0.0.1:3000/ 120 || die "aboutme-web did not answer on 127.0.0.1:3000"
   checkpoint
@@ -467,12 +467,10 @@ step_app_up() {
   say "app up"
 }
 
-# Read only the non-secret MCP flag from the two ordered environment files.
-# Reject malformed or duplicate lines without returning configuration values.
-cimd_effective_mcp_flag() {
-  local base overrides
-  base=$(jq -Rre -s '
-    reduce (split("\n")[]) as $line ({seen: {}, value: null};
+# Parse one container environment file without returning unrelated values.
+cimd_env_mcp_flag() { # environment file
+  jq -Rre -s '
+    reduce (split("\n")[]) as $line ({seen: {}, value: "absent"};
       if ($line | test("^[[:space:]]*(#|$)")) then .
       elif ($line | test("^[A-Z][A-Z0-9_]*=[^[:space:]\"\\x27]*$")) then
         ($line | capture("^(?<key>[^=]+)=(?<value>.*)$")) as $field
@@ -481,12 +479,36 @@ cimd_effective_mcp_flag() {
             | if $field.key == "MCP_ENABLED" then .value = $field.value else . end
           end
       else error("invalid environment line") end)
-    | .value | select(. == "true" or . == "false")
-  ' /etc/aboutme/server.env 2>/dev/null) || return 1
-  overrides=$(flags_json) || return 1
-  jq -er --arg base "$base" '
-    (.MCP_ENABLED // $base) | select(. == "true" or . == "false")
-  ' <<<"$overrides" 2>/dev/null
+    | .value | select(. == "true" or . == "false" or . == "absent")
+  ' "$1" 2>/dev/null
+}
+
+# Container env files override each other in entry order; inline Environment
+# overrides all files. Read the unit used by render or startup, never secrets.
+cimd_effective_mcp_flag() { # optional container unit
+  local unit=${1:-$templates/aboutme-server.container.in} files file value effective=absent inline
+  [[ -r $unit ]] || return 1
+  # Refuse alternate environment mechanisms that this reader cannot prove.
+  if grep -Eq '^(EnvironmentHost=|EnvironmentMerge=|UnsetEnvironment=)|^PodmanArgs=.*--(env|unsetenv)|^Secret=.*target=MCP_ENABLED([,[:space:]]|$)' "$unit"; then
+    return 1
+  fi
+  files=$(awk '/^\[/{section=$0} section == "[Container]" && /^EnvironmentFile=/ {print substr($0,17)}' "$unit") || return 1
+  [[ -n $files ]] || return 1
+  while IFS= read -r file; do
+    [[ $file == /* ]] || return 1
+    value=$(cimd_env_mcp_flag "$file") || return 1
+    [[ $value == absent ]] || effective=$value
+  done <<<"$files"
+  inline=$(awk '/^\[/{section=$0} section == "[Container]" && /^Environment=/ {print substr($0,13)}' "$unit") || return 1
+  while IFS= read -r value; do
+    case $value in
+    MCP_ENABLED=true) effective=true ;;
+    MCP_ENABLED=false) effective=false ;;
+    MCP_ENABLED* | *' MCP_ENABLED'*) return 1 ;;
+    esac
+  done <<<"$inline"
+  [[ $effective == true || $effective == false ]] || return 1
+  printf '%s' "$effective"
 }
 
 cimd_url_rows_exist() {
@@ -506,11 +528,11 @@ cimd_serving_app_stopped() {
 }
 
 cimd_rollback_check() { # candidate release number
-  local candidate=$1 mcp rows
+  local candidate=$1 unit=${2:-$templates/aboutme-server.container.in} mcp rows
   [[ $candidate =~ ^[0-9]+$ ]] || die "invalid CIMD rollback candidate"
   cimd_serving_app_stopped || die "CIMD rollback check requires a proved stopped serving app"
   ((candidate >= 8000)) && return 0
-  mcp=$(cimd_effective_mcp_flag) || die "cannot determine MCP configuration for rollback"
+  mcp=$(cimd_effective_mcp_flag "$unit") || die "cannot determine MCP configuration for rollback"
   case $mcp in
   false) return 0 ;;
   true) ;;

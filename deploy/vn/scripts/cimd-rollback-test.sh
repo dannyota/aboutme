@@ -8,15 +8,15 @@ sed -n '/^cimd_rollback_check() {/,/^}/p' "$here/deploy-host.sh" >"$work/guard.s
 [[ -s $work/guard.sh ]] || { echo 'missing CIMD rollback guard' >&2; exit 1; }
 
 check_case() {
-  local candidate=$1 mcp=$2 rows=$3 expected=$4
+  local candidate=$1 fixture_mcp=$2 fixture_rows=$3 expected=$4
   (
     die() { exit 1; }
     cimd_serving_app_stopped() { [[ ${serving_stopped:-true} == true ]]; }
-    cimd_effective_mcp_flag() { [[ $mcp != failure ]] || return 1; printf '%s' "$mcp"; }
-    cimd_url_rows_exist() { [[ $rows != failure ]] || return 1; printf '%s' "$rows"; }
+    cimd_effective_mcp_flag() { [[ $fixture_mcp != failure ]] || return 1; printf '%s' "$fixture_mcp"; }
+    cimd_url_rows_exist() { [[ $fixture_rows != failure ]] || return 1; printf '%s' "$fixture_rows"; }
     # shellcheck source=/dev/null
     source "$work/guard.sh"
-    cimd_rollback_check "$candidate"
+    cimd_rollback_check "$candidate" "$work/guard.sh"
   ) && actual=0 || actual=1
   [[ $actual == "$expected" ]] || { echo 'CIMD rollback case failed' >&2; exit 1; }
 }
