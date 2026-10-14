@@ -89,23 +89,25 @@ state. An uncertain marker write aborts without renewal. This guard must precede
 the send: a failure handler alone cannot cover cancellation or runner loss. A
 run that is not due or refuses before reaching this guard leaves no hold.
 
-The same run closes its own guard only after all processing succeeds and every
-sent renewal has a strictly later end time confirmed by readback, or after
-proving that no renewal request was sent. Price refusal and stale expected end
-time leave no hold when the CLI proves no send. Require documented,
-machine-readable CLI evidence for that distinction; an exit code or unchanged
-provider end time alone is insufficient. Confirm closed state before reporting
-completion. Never delete or replace the issue, or close a hold inherited from an
-earlier run. Store no credentials or provider response bodies in the issue.
+The same run closes its own guard when each renewal request is either confirmed
+by readback of a strictly later end time or proven unsent. This includes a
+confirmed send followed by a proven-unsent price refusal or stale expected end
+time. Closing the guard does not turn a failed job into a pass; GitHub failure
+notifications still apply. Require documented, machine-readable CLI evidence for
+that distinction; an exit code or unchanged provider end time alone is
+insufficient. Confirm closed state before reporting completion. Never delete or
+replace the issue, or close a hold inherited from an earlier run. Store no
+credentials or provider response bodies in the issue.
 
 Any possibly sent request without confirmation leaves the guard open as a
 persistent hold. This includes timeout, 5xx, `NotSettled`, authentication or
-transport failure after the request may have left, interruption after send, and
-any nonzero exit after a send. Later successful reads do not clear that failure.
-Missing send evidence after interruption is uncertain, even if termination
-occurred between opening the guard and sending. Failed guard closure also blocks
-later sends until reconciled. These failures need human action; a completed,
-confirmed renewal leaves no hold and needs no human clearance.
+transport failure after the request may have left, and interruption after an
+unconfirmed send. A nonzero exit retains the hold only if a request remains
+unconfirmed. Later successful reads do not clear that failure. Missing send
+evidence after interruption is uncertain, even if termination occurred between
+opening the guard and sending. Failed guard closure also blocks later sends
+until reconciled. These failures need human action; a completed, confirmed
+renewal leaves no hold and needs no human clearance.
 
 Only a human clears a persistent hold: disable the workflow, cancel queued and
 active runs, wait for termination, reconcile both quotas, settlement, and
@@ -123,6 +125,13 @@ disabling alarms remains possible. Issue writers can bypass this hold and must
 be trusted. A stolen job token can clear it; runner/actions compromise already
 exposes the cloud key. Revoke credentials and disable the workflow on that
 compromise; the hold does not contain it.
+
+Residual risk: a stolen token with both [Issues write][issues] and [Actions
+write][actions-api] can close the hold issue and dispatch a renewal on main.
+Through this path, the service account can only read and renew the free quotas,
+and the trusted-main CLI requires a 0 VND quote. The worst case is spending the
+monthly notification-quota action budget and a possibly early renewal, never
+cost. The primary accepts this residual risk for the owner.
 
 ## Script and CLI contract
 
@@ -207,15 +216,18 @@ and `--max-price 0`. Assert one renewal invocation per due quota reached, zero
 on earlier refusal or failure. Persist the fake issue across runs: confirmed
 success leaves it closed; not due, pre-send refusal, price refusal, and stale
 expected end time leave no hold when no request was sent. Unconfirmed sends,
-including timeout, 5xx, `NotSettled`, authentication/transport failure,
-interruption after send, and any nonzero exit after a send, leave it open.
-Assert zero sends from every later schedule, dispatch, and rerun while that hold
-exists, even if provider reads show an extended term. Test interruption between
-guard creation and send with missing send evidence, failed guard closure, and
-partial batch success. Only human reconciliation permits a later run to send.
-Failed marker reads/writes or missing issues must send zero renewals; `check`
-never clears the hold. Inject hostile output, fake secrets and tokens; assert
-stdout, stderr, annotations, and summaries disclose none of them.
+including timeout, 5xx, `NotSettled`, authentication/transport failure, and
+interruption after an unconfirmed send, leave it open. A nonzero exit retains
+the hold only if a request remains unconfirmed. Assert zero sends from every
+later schedule, dispatch, and rerun while that hold exists, even if provider
+reads show an extended term. Test interruption between guard creation and send
+with missing send evidence, failed guard closure, and partial batch success.
+Only human reconciliation permits a later run to send. Test confirmed Synthetic
+renewal followed by a machine-readable Email price refusal proving no send: the
+guard closes, the job still fails, and neither renewal is retried. Failed marker
+reads/writes or missing issues must send zero renewals; `check` never clears the
+hold. Inject hostile output, fake secrets and tokens; assert stdout, stderr,
+annotations, and summaries disclose none of them.
 
 Before credentialed use, obtain the CLI maintainer's passing transport-test
 evidence for the exact pinned release: state changed after the script's read and
