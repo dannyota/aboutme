@@ -21,6 +21,10 @@ and [authorization](mcp-cimd-authorization.md).
 - **A real client's URL with a foreign redirect.** It fails: the redirect must
   appear in the real document
   ([Document rules](mcp-cimd-fetch.md#document-rules)).
+- **A shared client as a denial target.** Anonymous guesses naming a real URL or
+  DCR UUID cannot spend an owner's failed-grant allowance. A stored code or
+  refresh token selects only its own grant under
+  [failed-grant admission](mcp-cimd-authorization.md#failed-grant-admission).
 - **aboutme as a scanner or reflector.**
   [Fetches](mcp-cimd-fetch.md#client-id-url-rules) reach only port 443 on
   [global addresses](mcp-cimd-fetch.md#ssrf-guard), the user never sees the
@@ -104,8 +108,27 @@ claim or remote document hash should imply otherwise.
 - Code exchange and refresh never fetch. Exercise the error matrix, including
   unknown URL rows, found tokens with mismatched clients, omitted refresh IDs,
   bad code/resource/PKCE, and an internal UUID used as a URL-client alias. The
-  failed-grant limiter still applies to known URL clients. Revocation accepts
-  only its existing token form and returns `200` for an unknown token.
+  failed-grant limiter follows the admission rule linked above. Revocation
+  accepts only its existing token form and returns `200` for an unknown token.
+- Two owners approve the same URL client and receive distinct grants. With a
+  fixed clock, send a full failure allowance of anonymous code guesses naming
+  that URL, then require the other owner's valid exchange and refresh to
+  succeed. Repeat with well-shaped never-issued codes and refresh tokens, not
+  only malformed strings. Use distinct source IPs to isolate grant admission
+  from the token-IP budget; also cover one shared IP below that budget.
+- Exhaust one owner's grant with counted failures using that owner's real code
+  or refresh token. Its next attempt gets `429` and `Retry-After`; the other
+  owner's valid exchange and refresh still succeed. Run these two-owner cases
+  with CIMD on and off, and repeat for a shared DCR client. A wrong claimed
+  client must never charge that client's other grants; omitted refresh
+  `client_id` must select the same grant as its correct explicit value.
+- Unknown credentials create no failed-grant entries or overflow reservations,
+  including under key churn and with the map at capacity. Cover wrong token
+  kind, stored terminal credentials, database lookup errors, concurrent
+  reservations, neutral release, success reset, stale completions, window
+  expiry, and bounded overflow under the amended key. Keep the token-IP
+  admission regression. Assert no code consumption, token rotation, or
+  revocation when admission refuses or its lookup fails.
 - Logs from every failure path hold no body, path, name, or redirect URI.
 - A dev-https proof drives the TypeScript SDK client with a client ID URL served
   by the stub: discovery, consent, token, `tools/list`, a forced refresh, and
