@@ -1,0 +1,12 @@
+[Unit]
+Description=aboutme host operation retention
+RequiresMountsFor=/srv/data
+OnFailure=aboutme-alert@%n.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/lib/aboutme/operation-run.sh prune
+LimitCORE=0
+StandardOutput=null
+StandardError=null
