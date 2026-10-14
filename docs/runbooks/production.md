@@ -96,7 +96,9 @@ event commit. A read-only job checks eligibility before publishing jobs start.
 Every write-capable job repeats the check before other work, so a partial rerun
 must pass fresh eligibility. Candidate checkouts supply build inputs only. The
 workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and
-pins image digests. GitHub holds no cloud credentials.
+pins image digests. GitHub holds no cloud credential other than the vMonitor
+quota-renewal service account
+([quota renewal design](../design/vmonitor-quota-renewal.md)).
 
 Before SSH or registry access, the deployer also requires its checkout to be on
 `main`, clean (including untracked files), and equal to freshly fetched
