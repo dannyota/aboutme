@@ -27,7 +27,9 @@ sudo systemctl status aboutme-caddy aboutme-server aboutme-web
 ```
 
 `/var/lib/aboutme/release.json` records the installed tag and image digests.
-Unit state and `/readyz` establish whether that release serves.
+Unit state and `/readyz` establish whether that release serves. Root-only host
+operation state and audit live on the mounted data volume under
+`/srv/data/host-operations/`; never copy personal audit into CI or the journal.
 
 ## Cloudflare DNS
 
@@ -131,6 +133,24 @@ backup timers also remain active. A deploy can therefore send a site-down mail.
 Public-page stylesheets and hydration scripts use a build-time content hash.
 Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 
+## Host operations
+
+Account deletion first ships in v0.7.9. Publish the reviewed image, install its
+reviewed bundle, then deploy it before use. Follow the
+[account-deletion runbook](account-delete.md) for confirmation, closed output,
+unknown-outcome recovery, public proof, and physical cleanup. Operations use
+pinned SSH as `aboutme-admin`; their target and confirmation arrive only through
+stdin to a fixed root entry point. Saved status never starts work.
+
+The request service survives SSH loss and never restarts automatically. Resume
+proves its old unit, containers, and matching database backends stopped before
+reconciliation. An unresolved write retains the operation fence and capacity.
+Known, quiescent deletion releases them before public proof and the media sweep.
+The daily `aboutme-operation-retention.timer` erases expired personal evidence
+at 180 days; abort can close an evidence-expired request only after quiescence.
+Ordinary installation refuses unresolved requests and preserves saved state. Key
+rotations and their repair/archive procedures ship separately.
+
 ## Failed deploy
 
 Before a migration request, a failed deploy restores the previous release and
@@ -179,11 +199,14 @@ release state, unit state, the fence, and any mutation marker. On the host:
 sudo /usr/local/lib/aboutme/fence.sh clear '<reason>'
 ```
 
-The clear records its reason and never lowers the floor. It refuses a retained
-cutover mutation marker. A retained cutover lock or marker also blocks serving
-and job starts across reboot; maintenance remains available. Inspect and recover
-the exact mutation before clearing its lock. Do not delete fence files to
-restart the app.
+The clear records its reason and never lowers the floor. Account-deletion
+release and clear also refuse an unresolved request, active unit/container, or
+matching database backend. Missing data mounts and key-change markers block
+image starts. Recover through the owning request; neither manual clear nor an
+EXIT trap bypasses these checks. It refuses a retained cutover mutation marker.
+A retained cutover lock or marker also blocks serving and job starts across
+reboot; maintenance remains available. Inspect and recover the exact mutation
+before clearing its lock. Do not delete fence files to restart the app.
 
 ## Backups and restore
 
@@ -227,6 +250,11 @@ Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 - CrowdSec retention timer and lease, CrowdSec alert counts, and Coraza match
   counts and malformed records in the last hour.
 - `totp_unavailable` in the server journal.
+
+Operation request and retention units also trigger `OnFailure=` mail. Their
+journal output contains no target or raw command diagnostics; inspect closed
+status and the root-only audit for an operation outcome. Media sweep failures
+leave physical cleanup pending.
 
 Unit failures also trigger mail through `OnFailure=`. `alert.sh` sends through
 Bizfly SMTP with `msmtp`, at most once per condition per UTC day. A send failure

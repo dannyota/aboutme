@@ -25,6 +25,10 @@ cat >"$work/bin/logger" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
+cat >"$work/bin/mountpoint" <<'STUB'
+#!/usr/bin/env bash
+exit "${MOUNT_ABSENT:-0}"
+STUB
 chmod +x "$work/bin/"*
 export PATH=$work/bin:$PATH FENCE_DIR=$work/fence FENCE_SAFETY_LIB=$safety
 
@@ -42,6 +46,52 @@ grep -Fq '"$lib/fence.sh" check "$number" "aboutme-job@$name"' \
 }
 
 "$fence" init
+if MOUNT_ABSENT=1 "$fence" check 4007 aboutme-server 2>/dev/null; then
+  echo "the server started without its data mount" >&2
+  exit 1
+fi
+# Bind account requests to one kind and tag. Neither release nor clear bypasses
+# the operation quiescence guard, including after a lost lock reply.
+request=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+[[ $("$fence" lock-for account_delete v0.7.9 "$request") == "$request" ]]
+[[ $("$fence" lock-for account_delete v0.7.9 "$request") == "$request" ]]
+if "$fence" lock-for account_delete v0.7.10 "$request" 2>/dev/null; then
+  echo "a bound request changed its tag" >&2
+  exit 1
+fi
+if "$fence" checkpoint "$request" v0.7.10 2>/dev/null; then
+  echo "a checkpoint bypassed the bound tag" >&2
+  exit 1
+fi
+cat >"$work/operation-safety.sh" <<'STUB'
+aboutme_assert_operation_release() { [[ ${OPERATION_RELEASE_SAFE:-0} == 1 ]]; }
+STUB
+for verb in release clear; do
+  if FENCE_SAFETY_LIB=$work/operation-safety.sh "$fence" "$verb" "$request" 2>/dev/null; then
+    echo "an unresolved account request bypassed the release guard" >&2
+    exit 1
+  fi
+done
+OPERATION_RELEASE_SAFE=1 FENCE_SAFETY_LIB=$work/operation-safety.sh "$fence" release "$request"
+if "$fence" lock-for account_delete v0.4.6 "$request" 2>/dev/null; then
+  echo "an account request bypassed the release floor" >&2
+  exit 1
+fi
+# A private copy redirects only the fixed marker path for CI fixtures.
+mkdir -p "$work/operations"
+sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/marker-fence.sh"
+chmod +x "$work/marker-fence.sh"
+for marker in malformed symlink; do
+  if [[ $marker == malformed ]]; then printf '{"bad":true}\n' >"$work/operations/key-change.json"
+  else ln -s "$work/nonexistent" "$work/operations/key-change.json"; fi
+  for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate aboutme-job@media-deletion-sweep; do
+    if "$work/marker-fence.sh" check 7009 "$unit" 2>/dev/null; then
+      echo "a retained key marker allowed an image start" >&2
+      exit 1
+    fi
+  done
+  rm "$work/operations/key-change.json"
+done
 op=$("$fence" lock cutover v0.4.7)
 "$fence" mutation-start "$op" v0.4.7 reset-db
 for unit in aboutme-server aboutme-web aboutme-caddy \

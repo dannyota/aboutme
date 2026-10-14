@@ -365,3 +365,38 @@ func TestDeletionRequestNeedsExactlyOneAuthority(t *testing.T) {
 	}
 	f.assertNothingDeleted(t)
 }
+
+func TestOperatorConfirmationDeletesResumesAddedAfterShow(t *testing.T) {
+	f := newOperatorFixture(t)
+	shown, err := f.service.AccountBySlug(f.ctx, f.slugs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The current resume set, rather than the earlier show result, controls deletion.
+	if _, err = f.pool.Exec(f.ctx, `DELETE FROM resumes WHERE slug=$1`, f.slugs[2]); err != nil {
+		t.Fatal(err)
+	}
+	created, err := resume.NewStore(f.pool, docmigrate.NewIdentityProjector()).Create(f.ctx, f.user.ID, "Added", validDeletionDocument(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newSlug := "added-" + uuid.NewString()[:8]
+	if _, err = f.pool.Exec(f.ctx, `UPDATE resumes SET slug=$2 WHERE id=$1`, created.ID, newSlug); err != nil {
+		t.Fatal(err)
+	}
+	reported := f.slugs[1]
+	deleted, err := f.service.DeleteAccountBySlug(f.ctx, reported, shown.UserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if equalStrings(shown.Slugs, deleted.Slugs) {
+		t.Fatal("committed slugs reused the show snapshot")
+	}
+	found := false
+	for _, slug := range deleted.Slugs {
+		found = found || slug == newSlug
+	}
+	if !found {
+		t.Fatal("committed result omitted the new slug")
+	}
+}

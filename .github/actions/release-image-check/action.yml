@@ -61,6 +61,26 @@ runs:
             docker run --rm "$IMAGE" version
             ;;
         esac
+    - name: Probe host operation dispatch
+      if: env.NAME == 'server'
+      shell: bash
+      run: |
+        probe() {
+          local expected_code=$1 expected=$2 code=0 output
+          shift 2
+          output=$(timeout 30 docker run --rm --network none \
+            --entrypoint /usr/local/bin/server "$IMAGE" "$@" 2>&1) || code=$?
+          if [[ $code != "$expected_code" || $output != "$expected" ]]; then
+            echo "host operation command probe failed" >&2
+            exit 1
+          fi
+        }
+        probe 2 'usage: server account-delete {show <slug> | confirm <slug> <user-id> | status <user-id>}' \
+          account-delete status invalid
+        probe 1 'account-delete status failed' \
+          account-delete status 018f5b6a-9a3e-7c21-8b1e-000000000030
+        probe 2 'usage: server media-deletion-status' media-deletion-status extra
+        probe 1 'usage: server totp-key-reencrypt' totp-key-reencrypt extra
     - name: Install Trivy
       shell: bash
       run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"

@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
@@ -860,5 +862,43 @@ func TestDeleteDueRemovesFilesystemObject(t *testing.T) {
 	}
 	if _, _, err := backend.Get(h.ctx, key); !errors.Is(err, media.ErrNotFound) {
 		t.Fatalf("filesystem Get() after cleanup error=%v, want ErrNotFound", err)
+	}
+}
+
+func TestOperatorQueueSnapshotCountsDelayedAndLeasedJobs(t *testing.T) {
+	h := newCleanupHarness(t)
+	err := accountapi.ReadOperatorSnapshot(h.ctx, h.pool, func(ctx context.Context, tx pgx.Tx) error {
+		q := store.New(tx)
+		args := store.GetMediaDeletionQueueStateParams{Now: h.now, OverdueCutoff: h.now}
+		before, err := q.GetMediaDeletionQueueState(ctx, args)
+		if err != nil {
+			return err
+		}
+		ids := make([]uuid.UUID, 3)
+		for i := range ids {
+			resumeID := uuid.New()
+			ids[i] = h.insertJob(t, resumeID, cleanupKey(resumeID, byte('a'+i)), h.now)
+		}
+		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET next_attempt_at=$2 WHERE id=$1`, ids[0], h.now.Add(time.Hour)); err != nil {
+			return err
+		}
+		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET lease_id=$2, lease_expires_at=$3 WHERE id=$1`, ids[1], uuid.New(), h.now.Add(time.Hour)); err != nil {
+			return err
+		}
+		if _, err = h.pool.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at=$2 WHERE id=$1`, ids[2], h.now); err != nil {
+			return err
+		}
+		unchanged, err := q.GetMediaDeletionQueueState(ctx, args)
+		if err != nil || unchanged.Pending != before.Pending {
+			t.Fatalf("queue snapshot changed: %v, %v", unchanged, err)
+		}
+		fresh, err := store.New(h.pool).GetMediaDeletionQueueState(ctx, args)
+		if err != nil || fresh.Pending != before.Pending+2 {
+			t.Fatalf("pending excludes delayed/leased rows: %v, %v", fresh, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

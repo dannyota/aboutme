@@ -26,7 +26,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Diagnose readiness after a hard reset: retained samples show persistent 503s until the server restarted, but no failed dependency reason. Startup ordering was present. Evidence: [historical readiness failure](./traceability/vietnam-operations.md#historical-readiness-failure).
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
-- Add and review a host procedure for abuse account deletion.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 
 ## Acceptance evidence gaps
