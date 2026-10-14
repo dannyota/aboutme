@@ -25,22 +25,21 @@ runbook must check enabled state and recent runs, since silence sends no alert.
 Normally email needs one renewal per term, possibly two in a calendar month when
 renewing early. This is an expectation, not an enforced monthly ceiling. Other
 notification-quota actions share the three-action budget. Whether refused or
-failed requests consume it is unverified. On any failure, the primary disables
-this workflow before investigation and cancels queued runs; never rerun an
-ambiguous write. Disabling is a human response, not an atomic failure latch:
-another scheduled run could start first and consume another action. Before
-re-enabling, reconcile provider state, settlement, and remaining action budget.
+failed requests consume it is unverified. An unconfirmed send leaves the
+[persistent hold](#persistent-hold) set until human reconciliation. Confirmed
+renewals need no human clearance, so monthly renewal remains unattended.
 
 ## Workflow and trust boundary
 
 `.github/workflows/vmonitor-renew.yml` has one `renew` job on `ubuntu-24.04`:
 
-- Only `schedule` and `workflow_dispatch`; dispatch input `action` is a required
+- Initially only `workflow_dispatch`; add `schedule` through the release gate
+  below. These are the only permitted events. Dispatch input `action` requires a
   choice of `renew` (default) or `check`. Schedule selects `renew`. Pass the
   action through step `env`, validate it in the script, never interpolate input
   into shell source. `check` calls only read commands with `--read-only`.
-- `permissions: {}` with no job override; job guard requires repository
-  `dannyota/aboutme`, ref `refs/heads/main`, and one of the two allowed events.
+- `permissions: {}` with only job-level `issues: write`; job guard requires
+  repository `dannyota/aboutme`, ref `refs/heads/main`, and an allowed event.
   Workflow concurrency is `vmonitor-renew`, `cancel-in-progress: false`; job
   timeout is 10 minutes. This serializes this workflow, not console actions.
 - `environment: vmonitor-renew`, already configured with the selected **Branch**
@@ -74,6 +73,57 @@ re-enabling, reconcile provider state, settlement, and remaining action budget.
   profile, or alternate endpoint configuration. No cloud secret during
   checkout/install.
 
+## Persistent hold
+
+The owner creates one dedicated, initially open issue in `dannyota/aboutme`; pin
+its number in the main script. Closed means armed; open blocks sends. Pass
+`GITHUB_TOKEN` to the final script step for the issue API. Every run, including
+schedules, dispatches, and reruns, reads the issue before quota processing.
+Reject open/missing/invalid state or API failure before any renewal command;
+`check` reports the hold without changing it and may continue read-only checks.
+Workflow concurrency covers this sequence; no other workflow may use this key.
+
+After both quota reads validate, immediately before the first renewal command
+that may send, reopen the issue as a temporary guard and read back its open
+state. An uncertain marker write aborts without renewal. This guard must precede
+the send: a failure handler alone cannot cover cancellation or runner loss. A
+run that is not due or refuses before reaching this guard leaves no hold.
+
+The same run closes its own guard only after all processing succeeds and every
+sent renewal has a strictly later end time confirmed by readback, or after
+proving that no renewal request was sent. Price refusal and stale expected end
+time leave no hold when the CLI proves no send. Require documented,
+machine-readable CLI evidence for that distinction; an exit code or unchanged
+provider end time alone is insufficient. Confirm closed state before reporting
+completion. Never delete or replace the issue, or close a hold inherited from an
+earlier run. Store no credentials or provider response bodies in the issue.
+
+Any possibly sent request without confirmation leaves the guard open as a
+persistent hold. This includes timeout, 5xx, `NotSettled`, authentication or
+transport failure after the request may have left, interruption after send, and
+any nonzero exit after a send. Later successful reads do not clear that failure.
+Missing send evidence after interruption is uncertain, even if termination
+occurred between opening the guard and sending. Failed guard closure also blocks
+later sends until reconciled. These failures need human action; a completed,
+confirmed renewal leaves no hold and needs no human clearance.
+
+Only a human clears a persistent hold: disable the workflow, cancel queued and
+active runs, wait for termination, reconcile both quotas, settlement, and
+remaining action budget, then close the issue and re-enable. An unchanged end
+time cannot resolve an ambiguous response; keep the hold until the provider
+resolves the outcome. Missing issues fail closed and require owner repair.
+Manual renewal uses the same disabled-workflow window.
+
+The [issue API][issues] adds repository-wide issue mutation power, with no
+per-issue `GITHUB_TOKEN` scope. Grant no `actions: write`: self-disabling after
+failure misses abrupt termination and adds workflow control. A stolen token with
+only [Actions write][actions-api] can dispatch, re-enable, or cancel runs, but
+cannot close the hold or edit trusted main. Repeated dispatches remain blocked;
+disabling alarms remains possible. Issue writers can bypass this hold and must
+be trusted. A stolen job token can clear it; runner/actions compromise already
+exposes the cloud key. Revoke credentials and disable the workflow on that
+compromise; the hold does not contain it.
+
 ## Script and CLI contract
 
 `scripts/vmonitor-renew.sh` uses JSON and `jq`. Validate both quota reads before
@@ -95,7 +145,7 @@ never conceal `NotSettled` with a later successful read or continue to Email.
 After success, read again: a sent renewal requires a strictly later end time;
 all quotas must remain active with more than 172800 seconds left for a pass.
 Apply this threshold in `check` mode too. `IN-TRASH` or expiry never invokes
-Recover or Buy. A later successful run reads the extended term and skips it.
+Recover or Buy. A later run skips confirmed extended terms without human action.
 `--expected-end-time` detects stale reads; it is not a durable idempotency key
 or a proven server-side compare-and-swap. An unchanged end after an ambiguous
 request does not prove no write occurred. Human renewal must not overlap a run.
@@ -137,28 +187,59 @@ Synthetic renewal.
 
 ## Verification and release
 
-Extend `scripts/test/workflow-contract.test.mjs` to assert the exact trigger,
-input, guard, permission, environment, concurrency, timeout, checkout, action
-pins, toolchain, cache, install/hash-check order, and step-only secret/variable
-mapping above. Reject extra jobs/actions, secret-bearing expressions in `run`,
-`continue-on-error`, bypassed hash checks, artifacts, and debug flags. Include
-negative fixtures that weaken each boundary. Static YAML tests cannot prove
-server-side environment settings or IAM; inspect their nonsecret metadata.
+Extend `scripts/test/workflow-contract.test.mjs` to assert the release-stage
+trigger, input, guard, permission, environment, concurrency, timeout, checkout,
+action pins, toolchain, cache, install/hash-check order, and step-only
+secret/variable mapping above. Reject extra jobs/actions, secret-bearing
+expressions in `run`, `continue-on-error`, bypassed hash checks, artifacts, and
+debug flags. Include negative fixtures that weaken each boundary. Static YAML
+tests cannot prove server-side environment settings or IAM; inspect their
+nonsecret metadata.
 
-`scripts/test/vmonitor-renew-test.sh` uses a fake CLI and clock: test 72/48-hour
-boundaries, delayed runs, `check` never renewing, invalid
+`scripts/test/vmonitor-renew-test.sh` fakes the CLI, issue API, and clock. Test
+72/48-hour boundaries, delayed runs, `check` never renewing, invalid
 action/read/status/time, expiry, price refusal, stale end, all nonzero exits,
 failed settlement with zero resends, no Email write after Synthetic failure, and
-a successful subsequent run skipping extended terms. Inject hostile/error
-output, fake secrets and tokens; assert stdout, stderr, annotations, and
-summaries disclose none of them.
+a subsequent run skipping confirmed extended terms without human clearance.
+Assert exact argv and call counts for every CLI command, including
+`--read-only`, Email kind, the unchanged expected end time, `--max-days-left 3`,
+and `--max-price 0`. Assert one renewal invocation per due quota reached, zero
+on earlier refusal or failure. Persist the fake issue across runs: confirmed
+success leaves it closed; not due, pre-send refusal, price refusal, and stale
+expected end time leave no hold when no request was sent. Unconfirmed sends,
+including timeout, 5xx, `NotSettled`, authentication/transport failure,
+interruption after send, and any nonzero exit after a send, leave it open.
+Assert zero sends from every later schedule, dispatch, and rerun while that hold
+exists, even if provider reads show an extended term. Test interruption between
+guard creation and send with missing send evidence, failed guard closure, and
+partial batch success. Only human reconciliation permits a later run to send.
+Failed marker reads/writes or missing issues must send zero renewals; `check`
+never clears the hold. Inject hostile output, fake secrets and tokens; assert
+stdout, stderr, annotations, and summaries disclose none of them.
 
-Release order: publish CLI version/sum and JSON contract; verify narrowed IAM
-and environment metadata; amend ADR 0027 and the runbook's credential rule;
-merge after independent design/adversarial implementation review and green CI;
-dispatch `action=check` on main. Keep manual renewal until live success confirms
-term arithmetic. No owner choice is open; pins, provider settlement/budget
-behavior, and live evidence remain due.
+Before credentialed use, obtain the CLI maintainer's passing transport-test
+evidence for the exact pinned release: state changed after the script's read and
+missing/nonzero prices send zero renewal requests; ambiguous responses such as
+authentication errors, disconnects/timeouts, 429s, 5xx, and `NotSettled`, cause
+zero resends. The evidence must also prove the CLI's machine-readable no-send
+result for refusals; missing or ambiguous results must never clear the guard.
+Evidence names the release commit, test command, run URL, and request-count
+assertions using the real CLI transport path. Fake-CLI tests cannot prove this.
+
+Release order: publish CLI version/sum, JSON contract, and transport evidence;
+verify narrowed IAM and environment metadata; amend ADR 0027 and the runbook's
+credential rule; create the hold issue. Merge with **no schedule trigger** after
+independent design/adversarial implementation review and green CI. The first
+credentialed run is `action=check` on main. After it passes, the owner clears
+the initial hold and coordinates one due `action=renew` dispatch with manual
+operators; no console renewal may overlap. Keep the schedule absent until live
+success confirms term arithmetic. A confirmed successful dispatch leaves no
+hold; an unconfirmed send requires the human reconciliation procedure above. The
+primary adds the cron trigger in a separate reviewed, green change authorized by
+the owner. Keep manual renewal during rollout using the hold procedure.
+Job-level `issues: write` and human clearance only for unconfirmed sends are
+approved (2026-10-14); `actions: write` remains excluded. Pins, CLI no-send
+evidence, provider settlement/budget behavior, and live evidence remain due.
 
 [Synthetic]:
   https://docs.greennode.ai/vmonitor/dashboards/synthetics/lam-viec-voi-synthetic-test-quota
@@ -174,3 +255,5 @@ behavior, and live evidence remain due.
   https://github.com/actions/setup-go#caching-dependency-files-and-build-outputs
 [gomod]: https://go.dev/ref/mod#authenticating
 [secrets]: https://docs.github.com/en/actions/concepts/security/secrets
+[issues]: https://docs.github.com/en/rest/issues/issues#update-an-issue
+[actions-api]: https://docs.github.com/en/rest/actions/workflows
