@@ -137,3 +137,60 @@ for loss in before after; do
   else [[ -e $work/dispatched ]] || fail 'post-dispatch fixture failed'; fi
 done
 echo 'host operation eligibility, hash and SSH-loss cases passed'
+
+# Exercise the installer's unit inventory guard without touching host paths.
+install_guard=$(sed -n '/^operation_units=/,/^# Validate the saved protocol/p' "$here/host/install.sh" | sed '$d')
+for unit_state in inactive failed active activating deactivating unknown; do
+  (
+    die() { exit 1; }
+    systemctl() { printf 'aboutme-operation@%s.service loaded %s dead active request description\n' "$valid_id" "$unit_state"; }
+    eval "$install_guard"
+  ) >"$work/install-output" 2>&1 && accepted=true || accepted=false
+  case $unit_state in
+    inactive | failed) [[ $accepted == true ]] || fail 'stopped listed operation blocked installation' ;;
+    *) [[ $accepted == false ]] || fail 'unresolved listed operation allowed installation' ;;
+  esac
+done
+
+# The real HTTPS proof submits a fixed receipt against synthetic discovery.
+cp "$here/../../scripts/host-operations-proof.sh" "$work/client/scripts/"
+cat >"$work/client/deploy/vn/scripts/operations.sh" <<'STUB'
+#!/usr/bin/env bash
+cat "$CLIENT_FIXTURE/proof-status"
+STUB
+cat >"$work/bin/ssh" <<'STUB'
+#!/usr/bin/env bash
+cat >"$CLIENT_FIXTURE/proof-receipt"
+STUB
+cat >"$work/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+output=''
+while (($# > 1)); do
+  if [[ $1 == --output ]]; then output=$2; shift; fi
+  shift
+done
+case $1 in
+  */sitemap.xml) cp "$CLIENT_FIXTURE/sitemap" "$output"; printf 200 ;;
+  */llms.txt) cp "$CLIENT_FIXTURE/llms" "$output"; printf 200 ;;
+  */readyz | */healthz) : >"$output"; printf 200 ;;
+  *'/api/v1/public/showcase?page=1') printf '{"items":[],"pageCount":0}' >"$output"; printf 200 ;;
+  *) : >"$output"; printf 404 ;;
+esac
+STUB
+jq -cn --arg user "$valid_uuid" '{challenge:{nonce:"synthetic",phase:"serving"},action:{userId:$user,shownSlugs:["adam"],returnedSlugs:[]}}' >"$work/proof-status"
+for discovery in prefix sitemap llms escaped malformed; do
+  printf '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://aboutme.vn/adam-long</loc></url></urlset>\n' >"$work/sitemap"
+  printf '# aboutme.vn\n\n## Resumes\n\n- [adam-long](https://aboutme.vn/adam-long.md)\n' >"$work/llms"
+  expected=fail
+  case $discovery in
+    prefix) expected=pass ;;
+    sitemap) sed -i 's|/adam-long<|/adam<|' "$work/sitemap" ;;
+    llms) sed -i 's|/adam-long.md)|/adam.md)|' "$work/llms" ;;
+    escaped) sed -i 's|/adam-long<|/a\&#100;am<|' "$work/sitemap" ;;
+    malformed) printf '<urlset' >"$work/sitemap" ;;
+  esac
+  bash "$work/client/scripts/host-operations-proof.sh" "$valid_id" >/dev/null || fail 'synthetic public proof refused'
+  [[ $(jq -r .result "$work/proof-receipt") == "$expected" ]] || fail "discovery URL equality: $discovery"
+done
+echo 'host operation install states and exact discovery URLs passed'

@@ -37,7 +37,23 @@ while IFS= read -r slug; do
   done
   for path in /sitemap.xml /llms.txt; do
     if read_url "$path" 200; then
-      if grep -qF "https://aboutme.vn/$slug" "$work/body"; then result=fail; fi
+      if ! python3 - "$path" "$slug" "$work/body" 2>/dev/null <<'PYTHON'
+import pathlib, re, sys, xml.etree.ElementTree as ET
+path, slug, body = sys.argv[1:]
+text = pathlib.Path(body).read_text(encoding="utf-8")
+if path == "/sitemap.xml":
+    root = ET.fromstring(text)
+    ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+    if root.tag != ns + "urlset":
+        sys.exit(1)
+    urls = [loc.text for loc in root.findall(ns + "url/" + ns + "loc")]
+    target = "https://aboutme.vn/" + slug
+else:
+    urls = re.findall(r"\[[^\]\n]*\]\(([^)\s]+)\)", text)
+    target = "https://aboutme.vn/" + slug + ".md"
+sys.exit(1 if target in urls else 0)
+PYTHON
+      then result=fail; fi
     else result=fail; fi
   done
 done < <(jq -r '.[]' <<<"$slugs")
