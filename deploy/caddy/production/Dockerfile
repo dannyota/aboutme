@@ -7,7 +7,14 @@
 FROM docker.io/library/golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS caddy-build
 WORKDIR /src
 COPY deploy/caddy/production/build/ ./
-RUN GOWORK=off go mod download
+# Retry proxy transport failures without changing module checksum verification.
+RUN for attempt in 1 2 3; do \
+      GOWORK=off go mod download && exit 0; \
+      status=$?; \
+      if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
+      echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
+      sleep "$((attempt * 5))" || exit $?; \
+    done
 RUN CGO_ENABLED=0 GOWORK=off go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/caddy .
 
 FROM docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS render
