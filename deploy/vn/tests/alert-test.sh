@@ -68,20 +68,19 @@ grep -qxF 'From: "Danny from aboutme.vn" <no-reply@example.test>' "$capture.mess
 }
 grep -qxF 'Read the details on the host with journalctl.' "$capture.message"
 
-for key in coraza-log-invalid; do
-  root=$work/$key
-  capture=$work/$key-capture
-  write_env "$root" 'aboutme.vn'
-  printf 'username' >"$root/secrets/smtp-username"
-  run_alert "$root" "$capture" "$key" 'Coraza diagnostic test'
-  grep -qxF 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.' "$capture.message"
-  grep -qxF 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.' "$capture.message"
-  grep -qxF 'Check the WAF log format and reader. Match and unparsed counts are available with journalctl -u aboutme-watch; they do not trigger mail.' "$capture.message"
-  if grep -qF 'Read the details on the host with journalctl.' "$capture.message"; then
-    echo "Coraza metadata was routed to journald" >&2
-    exit 1
-  fi
-done
+key=coraza-log-invalid
+root=$work/$key
+capture=$work/$key-capture
+write_env "$root" 'aboutme.vn'
+printf 'username' >"$root/secrets/smtp-username"
+run_alert "$root" "$capture" "$key" 'Coraza diagnostic test'
+grep -qxF 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.' "$capture.message"
+grep -qxF 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.' "$capture.message"
+grep -qxF 'Check the WAF log format and reader. Match and unparsed counts are available with journalctl -u aboutme-watch; they do not trigger mail.' "$capture.message"
+if grep -qF 'Read the details on the host with journalctl.' "$capture.message"; then
+  echo "Coraza metadata was routed to journald" >&2
+  exit 1
+fi
 
 for key in aboutme-server.service coraza coraza-other coraza-matches coraza-unparsed coraza-matches-extra coraza-unparsed-extra coraza-log-invalid-extra; do
   root=$work/$key
