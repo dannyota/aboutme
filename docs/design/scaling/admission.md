@@ -57,15 +57,21 @@ The seed creates both partitions disabled, full overflow buckets and no keys.
 - **P12 slug changes.** Up to 30 event times per hour. A denial replaces the
   oldest event with the current one, so denied attempts carry debt.
   `Retry-After` is 1.
-- **P22 failed OAuth grants.** The caller reserves an attempt UUID before grant
-  validation. Committed failures plus pending reservations are capped at 10 per
+- **P22 failed OAuth grants.** The caller first resolves the stored grant UUID
+  under
+  [failed-grant admission](../mcp-cimd-authorization.md#failed-grant-admission)
+  for CIMD and DCR, then reserves an attempt UUID before grant validation. A
+  credential that supplies no stored grant identity reserves nothing, including
+  in overflow. Committed failures plus pending reservations are capped at 10 per
   15 minutes, and the first reservation starts the window. Finish converts the
   reservation to a failure, releases it as neutral, or on success clears the
   private bucket. Overflow success releases only its own reservation. Expired
   reservations resolve as neutral. `shared_admission_attempts` keeps terminal
   receipts for 24 hours. An exact replay returns the stored outcome, and a
-  different outcome conflicts. The bucket key is SHA-256 over
-  `aboutme.oauth.failed_grant.v1` and the client UUID.
+  different outcome conflicts. The bucket key uses the
+  [typed encoder](#key-identity) with policy ID `oauth.failed_grant` and one
+  OAuth grant component containing the stored grant UUID. Codes and refresh
+  tokens for that grant share its bucket across the fleet.
 
 ### Allocation and cleanup
 
@@ -90,7 +96,8 @@ HMAC-SHA-256 with the admission key over:
 2. the policy ID, prefixed by a u16 big-endian length;
 3. a one-byte component count;
 4. per component: a type byte (1 IP, 2 peer IP, 3 account, 4 email digest, 5
-   OAuth client, 6 token, 7 user), a u16 big-endian length and the payload.
+   OAuth client, 6 token, 7 user, 8 OAuth grant), a u16 big-endian length and
+   the payload.
 
 IPs are unmapped once and encoded as a family byte plus 4 or 16 bytes. UUIDs are
 16 bytes and must be non-nil. Email is the existing 32-byte HMAC digest.

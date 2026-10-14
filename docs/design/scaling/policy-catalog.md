@@ -6,6 +6,11 @@ current columns describe built behavior. The fleet column is accepted design;
 [admission](admission.md) defines it. Numeric budgets come from
 [`budgets.md`](../budgets.md).
 
+P22 states the approved
+[stored grant identity amendment](../mcp-cimd-authorization.md#failed-grant-admission)
+for CIMD and DCR, pending implementation. Its fleet digest uses the
+[typed encoder](admission.md#key-identity).
+
 ## Current rules
 
 Every limiter is process-local under
@@ -51,7 +56,7 @@ Sources are under `apps/server/`.
 | P19 | `realtime.public_request`        | `internal/realtimeapi/service.go`    | IP; token                                           | 300/min                          | IP                            |
 | P20 | `oauth.register`                 | `internal/oauthsrv/rate.go`          | IP; token                                           | 5/hour                           | IP                            |
 | P21 | `oauth.token`                    | `internal/oauthsrv/rate.go`          | IP; token                                           | 30/min                           | IP                            |
-| P22 | `oauth.failed_grant`             | `internal/oauthsrv/rate.go`          | OAuth client UUID; fixed window with reservations   | 10 failures plus pending/15 min  | Client                        |
+| P22 | `oauth.failed_grant`             | `internal/oauthsrv/rate.go`          | Stored grant UUID; fixed window with reservations   | 10 failures plus pending/15 min  | Stored grant                  |
 | P23 | `mcp.token`                      | `internal/mcpapi/rate.go`            | Durable token UUID; token                           | 120/min                          | Token                         |
 | P24 | `mcp.user`                       | `internal/mcpapi/rate.go`            | Durable user UUID; token                            | 240/min                          | User                          |
 

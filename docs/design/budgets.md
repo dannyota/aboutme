@@ -162,7 +162,7 @@ the [scaling contract](scaling/README.md) and
 | `/oauth/register` per configured egress range            | ≤ 120/hour                                          | OAuth and MCP rate policies                              |
 | `/oauth/register` global ceiling                         | ≤ 600/hour                                          | OAuth and MCP rate policies                              |
 | `/oauth/token` per IP                                    | ≤ 30/min                                            | OAuth and MCP rate policies                              |
-| Failed grants per client                                 | ≤ 10 per 15 min                                     | OAuth and MCP rate policies                              |
+| Failed attempts per stored OAuth grant                   | ≤ 10 per 15 min                                     | OAuth and MCP rate policies                              |
 | `/mcp` tool calls per token                              | ≤ 120/min                                           | OAuth and MCP rate policies                              |
 | `/mcp` tool calls per user                               | ≤ 240/min                                           | OAuth and MCP rate policies                              |
 | Concurrent `/mcp` requests/user                          | ≤ 4                                                 | OAuth and MCP rate policies                              |
