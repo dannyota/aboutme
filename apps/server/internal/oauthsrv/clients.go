@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -61,6 +62,9 @@ const (
 
 // ServiceDependencies are the shared OAuth service dependencies.
 type ServiceDependencies struct {
+	CIMD              *CIMDResolver
+	CIMDEnabled       bool
+	TrustedProxies    api.TrustedProxies
 	Pool              *store.Pool
 	Queries           store.OAuthQueries
 	Clock             func() time.Time
@@ -73,6 +77,9 @@ type ServiceDependencies struct {
 
 // Service is the OAuth authorization-server service.
 type Service struct {
+	cimd              *CIMDResolver
+	cimdEnabled       bool
+	trustedProxies    api.TrustedProxies
 	pool              *store.Pool
 	queries           store.OAuthQueries
 	clock             func() time.Time
@@ -103,9 +110,12 @@ func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service
 		return nil, errors.New("oauth service: nil token admission")
 	case dependencies.LiveGrantLimit <= 0:
 		return nil, errors.New("oauth service: invalid live grant limit")
+	case dependencies.CIMDEnabled && dependencies.CIMD == nil:
+		return nil, errors.New("oauth service: missing CIMD resolver")
 	}
 
 	s := &Service{
+		cimd: dependencies.CIMD, cimdEnabled: dependencies.CIMDEnabled, trustedProxies: dependencies.TrustedProxies,
 		pool:              dependencies.Pool,
 		queries:           dependencies.Queries,
 		clock:             dependencies.Clock,

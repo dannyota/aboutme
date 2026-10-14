@@ -33,6 +33,7 @@ const me = {
 const grant = {
   id: 'grant-1',
   clientName: '<img src=x onerror=alert(1)>',
+  clientKind: 'cimd', clientHost: 'client.example',
   scopes: ['resumes:read', 'resumes:write'],
   createdAt: '2026-09-01T09:00:00Z',
   lastUsedAt: null,
@@ -97,6 +98,15 @@ describe('ConnectedAgents', () => {
         wrapper.find('[data-testid="connected-agents"] [as]').exists(),
       ).toBe(false);
       expect(wrapper.text()).toContain(grant.clientName);
+      expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
+        `${grant.clientName} (client.example)`,
+      );
+      expect(wrapper.get('[data-testid="agent-client-host"]').text())
+        .toBe('(client.example)');
+      const host = wrapper.get('[data-testid="agent-client-host"]');
+      expect(host.element.textContent).toBe(' (client.example)');
+      expect(host.element.tagName).toBe('BDI');
+      expect(host.attributes('dir')).toBe('ltr');
       expect(wrapper.find('[onerror]').exists()).toBe(false);
     },
   );
@@ -128,6 +138,13 @@ describe('ConnectedAgents', () => {
     expect(wrapper.text()).toContain('Chỉnh sửa CV');
     expect(wrapper.text()).toContain('Đã tạo ngày 1 tháng 9, 2026');
     expect(wrapper.text()).toContain('Chưa từng dùng');
+    expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
+      `${grant.clientName} (client.example)`,
+    );
+    const host = wrapper.get('[data-testid="agent-client-host"]');
+    expect(host.element.textContent).toBe(' (client.example)');
+    expect(host.element.tagName).toBe('BDI');
+    expect(host.attributes('dir')).toBe('ltr');
   });
 
   it(
@@ -269,6 +286,8 @@ describe('ConnectedAgents', () => {
       expect(dialog.textContent).toContain('Revoke access');
       expect(agentRequests).toBe(1);
       expect(wrapper.text()).toContain(grant.clientName);
+      expect(wrapper.get('[data-testid="agent-client-host"]').text())
+        .toBe('(client.example)');
 
       document.body.querySelector<HTMLButtonElement>(
         '[data-action="agent-revoke-cancel"]',

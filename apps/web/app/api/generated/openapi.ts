@@ -508,13 +508,13 @@ export interface paths {
         };
         /**
          * Read the pending agent consent request
-         * @description Re-validates the complete authorization request against the registered client and returns only its display name and requested scope list. `state` is echoed by the decision operation, but is never logged or returned as a separate response field. This read is safe and does not require CSRF.
+         * @description Re-validates the complete authorization request against DCR registration or the current CIMD document and returns display name, kind, hostname, and requested scopes. `state` is echoed by the decision operation, but is never logged or returned as a separate response field. This read is safe and does not require CSRF.
          */
         get: operations["getOAuthConsent"];
         put?: never;
         /**
          * Approve or deny agent consent
-         * @description Re-validates every authorization request field against the registered client before acting. Approval records the account-wide grant and redirects to the exact registered redirect URI with the authorization result; denial redirects there with `error=access_denied`. The redirect carries the submitted `state` when present. No token or code is returned as a response field.
+         * @description Re-validates every authorization request field against DCR registration or the current CIMD document before acting. Approval records the account-wide grant and redirects to the exact registered redirect URI with the authorization result; denial redirects there with `error=access_denied`. The redirect carries the submitted `state` when present. No token or code is returned as a response field.
          */
         post: operations["postOAuthConsentDecision"];
         delete?: never;
@@ -1487,13 +1487,14 @@ export interface components {
          * @enum {string}
          */
         OAuthConsentScope: "resumes:read" | "resumes:write";
+        /** @description DCR UUID or exact CIMD HTTPS URL. CIMD uses a lowercase ASCII DNS host, a nonempty path, no userinfo, port, query, fragment, backslash or dot segments. Canonical-host and local-name exclusions and address checks follow docs/design/mcp-cimd-fetch.md. Identity is byte for byte. */
+        OAuthPublicClientID: string & (unknown | unknown);
         /** @description Strict JSON representation of the validated authorization request and the user's decision. Unknown and duplicate fields are rejected. */
         OAuthConsentDecisionRequest: {
-            /** Format: uuid */
-            client_id: string;
+            client_id: components["schemas"]["OAuthPublicClientID"];
             /**
              * Format: uri
-             * @description Must exactly match one redirect URI registered by the client.
+             * @description DCR matches exactly. CIMD checks the current document; loopback ports may differ.
              */
             redirect_uri: string;
             /** @constant */
@@ -1510,6 +1511,10 @@ export interface components {
         };
         OAuthConsentResponse: {
             data: {
+                /** @enum {string} */
+                clientKind: "dcr" | "cimd";
+                /** @description ASCII metadata URL hostname for CIMD, null for DCR. */
+                clientHost: string | null;
                 clientName: string;
                 scopes: components["schemas"]["OAuthConsentScope"][];
             };
@@ -1518,7 +1523,7 @@ export interface components {
             data: {
                 /**
                  * Format: uri-reference
-                 * @description Redirect URL on the exact registered redirect URI only. It carries the authorization result and optional client state; it is never an arbitrary caller-selected destination.
+                 * @description Redirect URL on the validated redirect URI only. DCR checks the stored URI; CIMD checks the current document and binds the issued port. It carries the authorization result and optional client state; it is never an arbitrary caller-selected destination.
                  */
                 redirectTo: string;
             };
@@ -1526,6 +1531,10 @@ export interface components {
         OAuthAgentGrant: {
             /** Format: uuid */
             id: string;
+            /** @enum {string} */
+            clientKind: "dcr" | "cimd";
+            /** @description ASCII stored metadata URL hostname for CIMD, null for DCR. */
+            clientHost: string | null;
             clientName: string;
             scopes: components["schemas"]["OAuthConsentScope"][];
             /** Format: date-time */
@@ -6284,8 +6293,8 @@ export interface operations {
     getOAuthConsent: {
         parameters: {
             query: {
-                client_id: string;
-                /** @description Must exactly match one redirect URI registered by the client. */
+                client_id: components["schemas"]["OAuthPublicClientID"];
+                /** @description DCR matches exactly. CIMD checks the current document; loopback ports may differ. */
                 redirect_uri: string;
                 response_type: "code";
                 /** @description One or both account-wide scopes. This is a closed list, not free text. Multiple scopes use OAuth's canonical space-delimited form. */
@@ -6312,6 +6321,8 @@ export interface operations {
                      * @example {
                      *       "data": {
                      *         "clientName": "Resume assistant",
+                     *         "clientKind": "dcr",
+                     *         "clientHost": null,
                      *         "scopes": [
                      *           "resumes:read"
                      *         ]
@@ -6366,6 +6377,25 @@ export interface operations {
                      *       "error": {
                      *         "code": "not_found",
                      *         "message": "no such authorization client"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Metadata fetch admission refused; no redirect destination. */
+            429: {
+                headers: {
+                    /** @description Positive rounded-up seconds until retry. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "too many requests"
                      *       }
                      *     }
                      */
@@ -6499,6 +6529,25 @@ export interface operations {
                 };
             };
             415: components["responses"]["PasswordMediaTypeUnsupported"];
+            /** @description Metadata fetch admission refused; no redirect destination. */
+            429: {
+                headers: {
+                    /** @description Positive rounded-up seconds until retry. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "rate_limited",
+                     *         "message": "too many requests"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listAgentGrants: {
@@ -6523,6 +6572,8 @@ export interface operations {
                      *           {
                      *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000030",
                      *             "clientName": "Resume assistant",
+                     *             "clientKind": "dcr",
+                     *             "clientHost": null,
                      *             "scopes": [
                      *               "resumes:read",
                      *               "resumes:write"

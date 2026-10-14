@@ -17,6 +17,7 @@ import (
 // range (docs/design/mcp-client-compatibility.md, "Registration rate from
 // shared egress"). Empty means every address keeps the per-address budget.
 type AgentAccessConfig struct {
+	CIMD                        CIMDConfig
 	Enabled                     bool
 	OAuthRegisterRequests       int
 	OAuthRegisterEgressRanges   []netip.Prefix
@@ -110,6 +111,9 @@ func loadAgentAccessConfig(rawEnabled, rawEgress string) (AgentAccessConfig, err
 // composition root also calls this method so tests and future constructors
 // cannot bypass startup validation with a Config literal.
 func (c Config) ValidateAgentAccess() error {
+	if err := c.validateCIMD(); err != nil {
+		return err
+	}
 	if !c.AgentAccess.Enabled {
 		return nil
 	}

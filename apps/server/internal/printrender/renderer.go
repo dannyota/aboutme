@@ -18,7 +18,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
 
-const expectedBrowserVersion = "151.0.7922.34"
+const expectedBrowserVersion = "156.0.8078.4"
 
 var (
 	// ErrInvalidConfig reports an unusable browser controller configuration.

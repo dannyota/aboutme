@@ -117,34 +117,34 @@ func TestRatePolicies_FailedGrantBudgetClearsOnlyOnSuccess(t *testing.T) {
 		t.Fatalf("NewRatePolicies: %v", err)
 	}
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	client := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000030")
+	grant := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000030")
 
 	for i := 1; i <= 2; i++ {
-		attempt, allowed, _ := policies.AdmitGrant(client, now)
+		attempt, allowed, _ := policies.AdmitGrant(grant, now)
 		if !allowed {
 			t.Fatalf("pre-success failed grant %d was denied", i)
 		}
 		policies.FinishGrant(attempt, grantAttemptFailure)
 	}
-	success, successAllowed, _ := policies.AdmitGrant(client, now)
+	success, successAllowed, _ := policies.AdmitGrant(grant, now)
 	if !successAllowed {
 		t.Fatal("success attempt was denied before the failure budget was full")
 	}
 	policies.FinishGrant(success, grantAttemptSuccess)
 	for i := 1; i <= 10; i++ {
-		attempt, attemptAllowed, _ := policies.AdmitGrant(client, now)
+		attempt, attemptAllowed, _ := policies.AdmitGrant(grant, now)
 		if !attemptAllowed {
 			t.Fatalf("post-success failed grant %d denied before the reset budget was consumed", i)
 		}
 		policies.FinishGrant(attempt, grantAttemptFailure)
 	}
-	if _, limitAllowed, retry := policies.AdmitGrant(client, now); limitAllowed || retry != 900 {
+	if _, limitAllowed, retry := policies.AdmitGrant(grant, now); limitAllowed || retry != 900 {
 		t.Fatalf("failed grant limit+1 = (%t,%d), want (false,900)", limitAllowed, retry)
 	}
 
-	// Once the bounded store is full, new client IDs share one overflow
-	// bucket. A success for one overflow client must not clear every other
-	// overflow client's debt.
+	// Once the bounded store is full, new grant IDs share one overflow
+	// bucket. A success for one overflow grant must not clear every other
+	// overflow grant's debt.
 	overflowA := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000031")
 	overflowB := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000032")
 	for i := 1; i <= 9; i++ {
@@ -165,7 +165,7 @@ func TestRatePolicies_FailedGrantBudgetClearsOnlyOnSuccess(t *testing.T) {
 	}
 	policies.FinishGrant(overflowFailure, grantAttemptFailure)
 	if _, limitAllowed, _ := policies.AdmitGrant(overflowA, now); limitAllowed {
-		t.Fatal("overflow success cleared another client's shared failure debt")
+		t.Fatal("overflow success cleared another grant's shared failure debt")
 	}
 }
 
@@ -177,28 +177,28 @@ func TestRatePolicies_FailedGrantAdmissionReservesConcurrentBudget(t *testing.T)
 		t.Fatalf("NewRatePolicies: %v", err)
 	}
 	now := time.Date(2026, 9, 2, 12, 30, 0, 0, time.UTC)
-	client := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000034")
+	grant := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000034")
 
 	attempts := make([]grantAttempt, 0, 3)
 	for i := 1; i <= 3; i++ {
-		attempt, allowed, _ := policies.AdmitGrant(client, now)
+		attempt, allowed, _ := policies.AdmitGrant(grant, now)
 		if !allowed {
 			t.Fatalf("concurrent reservation %d denied within the budget", i)
 		}
 		attempts = append(attempts, attempt)
 	}
-	if _, allowed, retry := policies.AdmitGrant(client, now); allowed || retry != 900 {
+	if _, allowed, retry := policies.AdmitGrant(grant, now); allowed || retry != 900 {
 		t.Fatalf("concurrent reservation limit+1 = (%t,%d), want (false,900)", allowed, retry)
 	}
 	policies.FinishGrant(attempts[0], grantAttemptRelease)
-	replacement, allowed, _ := policies.AdmitGrant(client, now)
+	replacement, allowed, _ := policies.AdmitGrant(grant, now)
 	if !allowed {
 		t.Fatal("a non-failure outcome did not release its reservation")
 	}
 	_ = replacement
 	policies.FinishGrant(attempts[1], grantAttemptSuccess)
 	for i := 1; i <= 3; i++ {
-		if _, allowed, _ := policies.AdmitGrant(client, now); !allowed {
+		if _, allowed, _ := policies.AdmitGrant(grant, now); !allowed {
 			t.Fatalf("reservation %d denied after success clear", i)
 		}
 	}
@@ -236,16 +236,22 @@ func TestHandleToken_FailedGrantBudgetIsClearedBySuccess(t *testing.T) {
 	if response := fixture.exchange(t, fixture.clientID, "http://127.0.0.1:20090/callback", fixture.verifier); response.Code != http.StatusOK {
 		t.Fatalf("successful exchange status = %d, want 200", response.Code)
 	}
+	if len(policies.grants.entries) != 0 {
+		t.Fatal("successful exchange did not clear its grant debt")
+	}
+	var ordinary *httptest.ResponseRecorder
 	for i := 1; i <= 3; i++ {
 		response := fixture.exchange(t, fixture.clientID, "http://127.0.0.1:20090/callback", fixture.verifier)
-		if response.Code != http.StatusBadRequest {
-			t.Fatalf("post-success failed grant %d status = %d, want 400 after success reset", i, response.Code)
+		assertClosedInvalidGrant(t, response)
+		bucket := policies.grants.entries[fixture.grantID]
+		if bucket == nil || bucket.failures != i || len(bucket.pending) != 0 {
+			t.Fatalf("post-success failure %d did not spend its reset allowance", i)
 		}
+		ordinary = response
 	}
 	limited := fixture.exchange(t, fixture.clientID, "http://127.0.0.1:20090/callback", fixture.verifier)
-	if limited.Code != http.StatusTooManyRequests || limited.Header().Get("Retry-After") != "900" {
-		t.Fatalf("post-reset limit+1 = %d Retry-After %q", limited.Code, limited.Header().Get("Retry-After"))
-	}
+	assertClosedInvalidGrant(t, limited)
+	assertSameTokenResponse(t, ordinary, limited)
 }
 
 // testEgressRange is a published client egress range used only by these

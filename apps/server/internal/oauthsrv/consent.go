@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +40,9 @@ var (
 // ConsentQuery is the validated browser representation of an authorization
 // request. Scope remains its canonical OAuth parameter spelling at this edge.
 type ConsentQuery struct {
+	PublicClientID      string
+	metadata            *CIMDMetadata
+	address             netip.Addr
 	ClientID            uuid.UUID
 	RedirectURI         string
 	ResponseType        string
@@ -51,6 +56,8 @@ type ConsentQuery struct {
 // ConsentView is safe for the session-authenticated consent page: it exposes
 // display metadata but never state, verifier material, or credentials.
 type ConsentView struct {
+	ClientKind string
+	ClientHost *string
 	ClientName string
 	Scopes     Scopes
 }
@@ -65,24 +72,24 @@ type ConsentDecision struct {
 // ConsentContext revalidates a stateless request and returns only the client
 // name and canonical requested scopes for rendering.
 func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuery) (ConsentView, error) {
-	client, err := s.queries.GetOAuthClient(ctx, q.ClientID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ConsentView{}, ErrConsentNotFound
-	}
+	resolved, client, err := s.resolveConsent(ctx, q)
 	if err != nil {
 		return ConsentView{}, fmt.Errorf("get OAuth consent client: %w", err)
 	}
-	if !registeredRedirect(client, q.RedirectURI) {
-		return ConsentView{}, ErrConsentNotFound
-	}
-	if validateConsentQuery(q) != nil {
+	if validateConsentQuery(resolved) != nil {
 		return ConsentView{}, ErrConsentInvalid
 	}
 	scopes, scopeErr := q.parsedScopes()
 	if scopeErr != nil {
 		return ConsentView{}, ErrConsentInvalid
 	}
-	return ConsentView{ClientName: client.ClientName, Scopes: scopes}, nil
+	kind, host := clientDisplay(client.MetadataUrl)
+	if resolved.metadata != nil {
+		kind = "cimd"
+		value := resolved.metadata.host
+		host = &value
+	}
+	return ConsentView{ClientName: client.ClientName, Scopes: scopes, ClientKind: kind, ClientHost: host}, nil
 }
 
 // ConsentDecision revalidates the complete request. Approval writes the grant
@@ -95,9 +102,14 @@ func (s *Service) ConsentDecision(ctx context.Context, sess store.Session, d Con
 	if d.Decision != "approve" && d.Decision != "deny" {
 		return "", ErrConsentInvalid
 	}
-	if _, err := s.ConsentContext(ctx, sess.UserID, d.ConsentQuery); err != nil {
+	resolved, _, err := s.resolveConsent(ctx, d.ConsentQuery)
+	if err != nil {
 		return "", err
 	}
+	if validateConsentQuery(resolved) != nil {
+		return "", ErrConsentInvalid
+	}
+	d.ConsentQuery = resolved
 	if d.Decision == "deny" {
 		return s.denyConsent(ctx, d.ConsentQuery)
 	}
@@ -105,6 +117,12 @@ func (s *Service) ConsentDecision(ctx context.Context, sess store.Session, d Con
 }
 
 func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redirectTo string, err error) {
+	if request.metadata != nil {
+		if !request.metadata.matchesRedirect(request.RedirectURI) {
+			return "", ErrConsentInvalid
+		}
+		return oauthResultURL(request.RedirectURI, s.publicOrigin, "", "access_denied", request.State), nil
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin consent denial transaction: %w", err)
@@ -117,7 +135,7 @@ func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redire
 	if err != nil {
 		return "", fmt.Errorf("lock consent client: %w", err)
 	}
-	if !registeredRedirect(client, request.RedirectURI) {
+	if !consentRedirectMatches(client, request) {
 		return "", ErrConsentNotFound
 	}
 	if validateConsentQuery(request) != nil {
@@ -130,7 +148,7 @@ func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redire
 }
 
 func validateConsentQuery(q ConsentQuery) error {
-	if q.ClientID == uuid.Nil || q.ResponseType != "code" || len(q.State) > stateMaxBytes || q.CodeChallengeMethod != "S256" || !isS256Challenge(q.CodeChallenge) {
+	if (q.ClientID == uuid.Nil && !strings.HasPrefix(q.PublicClientID, "https://")) || q.ResponseType != "code" || len(q.State) > stateMaxBytes || q.CodeChallengeMethod != "S256" || !isS256Challenge(q.CodeChallenge) {
 		return ErrConsentInvalid
 	}
 	scopes, err := ParseScopes(q.Scope)
@@ -152,7 +170,7 @@ func (q ConsentQuery) parsedScopes() (Scopes, error) {
 
 func (q ConsentQuery) values() url.Values {
 	values := url.Values{
-		"client_id":             {q.ClientID.String()},
+		"client_id":             {q.publicID()},
 		"redirect_uri":          {q.RedirectURI},
 		"response_type":         {q.ResponseType},
 		"scope":                 {q.Scope},
@@ -172,14 +190,14 @@ func (s *Service) approveConsent(ctx context.Context, sess store.Session, reques
 	}
 	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback consent transaction")
 	qtx := store.New(tx)
-	client, err := qtx.GetOAuthClientForUpdate(ctx, request.ClientID)
+	client, err := s.lockApprovalClient(ctx, qtx, &request)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrConsentNotFound
 	}
 	if err != nil {
 		return "", fmt.Errorf("lock consent client: %w", err)
 	}
-	if !registeredRedirect(client, request.RedirectURI) {
+	if !consentRedirectMatches(client, request) {
 		return "", ErrConsentNotFound
 	}
 	if validateConsentQuery(request) != nil {
@@ -287,6 +305,9 @@ func (s *Service) issueCode(ctx context.Context, sess store.Session, request Con
 // left over from before an authentication epoch change cannot mint a fresh
 // code without reproving itself.
 func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, request ConsentQuery) (redirectTo string, err error) {
+	if request.metadata != nil && nativeLoopbackRedirect(request.RedirectURI) {
+		return "", ErrConsentInvalid
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin code transaction: %w", err)
@@ -294,7 +315,7 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback authorization code transaction")
 	qtx := store.New(tx)
 	client, err := qtx.GetOAuthClientForUpdate(ctx, request.ClientID)
-	if err != nil || !registeredRedirect(client, request.RedirectURI) || validateConsentQuery(request) != nil {
+	if err != nil || !consentRedirectMatches(client, request) || validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
 	user, userErr := qtx.GetUserForUpdate(ctx, sess.UserID)
@@ -310,7 +331,7 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 		return "", err
 	}
 	requestedScopes, scopeErr := request.parsedScopes()
-	if scopeErr != nil || !live || !grantAllows(grant.Scopes, requestedScopes) {
+	if scopeErr != nil || !live || grant.AuthEpoch != user.AuthEpoch || !grantAllows(grant.Scopes, requestedScopes) {
 		return "", ErrConsentInvalid
 	}
 	rawCode, digest, err := s.newCode()

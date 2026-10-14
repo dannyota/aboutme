@@ -313,6 +313,8 @@ fi
 
 # 8. The new release beside maintenance, ready from the host; then maintenance
 # stops and is proved stopped.
+# app-up rechecks the CIMD rollback boundary with the serving app stopped,
+# under this operation's persistent lock. The host also checks restoration.
 step app-up
 step maintenance-down
 
