@@ -49,9 +49,8 @@ let intended = committed.value;
 let announced = committed.value;
 let navigation = 0;
 let pending = false;
-let pendingTarget = '';
 const removeRouteHook = router.afterEach((to, _from, failure) => {
-  if (!pending || failure || to.fullPath === pendingTarget) return;
+  if (!pending || failure) return;
   navigation += 1;
   pending = false;
   intended = pair(to.query);
@@ -176,7 +175,6 @@ async function change(next: Pair, recovery?: Recovery): Promise<void> {
     path: '/templates',
     query: withGalleryFilters(route.query, next.role, next.filter),
   };
-  pendingTarget = router.resolve(target).fullPath;
   try {
     const failure = await router.replace(target);
     if (token !== navigation) return;
@@ -329,26 +327,26 @@ useHead(
         @clear-all="clearAll"
       />
     </div>
-    <noscript>
+    <component :is="'noscript'">
       <div class="gallery-fallback mt-4">
-      <LibraryFilters
-      :filter="committed.filter"
-      layout="row"
-      :locale="locale"
-      :query="route.query"
-      :role="committed.role"
-      style-only
-      />
+        <LibraryFilters
+          :filter="committed.filter"
+          layout="row"
+          :locale="locale"
+          :query="route.query"
+          :role="committed.role"
+          style-only
+        />
       </div>
       <NuxtLink
-      v-if="chips.length"
-      class="gallery-fallback-clear"
-      :prefetch="false"
-      :to="clearTarget"
+        v-if="chips.length"
+        class="gallery-fallback-clear"
+        :prefetch="false"
+        :to="clearTarget"
       >
-      {{ copy.filterControls.clearAll }}
+        {{ copy.filterControls.clearAll }}
       </NuxtLink>
-    </noscript>
+    </component>
     <ul
       v-show="visibleIds.length"
       class="gallery-grid mt-4"
@@ -369,7 +367,7 @@ useHead(
     </ul>
     <p
       v-if="visibleIds.length === 0"
-      class="mt-4 text-md text-muted-foreground"
+      class="mt-4 text-base text-muted-foreground"
     >
       {{ copy.noMatch }}
     </p>

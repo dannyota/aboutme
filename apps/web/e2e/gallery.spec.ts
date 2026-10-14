@@ -17,6 +17,83 @@ import {
 // Templates with a sample show its stored page image; the rest render live.
 const SAMPLE_TEMPLATES = new Set(SAMPLES.map(({ templateId }) => templateId));
 
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [390, 1440]) {
+    test(`Role chips have their size and selected colors in ${theme} ${width}`,
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.context().addCookies([
+          {
+            name: 'aboutme-theme',
+            value: theme,
+            url: 'http://127.0.0.1:20092',
+          },
+        ]);
+        await page.goto('/templates?role=backend');
+        if (width === 390) {
+          await page.locator('[data-action="gallery-filters-open"]').click();
+        }
+        const fields = width === 390
+          ? page.getByTestId('gallery-filter-sheet')
+          : page.locator('.gallery-desktop');
+        const roles = fields.locator('[data-role]');
+        await expect(roles).toHaveCount(10);
+        const sizes = await roles.evaluateAll((nodes) => nodes.map((node) => {
+          const style = getComputedStyle(node);
+          return {
+            height: style.height,
+            paddingLeft: style.paddingLeft,
+            paddingRight: style.paddingRight,
+            borderRadius: style.borderRadius,
+            fontSize: style.fontSize,
+          };
+        }));
+        for (const size of sizes) {
+          expect(size).toEqual({
+            height: width === 390 ? '40px' : '36px',
+            paddingLeft: width === 390 ? '14px' : '16px',
+            paddingRight: width === 390 ? '14px' : '16px',
+            borderRadius: '9999px',
+            fontSize: '14px',
+          });
+        }
+        const colors = await page.evaluate(() => {
+          const probe = document.createElement('span');
+          probe.style.backgroundColor = 'var(--primary)';
+          probe.style.color = 'var(--primary-foreground)';
+          document.body.append(probe);
+          const style = getComputedStyle(probe);
+          const result = {
+            background: style.backgroundColor,
+            text: style.color,
+          };
+          probe.remove();
+          return result;
+        });
+        for (const role of ['backend', 'frontend']) {
+          const selected = fields.locator(`[data-role="${role}"]`);
+          if (role === 'frontend') await selected.click();
+          await expect(selected).toHaveAttribute('aria-pressed', 'true');
+          await expect(selected).toHaveCSS(
+            'background-color', colors.background,
+          );
+          await expect(selected).toHaveCSS(
+            'border-top-color', colors.background,
+          );
+          await expect(selected).toHaveCSS('color', colors.text);
+          await expect(selected).toHaveCSS(
+            'font-weight', width === 390 ? '600' : '500',
+          );
+        }
+        if (width === 1440) {
+          const divider = fields.locator('.library-divider');
+          await expect(divider).toHaveCSS('margin-left', '4px');
+          await expect(divider).toHaveCSS('margin-right', '4px');
+        }
+      });
+  }
+}
+
 for (const width of [390, 1440]) {
   test(`gallery at ${width} px fits the viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -134,6 +211,8 @@ for (const width of [390, 1440]) {
     await expect(
       page.getByText('No template matches this filter.'),
     ).toBeVisible();
+    await expect(page.getByText('No template matches this filter.'))
+      .toHaveCSS('font-size', '15px');
     if (width === 390) {
       await page.locator('[data-action="gallery-filters-clear-all"]').click();
       await expect(trigger).toBeFocused();
@@ -638,7 +717,9 @@ for (const width of [390, 1440]) {
       { name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092' },
     ]);
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:20092/templates?role=backend');
+    await page.goto(
+      'http://127.0.0.1:20092/templates?role=backend&source=a%20%26%20b',
+    );
     await expect(page.locator('[data-template]')).toHaveCount(20);
     await expect(page.locator('[data-template]:visible')).toHaveCount(1);
     await expect(
@@ -653,11 +734,28 @@ for (const width of [390, 1440]) {
       = width < 1024
         ? page.locator('.gallery-fallback')
         : page.locator('.gallery-desktop');
+    if (width < 1024) {
+      await expect(page.locator('.gallery-fallback')).toBeVisible();
+    } else {
+      await expect(page.locator('.gallery-fallback')).toBeHidden();
+    }
+    await expect(styles.locator('[data-filter="ats"]')).toHaveAttribute(
+      'href',
+      /^\/templates\?source=a(%20|\+)%26(%20|\+)b&role=backend&filter=ats$/u,
+    );
     await styles.locator('[data-filter="ats"]').click();
     await expect(page).toHaveURL(/role=backend&filter=ats$/u);
     await expect(page.locator('[data-template]:visible')).toHaveCount(0);
-    await page.getByRole('link', { name: 'Clear all', exact: true }).click();
-    await expect(page).toHaveURL(/\/templates$/u);
+    const clear = page.getByRole('link', { name: 'Clear all', exact: true });
+    await expect(clear).toBeVisible();
+    await expect(clear).toHaveAttribute(
+      'href', /^\/templates\?source=a(?:%20|\+)%26(?:%20|\+)b$/u,
+    );
+    await clear.click();
+    await expect(page).toHaveURL(
+      /\/templates\?source=a(?:%20|\+)%26(?:%20|\+)b$/u,
+    );
+    await expect(clear).toHaveCount(0);
     await expect(page.locator('[data-template]:visible')).toHaveCount(20);
     await expect(page.locator('[data-role="all"]')).toBeDisabled();
     await context.close();

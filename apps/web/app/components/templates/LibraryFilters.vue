@@ -202,7 +202,7 @@ function onRole(value: unknown): void {
 .library-divider {
   width: 1px;
   height: 24px;
-  margin: 0 12px 0 4px;
+  margin: 0 4px;
   background: var(--border);
 }
 .library-break {
@@ -213,7 +213,7 @@ function onRole(value: unknown): void {
 .library-filters--sheet .library-divider {
   display: none;
 }
-.gallery-chip {
+.library-filters :deep(.gallery-chip) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -230,21 +230,24 @@ function onRole(value: unknown): void {
     background-color 150ms,
     border-color 150ms;
 }
-.gallery-chip:not([aria-current='page']):not([aria-pressed='true']):hover {
+.library-filters
+  :deep(
+    .gallery-chip:not([aria-current='page']):not([aria-pressed='true']):hover
+  ) {
   background: var(--surface-indigo);
 }
-.gallery-chip[aria-current='page'],
-.gallery-chip[aria-pressed='true'] {
+.library-filters :deep(.gallery-chip[aria-current='page']),
+.library-filters :deep(.gallery-chip[aria-pressed='true']) {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
 }
-.library-filters--sheet .gallery-chip {
+.library-filters--sheet :deep(.gallery-chip) {
   height: 40px;
   padding-inline: 14px;
 }
-.library-filters--sheet .gallery-chip[aria-current='page'],
-.library-filters--sheet .gallery-chip[aria-pressed='true'] {
+.library-filters--sheet :deep(.gallery-chip[aria-current='page']),
+.library-filters--sheet :deep(.gallery-chip[aria-pressed='true']) {
   font-weight: 600;
 }
 .gallery-chip__dot {
@@ -261,7 +264,7 @@ function onRole(value: unknown): void {
 [aria-current='page'] .gallery-chip__dot {
   background: currentColor;
 }
-.gallery-chip:focus-visible {
+.library-filters :deep(.gallery-chip:focus-visible) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
