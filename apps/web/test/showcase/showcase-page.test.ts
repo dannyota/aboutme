@@ -62,7 +62,8 @@ const FORBIDDEN = new RegExp([
 type Reply
   = | { readonly status?: number; readonly body: unknown }
     | { readonly fail: true }
-    | { readonly hold: true };
+    | { readonly hold: true }
+    | { readonly response: Promise<Response> };
 
 interface Call {
   readonly url: string;
@@ -74,6 +75,7 @@ let replies: Reply[] = [];
 
 function respond(reply: Reply | undefined): Promise<Response> {
   if (reply === undefined) return Promise.reject(new Error('unexpected'));
+  if ('response' in reply) return reply.response;
   if ('hold' in reply) return new Promise(() => {});
   if ('fail' in reply) return Promise.reject(new TypeError('offline'));
   return Promise.resolve(new Response(JSON.stringify(reply.body), {
@@ -836,6 +838,71 @@ describe('showcase count line', () => {
       expect(listingUrls().at(-1)).toBe(`${LISTING_PATH}?page=2`);
       expect(textNode(wrapper)).toBe(before);
     });
+
+    it.each(['en', 'vi'] as const)(
+      'does not repeat a reverted filter count on the next load in %s',
+      async (locale) => {
+        setSiteLocale(locale);
+        const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
+        let finishChange!: (response: Response) => void;
+        let finishRevert!: (response: Response) => void;
+        const change = new Promise<Response>((resolve) => {
+          finishChange = resolve;
+        });
+        const revert = new Promise<Response>((resolve) => {
+          finishRevert = resolve;
+        });
+        stubListing(reply, { response: change }, { response: revert }, reply);
+        const wrapper = await mountPage();
+        const before = textNode(wrapper);
+
+        await wrapper.get('[data-role="qa"]').trigger('click');
+        await expectQuery({ role: 'qa' });
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        expect(textNode(wrapper)).toBe(before);
+        await wrapper.get('[data-role="all"]').trigger('click');
+        await expectQuery({});
+        await vi.waitFor(() => expect(calls).toHaveLength(3));
+        expect(calls[1]!.init!.signal!.aborted).toBe(true);
+        expect(textNode(wrapper)).toBe(before);
+
+        finishRevert(await respond(reply));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="list"]')
+          .exists()).toBe(true));
+        await flushPromises();
+        expect(countText(wrapper)).toBe(showcaseCopy[locale].countLine(5));
+        expect(textNode(wrapper)).toBe(before);
+        // A stale reply cannot announce the abandoned filters.
+        finishChange(await respond(reply));
+        await flushPromises();
+        expect(textNode(wrapper)).toBe(before);
+
+        await useRouter().replace({ path: '/showcase', query: { page: '2' } });
+        await vi.waitFor(() => expect(calls).toHaveLength(4));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+          .exists()).toBe(false));
+        await flushPromises();
+        expect(textNode(wrapper)).toBe(before);
+
+        await wrapper.get('[data-role="qa"]').trigger('click');
+        await expectQuery({ role: 'qa' });
+        await vi.waitFor(() => expect(calls).toHaveLength(5));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+          .exists()).toBe(false));
+        await flushPromises();
+        const announced = textNode(wrapper);
+        expect(announced).not.toBe(before);
+        expect(countText(wrapper)).toBe(showcaseCopy[locale].countLine(5));
+        await useRouter().replace({
+          path: '/showcase', query: { role: 'qa', page: '2' },
+        });
+        await vi.waitFor(() => expect(calls).toHaveLength(6));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+          .exists()).toBe(false));
+        await flushPromises();
+        expect(textNode(wrapper)).toBe(announced);
+      },
+    );
 
     it('keeps the node when the change fails and replaces it after Retry',
       async () => {
