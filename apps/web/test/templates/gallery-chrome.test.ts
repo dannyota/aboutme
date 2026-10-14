@@ -1,6 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isNavigationFailure, NavigationFailureType } from 'vue-router';
 
 import GalleryPage from '../../app/pages/templates/index.vue';
 import {
@@ -298,6 +299,70 @@ describe('Library filter navigation', () => {
       wrapper.get('[data-filter="technical"]').attributes('aria-current'),
     ).toBe('page');
   });
+
+  it('commits Back to the pending target before delayed navigation cancels',
+    async () => {
+      const wrapper = await mountGallery('/templates?role=frontend');
+      const router = useRouter();
+      await router.push('/templates');
+      await flushPromises();
+      const before = wrapper.get('[data-testid="gallery-count"] span').element;
+      let release!: () => void;
+      let entered!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const delayed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let delay = true;
+      const removeGuard = router.beforeEach(async (to) => {
+        if (to.fullPath !== '/templates?role=frontend' || !delay) return;
+        delay = false;
+        entered();
+        await delayed;
+      });
+      const replace = vi.spyOn(router, 'replace');
+      try {
+        await wrapper.get('[data-role="frontend"]').trigger('click');
+        await waiting;
+        expect(wrapper.get('[data-role="all"]').attributes('aria-pressed'))
+          .toBe('true');
+        router.back();
+        await vi.waitFor(() => {
+          expect(router.currentRoute.value.fullPath)
+            .toBe('/templates?role=frontend');
+        });
+        await flushPromises();
+        expect(wrapper.get('[data-role="frontend"]').attributes('aria-pressed'))
+          .toBe('true');
+        expect(wrapper.get('[data-testid="gallery-count"]').text())
+          .toBe('1 template');
+        expect(wrapper.get('[data-testid="gallery-filters-badge"]').text())
+          .toBe('1');
+        const visible = wrapper.findAll('[data-template]').filter((card) =>
+          !card.element.closest('li')?.hasAttribute('hidden'));
+        expect(visible.map((card) => card.attributes('data-template')))
+          .toEqual(['engineer-compact']);
+        const announced = wrapper.get('[data-testid="gallery-count"] span')
+          .element;
+        expect(announced).not.toBe(before);
+        release();
+        const failure = await replace.mock.results[0]!.value;
+        expect(isNavigationFailure(failure, NavigationFailureType.cancelled))
+          .toBe(true);
+        await flushPromises();
+        expect(wrapper.get('[data-testid="gallery-count"] span').element)
+          .toBe(announced);
+        expect(wrapper.get('[data-role="frontend"]').attributes('aria-pressed'))
+          .toBe('true');
+      } finally {
+        release();
+        removeGuard();
+        await replace.mock.results[0]?.value;
+        await flushPromises();
+      }
+    });
 
   it('does not reannounce an unfinished reverted change', async () => {
     const wrapper = await mountGallery('/templates?role=backend');

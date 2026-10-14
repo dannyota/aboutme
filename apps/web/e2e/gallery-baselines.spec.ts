@@ -16,7 +16,8 @@ const CASES = [
   { name: 'rows', locale: 'vi', theme: 'light', width: 1024 },
 ] as const;
 const LIVE_THUMBNAILS
-  = TEMPLATES.length - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
+  = TEMPLATES.length
+    - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
 
 for (const { name, locale, theme, width } of CASES) {
   test(`Library ${name} ${locale} ${theme} ${width} matches baseline`, async ({
