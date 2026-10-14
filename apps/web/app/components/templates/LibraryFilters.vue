@@ -156,7 +156,7 @@ function onRole(value: unknown): void {
                         ? 'format'
                         : 'audience'
                   "
-                  :href="href"
+                  :href="href ?? undefined"
                   @click="onStyle($event, value)"
                 >
                   <span
