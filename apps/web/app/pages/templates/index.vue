@@ -2,6 +2,9 @@
 import { useMediaQuery } from '@vueuse/core';
 import {
   computed,
+  createStaticVNode,
+  defineComponent,
+  h,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -29,6 +32,17 @@ import {
   withGalleryFilters,
 } from '@/templates/catalog';
 import { galleryStructuredData } from '@/templates/structuredData';
+
+const NoScriptFallback = defineComponent({
+  name: 'NoScriptFallback',
+  setup(_props, { slots }) {
+    // With scripts enabled, noscript holds raw text, not child elements.
+    // Adopt the server node without hydrating its fallback children.
+    return () => import.meta.server
+      ? h('noscript', null, slots.default?.())
+      : createStaticVNode('<noscript></noscript>', 1);
+  },
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -327,7 +341,7 @@ useHead(
         @clear-all="clearAll"
       />
     </div>
-    <component :is="'noscript'">
+    <NoScriptFallback>
       <div class="gallery-fallback mt-4">
         <LibraryFilters
           :filter="committed.filter"
@@ -346,7 +360,7 @@ useHead(
       >
         {{ copy.filterControls.clearAll }}
       </NuxtLink>
-    </component>
+    </NoScriptFallback>
     <ul
       v-show="visibleIds.length"
       class="gallery-grid mt-4"
