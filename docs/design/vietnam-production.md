@@ -282,6 +282,11 @@ two public locations and mails the owner. The GitHub
 [production runbook](../runbooks/production.md#alarms) owns check settings,
 notification delivery, and monthly quota renewal.
 
+The [quota renewal design](vmonitor-quota-renewal.md) defines the approved
+scheduled GitHub renewal and its security and failure boundaries, pending
+implementation. Its renew-only GreenNode service account is the one approved
+exception to GitHub holding no cloud credentials (owner, 2026-10-14).
+
 | Signal   | Mechanism                                                        |
 | -------- | ---------------------------------------------------------------- |
 | App down | vMonitor on `/readyz`, email; GitHub uptime backstop             |

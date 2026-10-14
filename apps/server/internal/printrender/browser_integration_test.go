@@ -348,7 +348,7 @@ func newPinnedTestRenderer(t *testing.T, forwardOrigin string) *Renderer {
 	t.Helper()
 	executable := os.Getenv("ABOUTME_CHROMIUM_PATH")
 	if executable == "" {
-		t.Fatal("ABOUTME_CHROMIUM_PATH must name pinned Chromium 151.0.7922.34")
+		t.Fatal("ABOUTME_CHROMIUM_PATH must name pinned Chromium 156.0.8078.4")
 	}
 	renderer, err := New(Config{
 		BrowserExecutable: executable,

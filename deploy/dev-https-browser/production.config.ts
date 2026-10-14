@@ -1,15 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-// Suppresses the pinned Playwright 1.62.1 runner's failure-page ARIA
-// snapshot (`error-context.md`). The published config surface has no field
-// for this; reading the pinned package
-// (node_modules/playwright/lib/index.js, `_takePageSnapshot`) shows the
-// capture is skipped whenever this process environment variable is set,
-// before Playwright's own base reporter fixture ever calls
-// `page.ariaSnapshot()`. Setting it here, at module load, covers the whole
-// run without changing `run.sh`'s environment. See
-// docs/runbooks/totp-keys.md "Production proofs": no assertion may print or
-// persist a secret, and a page-content snapshot could hold one.
+// Keep failure-page ARIA snapshots (`error-context.md`) suppressed for the
+// pinned Playwright 1.64.0 runner. A page-content snapshot could hold a
+// secret; see docs/runbooks/totp-keys.md "Production proofs".
+// This runner-internal environment switch requires verification whenever
+// the pinned Playwright package changes.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
 
 const baseURL = 'https://aboutme.vn';

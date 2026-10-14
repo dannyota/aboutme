@@ -336,7 +336,7 @@ HTTPS_REPO=$WORK/https-repo
 HTTPS_BIN=$WORK/https-bin
 HTTPS_CALLS=$WORK/https.calls
 HTTPS_ID=sha256:1111111111111111111111111111111111111111111111111111111111111111
-HTTPS_BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac'
+HTTPS_BASE='mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
 mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
   "$HTTPS_REPO/apps/server" \
   "$HTTPS_REPO/.dev/native-https/input" "$HTTPS_BIN"
@@ -385,7 +385,7 @@ build:*)
   ;;
 image:inspect)
   if [[ " $* " == *Config.Labels* ]]; then
-    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.62.1|2:3.98-1ubuntu0.2\n' \
+    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.64.0|2:3.98-1ubuntu0.2\n' \
       "${FAKE_HTTPS_IMAGE_ID#sha256:}" "$FAKE_HTTPS_BASE"
   else
     printf '%s\n' "${FAKE_HTTPS_IMAGE_ID#sha256:}"
