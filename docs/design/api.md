@@ -179,6 +179,12 @@ and connected-agent operations listed above. The
 [MCP client compatibility](mcp-client-compatibility.md) add the `resource` and
 native and web `application_type` registration rules official SDK clients need.
 
+[CIMD authorization](mcp-cimd-authorization.md) adds URL client identifiers
+alongside DCR UUIDs. Consent and grant views expose `clientKind` and
+`clientHost`, without the full URL or internal UUID. Consent fetch admission can
+return `429` with `Retry-After`. Raw OAuth routes retain their protocol error
+contracts.
+
 Every tool dispatches through a closed in-process facade to the same handler as
 its REST counterpart. Both protocols therefore execute one validation,
 sanitizer, bounds, idempotency, and store chain. Each mutating tool requires the

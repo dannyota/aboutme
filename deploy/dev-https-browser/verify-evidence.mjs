@@ -187,6 +187,13 @@ async function verify(mode, path) {
       refreshedAfterForcedExpiry: true,
       grantRevoked: true,
       revokedRejected: true,
+      cimdDiscovered: true,
+      cimdConsentApproved: true,
+      cimdTokenExchanged: true,
+      cimdToolsListed: true,
+      cimdRefreshed: true,
+      cimdGrantRevoked: true,
+      cimdRevokedRejected: true,
     },
   } : mode === 'privacy' ? {
     ...common,

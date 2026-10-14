@@ -1693,3 +1693,37 @@ func TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys(t *testing.T) {
 		t.Fatal("k:0 admitted again after its single token was spent")
 	}
 }
+
+func TestBoundedRateLimiterCheckDoesNotConsumeTokens(t *testing.T) {
+	t.Parallel()
+	limiter := api.NewBoundedRateLimiter(api.RateLimiterConfig{Requests: 1, Window: time.Minute, MaxKeys: 1})
+	now := testutil.Epoch
+	for range 10 {
+		if allowed, retry := limiter.Check(now, "tracked"); !allowed || retry != 0 {
+			t.Fatal("checking a fresh bucket spent its token")
+		}
+	}
+	if allowed, _ := limiter.Admit(now, "tracked"); !allowed {
+		t.Fatal("checks consumed the tracked budget")
+	}
+	for range 10 {
+		if allowed, retry := limiter.Check(now.Add(-time.Minute), "tracked"); allowed || retry != 60 {
+			t.Fatal("check ignored debt or a clock rollback")
+		}
+		if allowed, retry := limiter.Check(now, "overflow"); !allowed || retry != 0 {
+			t.Fatal("checking overflow spent its token")
+		}
+	}
+	if allowed, _ := limiter.Admit(now, "overflow"); !allowed {
+		t.Fatal("checks consumed the overflow budget")
+	}
+	if allowed, retry := limiter.Check(now, "another overflow"); allowed || retry != 60 {
+		t.Fatal("check bypassed shared overflow debt")
+	}
+	if allowed, _ := limiter.Check(now.Add(time.Minute), "tracked"); !allowed {
+		t.Fatal("check left debt after refill")
+	}
+	if allowed, _ := limiter.Admit(now.Add(time.Minute), "tracked"); !allowed {
+		t.Fatal("refill check spent its token")
+	}
+}

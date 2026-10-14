@@ -151,13 +151,21 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
     expect(
       responseDataSchema(operation("postOAuthConsentDecision").responses["200"])
         .properties.redirectTo.description,
-    ).toMatch(/registered redirect/i);
+    ).toMatch(/validated redirect/i);
   });
 
   it("uses the shared closed error envelope for documented failures", () => {
     const expected: Record<string, string[]> = {
-      getOAuthConsent: ["400", "401", "404"],
-      postOAuthConsentDecision: ["400", "401", "403", "404", "409", "415"],
+      getOAuthConsent: ["400", "401", "404", "429"],
+      postOAuthConsentDecision: [
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "415",
+        "429",
+      ],
       listAgentGrants: ["401"],
       revokeAgentGrant: ["401", "403", "404"],
     };
@@ -175,7 +183,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
 
   it("documents the exact status matrix, including strict media type rejection", () => {
     const expected: Record<string, string[]> = {
-      getOAuthConsent: ["200", "400", "401", "404"],
+      getOAuthConsent: ["200", "400", "401", "404", "429"],
       postOAuthConsentDecision: [
         "200",
         "400",
@@ -185,6 +193,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
         "409",
         "413",
         "415",
+        "429",
       ],
       listAgentGrants: ["200", "401"],
       revokeAgentGrant: ["204", "401", "403", "404"],
@@ -193,6 +202,47 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
       const op = operation(operationId as keyof typeof OPERATIONS);
       expect(Object.keys(op.responses).sort(), operationId).toEqual(
         [...statuses].sort(),
+      );
+    }
+  });
+
+  it("uses exact public URL identity and requires kind and host in owner views", () => {
+    const publicID = schema("#/components/schemas/OAuthPublicClientID");
+    expect(publicID.type).toBe("string");
+    expect(publicID.maxLength).toBe(256);
+    expect(publicID.oneOf.map((choice: any) => choice.format)).toEqual([
+      "uuid",
+      "uri",
+    ]);
+    const parameter = operation("getOAuthConsent").parameters.find(
+      (item: any) => item.name === "client_id",
+    );
+    expect(parameter.schema.$ref).toBe(
+      "#/components/schemas/OAuthPublicClientID",
+    );
+    expect(
+      schema("#/components/schemas/OAuthConsentDecisionRequest").properties
+        .client_id,
+    ).toEqual(parameter.schema);
+    const consent = responseDataSchema(
+      operation("getOAuthConsent").responses["200"],
+    );
+    const grant = schema("#/components/schemas/OAuthAgentGrant");
+    for (const view of [consent, grant]) {
+      expect(view.required).toEqual(
+        expect.arrayContaining(["clientKind", "clientHost"]),
+      );
+      expect(view.properties.clientKind.enum).toEqual(["dcr", "cimd"]);
+      expect(view.properties.clientHost.type).toEqual(["string", "null"]);
+    }
+  });
+
+  it("documents closed fetch admission failures with Retry-After", () => {
+    for (const id of ["getOAuthConsent", "postOAuthConsentDecision"] as const) {
+      const limited = response(operation(id).responses["429"]);
+      expect(limited.headers["Retry-After"].schema.minimum).toBe(1);
+      expect(limited.content["application/json"].example.error.code).toBe(
+        "rate_limited",
       );
     }
   });

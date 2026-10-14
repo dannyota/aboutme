@@ -27,6 +27,7 @@ const me = {
 const grant = {
   id: '018f5b6a-9a3e-7c21-8b1e-000000000030',
   clientName: 'Resume assistant',
+  clientKind: 'dcr', clientHost: null,
   scopes: ['resumes:read', 'resumes:write'],
   createdAt: '2026-09-01T09:00:00Z',
   lastUsedAt: null,
