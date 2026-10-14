@@ -2,6 +2,8 @@ package oauthsrv
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -102,5 +105,67 @@ func TestCIMDTokenFormNeverAcceptsClientCredentials(t *testing.T) {
 		if w.Code != 400 || !strings.Contains(w.Body.String(), `"error":"invalid_request"`) {
 			t.Fatal("client credential accepted")
 		}
+	}
+}
+
+func TestCIMDApprovedAuthoritySurvivesServiceRestartWithFlagOff(t *testing.T) {
+	s, q, user, request := cimdAuthorizeHarness(t)
+	ctx := context.Background()
+	verifier := strings.Repeat("v", 43)
+	sum := sha256.Sum256([]byte(verifier))
+	request.CodeChallenge = base64.RawURLEncoding.EncodeToString(sum[:])
+	session := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+	redirect, approvalErr := s.ConsentDecision(ctx, session, ConsentDecision{ConsentQuery: request, Decision: "approve"})
+	if approvalErr != nil {
+		t.Fatal(approvalErr)
+	}
+	result, parseErr := url.Parse(redirect)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	client, clientErr := q.GetOAuthClientByMetadataURL(ctx, request.PublicClientID)
+	if clientErr != nil {
+		t.Fatal(clientErr)
+	}
+	grant, grantErr := q.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: user.ID, ClientID: client.ID})
+	if grantErr != nil {
+		t.Fatal(grantErr)
+	}
+	// Reconstruct all process-local OAuth state without a resolver or flag.
+	restarted, restartErr := NewService(ctx, ServiceDependencies{
+		Pool: s.pool, Queries: store.New(s.pool), Clock: s.clock, Entropy: s.entropy,
+		PublicOrigin: s.publicOrigin, RegisterAdmission: s.registerAdmission,
+		TokenAdmission: s.tokenAdmission, LiveGrantLimit: s.liveGrantLimit,
+	})
+	if restartErr != nil {
+		t.Fatal(restartErr)
+	}
+	tokens, exchangeErr := restarted.exchangeAuthorizationCode(ctx, url.Values{
+		"client_id": {request.PublicClientID}, "code": {result.Query().Get("code")},
+		"redirect_uri": {request.RedirectURI}, "code_verifier": {verifier},
+	})
+	if exchangeErr != nil {
+		t.Fatal(exchangeErr)
+	}
+	var storedClient, storedGrant uuid.UUID
+	if bindingErr := s.pool.QueryRow(ctx, `SELECT client_id,grant_id FROM oauth_tokens WHERE user_id=$1 LIMIT 1`, user.ID).Scan(&storedClient, &storedGrant); bindingErr != nil {
+		t.Fatal(bindingErr)
+	}
+	if storedClient != client.ID || storedGrant != grant.ID {
+		t.Fatal("restart changed UUID authority")
+	}
+	rows, listingErr := restarted.queries.ListLiveOAuthGrantsForUser(ctx, store.ListLiveOAuthGrantsForUserParams{UserID: user.ID, LimitRows: 10})
+	if listingErr != nil || len(rows) != 1 || rows[0].MetadataUrl == nil || *rows[0].MetadataUrl != request.PublicClientID {
+		t.Fatal("flag-off owner grant listing lost URL identity", listingErr)
+	}
+	rotated, refreshErr := restarted.rotateRefreshToken(ctx, tokens.RefreshToken, []string{request.PublicClientID})
+	if refreshErr != nil {
+		t.Fatal(refreshErr)
+	}
+	if revokeErr := restarted.revokeToken(ctx, rotated.RefreshToken, ""); revokeErr != nil {
+		t.Fatal(revokeErr)
+	}
+	if _, rejectedErr := restarted.rotateRefreshToken(ctx, rotated.RefreshToken, []string{request.PublicClientID}); !errors.Is(rejectedErr, errOAuthInvalidGrant) {
+		t.Fatal("revoked restarted authority refreshed")
 	}
 }

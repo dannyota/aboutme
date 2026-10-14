@@ -1,7 +1,7 @@
 # AC-MCP traceability rows
 
-Ten acceptance-criterion rows use the `AC-MCP-` prefix. Phase PM proved them
-all. The design clause column names the amended Approved v4 clause
+Fifteen acceptance-criterion rows use the `AC-MCP-` prefix. The first ten have
+recorded proof. CIMD rows remain in progress. The design clause column names the amended Approved v4 clause
 ([product](../../design/product.md#agent-access),
 [API](../../design/api.md#agent-access-and-the-bearer-world),
 [security](../../design/security.md#agent-authorization-and-the-bearer-world),
@@ -27,13 +27,14 @@ remain in the approved [budgets](../../design/budgets.md). See
 
 ## Client metadata documents
 
-These rows are in progress. Test sources exist; CI, generation, independent
-review, the HTTPS proof, and the owner production proof remain required.
+These rows are in progress. Test sources exist; CI, independent
+review, hosted HTTPS proof execution, and the owner production proof remain
+required.
 
 | ID | Design clause | Statement | State | Test / acceptance reference |
 |-|-|-|-|-|
 | AC-MCP-011 | CIMD: configuration and storage | Startup flag defaults off; production refuses the stub; exact nullable URLs retain UUID foreign keys and refuse destructive down while present | in progress | `config/cimd_test.go`; `migrations/cimd_test.go` |
 | AC-MCP-012 | CIMD: fetch | URL grammar, full address refusals, pinned TLS, closed documents, deadlines, cache and bounded admission fail closed | in progress | `oauthsrv/cimd_test.go`; `oauthsrv/cimd_fetch_test.go` |
 | AC-MCP-013 | CIMD: authorization | Reads and denial write no row; approval commits client, grant and code together; loopback always shows consent; token operations never fetch or accept internal UUID aliases | in progress | `oauthsrv/cimd_authorization_test.go`; token and consent tests |
-| AC-MCP-014 | CIMD: interface | Both languages lead with the isolated host, quote the name, warn for loopback, and name the redirect hostname; Settings shows the host | in progress | Web authorize, consent and connected-agent tests; phone and desktop proof pending |
-| AC-MCP-015 | CIMD: deployment and proof | Default off; older binary startup checks stopped-app URL rows and MCP configuration; trusted HTTPS SDK proof and owner enablement proof | in progress | `deploy/vn/scripts/cimd-rollback-test.sh`; HTTPS CIMD proof pending |
+| AC-MCP-014 | CIMD: interface | Both languages lead with the isolated host, quote the name, warn for loopback, and name the redirect hostname; Settings shows the host | in progress | Web authorize, consent and connected-agent tests; `mcp-ts-sdk.spec.ts` phone and desktop proof source; execution pending |
+| AC-MCP-015 | CIMD: deployment and proof | Default off; older binary startup checks stopped-app URL rows and MCP configuration; trusted HTTPS SDK proof and owner enablement proof | in progress | `deploy/vn/scripts/cimd-rollback-test.sh`; VN safety/failure tests; `mcp-ts-sdk.spec.ts` CIMD flow; hosted and owner proof execution pending |

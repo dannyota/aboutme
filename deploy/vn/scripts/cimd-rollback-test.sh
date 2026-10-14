@@ -12,7 +12,7 @@ check_case() {
   (
     die() { exit 1; }
     cimd_serving_app_stopped() { [[ ${serving_stopped:-true} == true ]]; }
-    cimd_effective_mcp_flag() { printf '%s' "$mcp"; }
+    cimd_effective_mcp_flag() { [[ $mcp != failure ]] || return 1; printf '%s' "$mcp"; }
     cimd_url_rows_exist() { [[ $rows != failure ]] || return 1; printf '%s' "$rows"; }
     # shellcheck source=/dev/null
     source "$work/guard.sh"
@@ -26,6 +26,8 @@ check_case 7999 true t 1
 check_case 7999 true f 0
 check_case 7999 false t 0
 check_case 7999 invalid f 1
+check_case 7999 failure f 1
+check_case invalid true f 1
 check_case 7999 true failure 1
 check_case 7999 true invalid 1
 serving_stopped=false check_case 8000 true f 1

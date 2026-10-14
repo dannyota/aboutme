@@ -1523,7 +1523,7 @@ export interface components {
             data: {
                 /**
                  * Format: uri-reference
-                 * @description Redirect URL on the exact registered redirect URI only. It carries the authorization result and optional client state; it is never an arbitrary caller-selected destination.
+                 * @description Redirect URL on the validated redirect URI only. DCR checks the stored URI; CIMD checks the current document and binds the issued port. It carries the authorization result and optional client state; it is never an arbitrary caller-selected destination.
                  */
                 redirectTo: string;
             };
