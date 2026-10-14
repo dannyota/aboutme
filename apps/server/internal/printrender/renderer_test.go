@@ -17,14 +17,14 @@ import (
 
 func TestNewValidatesConfigurationWithoutGeneratingAuthority(t *testing.T) {
 	origin := testRenderOrigin(t)
-	executable := writeExecutable(t, "#!/bin/sh\nprintf 'Google Chrome for Testing 151.0.7922.34\\n'\n")
+	executable := writeExecutable(t, "#!/bin/sh\nprintf 'Google Chrome for Testing 156.0.8078.4\\n'\n")
 
 	var versionCalls atomic.Int32
 	hooks := defaultHooks()
 	hooks.euid = func() int { return 1000 }
 	hooks.version = func(context.Context, string) (string, error) {
 		versionCalls.Add(1)
-		return "Google Chrome for Testing 151.0.7922.34", nil
+		return "Google Chrome for Testing 156.0.8078.4", nil
 	}
 	hooks.sandboxSupported = func() bool { return true }
 	hooks.ready = func(context.Context, *Renderer) error { return nil }
@@ -47,13 +47,13 @@ func TestDefaultVersionProbeDoesNotInheritParentEnvironment(t *testing.T) {
 if [ -n "${ABOUTME_PARENT_SECRET_SENTINEL+x}" ]; then
 	exit 9
 fi
-printf 'Google Chrome for Testing 151.0.7922.34\n'
+printf 'Google Chrome for Testing 156.0.8078.4\n'
 `)
 	got, err := defaultHooksWithSupervisor(testSupervisorCommand(t)).version(context.Background(), executable)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "Google Chrome for Testing 151.0.7922.34" {
+	if got != "Google Chrome for Testing 156.0.8078.4" {
 		t.Fatalf("version = %q", got)
 	}
 }
