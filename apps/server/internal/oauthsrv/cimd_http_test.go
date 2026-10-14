@@ -17,7 +17,7 @@ func TestCIMDDiscoveryStartupFlag(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		s := &Service{publicOrigin: "https://aboutme.example", cimdEnabled: enabled}
 		w := httptest.NewRecorder()
-		s.HandleMetadata(w, httptest.NewRequest(http.MethodGet, "https://aboutme.example/.well-known/oauth-authorization-server", nil))
+		s.HandleMetadata(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "https://aboutme.example/.well-known/oauth-authorization-server", nil))
 		var metadata map[string]any
 		if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil {
 			t.Fatal(err)
@@ -46,7 +46,7 @@ func TestCIMDHTTPFailuresAreClosedAndFlagOffNeverResolves(t *testing.T) {
 	request.RedirectURI = "http://localhost:20095/callback"
 	query := request.values().Encode()
 	w := httptest.NewRecorder()
-	h.service.HandleAuthorize(w, httptest.NewRequest(http.MethodGet, h.service.publicOrigin+"/oauth/authorize?"+query, nil))
+	h.service.HandleAuthorize(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, h.service.publicOrigin+"/oauth/authorize?"+query, nil))
 	if w.Code != 400 || w.Header().Get("Location") != "" || calls != 0 {
 		t.Fatal("disabled authorize fetched or redirected")
 	}
@@ -57,14 +57,14 @@ func TestCIMDHTTPFailuresAreClosedAndFlagOffNeverResolves(t *testing.T) {
 			values[key] = request.values().Get(key)
 		}
 		values["decision"] = "approve"
-		body, err := json.Marshal(values)
-		if err != nil {
-			t.Fatal(err)
+		body, marshalErr := json.Marshal(values)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
 		}
 		r := h.request(method, h.service.publicOrigin+"/api/v1/oauth/consent?"+query, string(body), true, true)
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, r)
-		if w.Code != 400 || responseErrorCode(t, w) != "request_invalid" || strings.Contains(w.Body.String(), "redirectTo") || calls != 0 {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, r)
+		if response.Code != 400 || responseErrorCode(t, response) != "request_invalid" || strings.Contains(response.Body.String(), "redirectTo") || calls != 0 {
 			t.Fatal("disabled consent fetched or exposed redirect")
 		}
 	}
@@ -87,10 +87,10 @@ func TestCIMDHTTPFailuresAreClosedAndFlagOffNeverResolves(t *testing.T) {
 	for range 6 {
 		r := h.request(http.MethodGet, h.service.publicOrigin+"/api/v1/oauth/consent?"+query, "", true, false)
 		r.RemoteAddr = "8.8.8.8:1234"
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, r)
-		if w.Code != 400 || responseErrorCode(t, w) != "request_invalid" {
-			t.Fatalf("fetch failure status = %d", w.Code)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, r)
+		if response.Code != 400 || responseErrorCode(t, response) != "request_invalid" {
+			t.Fatalf("fetch failure status = %d", response.Code)
 		}
 	}
 	r := h.request(http.MethodGet, h.service.publicOrigin+"/api/v1/oauth/consent?"+query, "", true, false)

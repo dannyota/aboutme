@@ -354,8 +354,8 @@ func TestBearer_CIMDClientKeepsTokenEpochAndGrantBoundaries(t *testing.T) {
 	if err != nil || principal.UserID != h.user.ID || principal.GrantID != h.grant.ID || principal.Scopes.String() != "resumes:read" {
 		t.Fatalf("URL-client authority changed: %v", err)
 	}
-	if _, err := h.pool.Exec(context.Background(), `UPDATE users SET auth_epoch=auth_epoch+1 WHERE id=$1`, h.user.ID); err != nil {
-		t.Fatal(err)
+	if _, updateErr := h.pool.Exec(context.Background(), `UPDATE users SET auth_epoch=auth_epoch+1 WHERE id=$1`, h.user.ID); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	_, err = h.bearer.Authenticate(bearerRequest("Bearer " + raw))
 	assertClosedUnauthorized(t, err)

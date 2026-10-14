@@ -9,10 +9,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 type oauthClientReader interface {
@@ -28,7 +29,7 @@ func (s *Service) storedPublicClient(ctx context.Context, q oauthClientReader, r
 		if originErr != nil || origin.Hostname() == "" {
 			return client, errOAuthInvalidClient
 		}
-		if _, err := parseCIMDURL(raw, origin.Hostname()); err != nil {
+		if _, parseErr := parseCIMDURL(raw, origin.Hostname()); parseErr != nil {
 			return client, errOAuthInvalidClient
 		}
 		client, err = q.GetOAuthClientByMetadataURL(ctx, raw)

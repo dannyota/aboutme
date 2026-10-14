@@ -189,34 +189,34 @@ onMounted(() => {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      <template v-if="view?.clientKind === 'cimd'"
-        >{{ copy.hostRequestBefore
+      <template v-if="view?.clientKind === 'cimd'">
+        {{ copy.hostRequestBefore
         }}<bdi
           class="[overflow-wrap:anywhere]"
           dir="ltr"
           data-testid="consent-client-host"
-          >{{ view.clientHost }}</bdi
-        >{{ copy.hostRequestAfter }}</template
-      >
-      <template v-else>{{
-        view ? copy.allowClient(view.clientName) : copy.title
-      }}</template>
+        >{{ view.clientHost }}</bdi>{{ copy.hostRequestAfter }}
+      </template>
+      <template v-else>
+        {{ view ? copy.allowClient(view.clientName) : copy.title }}
+      </template>
     </h1>
     <p
       v-if="view"
       class="mt-4 text-base text-muted-foreground [overflow-wrap:anywhere]"
     >
-      <template v-if="view.clientKind === 'cimd'"
-        >{{ copy.selfNamedBefore
-        }}<bdi data-testid="consent-client-name">{{ view.clientName }}</bdi
-        >{{ copy.selfNamedAfter }}</template
-      >
-      <template v-else
-        ><strong data-testid="consent-client-name">{{
+      <template v-if="view.clientKind === 'cimd'">
+        {{ copy.selfNamedBefore
+        }}<bdi data-testid="consent-client-name">{{
+          view.clientName
+        }}</bdi>{{ copy.selfNamedAfter }}
+      </template>
+      <template v-else>
+        <strong data-testid="consent-client-name">{{
           view.clientName
         }}</strong>
-        {{ copy.clientRequest }}</template
-      >
+        {{ copy.clientRequest }}
+      </template>
     </p>
     <p
       v-if="returnToLine"
