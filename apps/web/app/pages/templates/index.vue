@@ -78,16 +78,26 @@ const phone = ref<HTMLElement | null>(null);
 const bar = ref<{ focusFilters(): void } | null>(null);
 const wide = useMediaQuery('(width >= 1024px)');
 let focusVersion = 0;
+let focused: HTMLElement | null = null;
 let initiator: HTMLElement | null = null;
-function onFocus(): void {
+function onFocus(event: FocusEvent): void {
   focusVersion += 1;
+  focused = event.target instanceof HTMLElement ? event.target : null;
+}
+function onBlur(event: FocusEvent): void {
+  if (
+    event.target === focused
+    && (event.relatedTarget || focused?.getClientRects().length)
+  ) focused = null;
 }
 onMounted(() => {
   hydrated.value = true;
   document.addEventListener('focusin', onFocus);
+  document.addEventListener('focusout', onBlur);
 });
 onBeforeUnmount(() => {
   document.removeEventListener('focusin', onFocus);
+  document.removeEventListener('focusout', onBlur);
   removeRouteHook();
 });
 
@@ -146,7 +156,13 @@ function focusFilters(): void {
   bar.value?.focusFilters();
 }
 watch(wide, async (isWide) => {
-  const active = document.activeElement;
+  const current = document.activeElement;
+  // CSS can hide and blur a control before the media-query event arrives.
+  const active = current === document.body
+    && focused?.isConnected
+    && focused.getClientRects().length === 0
+    ? focused
+    : current;
   const repair = isWide
     ? sheetOpen.value
     || phone.value?.contains(active)
@@ -154,7 +170,9 @@ watch(wide, async (isWide) => {
     : desktop.value?.contains(active);
   if (isWide) sheetOpen.value = false;
   if (!repair) return;
+  const version = focusVersion;
   await nextTick();
+  if (version !== focusVersion || isWide !== wide.value) return;
   if (isWide) focusDesktop();
   else focusFilters();
 });

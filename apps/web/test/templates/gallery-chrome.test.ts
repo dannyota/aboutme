@@ -14,17 +14,34 @@ import { setSiteLocale } from '../support/locale';
 // The gallery header and filter chips (DESIGN.md, template gallery). The
 // dot is decorative: the chip text carries the meaning it names.
 
-function stubViewport() {
-  vi.stubGlobal('matchMedia', (query: string) => ({
+function stubViewport(wide = false) {
+  const query = '(width >= 1024px)';
+  const media = Object.assign(new EventTarget(), {
     media: query,
-    matches: false,
+    matches: wide,
     onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
     addListener: () => {},
     removeListener: () => {},
-    dispatchEvent: () => true,
-  }));
+  });
+  vi.stubGlobal('matchMedia', (value: string) => value === query
+    ? media
+    : {
+        media: value,
+        matches: false,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => true,
+      });
+  return (isWide: boolean) => {
+    media.matches = isWide;
+    media.dispatchEvent(Object.assign(new Event('change'), {
+      matches: isWide,
+      media: query,
+    }));
+  };
 }
 
 const mounted: { unmount(): void }[] = [];
@@ -407,6 +424,70 @@ describe('Library sheet and focus', () => {
   beforeEach(() => {
     setSiteLocale('en');
     stubViewport();
+  });
+
+  it.each([
+    ['Role', true, '.gallery-desktop [data-role="backend"]'],
+    ['Style', true, '.gallery-desktop [data-filter="technical"]'],
+    ['Filters', false, '[data-action="gallery-filters-open"]'],
+    ['active chip', false, '[data-action="gallery-filter-remove"]'],
+  ] as const)('repairs %s focus cleared before the width event',
+    async (_name, startsWide, selector) => {
+      const resize = stubViewport(startsWide);
+      const wrapper = await mountGallery(
+        '/templates?role=backend&filter=technical',
+      );
+      const control = wrapper.get(selector).element as HTMLElement;
+      vi.spyOn(control, 'getClientRects').mockReturnValue(
+        [] as unknown as DOMRectList,
+      );
+      control.focus();
+      expect(document.activeElement).toBe(control);
+      // Layout can blur the hidden control before matchMedia emits change.
+      control.blur();
+      expect(document.activeElement).toBe(document.body);
+      resize(!startsWide);
+      await flushPromises();
+      const destination = wrapper.get(startsWide
+        ? '[data-action="gallery-filters-open"]'
+        : '.gallery-desktop [data-role="backend"]');
+      expect(document.activeElement).toBe(destination.element);
+    });
+
+  it('does not repair a visible control deliberately blurred before resize',
+    async () => {
+      const resize = stubViewport(true);
+      const wrapper = await mountGallery('/templates?role=backend');
+      const role = wrapper.get('.gallery-desktop [data-role="backend"]')
+        .element as HTMLElement;
+      const rects = vi.spyOn(role, 'getClientRects').mockReturnValue([
+        {},
+      ] as unknown as DOMRectList);
+      role.focus();
+      role.blur();
+      expect(document.activeElement).toBe(document.body);
+      rects.mockReturnValue([] as unknown as DOMRectList);
+      resize(false);
+      await flushPromises();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+  it('keeps later card focus after a hidden control loses focus', async () => {
+    const resize = stubViewport(true);
+    const wrapper = await mountGallery('/templates?role=backend');
+    const role = wrapper.get('.gallery-desktop [data-role="backend"]')
+      .element as HTMLElement;
+    vi.spyOn(role, 'getClientRects').mockReturnValue(
+      [] as unknown as DOMRectList,
+    );
+    role.focus();
+    role.blur();
+    const card = wrapper.get('[data-template]').element as HTMLElement;
+    card.focus();
+    expect(document.activeElement).toBe(card);
+    resize(false);
+    await flushPromises();
+    expect(document.activeElement).toBe(card);
   });
 
   it('mirrors count in a sheet with unique heading IDs', async () => {

@@ -703,6 +703,8 @@ test('sheet traps links and resize repairs hidden focus', async ({
   await card.focus();
   await page.setViewportSize({ width: 1024, height: 900 });
   await expect(card).toBeFocused();
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await expect(card).toBeFocused();
 });
 
 for (const locale of ['vi', 'en']) {
