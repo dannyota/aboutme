@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -35,6 +35,7 @@ var (
 type Config struct {
 	BrowserExecutable string
 	RenderOrigin      directrender.RenderOrigin
+	Logger            *slog.Logger
 
 	testHooks         *runtimeHooks
 	testForwardOrigin string
@@ -47,6 +48,7 @@ type runtimeHooks struct {
 	ready            func(context.Context, *Renderer) error
 	attempt          func(context.Context, *Renderer, renderjob.Navigation) ([]byte, error)
 	supervisor       supervisorCommand
+	now              func() time.Time
 }
 
 // Renderer owns a fresh browser and closed network authority for each render.
@@ -56,36 +58,63 @@ type Renderer struct {
 	forwardOrigin string
 	hooks         *runtimeHooks
 	supervisor    supervisorCommand
-	readyOnce     sync.Once
+	logger        *slog.Logger
+	browserOnce   sync.Once
+	browserPermit chan struct{}
+	readyMu       sync.Mutex
+	readyOK       bool
 	readyErr      error
+	readyAfter    time.Time
 	render        func(context.Context, renderjob.Navigation) ([]byte, error)
 }
 
 // New validates the fixed browser and direct render origin.
 func New(config Config) (*Renderer, error) {
-	if config.BrowserExecutable == "" || config.RenderOrigin.String() == "" {
-		return nil, ErrInvalidConfig
+	if config.RenderOrigin.String() == "" {
+		return nil, initializationFailure(ErrInvalidConfig, "configuration", "render origin is missing")
+	}
+	if config.BrowserExecutable == "" {
+		return nil, initializationFailure(ErrInvalidConfig, "binary-lookup", "browser executable is missing")
 	}
 	executable, err := filepath.Abs(config.BrowserExecutable)
 	if err != nil || executable != config.BrowserExecutable {
-		return nil, ErrInvalidConfig
+		return nil, initializationFailure(ErrInvalidConfig, "binary-lookup", "browser path must be absolute")
 	}
 	info, err := os.Stat(executable)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return nil, ErrInvalidConfig
+	if err != nil {
+		return nil, diagnoseInitialization(context.Background(), ErrInvalidConfig, "binary-lookup", err, nil, 0)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return nil, initializationFailure(ErrInvalidConfig, "binary-lookup", "browser must be a regular executable file")
 	}
 	hooks := config.testHooks
 	if hooks == nil {
 		hooks = defaultHooks()
 	}
-	if hooks.euid == nil || hooks.euid() == 0 || hooks.sandboxSupported == nil || !hooks.sandboxSupported() || hooks.version == nil {
-		return nil, ErrInvalidConfig
+	if hooks.euid == nil || hooks.sandboxSupported == nil || hooks.version == nil {
+		return nil, initializationFailure(ErrInvalidConfig, "configuration", "runtime checks are missing")
 	}
+	if hooks.euid() == 0 {
+		return nil, initializationFailure(ErrInvalidConfig, "sandbox", "browser must run as a non-root user")
+	}
+	if !hooks.sandboxSupported() {
+		return nil, initializationFailure(ErrInvalidConfig, "sandbox", "user namespaces are unavailable")
+	}
+	started := time.Now()
 	checkCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	version, versionErr := hooks.version(checkCtx, executable)
-	cancel()
-	if versionErr != nil || !hasExactBrowserVersion(version) {
-		return nil, ErrInvalidConfig
+	if versionErr != nil || checkCtx.Err() != nil {
+		return nil, diagnoseInitialization(checkCtx, ErrInvalidConfig, "version-probe", versionErr, nil, time.Since(started))
+	}
+	if !hasExactBrowserVersion(version) {
+		failure := initializationFailure(ErrInvalidConfig, "version-probe", "browser version mismatch")
+		failure.exitStatus, failure.elapsed = 0, time.Since(started)
+		return nil, failure
+	}
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
 	}
 	renderer := &Renderer{
 		executable:    executable,
@@ -93,6 +122,7 @@ func New(config Config) (*Renderer, error) {
 		forwardOrigin: config.testForwardOrigin,
 		hooks:         hooks,
 		supervisor:    hooks.supervisor,
+		logger:        logger,
 	}
 	renderer.render = func(ctx context.Context, navigation renderjob.Navigation) ([]byte, error) {
 		if hooks.attempt != nil {
@@ -103,23 +133,50 @@ func New(config Config) (*Renderer, error) {
 	return renderer, nil
 }
 
-// Ready runs at most one controlled browser startup probe and caches the result.
+// Ready caches a successful probe and rechecks failures after a cooldown.
 func (r *Renderer) Ready() error {
 	if r == nil || r.hooks == nil {
 		return ErrUnavailable
 	}
-	r.readyOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		probe := r.hooks.ready
-		if probe == nil {
-			probe = readyBrowser
-		}
-		if err := probe(ctx, r); err != nil {
-			r.readyErr = ErrUnavailable
-		}
-	})
-	return r.readyErr
+	r.readyMu.Lock()
+	defer r.readyMu.Unlock()
+	if r.readyOK {
+		return nil
+	}
+	now := time.Now
+	if r.hooks.now != nil {
+		now = r.hooks.now
+	}
+	if r.readyErr != nil && now().Before(r.readyAfter) {
+		return ErrUnavailable
+	}
+	// A readiness probe must not overlap a render's browser or joined teardown.
+	gate := r.browserGate()
+	select {
+	case gate <- struct{}{}:
+	default:
+		return ErrUnavailable
+	}
+	defer func() { <-gate }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	probe := r.hooks.ready
+	if probe == nil {
+		probe = readyBrowser
+	}
+	started := time.Now()
+	err := probe(ctx, r)
+	if err != nil || ctx.Err() != nil {
+		r.readyErr = diagnoseInitialization(ctx, ErrUnavailable, "launch", err, nil, time.Since(started))
+		r.readyAfter = now().Add(5 * time.Second)
+		r.logger.Error("private browser renderer initialization failed", "error", r.readyErr)
+		return ErrUnavailable
+	}
+	if r.readyErr != nil {
+		r.logger.Info("private browser renderer initialization recovered")
+	}
+	r.readyOK, r.readyErr = true, nil
+	return nil
 }
 
 // Render performs one controlled navigation and returns only validated bytes.
@@ -135,6 +192,16 @@ func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) 
 	default:
 		return nil, ErrRenderFailed
 	}
+	gate := r.browserGate()
+	select {
+	case gate <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-gate }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	output, err := r.render(ctx, navigation)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
@@ -146,6 +213,11 @@ func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) 
 		return nil, ErrRenderFailed
 	}
 	return output, nil
+}
+
+func (r *Renderer) browserGate() chan struct{} {
+	r.browserOnce.Do(func() { r.browserPermit = make(chan struct{}, 1) })
+	return r.browserPermit
 }
 
 func validNavigation(navigation renderjob.Navigation) bool {
@@ -172,16 +244,7 @@ func defaultHooksWithSupervisor(supervisor supervisorCommand) *runtimeHooks {
 		sandboxSupported: linuxSandboxSupported,
 		supervisor:       supervisor,
 		version: func(ctx context.Context, executable string) (string, error) {
-			// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- executable is the configured absolute browser path that New checked and never request data
-			cmd := exec.CommandContext(ctx, executable, "--version")
-			configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
-			configure(cmd)
-			output, err := cmd.Output()
-			if cmd.Process == nil {
-				proof.noChildStarted()
-			}
-			proof.wait()
-			return strings.TrimSpace(string(output)), err
+			return probeBrowserVersion(ctx, executable, supervisor)
 		},
 	}
 }

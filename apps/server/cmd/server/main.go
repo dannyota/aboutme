@@ -164,10 +164,10 @@ func run() error {
 	}
 	renderer := directrender.New(runtime.RenderOrigin, nil)
 	printRenderer, err := printrender.New(printrender.Config{
-		BrowserExecutable: cfg.ChromiumPath, RenderOrigin: runtime.RenderOrigin,
+		BrowserExecutable: cfg.ChromiumPath, RenderOrigin: runtime.RenderOrigin, Logger: logger,
 	})
 	if err != nil {
-		return errors.New("initialize private browser renderer")
+		return fmt.Errorf("initialize private browser renderer: %w", err)
 	}
 	printQueue, err := renderjob.New(renderjob.Config{Renderer: printRenderer})
 	if err != nil {
@@ -238,8 +238,8 @@ func run() error {
 			if queueErr := printQueue.Ready(); queueErr != nil {
 				return queueErr
 			}
-			// The cached startup probe has its own bound; a canceled caller must not poison readiness.
-			if readyErr := printRenderer.Ready(); readyErr != nil { //nolint:contextcheck // Ready owns the one-time browser probe context.
+			// The browser probe owns its bound so a canceled caller cannot poison readiness.
+			if readyErr := printRenderer.Ready(); readyErr != nil { //nolint:contextcheck // Ready owns the browser probe context.
 				return readyErr
 			}
 			return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
