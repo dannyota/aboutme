@@ -797,7 +797,7 @@ VALUES (
     $3::timestamptz,
     $3::timestamptz
 )
-RETURNING id, client_name, redirect_uris, created_at, last_used_at
+RETURNING id, client_name, redirect_uris, created_at, last_used_at, metadata_url
 `
 
 type CreateOAuthClientParams struct {
@@ -830,6 +830,7 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 		&i.RedirectURIs,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.MetadataUrl,
 	)
 	return i, err
 }
@@ -1928,6 +1929,25 @@ func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uui
 	return i, err
 }
 
+const getDCRClient = `-- name: GetDCRClient :one
+SELECT id, client_name, redirect_uris, created_at, last_used_at, metadata_url FROM oauth_clients WHERE id = $1 AND metadata_url IS NULL
+`
+
+// Public UUID resolution excludes the internal UUID of a URL client.
+func (q *Queries) GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, getDCRClient, id)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.MetadataUrl,
+	)
+	return i, err
+}
+
 const getIdempotencyCapacityRetryAfter = `-- name: GetIdempotencyCapacityRetryAfter :one
 SELECT EXISTS (
          SELECT 1 FROM idempotency_records
@@ -2173,7 +2193,7 @@ func (q *Queries) GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context
 }
 
 const getOAuthClient = `-- name: GetOAuthClient :one
-SELECT id, client_name, redirect_uris, created_at, last_used_at FROM oauth_clients WHERE id = $1
+SELECT id, client_name, redirect_uris, created_at, last_used_at, metadata_url FROM oauth_clients WHERE id = $1
 `
 
 func (q *Queries) GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
@@ -2185,12 +2205,31 @@ func (q *Queries) GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient
 		&i.RedirectURIs,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.MetadataUrl,
+	)
+	return i, err
+}
+
+const getOAuthClientByMetadataURL = `-- name: GetOAuthClientByMetadataURL :one
+SELECT id, client_name, redirect_uris, created_at, last_used_at, metadata_url FROM oauth_clients WHERE metadata_url = $1::text COLLATE "C"
+`
+
+func (q *Queries) GetOAuthClientByMetadataURL(ctx context.Context, metadataUrl string) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, getOAuthClientByMetadataURL, metadataUrl)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.MetadataUrl,
 	)
 	return i, err
 }
 
 const getOAuthClientForUpdate = `-- name: GetOAuthClientForUpdate :one
-SELECT id, client_name, redirect_uris, created_at, last_used_at FROM oauth_clients WHERE id = $1 FOR UPDATE
+SELECT id, client_name, redirect_uris, created_at, last_used_at, metadata_url FROM oauth_clients WHERE id = $1 FOR UPDATE
 `
 
 // The client-row lock the authorize, consent, and token paths take before
@@ -2206,6 +2245,7 @@ func (q *Queries) GetOAuthClientForUpdate(ctx context.Context, id uuid.UUID) (OA
 		&i.RedirectURIs,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.MetadataUrl,
 	)
 	return i, err
 }
@@ -3287,7 +3327,7 @@ func (q *Queries) ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time)
 }
 
 const listLiveOAuthGrantsForUser = `-- name: ListLiveOAuthGrantsForUser :many
-SELECT grant_row.id, grant_row.client_id, client_row.client_name,
+SELECT grant_row.id, grant_row.client_id, client_row.client_name, client_row.metadata_url,
        grant_row.scopes, grant_row.created_at,
        (
            SELECT token_row.last_used_at FROM oauth_tokens AS token_row
@@ -3310,12 +3350,13 @@ type ListLiveOAuthGrantsForUserParams struct {
 }
 
 type ListLiveOAuthGrantsForUserRow struct {
-	ID         uuid.UUID
-	ClientID   uuid.UUID
-	ClientName string
-	Scopes     string
-	CreatedAt  time.Time
-	LastUsedAt *time.Time
+	ID          uuid.UUID
+	ClientID    uuid.UUID
+	ClientName  string
+	MetadataUrl *string
+	Scopes      string
+	CreatedAt   time.Time
+	LastUsedAt  *time.Time
 }
 
 // The connected-agents list: client name, scopes, and when the agent was
@@ -3341,6 +3382,7 @@ func (q *Queries) ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOA
 			&i.ID,
 			&i.ClientID,
 			&i.ClientName,
+			&i.MetadataUrl,
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.LastUsedAt,
@@ -4496,6 +4538,43 @@ func (q *Queries) UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantPara
 		&i.CreatedAt,
 		&i.RevokedAt,
 		&i.AuthEpoch,
+	)
+	return i, err
+}
+
+const upsertOAuthMetadataClient = `-- name: UpsertOAuthMetadataClient :one
+INSERT INTO oauth_clients (metadata_url, client_name, redirect_uris, created_at, last_used_at)
+VALUES ($1::text, $2, $3,
+        $4::timestamptz, $4::timestamptz)
+ON CONFLICT (metadata_url COLLATE "C") WHERE metadata_url IS NOT NULL
+DO UPDATE SET client_name = EXCLUDED.client_name, redirect_uris = EXCLUDED.redirect_uris
+RETURNING id, client_name, redirect_uris, created_at, last_used_at, metadata_url
+`
+
+type UpsertOAuthMetadataClientParams struct {
+	MetadataUrl  string
+	ClientName   string
+	RedirectURIs json.RawMessage
+	CreatedAt    time.Time
+}
+
+// Approval alone calls this query, before user and session locks. The unique
+// URL index serializes concurrent approvals and preserves the internal UUID.
+func (q *Queries) UpsertOAuthMetadataClient(ctx context.Context, arg UpsertOAuthMetadataClientParams) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, upsertOAuthMetadataClient,
+		arg.MetadataUrl,
+		arg.ClientName,
+		arg.RedirectURIs,
+		arg.CreatedAt,
+	)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.MetadataUrl,
 	)
 	return i, err
 }

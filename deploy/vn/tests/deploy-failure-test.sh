@@ -95,6 +95,13 @@ if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
   if [[ $args == *' release-json '* ]]; then printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
   if [[ $args == *' running-release '* ]]; then printf '1001\n'; fi
   if [[ ${FAIL_RENDER:-0} == 1 && $args == *' render '* ]]; then exit 255; fi
+  if [[ ${FAIL_CIMD:-} == render && $args == *' render '* ]] ||
+     [[ ${FAIL_CIMD:-} == render && $args == *' restore-previous '* ]] ||
+     [[ ${FAIL_CIMD:-} == restore && $args == *' restore-previous '* ]] ||
+     [[ ${FAIL_CIMD:-} == app-up && $args == *' app-up '* ]]; then
+    echo 'pre-CIMD rollback refused by host guard' >&2
+    exit 1
+  fi
   if [[ ${FAIL_CLOSED:-0} == 1 && $args == *' fail-closed '* ]]; then exit 1; fi
   exit 0
 fi
@@ -267,4 +274,23 @@ for OBSERVER_CASE in good arm64 index bad-provenance transport-error; do
     [[ ! -s $work/host.log ]] || { echo "changed host on $OBSERVER_CASE observer" >&2; exit 1; }
   fi
 done
+unset OBSERVER_CASE
+for FAIL_CIMD in render restore app-up; do
+  export FAIL_CIMD
+  : >"$work/host.log"
+  : >"$work/ssh.log"
+  initial_render_failure=0
+  [[ $FAIL_CIMD != restore ]] || initial_render_failure=1
+  if FAIL_RENDER=$initial_render_failure "$repo_root/deploy/vn/scripts/deploy.sh" --rollback v0.1.1 >"$work/cimd-$FAIL_CIMD.out" 2>&1; then
+    echo 'deployment accepted a refused CIMD rollback' >&2; exit 1
+  fi
+  if [[ $FAIL_CIMD != app-up ]] && grep -q ' app-up ' "$work/host.log"; then
+    echo 'started an app after restoration guard refusal' >&2; exit 1
+  fi
+  if grep -q ' /usr/local/lib/aboutme/fence.sh release ' "$work/ssh.log"; then
+    echo 'released operation lock after CIMD recovery refusal' >&2; exit 1
+  fi
+  grep -q 'operation lock remains for manual recovery' "$work/cimd-$FAIL_CIMD.out"
+done
+unset FAIL_CIMD
 echo "deployment failure test passed"

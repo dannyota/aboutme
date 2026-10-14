@@ -53,7 +53,10 @@ describe('useOAuthConsent', () => {
       handler: (event) => {
         requestURL = event.node.req.url ?? '';
         return {
-          data: { clientName: 'Resume agent', scopes: ['resumes:read'] },
+          data: {
+            clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
+            scopes: ['resumes:read'],
+          },
         };
       },
     });
@@ -61,7 +64,7 @@ describe('useOAuthConsent', () => {
     const wrapper = await mountSuspended(Probe);
     const result = await wrapper.vm.get(query);
     expect(result).toEqual({
-      clientName: 'Resume agent',
+      clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
       scopes: ['resumes:read'],
     });
     const params = new URL(requestURL, 'http://localhost').searchParams;
@@ -95,6 +98,7 @@ describe('useOAuthConsent', () => {
     [401, 'session_required', 'session-required'],
     [400, 'other', 'unavailable'],
     [503, 'server_error', 'unavailable'],
+    [429, 'rate_limited', 'unavailable'],
   ] as const)('maps GET %s/%s to %s', async (status, code, kind) => {
     registerEndpoint('/api/v1/oauth/consent', {
       method: 'GET',

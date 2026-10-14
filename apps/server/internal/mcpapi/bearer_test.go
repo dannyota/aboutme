@@ -343,3 +343,20 @@ func TestRequireScope_ReadWriteMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestBearer_CIMDClientKeepsTokenEpochAndGrantBoundaries(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read")
+	if _, err := h.pool.Exec(context.Background(), `UPDATE oauth_clients SET metadata_url=$1 WHERE id=$2`, "https://client.example/"+uuid.NewString(), h.client.ID); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	principal, err := h.bearer.Authenticate(bearerRequest("Bearer " + raw))
+	if err != nil || principal.UserID != h.user.ID || principal.GrantID != h.grant.ID || principal.Scopes.String() != "resumes:read" {
+		t.Fatalf("URL-client authority changed: %v", err)
+	}
+	if _, updateErr := h.pool.Exec(context.Background(), `UPDATE users SET auth_epoch=auth_epoch+1 WHERE id=$1`, h.user.ID); updateErr != nil {
+		t.Fatal(updateErr)
+	}
+	_, err = h.bearer.Authenticate(bearerRequest("Bearer " + raw))
+	assertClosedUnauthorized(t, err)
+}

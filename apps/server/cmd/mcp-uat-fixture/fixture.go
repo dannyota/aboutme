@@ -164,8 +164,11 @@ func cleanFixture(ctx context.Context, db *sql.DB, clientName string) (err error
 
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM oauth_clients
-		 WHERE client_name = $1 AND redirect_uris = $2::jsonb`,
-		clientName, fixtureRedirectsJSON); err != nil {
+		 WHERE client_name = $1 AND (
+           (metadata_url IS NULL AND redirect_uris IN ($2::jsonb, $3::jsonb)) OR
+           (metadata_url = $4 AND redirect_uris = '["http://localhost/callback"]'::jsonb))`,
+		clientName, fixtureRedirectsJSON, `["http://localhost:20097/callback"]`,
+		"https://client.example/oauth/"+strings.TrimPrefix(clientName, fixtureClientNamePrefix)); err != nil {
 		return fmt.Errorf("delete fixture clients: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -195,9 +198,12 @@ func cleanFixture(ctx context.Context, db *sql.DB, clientName string) (err error
 			args:  []any{fixtureUser.Provider, fixtureUser.ProviderUserID},
 		},
 		{
-			name:  "fixture client",
-			query: `SELECT count(*) FROM oauth_clients WHERE client_name = $1 AND redirect_uris = $2::jsonb`,
-			args:  []any{clientName, fixtureRedirectsJSON},
+			name: "fixture client",
+			query: `SELECT count(*) FROM oauth_clients WHERE client_name = $1 AND (
+           (metadata_url IS NULL AND redirect_uris IN ($2::jsonb, $3::jsonb)) OR
+           (metadata_url = $4 AND redirect_uris = '["http://localhost/callback"]'::jsonb))`,
+			args: []any{clientName, fixtureRedirectsJSON, `["http://localhost:20097/callback"]`,
+				"https://client.example/oauth/" + strings.TrimPrefix(clientName, fixtureClientNamePrefix)},
 		},
 		{
 			name: "fixture OAuth rows",
