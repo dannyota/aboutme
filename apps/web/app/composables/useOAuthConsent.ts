@@ -85,8 +85,17 @@ function isScope(value: unknown): value is OAuthConsentScope {
 
 function isConsentView(value: unknown): value is OAuthConsentView {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as { clientName?: unknown; scopes?: unknown };
+  const candidate = value as {
+    clientName?: unknown;
+    scopes?: unknown;
+    clientKind?: unknown;
+    clientHost?: unknown;
+  };
   return typeof candidate.clientName === 'string'
+    && ((candidate.clientKind === 'dcr' && candidate.clientHost === null)
+      || (candidate.clientKind === 'cimd'
+        && typeof candidate.clientHost === 'string'
+        && candidate.clientHost !== ''))
     && candidate.clientName !== ''
     && Array.isArray(candidate.scopes)
     && candidate.scopes.length > 0

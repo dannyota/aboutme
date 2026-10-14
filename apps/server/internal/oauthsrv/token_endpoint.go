@@ -143,8 +143,11 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.UUID, bool) {
 	switch form.Get("grant_type") {
 	case "authorization_code":
-		clientID, err := uuid.Parse(form.Get("client_id"))
-		return clientID, err == nil && clientID != uuid.Nil
+		if isNilDependency(s.queries) {
+			return uuid.Nil, false
+		}
+		client, err := s.storedPublicClient(ctx, s.queries, form.Get("client_id"))
+		return client.ID, err == nil
 	case "refresh_token":
 		kind, digest, err := ParseToken(form.Get("refresh_token"))
 		if err != nil || kind != TokenKindRefresh || isNilDependency(s.queries) {
@@ -280,19 +283,14 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	if err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	clientID, err := uuid.Parse(form.Get("client_id"))
-	if err != nil {
-		return tokenResponse{}, errOAuthInvalidClient
-	}
 	// A code belongs to its client and is deleted with it, so the client is
 	// looked up first: a swept client must get invalid_client, not the
 	// invalid_grant of a missing code. The row is locked again below.
-	if _, err = s.queries.GetOAuthClient(ctx, clientID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, errOAuthUnknownClient
-		}
+	client, err := s.storedPublicClient(ctx, s.queries, form.Get("client_id"))
+	if err != nil {
 		return tokenResponse{}, err
 	}
+	clientID := client.ID
 	// This unlocked lookup only discovers the lock-order identities. The row is
 	// loaded again under lock before any validation or mutation.
 	preCode, err := s.queries.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
@@ -402,7 +400,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedClientIDs []string) (response tokenResponse, err error) {
 	kind, digest, err := ParseToken(raw)
 	if err != nil || kind != TokenKindRefresh {
-		return tokenResponse{}, missingRefreshTokenError(ctx, s.queries, claimedClientIDs)
+		return tokenResponse{}, s.missingRefreshTokenError(ctx, s.queries, claimedClientIDs)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -418,11 +416,12 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 	authority, err := q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, missingRefreshTokenError(ctx, q, claimedClientIDs)
+			return tokenResponse{}, s.missingRefreshTokenError(ctx, q, claimedClientIDs)
 		}
 		return tokenResponse{}, err
 	}
-	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
+	client, err := q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID)
+	if err != nil {
 		return tokenResponse{}, err
 	}
 	user, err := q.GetUserForUpdate(ctx, authority.OAuthToken.UserID)
@@ -443,8 +442,14 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 	// the family, so it fails before the reuse check below and the deferred
 	// rollback discards the transaction.
 	if len(claimedClientIDs) == 1 {
-		claimed, parseErr := uuid.Parse(claimedClientIDs[0])
-		if parseErr != nil || claimed != token.ClientID {
+		matches := false
+		if client.MetadataUrl != nil {
+			matches = claimedClientIDs[0] == *client.MetadataUrl
+		} else {
+			claimed, parseErr := uuid.Parse(claimedClientIDs[0])
+			matches = parseErr == nil && claimed == token.ClientID
+		}
+		if !matches {
 			return tokenResponse{}, errOAuthInvalidGrant
 		}
 	}
@@ -500,23 +505,16 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedCli
 // missingRefreshTokenError classifies a refresh token that does not exist. A
 // client_id naming no stored client is errOAuthUnknownClient; every other case
 // is errOAuthInvalidGrant.
-func missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
+func (s *Service) missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
 	if len(claimedClientIDs) != 1 {
 		return errOAuthInvalidGrant
 	}
-	clientID, err := uuid.Parse(claimedClientIDs[0])
-	if err != nil {
+	_, err := s.storedPublicClient(ctx, q, claimedClientIDs[0])
+	if errors.Is(err, errOAuthInvalidClient) {
 		return errOAuthInvalidGrant
 	}
-	if _, err = q.GetOAuthClient(ctx, clientID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errOAuthUnknownClient
-		}
+	if err != nil {
 		return err
 	}
 	return errOAuthInvalidGrant
-}
-
-type oauthClientReader interface {
-	GetOAuthClient(context.Context, uuid.UUID) (store.OAuthClient, error)
 }

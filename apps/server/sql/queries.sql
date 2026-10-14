@@ -1059,6 +1059,23 @@ RETURNING *;
 -- name: GetOAuthClient :one
 SELECT * FROM oauth_clients WHERE id = $1;
 
+-- name: GetDCRClient :one
+-- Public UUID resolution excludes the internal UUID of a URL client.
+SELECT * FROM oauth_clients WHERE id = $1 AND metadata_url IS NULL;
+
+-- name: GetOAuthClientByMetadataURL :one
+SELECT * FROM oauth_clients WHERE metadata_url = sqlc.arg(metadata_url)::text COLLATE "C";
+
+-- name: UpsertOAuthMetadataClient :one
+-- Approval alone calls this query, before user and session locks. The unique
+-- URL index serializes concurrent approvals and preserves the internal UUID.
+INSERT INTO oauth_clients (metadata_url, client_name, redirect_uris, created_at, last_used_at)
+VALUES (sqlc.arg(metadata_url)::text, sqlc.arg(client_name), sqlc.arg(redirect_uris),
+        sqlc.arg(created_at)::timestamptz, sqlc.arg(created_at)::timestamptz)
+ON CONFLICT (metadata_url COLLATE "C") WHERE metadata_url IS NOT NULL
+DO UPDATE SET client_name = EXCLUDED.client_name, redirect_uris = EXCLUDED.redirect_uris
+RETURNING *;
+
 -- name: GetOAuthClientForUpdate :one
 -- The client-row lock the authorize, consent, and token paths take before
 -- writing a grant, code, or token for that client. Holding it is what lets
@@ -1214,7 +1231,7 @@ SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL;
 -- more naturally: sqlc cannot type an aggregate expression and emits
 -- interface{} for it, while a plain nullable column reference keeps the Go
 -- type *time.Time — NULL for a grant whose tokens have never been used.
-SELECT grant_row.id, grant_row.client_id, client_row.client_name,
+SELECT grant_row.id, grant_row.client_id, client_row.client_name, client_row.metadata_url,
        grant_row.scopes, grant_row.created_at,
        (
            SELECT token_row.last_used_at FROM oauth_tokens AS token_row

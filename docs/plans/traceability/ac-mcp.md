@@ -24,3 +24,16 @@ remain in the approved [budgets](../../design/budgets.md). See
 | AC-MCP-008 | Bounds: rate and caps              | Register/token/tool-call rates, the 4-concurrent cap, the 10-grant cap, and the 4 MiB body cap enforce the M5 budgets with bounded key stores and Retry-After                                                                   | PM T05/T09             | PROVEN | `oauthsrv/{clients,rate}_test.go`; `mcpapi/server_test.go`                                |
 | AC-MCP-009 | Web: consent and connected agents  | When agent access is enabled, consent and Connected agents render client data as text, act through the session/CSRF chain, and revoke grants visibly; when disabled, settings hides the block and makes no grant request        | PM T02/T10/T11; PF T05 | PROVEN | OAuth session HTTP and web consent/grant tests; PF capability-gating tests; M9 revocation |
 | AC-MCP-010 | Verification: end-to-end proof     | One native HTTPS Playwright process proves register→authorize→consent→exchange→build→editor-visible→revoke→rejected with zero error counters                                                                                    | PM T12                 | PROVEN | `deploy/dev-https-browser/mcp.spec.ts`; `make dev-https-mcp-check`                        |
+
+## Client metadata documents
+
+These rows are in progress. Test sources exist; CI, generation, independent
+review, the HTTPS proof, and the owner production proof remain required.
+
+| ID | Design clause | Statement | State | Test / acceptance reference |
+|-|-|-|-|-|
+| AC-MCP-011 | CIMD: configuration and storage | Startup flag defaults off; production refuses the stub; exact nullable URLs retain UUID foreign keys and refuse destructive down while present | in progress | `config/cimd_test.go`; `migrations/cimd_test.go` |
+| AC-MCP-012 | CIMD: fetch | URL grammar, full address refusals, pinned TLS, closed documents, deadlines, cache and bounded admission fail closed | in progress | `oauthsrv/cimd_test.go`; `oauthsrv/cimd_fetch_test.go` |
+| AC-MCP-013 | CIMD: authorization | Reads and denial write no row; approval commits client, grant and code together; loopback always shows consent; token operations never fetch or accept internal UUID aliases | in progress | `oauthsrv/cimd_authorization_test.go`; token and consent tests |
+| AC-MCP-014 | CIMD: interface | Both languages lead with the isolated host, quote the name, warn for loopback, and name the redirect hostname; Settings shows the host | in progress | Web authorize, consent and connected-agent tests; phone and desktop proof pending |
+| AC-MCP-015 | CIMD: deployment and proof | Default off; older binary startup checks stopped-app URL rows and MCP configuration; trusted HTTPS SDK proof and owner enablement proof | in progress | `deploy/vn/scripts/cimd-rollback-test.sh`; HTTPS CIMD proof pending |

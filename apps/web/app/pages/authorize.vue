@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import {
   type OAuthConsentDecision,
   type OAuthConsentRequest,
-  type OAuthConsentScope,
+  type OAuthConsentView,
   OAuthConsentFailure,
   useOAuthConsent,
 } from '../composables/useOAuthConsent';
@@ -24,10 +24,7 @@ type PageState
   = 'loading' | 'ready' | 'invalid' | 'unavailable' | 'agent-limit';
 
 const state = ref<PageState>('loading');
-const view = ref<{
-  clientName: string;
-  scopes: OAuthConsentScope[];
-} | null>(null);
+const view = ref<OAuthConsentView | null>(null);
 const errorSummary = ref<HTMLElement | null>(null);
 const pending = ref(false);
 
@@ -58,9 +55,19 @@ const returnToLine = computed(() => {
   }
   if (url.protocol === 'https:') return copy.value.returnToHost(url.host);
   if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
-    return copy.value.returnToLoopback;
+    return copy.value.returnToLoopback(url.hostname);
   }
   return null;
+});
+
+const loopbackRedirect = computed(() => {
+  if (view.value === null || authorizeQuery === null) return false;
+  try {
+    const url = new URL(authorizeQuery.redirect_uri);
+    return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
 });
 
 function parseQuery(): OAuthConsentRequest | null {
@@ -182,14 +189,34 @@ onMounted(() => {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      {{ view ? copy.allowClient(view.clientName) : copy.title }}
+      <template v-if="view?.clientKind === 'cimd'"
+        >{{ copy.hostRequestBefore
+        }}<bdi
+          class="[overflow-wrap:anywhere]"
+          dir="ltr"
+          data-testid="consent-client-host"
+          >{{ view.clientHost }}</bdi
+        >{{ copy.hostRequestAfter }}</template
+      >
+      <template v-else>{{
+        view ? copy.allowClient(view.clientName) : copy.title
+      }}</template>
     </h1>
     <p
       v-if="view"
-      class="mt-4 text-base text-muted-foreground"
+      class="mt-4 text-base text-muted-foreground [overflow-wrap:anywhere]"
     >
-      <strong data-testid="consent-client-name">{{ view.clientName }}</strong>
-      {{ copy.clientRequest }}
+      <template v-if="view.clientKind === 'cimd'"
+        >{{ copy.selfNamedBefore
+        }}<bdi data-testid="consent-client-name">{{ view.clientName }}</bdi
+        >{{ copy.selfNamedAfter }}</template
+      >
+      <template v-else
+        ><strong data-testid="consent-client-name">{{
+          view.clientName
+        }}</strong>
+        {{ copy.clientRequest }}</template
+      >
     </p>
     <p
       v-if="returnToLine"
@@ -197,6 +224,13 @@ onMounted(() => {
       data-testid="consent-return-to"
     >
       {{ returnToLine }}
+    </p>
+    <p
+      v-if="view?.clientKind === 'cimd' && loopbackRedirect"
+      class="mt-2 text-base text-muted-foreground"
+      data-testid="consent-loopback-warning"
+    >
+      {{ copy.loopbackWarning }}
     </p>
     <p
       v-if="state === 'loading'"

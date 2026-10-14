@@ -378,6 +378,7 @@ step_render() { # server web caddy [observer]
   fi
   mnumber=$(release_number "$mtag") || die "the recorded maintenance release has a malformed tag"
   checkpoint
+  cimd_rollback_check "$number"
   render_all "$tag" "$number" "$1" "$2" "$3" "$mimage" "$mtag" "$mnumber"
   render_observer "${4:-}"
   say "rendered $tag"
@@ -396,6 +397,7 @@ step_restore_previous() {
     p=$(release_read "$state/release.previous.json")
   fi
   checkpoint
+  cimd_rollback_check "$(jq -r .release_number <<<"$p")"
   # shellcheck disable=SC2046 # the values are shape-checked tags, numbers, and digests
   render_all $(jq -r '.release_tag, .release_number, .server_image, .web_image, .caddy_image' <<<"$p") \
     $(jq -r '.maintenance_image, .maintenance_tag, .maintenance_number' <<<"$p")
@@ -447,6 +449,9 @@ step_oneshot() { # unit
 
 step_app_up() {
   checkpoint
+  local installed
+  installed=$(release_read "$release_json")
+  cimd_rollback_check "$(jq -r .release_number <<<"$installed")"
   systemctl restart aboutme-web
   http_ok http://127.0.0.1:3000/ 120 || die "aboutme-web did not answer on 127.0.0.1:3000"
   checkpoint
@@ -460,6 +465,63 @@ step_app_up() {
   active aboutme-caddy || die "aboutme-caddy did not stay up"
   (($(caddy_listeners 443) >= 1)) || die "no Caddy listens on 443"
   say "app up"
+}
+
+# Read only the non-secret MCP flag from the two ordered environment files.
+# Reject malformed or duplicate lines without returning configuration values.
+cimd_effective_mcp_flag() {
+  local base overrides
+  base=$(jq -Rre -s '
+    reduce (split("\n")[]) as $line ({seen: {}, value: null};
+      if ($line | test("^[[:space:]]*(#|$)")) then .
+      elif ($line | test("^[A-Z][A-Z0-9_]*=[^[:space:]\"\\x27]*$")) then
+        ($line | capture("^(?<key>[^=]+)=(?<value>.*)$")) as $field
+        | if .seen[$field.key] then error("duplicate environment name")
+          else .seen[$field.key] = true
+            | if $field.key == "MCP_ENABLED" then .value = $field.value else . end
+          end
+      else error("invalid environment line") end)
+    | .value | select(. == "true" or . == "false")
+  ' /etc/aboutme/server.env 2>/dev/null) || return 1
+  overrides=$(flags_json) || return 1
+  jq -er --arg base "$base" '
+    (.MCP_ENABLED // $base) | select(. == "true" or . == "false")
+  ' <<<"$overrides" 2>/dev/null
+}
+
+cimd_url_rows_exist() {
+  # to_jsonb also permits a database whose additive CIMD migration is absent.
+  # Only a Boolean existence result leaves PostgreSQL.
+  runuser -u postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -d aboutme \
+    -c "SELECT EXISTS (SELECT 1 FROM public.oauth_clients AS client WHERE to_jsonb(client)->>'metadata_url' IS NOT NULL)" 2>/dev/null
+}
+
+cimd_serving_app_stopped() {
+  local unit_state
+  unit_state=$(systemctl show -p ActiveState --value aboutme-server) || return 1
+  case $unit_state in
+  inactive | failed) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+cimd_rollback_check() { # candidate release number
+  local candidate=$1 mcp rows
+  [[ $candidate =~ ^[0-9]+$ ]] || die "invalid CIMD rollback candidate"
+  cimd_serving_app_stopped || die "CIMD rollback check requires a proved stopped serving app"
+  ((candidate >= 8000)) && return 0
+  mcp=$(cimd_effective_mcp_flag) || die "cannot determine MCP configuration for rollback"
+  case $mcp in
+  false) return 0 ;;
+  true) ;;
+  *) die "invalid MCP configuration for rollback" ;;
+  esac
+  rows=$(cimd_url_rows_exist) || die "cannot determine URL-client existence for rollback"
+  case $rows in
+  f) return 0 ;;
+  t) die "pre-CIMD rollback requires no URL clients or MCP_ENABLED=false" ;;
+  *) die "invalid URL-client existence result for rollback" ;;
+  esac
 }
 
 step_maintenance_down() {

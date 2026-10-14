@@ -223,6 +223,22 @@ internet because it has no floating IP or NAT. Outbound networking remains open;
 a successful restore drill is not recorded here. See the
 [host guide](../../deploy/vn/README.md#restore-drill).
 
+## Client metadata authorization
+
+`deploy/vn/host/env/server.env` defaults `OAUTH_CIMD_ENABLED=false`. The owner
+may override it in `/etc/aboutme/flags.env` after the
+[CIMD production proof](mcp-cimd-verification.md#production-enablement-proof).
+Production refuses `OAUTH_CIMD_DEV_STUB_ADDR`, even with the feature disabled.
+
+Apply the additive URL-client migration before serving the CIMD binary. Normal
+rollback turns the feature flag off while retaining the binary, grants, and
+tokens. `deploy-host.sh` checks the
+[binary rollback boundary](mcp-cimd-authorization.md#older-clients-and-loss)
+while the serving app is stopped, at render, restoration, and startup. A target
+before v0.8.0 may start only with no URL-client rows or `MCP_ENABLED=false`.
+Configuration and query failures refuse startup. Keep the migration and current
+reviewed deployment helpers when selecting older images.
+
 ## Release fence
 
 `deploy/vn/scripts/fence.sh` changes root-owned `/var/lib/aboutme/fence.json`
