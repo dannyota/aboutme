@@ -11,7 +11,7 @@ source "$lib/operation-account.sh"
 
 refuse() { printf '%s\n' "${1:-refused}" >&2; exit "${2:-1}"; }
 request_lock() {
-  [[ -e $operations_dir/$id || -L $operations_dir/$id ]] || refuse not_found
+  operation_state load "$id" >/dev/null || exit 1
   [[ -d $operations_dir/$id && ! -L $operations_dir/$id ]] || refuse
   [[ ! -L $operations_dir/$id/.request.lock ]] || refuse
   exec {request_fd}>>"$operations_dir/$id/.request.lock"

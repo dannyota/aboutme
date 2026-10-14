@@ -99,6 +99,37 @@ request_id() { printf '%042dA' "$1"; }
   done
   expect_error not_found operation_main run "$id"
   [[ ! -e $operations_dir/$id && ! -e $work/unknown-dispatch && ! -e $work/unknown-fence ]] || fail 'unknown lookup created work'
+  # Inject EIO at the request-directory lookup. Absence must come from errno,
+  # and failed metadata reads must stop before opening a lock or dispatching.
+  (
+    operation_state() {
+      python3 - "$work/state.py" "$1" "${2:-}" "$operations_dir" <<'PY'
+import errno, os, runpy, sys
+driver = sys.argv.pop(1)
+request_path = sys.argv[3]+'/'+sys.argv[2]
+real_lstat = os.lstat
+def lookup(path, *args, **kwargs):
+    if path == request_path: raise OSError(errno.EIO, 'synthetic lookup failure')
+    return real_lstat(path, *args, **kwargs)
+os.lstat = lookup
+runpy.run_path(driver, run_name='__main__')
+PY
+    }
+    for presence in missing existing; do
+      [[ $presence != existing ]] || mkdir -m 0700 "$operations_dir/$id"
+      for mode in read load; do expect_error protocol_failed operation_state "$mode" "$id"; done
+      for verb in status resume verify abort apply proof; do
+        envelope=$(jq -cn --arg verb "$verb" --arg id "$id" --arg user "$user" '
+          {verb:$verb,requestId:$id} +
+          (if $verb=="apply" then {confirmation:("delete-account:"+$id+":"+$user+":valid-slug")}
+           elif $verb=="proof" then {phase:"serving",nonce:$id,result:"pass"} else {} end)')
+        expect_error protocol_failed operation_main request <<<"$envelope"
+      done
+      expect_error protocol_failed operation_main run "$id"
+      [[ ! -e $operations_dir/$id/.request.lock && ! -e $work/unknown-dispatch && ! -e $work/unknown-fence ]] || fail 'failed lookup created work'
+    done
+    rmdir "$operations_dir/$id"
+  )
   mkdir -m 0700 "$operations_dir/$id"
   for mode in read load; do
     expect_error protocol_failed operation_state "$mode" "$id"
@@ -114,7 +145,7 @@ request_id() { printf '%042dA' "$1"; }
   rmdir "$operations_dir/$id"
   ln -s "$work/absent-request" "$operations_dir/$id"
   expect_error protocol_failed operation_state read "$id"
-  expect_error refused request_existing resume
+  expect_error protocol_failed request_existing resume
   rm "$operations_dir/$id"
   chmod 0755 "$operations_dir"
   expect_error protocol_failed operation_state read "$id"
