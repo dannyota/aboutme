@@ -15,6 +15,8 @@ source "$root/deploy/caddy/production/test/direct_maintenance.sh"
 source "$root/deploy/caddy/production/test/crowdsec_feed.sh"
 # shellcheck source=deploy/caddy/production/test/deployment_document.sh
 source "$root/deploy/caddy/production/test/deployment_document.sh"
+# shellcheck source=deploy/caddy/production/test/waf_stderr.sh
+source "$root/deploy/caddy/production/test/waf_stderr.sh"
 work=$(mktemp -d)
 name=aboutme-caddy-test
 waf_volume=$name-waf
@@ -82,6 +84,7 @@ bash "$maintenance_render" "$maintenance_html" >/dev/null ||
 want_csp=$(bash "$maintenance_render" "$maintenance_html" |
   grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
+python3 -B "$root/deploy/caddy/production/test/waf_stderr_diagnostic_test.py"
 (cd "$root/deploy/caddy/production/build" && GOWORK=off go test ./...)
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null
 # Production runs the image's own user; the task definitions set none.
@@ -500,11 +503,7 @@ if podman exec "$name" test -e /var/log/caddy/waf/audit.log; then
   echo "coraza: raw audit log exists" >&2
   exit 1
 fi
-logs=$(podman logs "$name" 2>&1)
-if grep -qE '941100|"client_ip"' <<<"$logs"; then
-  echo "coraza: rule matches or client addresses reached stderr" >&2
-  exit 1
-fi
+assert_waf_stderr_private "$name" serving || exit 1
 
 # A client that stops during an inspected body cannot hold the 5 MiB WAF
 # buffer forever. Caddy must end the upload before the client's own deadline.
