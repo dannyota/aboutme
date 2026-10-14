@@ -24,16 +24,28 @@ func TestVersionFailureReportsExitStatusWithoutPrivateOutput(t *testing.T) {
 }
 
 func TestVersionTimeoutReportsItsOperation(t *testing.T) {
-	executable := writeExecutable(t, "#!/bin/sh\nexec /bin/sleep 30\n")
+	testCtx, testCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer testCancel()
+	executable := writeExecutable(t, "#!/bin/sh\nexit 0\n")
 	hooks := safeProcessHooks(t)
-	version := hooks.version
-	hooks.version = func(ctx context.Context, path string) (string, error) {
+	hooks.version = func(ctx context.Context, _ string) (string, error) {
 		probeCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
-		return version(probeCtx, path)
+		<-probeCtx.Done()
+		return "", probeCtx.Err()
 	}
-	_, err := New(Config{BrowserExecutable: executable, RenderOrigin: testRenderOrigin(t), testHooks: hooks})
-	assertInitializationError(t, err, ErrInvalidConfig, "timeout", "operation=version-probe")
+	origin := testRenderOrigin(t)
+	result := make(chan error, 1)
+	go func() {
+		_, err := New(Config{BrowserExecutable: executable, RenderOrigin: origin, testHooks: hooks})
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		assertInitializationError(t, err, ErrInvalidConfig, "timeout", "operation=version-probe")
+	case <-testCtx.Done():
+		t.Fatal("version timeout did not return")
+	}
 }
 
 func TestWrongBrowserVersionFailsClosedBeforeReadinessOrRender(t *testing.T) {
