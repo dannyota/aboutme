@@ -11,6 +11,7 @@ source "$lib/operation-account.sh"
 
 refuse() { printf '%s\n' "${1:-refused}" >&2; exit "${2:-1}"; }
 request_lock() {
+  operation_state load "$id" >/dev/null || exit 1
   [[ -d $operations_dir/$id && ! -L $operations_dir/$id ]] || refuse
   [[ ! -L $operations_dir/$id/.request.lock ]] || refuse
   exec {request_fd}>>"$operations_dir/$id/.request.lock"
@@ -329,7 +330,7 @@ operation_main() {
       id=$(jq -r '.requestId // empty' <<<"$envelope")
       case $(jq -r .verb <<<"$envelope") in
         show) request_new "$(jq -r .slug <<<"$envelope")" ;;
-        status) operation_output "$id" || refuse ;;
+        status) operation_output "$id" ;;
         apply) request_existing apply "$(jq -r .confirmation <<<"$envelope")" ;;
         resume | verify | abort) request_existing "$(jq -r .verb <<<"$envelope")" ;;
         proof) request_proof ;;

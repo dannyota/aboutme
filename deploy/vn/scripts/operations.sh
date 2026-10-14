@@ -78,7 +78,21 @@ done
 rc=0
 printf '%s\n' "$envelope" | remote "sudo $lib/operation-run.sh request" >"$work/reply" 2>"$work/error" || rc=$?
 if ((rc != 0)); then
-  case $rc in 2) fail invalid_request 2 ;; 4) fail not_found 4 ;; *) fail transport_failed ;; esac
+  case $rc in
+    1)
+      [[ ! -s $work/reply && $(wc -c <"$work/error") -le 32 ]] || fail protocol_failed
+      IFS= read -r error <"$work/error" || fail protocol_failed
+      [[ $(wc -c <"$work/error") == $((${#error}+1)) ]] || fail protocol_failed
+      case $error in
+        not_found | refused | protocol_failed) fail "$error" ;;
+        *) fail protocol_failed ;;
+      esac
+      ;;
+    2) fail invalid_request 2 ;;
+    4) fail not_found 4 ;;
+    255) fail transport_failed ;;
+    *) fail protocol_failed ;;
+  esac
 fi
 [[ $(wc -c <"$work/reply") -le 16384 ]] || fail protocol_failed
 # Reuse the closed versioned validator without reading any host state locally.

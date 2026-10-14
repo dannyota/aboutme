@@ -38,6 +38,10 @@ prints no JSON. Exit 2 means invalid input. Exit 1 means refusal or transport
 failure. Exit 0 means a read succeeded or a transition was durably accepted; it
 does not mean deletion completed.
 
+An unknown request ID returns `not_found` on stderr, no JSON, and exit 1. Host
+refusals return `refused`; SSH failures return `transport_failed`. Malformed
+host replies return `protocol_failed`.
+
 ## Steps
 
 1. Read the report and open `https://aboutme.vn/reported-slug`. Establish the
