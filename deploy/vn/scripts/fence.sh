@@ -101,7 +101,7 @@ cmd_read() {
 cmd_lock() { # kind tag
   local kind=$1 candidate oid ts
   case $kind in
-    deploy | rollback | activate | totp_reencrypt | cutover) ;;
+    deploy | rollback | activate | totp_reencrypt | account_delete | view_pass_rotate | cutover) ;;
     *) die "unknown operation kind '$kind'" ;;
   esac
   candidate=$(candidate_of "$2")
@@ -115,6 +115,35 @@ cmd_lock() { # kind tag
   printf '%s\n' "$oid"
 }
 
+cmd_lock_for() { # kind tag request id
+  local kind=$1 tag=$2 id=$3 candidate ts
+  case $kind in account_delete | totp_reencrypt | view_pass_rotate) ;; *) die "unsupported bound operation" ;; esac
+  [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || die "invalid request id"
+  candidate=$(candidate_of "$tag")
+  load
+  ((candidate >= minimum)) || die "release is below the floor"
+  if [[ -n $owner ]]; then
+    [[ $owner == "$id" && $(jq -r .operation_kind <<<"$doc") == "$kind" && $(jq -r .operation_tag <<<"$doc") == "$tag" ]] || die "another binding owns the fence"
+    printf '%s\n' "$id"
+    return
+  fi
+  ts=$(now)
+  jq --arg id "$id" --arg kind "$kind" --arg tag "$tag" --arg ts "$ts" \
+    '.operation_id=$id | .operation_kind=$kind | .operation_tag=$tag | .operation_started_at=$ts | .operation_checked_at=$ts' <<<"$doc" | store
+  printf '%s\n' "$id"
+}
+
+operation_release_guard() {
+  [[ ! -e /srv/data/host-operations/key-change.json && ! -L /srv/data/host-operations/key-change.json ]] || die "a key-change marker remains"
+  if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == account_delete ]]; then
+    local safety=${FENCE_SAFETY_LIB:-/usr/local/lib/aboutme/deploy-safety.sh}
+    [[ -r $safety && ! -L $safety ]] || die "operation safety helper is missing"
+    # shellcheck disable=SC1090
+    source "$safety"
+    aboutme_assert_operation_release "$owner" || die "the account operation remains unresolved or active"
+  fi
+}
+
 owned_or_die() { # id
   load
   [[ -n $owner ]] || die "no operation holds the lock"
@@ -125,6 +154,9 @@ cmd_checkpoint() { # id tag
   local candidate
   candidate=$(candidate_of "$2")
   owned_or_die "$1"
+  if [[ $(jq -r '.operation_tag // empty' <<<"$doc") != '' ]]; then
+    [[ $(jq -r .operation_tag <<<"$doc") == "$2" ]] || die "the bound operation tag differs"
+  fi
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
   jq --arg s "$(now)" '.operation_checked_at = $s' <<<"$doc" | store
 }
@@ -218,7 +250,8 @@ cmd_release() { # id
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover && ( -e $mutation_file || -L $mutation_file ) ]]; then
     die "the cutover mutation marker remains; recover or clear it first"
   fi
-  jq 'del(.operation_id, .operation_kind, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
+  operation_release_guard
+  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
 }
 
 # ExecStartPre for every production-image start. Takes a shared lock so it
@@ -228,6 +261,8 @@ cmd_check() { # release unit
   local release=$1 unit=$2
   [[ $release =~ ^[0-9]+$ ]] || die "release '$release' is not a number"
   load
+  mountpoint -q /srv/data || die "the data mount is missing"
+  [[ ! -e /srv/data/host-operations/key-change.json && ! -L /srv/data/host-operations/key-change.json ]] || die "a key-change marker blocks starts"
   if ((release < minimum)); then
     echo "aboutme-fence-refused unit=$unit release=$release minimum=$minimum"
     exit 1
@@ -262,7 +297,8 @@ cmd_clear() { # reason
     return 0
   }
   logger -t aboutme-fence "manual clear of $(jq -c '{operation_kind, operation_started_at, operation_checked_at}' <<<"$doc") by ${SUDO_USER:-root}: $reason"
-  jq 'del(.operation_id, .operation_kind, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
+  operation_release_guard
+  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
   say "cleared"
 }
 
@@ -311,6 +347,7 @@ case "$#:${1-}" in
   1:init) with_lock -x cmd_init ;;
   1:read) with_lock -s cmd_read ;;
   3:lock) with_lock -x cmd_lock "$2" "$3" ;;
+  4:lock-for) with_lock -x cmd_lock_for "$2" "$3" "$4" ;;
   3:checkpoint) with_lock -x cmd_checkpoint "$2" "$3" ;;
   4:mutation-start) with_lock -x cmd_mutation_start "$2" "$3" "$4" ;;
   3:mutation-clear) with_lock -x cmd_mutation_clear "$2" "$3" ;;

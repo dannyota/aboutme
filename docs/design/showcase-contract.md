@@ -82,7 +82,7 @@ aboutme stores nothing about the reporter. When a report shows a serious breach
 of the Terms, or the law requires action, the operator deletes the account that
 owns the reported slug (**Owner approval** N3; see
 [Terms of Service](showcase-copy.md#terms-of-service)). It runs
-`server account-delete`, a one-shot task the deploy script starts out of band
+`server account-delete`, through the durable host operation runner
 ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)):
 
 1. `show <slug>` is read-only. It prints the user ID that owns the resume
@@ -96,9 +96,12 @@ owns the reported slug (**Owner approval** N3; see
    already admitted finish
    ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
-Output and the one audit log line per run carry only the user ID, slugs, action,
-outcome, and time; never an email, name, headline, IP address, or session data.
-The task log keeps that line with the server logs for 180 days.
+The [root-only host audit](../runbooks/account-delete.md#audit-and-failures)
+retains action, outcome, UUID, reported, shown, and returned slugs, and event
+UTC for 180 days. It stores no email, name, headline, or report body. Server
+journald and CI are not the audit store. The
+[host operations design](vietnam-host-operations.md) owns confirmation,
+unknown-outcome reconciliation, retention, and separate verification outcomes.
 
 ## Delivery, caching, and revocation
 

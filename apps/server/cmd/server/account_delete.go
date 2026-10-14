@@ -39,7 +39,7 @@ const (
 	accountDeleteMismatchExitCode = 5
 )
 
-const accountDeleteUsage = "usage: server account-delete {show <slug> | confirm <slug> <user-id>}"
+const accountDeleteUsage = "usage: server account-delete {show <slug> | confirm <slug> <user-id> | status <user-id>}"
 
 // accountDeleteExitError carries a fixed exit status. Status 4 and 5 have
 // already written their result line; status 2 carries the usage text.
@@ -52,6 +52,7 @@ func (err accountDeleteExitError) Error() string { return err.message }
 
 type accountDeleteArgs struct {
 	confirm bool
+	status  bool
 	slug    string
 	userID  uuid.UUID
 }
@@ -63,6 +64,12 @@ func parseAccountDeleteArgs(args []string) (accountDeleteArgs, error) {
 	}
 	var parsed accountDeleteArgs
 	switch {
+	case args[0] == "status" && len(args) == 2:
+		id, err := uuid.Parse(args[1])
+		if err != nil || id.String() != args[1] {
+			return accountDeleteArgs{}, usage
+		}
+		return accountDeleteArgs{status: true, userID: id}, nil
 	case args[0] == "show" && len(args) == 2:
 	case args[0] == "confirm" && len(args) == 3:
 		parsed.confirm = true
@@ -92,6 +99,9 @@ func runAccountDelete(args []string) error {
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, accountDeleteTimeout)
 	defer cancel()
+	if parsed.status {
+		return executeAccountStatus(ctx, parsed.userID, os.Getenv, os.Stdout)
+	}
 	return executeAccountDelete(ctx, parsed, os.Getenv, os.Stdout, os.Stderr)
 }
 
@@ -144,7 +154,7 @@ func executeAccountDelete(ctx context.Context, args accountDeleteArgs, getenv fu
 
 // reportAccountDelete writes the result of one run and returns its exit
 // status. A lost commit answer exits 3 with no end line: the account may be
-// deleted, and show tells.
+// deleted. Reconcile by account ID after proving the attempt stopped.
 func reportAccountDelete(output io.Writer, logger *slog.Logger, args accountDeleteArgs, account accountapi.Account, err error) error {
 	action := "show"
 	if args.confirm {
@@ -160,7 +170,7 @@ func reportAccountDelete(output io.Writer, logger *slog.Logger, args accountDele
 			fmt.Sprintf("mismatch: %s is not owned by %s; nothing deleted", args.slug, args.userID))
 	case errors.Is(err, accountapi.ErrOutcomeUnknown):
 		logger.Error(accountDeleteCommandName, "action", action, "outcome", "unknown", "user", args.userID.String(), "slugs", []string{args.slug})
-		if _, writeErr := fmt.Fprintf(output, "result unknown: run show %s\n", args.slug); writeErr != nil {
+		if _, writeErr := fmt.Fprintf(output, "result unknown: run account-delete status %s after proving the attempt stopped\n", args.userID); writeErr != nil {
 			return errors.New("account-delete result could not be written")
 		}
 		return accountDeleteExitError{code: accountDeleteUnknownExitCode}

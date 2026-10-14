@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The five-minute host watch (docs/design/vietnam-production.md, "Logs,
 # metrics, and alarms"). Runs as root from aboutme-watch.service and calls
-# alert.sh for each condition that holds; alert.sh sends at most one message
-# per condition per day. Every check runs even when an earlier one fires.
+# alert.sh for alarm conditions; alert.sh sends at most one message per
+# condition per day. Coraza counts stay in the journal. Every check runs even
+# when an earlier one fires.
 set -euo pipefail
 
 if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
@@ -14,7 +15,6 @@ fi
 disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
-coraza_matches_per_hour=${CORAZA_MATCHES_PER_HOUR:-50}
 if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
   retention_lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?watch test lease is required}
 else
@@ -114,8 +114,7 @@ if ((${#waf_logs[@]})); then
   read -r matches unparsed unknown <<<"$counts"
   ((unknown == 0)) || alert coraza-log-invalid "the Coraza match log has $unknown unknown records in the last hour"
 fi
-((matches <= coraza_matches_per_hour)) || alert coraza-matches "Coraza recorded $matches rule matches in the last hour"
-((unparsed == 0)) || alert coraza-unparsed "Coraza wrote $unparsed unparsed match records in the last hour"
+printf 'coraza counts in the last hour: matches=%s unparsed=%s\n' "$matches" "$unparsed"
 
 # totp_unavailable in the server journal since the last run.
 totp=$(journalctl -u aboutme-server --since -6min -o cat --no-pager 2>/dev/null | grep -c -F totp_unavailable || true)

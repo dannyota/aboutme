@@ -1,0 +1,10 @@
+[Unit]
+Description=aboutme daily host operation retention
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=aboutme-operation-retention.service
+
+[Install]
+WantedBy=timers.target
