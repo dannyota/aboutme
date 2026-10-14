@@ -72,6 +72,12 @@ readonly STOP_KILL_ATTEMPTS=${DEV_HTTPS_STOP_KILL_ATTEMPTS:-50}
 readonly BASH_BIN=$(readlink -f "$(command -v bash)")
 readonly SUPERVISOR_CODE='set -Eeuo pipefail
 umask 077
+report_exit() {
+  local status=$?
+  printf "dev-https supervisor exit status=%s\n" "$status"
+  exit "$status"
+}
+trap report_exit EXIT
 printf "%s\n" "$$" >"$1"
 cd "$2" || exit 127
 set -a
@@ -85,6 +91,8 @@ wait "$child"'
 STARTUP_ARMED=0
 declare -a STARTED_SERVICES=()
 CURRENT_SERVICE=
+CURRENT_STARTUP_STEP=
+CURRENT_STARTUP_LOG_FROM=1
 APP_BUILD_DIGEST=
 PUBLIC_RENDERER_BUILD_DIGEST=
 PASSWORD_RATE_HMAC_KEY_B64=

@@ -78,6 +78,10 @@ caddy)
   ;;
 esac
 if [ "${FAKE_EXIT_SERVICE-}" = "$name" ]; then
+  if [ "$name" = server ]; then
+    printf '%s\n' 'initialize private browser renderer' >&2
+    printf 'AUTH_EMAIL_ACTIVE_KEY=%s\n' "$AUTH_EMAIL_ACTIVE_KEY" >&2
+  fi
   exit 7
 fi
 if [ "${FAKE_EXIT_BEFORE_COMPLETION-}" = "$name" ]; then
@@ -1221,16 +1225,31 @@ run_mail_capture_failure_rollback_check() (
 )
 
 run_server_after_capture_rollback_check() (
-  local fixture output pidfile pid
+  local fixture output pidfile pid diagnostic
   fixture=$(new_fixture)
   trap 'cleanup_fixture "$fixture"' EXIT
   fixture_env "$fixture"
   export FAKE_EXIT_SERVICE=server
+  export GITHUB_ACTIONS=true
   cd "$fixture/repo"
+  install -d -m 0700 .dev/native-https/log .dev/proof-timing
+  printf '%s\n' 'previous-proof-only' >.dev/native-https/log/server.log
   if output=$(bash scripts/dev-https.sh up 2>&1); then
     fail 'up accepted server failure after mail-capture start'
   fi
   assert_contains "$output" 'startup failed'
+  assert_contains "$output" 'server: startup step='
+  assert_contains "$output" 'server: initialize private browser renderer'
+  assert_contains "$output" 'server: dev-https supervisor exit status=7'
+  assert_contains "$output" 'server: AUTH_EMAIL_ACTIVE_KEY=[REDACTED]'
+  assert_not_contains "$output" 'previous-proof-only'
+  diagnostic=$(cat .dev/proof-timing/startup-server.log)
+  assert_contains "$diagnostic" 'server: initialize private browser renderer'
+  assert_contains "$diagnostic" 'server: dev-https supervisor exit status=7'
+  assert_contains "$diagnostic" 'server: AUTH_EMAIL_ACTIVE_KEY=[REDACTED]'
+  assert_not_contains "$diagnostic" 'previous-proof-only'
+  [ "$(stat -c '%a' .dev/proof-timing/startup-server.log)" = 600 ] ||
+    fail 'startup diagnostic is not mode 600'
   assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
   assert_log_line "$FAKE_MUTATIONS" 'start:server'
   for pidfile in .dev/native-https/run/*.pid; do
@@ -1239,6 +1258,45 @@ run_server_after_capture_rollback_check() (
     ! kill -0 "$pid" 2>/dev/null || fail "server-after-capture rollback left pid $pid alive"
   done
   [ ! -s "$FAKE_FORBIDDEN" ] || fail 'server-after-capture rollback invoked a forbidden command'
+)
+
+run_startup_diagnostic_path_checks() (
+  local fixture directory sentinel kind
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  # shellcheck source=lib/dev-https-state.sh
+  source scripts/lib/dev-https-state.sh
+  # shellcheck source=lib/dev-https-lifecycle.sh
+  source scripts/lib/dev-https-lifecycle.sh
+  ROOT=$PWD
+  CURRENT_SERVICE=server
+  export GITHUB_ACTIONS=true
+  die() { printf '%s\n' "$*" >&2; exit 1; }
+  directory=$ROOT/.dev/proof-timing
+  sentinel=$fixture/sentinel
+  install -d -m 0700 "$directory"
+  printf '%s\n' unchanged >"$sentinel"
+  for kind in symlink hardlink; do
+    case $kind in
+    symlink) ln -s "$sentinel" "$directory/startup-server.log" ;;
+    hardlink) ln "$sentinel" "$directory/startup-server.log" ;;
+    esac
+    if save_startup_failure 'redacted startup error' >/dev/null 2>&1; then
+      fail "startup diagnostics accepted a $kind artifact"
+    fi
+    assert_log_line "$sentinel" unchanged
+    rm -- "$directory/startup-server.log"
+  done
+  rmdir "$directory"
+  install -d -m 0700 "$fixture/outside"
+  ln -s "$fixture/outside" "$directory"
+  if save_startup_failure 'redacted startup error' >/dev/null 2>&1; then
+    fail 'startup diagnostics accepted a symlink directory'
+  fi
+  [ ! -e "$fixture/outside/startup-server.log" ] ||
+    fail 'startup diagnostics wrote outside the artifact directory'
 )
 
 run_mail_capture_binary_drift_check() (
@@ -1494,6 +1552,7 @@ readonly CHECKS=(
   run_failed_build_retry_check
   run_mail_capture_failure_rollback_check
   run_server_after_capture_rollback_check
+  run_startup_diagnostic_path_checks
   run_mail_capture_binary_drift_check
   run_mail_capture_foreign_listener_check
   run_mail_capture_group_drain_check
@@ -1567,6 +1626,7 @@ main() {
   build-retry) run_failed_build_retry_check; return ;;
   mail-capture-rollback) run_mail_capture_failure_rollback_check; return ;;
   server-after-capture) run_server_after_capture_rollback_check; return ;;
+  startup-diagnostic-paths) run_startup_diagnostic_path_checks; return ;;
   mail-capture-drift) run_mail_capture_binary_drift_check; return ;;
   mail-capture-foreign) run_mail_capture_foreign_listener_check; return ;;
   mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;

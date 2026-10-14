@@ -78,14 +78,23 @@ start_service() {
   file=$(pidfile "$name")
   environment=$(service_env_file "$name")
   log=$(logfile "$name")
+  CURRENT_STARTUP_STEP=environment
+  CURRENT_STARTUP_LOG_FROM=1
+  if [ -f "$log" ]; then
+    CURRENT_STARTUP_LOG_FROM=$(wc -l <"$log")
+    CURRENT_STARTUP_LOG_FROM=$((CURRENT_STARTUP_LOG_FROM + 1))
+  fi
   [ ! -e "$file" ] || return 1
   write_service_env "$name" || return 1
   printf '\n===== %s started %s =====\n' "$name" "$(date -Is)" >>"$log"
   token="$name-$(printf '%s' "$name:$BASHPID:$(date +%s%N)" | sha256sum | awk '{print $1}')"
+  CURRENT_STARTUP_STEP=launch-intent
   write_launch_intent "$name" "$token" || return 1
   STARTED_SERVICES+=("$name")
+  CURRENT_STARTUP_STEP=supervisor-launch
   ABOUTME_DEV_HTTPS_IDENTITY="$token" setsid --fork "$BASH_BIN" -c "$SUPERVISOR_CODE" \
     "dev-https-$name" "$file" "$workdir" "$environment" "$@" >>"$log" 2>&1 </dev/null
+  CURRENT_STARTUP_STEP=launch-identity
   local attempt
   for attempt in $(seq 1 50); do
     if [ -s "$file" ]; then
@@ -102,30 +111,39 @@ start_service() {
 
 wait_http() {
   local name=$1 url=$2 timeout=$3 pid deadline
+  CURRENT_STARTUP_STEP=http-readiness-identity
   pid=$(service_pid "$name") || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
+    CURRENT_STARTUP_STEP=http-readiness-identity
     validate_service_identity "$name" 1 || return 1
+    CURRENT_STARTUP_STEP=http-readiness-probe
     curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null && return 0
     sleep 0.3
   done
+  CURRENT_STARTUP_STEP=http-readiness-timeout
   return 1
 }
 
 wait_https() {
   local url=$1 timeout=$2 pid deadline
+  CURRENT_STARTUP_STEP=https-readiness-identity
   pid=$(service_pid caddy) || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
+    CURRENT_STARTUP_STEP=https-readiness-identity
     validate_service_identity caddy 1 || return 1
+    CURRENT_STARTUP_STEP=https-readiness-probe
     curl -fsS -o /dev/null --max-time 5 --cacert "$EXPORTED_ROOT" "$url" 2>/dev/null && return 0
     sleep 0.3
   done
+  CURRENT_STARTUP_STEP=https-readiness-timeout
   return 1
 }
 
 wait_for_caddy_root() {
   local pid deadline
+  CURRENT_STARTUP_STEP=certificate-identity
   pid=$(service_pid caddy) || return 1
   deadline=$((SECONDS + 30))
   while [ "$SECONDS" -lt "$deadline" ]; do
@@ -133,6 +151,7 @@ wait_for_caddy_root() {
     [ -s "$CADDY_ROOT" ] && return 0
     sleep 0.2
   done
+  CURRENT_STARTUP_STEP=certificate-timeout
   return 1
 }
 
@@ -218,29 +237,49 @@ stop_owned_service() {
   info "stopped $name (pid $pid)"
 }
 
-# report_startup_failure names the one service the start_* wrappers were
-# waiting on when startup aborted (CURRENT_SERVICE, set for the duration of
-# each wrapper's start_service/wait_* pair) and prints its redacted log tail,
-# so a public CI failure names its cause instead of only "startup failed"
-# (the rollback below removes the pidfile and identity records that would
-# otherwise let a later run distinguish this service, but never removes the
-# log file itself).
-report_startup_failure() {
+# Keep previous proofs out of startup diagnostics and redact before retaining
+# the current launch's output. Rollback removes process records, not logs.
+startup_failure_details() {
   local log line
   if [ -z "$CURRENT_SERVICE" ]; then
     warn "startup failed before any service was launched; see the build and migration output above"
     return 0
   fi
   warn "$CURRENT_SERVICE did not finish starting"
+  warn "$CURRENT_SERVICE: startup step=$CURRENT_STARTUP_STEP"
   log=$(logfile "$CURRENT_SERVICE")
-  if [ -s "$log" ]; then
-    warn "$CURRENT_SERVICE: last log lines follow"
+  if [ "$CURRENT_STARTUP_LOG_FROM" -gt 0 ] && [ -f "$log" ] &&
+    [ "$(wc -l <"$log")" -ge "$CURRENT_STARTUP_LOG_FROM" ]; then
+    warn "$CURRENT_SERVICE: current launch log lines follow"
     while IFS= read -r line; do
       warn "$CURRENT_SERVICE: $line"
-    done < <(tail -n 40 -- "$log" | redact_logs)
+    done < <(tail -n "+$CURRENT_STARTUP_LOG_FROM" -- "$log" | tail -n 40 | redact_logs)
   else
     warn "$CURRENT_SERVICE produced no log output before failing"
   fi
+}
+
+# The hosted proof job already uploads this directory after failed restarts.
+save_startup_failure() (
+  local details=$1 directory=$ROOT/.dev/proof-timing file
+  [ "${GITHUB_ACTIONS-}" = true ] && [ -d "$directory" ] || return 0
+  [ -n "$CURRENT_SERVICE" ] || return 0
+  validate_existing_state_node "$directory" directory
+  file=$directory/startup-$CURRENT_SERVICE.log
+  if [ -e "$file" ] || [ -L "$file" ]; then
+    validate_existing_state_node "$file" regular
+    [ "$(stat -c '%h' -- "$file")" = 1 ] || return 1
+  fi
+  umask 077
+  printf '%s\n' "$details" >"$file" || return 1
+  chmod 0600 -- "$file"
+)
+
+report_startup_failure() {
+  local details
+  details=$(startup_failure_details 2>&1)
+  printf '%s\n' "$details" >&2
+  save_startup_failure "$details" || warn "could not retain startup diagnostics; see the redacted output above"
 }
 
 rollback_startup() {
@@ -292,10 +331,13 @@ start_mock() {
 # putting the bearer secret on a command line.
 wait_mail_capture() {
   local name=$1 port=$2 timeout=$3 pid deadline status
+  CURRENT_STARTUP_STEP=listener-readiness-identity
   pid=$(service_pid "$name") || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
+    CURRENT_STARTUP_STEP=listener-readiness-identity
     validate_service_identity "$name" 1 || return 1
+    CURRENT_STARTUP_STEP=listener-readiness-probe
     if port_listening "$port"; then
       return 0
     else
@@ -304,6 +346,7 @@ wait_mail_capture() {
     fi
     sleep 0.3
   done
+  CURRENT_STARTUP_STEP=listener-readiness-timeout
   return 1
 }
 
@@ -324,6 +367,8 @@ start_server() {
 
 start_web() {
   CURRENT_SERVICE=web
+  CURRENT_STARTUP_STEP=web-environment
+  CURRENT_STARTUP_LOG_FROM=0
   [ -d "$ROOT/apps/web/node_modules" ] || return 1
   start_service web "$ROOT/apps/web" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
   wait_http web "http://127.0.0.1:${WEB_PORT}/" 240
@@ -333,6 +378,8 @@ start_web() {
 start_caddy() {
   local generated
   CURRENT_SERVICE=caddy
+  CURRENT_STARTUP_STEP=caddy-configuration
+  CURRENT_STARTUP_LOG_FROM=0
   generated=$(generate_caddyfile) || return 1
   printf '%s' "$generated" >"$CADDYFILE_GEN"
   start_service caddy "$ROOT" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile
