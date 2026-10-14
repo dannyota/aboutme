@@ -18,9 +18,10 @@
 # writes redacted evidence on a mid-test failure (exports.spec.ts,
 # linkedin-import.spec.ts), so their evidence moves too, to
 # .dev/proof-evidence/exports-browser-proof-evidence/ and
-# .dev/proof-evidence/linkedin-import-browser-proof-evidence/. Every other
-# proof's evidence is never moved out of the evidence root and so is never
-# uploaded.
+# .dev/proof-evidence/linkedin-import-browser-proof-evidence/. The publish
+# proof stages its redacted creation failure record alone under
+# .dev/proof-evidence/publish-create/. Other proofs' evidence stays in the
+# evidence root.
 #
 # Every request the proofs send reaches the server from one client IP, so
 # the job summary and log also list each proof's peak server requests in any
@@ -87,6 +88,17 @@ move_linkedin_import_evidence() {
   for dir in "$evidence_root"/linkedin-import.*; do
     [ -d "$dir" ] || continue
     mv -- "$dir" "$dest/"
+  done
+}
+
+# Stage only the redacted creation record so intermittent publish failures
+# retain evidence through CI's upload on every outcome.
+move_publish_create_evidence() {
+  local dest=$staging/publish-create file
+  for file in "$evidence_root"/publish.*/publish-create-failure.json; do
+    [ -f "$file" ] && [ ! -L "$file" ] || continue
+    install -d -m 0700 "$staging" "$dest" || return 1
+    mv -- "$file" "$dest/publish-create-failure.json" || return 1
   done
 }
 
@@ -179,6 +191,7 @@ for proof in "$@"; do
   esac
   [ "$proof" != exports ] || move_exports_evidence || status=1
   [ "$proof" != linkedin-import ] || move_linkedin_import_evidence || status=1
+  [ "$proof" != publish ] || move_publish_create_evidence || status=1
   echo "::endgroup::"
   if [ "$status" -eq 0 ]; then
     result=passed

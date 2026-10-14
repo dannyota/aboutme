@@ -808,6 +808,94 @@ for (const [actual, expected] of cases) {
 }
 NETWORK_POLICY_TEST
 
+node --input-type=module - "$SOURCE/publish-create-diagnostics.mjs" <<'PUBLISH_CREATE_DIAGNOSTICS_TEST'
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { pathToFileURL } from 'node:url';
+const { createFailureEvidence, observePublishCreate } = await import(pathToFileURL(process.argv[2]));
+const error = new Error('expect(locator).toBeVisible() failed: private-value');
+error.stack = 'Error: private-value\n    at createBlankResume (/tmp/spec/editor-fixtures.ts:85:24)';
+const evidence = createFailureEvidence('ready', error, {
+  createRequests: 0, createResponses: 0, createStatus: 0,
+  createFailed: false, meStatus: 200, listStatus: 200,
+}, {
+  path: 'list', lang: 'en', hydrated: true,
+  createDisabled: true, submitDisabled: null, dialogVisible: false,
+  input: {
+    enterCount: 1, openClicks: 0, submitClicks: 0, submits: 0,
+    target: 'outside', hydrated: true,
+    createDisabled: true, submitDisabled: null,
+  },
+});
+assert.equal(evidence.lastStage, 'ready');
+assert.equal(evidence.helperLine, 85);
+assert.equal(evidence.failure, 'assertion');
+assert.equal(evidence.page.path, 'list');
+assert.equal(evidence.page.input.target, 'outside');
+assert.equal(evidence.page.input.createDisabled, true);
+assert.equal(evidence.network.createRequests, 0);
+
+// Only fixed words, booleans, and bounded numbers may reach the artifact.
+const hostile = new Proxy({}, { get: () => 'private-value' });
+const redacted = createFailureEvidence('private-value', error, hostile, {
+  ...hostile, path: 'private-value', lang: 'private-value',
+  hydrated: 'private-value', createDisabled: 'private-value',
+  submitDisabled: 'private-value', dialogVisible: 'private-value',
+  input: hostile, cookie: 'private-value', body: 'private-value',
+});
+assert.equal(JSON.stringify(redacted).includes('private-value'), false);
+assert.equal(redacted.lastStage, 'unknown');
+assert.equal(redacted.page.path, 'other');
+assert.equal(redacted.page.hydrated, null);
+assert.equal(redacted.network.createStatus, 0);
+assert.equal(redacted.page.input.enterCount, 0);
+assert.equal(redacted.network.createFailed, null);
+assert.equal(createFailureEvidence('submitted', { name: 'TimeoutError' }, {}, null).failure, 'timeout');
+assert.equal(createFailureEvidence('submitted', new SyntaxError('private-value'), {}, null).failure, 'json');
+assert.equal(createFailureEvidence('submitted', {}, {
+  createRequests: 1e9, createStatus: 1e9,
+}, null).network.createRequests, 1000);
+assert.equal(createFailureEvidence('submitted', {}, {
+  createRequests: -1, createStatus: 600,
+}, null).network.createStatus, 0);
+assert.equal(createFailureEvidence('submitted', {}, {}, null).page.path, 'unread');
+assert.ok(Buffer.byteLength(JSON.stringify(evidence)) < 4096);
+
+// Keep the state at Enter even if the control becomes enabled before failure.
+const handlers = new Map();
+const create = { disabled: true };
+globalThis.window = {};
+globalThis.document = {
+  addEventListener: (name, handler) => handlers.set(name, handler),
+  getElementById: () => ({ __vue_app__: {} }),
+  querySelector: (selector) => selector === '[data-testid="create-resume"]' ? create : null,
+};
+const page = new EventEmitter();
+page.addInitScript = async (script) => script();
+const observer = await observePublishCreate(page);
+const outside = { closest: () => null };
+handlers.get('keydown')({ key: 'Enter', target: outside });
+create.disabled = false;
+const input = Reflect.get(window, '__publishCreateInput');
+assert.equal(input.createDisabled, true);
+assert.equal(input.hydrated, true);
+assert.equal(input.target, 'outside');
+assert.equal(input.enterCount, 1);
+const submit = { closest: (selector) => selector.includes('[role="dialog"]') ? {} : null };
+handlers.get('keydown')({ key: 'Enter', target: submit });
+handlers.get('click')({ target: submit });
+handlers.get('submit')({ target: submit });
+assert.equal(input.target, 'submit');
+assert.equal(input.submitClicks, 1);
+assert.equal(input.submits, 1);
+handlers.get('keydown')({ key: 'Tab', target: outside });
+assert.equal(input.enterCount, 2);
+observer.stop();
+for (const name of ['request', 'response', 'requestfailed']) {
+  assert.equal(page.listenerCount(name), 0);
+}
+PUBLISH_CREATE_DIAGNOSTICS_TEST
+
 node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" "$SOURCE/editor.spec.ts" "$SOURCE/editor-diagnostics.ts" <<'ROUTING_SCOPE_TEST'
 import { readFile } from 'node:fs/promises';
 
@@ -1125,8 +1213,10 @@ mcp-sdk-fail)
   ;;
 publish-fail)
   printf '%s\n' 'browser-secret-must-not-escape'
-  printf '%s\n' 'publish-stage:login-form'
-  printf '%s\n' 'publish-stage:credentials-filled'
+  printf '%s\n' 'publish-stage:create-ready'
+  printf '%s\n' 'publish-stage:fail-create-ready'
+  printf '%s\n' 'publish-stage:failure-at-line-336'
+  printf '%s\n' 'publish-stage:showcase-cleanup'
   exit 1
   ;;
 public-fail)
@@ -1630,8 +1720,8 @@ if output=$(FAKE_BROWSER_MODE=publish-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside publish 2>&1); then
   fail 'publish browser failure was accepted'
 fi
-grep -Fxq 'dev-https-browser: publish-stage:credentials-filled' <<<"$output" ||
-  fail 'publish failure did not expose its last bounded stage'
+grep -Fxq 'dev-https-browser: publish-stage:fail-create-ready' <<<"$output" ||
+  fail 'publish creation failure was hidden by a later test stage'
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'publish failure leaked volatile output'
 fi

@@ -3,9 +3,9 @@
 # Tests scripts/ci-browser-proofs.sh against a fake make: proof order and
 # harness restarts, shard environment, shard evidence staging (including a
 # TOTP shard list split into one staging directory per shard), that the
-# exports proof's evidence is staged even when it fails, the request peak in
-# the summary, and that one failing proof neither stops the rest nor lets the
-# group pass.
+# exports proof's evidence and the publish creation failure record are staged
+# when they fail, the request peak in the summary, and that one failing proof
+# neither stops the rest nor lets the group pass.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -62,6 +62,16 @@ dev-https-exports-check)
   mkdir -p "$evidence/exports.z"
   : >"$evidence/exports.z/exports-failure.json"
   exit 3
+  ;;
+dev-https-publish-check)
+  mkdir -p "$evidence/publish.p"
+  : >"$evidence/publish.p/publish-proof.json"
+  printf '%s\n' 'browser-secret-must-not-escape' >"$evidence/publish.p/playwright.log"
+  if [ "${FAKE_PUBLISH_FAIL:-0}" -eq 1 ]; then
+    printf '%s\n' '{"schemaVersion":1,"lastStage":"ready"}' >"$evidence/publish.p/publish-create-failure.json"
+    chmod 0600 "$evidence/publish.p/publish-create-failure.json"
+    exit 4
+  fi
   ;;
 esac
 exit 0
@@ -146,6 +156,33 @@ awk -F '\t' '
   NR == 3 { if ($1 != "auth" || $2 != 0) exit 1 }
   END { if (NR != 3) exit 1 }
 ' "$timing" || fail "failed proof timings lost the failure or the later proof"
+
+run_group publish-passing publish || fail "a passing publish proof failed"
+[ ! -e "$staged/publish-create" ] ||
+  fail "a passing publish proof staged a creation failure record"
+
+if FAKE_PUBLISH_FAIL=1 run_group publish-failing publish auth; then
+  fail "a group with a publish creation failure passed"
+fi
+grep -Fq 'dev-https-auth-check' "$WORK/publish-failing.calls" ||
+  fail "a publish creation failure stopped the rest of its group"
+grep -Fq '| publish | failed (exit 4) |' "$WORK/publish-failing.summary" ||
+  fail "staging the creation failure record changed the publish result"
+publish_record=$staged/publish-create/publish-create-failure.json
+[ -f "$publish_record" ] || fail "publish creation failure record was not staged for upload"
+[ "$(cat "$publish_record")" = '{"schemaVersion":1,"lastStage":"ready"}' ] ||
+  fail "staging changed the publish creation failure record"
+[ "$(stat -c %a "$publish_record")" = 600 ] || fail "publish creation failure record lost its private mode"
+[ "$(stat -c %a "$staged/publish-create")" = 700 ] || fail "publish creation staging directory is not private"
+[ "$(find "$staged/publish-create" -mindepth 1 -maxdepth 1 -printf '%f\n')" = publish-create-failure.json ] ||
+  fail "publish staging included unrelated browser output"
+[ ! -e "$REPO/.dev/native-https/evidence/publish.p/publish-create-failure.json" ] ||
+  fail "publish creation failure record was left in the evidence root"
+[ -f "$REPO/.dev/native-https/evidence/publish.p/playwright.log" ] ||
+  fail "publish staging moved volatile browser output"
+if grep -RqF 'browser-secret-must-not-escape' "$staged"; then
+  fail "publish staging exposed volatile browser output"
+fi
 
 for bad in '' 'totp:' 'Editor' '../x' 'totp:skew;id' 'totp:skew,' 'totp:,skew' \
   'passkey:primary-disabled,recovery-attempts' 'editor,exports'; do
