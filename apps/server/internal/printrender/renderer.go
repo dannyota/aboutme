@@ -167,10 +167,10 @@ func (r *Renderer) Ready() (resultErr error) {
 	if probe == nil {
 		probe = readyBrowser
 	}
-	started := time.Now()
+	probeStarted := time.Now()
 	err := probe(ctx, r)
 	if err != nil || ctx.Err() != nil {
-		r.readyErr = diagnoseInitialization(ctx, ErrUnavailable, "launch", err, nil, time.Since(started))
+		r.readyErr = diagnoseInitialization(ctx, ErrUnavailable, "launch", err, nil, time.Since(probeStarted))
 		r.readyAfter = now().Add(5 * time.Second)
 		r.logger.Error("private browser renderer initialization failed", "error", r.readyErr)
 		return ErrUnavailable
