@@ -206,6 +206,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cimd, err := loadCIMDConfig(getenv, env)
+	if err != nil {
+		return Config{}, err
+	}
 
 	publicOrigin, err := loadPublicOrigin(getenv("PUBLIC_ORIGIN"))
 	if err != nil {
@@ -295,6 +299,7 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	agentAccess.CIMD = cimd
 
 	signInToViewEnabled, err := loadSignInToViewFlag(getenv("SIGN_IN_TO_VIEW_ENABLED"))
 	if err != nil {

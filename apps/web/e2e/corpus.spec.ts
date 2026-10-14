@@ -5,6 +5,30 @@ import { HTML_CSP } from '../app/utils/csp';
 import { NEUTRALIZATION_POLICY } from '../test/sanitizer/neutralization';
 import { denyExternalRequests } from './support';
 
+// DOMParser checks CSP when it parses a handler, before DOMPurify removes it.
+// https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-content-attributes
+const inlineHandlerCases = new Set([
+  'event-handler-img-onerror',
+  'event-handler-svg-onload',
+  'event-handler-anchor-onclick',
+  'input-autofocus-onfocus',
+]);
+const inlineHandlerViolation = {
+  blockedURI: 'inline',
+  effectiveDirective: 'script-src-attr',
+  violatedDirective: 'script-src-attr',
+};
+// Chromium reports a placeholder hash for a blocked handler.
+// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/csp/csp_directive_list.cc
+const inlineHandlerError
+  = 'Executing inline event handler violates the following Content Security '
+    + 'Policy directive \'script-src \'self\'\'.'
+    + ' Either the \'unsafe-inline\' keyword, a hash (\'sha256-...\'), or a '
+    + 'nonce (\'nonce-...\') is required to enable inline execution.'
+    + ' Note that hashes do not apply to event handlers, style attributes '
+    + 'and javascript: navigations unless the \'unsafe-hashes\' keyword is '
+    + 'present. The action has been blocked.';
+
 interface BrowserSignals {
   readonly consoleErrors: string[];
   readonly dialogs: string[];
@@ -114,10 +138,15 @@ test.describe('hostile corpus in Chromium', () => {
         NEUTRALIZATION_POLICY,
       );
       expect(violations).toEqual([]);
-      expect(await cspViolations(page)).toEqual([]);
+      const hasInlineHandler = inlineHandlerCases.has(record.id);
+      expect(await cspViolations(page)).toEqual(
+        hasInlineHandler ? [inlineHandlerViolation] : [],
+      );
       expect(signals.dialogs).toEqual([]);
       expect(signals.pageErrors).toEqual([]);
-      expect(signals.consoleErrors).toEqual([]);
+      expect(signals.consoleErrors).toEqual(
+        hasInlineHandler ? [inlineHandlerError] : [],
+      );
       expect(external).toEqual([]);
 
       signals.consoleErrors.length = 0;
@@ -140,5 +169,39 @@ test.describe('hostile corpus in Chromium', () => {
       expect(signals.pageErrors).toEqual([]);
       expect(external).toEqual([]);
     });
+  }
+});
+
+test('sanitized markup reparses without CSP violations', async ({ page }) => {
+  await page.goto('/_harness/render?payload=event-handler-anchor-onclick');
+  await expect(page.locator('[data-corpus-ready="sanitized"]')).toHaveCount(1);
+  const sanitizedHtml = await page.locator('[data-corpus-mount]').innerHTML();
+
+  const cleanPage = await page.context().newPage();
+  try {
+    const signals = await installSignals(cleanPage);
+    const external = await denyExternalRequests(cleanPage);
+    await cleanPage.goto('/_harness/render?payload=js-scheme-bare');
+    await expect(
+      cleanPage.locator('[data-corpus-ready="sanitized"]'),
+    ).toHaveCount(1);
+    await cleanPage.locator('[data-corpus-mount]').evaluate(
+      (mount, sanitized) => {
+        mount.innerHTML = sanitized;
+        mount.querySelector('a')?.addEventListener('click', (event) => {
+          event.preventDefault();
+        });
+      },
+      sanitizedHtml,
+    );
+    await cleanPage.locator('[data-corpus-mount] a').click();
+
+    expect(await cspViolations(cleanPage)).toEqual([]);
+    expect(signals.dialogs).toEqual([]);
+    expect(signals.pageErrors).toEqual([]);
+    expect(signals.consoleErrors).toEqual([]);
+    expect(external).toEqual([]);
+  } finally {
+    await cleanPage.close();
   }
 });

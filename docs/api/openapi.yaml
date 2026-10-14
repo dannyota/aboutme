@@ -1654,8 +1654,9 @@ paths:
         - sessionCookie: []
       summary: Read the pending agent consent request
       description: >-
-        Re-validates the complete authorization request against the registered
-        client and returns only its display name and requested scope list.
+        Re-validates the complete authorization request against DCR registration
+        or the current CIMD document and returns display name, kind, hostname,
+        and requested scopes.
         `state` is echoed by the decision operation, but is never logged or
         returned as a separate response field. This read is safe and does not
         require CSRF.
@@ -1664,12 +1665,11 @@ paths:
           in: query
           required: true
           schema:
-            type: string
-            format: uuid
+            $ref: "#/components/schemas/OAuthPublicClientID"
         - name: redirect_uri
           in: query
           required: true
-          description: Must exactly match one redirect URI registered by the client.
+          description: DCR matches exactly. CIMD checks the current document; loopback ports may differ.
           schema:
             type: string
             format: uri
@@ -1724,6 +1724,8 @@ paths:
               example:
                 data:
                   clientName: Resume assistant
+                  clientKind: dcr
+                  clientHost: null
                   scopes: [resumes:read]
         "400":
           description: The authorization request is malformed or invalid.
@@ -1755,6 +1757,22 @@ paths:
                 error:
                   code: not_found
                   message: no such authorization client
+        "429":
+          description: Metadata fetch admission refused; no redirect destination.
+          headers:
+            Retry-After:
+              description: Positive rounded-up seconds until retry.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: rate_limited
+                  message: too many requests
     post:
       operationId: postOAuthConsentDecision
       tags: [OAuthAgentAccess]
@@ -1763,8 +1781,9 @@ paths:
           csrfToken: []
       summary: Approve or deny agent consent
       description: >-
-        Re-validates every authorization request field against the registered
-        client before acting. Approval records the account-wide grant and
+        Re-validates every authorization request field against DCR registration
+        or the current CIMD document before acting. Approval records the
+        account-wide grant and
         redirects to the exact registered redirect URI with the authorization
         result; denial redirects there with `error=access_denied`. The
         redirect carries the submitted `state` when present. No token or code
@@ -1864,6 +1883,23 @@ paths:
                   message: request body is too large
         "415":
           $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "429":
+          description: Metadata fetch admission refused; no redirect destination.
+          headers:
+            Retry-After:
+              description: Positive rounded-up seconds until retry.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: rate_limited
+                  message: too many requests
+
   /me/agents:
     get:
       operationId: listAgentGrants
@@ -1887,6 +1923,8 @@ paths:
                   grants:
                     - id: 018f5b6a-9a3e-7c21-8b1e-000000000030
                       clientName: Resume assistant
+                      clientKind: dcr
+                      clientHost: null
                       scopes: [resumes:read, resumes:write]
                       createdAt: "2026-09-01T09:00:00Z"
                       lastUsedAt: null
@@ -6355,6 +6393,19 @@ components:
       type: string
       description: Account-wide permission granted to a connected agent.
       enum: [resumes:read, resumes:write]
+    OAuthPublicClientID:
+      type: string
+      minLength: 9
+      maxLength: 256
+      description: >-
+        DCR UUID or exact CIMD HTTPS URL. CIMD uses a lowercase ASCII DNS host,
+        a nonempty path, no userinfo, port, query, fragment, backslash or dot
+        segments. Canonical-host and local-name exclusions and address checks
+        follow docs/design/mcp-cimd-fetch.md. Identity is byte for byte.
+      oneOf:
+        - format: uuid
+        - format: uri
+          pattern: '^https://(?=[!-~]+$)(?!.*[?#\\])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?/.+$'
     OAuthConsentDecisionRequest:
       type: object
       description: >-
@@ -6371,12 +6422,11 @@ components:
         - decision
       properties:
         client_id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/OAuthPublicClientID"
         redirect_uri:
           type: string
           format: uri
-          description: Must exactly match one redirect URI registered by the client.
+          description: DCR matches exactly. CIMD checks the current document; loopback ports may differ.
         response_type:
           type: string
           const: code
@@ -6409,8 +6459,14 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [clientName, scopes]
+          required: [clientName, clientKind, clientHost, scopes]
           properties:
+            clientKind:
+              type: string
+              enum: [dcr, cimd]
+            clientHost:
+              type: [string, "null"]
+              description: ASCII metadata URL hostname for CIMD, null for DCR.
             clientName:
               type: string
               maxLength: 64
@@ -6435,17 +6491,25 @@ components:
               type: string
               format: uri-reference
               description: >-
-                Redirect URL on the exact registered redirect URI only. It
-                carries the authorization result and optional client state;
-                it is never an arbitrary caller-selected destination.
+                Redirect URL on the validated redirect URI only. DCR checks the
+                stored URI; CIMD checks the current document and binds the issued
+                port. It carries the authorization result and optional client
+                state; it is never an arbitrary caller-selected destination.
     OAuthAgentGrant:
       type: object
       additionalProperties: false
-      required: [id, clientName, scopes, createdAt, lastUsedAt]
+      required:
+        [id, clientName, clientKind, clientHost, scopes, createdAt, lastUsedAt]
       properties:
         id:
           type: string
           format: uuid
+        clientKind:
+          type: string
+          enum: [dcr, cimd]
+        clientHost:
+          type: [string, "null"]
+          description: ASCII stored metadata URL hostname for CIMD, null for DCR.
         clientName:
           type: string
           maxLength: 64

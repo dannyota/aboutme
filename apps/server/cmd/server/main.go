@@ -439,7 +439,15 @@ func newAgentAccessRoutes(ctx context.Context, cfg config.Config, pool *store.Po
 	if err != nil {
 		return nil, err
 	}
+	var cimd *oauthsrv.CIMDResolver
+	if a.CIMD.Enabled {
+		cimd, err = oauthsrv.NewCIMDResolver(a.CIMD, cfg.PublicOrigin, time.Now, a.MaxRateKeys)
+		if err != nil {
+			return nil, err
+		}
+	}
 	oauthService, err := oauthsrv.NewService(ctx, oauthsrv.ServiceDependencies{
+		CIMD: cimd, CIMDEnabled: a.CIMD.Enabled, TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
 		Pool: pool, Queries: queries, Clock: time.Now, Entropy: rand.Reader,
 		PublicOrigin: cfg.PublicOrigin, RegisterAdmission: oauthRates, TokenAdmission: oauthRates,
 		LiveGrantLimit: a.OAuthLiveGrantLimit,

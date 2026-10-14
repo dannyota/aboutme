@@ -45,6 +45,12 @@ only `client_name` `"aboutme MCP owner workflow"`, its exact loopback
 `application_type: native` for the runner's loopback redirect. See
 [rule 3](mcp-client-compatibility.md#3-native-loopback-host-and-web-application-type).
 
+[CIMD](mcp-cimd.md) is a separate client identity option behind
+`OAUTH_CIMD_ENABLED`. The Go SDK runner keeps DCR and exact redirects. URL
+clients use the current document during authorization and always show consent
+for loopback redirects; token operations use stored identity without fetching.
+The shared return line names the actual validated redirect hostname.
+
 ## SDK and HTTP boundary
 
 The runner uses the pinned `github.com/modelcontextprotocol/go-sdk v1.8.0`,
