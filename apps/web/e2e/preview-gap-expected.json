@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese modern-sidebar sample, whose PDF text layer splits a few diacritic words differently from the DOM. The paged preview lays text out with subpixel glyph advances, as the PDF does, so line-break ceilings hold only the differences left after that; they change with the browser, the font build, or the sample text. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
+  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. Page-break, entry-page, missing, and extra ceilings are 0. PDF word extraction removes tracking spaces absent from decoded glyphs only when a complete horizontal text object matches the extracted item's text and origin. Line-break ceilings retain the measured modern-sidebar Vietnamese width drift and creative-accent English WebKit text-advance drift. Lower a ceiling when a fix supports less drift. A null metric is reported but not enforced.",
   "cases": {
     "ats-plain|en|chromium-normal": {
       "maxLineBreak": 0,
@@ -271,15 +271,15 @@
     "modern-sidebar|vi|chromium-normal": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
+      "maxMissing": 0,
+      "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|webkit": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
+      "maxMissing": 0,
+      "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
     "mono-print|en|chromium-normal": {
