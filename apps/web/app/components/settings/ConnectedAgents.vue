@@ -179,9 +179,7 @@ async function refreshAfterAction(): Promise<void> {
                 class="ml-2"
                 dir="ltr"
                 data-testid="agent-client-host"
-              >{{
-                grant.clientHost
-              }}</bdi>
+              >({{ grant.clientHost }})</bdi>
             </template>
           </h3>
           <div class="flex flex-wrap gap-2">

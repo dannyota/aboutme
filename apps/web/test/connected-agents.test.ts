@@ -98,8 +98,11 @@ describe('ConnectedAgents', () => {
         wrapper.find('[data-testid="connected-agents"] [as]').exists(),
       ).toBe(false);
       expect(wrapper.text()).toContain(grant.clientName);
+      expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
+        `${grant.clientName} (client.example)`,
+      );
       expect(wrapper.get('[data-testid="agent-client-host"]').text())
-        .toBe('client.example');
+        .toBe('(client.example)');
       expect(wrapper.find('[onerror]').exists()).toBe(false);
     },
   );
@@ -131,6 +134,9 @@ describe('ConnectedAgents', () => {
     expect(wrapper.text()).toContain('Chỉnh sửa CV');
     expect(wrapper.text()).toContain('Đã tạo ngày 1 tháng 9, 2026');
     expect(wrapper.text()).toContain('Chưa từng dùng');
+    expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
+      `${grant.clientName} (client.example)`,
+    );
   });
 
   it(
@@ -273,7 +279,7 @@ describe('ConnectedAgents', () => {
       expect(agentRequests).toBe(1);
       expect(wrapper.text()).toContain(grant.clientName);
       expect(wrapper.get('[data-testid="agent-client-host"]').text())
-        .toBe('client.example');
+        .toBe('(client.example)');
 
       document.body.querySelector<HTMLButtonElement>(
         '[data-action="agent-revoke-cancel"]',
