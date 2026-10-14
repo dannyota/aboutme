@@ -62,8 +62,24 @@ claim or remote document hash should imply otherwise.
 - Each URL rule rejects its neighbor without a network call: `http`, a port,
   `:443`, a query, a fragment, userinfo, `/`, a dot segment, an IP literal,
   uppercase, the canonical host, and each refused name suffix.
-- The guard refuses every listed range, `::7f00:1`, a mapped private IPv4
-  address, and a hostname whose answer mixes a public and a private address.
+- Address-policy fixtures cover every entry from both registries retrieved for
+  the [SSRF guard](mcp-cimd-fetch.md#ssrf-guard), including contained entries,
+  globally reachable entries, terminated entries, and the local refusals. For
+  each refused prefix, check its first and last addresses and an interior
+  address where one exists. Check adjacent addresses against the whole policy,
+  since a neighbor can belong to another refused range.
+- Explicit refusal cases include `192.31.196.1`, `192.52.193.1`, `192.175.48.1`,
+  `2620:4f:8000::1`, `100:0:0:1::1`, and `5f00::1`. The guard also refuses
+  `::7f00:1` and other non-mapped IPv6 addresses outside `2000::/3`. Globally
+  reachable flags never override the refusal tables.
+- Test each refused IPv4 case in IPv4-mapped form too. Ordinary public fixtures
+  `8.8.8.8` and `2606:4700::1111` pass the address policy; `::ffff:8.8.8.8`
+  passes only through unmapping and dialing the checked IPv4 literal. Assert the
+  same policy at DNS validation and at connect, with no connection for refusal
+  cases.
+- A hostname whose answer mixes an allowed address with any refused address
+  fails before any connection, including public/private and public/special-use
+  pairs in either answer order and across A and AAAA answers.
 - A redirect response, a non-200 status, a wrong type, a 5,121-byte body, and a
   slow body each fail closed with the `400` page.
 - The document rules reject a `client_id` mismatch, a missing or wrong

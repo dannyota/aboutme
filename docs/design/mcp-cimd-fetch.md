@@ -89,16 +89,37 @@ provider client, or a proxy from the environment (`Proxy` is nil).
    refused IPv4 range below holds it. An IPv6 address must sit in `2000::/3` and
    outside every refused IPv6 range below; everything else is refused, including
    the IPv4-compatible `::/96` (for example `::7f00:1`). An IPv4-mapped address
-   (`::ffff:0:0/96`) is unmapped and its embedded IPv4 address checked instead.
-   Go's `netip.Addr.IsGlobalUnicast` alone is not the check: it accepts `::/96`
-   addresses such as `::7f00:1`. The ranges follow the IANA special-purpose
-   registries ([IPv4][iana4], [IPv6][iana6], checked 2026-10-14). This table
-   defines the policy, with no narrower allow-exceptions inside its ranges:
+   (`::ffff:0:0/96`) is unmapped and its embedded IPv4 address checked instead,
+   both at DNS validation and at connect. This is the sole special-purpose entry
+   with conditional acceptance: it represents an IPv4 destination, so only an
+   IPv4 address that passes the full IPv4 policy may be dialed, as IPv4. Go's
+   `netip.Addr.IsGlobalUnicast` alone is not the check: it accepts `::/96`
+   addresses such as `::7f00:1`.
 
-| Family | Refused ranges                                                                                                                                                                                                                                                                            |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IPv4   | `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10` (CGNAT), `127.0.0.0/8`, `169.254.0.0/16` (instance and task metadata), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`, `192.168.0.0/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/4`, `240.0.0.0/4` |
-| IPv6   | `::/128`, `::1/128`, `64:ff9b::/96` and `64:ff9b:1::/48` (NAT64), `100::/64`, `2001::/23` (including Teredo), `2001:db8::/32`, `2002::/16` (6to4), `3fff::/20` (documentation), `fc00::/7` (including AWS `fd00:ec2::254`), `fe80::/10`, `fec0::/10`, `ff00::/8`                          |
+The refusal tables cover every entry in the IANA special-purpose registries
+([IPv4][iana4], [IPv6][iana6]), retrieved 2026-10-14; both registries report
+2025-10-09 as their last update. Except for the mapped-address handling above,
+refuse every entry, including globally reachable and terminated allocations, as
+required by [the CIMD draft's SSRF rule][cimd-ssrf]. A registry flag never
+creates an allow-exception. The tables also retain the local multicast and
+deprecated site-local refusals. There are no narrower allow-exceptions inside
+any refused range:
+
+| Family | Refused ranges                                                                                                                                                                                                                                                                                                                                     |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IPv4   | `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10` (CGNAT), `127.0.0.0/8`, `169.254.0.0/16` (instance and task metadata), `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.31.196.0/24`, `192.52.193.0/24`, `192.88.99.0/24`, `192.168.0.0/16`, `192.175.48.0/24`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/4`, `240.0.0.0/4` |
+| IPv6   | `::/128`, `::1/128`, `64:ff9b::/96` and `64:ff9b:1::/48` (NAT64), `100::/64`, `100:0:0:1::/64`, `2001::/23` (including Teredo), `2001:db8::/32`, `2002::/16` (6to4), `2620:4f:8000::/48`, `3fff::/20` (documentation), `5f00::/16`, `fc00::/7` (including AWS `fd00:ec2::254`), `fe80::/10`, `fec0::/10`, `ff00::/8`                               |
+
+These narrower registry entries are refused through their containing ranges
+above, including entries that IANA marks globally reachable:
+
+| Refused containing range | Contained registry entries                                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0.0.0.0/8`              | `0.0.0.0/32`                                                                                                                                                    |
+| `192.0.0.0/24`           | `192.0.0.0/29`, `192.0.0.8/32`, `192.0.0.9/32`, `192.0.0.10/32`, `192.0.0.170/32`, `192.0.0.171/32`                                                             |
+| `192.88.99.0/24`         | `192.88.99.2/32`                                                                                                                                                |
+| `240.0.0.0/4`            | `255.255.255.255/32`                                                                                                                                            |
+| `2001::/23`              | `2001::/32`, `2001:1::1/128`, `2001:1::2/128`, `2001:1::3/128`, `2001:2::/48`, `2001:3::/32`, `2001:4:112::/48`, `2001:10::/28`, `2001:20::/28`, `2001:30::/28` |
 
 The guard matters on the production host. Go runs in the `aboutme-server`
 container with host networking, so it shares the host loopback with Caddy.
@@ -239,3 +260,5 @@ does not apply.
 [rfc8252]: https://www.rfc-editor.org/rfc/rfc8252#section-7.3
 [iana4]: https://www.iana.org/assignments/iana-ipv4-special-registry/
 [iana6]: https://www.iana.org/assignments/iana-ipv6-special-registry/
+[cimd-ssrf]:
+  https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.6
