@@ -222,7 +222,9 @@ Notes on rows whose reason is not obvious:
   limits keep one agent from starving another. The eleventh consent is refused
   rather than evicting a grant. `/mcp` allows 4 MiB so `upload_photo` fits a
   base64 2 MiB photo plus the JSON-RPC envelope; decoded media limits still
-  apply.
+  apply. The failed-grant bound includes pending reservations; credential
+  eligibility and the authority-dependent refusal response belong to
+  [failed-grant admission](mcp-cimd-authorization.md#failed-grant-admission).
 - **Realtime.** Queue overflow disconnects a slow consumer so its next
   unconditional read repairs it. The two-second write deadline fits inside the
   five-second revocation drain.

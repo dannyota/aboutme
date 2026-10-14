@@ -25,6 +25,11 @@ and [authorization](mcp-cimd-authorization.md).
   DCR UUID cannot spend an owner's failed-grant allowance. A stored code or
   refresh token selects only its own grant under
   [failed-grant admission](mcp-cimd-authorization.md#failed-grant-admission).
+- **Credential existence through throttling.** Repeating a candidate with a
+  wrong verifier or client must not distinguish a stored credential from a
+  never-issued one through status, body, or headers. The
+  [refusal response](mcp-cimd-authorization.md#refusal-response-and-client-recovery)
+  exposes grant backoff only after read-only validation of live authority.
 - **aboutme as a scanner or reflector.**
   [Fetches](mcp-cimd-fetch.md#client-id-url-rules) reach only port 443 on
   [global addresses](mcp-cimd-fetch.md#ssrf-guard), the user never sees the
@@ -117,11 +122,42 @@ claim or remote document hash should imply otherwise.
   only malformed strings. Use distinct source IPs to isolate grant admission
   from the token-IP budget; also cover one shared IP below that budget.
 - Exhaust one owner's grant with counted failures using that owner's real code
-  or refresh token. Its next attempt gets `429` and `Retry-After`; the other
-  owner's valid exchange and refresh still succeed. Run these two-owner cases
-  with CIMD on and off, and repeat for a shared DCR client. A wrong claimed
-  client must never charge that client's other grants; omitted refresh
-  `client_id` must select the same grant as its correct explicit value.
+  or refresh token. Its next otherwise valid attempt gets `429` and
+  `Retry-After`; an invalid attempt keeps its ordinary error. The other owner's
+  valid exchange and refresh still succeed. Run these two-owner cases with CIMD
+  on and off, and repeat for a shared DCR client. A wrong claimed client must
+  never charge that client's other grants; omitted refresh `client_id` must
+  select the same grant as its correct explicit value.
+- With a fixed clock and a fresh token-IP budget, interleave eleven requests for
+  one stored code with eleven for one well-shaped never-issued code from the
+  same address. Use the same existing client, redirect, and syntactically valid
+  wrong verifier; only the candidate code differs. All twenty-two responses must
+  match the closed `invalid_grant` status, exact body bytes, and full
+  application headers, including absent `Retry-After`. Assert token-IP admission
+  succeeds on every request so it cannot mask the grant refusal.
+- Repeat that paired sequence for a stored refresh token and a well-shaped
+  never-issued refresh token, naming the same existing but mismatched client.
+  Reset the address budget between sequences. Run both sequences for CIMD with
+  the flag on and off and for DCR, with a tracked grant and with an untracked
+  grant that exhausts shared overflow. Pin or normalize only
+  credential-independent transport dates and request IDs when comparing headers.
+  Verify only stored candidates spend grant debt, unknown candidates allocate
+  nothing, and the exhausted bucket still blocks an otherwise valid request for
+  that grant.
+- Repeat response comparisons with retained consumed, expired, superseded, and
+  revoked credentials, and with wrong client, redirect, verifier, resource, or
+  stale epoch as applicable. Each pair uses otherwise matching requests and
+  stays below token-IP admission. Check other token errors retain their matrix
+  precedence even when a stored grant's bucket is exhausted.
+- A correct code request against an exhausted bucket receives the ordinary OAuth
+  throttle body and positive `Retry-After`; correct refresh requests with
+  omitted and explicit client IDs do too. Refusal creates no token and changes
+  no credential or revocation state. After the returned delay, a still-live
+  refresh succeeds; an expired code requires fresh authorization. A request
+  whose authority becomes invalid before it obtains the validation locks must
+  return its ordinary error without a throttle hint. Cover database failure
+  during the read-only check and concurrent consume, rotation, revocation, and
+  epoch changes; retain admitted reuse-revocation coverage.
 - Unknown credentials create no failed-grant entries or overflow reservations,
   including under key churn and with the map at capacity. Cover wrong token
   kind, stored terminal credentials, database lookup errors, concurrent
