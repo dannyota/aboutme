@@ -6,7 +6,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 
 |Path|Holds|
 |-|-|
-|[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
+|[v0.8-roadmap.md](v0.8-roadmap.md)|Active release order|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[restore-drill.md](restore-drill.md)|Isolated backup restore drill and its remaining safety proofs|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
@@ -36,7 +36,7 @@ Production runs on one GreenNode host in Vietnam ([ADR 0027](../adr/0027-vietnam
 
 ## Remaining
 
-- The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) remain open. Mobile display fixes stay in 0.6.x.
+- [v0.8-roadmap.md](v0.8-roadmap.md): agent access, editor and PDF parity, and Vietnam tech samples.
 - [backlog.md](backlog.md): open follow-ups, Vietnam production work, acceptance evidence, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
 
