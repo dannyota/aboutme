@@ -15,7 +15,7 @@ managed records in the dashboard.
 | `aboutme.vn`                   | CAA   | `0 issue "letsencrypt.org"`                                       |
 | `aboutme.vn`                   | MX    | `smtp.google.com`, Google Workspace mailbox                       |
 | `aboutme.vn`                   | TXT   | `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all` |
-| `_dmarc.aboutme.vn`            | TXT   | `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn`                   |
+| `_dmarc.aboutme.vn`            | TXT   | `v=DMARC1; p=quarantine; rua=mailto:danny@aboutme.vn`             |
 | `dkim._domainkey.aboutme.vn`   | TXT   | Bizfly domain verification key                                    |
 | `etrans._domainkey.aboutme.vn` | TXT   | Bizfly mail-signing key                                           |
 | `google._domainkey.aboutme.vn` | TXT   | Google Workspace DKIM key                                         |
