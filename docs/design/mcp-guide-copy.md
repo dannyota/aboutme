@@ -1,6 +1,8 @@
 # MCP guide copy
 
-Status: implemented (2026-09-28).
+The Claude Code sign-in and removal steps and the Other apps requirement are
+proposed updates to the shipped copy. Their scope and release gate live in
+[MCP guide](mcp-guide.md#cimd-copy-update).
 
 The Vietnamese and English text of the [MCP guide](mcp-guide.md), in page order.
 Vietnamese is the default. **Bold** marks a UI name set in weight 600; backticks
@@ -160,15 +162,17 @@ troubleshooting question from its answer.
      - en: Add the server for all your projects:
      - Command block:
        `claude mcp add --transport http --scope user aboutme {url}`
-  2. - vi: Đăng nhập. Trình duyệt mở aboutme.vn; chọn **Cho phép**. Trong Claude
-       Code, bạn cũng có thể gõ `/mcp` rồi chọn aboutme.
-     - en: Sign in. Your browser opens aboutme.vn; choose **Approve**. Inside
-       Claude Code you can also run `/mcp` and pick aboutme.
+  2. - vi: Đăng nhập. Trên trang aboutme.vn, kiểm tra bên yêu cầu truy cập là
+       claude.ai và nơi quay lại là ứng dụng trên máy tính này (localhost), rồi
+       chọn **Cho phép**. Bạn cần cho phép mỗi lần đăng nhập lại.
+     - en: Sign in. On the aboutme.vn page, check that claude.ai is requesting
+       access and approval returns to an app on this computer (localhost), then
+       choose **Approve**. You need to approve each time you sign in again.
      - Command block: `claude mcp login aboutme`
-  3. - vi: Để gỡ, chạy `claude mcp remove aboutme`, rồi thu hồi quyền trong Cài
-       đặt của aboutme.vn.
-     - en: To remove it, run `claude mcp remove aboutme`, then revoke access in
-       aboutme.vn Settings.
+  3. - vi: Để gỡ, chạy `claude mcp remove aboutme`, rồi vào **Cài đặt** > **Tác
+       nhân đã kết nối** trên aboutme.vn để thu hồi quyền của Claude Code.
+     - en: To remove it, run `claude mcp remove aboutme`, then revoke Claude
+       Code's access in aboutme.vn **Settings** > **Connected agents**.
 - Command copy button name
   - vi: Sao chép lệnh
   - en: Copy command
@@ -235,10 +239,12 @@ troubleshooting question from its answer.
   - vi: Ứng dụng khác
   - en: Other apps
 - Requirements
-  - vi: Ứng dụng hỗ trợ máy chủ MCP từ xa (Streamable HTTP) với đăng nhập OAuth
-    và tự đăng ký ứng dụng có thể dùng cùng địa chỉ `{url}`.
-  - en: An app that supports remote MCP servers (Streamable HTTP) with OAuth
-    sign-in and automatic client registration can use the same URL, `{url}`.
+  - vi: Để dùng `{url}`, ứng dụng cần hỗ trợ MCP từ xa (Streamable HTTP) và đăng
+    nhập OAuth. Ứng dụng phải tự đăng ký hoặc dùng tài liệu mô tả ứng dụng
+    (client ID metadata document) qua HTTPS.
+  - en: To use `{url}`, an app needs remote MCP support (Streamable HTTP) and
+    OAuth sign-in. It must support automatic client registration or use a client
+    ID metadata document served over HTTPS.
 - Limits
   - vi: Ứng dụng chỉ chạy máy chủ MCP cục bộ, chỉ nhận khóa API, hoặc quay về
     một địa chỉ riêng của ứng dụng thay vì https hay localhost thì chưa kết nối
