@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,31 +121,71 @@ func TestRevokeStorageWorkDependsOnlyOnToken(t *testing.T) {
 }
 
 type revokeLogWriter struct {
-	t     *testing.T
-	f     revokeFixture
-	lines [][]byte
-	fail  bool
+	mu             sync.Mutex
+	f              revokeFixture
+	lines          [][]byte
+	fail           bool
+	beforeCommit   bool
+	commitCheckErr error
 }
 
 func (w *revokeLogWriter) Write(line []byte) (int, error) {
 	grant, err := w.f.q.GetOAuthGrantForUpdate(context.Background(), w.f.grantID)
-	if err != nil || grant.RevokedAt == nil {
-		w.t.Error("mismatch event preceded the revocation commit", err)
+	w.mu.Lock()
+	if err != nil {
+		w.commitCheckErr = err
+	}
+	if grant.RevokedAt == nil {
+		w.beforeCommit = true
 	}
 	w.lines = append(w.lines, bytes.Clone(line))
+	w.mu.Unlock()
 	if w.fail {
 		return 0, errors.New("synthetic telemetry failure")
 	}
 	return len(line), nil
 }
 
+func (w *revokeLogWriter) snapshot(t *testing.T) [][]byte {
+	t.Helper()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.beforeCommit || w.commitCheckErr != nil {
+		t.Fatal("mismatch event preceded the revocation commit", w.commitCheckErr)
+	}
+	return slices.Clone(w.lines)
+}
+
 func captureRevokeLogs(t *testing.T, f revokeFixture, fail bool) *revokeLogWriter {
 	t.Helper()
-	w := &revokeLogWriter{t: t, f: f, fail: fail}
+	w := &revokeLogWriter{f: f, fail: fail}
 	previous := slog.Default()
+	previousWriter, previousFlags := log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(w, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	t.Cleanup(func() {
+		// SetDefault also redirects log's writer and clears its flags.
+		slog.SetDefault(previous)
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+		w.snapshot(t)
+	})
 	return w
+}
+
+func TestRevokeLogCaptureRestoresDefaults(t *testing.T) {
+	previous := slog.Default()
+	previousWriter, previousFlags := log.Writer(), log.Flags()
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	})
+	t.Run("capture", func(t *testing.T) {
+		captureRevokeLogs(t, revokeFixture{}, false)
+	})
+	if slog.Default() != previous || log.Writer() != previousWriter || log.Flags() != previousFlags {
+		t.Fatal("log capture changed the default loggers after its test finished")
+	}
 }
 
 func TestRevokeRejectedAndUnknownInputsEmitNoMismatchEvent(t *testing.T) {
@@ -170,7 +210,7 @@ func TestRevokeRejectedAndUnknownInputsEmitNoMismatchEvent(t *testing.T) {
 				if postRevoke(f.s, tc.form.Encode(), nil).Code != tc.status {
 					t.Fatal("negative telemetry fixture returned the wrong status")
 				}
-				if len(logs.lines) != 0 {
+				if len(logs.snapshot(t)) != 0 {
 					t.Fatal("syntax failure or unknown token emitted mismatch telemetry")
 				}
 			}
@@ -209,16 +249,16 @@ func TestRevokeMismatchTelemetryContainsOnlyCommittedStoredIDs(t *testing.T) {
 						mismatch = false
 					}
 					if !mismatch {
-						if len(logs.lines) != 0 {
+						if len(logs.snapshot(t)) != 0 {
 							t.Fatal("matching or omitted claim emitted telemetry")
 						}
 						return
 					}
-					if len(logs.lines) != 1 {
+					if len(logs.snapshot(t)) != 1 {
 						t.Fatal("committed mismatch did not emit exactly one event")
 					}
 					var record map[string]any
-					if err := json.Unmarshal(logs.lines[0], &record); err != nil {
+					if err := json.Unmarshal(logs.snapshot(t)[0], &record); err != nil {
 						t.Fatal(err)
 					}
 					delete(record, "time")
@@ -259,7 +299,7 @@ func TestRevokeDatabaseFailuresRollBackAndDoNotLogClaims(t *testing.T) {
 				if !slices.Contains(trace.snapshot(), step) {
 					t.Fatal("fault injection did not reach the named database operation")
 				}
-				if len(logs.lines) != 0 {
+				if len(logs.snapshot(t)) != 0 {
 					t.Fatal("failed transaction emitted mismatch telemetry")
 				}
 				grant, err := f.q.GetOAuthGrantForUpdate(t.Context(), f.grantID)
@@ -307,7 +347,7 @@ func TestRevokeUnavailableDatabaseIsNotUnknownTokenSuccess(t *testing.T) {
 			assertEmptyRevoke(t, postRevoke(f.s, malformed.Encode(), nil))
 			invalid := url.Values{"token": {f.raw}, "client_id": {"https://invalid.example:443/metadata"}}
 			assertSameTokenResponse(t, postRevoke(f.s, "token=", nil), postRevoke(f.s, invalid.Encode(), nil))
-			if len(logs.lines) != 0 {
+			if len(logs.snapshot(t)) != 0 {
 				t.Fatal("unavailable database or rejected input emitted mismatch telemetry")
 			}
 			grant, err := f.q.GetOAuthGrantForUpdate(t.Context(), f.grantID)
@@ -368,18 +408,8 @@ func TestRevokeClaimedClientSerializesWithRefresh(t *testing.T) {
 				blocker, pid := lockUserForRace(t, f.refreshFixture)
 				defer rollbackTestTx(t, blocker)
 				revoke := func() <-chan *httptest.ResponseRecorder {
-					result := make(chan *httptest.ResponseRecorder, 1)
-					go func() {
-						ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-						defer cancel()
-						form := url.Values{"token": {f.raw}, "client_id": {"https://unknown.example/metadata"}}
-						r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(form.Encode()))
-						r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-						w := httptest.NewRecorder()
-						f.s.HandleRevoke(w, r)
-						result <- w
-					}()
-					return result
+					form := url.Values{"token": {f.raw}, "client_id": {"https://unknown.example/metadata"}}
+					return runClaimedRevokeRequest(t, f.s, form)
 				}
 				var revocation <-chan *httptest.ResponseRecorder
 				var rotation <-chan tokenHandlerResult

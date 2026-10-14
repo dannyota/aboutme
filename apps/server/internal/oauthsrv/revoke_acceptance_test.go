@@ -87,7 +87,7 @@ func TestRevokeLostCommitAcknowledgementRetryConverges(t *testing.T) {
 					t.Fatal("lost commit acknowledgement did not return the generic server error")
 				}
 				fault.assertCommitted(t)
-				if len(logs.lines) != 0 {
+				if len(logs.snapshot(t)) != 0 {
 					t.Fatal("unacknowledged commit emitted mismatch telemetry")
 				}
 				assertRevokeCommittedState(t, f)
@@ -122,10 +122,17 @@ func assertRevokeCommittedState(t *testing.T, f revokeFixture) {
 	}
 }
 
-func runClaimedRevokeRequest(s *Service, form url.Values) <-chan *httptest.ResponseRecorder {
+func runClaimedRevokeRequest(t *testing.T, s *Service, form url.Values) <-chan *httptest.ResponseRecorder {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	result := make(chan *httptest.ResponseRecorder, 1)
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer close(done)
 		defer cancel()
 		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(form.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -142,6 +149,15 @@ func TestRevokeConcurrentLogoutAndDuplicateConverge(t *testing.T) {
 			for _, duplicateAccess := range []bool{false, true} {
 				t.Run(mode+"/access first="+strconv.FormatBool(accessFirst)+"/duplicate access="+strconv.FormatBool(duplicateAccess), func(t *testing.T) {
 					f := newRevokeFixture(t, mode)
+					// Keep the blocker and observer out of the three request connections.
+					cfg := f.pool.Config()
+					cfg.MaxConns = 3
+					requestPool, err := pgxpool.NewWithConfig(t.Context(), cfg)
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(requestPool.Close)
+					f.s.pool = &store.Pool{Pool: requestPool}
 					blocker, pid := lockUserForRace(t, f.refreshFixture)
 					defer rollbackTestTx(t, blocker)
 					refresh := url.Values{"token": {f.raw}, "token_type_hint": {"refresh_token"}, "client_id": {f.publicID}}
@@ -153,9 +169,9 @@ func TestRevokeConcurrentLogoutAndDuplicateConverge(t *testing.T) {
 					if duplicateAccess {
 						duplicate = access
 					}
-					results := []<-chan *httptest.ResponseRecorder{runClaimedRevokeRequest(f.s, first)}
+					results := []<-chan *httptest.ResponseRecorder{runClaimedRevokeRequest(t, f.s, first)}
 					waitForBlockedTransactions(t, f.pool, pid, 1)
-					results = append(results, runClaimedRevokeRequest(f.s, second), runClaimedRevokeRequest(f.s, duplicate))
+					results = append(results, runClaimedRevokeRequest(t, f.s, second), runClaimedRevokeRequest(t, f.s, duplicate))
 					waitForRevokeLockChain(t, f.pool, pid, 3)
 					if err := blocker.Commit(t.Context()); err != nil {
 						t.Fatal(err)
@@ -179,12 +195,13 @@ func TestRevokeConcurrentLogoutAndDuplicateConverge(t *testing.T) {
 // Follow PostgreSQL's blocker graph so all three belong to this fixture.
 func waitForRevokeLockChain(t *testing.T, pool *store.Pool, holderPID int32, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 	for {
 		var blocked int
-		err := pool.QueryRow(t.Context(), `
+		err := pool.QueryRow(ctx, `
 			WITH RECURSIVE waits AS (
 				SELECT pid, unnest(pg_blocking_pids(pid)) AS holder
 				FROM pg_stat_activity WHERE datname=current_database()
@@ -202,10 +219,11 @@ func waitForRevokeLockChain(t *testing.T, pool *store.Pool, holderPID int32, wan
 		if blocked >= want {
 			return
 		}
-		if time.Now().After(deadline) {
+		select {
+		case <-ctx.Done():
 			t.Fatalf("observed %d revocation lock descendants, want at least %d", blocked, want)
+		case <-ticker.C:
 		}
-		<-ticker.C
 	}
 }
 
@@ -269,9 +287,7 @@ func refusedRevokeToken(t *testing.T, f revokeFixture, state string) string {
 	case "access":
 		return f.accessRaw
 	case "expired":
-		if _, err := f.pool.Exec(t.Context(), "UPDATE oauth_tokens SET expires_at=created_at WHERE token_digest=$1", f.digest[:]); err != nil {
-			t.Fatal(err)
-		}
+		f.s.clock = func() time.Time { return f.now.Add(refreshFamilyTTL + time.Second) }
 	case "rotated":
 		if _, err := f.s.rotateRefreshToken(t.Context(), f.raw, nil); err != nil {
 			t.Fatal(err)
