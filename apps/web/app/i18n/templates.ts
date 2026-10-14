@@ -3,12 +3,18 @@
 // app/templates/catalog.ts.
 import type { GalleryFilter, GalleryRole } from '../templates/catalog';
 import type { Locale } from './locale';
+import { filterControls, type FilterControlCopy } from './filters';
 
 export interface GalleryCopy {
   readonly title: string;
   readonly seoTitle: string;
   readonly lead: string;
-  readonly filtersLabel: string;
+  readonly stylesLabel: string;
+  readonly roleHeading: string;
+  readonly styleHeading: string;
+  readonly filterControls: FilterControlCopy;
+  readonly count: (count: number) => string;
+  readonly showResults: (count: number) => string;
   readonly all: (count: number) => string;
   readonly filters: Readonly<Record<GalleryFilter, string>>;
   readonly rolesLabel: string;
@@ -56,7 +62,12 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
     seoTitle: 'Thư viện mẫu CV miễn phí',
     lead: '20 mẫu miễn phí. Trang bạn xem ở đây chính là trang nhà tuyển dụng '
       + 'mở và bản PDF họ tải về.',
-    filtersLabel: 'Lọc thư viện',
+    stylesLabel: 'Lọc theo phong cách',
+    roleHeading: 'Vị trí',
+    styleHeading: 'Phong cách',
+    filterControls: filterControls.vi,
+    count: (count) => `${count} mẫu`,
+    showResults: (count) => `Xem ${count} mẫu`,
     all: (count) => `Tất cả ${count}`,
     filters: {
       'sample': 'Có CV mẫu',
@@ -127,7 +138,13 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
     seoTitle: 'Free resume library',
     lead: '20 free templates. What you see here is exactly the page a '
       + 'recruiter opens and the PDF they download.',
-    filtersLabel: 'Filter the library',
+    stylesLabel: 'Filter by style',
+    roleHeading: 'Role',
+    styleHeading: 'Style',
+    filterControls: filterControls.en,
+    count: (count) => `${count} ${count === 1 ? 'template' : 'templates'}`,
+    showResults: (count) =>
+      `Show ${count} ${count === 1 ? 'template' : 'templates'}`,
     all: (count) => `All ${count}`,
     filters: {
       'sample': 'With a sample',

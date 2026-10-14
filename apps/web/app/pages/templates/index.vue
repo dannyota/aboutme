@@ -1,97 +1,282 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
+import {
+  computed,
+  createStaticVNode,
+  defineComponent,
+  h,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue';
+import type { LocationQuery } from 'vue-router';
 
+import ActiveFilters from '@/components/app/ActiveFilters.vue';
+import FilterBar from '@/components/app/FilterBar.vue';
+import FilterSheet from '@/components/app/FilterSheet.vue';
+import LibraryFilters from '@/components/templates/LibraryFilters.vue';
 import TemplateCard from '@/components/templates/TemplateCard.vue';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { pageTitle } from '@/i18n/meta';
 import { galleryCopy } from '@/i18n/templates';
 import {
-  FILTERS,
   GALLERY,
   type GalleryFilter,
+  type GalleryRole,
   matchesFilter,
   matchesRole,
   parseFilter,
   parseRole,
-  ROLES,
-  withRole,
+  withGalleryFilters,
 } from '@/templates/catalog';
 import { galleryStructuredData } from '@/templates/structuredData';
+
+const NoScriptFallback = defineComponent({
+  name: 'NoScriptFallback',
+  setup(_props, { slots }) {
+    // With scripts enabled, noscript holds raw text, not child elements.
+    // Adopt the server node without hydrating its fallback children.
+    return () => import.meta.server
+      ? h('noscript', null, slots.default?.())
+      : createStaticVNode('<noscript></noscript>', 1);
+  },
+});
 
 const route = useRoute();
 const router = useRouter();
 const { locale } = useLocale();
 const copy = computed(() => galleryCopy[locale.value]);
-const active = computed(() => parseFilter(route.query.filter));
-const activeRole = computed(() => parseRole(route.query.role));
+type Pair = {
+  role: GalleryRole | undefined;
+  filter: GalleryFilter | undefined;
+};
+function pair(query: LocationQuery): Pair {
+  return { role: parseRole(query.role), filter: parseFilter(query.filter) };
+}
+function same(a: Pair, b: Pair): boolean {
+  return a.role === b.role && a.filter === b.filter;
+}
+const committed = shallowRef(pair(route.query));
+let intended = committed.value;
+let announced = committed.value;
+let navigation = 0;
+let pending = false;
+const removeRouteHook = router.afterEach((to, _from, failure) => {
+  if (!pending || failure) return;
+  navigation += 1;
+  pending = false;
+  intended = pair(to.query);
+  commit(intended);
+});
+const announceKey = ref(0);
+const hydrated = ref(false);
+const sheetOpen = ref(false);
+const desktop = ref<HTMLElement | null>(null);
+const phone = ref<HTMLElement | null>(null);
+const bar = ref<{ focusFilters(): void } | null>(null);
+const wide = useMediaQuery('(width >= 1024px)');
+let focusVersion = 0;
+let focused: HTMLElement | null = null;
+let initiator: HTMLElement | null = null;
+function onFocus(event: FocusEvent): void {
+  focusVersion += 1;
+  focused = event.target instanceof HTMLElement ? event.target : null;
+}
+function onBlur(event: FocusEvent): void {
+  if (
+    event.target === focused
+    && (event.relatedTarget || focused?.getClientRects().length)
+  ) focused = null;
+}
+onMounted(() => {
+  hydrated.value = true;
+  document.addEventListener('focusin', onFocus);
+  document.addEventListener('focusout', onBlur);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('focusin', onFocus);
+  document.removeEventListener('focusout', onBlur);
+  removeRouteHook();
+});
+
+function commit(next: Pair): void {
+  committed.value = next;
+  if (!same(next, announced)) {
+    announced = next;
+    announceKey.value += 1;
+  }
+}
+watch(
+  () => route.query,
+  (query) => {
+    if (pending) return;
+    navigation += 1;
+    intended = pair(query);
+    commit(intended);
+  },
+);
 
 function visible(template: (typeof GALLERY)[number]): boolean {
-  const filter = active.value;
-  const role = activeRole.value;
-  if (filter !== undefined && !matchesFilter(template, filter)) return false;
-  if (role !== undefined && !matchesRole(template, role)) return false;
-  return true;
+  const { role, filter } = committed.value;
+  return (
+    (filter === undefined || matchesFilter(template, filter))
+    && (role === undefined || matchesRole(template, role))
+  );
 }
-
-const visibleIds = computed(() =>
-  GALLERY.filter(visible).map((template) => template.id));
-const sampleCount = GALLERY.filter((template) =>
-  matchesFilter(template, 'sample')).length;
-
+const visibleIds = computed(() => GALLERY.filter(visible).map(({ id }) => id));
 function eager(id: string): boolean {
   const rank = visibleIds.value.indexOf(id);
   return rank >= 0 && rank < 2;
 }
+const count = computed(() => copy.value.count(visibleIds.value.length));
+const chips = computed(() => {
+  const { role, filter } = committed.value;
+  return [
+    ...(role === undefined
+      ? []
+      : [{ kind: 'role', label: copy.value.roles[role] }]),
+    ...(filter === undefined
+      ? []
+      : [{ kind: 'style', label: copy.value.filters[filter] }]),
+  ];
+});
+const clearTarget = computed(() => ({
+  path: '/templates',
+  query: withGalleryFilters(route.query, undefined, undefined),
+}));
 
-function label(filter: GalleryFilter): string {
-  const name = copy.value.filters[filter];
-  return filter === 'sample' ? `${name} ${sampleCount}` : name;
+function focusDesktop(): void {
+  desktop.value
+    ?.querySelector<HTMLElement>('[data-role][aria-pressed="true"]')
+    ?.focus();
+}
+function focusFilters(): void {
+  bar.value?.focusFilters();
+}
+watch(wide, async (isWide) => {
+  const current = document.activeElement;
+  // CSS can hide and blur a control before the media-query event arrives.
+  const active = current === document.body
+    && focused?.isConnected
+    && focused.getClientRects().length === 0
+    ? focused
+    : current;
+  const repair = isWide
+    ? sheetOpen.value
+    || phone.value?.contains(active)
+    || active?.matches('[data-action="gallery-filters-open"]')
+    : desktop.value?.contains(active);
+  if (isWide) sheetOpen.value = false;
+  if (!repair) return;
+  const version = focusVersion;
+  await nextTick();
+  if (version !== focusVersion || isWide !== wide.value) return;
+  if (isWide) focusDesktop();
+  else focusFilters();
+});
+function onClose(event: Event): void {
+  if (!wide.value) return;
+  event.preventDefault();
+  focusDesktop();
 }
 
-function filterLink(filter: GalleryFilter | undefined) {
-  return { path: '/templates', query: filter === undefined ? {} : { filter } };
+type Recovery = {
+  control: HTMLElement | null;
+  destination: Element | null;
+  version: number;
+};
+function recover(snapshot: Recovery | undefined): void {
+  if (!snapshot) return;
+  const { control, destination, version } = snapshot;
+  if (
+    control?.isConnected
+    && !control.matches(':disabled')
+    && control.getClientRects().length > 0
+    && document.activeElement === destination
+    && focusVersion === version
+  ) control.focus();
 }
-
-// Reka's single toggle group emits undefined when the pressed item is
-// pressed again; a role stays selected, like a radio (DESIGN.md, Library).
-function onRole(value: unknown): void {
-  if (value === undefined) return;
-  const role = value === 'all' ? undefined : parseRole(value);
-  if (value !== 'all' && role === undefined) return;
-  router.replace({ query: withRole(route.query, role) });
+async function change(next: Pair, recovery?: Recovery): Promise<void> {
+  if (same(next, intended)) return;
+  intended = next;
+  const token = ++navigation;
+  pending = true;
+  const target = {
+    path: '/templates',
+    query: withGalleryFilters(route.query, next.role, next.filter),
+  };
+  try {
+    const failure = await router.replace(target);
+    if (token !== navigation) return;
+    if (failure) recover(recovery);
+    else commit(next);
+  } catch {
+    if (token === navigation) recover(recovery);
+  } finally {
+    if (token === navigation) {
+      pending = false;
+      intended = committed.value;
+    }
+  }
 }
-
-// The chip dot's color names what the chip narrows: format (what the
-// document looks like) or the audience it suits. The dot is decorative;
-// the chip text carries the meaning. Role chips carry no dot (DESIGN.md,
-// Library).
-const FORMAT_FILTERS = new Set<GalleryFilter>([
-  'sample',
-  'ats',
-  'one-page',
-  'photo',
-]);
-function chipGroup(filter: GalleryFilter): 'format' | 'audience' {
-  return FORMAT_FILTERS.has(filter) ? 'format' : 'audience';
+function onRole(role: GalleryRole | undefined): void {
+  void change({ ...intended, role });
 }
-
+function onStyle(filter: GalleryFilter | undefined): void {
+  void change({ ...intended, filter });
+}
+function capture(event: Event): void {
+  initiator = (event.target as HTMLElement).closest<HTMLElement>('button');
+}
+async function remove(kind: string, last: boolean): Promise<void> {
+  const control = initiator;
+  const next = {
+    ...intended,
+    [kind === 'role' ? 'role' : 'filter']: undefined,
+  };
+  if (last) focusFilters();
+  const recovery = {
+    control,
+    destination: document.activeElement,
+    version: focusVersion,
+  };
+  await change(next, recovery);
+}
+function clearAll(): void {
+  const recovery = {
+    control: initiator,
+    destination: document.activeElement,
+    version: focusVersion,
+  };
+  focusFilters();
+  recovery.destination = document.activeElement;
+  recovery.version = focusVersion;
+  void change({ role: undefined, filter: undefined }, recovery);
+}
 useSiteSeo(() => ({
   path: '/templates',
   title: pageTitle(copy.value.seoTitle),
   description: copy.value.lead,
   locale: locale.value,
 }));
-useHead(computed(() => ({
-  script: [{
-    key: 'aboutme-structured-data',
-    type: 'application/ld+json',
-    innerHTML: galleryStructuredData(
-      copy.value.seoTitle,
-      copy.value.lead,
-      GALLERY,
-    ),
-  }],
-})));
+useHead(
+  computed(() => ({
+    htmlAttrs: { class: 'filter-bar-scroll-padding' },
+    script: [
+      {
+        key: 'aboutme-structured-data',
+        type: 'application/ld+json',
+        innerHTML: galleryStructuredData(
+          copy.value.seoTitle,
+          copy.value.lead,
+          GALLERY,
+        ),
+      },
+    ],
+  })),
+);
 </script>
 
 <template>
@@ -112,78 +297,92 @@ useHead(computed(() => ({
       </p>
     </header>
     <div
-      class="gallery-filters -mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+      ref="desktop"
+      class="gallery-desktop mt-8"
     >
-      <ToggleGroup
-        :aria-label="copy.rolesLabel"
-        class="flex w-max items-center gap-2"
-        data-testid="gallery-roles"
-        :model-value="activeRole ?? 'all'"
-        :spacing="2"
-        type="single"
-        @update:model-value="onRole"
-      >
-        <ToggleGroupItem
-          class="gallery-chip"
-          data-role="all"
-          value="all"
-        >
-          {{ copy.allRoles }}
-        </ToggleGroupItem>
-        <ToggleGroupItem
-          v-for="role in ROLES"
-          :key="role"
-          class="gallery-chip"
-          :data-role="role"
-          :value="role"
-        >
-          {{ copy.roles[role] }}
-        </ToggleGroupItem>
-      </ToggleGroup>
+      <LibraryFilters
+        :disabled="!hydrated"
+        :filter="committed.filter"
+        layout="row"
+        :locale="locale"
+        :query="route.query"
+        :role="committed.role"
+        @role="onRole"
+        @style="onStyle"
+      />
     </div>
-    <nav
-      :aria-label="copy.filtersLabel"
-      class="gallery-filters -mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+    <FilterBar
+      ref="bar"
+      :active-count="chips.length"
+      :announce-key="announceKey"
+      :copy="copy.filterControls"
+      :disabled="!hydrated"
+      layout="library"
+      :open="sheetOpen"
+      prefix="gallery"
+      :text="count"
+      @update:open="sheetOpen = $event"
     >
-      <ul class="flex w-max items-center gap-2">
-        <li>
-          <NuxtLink
-            :aria-current="active === undefined ? 'page' : undefined"
-            class="gallery-chip"
-            data-filter="all"
-            :to="filterLink(undefined)"
-          >
-            {{ copy.all(GALLERY.length) }}
-          </NuxtLink>
-        </li>
-        <template
-          v-for="filter in FILTERS"
-          :key="filter"
-        >
-          <li
-            v-if="filter === 'first-job'"
-            aria-hidden="true"
-            class="mx-1 h-6 w-px bg-border"
-          />
-          <li>
-            <NuxtLink
-              :aria-current="active === filter ? 'page' : undefined"
-              class="gallery-chip"
-              :data-filter="filter"
-              :data-group="chipGroup(filter)"
-              :to="filterLink(filter)"
-            >
-              <span
-                aria-hidden="true"
-                class="gallery-chip__dot"
-              />
-              {{ label(filter) }}
-            </NuxtLink>
-          </li>
-        </template>
-      </ul>
-    </nav>
-    <ul class="gallery-grid mt-8">
+      <FilterSheet
+        v-if="sheetOpen"
+        :announce-key="announceKey"
+        :copy="copy.filterControls"
+        prefix="gallery"
+        :results-label="copy.showResults(visibleIds.length)"
+        :status="count"
+        @clear="change({ role: undefined, filter: undefined })"
+        @close-auto-focus="onClose"
+      >
+        <LibraryFilters
+          :filter="committed.filter"
+          layout="sheet"
+          :locale="locale"
+          :query="route.query"
+          :role="committed.role"
+          @role="onRole"
+          @style="onStyle"
+        />
+      </FilterSheet>
+    </FilterBar>
+    <div
+      v-if="chips.length"
+      ref="phone"
+      class="gallery-phone mt-4"
+      @click.capture="capture"
+    >
+      <ActiveFilters
+        :chips="chips"
+        :copy="copy.filterControls"
+        :disabled="!hydrated"
+        prefix="gallery"
+        @remove="remove"
+        @clear-all="clearAll"
+      />
+    </div>
+    <NoScriptFallback>
+      <div class="gallery-fallback mt-4">
+        <LibraryFilters
+          :filter="committed.filter"
+          layout="row"
+          :locale="locale"
+          :query="route.query"
+          :role="committed.role"
+          style-only
+        />
+      </div>
+      <NuxtLink
+        v-if="chips.length"
+        class="gallery-fallback-clear"
+        :prefetch="false"
+        :to="clearTarget"
+      >
+        {{ copy.filterControls.clearAll }}
+      </NuxtLink>
+    </NoScriptFallback>
+    <ul
+      v-show="visibleIds.length"
+      class="gallery-grid mt-4"
+    >
       <li
         v-for="template in GALLERY"
         :key="template.id"
@@ -200,7 +399,7 @@ useHead(computed(() => ({
     </ul>
     <p
       v-if="visibleIds.length === 0"
-      class="mt-8 text-muted-foreground"
+      class="mt-4 text-base text-muted-foreground"
     >
       {{ copy.noMatch }}
     </p>
@@ -208,64 +407,24 @@ useHead(computed(() => ({
 </template>
 
 <style scoped>
-.gallery-filters {
-  scrollbar-width: none;
-}
-
-.gallery-filters::-webkit-scrollbar {
+.gallery-desktop {
   display: none;
 }
-
-.gallery-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 2.25rem;
-  padding: 0 1rem;
-  border: 1px solid var(--border);
-  border-radius: 9999px;
-  background: var(--card);
-  color: var(--foreground);
-  font-size: 0.875rem;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background-color 150ms, border-color 150ms;
+.gallery-fallback-clear {
+  display: block;
+  margin-top: 12px;
+  color: var(--link);
+  text-decoration: underline;
 }
-
-.gallery-chip:not([aria-current="page"]):not([aria-pressed="true"]):hover {
-  background: var(--surface-indigo);
+@media (width >= 1024px) {
+  .gallery-desktop {
+    display: block;
+  }
+  .gallery-phone,
+  .gallery-fallback {
+    display: none;
+  }
 }
-
-.gallery-chip[aria-current="page"],
-.gallery-chip[aria-pressed="true"] {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-}
-
-.gallery-chip__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 9999px;
-}
-
-[data-group="format"] .gallery-chip__dot {
-  background: var(--brand-jade);
-}
-
-[data-group="audience"] .gallery-chip__dot {
-  background: var(--brand-ochre);
-}
-
-[aria-current="page"] .gallery-chip__dot {
-  background: currentColor;
-}
-
-.gallery-chip:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -39,6 +39,7 @@ apps/web/app/assets/fonts/spectral-400.woff2
 apps/web/app/assets/fonts/spectral-700.woff2
 apps/web/app/assets/fonts/work-sans-var.woff2
 apps/web/app/components/app/AccountMenu.vue
+apps/web/app/components/app/ActiveFilters.vue
 apps/web/app/components/app/AppLogo.vue
 apps/web/app/components/app/AppSeal.vue
 apps/web/app/components/app/AppSheetContent.vue
@@ -46,6 +47,8 @@ apps/web/app/components/app/AppShell.vue
 apps/web/app/components/app/CheckboxField.vue
 apps/web/app/components/app/ConfirmDialog.vue
 apps/web/app/components/app/EmptyState.vue
+apps/web/app/components/app/FilterBar.vue
+apps/web/app/components/app/FilterSheet.vue
 apps/web/app/components/app/FormDialog.vue
 apps/web/app/components/app/FormField.vue
 apps/web/app/components/app/IconButton.vue
@@ -197,6 +200,7 @@ apps/web/app/components/showcase/ShowcaseFilters.vue
 apps/web/app/components/showcase/ShowcaseInvite.vue
 apps/web/app/components/showcase/ShowcasePager.vue
 apps/web/app/components/showcase/ShowcaseTile.vue
+apps/web/app/components/templates/LibraryFilters.vue
 apps/web/app/components/templates/SheetThumbnail.vue
 apps/web/app/components/templates/TemplateCard.vue
 apps/web/app/components/ui/alert-dialog/AlertDialog.vue
@@ -383,6 +387,7 @@ apps/web/app/i18n/editor-fields.ts
 apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
 apps/web/app/i18n/error.ts
+apps/web/app/i18n/filters.ts
 apps/web/app/i18n/guide.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/import.ts
@@ -509,6 +514,11 @@ apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--paged.png
 apps/web/e2e/baselines/engineer-compact--vn-full--paged.png
 apps/web/e2e/baselines/executive-band--vn-full--paged.png
+apps/web/e2e/baselines/gallery--filtered--en--light--1440.png
+apps/web/e2e/baselines/gallery--filtered--vi--dark--390.png
+apps/web/e2e/baselines/gallery--rows--vi--light--1024.png
+apps/web/e2e/baselines/gallery--sheet--en--light--390.png
+apps/web/e2e/baselines/gallery--sheet--vi--dark--390.png
 apps/web/e2e/baselines/guide--dark--1280.png
 apps/web/e2e/baselines/guide--dark--390.png
 apps/web/e2e/baselines/guide--en--dark--1280.png
@@ -590,6 +600,7 @@ apps/web/e2e/fixtures/deployment/stale.json
 apps/web/e2e/fixtures/deployment/unverified.json
 apps/web/e2e/fixtures/deployment/verified.json
 apps/web/e2e/fonts-offline.spec.ts
+apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
 apps/web/e2e/normal-csp.spec.ts
 apps/web/e2e/playwright.config.ts
