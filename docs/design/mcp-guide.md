@@ -127,13 +127,12 @@ copy, and client eligibility stay unchanged.
   which a public metadata URL does not provide. Split the transport and sign-in
   requirements from client identification into two sentences.
 
-Release remains gated by [CIMD release order](mcp-cimd.md#release-order) and the
-[production enablement proof](mcp-cimd-verification.md#production-enablement-proof).
-The observations below do not complete that proof. The existing 390 px layout
-applies to both languages; this proposal does not change spacing or type size to
-fit longer copy. This copy change adds no data, dependency, or authorization
-behavior. Cached older copy keeps the same commands; there is no migration or
-data loss.
+Release followed [CIMD release order](mcp-cimd.md#release-order) and the
+[production enablement proof](mcp-cimd-verification.md#production-enablement-proof),
+which Claude Code completed on 2026-10-14. The existing 390 px layout applies to
+both languages; this proposal does not change spacing or type size to fit longer
+copy. This copy change adds no data, dependency, or authorization behavior.
+Cached older copy keeps the same commands; there is no migration or data loss.
 
 ### Other clients
 
@@ -151,9 +150,9 @@ revoke.
   quoted the self-given name `Claude Code`, named the loopback return
   destination, and showed the loopback warning and two scopes. List and read
   worked. Logout and login showed consent again and kept one grant; Settings
-  showed `Claude Code (claude.ai)`. Refresh after one hour and revocation remain
-  unproven. These observations support only Claude Code's demonstrated behavior,
-  not a completed CIMD proof.
+  showed `Claude Code (claude.ai)`. Refresh after the one-hour expiry and
+  revocation from Settings passed the same day, completing the owner proof
+  recorded in AC-MCP-015. These observations cover Claude Code only.
 - **Hosted Claude** (web, desktop, and mobile) is not proven over a client ID
   URL. Its existing guide steps stay unchanged and make no CIMD claim.
 - **Visual Studio Code** [documents][vscode-mcp] remote HTTP servers, OAuth with

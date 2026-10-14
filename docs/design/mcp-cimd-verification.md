@@ -58,6 +58,25 @@ next request. A lost client URL is a new client identity, with no automatic
 transfer of its grants. A removed document cannot recover a lost token; a new
 valid authorization is required.
 
+### Revocation with a claimed client
+
+The proposed [revocation contract](mcp-cimd-authorization.md#revocation) owns
+request validation, authority, responses, timing limits, and failure recovery.
+It adds no key or token custody path. Apply this attacker trace alongside the
+existing controls above; response equality does not hide database timing.
+
+| Attacker                                   | Path, control, and remaining limit                                                                                                                                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anonymous visitor                          | A claimed URL or UUID passes grammar only and never resolves a client. Missing authority cannot select a victim's grant. Random token guesses reach bounded digest lookup; hits take a different database path, so timing can reveal existence. Outer admission limits traffic, not all distributed guessing. |
+| Signed-in attacker                         | Cookies supply no authority. Naming a victim's client or sharing that client does not select the victim's grant; the presented token's stored foreign keys select the only mutation target.                                                                                                                   |
+| Hostile resume or metadata content         | No content is executed, rendered, or fetched here. A script can submit a form, but a cookie or claimed client cannot replace possession of the victim's token. Existing token storage and injection defenses remain necessary.                                                                                |
+| Stolen session or MCP token                | A stolen session alone grants no authority here. A stolen token can destroy its own grant, even if expired or rotated while its row remains; it cannot select another grant. Settings remains the owner's independent recovery path, followed by fresh authorization.                                         |
+| Local process claiming a legitimate client | A public client ID alone does nothing. Access to the token store permits revocation and disconnection; the claim does not attest the process.                                                                                                                                                                 |
+| Network position between client and edge   | HTTPS and endpoint certificate validation protect the submitted token. Captured tokens remain bearer authority; replay revokes the same grant and cannot restore it.                                                                                                                                          |
+| Compromised container on the host          | A container with application database authority can bypass revocation rules. Compromise of another container does not itself grant that authority; existing isolation and credentials set the boundary.                                                                                                       |
+| Database writer without application keys   | Client metadata tampering can change the mismatch event; token or grant ownership tampering can redirect mutation. Database authority remains trusted, with no new signing protection.                                                                                                                        |
+| Leaked backup                              | Stored digests do not supply the raw high-entropy token needed for revocation. Existing account-to-grant relationships remain exposed; no claimed value enters storage or logs. A restored database can restore authority under existing restore procedures.                                                  |
+
 A taken-over client domain can serve a new document and callback on the same
 host. Under approved HTTPS silent reauthorization and grant survival, it can
 receive new codes for an existing grant. Host display, TLS, and PKCE do not
@@ -114,7 +133,7 @@ claim or remote document hash should imply otherwise.
   unknown URL rows, found tokens with mismatched clients, omitted refresh IDs,
   bad code/resource/PKCE, and an internal UUID used as a URL-client alias. The
   failed-grant limiter follows the admission rule linked above. Revocation
-  accepts only its existing token form and returns `200` for an unknown token.
+  follows the [revocation checks](#revocation-checks).
 - Two owners approve the same URL client and receive distinct grants. With a
   fixed clock, send a full failure allowance of anonymous code guesses naming
   that URL, then require the other owner's valid exchange and refresh to
@@ -184,6 +203,72 @@ claim or remote document hash should imply otherwise.
 - Both CIMD and DCR loopback return lines show the actual validated hostname in
   parentheses before the final period, as text, in both languages.
 - Owner proof in production follows the sequence below.
+
+### Revocation checks
+
+Exercise the proposed [contract](mcp-cimd-authorization.md#revocation) through
+`HandleRevoke`, not only the form helper. Use independent DCR and CIMD fixtures,
+each with multiple token families, a second grant for the same user, and another
+owner's grant for the same client. Run both CIMD flag states; reset mutable
+fixtures between cases. Use synthetic credentials only in test evidence.
+
+- Cover both token kinds with omitted, matching, and mismatched IDs. Include
+  another DCR UUID, existing and never-stored URLs, a URL client's internal
+  UUID, and DCR parser-accepted UUID spellings. URL comparisons must not
+  normalize equivalent percent encodings. Only the token's grant and every
+  family under it are revoked; unrelated grants survive. Check the next `/mcp`
+  request is `401`, refresh fails with `invalid_grant`, and outstanding codes
+  cannot issue.
+- Pair live tokens with retained expired, rotated, and revoked rows, well-shaped
+  never-issued tokens of both kinds, and non-empty malformed tokens. Cross with
+  omitted IDs, matching IDs, other existing IDs, and never-stored IDs. Compare
+  status, exact empty body bytes, and all application headers. Pin or normalize
+  only independent transport dates and request IDs. Repeat with no cookie, an
+  unrelated session cookie, and Basic or Bearer Authorization; headers alone
+  with no form token must not revoke anything.
+- Instrument database, cache, DNS, and fetch boundaries. Malformed forms and
+  malformed IDs do zero database work, even with live tokens. Non-empty
+  malformed tokens do none after valid form checks. Unknown parsed tokens do
+  only the normal digest lookup transaction. Found tokens use the same locks and
+  writes for matching and mismatched IDs; no claimed-client lookup or network
+  call occurs in any case. Assert these work classes, not wall-clock equality.
+- Cover missing or empty token, empty ID, unknown fields (`client_secret`,
+  `client_assertion`, `client_assertion_type`, `resource`, `grant_type`), and
+  duplicates of every allowed key, including percent-encoded key aliases.
+  Include invalid form escapes, the body limit and one byte over, wrong method,
+  and absent, duplicate, or wrong Content-Type. Compare each closed error with
+  live, unknown, and malformed candidates; assert no state change or input echo.
+- Reuse all URL-grammar boundary fixtures, including size, whitespace, encoded
+  dot segments, forbidden hostnames, ports, and malformed UUIDs. Combine each
+  bad ID with live, unknown, and malformed tokens to prove validation
+  precedence.
+- Omitted, empty, unknown (`id_token`), correct, and opposite-kind hints all
+  produce the same revocation result. Duplicate hints remain malformed forms.
+- Reproduce the inferred Claude Code sequence with its public URL: refresh
+  revocation followed by access revocation. Repeat each request and reverse the
+  order. Both return `200`; no replay restores authority or affects other
+  grants.
+- Exhaust token-IP, stored failed-grant, and shared overflow budgets through
+  token requests while outer admission allows revocation. Revoke must still
+  succeed and leave all those limiter states unchanged. Separately simulate
+  outer refusal before the handler: it must do no lookup or mutation and must
+  not depend on token state. Hosted routing coverage proves the real edge
+  policy.
+- Capture telemetry across success, mismatch, syntax failure, lookup failure,
+  and rollback. Only committed mismatches have the closed event and stored IDs;
+  matching or omitted claims do not. Assert the contract's redaction using
+  synthetic marker values, including a claimed URL with a sensitive path.
+  Simulate telemetry failure after commit: the revocation result stays `200`.
+- Inject failures at transaction begin, digest lookup, each lock, each mutation,
+  and commit. Verify generic `500`, no secret echo, and rollback where failure
+  precedes commit. Simulate commit acknowledgement loss without asserting that
+  tokens stayed live; retry must end with the grant dead and empty `200`.
+- Serialize concurrent revoke/revoke and revoke/refresh through both lock
+  orders. A refresh that wins first has its successor revoked; one that follows
+  revoke cannot issue. Reauthorization after revocation creates a distinct
+  grant; replaying an old retained token must not revoke the replacement grant.
+- Preserve the owner workflow's token-plus-hint and Go SDK cases. No claim about
+  hosted Claude logout follows from the inferred Claude Code request shape.
 
 ## Production enablement proof
 
