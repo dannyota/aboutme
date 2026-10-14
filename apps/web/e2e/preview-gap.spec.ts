@@ -413,7 +413,7 @@ test.describe('PDF word spacing', () => {
   const operators = (text: string): PdfTextOperators => ({
     fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.endText],
     argsArray: [
-      [], [1, 0, 0, 1, 404.8, 388.17],
+      [], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
       [Array.from(text, (unicode) => ({ unicode }))], [],
     ],
   });
@@ -436,7 +436,8 @@ test.describe('PDF word spacing', () => {
     ops.argsArray = [[],
       [0.74999996875, 0, 0, -0.74999996875,
         39.74999834375, 805.16998153125],
-      [], ['heading', 15.3999996], [1, 0, 0, -1, 486.734375, 556]];
+      [], ['heading', 15.3999996],
+      [new Float32Array([1, 0, 0, -1, 486.734375, 556])]];
     const advances = [12.9286957, 12.1899414, 13.2062225, 12.4515839,
       13.0825958, 4.4638367, 12.9286957, 12.1899414];
     Array.from('CHỨNG CHỈ').forEach((unicode, index) => {
@@ -453,6 +454,50 @@ test.describe('PDF word spacing', () => {
     });
     ops.fnArray.push(OPS.endText, OPS.restore);
     ops.argsArray.push([], []);
+    expect(extract({
+      ...item,
+      transform: [11.549999218750012, 0, 0, 11.549999218750012,
+        404.8007681333006, 388.16999890625],
+    }, ops)).toEqual([
+      { text: 'CHỨNG', index: 0 }, { text: 'CHỈ', index: 7 },
+    ]);
+  });
+
+  test('normalizes the decoded PDF heading operator sequence', () => {
+    const sequence: [number, unknown[]][] = [
+      [OPS.save, []],
+      [OPS.transform, [0.74999996875, 0, 0, -0.74999996875,
+        39.74999834375, 805.16998153125]],
+      [OPS.beginText, []],
+      [OPS.setFont, ['g_d27_f5', 15.3999996]],
+      [OPS.setTextMatrix,
+        [new Float32Array([1, 0, 0, -1, 486.734375, 556])]],
+      [OPS.showText, [[{ unicode: 'C' }]]],
+      [OPS.moveText, [12.9286957, 0]],
+      [OPS.showText, [[{ unicode: 'H' }]]],
+      [OPS.moveText, [12.1899414, 0]],
+      [OPS.showText, [[{ unicode: 'Ứ' }]]],
+      [OPS.moveText, [13.2062225, 0]],
+      [OPS.showText, [[{ unicode: 'N' }]]],
+      [OPS.moveText, [12.4515839, 0]],
+      [OPS.showText, [[{ unicode: 'G' }]]],
+      [OPS.setFont, ['g_d27_f6', 15.3999996]],
+      [OPS.moveText, [13.0825958, 0]],
+      [OPS.showText, [[{ unicode: ' ' }]]],
+      [OPS.setFont, ['g_d27_f5', 15.3999996]],
+      [OPS.moveText, [4.4638367, 0]],
+      [OPS.showText, [[{ unicode: 'C' }]]],
+      [OPS.moveText, [12.9286957, 0]],
+      [OPS.showText, [[{ unicode: 'H' }]]],
+      [OPS.moveText, [12.1899414, 0]],
+      [OPS.showText, [[{ unicode: 'Ỉ' }]]],
+      [OPS.endText, []],
+      [OPS.restore, []],
+    ];
+    const ops = {
+      fnArray: sequence.map(([fn]) => fn),
+      argsArray: sequence.map(([, args]) => args),
+    };
     expect(extract({
       ...item,
       transform: [11.549999218750012, 0, 0, 11.549999218750012,
@@ -510,7 +555,7 @@ test.describe('PDF word spacing', () => {
     const positioned = {
       fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.moveText,
         OPS.showText, OPS.endText],
-      argsArray: [[], [1, 0, 0, 1, 404.8, 388.17],
+      argsArray: [[], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
         [[{ unicode: 'CHỨ' }]], [25, 0], [[{ unicode: 'NG CHỈ' }]], []],
     };
     expect(extract(item, positioned).map((word) => word.text))
@@ -521,7 +566,7 @@ test.describe('PDF word spacing', () => {
     const positioned = {
       fnArray: [OPS.beginText, OPS.setTextMatrix, OPS.showText, OPS.moveText,
         OPS.showText, OPS.endText],
-      argsArray: [[], [1, 0, 0, 1, 404.8, 388.17],
+      argsArray: [[], [new Float32Array([1, 0, 0, 1, 404.8, 388.17])],
         [[{ unicode: 'A' }]], [12, 0], [[{ unicode: 'BC' }]], []],
     };
     expect(extract({ ...item, str: 'A BC' }, positioned)).toEqual([
@@ -590,7 +635,8 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
     if (current === null) return;
     if (fn === OPS.setTextMatrix) {
       if (current.text !== '') current.valid = false;
-      current.matrix = Array.from(args as number[]);
+      // PDF.js passes the text matrix as one Float32Array operand.
+      current.matrix = Array.from(args[0] as Float32Array);
     }
     if (fn === OPS.moveText) {
       // Glyph tracking needs single glyphs on both sides of each move.
