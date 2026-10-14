@@ -206,8 +206,8 @@ useHead(computed(() => ({
     { name: 'robots', content: 'noindex, nofollow' },
   ],
   // Below 1024 px the root scroller keeps the sticky bar clear of focus and
-  // of the pager's scroll; the rule lives in this page's global style.
-  htmlAttrs: { class: 'showcase-scroll-padding' },
+  // of the pager's scroll; FilterBar owns the shared global rule.
+  htmlAttrs: { class: 'filter-bar-scroll-padding' },
 })));
 </script>
 
@@ -355,17 +355,6 @@ useHead(computed(() => ({
     </div>
   </main>
 </template>
-
-<style>
-/* Below 1024 px the sticky filter bar is 60 px tall; the extra 8 px leaves
-   room for the focus ring, so focus and the pager's scroll never land under
-   it (docs/design/ui/showcase.md, Sticky bar). */
-@media (width < 1024px) {
-  html.showcase-scroll-padding {
-    scroll-padding-top: 68px;
-  }
-}
-</style>
 
 <style scoped>
 .showcase-main {
