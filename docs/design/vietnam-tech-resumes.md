@@ -1,7 +1,7 @@
 # Vietnam tech resumes
 
-This guide sets the language rules for resumes written by software developers in
-Vietnam. The gallery samples, template reviews, and any writing help in aboutme
+This guide sets the language rules for the [tech roles below](#role-notes) in
+Vietnam. Their gallery samples, template reviews, and writing help in aboutme
 follow it. It covers headings, which words stay in English, bullets, dates,
 local credentials, the choice of resume language, and what an applicant tracking
 system (ATS) reads.
@@ -45,7 +45,7 @@ them. Each maps to one schema section type; the heading is the section's
 | Học vấn               | Education      | `education`          | Degree and school                             |
 | Chứng chỉ             | Certifications | `certificate`        | Cloud, testing, security, and PM certificates |
 | Ngoại ngữ             | Languages      | `language`           | English and Japanese with scores              |
-| Giải thưởng           | Awards         | `custom`             | Competitions and scholarships                 |
+| Giải thưởng           | Awards         | `custom`             | See [Education](#education)                   |
 | Hoạt động             | Activities     | `custom`             | Clubs, volunteering, talks                    |
 
 Contact data is not a section. Name, headline, email, phone, city, GitHub,
@@ -304,9 +304,23 @@ the number, not a translated rank. List the GPA when it is Khá or better. Drop
 it after about two years of work for a product company or foreign employer; keep
 it for a bank or state employer, which often still asks **(judgment)**.
 
-Freshers also list the graduation project (đồ án tốt nghiệp), student research,
-scholarships, and competitions, in `Dự án` or a custom `Giải thưởng` section. A
-coding bootcamp is its own `education` entry: the program in `degree`, such as
+For freshers, keep one or two awards as bullets in `education`, beside the GPA
+**(judgment)**. Count a recurring merit scholarship as one award and state the
+number of semesters; a project is not an award. Give the prize's rank and scope:
+`Giải Nhì cuộc thi lập trình sinh viên cấp trường` /
+`Second prize, university student programming contest`. A custom `Giải thưởng` /
+`Awards` section is an option for three or more distinct awards, or one whose
+name matters to the target role, such as a national programming Olympiad prize
+or an ICPC regional rank **(judgment)**. Keep only relevant awards; do not
+repeat them under education.
+
+A short graduation project or student research result can also be an education
+bullet, with a score when available: `Đồ án tốt nghiệp (9,2/10): ...` /
+`Graduation project (9.2/10): ...`. Put a project with a repository link under
+`Dự án` / `Projects`, with its scope and result, instead of repeating it under
+education. Both `minimal-air` variants show education bullets for a scholarship,
+an unlinked graduation project, and a competition prize. A coding bootcamp is
+its own `education` entry: the program in `degree`, such as
 `Full-stack Web Development`, and the provider in `school`.
 
 ## Certifications and links
@@ -323,9 +337,21 @@ stack fills that gap; drop it once a job or a stronger project replaces it.
 Links go in `personalDetails` with their types: `github`, `linkedin`, `website`.
 Link a GitHub profile only when its pinned repositories show real work
 **(judgment)**. A personal blog or talk slides go under `website` or a project
-`link`. Leave out Facebook. Many local recruiters message candidates on Zalo
-first **(judgment)**, so say which number takes Zalo in a `custom` detail, such
-as `Zalo: cùng số` or `Zalo: same number`. Keep the `phone` value to digits,
+`link`. Leave out Facebook.
+
+Zalo follows the language split **(judgment)**. In Vietnamese, include a
+`custom` detail labelled `Zalo` when the candidate uses it and wants recruiter
+contact there. Use `cùng số` only when it refers to the visible phone number;
+otherwise give the number the candidate agrees to share. The English version
+omits this channel hint to keep the header focused on phone, email, and
+professional links. This is an editorial choice, not a claim that English
+readers never use Zalo or that every Vietnamese candidate must use it.
+Vietnamese tech samples model this choice with `Zalo: cùng số`.
+
+Zalo's policy lists phone numbers as account information and describes contact
+search using phone contacts with consent (Zalo). It does not establish recruiter
+preferences or guarantee discovery by phone number. Omitting the Zalo hint does
+not make the listed phone number private. Keep the `phone` value to digits,
 spaces, and `+`, so it stays a tap-to-call link
 ([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
 
@@ -360,9 +386,8 @@ Bad skill entries: `Backend (Go/Java/Node...)`, `Database các loại`,
 ## Writing the role samples
 
 This section is for gallery sample authors; a person writing their own resume
-can skip it. Every gallery sample for a tech role follows the rules above and
-this checklist. The nine roles are Backend, Frontend, Mobile, DevOps/SRE,
-Data/AI, QA/Tester, Fresher/Intern, BrSE, and Security.
+can skip it. Samples for the nine roles below follow the rules above and this
+checklist. Executive and non-developer samples are outside this guide's scope.
 
 ### Checklist
 
@@ -380,8 +405,9 @@ Data/AI, QA/Tester, Fresher/Intern, BrSE, and Security.
       `MM/YYYY`, and has full diacritics.
 - [ ] The English version is written in English, not translated word by word,
       and uses `Mon YYYY`.
-- [ ] Both versions state the same facts and fit one A4 page in the paired
-      template.
+- [ ] Both versions describe the same person and career and fit one A4 page in
+      the paired template; contact hints follow
+      [the Zalo rule](#certifications-and-links).
 - [ ] Headings come from the heading table.
 - [ ] Skills are 6 to 10 exact keywords.
 - [ ] Languages carry a test score or a concrete use.
@@ -414,5 +440,8 @@ security operations center.
 - IELTS, scoring in detail:
   <https://ielts.org/take-a-test/your-results/ielts-scoring-in-detail>
 - JLPT, N1 to N5 level summary: <https://www.jlpt.jp/e/about/levelsummary.html>
-- Thông tư 08/2021/TT-BGDĐT, graduation classification on the 4-point scale:
+- Zalo privacy policy, account information and contact search:
+  <https://zalo.me/zalo/policy/>
+- Thông tư 08/2021/TT-BGDĐT, graduation classification on the 4-point scale
+  (secondary summary; needs verification against the official circular):
   <https://thuvienphapluat.vn/lao-dong-tien-luong/xep-loai-tot-nghiep-dai-hoc-thang-diem-4-nhu-the-nao-tot-nghiep-dai-hoc-loai-xuat-sac-co-duoc-tuyen-33523.html>
