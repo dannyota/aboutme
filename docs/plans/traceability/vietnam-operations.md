@@ -15,7 +15,7 @@ Each `aboutme-job@<name>.service` reported `Result=success`, `ExecMainCode=1` (n
 
 At 2026-10-13 03:44:20 UTC, all four application-job timers were enabled and active. Duplicate journal reports shared invocation IDs, so report totals are not invocation counts. This evidence records one successful invocation of each job; it does not prove overlap handling or failure notification.
 
-## Alarm acceptance remains open
+## Alarm acceptance
 
 AC-OPS-019 follows the [Vietnam alarm inventory](../../design/vietnam-production.md#logs-metrics-and-alarms) and [production alarm runbook](../../runbooks/production.md#alarms): host conditions and unit failures use Bizfly SMTP, and external readiness failures use GitHub workflow notifications.
 
@@ -23,7 +23,7 @@ The 2026-10-13 03:44:20 UTC collection found daily alert stamps for host and uni
 
 The owner supplied a screenshot of the `coraza-matches` alert received at 13:40 Vietnam time on 2026-10-13. The message records event time `2026-10-13T06:40:01Z` and a count of 122. This verifies receipt for the Coraza match-threshold alert. The watcher counts rule-match records, not distinct requests, so the subject's use of "requests" is inaccurate. The live serving container's configuration was checked and uses `SecRuleEngine DetectionOnly`.
 
-The remaining alarm-inventory acceptance work is to document safe triggers and connect the other applicable detectors or failure actions to their receipt evidence. A direct synthetic mail proves the sender path only. Production retention failures stop the edge and must not be induced solely for notification proof.
+On 2026-10-13 the owner accepted AC-OPS-019 on this evidence: host and unit alarms share the Bizfly SMTP sender that delivered this alert, and the alert wording was corrected from it. Per-alarm triggers are not required. Production retention failures stop the edge and must not be induced for notification proof. External readiness alerts depend on the scheduled workflow, whose cadence gap remains open below.
 
 ### Coraza alert at 06:40 UTC
 
@@ -55,7 +55,9 @@ Those timings are consistent with a cached browser readiness failure, but they d
 
 ## Restore prerequisites
 
-The existing management account returned HTTP 403 for the read-only `storage.ListProjects` call on 2026-10-13. The state project ID could not be verified, so the independent conditional-write proof was not started and no probe object was created. The [restore design](../../design/restore-drill-networking.md) still requires region-specific permanent deletion and complete active, pending, and recoverable resource inventories. Published provider documentation does not establish those guarantees. No restore resources were allocated, and backup restoration remains unproved.
+An earlier read-only `storage.ListProjects` call with the management account returned HTTP 403 on 2026-10-13; its cause was not established. Later that day, with `vngcloud` updated to v0.81.1, the read-only `aboutme` profile listed one storage project, `aboutme` in HCM04, and read `aboutme-tfstate` versioning as `{"Enabled":false,"Status":"Off"}`. `deploy/vn/scripts/drill-state-proof.sh` then passed with that profile and the existing state key. Its probe `restore-drill/probes/71ec062a-5ac4-4d3f-b06d-9ff13e23e6d9.json` was created, refused a second conditional write, read back unchanged, and was deleted; the final check found it absent.
+
+The owner confirmed on 2026-10-13, from building the `vngcloud` CLI, that a GreenNode delete is permanent and leaves no recoverable copy. That settles the permanent-deletion requirement in the [restore design](../../design/restore-drill-networking.md). No restore resources were allocated, and backup restoration remains unproved.
 
 ## Supporting host metadata
 

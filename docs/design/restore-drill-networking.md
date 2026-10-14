@@ -165,33 +165,41 @@ evidence. Crashes reread the chain.
 
 ## Deletion and completion
 
-[Deletion][delete] permits immediate removal or [trash][recover]: seven days
-prepaid, three/seven postpaid. HCM03-1C API trash bypass is unproved; a 404
-cannot certify permanent deletion.
+The owner, who wrote the `vngcloud` CLI, confirmed on 2026-10-13 that a
+GreenNode delete is permanent: deleted servers, disks, ports, and floating IPs
+leave no recoverable copy. There is no trash to bypass and no purge step.
 
 | Resource        | Documented behavior and required verification                                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server          | [Termination][server] deletes instance-store data. Check active and recoverable server inventory.                                                 |
-| Root/data disks | [Volumes][volume] bind root to its server; standalone deletion requires Available. Check each disk ID in active and recoverable inventory.        |
-| Floating IP     | [Disassociation][ip] keeps billing; release is separate. Check allocation/reservation and recoverable inventory; docs promise no trash exemption. |
+| Server          | [Termination][server] deletes instance-store data. Check complete active and pending server inventories.                                          |
+| Root/data disks | [Volumes][volume] bind root to its server; standalone deletion requires Available. Check each disk ID in complete active and pending inventories. |
+| Ports           | Check every run port ID, including automatically created ports, in complete active and pending inventories.                                       |
+| Floating IP     | [Disassociation][ip] keeps billing; release is separate. Check complete active and pending allocation/reservation inventories.                    |
 
 On completion/failure/EXIT/INT/TERM/timeout, attempt all: stop PostgreSQL, erase
 reachable tmpfs, revoke keys, disconnect/release IP, delete server
-(`--delete-volumes`) and detached disks. Poll all inventories/orders, including
-snapshots/backups; errors never prove absence. Attended operators purge only run
-IDs in portal trash; journal UTC/IDs/action/absence. No purge: retain
-lock/`cleanup-pending` through expiry, verify absence. Missing views need
-GreenNode confirmation for exact IDs. Active-list absence, receipts, elapsed
-days cannot close runs. Prove deletion before secrets on fixtures. Exclude
-physical erasure/provider metadata, including cloud-init SSH keys.
+(`--delete-volumes`) and detached disks. Delete every remaining run resource,
+including ports, snapshots, backups, and created buckets. Poll complete active
+and pending inventories and orders for every run resource, including all pages;
+errors never prove absence. Journal UTC/IDs/action/absence. Failed or ambiguous
+deletes, incomplete inventories, and unsettled orders retain the shared lock and
+`cleanup-pending` until resolved. A 404, delete receipt, or active-list absence
+alone cannot close a run. Exclude physical erasure/provider metadata, including
+cloud-init SSH keys.
+
+Before secret delivery, prove the drill's cleanup code on disposable fixtures:
+deletion, complete inventory checks, journaled absence, and lock release only
+after confirmed cleanup. Verify that failed or ambiguous deletion retains the
+lock. This proof checks the drill's code paths; provider deletion permanence
+rests on the owner's confirmation above.
 
 Budget three hours: setup 30 minutes, two one-hour restores, cleanup 30 minutes.
 Stop restores at 150 minutes, sooner on failure. API calls cap at 60 seconds;
 SSH at remaining phase time. At 180 minutes, unfinished cleanup fails and
 retains the lock. SIGKILL/laptop loss needs recovery. Success requires both
 restores and no run server, disk, port, IP, snapshot, backup, reader key, or
-created bucket, active or recoverable. Persistent groups stay detached and
-audited. Preserve source backups; record counts/timings, never rows.
+created bucket, active or pending. Persistent groups stay detached and audited.
+Preserve source backups; record counts/timings, never rows.
 
 ## Cost, approval, and delivery
 
@@ -227,10 +235,6 @@ backups after a compromise is not pre-approved; the owner decides at the time.
   https://docs.greennode.ai/vstorage/object-storage/object-storage-hcm04/quan-ly-truy-cap/working-with-s3-keys
 [cli-keys]:
   https://github.com/dannyota/vngcloud/blob/v0.66.0/internal/cli/gendocs_notes_storage.go
-[delete]:
-  https://docs.greennode.ai/billing-management/experience-with-billing-and-payment/resource-lifecycle-management/delete-resource
-[recover]:
-  https://docs.greennode.ai/billing-management/experience-with-billing-and-payment/resource-lifecycle-management/recover-resource
 [server]:
   https://docs.greennode.ai/vserver/compute-hcm03-1a/instance/instance-lifecycle
 [volume]: https://docs.greennode.ai/vserver/compute-hcm03-1a/volume
