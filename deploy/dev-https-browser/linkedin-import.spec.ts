@@ -48,6 +48,7 @@ import {
   slowContentPdf,
 } from './linkedin-import-fixtures';
 import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from './network-policy';
+import { observeImportNetwork } from './linkedin-import-diagnostics.mjs';
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/linkedin-import-proof.json';
@@ -617,11 +618,13 @@ for (const engine of ['chromium', 'webkit'] as const) {
     const context = await source.newContext(
       engine === 'webkit' ? { baseURL: ORIGIN } : {},
     );
+    let networkDiagnostic: ReturnType<typeof observeImportNetwork> | undefined;
     try {
       await pinEnglish(context);
       await installExternalRequestFirewall(context, counters);
       await installExternalWebSocketFirewall(context, counters);
       const page = await context.newPage();
+      networkDiagnostic = observeImportNetwork(page, () => lastStage);
       // Same reasoning as the create-flow test above: filter the expected
       // anonymous /api/v1/me read at sign-in. Page errors keep the shared
       // counter (other proofs read it the same way) but this proof checks
@@ -634,6 +637,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
           )
           && !isExpectedWebKitInterruptedFetch(engine, message.text()),
         onCountedConsoleError: (message) => {
+          networkDiagnostic?.console(message);
           unexpectedConsoleMessages.push({
             pathname: pathnameOf(message.location().url),
             type: message.type(),
@@ -733,6 +737,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
               error instanceof Error ? error.message : String(error),
             ),
             unexpectedConsoleMessages,
+            network: networkDiagnostic?.snapshot() ?? null,
           },
         );
       } catch {
@@ -740,6 +745,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       }
       throw error;
     } finally {
+      networkDiagnostic?.stop();
       await context.close();
     }
   });

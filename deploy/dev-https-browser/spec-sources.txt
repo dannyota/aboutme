@@ -24,6 +24,7 @@ sample-start.spec.ts
 linkedin.spec.ts
 linkedin-import.spec.ts
 linkedin-import-fixtures.ts
+linkedin-import-diagnostics.mjs
 second-factor.spec.ts
 totp.spec.ts
 totp-fixture.ts

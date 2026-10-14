@@ -896,6 +896,8 @@ for (const name of ['request', 'response', 'requestfailed']) {
 }
 PUBLISH_CREATE_DIAGNOSTICS_TEST
 
+node "$SOURCE/linkedin-import-diagnostics.test.mjs"
+
 node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" "$SOURCE/editor.spec.ts" "$SOURCE/editor-diagnostics.ts" <<'ROUTING_SCOPE_TEST'
 import { readFile } from 'node:fs/promises';
 
