@@ -125,8 +125,9 @@ The deployer then:
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
    `nosniff`, and a CrowdSec 403 for the operator's test ban. Releases the lock.
 
-The external uptime workflow keeps running during maintenance. Host alarms and
-backup timers also remain active. A deploy can therefore send a site-down mail.
+vMonitor and the uptime backstop keep running during maintenance. Host alarms
+and backup timers also remain active. A deploy can therefore send a site-down
+mail.
 
 Public-page stylesheets and hydration scripts use a build-time content hash.
 Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
@@ -204,19 +205,49 @@ from backup configuration alone.
 
 ## Alarms
 
-[`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) checks
-`https://aboutme.vn/readyz` on a requested five-minute schedule. It tries three
-times, 20 seconds apart, and passes only on HTTP 200. A failed run makes GitHub
-email the account that last changed the cron line.
+GreenNode vMonitor check `aboutme-readyz` is the site-down alarm. It sends GET
+`https://aboutme.vn/readyz` every minute from public locations `SYNTT-VN-HCM01`
+and `SYNTT-VN-HAN01`, with a 10-second timeout. The default assertion fails on
+4xx or 5xx responses. Three consecutive failures at both locations trigger an
+alarm. In-alarm and Up notifications go to email channel `aboutme-owner-email`,
+the owner's operations mailbox.
 
-GitHub documents that scheduled runs can be delayed or dropped under load, five
-minutes is the shortest interval, and scheduled workflows in a public repository
-are disabled after 60 days without repository activity. See
+To confirm delivery safely, create a temporary check against a URL that returns
+404, using the same locations, failure threshold, and notification channel. Wait
+for its In-alarm email to reach the owner, record the receipt time, then delete
+the temporary check. Do not interrupt production to test delivery.
+
+Both quotas are free, have no auto-renew, and last at most one month:
+
+| Quota                          | Allowance         | Expiry recorded 2026-10-14 (UTC) |
+| ------------------------------ | ----------------- | -------------------------------- |
+| Synthetic Test                 | 10 checks         | 2026-10-25 21:43                 |
+| Email Notification `emailfree` | 20 emails a month | 2026-11-13 03:10                 |
+
+Renew both by hand each month before expiry:
+
+1. Open the vMonitor console, then **Quota & Usage**.
+2. Select **Synthetic test** and renew the free Synthetic Test quota.
+3. Select **Notification** and renew the Email Notification package. The buy
+   page preselects paid `email5k`; select `emailfree` before confirming.
+4. Confirm both quotas are active and record their new expiry dates.
+
+Each state change at each location sends one email, so an outage costs about two
+(In-alarm, then Up). Editing a check can replay a state change and send an extra
+email; change the production check only when needed.
+
+Billing allows three notification-quota actions a month. A lapsed Synthetic Test
+quota stops checks; a lapsed email quota stops mail while alarms still fire. The
+`vngcloud` CLI does not yet read or renew quotas.
+
+[`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) is a slower
+backstop. It requests a five-minute schedule, tries `/readyz` three times, 20
+seconds apart, and passes only on HTTP 200. A failed run makes GitHub email the
+account that last changed the cron line. Scheduled runs have arrived 3 to 10
+hours apart. GitHub can delay or drop scheduled runs and disables scheduled
+workflows in public repositories after 60 days without repository activity.
+Check its enabled state and run history after an idle period. See
 [GitHub's schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
-A delayed or disabled workflow does not prove the site healthy. Check the
-workflow's enabled state and run history after an idle period. The
-[recorded October 2026 gaps](../plans/traceability/vietnam-operations.md#external-readiness-monitoring)
-leave the intended monitoring interval unproved.
 
 Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 `aboutme-alert@.service`. The watcher runs every five minutes and checks:
@@ -311,4 +342,5 @@ Healthy state has these properties:
 - The four job timers, backup timers, host watcher, and CrowdSec retention timer
   are enabled and active.
 - The fence has no operation lock or mutation marker between operations.
-- The uptime workflow is enabled and has recent successful runs.
+- vMonitor `aboutme-readyz` is healthy, both quotas are active, and the uptime
+  backstop is enabled with recent successful runs.

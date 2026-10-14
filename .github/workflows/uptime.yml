@@ -1,6 +1,6 @@
-# Site-down alarm for production (docs/runbooks/production.md, "Alarms"). A
+# Readiness backstop for production (docs/runbooks/production.md, "Alarms"). A
 # failed scheduled run makes GitHub email the account that last changed the
-# schedule. GitHub can delay scheduled runs by several minutes under load.
+# schedule. Scheduled runs can arrive hours apart; vMonitor is the site-down alarm.
 name: Uptime
 
 on:

@@ -26,7 +26,7 @@ mails alarms through Bizfly.
 | Secrets            | Root-only host files, age-encrypted copy in `aboutme-infra`         |
 | Release fence      | Root-owned host file plus a start-time check                        |
 | Jobs               | systemd timers running one-shot containers                          |
-| Logs and alarms    | journald, host mail alert units, GitHub uptime workflow             |
+| Logs and alarms    | journald, host mail alert units, vMonitor; GitHub backstop          |
 | Transactional mail | Bizfly Email Transaction over SMTP                                  |
 | Support mailbox    | Google Workspace                                                    |
 | Infrastructure     | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; DNS root     |
@@ -254,20 +254,21 @@ expires release backups; the command stays for the AWS path.
 
 ## Logs, metrics, and alarms
 
-There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
 journald keeps 30 days on the data volume, capped at 2 GB. Ordinary Caddy logs
 drop addresses, URIs, and request headers. Its RAM-only feed and logs follow
 [HTTP privacy contract](crowdsec-http-privacy.md). `aboutme-watch.timer` runs
 `watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
 both mail the support mailbox through Bizfly SMTP with `msmtp`, at most one
-message per condition per UTC day, from the sender the app uses. The GitHub
-[uptime workflow](../../.github/workflows/uptime.yml) checks `/readyz` from
-outside the host. The [production runbook](../runbooks/production.md#alarms)
-owns its schedule, notification recipient, and limits.
+message per condition per UTC day, from the sender the app uses. GreenNode
+vMonitor is the external readiness alarm: it checks `/readyz` every minute from
+two public locations and mails the owner. The GitHub
+[uptime workflow](../../.github/workflows/uptime.yml) is a slower backstop. The
+[production runbook](../runbooks/production.md#alarms) owns check settings,
+notification delivery, and monthly quota renewal.
 
 | Signal   | Mechanism                                                        |
 | -------- | ---------------------------------------------------------------- |
-| App down | GitHub uptime workflow on `/readyz`, failed-run mail             |
+| App down | vMonitor on `/readyz`, email; GitHub uptime backstop             |
 | Units    | `OnFailure=` mail; `watch.sh` lists failed units                 |
 | Host     | `watch.sh`: root and data volume above 70%                       |
 | Database | `watch.sh`: archive failure, newest backup at least 26 hours old |
@@ -330,7 +331,8 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
    at `127.0.0.1:8080` from the host. Start Caddy beside maintenance, then stop
    maintenance and prove it stopped. The readiness check does not depend on
    which Caddy takes an external connection.
-9. Start the job timers. The external uptime workflow runs throughout deploys.
+9. Start the job timers. vMonitor and the uptime backstop run throughout
+   deploys.
 10. Smoke from outside: health, TLS, security headers, and a 403 for a
     CrowdSec-banned test address. Release the lock.
 
