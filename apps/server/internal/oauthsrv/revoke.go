@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,8 +59,8 @@ func RevokeGrantsForEpochChangeTx(ctx context.Context, qtx *store.Queries, userI
 	return nil
 }
 
-// HandleRevoke implements the RFC 7009 no-oracle response contract. It never
-// reads a cookie and returns 200 for every syntactically valid unknown token.
+// HandleRevoke uses token possession alone to revoke its grant. Claimed client
+// IDs supply no authority; see docs/design/mcp-cimd-authorization.md#revocation.
 func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeOAuthError(w, http.StatusMethodNotAllowed)
@@ -68,12 +70,16 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusUnsupportedMediaType)
 		return
 	}
-	form, err := decodeOAuthForm(r, map[string]bool{"token": true, "token_type_hint": true})
+	form, err := decodeOAuthForm(r, map[string]bool{"token": true, "token_type_hint": true, "client_id": true})
 	if err != nil || !exactRevokeKeys(form) {
 		writeOAuthError(w, http.StatusBadRequest)
 		return
 	}
-	if err := s.revokeToken(r.Context(), form.Get("token"), form.Get("token_type_hint")); err != nil {
+	if _, supplied := form["client_id"]; supplied && !s.validRevokeClientID(form.Get("client_id")) {
+		writeOAuthError(w, http.StatusBadRequest)
+		return
+	}
+	if err := s.revokeToken(r.Context(), form.Get("token"), form.Get("client_id")); err != nil {
 		writeOAuthServerError(w)
 		return
 	}
@@ -81,21 +87,34 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func exactRevokeKeys(form url.Values) bool {
-	if len(form) < 1 || len(form) > 2 || form.Get("token") == "" {
+	if len(form) < 1 || len(form) > 3 || form.Get("token") == "" {
 		return false
 	}
-	if hint := form.Get("token_type_hint"); hint != "" && hint != "access_token" && hint != "refresh_token" {
+	if _, supplied := form["client_id"]; supplied && form.Get("client_id") == "" {
 		return false
 	}
+	// Every hint value is advisory, including an empty or unsupported value.
 	return true
 }
 
-func (s *Service) revokeToken(ctx context.Context, raw, hint string) (err error) {
-	kind, digest, err := ParseToken(raw)
+func (s *Service) validRevokeClientID(raw string) bool {
+	if !strings.HasPrefix(raw, "https://") {
+		_, err := uuid.Parse(raw)
+		return err == nil
+	}
+	origin, err := url.Parse(s.publicOrigin)
+	if err != nil || origin.Hostname() == "" {
+		return false
+	}
+	_, err = parseCIMDURL(raw, origin.Hostname())
+	return err == nil
+}
+
+func (s *Service) revokeToken(ctx context.Context, raw, claimedClientID string) (err error) {
+	_, digest, err := ParseToken(raw)
 	if err != nil {
 		return nil
 	}
-	_ = kind // token_type_hint is advisory under RFC 7009.
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -113,7 +132,8 @@ func (s *Service) revokeToken(ctx context.Context, raw, hint string) (err error)
 	if err != nil {
 		return err
 	}
-	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
+	client, err := q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID)
+	if err != nil {
 		return err
 	}
 	if _, err = q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
@@ -129,5 +149,12 @@ func (s *Service) revokeToken(ctx context.Context, raw, hint string) (err error)
 	if _, err = q.RevokeOAuthTokensForGrant(ctx, store.RevokeOAuthTokensForGrantParams{GrantID: authority.OAuthToken.GrantID, RevokedAt: now}); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	if claimedClientID != "" && !publicClientMatches(client, claimedClientID) {
+		slog.InfoContext(ctx, "client_id_mismatch",
+			"client_id", client.ID.String(), "grant_id", authority.OAuthToken.GrantID.String(), "token_id", authority.OAuthToken.ID.String())
+	}
+	return nil
 }
