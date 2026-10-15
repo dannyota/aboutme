@@ -52,7 +52,7 @@ resource "cloudflare_dns_record" "txt" {
   proxied = false
   type    = "TXT"
   ttl     = var.record_ttls[each.key]
-  content = each.key == "spf" ? "\"v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all\"" : each.key == "dmarc" ? "\"v=DMARC1; p=quarantine; rua=mailto:danny@aboutme.vn\"" : var.dkim_values[each.key]
+  content = each.key == "spf" ? "\"v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all\"" : each.key == "dmarc" ? "\"v=DMARC1; p=quarantine\"" : var.dkim_values[each.key]
 }
 
 resource "cloudflare_dns_record" "google_verification" {
