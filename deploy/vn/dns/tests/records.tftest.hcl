@@ -40,7 +40,7 @@ run "records_match_inventory" {
     condition = length(cloudflare_dns_record.txt) == 5 && alltrue([
       for key, expected in {
         spf         = { name = "aboutme.vn", content = "\"v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all\"" }
-        dmarc       = { name = "_dmarc.aboutme.vn", content = "\"v=DMARC1; p=quarantine; rua=mailto:danny@aboutme.vn\"" }
+        dmarc       = { name = "_dmarc.aboutme.vn", content = "\"v=DMARC1; p=quarantine\"" }
         dkim        = { name = "dkim._domainkey.aboutme.vn", content = "test-bizfly-verification" }
         etrans      = { name = "etrans._domainkey.aboutme.vn", content = "test-bizfly-signing" }
         google_dkim = { name = "google._domainkey.aboutme.vn", content = "test-google-signing" }
