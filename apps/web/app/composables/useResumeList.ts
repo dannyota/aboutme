@@ -37,6 +37,10 @@ export type CreateNotice
 
 export type ResumeListNotice = 'resume-changed' | null;
 
+export interface CreateOpenOptions {
+  readonly beforeOpen?: (resumeId: string) => void;
+}
+
 export interface ResumeListController {
   readonly view: Ref<ResumeListView>;
   readonly items: ComputedRef<readonly ResumeSummary[]>;
@@ -48,6 +52,7 @@ export interface ResumeListController {
     title: string,
     lng: string | null | undefined,
     document?: Resume,
+    options?: CreateOpenOptions,
   ): Promise<CreateResumeResult>;
   refreshCreate(intentId: string): Promise<OpaqueCreateOutcome>;
   abandonCreate(intentId: string): void;
@@ -176,6 +181,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     title: string,
     lng: string | null | undefined,
     document?: Resume,
+    options?: CreateOpenOptions,
   ): Promise<CreateResumeResult> => {
     if (creating !== null) return creating;
     actionNotice.value = null;
@@ -201,6 +207,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     };
     creating = coordinator.createResume(intent).then(async (result) => {
       if (result.kind === 'created') {
+        options?.beforeOpen?.(result.resume.metadata.id);
         await navigateTo(
           `/app/resumes/${encodeURIComponent(result.resume.metadata.id)}`,
         );

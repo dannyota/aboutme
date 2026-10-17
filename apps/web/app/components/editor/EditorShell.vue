@@ -50,6 +50,7 @@ import StructurePanel from './structure/StructurePanel.vue';
 import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
+import LanguageTwinReview from './LanguageTwinReview.vue';
 import EditorPreview from './EditorPreview.vue';
 import EditorRegionTabs from './EditorRegionTabs.vue';
 import ErrorSummary from './ErrorSummary.vue';
@@ -671,5 +672,9 @@ async function discardAndSignIn(): Promise<void> {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <LanguageTwinReview
+      :resume-id="record.accepted.metadata.id"
+      :title="record.current.metadata.title"
+    />
   </main>
 </template>

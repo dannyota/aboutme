@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { Resume } from '@aboutme/schema';
-import type { ResumeSummary } from '../../../editor/resumeApi';
+import {
+  languageTwin,
+  rememberLanguageTwin,
+} from '../../../editor/languageTwin';
+import {
+  createResumeApi,
+  type ResumeSummary,
+} from '../../../editor/resumeApi';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
 import type { CreateNotice } from '../../../composables/useResumeList';
 import LoadingState from '@/components/app/LoadingState.vue';
@@ -19,6 +26,7 @@ const copy = computed(() => resumeListCopy[locale.value]);
 useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 
 const list = useResumeList();
+const api = createResumeApi();
 const now = useNow();
 const createOpen = ref(false);
 const renameItem = ref<ResumeSummary | null>(null);
@@ -79,6 +87,45 @@ function abandonCreate(intentId: string): void {
   retained.value = null;
 }
 
+async function createOtherLanguage(item: ResumeSummary): Promise<void> {
+  begin(item.id);
+  createNoticeCode.value = null;
+  const read = await api.read(item.id);
+  if (read.kind === 'session-lost') {
+    createNoticeCode.value = 'session-lost';
+    end(item.id);
+    return;
+  }
+  if (read.kind === 'rate-limited') {
+    createNoticeCode.value = 'retry-later';
+    end(item.id);
+    return;
+  }
+  if (read.kind !== 'complete') {
+    createNoticeCode.value = 'create-failed';
+    end(item.id);
+    return;
+  }
+  const twin = languageTwin({
+    title: read.accepted.metadata.title,
+    lng: read.accepted.metadata.lng,
+    document: read.accepted.document,
+    newId: () => globalThis.crypto.randomUUID(),
+  });
+  if (twin === null) {
+    createNoticeCode.value = 'create-failed';
+    end(item.id);
+    return;
+  }
+  const result = await list.create(twin.title, twin.lng, twin.document, {
+    beforeOpen(id: string): void {
+      rememberLanguageTwin(id, twin);
+    },
+  });
+  end(item.id);
+  createNoticeCode.value = createNotice(result);
+}
+
 async function rename(id: string, title: string): Promise<void> {
   begin(id);
   await list.rename(id, title);
@@ -118,6 +165,7 @@ async function remove(id: string, title: string): Promise<void> {
       :removal-focus-id="list.removalFocusId.value"
       :removal-focus-version="list.removalFocusVersion.value"
       @create="createOpen = true"
+      @other-language="createOtherLanguage"
       @rename="renameItem = $event"
       @remove="deleteItem = $event"
     />

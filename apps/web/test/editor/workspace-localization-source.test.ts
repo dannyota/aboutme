@@ -8,6 +8,7 @@ import { editorFieldsCopy } from '../../app/i18n/editor-fields';
 import { editorSectionsCopy } from '../../app/i18n/editor-sections';
 import { editorShellCopy } from '../../app/i18n/editor-shell';
 import { importCopy } from '../../app/i18n/import';
+import { languageTwinCopy } from '../../app/i18n/language-twin';
 import { workspaceTitles } from '../../app/i18n/meta';
 import { pdfCopy } from '../../app/i18n/pdf';
 import { publishCopy } from '../../app/i18n/publish';
@@ -31,6 +32,7 @@ const catalogs = [
   'i18n/editor-sections.ts',
   'i18n/editor-shell.ts',
   'i18n/import.ts',
+  'i18n/language-twin.ts',
   'i18n/meta.ts',
   'i18n/pdf.ts',
   'i18n/publish.ts',
@@ -49,6 +51,7 @@ const vueSources = [
   'components/editor/ConflictPanel.vue',
   'components/editor/EditorPreview.vue',
   'components/editor/EditorShell.vue',
+  'components/editor/LanguageTwinReview.vue',
   'components/editor/EntryCard.vue',
   'components/editor/ErrorSummary.vue',
   'components/editor/PDFDownloadButton.vue',
@@ -167,6 +170,7 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'resume-list.relativeTime.days': [2],
   'resume-list.relativeTime.date': [1, 2, 2026],
   'workspace.publicAt': ['/resume'],
+  'language-twin.agentPrompt': ['Resume', 'English'],
   'import.readingPage': [1, 2],
   'import.noticeDates': ['Entry'],
   'import.noticeStartOnly': ['Entry'],
@@ -320,6 +324,7 @@ describe('workspace localization source guard', () => {
       ['editor-sections', editorSectionsCopy],
       ['editor-shell', editorShellCopy],
       ['import', importCopy],
+      ['language-twin', languageTwinCopy],
       ['meta', workspaceTitles],
       ['pdf', pdfCopy],
       ['publish', publishCopy],
