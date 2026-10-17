@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { parseCurrentDocument } from '../../app/editor/documentValidation';
 import {
   dismissLanguageTwin,
+  forgetLanguageTwin,
   languageTwin,
   readLanguageTwin,
   rememberLanguageTwin,
@@ -17,7 +18,7 @@ const ZALO = '123e4567-e89b-12d3-a456-426614174003';
 const NEW_ZALO = '123e4567-e89b-12d3-a456-426614174004';
 
 afterEach(() => {
-  sessionStorage.removeItem('aboutme.language-twin');
+  forgetLanguageTwin();
 });
 
 function detail(

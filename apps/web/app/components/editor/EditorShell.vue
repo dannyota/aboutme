@@ -673,7 +673,6 @@ async function discardAndSignIn(): Promise<void> {
       </AlertDialogContent>
     </AlertDialog>
     <LanguageTwinReview
-      v-if="!record.sessionLost"
       :resume-id="record.accepted.metadata.id"
       :title="record.current.metadata.title"
     />
