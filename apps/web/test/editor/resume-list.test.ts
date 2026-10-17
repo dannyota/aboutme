@@ -143,6 +143,37 @@ describe('useResumeList', () => {
     },
   );
 
+  it('runs beforeOpen before opening a created resume', async () => {
+    const order: string[] = [];
+    vi.mocked(navigateTo).mockImplementation(async () => {
+      order.push('navigate');
+    });
+    const coordinator = {
+      createResume: vi.fn().mockResolvedValue({
+        kind: 'created',
+        resume: acceptedFixture(),
+      }),
+    } as unknown as ResumeMutationCoordinator;
+    const list = useResumeList({
+      coordinator,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'intent',
+        delay: async () => {},
+      },
+      ownerId: ref('owner-1'),
+      authState: computed(() => 'authenticated') as never,
+    });
+
+    await list.create('Twin', 'vi', acceptedFixture().document, {
+      beforeOpen(id: string): void {
+        order.push(id);
+      },
+    });
+
+    expect(order).toEqual(['resume-1', 'navigate']);
+  });
+
   it('keeps one opaque create intent until the owner abandons it', async () => {
     const intent = {
       kind: 'resumeCreate',
@@ -832,10 +863,13 @@ describe('useResumeList', () => {
   });
 
   it.each([
-    ['vi', 'CV', 'Đổi tên CV', 'Tên CV', 'Xóa CV', 'Đổi tên', 'Xóa', 'Đóng'],
+    [
+      'vi', 'CV', 'Đổi tên CV', 'Tên CV', 'Xóa CV', 'Đổi tên', 'Xóa', 'Đóng',
+      'Tạo bản tiếng Việt',
+    ],
     [
       'en', 'Resumes', 'Rename resume', 'Title', 'Delete resume', 'Rename',
-      'Delete', 'Close',
+      'Delete', 'Close', 'Create the Vietnamese version',
     ],
   ] as const)('renders list and dialogs in %s', async (
     locale,
@@ -846,6 +880,7 @@ describe('useResumeList', () => {
     renameAction,
     deleteAction,
     closeLabel,
+    otherLanguage,
   ) => {
     setSiteLocale(locale);
     const item = summary({ id: `locale-${locale}`, title: 'First' });
@@ -862,6 +897,7 @@ describe('useResumeList', () => {
     const actions = [...document.body.querySelectorAll('[role="menuitem"]')]
       .map((item) => item.textContent);
     expect(actions).toEqual(expect.arrayContaining([
+      otherLanguage,
       renameAction,
       deleteAction,
     ]));
@@ -896,6 +932,45 @@ describe('useResumeList', () => {
     expect(document.body.textContent).toContain(deleteTitle);
     deleteWrapper.unmount();
   });
+
+  it('hides the other language when the resume is not Vietnamese or English',
+    async () => {
+      const wrapper = mount(ResumeList, {
+        props: {
+          items: [summary({ lng: 'ja' })],
+          busyIds: [],
+          removalFocusId: null,
+          removalFocusVersion: 0,
+        },
+      });
+      await wrapper.get('[data-resume-actions]').trigger('click');
+      expect(document.body.querySelector(
+        '[data-testid="create-other-language"]',
+      )).toBeNull();
+      wrapper.unmount();
+    });
+
+  it('disables the other language when the account already has three resumes',
+    async () => {
+      const wrapper = mount(ResumeList, {
+        props: {
+          items: [
+            summary({ id: 'a' }),
+            summary({ id: 'b' }),
+            summary({ id: 'c' }),
+          ],
+          busyIds: [],
+          removalFocusId: null,
+          removalFocusVersion: 0,
+        },
+      });
+      await wrapper.get('[data-resume-actions]').trigger('click');
+      const item = document.body.querySelector(
+        '[data-testid="create-other-language"]',
+      );
+      expect(item?.getAttribute('aria-disabled')).toBe('true');
+      wrapper.unmount();
+    });
 
   it('shows public and draft marks from the summary fields', () => {
     const publicItem = summary({
