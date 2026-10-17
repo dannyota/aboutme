@@ -12,7 +12,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { twinTarget } from '../../../editor/languageTwin';
 import type { ResumeSummary } from '../../../editor/resumeApi';
+import { languageTwinCopy } from '@/i18n/language-twin';
 import { resumeListCopy } from '@/i18n/resume-list';
 import { formatRelativeTime } from '../../../utils/relativeTime';
 import { useNow } from '../../../composables/useNow';
@@ -29,6 +31,7 @@ const props = withDefaults(
 );
 const emit = defineEmits<{
   create: [];
+  otherLanguage: [item: ResumeSummary];
   rename: [item: ResumeSummary];
   remove: [item: ResumeSummary];
 }>();
@@ -36,6 +39,14 @@ const root = ref<HTMLElement | null>(null);
 const now = props.now ?? useNow();
 const locale = useRouteLocale();
 const copy = computed(() => resumeListCopy[locale.value]);
+const twinCopy = computed(() => languageTwinCopy[locale.value]);
+const atCap = computed(() => props.items.length >= 3);
+
+function twinMenu(lng: string): string {
+  const target = twinTarget(lng);
+  if (target === null) return '';
+  return twinCopy.value.action[target];
+}
 
 function focusMenuTrigger(id: string): void {
   const selector
@@ -147,6 +158,14 @@ watch(
             </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              v-if="twinTarget(item.lng) !== null"
+              data-testid="create-other-language"
+              :disabled="atCap"
+              @select="emit('otherLanguage', item)"
+            >
+              {{ twinMenu(item.lng) }}
+            </DropdownMenuItem>
             <DropdownMenuItem
               :aria-label="copy.rename(item.title)"
               @select="emit('rename', item)"
