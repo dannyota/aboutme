@@ -74,6 +74,7 @@ apps/web/app/components/editor/EditorShell.vue
 apps/web/app/components/editor/EntryCard.vue
 apps/web/app/components/editor/ErrorSummary.vue
 apps/web/app/components/editor/InspectorPanel.vue
+apps/web/app/components/editor/LanguageTwinReview.vue
 apps/web/app/components/editor/PDFDownloadButton.vue
 apps/web/app/components/editor/PDFOpenButton.vue
 apps/web/app/components/editor/PanelResizeHandle.vue
@@ -358,6 +359,7 @@ apps/web/app/editor/coordinatorTypes.ts
 apps/web/app/editor/documentValidation.ts
 apps/web/app/editor/documentValidator.generated.d.ts
 apps/web/app/editor/documentValidator.generated.mjs
+apps/web/app/editor/languageTwin.ts
 apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
@@ -391,6 +393,7 @@ apps/web/app/i18n/filters.ts
 apps/web/app/i18n/guide.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/import.ts
+apps/web/app/i18n/language-twin.ts
 apps/web/app/i18n/legal-en.ts
 apps/web/app/i18n/legal-vi.ts
 apps/web/app/i18n/legal.ts
