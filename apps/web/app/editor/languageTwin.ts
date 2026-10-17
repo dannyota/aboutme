@@ -40,7 +40,8 @@ interface StoredLanguageTwin {
 
 const TITLE_LIMIT = 160;
 const DETAIL_LIMIT = 16;
-const STORAGE_KEY = 'aboutme.language-twin';
+/** In-tab handoff from create → editor; never browser storage. */
+let rememberedTwin: StoredLanguageTwin | null = null;
 const TITLE_SUFFIX: Readonly<Record<TwinLanguage, string>> = {
   vi: ' · Tiếng Việt',
   en: ' · English',
@@ -120,16 +121,6 @@ const BIRTH_LABELS = new Set([
   'birthday',
 ]);
 
-const TWIN_NOTES = new Set<TwinNote>([
-  'photo-removed',
-  'birth-removed',
-  'zalo-added',
-  'zalo-full',
-  'zalo-removed',
-  'no-phone',
-  'headings-left',
-]);
-
 /** The other Vietnam-guide language, or null when this resume is not vi/en. */
 export function twinTarget(lng: string): TwinLanguage | null {
   if (lng === 'vi') return 'en';
@@ -176,30 +167,27 @@ export function rememberLanguageTwin(
   id: string,
   twin: LanguageTwin,
 ): void {
-  const stored: StoredLanguageTwin = {
+  rememberedTwin = {
     id,
     target: twin.lng,
     notes: twin.notes,
   };
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
 /** The checklist for this resume, when it was just created as a twin. */
 export function readLanguageTwin(id: string): StoredLanguageTwin | null {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
-  if (raw === null) return null;
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (!isStored(value) || value.id !== id) return null;
-    return value;
-  } catch {
-    return null;
-  }
+  if (rememberedTwin === null || rememberedTwin.id !== id) return null;
+  return rememberedTwin;
 }
 
 /** Drop the checklist after the person finishes reviewing. */
 export function dismissLanguageTwin(id: string): void {
-  if (readLanguageTwin(id) !== null) sessionStorage.removeItem(STORAGE_KEY);
+  if (rememberedTwin?.id === id) rememberedTwin = null;
+}
+
+/** Clear any pending checklist (tests). */
+export function forgetLanguageTwin(): void {
+  rememberedTwin = null;
 }
 
 function retitle(title: string, target: TwinLanguage): string {
@@ -312,20 +300,4 @@ function isPhone(detail: PersonalDetail): boolean {
   return detail.type === 'phone'
     && !detail.isHidden
     && detail.value.trim() !== '';
-}
-
-function isStored(value: unknown): value is StoredLanguageTwin {
-  if (typeof value !== 'object' || value === null) return false;
-  const stored = value as {
-    id?: unknown;
-    target?: unknown;
-    notes?: unknown;
-  };
-  return typeof stored.id === 'string'
-    && (stored.target === 'vi' || stored.target === 'en')
-    && Array.isArray(stored.notes)
-    && stored.notes.every(
-      (note): note is TwinNote =>
-        typeof note === 'string' && TWIN_NOTES.has(note as TwinNote),
-    );
 }
