@@ -27,6 +27,9 @@ verified host key. `<bundle>` is the copied, reviewed `deploy/vn` directory;
 `<notice-tag>` is the eligible published tag. These placeholders select the
 ordinary install/deploy inputs, not notice command overrides.
 
+The incoming bundle, its files, and all ancestor directories must be root-owned
+and not group- or world-writable.
+
 ## First adoption, installation, and deployment
 
 On an existing pre-notice application host, invoke adoption directly from the
