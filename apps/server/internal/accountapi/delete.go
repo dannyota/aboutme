@@ -19,6 +19,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -337,6 +338,9 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	}
 	if !sameDeletionUser(lockedUser, plan.user) {
 		return errAccountChanged
+	}
+	if noticeErr := privacynotice.ResolveAccountDeletion(ctx, qtx, lockedUser.ID, plan.occurredAt); noticeErr != nil {
+		return noticeErr
 	}
 	set, err := qtx.ListAccountDeletionResumeSetForUpdate(ctx, plan.user.ID)
 	if err != nil {

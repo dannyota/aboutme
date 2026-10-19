@@ -202,6 +202,47 @@ type PendingAuthentication struct {
 	ConsumedAt        *time.Time
 }
 
+type PrivacyNoticeCampaign struct {
+	ID                             string
+	ContentSha256                  []byte
+	CutoffAt                       time.Time
+	ExpectedCount                  int64
+	CaptureCursor                  *uuid.UUID
+	State                          string
+	SealedAt                       *time.Time
+	FirstActivatedAt               *time.Time
+	ActivatedAt                    *time.Time
+	AbortedAt                      *time.Time
+	RetiredAt                      *time.Time
+	PurgedAt                       *time.Time
+	ActivationCount                int64
+	AcceptedCount                  *int64
+	DeletedCount                   *int64
+	LastAcceptedAt                 *time.Time
+	RecoveryCount                  int64
+	RecoveryExpiredCount           int64
+	RecoveryAttemptsExhaustedCount int64
+	RecoveryProviderRejectedCount  int64
+	RecoveryPayloadInvalidCount    int64
+	RecoveryJobMissingCount        int64
+	RecoveryDeliveryFailedCount    int64
+}
+
+type PrivacyNoticeRecipient struct {
+	ID          uuid.UUID
+	CampaignID  string
+	UserID      *uuid.UUID
+	JobID       uuid.UUID
+	State       string
+	Generation  int32
+	QueuedAt    *time.Time
+	AcceptedAt  *time.Time
+	DeletedAt   *time.Time
+	FailedAt    *time.Time
+	CancelledAt *time.Time
+	FailureCode *string
+}
+
 type PrivacySweepState struct {
 	Name      string
 	Cursor    string

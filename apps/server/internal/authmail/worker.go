@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -34,15 +35,16 @@ const (
 // Production has no alternate store path; tests inject only package-private
 // begin/commit failure hooks and the same *store.Queries transaction binding.
 type WorkerOptions struct {
-	Pool       *store.Pool
-	Queries    *store.Queries
-	KeyRing    *KeyRing
-	Sender     Sender
-	FooterNote string
-	Clock      func() time.Time
-	Jitter     func(time.Duration) time.Duration
-	Logger     *slog.Logger
-	WorkerID   uuid.UUID
+	Pool            *store.Pool
+	Queries         *store.Queries
+	KeyRing         *KeyRing
+	Sender          Sender
+	FooterNote      string
+	Clock           func() time.Time
+	Jitter          func(time.Duration) time.Duration
+	Logger          *slog.Logger
+	WorkerID        uuid.UUID
+	NoticeAuthority NoticeAuthority
 }
 
 // Worker polls once per second, claims at most ten jobs, and sends at most two
@@ -50,15 +52,16 @@ type WorkerOptions struct {
 // locks the scope row first and the leased job second, holds both locks through
 // the at-most-ten-second sender call, and commits sent/terminal/requeue state.
 type Worker struct {
-	pool       poolBeginner
-	queries    *store.Queries
-	ring       *KeyRing
-	sender     Sender
-	footerNote string
-	clock      func() time.Time
-	jitter     func(time.Duration) time.Duration
-	logger     *slog.Logger
-	id         uuid.UUID
+	pool            poolBeginner
+	queries         *store.Queries
+	ring            *KeyRing
+	sender          Sender
+	footerNote      string
+	clock           func() time.Time
+	jitter          func(time.Duration) time.Duration
+	logger          *slog.Logger
+	id              uuid.UUID
+	noticeAuthority NoticeAuthority
 
 	// package-private hooks tests use as deterministic barriers; nil in
 	// production.
@@ -91,15 +94,16 @@ func NewWorker(opts WorkerOptions) (*Worker, error) {
 		return nil, ErrWorker
 	}
 	return &Worker{
-		pool:       opts.Pool,
-		queries:    opts.Queries,
-		ring:       opts.KeyRing,
-		sender:     opts.Sender,
-		footerNote: opts.FooterNote,
-		clock:      opts.Clock,
-		jitter:     opts.Jitter,
-		logger:     opts.Logger,
-		id:         opts.WorkerID,
+		pool:            opts.Pool,
+		queries:         opts.Queries,
+		ring:            opts.KeyRing,
+		sender:          opts.Sender,
+		footerNote:      opts.FooterNote,
+		clock:           opts.Clock,
+		jitter:          opts.Jitter,
+		logger:          opts.Logger,
+		id:              opts.WorkerID,
+		noticeAuthority: opts.NoticeAuthority,
 	}, nil
 }
 
@@ -160,7 +164,11 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			if err := w.sendJob(ctx, job); err != nil {
-				w.logger.Warn("authmail: send job failed", "job", job.ID, "err", "send failed")
+				if Kind(job.Kind) == KindPrivacyNotice {
+					w.logger.Warn("authmail: notice send failed")
+				} else {
+					w.logger.Warn("authmail: send job failed", "job", job.ID, "err", "send failed")
+				}
 			}
 		}()
 	}
@@ -183,8 +191,9 @@ func (w *Worker) requeueExpired(ctx context.Context, now time.Time) error {
 	}()
 	qtx := w.queries.WithTx(tx)
 	if _, err := qtx.RequeueExpiredAuthEmailLeases(ctx, store.RequeueExpiredAuthEmailLeasesParams{
-		Now:       now,
-		LimitRows: staleLeaseBatch,
+		Now:           now,
+		LimitRows:     staleLeaseBatch,
+		IncludeNotice: w.noticeAllowed(ctx, qtx),
 	}); err != nil {
 		return err
 	}
@@ -215,8 +224,9 @@ func (w *Worker) cleanup(ctx context.Context, now time.Time) error {
 	}
 	return w.deleteInTx(ctx, func(qtx *store.Queries) error {
 		_, err := qtx.CleanupFinishedAuthEmailJobs(ctx, store.CleanupFinishedAuthEmailJobsParams{
-			Cutoff:    now.Add(-finishedJobRetain),
-			LimitRows: cleanupBatch,
+			Cutoff:        now.Add(-finishedJobRetain),
+			LimitRows:     cleanupBatch,
+			IncludeNotice: w.noticeManifestMatches(ctx, qtx),
 		})
 		return err
 	})
@@ -256,6 +266,7 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob
 		LeaseExpiresAt: now.Add(leaseDuration),
 		Now:            now,
 		LimitRows:      claimBatchSize,
+		IncludeNotice:  w.noticeAllowed(ctx, w.queries.WithTx(tx)),
 	})
 	if err != nil {
 		return nil, err
@@ -263,6 +274,9 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	sort.SliceStable(jobs, func(i, j int) bool {
+		return Kind(jobs[i].Kind) != KindPrivacyNotice && Kind(jobs[j].Kind) == KindPrivacyNotice
+	})
 	if w.hooks.afterClaim != nil {
 		w.hooks.afterClaim(jobs)
 	}
@@ -279,6 +293,9 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob
 func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	if w.hooks.beforeAuth != nil {
 		w.hooks.beforeAuth(job.ID)
+	}
+	if Kind(job.Kind) == KindPrivacyNotice {
+		return w.sendNoticeJob(ctx, job)
 	}
 
 	tx, err := w.pool.Begin(ctx)
