@@ -318,7 +318,8 @@ describe('privacy and terms pages', () => {
   }) => {
     setSiteLocale(locale);
     const wrapper = await mountSuspended(PrivacyPage);
-    expect(paragraphs(wrapper)).toContain(notice);
+    const items = wrapper.findAll('section li').map((item) => item.text());
+    expect(items).toContain(notice);
   });
 
   it('render the Terms in Vietnamese and English', async () => {
