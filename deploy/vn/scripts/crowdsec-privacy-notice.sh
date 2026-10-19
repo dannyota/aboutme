@@ -47,7 +47,7 @@ notice_release_read() {
   done
   grep -qxF "Environment=DEPLOY_RELEASE_TAG=$notice_tag" /etc/containers/systemd/aboutme-server.container || return 1
   [[ $(notice_manifest | sha256sum | cut -d' ' -f1) == "$content_sha256" ]] || return 1
-  notice_manifest | grep -qxF "publication_date=$publication_date"
+  notice_manifest | grep -xF "publication_date=$publication_date" >/dev/null
 }
 notice_owner_receipts() {
   local name model parsed cutoff expected
