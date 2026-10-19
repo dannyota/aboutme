@@ -118,12 +118,20 @@ STUB
 done
 stub "$work/bin/systemctl" <<'STUB'
 set -euo pipefail
+printf '%s\n' "$*" >>"$NOTICE_FIXTURE/systemctl-calls"
 case $1 in
-  is-active) [[ ${NOTICE_APP_STATE:-absent} == active || ${*: -1} == aboutme-maintenance* ]] ;;
+  is-active)
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      case ${*: -1} in crowdsec* | aboutme-crowdsec-retention*) exit 0 ;; esac
+    fi
+    [[ ${NOTICE_APP_STATE:-absent} == active || ${*: -1} == aboutme-maintenance* ]] ;;
   show)
     [[ ${NOTICE_APP_STATE:-absent} != inspection-failure ]] || exit 1
     [[ " $* " == *' --all '* ]] || exit 1
     unit_state=${NOTICE_UNIT_STATE:-inactive}; job=${NOTICE_JOB:-}
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      case ${*: -1} in crowdsec* | aboutme-crowdsec-retention*) unit_state=active ;; esac
+    fi
     [[ ${NOTICE_APP_STATE:-absent} != active ]] || unit_state=active
     if [[ ${*: -1} == postgresql@18-main.service ]]; then unit_state=active; job=${NOTICE_POSTGRES_JOB:-}; [[ ${NOTICE_POSTGRES_INSPECTION:-0} == 0 ]] || exit 1; fi
     if [[ ${NOTICE_CLAIMED:-0} == 1 && -f $NOTICE_FIXTURE/stopped && -z $job && $unit_state == inactive ]]; then
@@ -135,7 +143,23 @@ case $1 in
       *Job*) printf '%s\n' "$job" ;;
       *) exit 1 ;;
     esac ;;
-  list-jobs | list-units) : ;;
+  list-jobs)
+    [[ ${NOTICE_INITIAL_INSPECTION:-valid} != jobs ]] || exit 1
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      printf '1 aboutme-crowdsec-retention.service start running\n'
+    fi
+    [[ -z ${NOTICE_INITIAL_JOB:-} ]] || printf '2 %s start waiting\n' "$NOTICE_INITIAL_JOB"
+    ;;
+  list-units)
+    [[ ${NOTICE_INITIAL_INSPECTION:-valid} != units ]] || exit 1
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      printf '%s\n' 'crowdsec.service loaded active running protection' \
+        'crowdsec-firewall-bouncer.service loaded active running bouncer' \
+        'aboutme-crowdsec-retention.timer loaded active waiting retention' \
+        'aboutme-crowdsec-retention-startup.service loaded active exited retention'
+    fi
+    [[ -z ${NOTICE_INITIAL_UNIT:-} ]] || printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+    ;;
   stop)
     if [[ ${NOTICE_CAPTURE:-0} == 1 && $* == *aboutme-server* ]]; then
       [[ -f /var/lib/aboutme/privacy-notice/capture-in-progress ]] || exit 1
@@ -746,6 +770,13 @@ for name in send.json activation.json capture-in-progress; do
 done
 NOTICE_APP_STATE=inspection-failure refuse bash "$wrapper" reconcile-initial; initial_reset
 NOTICE_JOB=1 refuse bash "$wrapper" reconcile-initial; initial_reset
+before=$(wc -l <"$work/initial-calls")
+for unit in aboutme-migrate.service aboutme-db-setup.service aboutme-job@privacy-retention-sweep.service aboutme-restore.service postgresql-recovery.service; do
+  NOTICE_INITIAL_JOB=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+  NOTICE_INITIAL_UNIT=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+done
+for inspection in jobs units; do NOTICE_INITIAL_INSPECTION=$inspection refuse bash "$wrapper" reconcile-initial; initial_reset; done
+[[ $(wc -l <"$work/initial-calls") == "$before" ]] || fail 'nonquiescent writer reached initial database proof'
 for fault in rm:/var/lib/aboutme/privacy-notice/restore-reconciliation sync:/var/lib/aboutme/privacy-notice; do
   NOTICE_INITIAL_FAULT=$fault initial_refuse
 done
@@ -771,7 +802,10 @@ refuse bash "$wrapper" reconcile-initial; initial_reset; exec {initial_continue_
 touch "$authority/restore-reconciliation"; chmod 0444 "$authority/restore-reconciliation"
 NOTICE_LOCK=contention refuse bash "$wrapper" reconcile-initial
 [[ -f $authority/restore-reconciliation ]] || fail 'lock contention cleared marker'
-initial_reset; app 0 reconcile-initial; [[ ! -e $authority/restore-reconciliation && ! -e /var/lib/aboutme/cutover-mutation.json ]] || fail 'initial success retained markers'
+initial_reset; : >"$work/systemctl-calls"
+NOTICE_LEGACY_PROTECTION=active app 0 reconcile-initial
+[[ ! -e $authority/restore-reconciliation && ! -e /var/lib/aboutme/cutover-mutation.json ]] || fail 'initial success retained markers'
+if grep -Eq '^(stop|restart).*crowdsec' "$work/systemctl-calls"; then fail 'initial reconciliation interrupted existing protection'; fi
 cmp -s "$authority/initial-epoch" "$work/initial-current" || fail 'initial action changed anchor'
 [[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'initial success issued authority'
 before=$(wc -l <"$work/initial-calls"); app 0 reconcile-initial
