@@ -300,9 +300,10 @@ access on encrypted storage and expires 30 days after capture. It is neither a
 fallback nor a recurring backup; never copy it into support, CI, the repository,
 or the backup bucket.
 
-Release the notice before ingestion. Under the operation lock, persist a marker
-blocking unattended starts after crashes/reboots. Stop both Caddy modes, engine,
-firewall bouncer, and retention scheduling; package hooks must not restart them.
+Complete the [notice and email gate](crowdsec-privacy-notification.md) before
+ingestion. Under the operation lock, persist a marker blocking unattended starts
+after crashes/reboots. Stop both Caddy modes, engine, firewall bouncer, and
+retention scheduling; package hooks must not restart them.
 
 Provision authentication and database; install PostgreSQL configuration before
 any CrowdSec binary runs. The fenced empty-database preflight permits initial

@@ -8,6 +8,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |-|-|
 |[v0.8-roadmap.md](v0.8-roadmap.md)|Active release order|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
+|[crowdsec-postgresql.md](crowdsec-postgresql.md)|CrowdSec PostgreSQL storage, bounded probe paths, retention, and cutover|
 |[restore-drill.md](restore-drill.md)|Isolated backup restore drill and its remaining safety proofs|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
