@@ -581,11 +581,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          - group: editor
-            proofs: editor exports
+          - group: editor-diagnostic-1
+            proofs: editor
+          - group: editor-diagnostic-2
+            proofs: editor
+          - group: editor-diagnostic-3
+            proofs: editor
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start setup timing
