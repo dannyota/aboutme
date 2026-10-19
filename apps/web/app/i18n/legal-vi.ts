@@ -3,7 +3,8 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  updated: 'Cập nhật lần cuối ngày 11/10/2026',
+  privacyUpdated: 'Cập nhật lần cuối ngày 19/10/2026',
+  termsUpdated: 'Cập nhật lần cuối ngày 11/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
@@ -60,17 +61,24 @@ export const legalVi: LegalCopy = {
           + 'dùng gần nhất. Token truy cập chỉ được lưu dưới dạng mã băm.',
           'Nhật ký vận hành thông thường của máy chủ không ghi địa chỉ IP '
           + 'hoặc tiêu đề yêu cầu và được lưu tối đa 30 ngày.',
-          'Chống tấn công: CrowdSec nhận dữ liệu yêu cầu gồm đúng năm '
-          + 'trường: dấu thời gian UTC, địa chỉ IP nguồn, phương thức HTTP, '
-          + 'mã trạng thái phản hồi và nhóm đường dẫn chung. Dữ liệu này '
-          + 'không ghi đường dẫn hoặc URI cụ thể, chuỗi truy vấn, tiêu đề '
-          + 'yêu cầu hay phản hồi, hoặc nội dung yêu cầu hay phản hồi. Dữ '
-          + 'liệu đầu vào chỉ nằm trong RAM. Cảnh báo và lệnh chặn của '
-          + 'CrowdSec được lưu trên ổ dữ liệu được mã hóa tại Việt Nam. '
-          + 'Dữ liệu đầu vào và toàn bộ bản ghi tấn công của CrowdSec, gồm '
-          + 'cảnh báo và lệnh chặn HTTP và SSH, được giữ tối đa 24 giờ. '
-          + 'Không dữ liệu nào trong số này được chia sẻ với cộng đồng '
-          + 'CrowdSec.',
+          'Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, '
+          + 'phương thức, mã phản hồi, nhóm tuyến truy cập và nhóm dấu hiệu '
+          + 'thăm dò cố định. Chỉ với tuyến không được nhận diện trả về mã '
+          + '400, 404 hoặc 405, mẫu cảnh báo tấn công mới có thể chứa nguyên '
+          + 'đường dẫn đích đã mã hóa ký tự, bỏ phần truy vấn, tối đa 512 '
+          + 'byte. Chúng tôi không ghi đường dẫn đích của các tuyến đã biết, '
+          + 'gồm tuyến tài khoản, API và CV công khai hợp lệ. Đích không hợp '
+          + 'lệ hoặc quá dài chỉ được gán nhóm cố định, không ghi đường dẫn. '
+          + 'Tham số truy vấn, tiêu đề và nội dung yêu cầu không được ghi. '
+          + 'Dữ liệu yêu cầu nằm trong RAM; CrowdSec lưu mẫu cảnh báo tấn '
+          + 'công và lệnh chặn, không lưu nhật ký đầy đủ mọi lượt truy cập. '
+          + 'Bản ghi đang hoạt động được giữ tối đa 24 giờ. Bản sao lưu cơ '
+          + 'sở dữ liệu được mã hóa tại Việt Nam có thể giữ bản ghi cũ trong '
+          + 'khoảng năm tuần sau khi xóa, theo chính sách lưu bản sao bên '
+          + 'dưới. Bản sao lưu chỉ dùng để khôi phục sau sự cố. Dữ liệu '
+          + 'CrowdSec được khôi phục sẽ bị loại bỏ trước khi hệ thống chống '
+          + 'tấn công hoạt động trở lại. Không dữ liệu nào được chia sẻ với '
+          + 'cộng đồng CrowdSec.',
           'Kiểm tra mật khẩu: khi bạn đặt mật khẩu, chúng tôi kiểm tra xem '
           + 'mật khẩu đã từng bị lộ hay chưa qua dịch vụ Have I Been '
           + 'Pwned. Chỉ 5 ký tự đầu của mã băm SHA-1 được gửi đi, không '

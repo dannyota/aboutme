@@ -61,7 +61,7 @@ func TestCIMDMigrationPreservesDCRAndRefusesDestructiveDown(t *testing.T) {
 		VALUES ('Existing', $1, $2, $2) RETURNING id`, `["`+oauthRedirectURI+`"]`, oauthNow).Scan(&clientID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if _, err := provider.UpTo(ctx, 12); err != nil {
 		t.Fatal(err)
 	}
 	var unchanged bool

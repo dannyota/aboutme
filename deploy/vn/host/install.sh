@@ -46,6 +46,10 @@ bundle=$(readlink -f "$1")
 # enter, not the caller's home.
 cd /
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
+# Validate the incoming denial primitive before any persistent-state access.
+# shellcheck source=crowdsec-privacy-notice-host.sh
+source "$bundle/host/crowdsec-privacy-notice-host.sh"
+notice_mount_identity >/dev/null 2>&1 || die "invalid_state"
 mountpoint -q /srv/data || die "/srv/data is not a mountpoint; run host/data-volume.sh first"
 # shellcheck source=crowdsec-offline.sh
 source "$bundle/host/crowdsec-offline.sh"
@@ -79,6 +83,23 @@ for operation in /srv/data/host-operations/*; do
   operation_record=$(operation_state load "${operation##*/}") || die "malformed operation protocol"
   jq -e '.closureQuiescent==true and .fenceHeld==false and (.action.writeOutcome!="unknown") and (.phase=="closed" or .phase=="planned" or .phase=="serving")' <<<"$operation_record" >/dev/null || die "an operation remains unresolved"
 done
+
+# Adoption is explicit and precedes ordinary helper replacement on legacy hosts.
+if [[ -e /var/lib/aboutme/fence.json ]]; then
+  jq -e '(.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null 2>&1 || die "an operation remains owned"
+fi
+if [[ -e /var/lib/aboutme/release.json ]]; then
+  jq -e '.notice_authority.state=="adopted"' /var/lib/aboutme/fence.json >/dev/null 2>&1 || die "notice adoption is required"
+fi
+lib=/usr/local/lib/aboutme
+install -d -o root -g root -m 0755 "$lib" /run/aboutme
+for required in host/crowdsec-privacy-notice-host.sh host/workload-lock.sh \
+  scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh \
+  scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh; do
+  [[ -f $bundle/$required && ! -L $bundle/$required ]] || die "required notice helper is missing"
+  install -o root -g root -m 0755 "$bundle/$required" "$lib/${required##*/}"
+done
+"$lib/crowdsec-privacy-notice-host.sh" initialize || die "invalid_state"
 
 export DEBIAN_FRONTEND=noninteractive
 tmp=$(mktemp -d)

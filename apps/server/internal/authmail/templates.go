@@ -58,6 +58,7 @@ func FooterNoteForMode(mode string) string {
 }
 
 var templates = map[Kind]template{
+	KindPrivacyNotice: privacyNoticeTemplate(),
 	KindVerify: {
 		subject:   "Xác minh email aboutme.vn / Verify your aboutme.vn email",
 		preheader: "Xác nhận email để hoàn tất đăng ký. Confirm your email to finish your account.",
@@ -149,6 +150,9 @@ func buildMessage(kind Kind, p Payload, footerNote string) Message {
 	link := ""
 	if t.action != "" {
 		link = p.Link
+	}
+	if kind == KindPrivacyNotice {
+		link = PrivacyNoticeURL
 	}
 	return Message{
 		Kind:     kind,
