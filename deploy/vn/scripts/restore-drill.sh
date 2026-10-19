@@ -113,8 +113,8 @@ notice_host_child() {
   ((recovery_started)) || return 1
   elapsed=$((SECONDS - start))
   notice_database_checks 4>&- || return 1
-  state=$(systemctl show --property=ActiveState --property=Job postgresql@18-main.service 4>&-) || return 1
-  grep -qxF Job=0 <<<"$state" || return 1
+  state=$(systemctl show --all --property=ActiveState --property=Job postgresql@18-main.service 4>&-) || return 1
+  [[ $(wc -l <<<"$state") == 2 ]] && grep -qxF ActiveState=active <<<"$state" && grep -qxF Job= <<<"$state" || return 1
   ! pgrep -f '[/]pgbackrest.*restore' 4>&- >/dev/null || return 1
   notice_restore_postcheck 4>&- || return 1
   printf 'RECOVERY %s\n' "$elapsed"

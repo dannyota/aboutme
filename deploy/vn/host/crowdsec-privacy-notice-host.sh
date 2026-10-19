@@ -95,8 +95,8 @@ notice_epoch_rotate() {
 }
 notice_unit_stopped() {
   local result
-  result=$(systemctl show --property=ActiveState --property=Job "$1") || return 1
-  [[ $(wc -l <<<"$result") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" && grep -qxF 'Job=0' <<<"$result"
+  result=$(systemctl show --all --property=ActiveState --property=Job "$1") || return 1
+  [[ $(wc -l <<<"$result") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" && grep -qxF 'Job=' <<<"$result"
 }
 notice_app_absent() {
   notice_absent /var/lib/aboutme/release.json && notice_absent /etc/containers/systemd/aboutme-server.container || return 1
@@ -246,7 +246,7 @@ try:
                 integer(sum(v[group].values()))
             c=v['counts']; assert sum(c.values())==v['actual_count'] and sum(v['failure_counts'].values())==c['failed'] and sum(v['recovery_counts'].values())==v['recovery_count']
             state=v['state']; assert state in ('capturing','sealed','activated','aborted','retired')
-            assert v['actual_count']<=v['expected_count'] if state=='capturing' else v['actual_count']==v['expected_count']
+            assert v['actual_count']<=v['expected_count'] if state in ('capturing','retired') else v['actual_count']==v['expected_count']
             for k in ('sealed_at','first_activated_at','activated_at','aborted_at','last_accepted_at'):
                 if v[k] is not None: assert cutoff<=stamp(v[k])<=now
             assert (v['sealed_at'] is None)==(state=='capturing')
@@ -306,41 +306,52 @@ notice_bootstrap() {
   else notice_fence notice-restore-release "$operation" >/dev/null 2>&1; fi
 }
 notice_adopt() {
-  local state tag record base
+  local state tag record base name resuming=no
   notice_identity=$(notice_mount_identity) || return 1
   exec {notice_bundle_fd}>>/srv/data/host-operations/.bundle.lock || return 1
   flock -x -w 30 "$notice_bundle_fd" || return 1
   notice_recheck_mount || return 1
-  state=$(notice_fence read 2>/dev/null) || return 1
-  if [[ $(jq -r '.notice_authority.state // empty' <<<"$state") == initializing ]]; then notice_bootstrap; return; fi
-  [[ $(jq -r '.notice_authority // empty' <<<"$state") == '' ]] && notice_absent /var/lib/aboutme/privacy-notice || return 1
+  # The incoming reviewed helper reads intent even before its installed copy.
+  base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if [[ -f $base/../scripts/fence.sh ]]; then base=$(cd "$base/../scripts" && pwd); fi
+  for name in fence deploy-host deploy-safety; do [[ -f $base/$name.sh && ! -L $base/$name.sh ]] || return 1; done
+  state=$("$base/fence.sh" read 2>/dev/null) || return 1
+  if [[ $(jq -r '.notice_authority.state // empty' <<<"$state") == initializing ]]; then
+    notice_operation=$(jq -er .notice_authority.operation_id <<<"$state") || return 1
+    [[ $(jq -r .operation_id <<<"$state") == "$notice_operation" && $(jq -r .operation_kind <<<"$state") == cutover ]] || return 1
+    resuming=yes
+  else
+    [[ $(jq -r '.notice_authority // empty' <<<"$state") == '' ]] && notice_absent /var/lib/aboutme/privacy-notice || return 1
+  fi
   record=/var/lib/aboutme/release.json
   notice_safe_file "$record" 644 || return 1
   [[ $(sha256sum "$record" | cut -d' ' -f1) == "$LEGACY_RELEASE_SHA256" && \
     $(jq -r .release_tag "$record") == "$LEGACY_RELEASE_TAG" && \
     $(jq -r .server_image "$record") == "$LEGACY_SERVER_IMAGE" && $(jq -r .web_image "$record") == "$LEGACY_WEB_IMAGE" ]] || return 1
-  [[ $(sha256sum /usr/local/lib/aboutme/fence.sh | cut -d' ' -f1) == "$LEGACY_FENCE_SHA256" && \
-    $(sha256sum /usr/local/lib/aboutme/deploy-host.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_HOST_SHA256" && \
-    $(sha256sum /usr/local/lib/aboutme/deploy-safety.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_SAFETY_SHA256" ]] || return 1
   tag=$(jq -r .release_tag "$record")
-  notice_operation=$(notice_fence lock cutover "$tag" 2>/dev/null) || return 1
-  # The reviewed helper comes from the same incoming bundle before replacement.
-  base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  if [[ -f $base/../scripts/fence.sh ]]; then base=$(cd "$base/../scripts" && pwd); fi
-  [[ -f $base/fence.sh && -f $base/deploy-safety.sh && -f $base/deploy-host.sh ]] || return 1
+  if [[ $resuming == no ]]; then
+    [[ $(sha256sum /usr/local/lib/aboutme/fence.sh | cut -d' ' -f1) == "$LEGACY_FENCE_SHA256" && \
+      $(sha256sum /usr/local/lib/aboutme/deploy-host.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_HOST_SHA256" && \
+      $(sha256sum /usr/local/lib/aboutme/deploy-safety.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_SAFETY_SHA256" ]] || return 1
+    notice_operation=$(notice_fence lock cutover "$tag" 2>/dev/null) || return 1
+  fi
   # shellcheck source=../scripts/deploy-safety.sh
   source "$base/deploy-safety.sh"
   aboutme_stop_jobs 60 || return 1
   exec {notice_boot_fd}>>/run/aboutme/workload.lock || return 1
   flock -x -w 300 "$notice_boot_fd" || return 1
   aboutme_fail_closed 60 && aboutme_assert_cutover_quiescent || return 1
-  notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1
+  "$base/fence.sh" checkpoint "$notice_operation" "$tag" >/dev/null 2>&1 || return 1
+  if [[ $resuming == no ]]; then notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1; fi
   # The legacy helper cannot write evidence; use the incoming reviewed helper.
   "$base/fence.sh" notice-authority "$notice_operation" initializing >/dev/null 2>&1 || return 1
-  install -o root -g root -m 0755 "$base/fence.sh" /usr/local/lib/aboutme/fence.sh && \
-    install -o root -g root -m 0755 "$base/deploy-host.sh" /usr/local/lib/aboutme/deploy-host.sh && \
-    install -o root -g root -m 0755 "$base/deploy-safety.sh" /usr/local/lib/aboutme/deploy-safety.sh || return 1
-  notice_bootstrap
+  for name in fence deploy-host deploy-safety; do
+    notice_recheck_mount && install -o root -g root -m 0755 "$base/$name.sh" "/usr/local/lib/aboutme/$name.sh" || return 1
+  done
+  for name in fence deploy-host deploy-safety; do
+    notice_safe_file "/usr/local/lib/aboutme/$name.sh" 755 && cmp -s "$base/$name.sh" "/usr/local/lib/aboutme/$name.sh" || return 1
+  done
+  aboutme_assert_cutover_quiescent && notice_bootstrap
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

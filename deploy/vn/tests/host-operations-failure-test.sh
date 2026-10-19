@@ -183,7 +183,7 @@ set -euo pipefail
 # shellcheck source=deploy/vn/scripts/deploy-safety.sh
 source "$PLAN_SAFETY"
 mountpoint() { return 0; }
-systemctl() { printf 'ActiveState=inactive\nJob=0\n'; }
+systemctl() { [[ " $* " == *' --all '* ]] || return 1; printf 'ActiveState=inactive\nJob=\n'; }
 podman() { :; }
 timeout() { shift; "$@"; }
 runuser() { cat >/dev/null; printf '0\n'; }

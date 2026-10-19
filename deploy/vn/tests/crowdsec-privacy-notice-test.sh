@@ -5,14 +5,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 fail() { printf 'FAIL notice host %s\n' "$1" >&2; exit 1; }
 primitive=$root/deploy/vn/host/crowdsec-privacy-notice-host.sh; wrapper=$root/deploy/vn/scripts/crowdsec-privacy-notice.sh
 controller_source=$root/deploy/vn/scripts/restore-drill.sh; [[ -f $primitive && -f $wrapper ]] || fail 'missing implementation'
-legacy_fields=(LEGACY_RELEASE_TAG LEGACY_RELEASE_SHA256 LEGACY_SERVER_IMAGE LEGACY_WEB_IMAGE
-  LEGACY_FENCE_SHA256 LEGACY_DEPLOY_HOST_SHA256 LEGACY_DEPLOY_SAFETY_SHA256)
-for field in "${legacy_fields[@]}"; do
-  grep -Eq "^readonly $field='[^']+'$" "$primitive" || fail 'missing closed legacy pin'
-done
+legacy_fields=(LEGACY_RELEASE_TAG LEGACY_RELEASE_SHA256 LEGACY_SERVER_IMAGE LEGACY_WEB_IMAGE LEGACY_FENCE_SHA256 LEGACY_DEPLOY_HOST_SHA256 LEGACY_DEPLOY_SAFETY_SHA256)
+for field in "${legacy_fields[@]}"; do grep -Eq "^readonly $field='[^']+'$" "$primitive" || fail 'missing closed legacy pin'; done
 [[ $(id -u) == 0 ]] || fail 'isolated root runner required'
-# Owner commands share the replaceable directory and use only the pinned app identity, socket, and bounded offline container. These structural assertions
-# supplement the filesystem proof; they do not prove runtime network isolation.
+# Structural checks supplement the filesystem proof; they do not prove runtime network isolation.
 grep -Fq -- '--network=none' "$wrapper" || fail 'owner command network'; grep -Eq -- '--memory(=|[[:space:]])(256[mM]|268435456)' "$wrapper" || fail 'owner command memory'
 grep -Fq 'aboutme_app' "$wrapper" || fail 'owner command database identity'; grep -Fq '/run/postgresql' "$wrapper" || fail 'owner command database socket'
 grep -Fq 'server_image' "$wrapper" || fail 'owner command release pin'; grep -Fq 'privacy-notice:/var/lib/aboutme/privacy-notice:ro' "$wrapper" || fail 'owner authority directory mount'
@@ -105,13 +101,17 @@ case $1 in
   is-active) [[ ${NOTICE_APP_STATE:-absent} == active || ${*: -1} == aboutme-maintenance* ]] ;;
   show)
     [[ ${NOTICE_APP_STATE:-absent} != inspection-failure ]] || exit 1
-    if [[ ${NOTICE_CLAIMED:-0} == 1 && -f $NOTICE_FIXTURE/stopped && ${NOTICE_JOB:-0} == 0 && ${NOTICE_UNIT_STATE:-inactive} == inactive ]]; then
+    [[ " $* " == *' --all '* ]] || exit 1
+    unit_state=${NOTICE_UNIT_STATE:-inactive}; job=${NOTICE_JOB:-}
+    [[ ${NOTICE_APP_STATE:-absent} != active ]] || unit_state=active
+    if [[ ${*: -1} == postgresql@18-main.service ]]; then unit_state=active; job=${NOTICE_POSTGRES_JOB:-}; [[ ${NOTICE_POSTGRES_INSPECTION:-0} == 0 ]] || exit 1; fi
+    if [[ ${NOTICE_CLAIMED:-0} == 1 && -f $NOTICE_FIXTURE/stopped && -z $job && $unit_state == inactive ]]; then
       touch "$NOTICE_FIXTURE/joined"; printf 'join\n' >>"$NOTICE_FIXTURE/order"
     fi
     case $* in
-      *ActiveState*Job*) printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_JOB:-0}" ;;
-      *ActiveState*) printf '%s\n' "${NOTICE_UNIT_STATE:-inactive}" ;;
-      *Job*) printf '%s\n' "${NOTICE_JOB:-0}" ;;
+      *ActiveState*Job*) printf 'ActiveState=%s\nJob=%s\n' "$unit_state" "$job" ;;
+      *ActiveState*) printf '%s\n' "$unit_state" ;;
+      *Job*) printf '%s\n' "$job" ;;
       *) exit 1 ;;
     esac ;;
   list-jobs | list-units) : ;;
@@ -187,8 +187,7 @@ retained() {
 }
 denied() {
   local unit
-  for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
-    aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
+  for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
     if "$fence" check 4007 "$unit" >"$work/out" 2>"$work/err"; then
       fail 'guarded start admitted'
     fi
@@ -207,8 +206,7 @@ done
 refuse "$controller" _host-pass extra; refuse "$controller" _host-pass; refuse /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups "$controller" host-pass latest
 refuse /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups "$controller" _host-pass; refuse bash -c '"$1" _host-pass 3<"$2" 4>"$3"' bash "$controller" /dev/null "$work/completion-file"
 for function in notice_restore_begin notice_restore_pre_restore notice_restore_postcheck notice_restore_finish; do
-  grep -Eq "^$function\(\)[[:space:]]*\\{" "$primitive" || fail 'missing source-only boundary'; refuse bash -c 'source "$1"; "$2" extra' bash "$host" "$function"
-done
+  grep -Eq "^$function\(\)[[:space:]]*\\{" "$primitive" || fail 'missing source-only boundary'; refuse bash -c 'source "$1"; "$2" extra' bash "$host" "$function"; done
 for record in '' '{}' '{"version":1,"version":1}' '{"version":1,"extra":true}' \
   '{"version":"1"}' '{} {}' $'{}\n{}' '{"version":'; do
   refuse bash -c '"$1" _host-pass 3< <(printf "%s\n" "$2") 4> >(cat >/dev/null)' \
@@ -229,9 +227,7 @@ umount /var/lib/aboutme; NOTICE_LOCK=changed refuse "$host" initialize; [[ ! -e 
 umount /var/lib/aboutme; NOTICE_LOCK=contention refuse "$host" initialize; quiet "$host" initialize
 [[ $(jq -r '.operation_kind // "none"' /var/lib/aboutme/fence.json) == none ]] || fail 'successful bootstrap retained operation'
 [[ $(stat -c '%u:%g:%a' "$authority") == 0:0:755 ]] || fail 'directory metadata'
-for name in epoch restore-reconciliation; do
-  [[ $(stat -c '%u:%g:%a:%h' "$authority/$name") == 0:0:444:1 ]] || fail 'file metadata'
-done
+for name in epoch restore-reconciliation; do [[ $(stat -c '%u:%g:%a:%h' "$authority/$name") == 0:0:444:1 ]] || fail 'file metadata'; done
 [[ ! -s $authority/restore-reconciliation ]] || fail 'marker contents'; [[ $(wc -c <"$authority/epoch") == 37 ]] || fail 'epoch length'
 grep -qxE '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' "$authority/epoch" || fail 'epoch grammar'
 jq -e '.notice_authority | keys==["operation_id","state","version"] and .version==1 and .state=="adopted" and (.operation_id|test("^[A-Za-z0-9_-]{43}$"))' \
@@ -240,9 +236,7 @@ cp "$authority/epoch" "$work/initial-epoch"; cp /var/lib/aboutme/fence.json "$wo
 cmp -s "$authority/epoch" "$work/initial-epoch" || fail 'reinstall rotated epoch'; [[ ! -e /var/lib/aboutme/release.json ]] || fail 'bootstrap synthesized release'
 # Neither ordinary reinstall nor replacement-host bootstrap may derive receipt authority from a minimum release or a restored database.
 [[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'bootstrap issued receipt'
-for command in prepare enqueue status activate authorize-send; do
-  refuse bash "$wrapper" "$command" extra
-done
+for command in prepare enqueue status activate authorize-send; do refuse bash "$wrapper" "$command" extra; done
 refuse bash "$wrapper" --force; refuse bash "$wrapper" --resume
 for override in FENCE_DIR ABOUTME_WORKLOAD_LOCK NOTICE_AUTHORITY_DIR NOTICE_OPERATION_ID \
   RECOVERY_WAIT_SECONDS DB_NAME SMOKE_TABLE PG_TARGET NOTICE_COMMAND NOTICE_CONTROLLER; do refuse env "$override=invalid" "$controller" host-pass latest
@@ -362,7 +356,8 @@ sed -i '/^notice_restore_postcheck() {/a\
 for fault in active process inspection-failure; do
   NOTICE_APP_STATE=$fault refuse restore_pass
 done
-NOTICE_UNIT_STATE=activating refuse restore_pass; NOTICE_UNIT_STATE=deactivating refuse restore_pass; NOTICE_JOB=1 refuse restore_pass; mount -t tmpfs tmpfs "$authority"
+NOTICE_UNIT_STATE=activating refuse restore_pass; NOTICE_UNIT_STATE=deactivating refuse restore_pass
+for job in 0 1 invalid; do NOTICE_JOB=$job refuse restore_pass; done; mount -t tmpfs tmpfs "$authority"
 refuse restore_pass; umount "$authority"; mount --bind "$authority" "$authority"; refuse restore_pass
 umount "$authority"; mkdir "$authority/nested"; mount -t tmpfs tmpfs "$authority/nested"; refuse restore_pass
 umount "$authority/nested"; rmdir "$authority/nested"
@@ -391,6 +386,7 @@ done
 for flag in NOTICE_HELPER_EXIT NOTICE_POSTCHECK_FAIL; do
   export "$flag=1"; blocked_pass; unset "$flag"
 done
+NOTICE_POSTGRES_JOB=1 blocked_pass; NOTICE_POSTGRES_INSPECTION=1 blocked_pass
 for fault in before-store after-rename after-sync lost-response; do
   rm -f "$work/release-renamed" "$work/release-attempts"; : >"$work/order"
   jq -c '{minimum_release,minimum_tag,notice_authority}' /var/lib/aboutme/fence.json >"$work/release-invariants"
@@ -419,18 +415,14 @@ for stage in restore recovery version counts grants schema roles smoke; do
   [[ -f $authority/restore-reconciliation && ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'database failure lost denial'
   denied; refuse "$controller" host-pass latest --resume; reset_owner
 done
-for signal in HUP TERM INT; do
-  NOTICE_SIGNAL=$signal NOTICE_DB_SIGNAL=restore blocked_pass
-done
+for signal in HUP TERM INT; do NOTICE_SIGNAL=$signal NOTICE_DB_SIGNAL=restore blocked_pass; done
 # A surviving restore descendant must keep the kernel lock after either controller dies. The latch is a fixture FIFO, never a protocol/FD token.
 mkfifo "$work/continue"; exec {continue_fd}<>"$work/continue"
 for victim in outer child; do
   rm -f "$work/held-child" "$work/held-controller"
   NOTICE_DB_HOLD=restore "$controller" host-pass latest >"$work/death-out" 2>"$work/death-err" &
   outer_pid=$!
-  for ((attempt = 0; attempt < 100; attempt++)); do
-    [[ ! -f $work/held-child ]] || break; /usr/bin/sleep 0.02
-  done
+  for ((attempt = 0; attempt < 100; attempt++)); do [[ ! -f $work/held-child ]] || break; /usr/bin/sleep 0.02; done
   [[ -f $work/held-child ]] || fail 'restore descendant never reached latch'
   if [[ $victim == outer ]]; then kill -KILL "$outer_pid"
   else kill -KILL "$(cat "$work/held-controller")"; fi
@@ -497,7 +489,6 @@ done
 rm -f "$authority/send.json"; chmod 0777 "$authority"; refuse restore_pass; chmod 0755 "$authority"
 reset_owner; refuse "$host" adopt extra; refuse "$host" adopt --force; refuse "$host" adopt
 [[ ! -e $work/forbidden ]] || fail 'host primitive called application dependency'
-
 # Synthetic adoption uses a copied reviewed program with literal substitutions. The real rollout needs the primary's verified legacy pins before shipping.
 mkdir "$work/legacy" "$work/reviewed"
 for name in fence deploy-host deploy-safety; do
@@ -517,9 +508,7 @@ legacy_values=("$legacy_tag" "$(sha256sum "$work/legacy/release.json" | cut -d' 
   "$(sha256sum "$work/legacy/deploy-safety.sh" | cut -d' ' -f1)")
 cp "$primitive" "$work/reviewed/crowdsec-privacy-notice-host.sh"
 for index in "${!legacy_fields[@]}"; do
-  sed -i "s|^readonly ${legacy_fields[$index]}='[^']*'$|readonly ${legacy_fields[$index]}='${legacy_values[$index]}'|" \
-    "$work/reviewed/crowdsec-privacy-notice-host.sh"
-done
+  sed -i "s|^readonly ${legacy_fields[$index]}='[^']*'$|readonly ${legacy_fields[$index]}='${legacy_values[$index]}'|" "$work/reviewed/crowdsec-privacy-notice-host.sh"; done
 adopt=$work/reviewed/crowdsec-privacy-notice-host.sh
 for command in cp install; do
   stub "$work/bin/$command" <<'STUB'
@@ -531,6 +520,9 @@ if [[ ${NOTICE_ADOPTION:-0} == 1 ]]; then
         /var/lib/aboutme/fence.json >/dev/null || exit 1
       jq -e '.mutation_kind=="quiesce" and .state=="active"' /var/lib/aboutme/cutover-mutation.json >/dev/null || exit 1
       printf 'helper-replaced\n' >>"$NOTICE_FIXTURE/order"
+      [[ ${NOTICE_ADOPT_STOP:-none} != "before:${*: -1}" ]] || exit 1
+      [[ ${NOTICE_ADOPT_STOP:-none} != "skip:${*: -1}" ]] || exit 0
+      if [[ ${NOTICE_ADOPT_STOP:-none} == "after:${*: -1}" ]]; then "/usr/bin/${0##*/}" "$@"; exit 1; fi
       ;;
   esac
 fi
@@ -552,12 +544,22 @@ done
 NOTICE_ADOPTION=1 quiet bash "$adopt" adopt; [[ -f $authority/restore-reconciliation && -f $authority/epoch ]] || fail 'eligible adoption did not establish denial'
 jq -e '.notice_authority.state=="adopted" and .minimum_release==4007' /var/lib/aboutme/fence.json >/dev/null || fail 'adoption evidence or floor'
 refuse bash "$adopt" adopt
-for field in "${legacy_fields[@]}"; do
-  export "$field=caller_override"
+for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh skip:deploy-host.sh; do
+  rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json
+  cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
+  NOTICE_ADOPTION=1 NOTICE_ADOPT_STOP=${boundary/:/:\/usr\/local\/lib\/aboutme\/} refuse bash "$adopt" adopt
+  adoption_owner=$(jq -er '.notice_authority.operation_id' /var/lib/aboutme/fence.json)
+  jq -e --arg id "$adoption_owner" '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .operation_id==$id' /var/lib/aboutme/fence.json >/dev/null || fail 'interrupted adoption lost owner'
+  NOTICE_ADOPTION=1 NOTICE_APP_STATE=inspection-failure refuse bash "$adopt" adopt
+  jq -e --arg id "$adoption_owner" '.notice_authority.state=="initializing" and .operation_id==$id' /var/lib/aboutme/fence.json >/dev/null || fail 'unproved quiescence completed adoption'
+  NOTICE_ADOPTION=1 quiet bash "$adopt" adopt
+  jq -e --arg id "$adoption_owner" '.notice_authority.state=="adopted" and .notice_authority.operation_id==$id and .minimum_release==4007 and (.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null || fail 'resumed adoption changed owner or floor'
+  [[ ! -e /var/lib/aboutme/cutover-mutation.json && -f $authority/restore-reconciliation ]] || fail 'resumed adoption did not settle denial'
+  for name in fence deploy-host deploy-safety; do cmp -s "$work/reviewed/$name.sh" "$work/lib/$name.sh" || fail 'resumed adoption retained old helper'; done
 done
+for field in "${legacy_fields[@]}"; do export "$field=caller_override"; done
 refuse bash "$adopt" adopt
 for field in "${legacy_fields[@]}"; do unset "$field"; done
-
 # The app fixture emits only closed aggregates. It never simulates delivery.
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" "$work/lib/"; mkdir -p "$work/units" "$work/etc" /etc/containers/systemd /etc/aboutme
 mount --bind "$work/units" /etc/containers/systemd; mount --bind "$work/etc" /etc/aboutme; : >"$work/etc/server.env"
@@ -590,9 +592,7 @@ case " $* " in
 esac
 STUB
 digest=30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619
-literal() {
-  sed -nE "s/^(const )?[[:space:]]*$1[[:space:]]*=[[:space:]]*\"([^\"]*)\"$/\\2/p" "$2"
-}
+literal() { sed -nE "s/^(const )?[[:space:]]*$1[[:space:]]*=[[:space:]]*\"([^\"]*)\"$/\\2/p" "$2"; }
 manifest_source=$root/apps/server/internal/privacynotice/manifest.go; copy_source=$root/apps/server/internal/authmail/privacy_notice_copy.go
 {
   printf '%s\n' aboutme-crowdsec-privacy-content-v1 campaign_id=crowdsec-postgres-paths-v1; printf 'publication_date=%s\n' "$(literal PublicationDate "$manifest_source")"
@@ -647,10 +647,8 @@ jq '.result="queue_full"' "$work/aggregate" >"$work/full"
 cp "$work/full" "$work/aggregate"; app 2 enqueue; [[ ! -e $authority/activation.json ]] || fail 'queue wait activated ingestion'
 cp "$work/sealed" "$work/aggregate"; app 2 activate; [[ ! -e $authority/activation.json ]] || fail 'unresolved ledger activated ingestion'
 app 0 authorize-send; cp "$authority/send.json" "$work/current-send"
-for mutation in '.extra=true' '.schema_version=2' '.expected_count=2' \
-  '.content_sha256=("0"*64)' '.state="aborted"' '.state="retired"' \
-  '.cutoff_at="2026-10-19T01:02:03Z"' '.counts.failed=1' \
-  '.recovery_count=9223372036854775808' '.actual_count=0'; do
+for mutation in '.extra=true' '.schema_version=2' '.expected_count=2' '.content_sha256=("0"*64)' '.state="aborted"' '.state="retired"' \
+  '.cutoff_at="2026-10-19T01:02:03Z"' '.counts.failed=1' '.recovery_count=9223372036854775808' '.actual_count=0'; do
   jq "$mutation" "$work/sealed" >"$work/aggregate"
   invalid_aggregate; cmp -s "$authority/send.json" "$work/current-send" || fail 'invalid aggregate changed authority'
 done
@@ -666,8 +664,7 @@ jq '.release_number=1' "$work/current-release" > /var/lib/aboutme/release.json
 refuse bash "$wrapper" authorize-send; cp "$work/current-release" /var/lib/aboutme/release.json; cp "$work/units/aboutme-server.container" "$work/current-unit"
 sed -i "s|$legacy_server|ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 9)|" "$work/units/aboutme-server.container"
 refuse bash "$wrapper" authorize-send; cp "$work/current-unit" "$work/units/aboutme-server.container"
-for mutation in '.epoch="00000000-0000-4000-8000-000000000000"' '.expected_count=2' \
-  '.content_sha256=("0"*64)' '.issued_at="9999-01-01T00:00:00.000000Z"' '.extra=true'; do
+for mutation in '.epoch="00000000-0000-4000-8000-000000000000"' '.expected_count=2' '.content_sha256=("0"*64)' '.issued_at="9999-01-01T00:00:00.000000Z"' '.extra=true'; do
   jq "$mutation" "$work/current-send" >"$authority/send.json"
   chmod 0444 "$authority/send.json"; if [[ $mutation == '.expected_count=2' ]]; then invalid_aggregate enqueue; else refuse bash "$wrapper" enqueue; fi
 done
@@ -697,4 +694,7 @@ for state in aborted retired; do
   cp "$work/blocked" "$work/aggregate"; printf '1\n' >"$work/app-exit"; app 1 status; invalid_aggregate
   [[ ! -e $authority/send.json ]] || fail 'terminal campaign received send authority'
 done
+jq '.actual_count=0 | (.counts,.failure_counts) |= map_values(0) | .last_accepted_at=null' "$work/aggregate" >"$work/purged"
+cp "$work/purged" "$work/aggregate"; app 1 status; invalid_aggregate
+jq '.actual_count=2 | .counts.failed=2 | .failure_counts.delivery_failed=2' "$work/purged" >"$work/aggregate"; invalid_aggregate status
 printf 'PASS notice guest filesystem protocol\n'; printf 'notice reconciliation: not performed\n'
