@@ -3,7 +3,8 @@
 Status: Accepted (2026-09-24) for the provider choice, by the human owner's
 direction; the design choices in the
 [Vietnam production design](../design/vietnam-production.md) were approved on
-2026-10-10 and amended on 2026-10-11. Production runs on the Vietnam host.
+2026-10-10 and amended on 2026-10-11. The CrowdSec storage and backup amendment
+was accepted on 2026-10-18. Production runs on the Vietnam host.
 
 ## Context
 
@@ -31,6 +32,11 @@ Production uses providers that store and process data in Vietnam:
 - PostgreSQL 18 runs self-hosted on the vServer with pgBackRest to vStorage,
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
+- CrowdSec uses a separate database and least-privilege role in that PostgreSQL
+  cluster. Physical backups include its attack records. The owner accepts the
+  shared resource and recovery boundary and the longer encrypted-backup
+  lifetime, with live retention and fresh CrowdSec state after restore in the
+  [CrowdSec privacy contract](../design/crowdsec-http-privacy.md).
 - The release fence, secrets, jobs, logs, and alarms move to the host: journald
   keeps the logs and a host timer mails alarms. A GreenNode vMonitor synthetic
   check probes `/readyz` from outside the host and mails the owner; the GitHub
@@ -65,14 +71,19 @@ code without secrets, GitHub without cloud credentials other than the vMonitor
 quota-renewal service account (History, 2026-10-14), one serving replica and
 deploy-step migrations (ADRs 0005 and 0026), the second-factor fence rules with
 a new store (ADR 0017), and the live-state gate (ADR 0010), with no edge cache.
-Public HTTP, SSE, and MCP contracts, privacy deadlines, private media
-authorization, and every data invariant are unchanged.
+Public HTTP, SSE, and MCP contracts and private media authorization remain in
+force. The CrowdSec amendment separates its live-retention deadline from the
+existing physical-backup retention policy; other privacy deadlines remain in
+force.
 
 ## Consequences
 
 - Personal data at rest, in backups, in logs, and at the edge stays in Vietnam.
 - The team runs PostgreSQL: upgrades, backups, point-in-time recovery, and
   quarterly restore drills. A host or volume loss means a restore from vStorage.
+- CrowdSec shares the database cluster's failure and backup boundary without
+  sharing application tables or grants. Fresh state replaces data migration;
+  deployment and restore must satisfy its privacy gate before consumers start.
 - There is no instance role or parameter store. Static keys and secret files on
   the host replace them, so host compromise exposes every runtime secret, as it
   would on AWS through the task roles.
@@ -134,3 +145,13 @@ vMonitor Synthetic Test and Email Notification quotas, stored in a GitHub
 environment restricted to `main` and used by a scheduled workflow, because the
 free quotas cannot auto-renew and a lapse stops the site-down alarm. The
 [quota renewal design](../design/vmonitor-quota-renewal.md) states the controls.
+
+2026-10-18: the owner chose a separate CrowdSec database in the existing
+PostgreSQL cluster with no SQLite data migration. This removes SQLite checkpoint
+dependency from the serving gate and accepts attack records in encrypted cluster
+backups. The [CrowdSec privacy contract](../design/crowdsec-http-privacy.md)
+owns live retention, backup expiry, the bounded incident-copy exception, and
+recovery before consumer startup. The owner also approved conditional samples of
+rejected target paths, bounded by that contract. Fresh CrowdSec provisioning
+after every restore prevents old statistics and revoked credentials from
+returning to service. This is an accepted design, not evidence of cutover.

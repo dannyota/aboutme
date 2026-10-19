@@ -58,8 +58,9 @@ Three host-level controls replace AWS WAF:
 - Go's rate limits stay the application control.
 - CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer ban attacks; Caddy
   returns 403. Its [HTTP privacy contract](crowdsec-http-privacy.md) uses a
-  five-field RAM-only feed, keeps encrypted attack records for at most 24 hours,
-  and disables community sharing (owner, 2026-10-10).
+  bounded RAM-only feed with conditional rejected-target samples and disables
+  community sharing. The owner approved the feed and PostgreSQL amendment on
+  2026-10-18; its contract owns live retention, backups, cutover, and recovery.
 - Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
   before blocking. Raw audit logging stays off because it can record body data.
   Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
@@ -205,7 +206,13 @@ PostgreSQL 18 from the PGDG packages, pinned to the minor version.
   `peer` for `postgres`. `DATABASE_URL` uses `host=/run/postgresql`.
 - The `aboutme` role owns the database with `CREATEROLE`, like the RDS master,
   and runs `db-setup`. Only pgBackRest and restores use the `postgres`
-  superuser.
+  superuser, apart from provisioning the separate CrowdSec database and role.
+
+The approved CrowdSec architecture uses a separate `crowdsec` database and
+least-privilege role in this cluster, with Unix-socket peer authentication. Its
+[storage and privacy contract](crowdsec-http-privacy.md) owns the grants,
+retention gate, backup inclusion, release order, and fresh state after restore.
+Approval does not establish that production cutover has completed.
 
 pgBackRest archives WAL continuously to a private backup bucket with
 `archive_timeout = 60s`, so about a minute of commits is at risk. It runs a full
