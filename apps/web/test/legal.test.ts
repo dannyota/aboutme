@@ -24,6 +24,10 @@ function title(wrapper: Wrapper): string {
   return wrapper.get('[data-page-title]').text();
 }
 
+function paragraphs(wrapper: Wrapper): string[] {
+  return wrapper.findAll('section p').map((paragraph) => paragraph.text());
+}
+
 beforeEach(() => {
   setSiteLocale(undefined);
   clearNuxtData();
@@ -34,7 +38,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 11/10/2026',
+      'Cập nhật lần cuối ngày 19/10/2026',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
     expect(wrapper.text()).toContain(
@@ -44,24 +48,11 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'Bizfly Email Transaction gửi email tài khoản qua SMTP.',
     );
-    expect(wrapper.text()).toContain(
-      'dấu thời gian UTC, địa chỉ IP nguồn, phương thức HTTP, mã trạng '
-      + 'thái phản hồi và nhóm đường dẫn chung',
-    );
-    expect(wrapper.text()).toContain(
-      'không ghi đường dẫn hoặc URI cụ thể, chuỗi truy vấn, tiêu đề yêu '
-      + 'cầu hay phản hồi, hoặc nội dung yêu cầu hay phản hồi',
-    );
-    expect(wrapper.text()).toContain(
-      'Dữ liệu đầu vào chỉ nằm trong RAM. Cảnh báo và lệnh chặn của '
-      + 'CrowdSec được lưu trên ổ dữ liệu được mã hóa tại Việt Nam.',
-    );
-    expect(wrapper.text()).toContain(
-      'Dữ liệu đầu vào và toàn bộ bản ghi tấn công của CrowdSec, gồm cảnh '
-      + 'báo và lệnh chặn HTTP và SSH, được giữ tối đa 24 giờ.',
-    );
-    expect(wrapper.text()).toContain(
-      'Không dữ liệu nào trong số này được chia sẻ với cộng đồng CrowdSec.',
+    expect(paragraphs(wrapper)).toContain(
+      'Khi chính sách này thay đổi, chúng tôi cập nhật trang này và '
+      + 'ngày cập nhật. Nếu chúng tôi thay đổi lý do xử lý dữ liệu '
+      + 'hoặc dữ liệu chúng tôi thu thập, chúng tôi sẽ gửi email cho '
+      + 'bạn trước khi thay đổi có hiệu lực.',
     );
     expect(wrapper.text()).toContain(
       'Nhật ký vận hành thông thường của máy chủ không ghi địa chỉ IP '
@@ -160,7 +151,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 11, 2026',
+      'Last updated October 19, 2026',
     );
     expect(wrapper.text()).toContain(
       'Your account, resumes, photos, backups, and logs are stored on '
@@ -169,24 +160,10 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'Bizfly Email Transaction sends account emails over SMTP.',
     );
-    expect(wrapper.text()).toContain(
-      'the UTC timestamp, source IP address, HTTP method, response status, '
-      + 'and broad route class',
-    );
-    expect(wrapper.text()).toContain(
-      'does not record the specific path or URI, query string, request or '
-      + 'response headers, or request or response body',
-    );
-    expect(wrapper.text()).toContain(
-      'The feed stays only in RAM. CrowdSec attack alerts and bans are '
-      + 'stored on the encrypted Vietnam data volume.',
-    );
-    expect(wrapper.text()).toContain(
-      'We keep the feed and all CrowdSec attack records, including HTTP '
-      + 'and SSH alerts and bans, for at most 24 hours.',
-    );
-    expect(wrapper.text()).toContain(
-      'None of this data is shared with the CrowdSec community.',
+    expect(paragraphs(wrapper)).toContain(
+      'When this policy changes, we update this page and its date. '
+      + 'If we change why we process data or what we collect, we '
+      + 'will email you before the change applies.',
     );
     expect(wrapper.text()).toContain(
       'Ordinary server operational logs do not record request IP addresses '
@@ -295,12 +272,75 @@ describe('privacy and terms pages', () => {
     );
   });
 
+  it.each([
+    {
+      locale: 'vi' as const,
+      notice: 'Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, '
+        + 'phương thức, mã phản hồi, nhóm tuyến truy cập và nhóm dấu hiệu '
+        + 'thăm dò cố định. Chỉ với tuyến không được nhận diện trả về mã '
+        + '400, 404 hoặc 405, mẫu cảnh báo tấn công mới có thể chứa nguyên '
+        + 'đường dẫn đích đã mã hóa ký tự, bỏ phần truy vấn, tối đa 512 '
+        + 'byte. Chúng tôi không ghi đường dẫn đích của các tuyến đã biết, '
+        + 'gồm tuyến tài khoản, API và CV công khai hợp lệ. Đích không hợp '
+        + 'lệ hoặc quá dài chỉ được gán nhóm cố định, không ghi đường dẫn. '
+        + 'Tham số truy vấn, tiêu đề và nội dung yêu cầu không được ghi. '
+        + 'Dữ liệu yêu cầu nằm trong RAM; CrowdSec lưu mẫu cảnh báo tấn '
+        + 'công và lệnh chặn, không lưu nhật ký đầy đủ mọi lượt truy cập. '
+        + 'Bản ghi đang hoạt động được giữ tối đa 24 giờ. Bản sao lưu cơ '
+        + 'sở dữ liệu được mã hóa tại Việt Nam có thể giữ bản ghi cũ trong '
+        + 'khoảng năm tuần sau khi xóa, theo chính sách lưu bản sao bên '
+        + 'dưới. Bản sao lưu chỉ dùng để khôi phục sau sự cố. Dữ liệu '
+        + 'CrowdSec được khôi phục sẽ bị loại bỏ trước khi hệ thống chống '
+        + 'tấn công hoạt động trở lại. Không dữ liệu nào được chia sẻ với '
+        + 'cộng đồng CrowdSec.',
+    },
+    {
+      locale: 'en' as const,
+      notice: 'Attack protection uses your IP address, request time, method, '
+        + 'response status, broad route class, and a fixed probe category. '
+        + 'Only for unrecognized routes returning 400, 404, or 405, attack '
+        + 'alert samples may include the exact escaped target path, without '
+        + 'the query, up to 512 bytes. We do not record target paths for '
+        + 'known routes, including account, API, and valid public resume '
+        + 'routes. Invalid or oversized targets use a fixed category and '
+        + 'no path. Queries, headers, and bodies are never included. The '
+        + 'request feed stays in RAM; CrowdSec stores attack alert samples '
+        + 'and bans, not a full access log. Live records are kept for at '
+        + 'most 24 hours. Encrypted database backups in Vietnam may retain '
+        + 'earlier records for about five weeks after deletion, under the '
+        + 'backup policy below. Backups are used only for disaster recovery. '
+        + 'Restored CrowdSec data is discarded before attack protection '
+        + 'resumes. None of this data is shared with the CrowdSec community.',
+    },
+  ])('renders the exact attack-protection notice in $locale', async ({
+    locale,
+    notice,
+  }) => {
+    setSiteLocale(locale);
+    const wrapper = await mountSuspended(PrivacyPage);
+    expect(paragraphs(wrapper)).toContain(notice);
+  });
+
   it('render the Terms in Vietnamese and English', async () => {
     const vietnamese = await mountSuspended(TermsPage);
     expect(vietnamese.find('[data-testid="legal-operator"]').exists()).toBe(
       false,
     );
     expect(title(vietnamese)).toBe('Điều khoản sử dụng');
+    expect(vietnamese.get('[data-testid="legal-updated"]').text()).toBe(
+      'Cập nhật lần cuối ngày 11/10/2026',
+    );
+    expect(paragraphs(vietnamese)).toContain(
+      'Khi điều khoản thay đổi, chúng tôi cập nhật trang này và ngày '
+      + 'cập nhật. Nếu thay đổi là quan trọng, chúng tôi sẽ gửi email '
+      + 'báo trước ít nhất 15 ngày trước khi thay đổi có hiệu lực. '
+      + 'Nếu không đồng ý, bạn có thể xuất dữ liệu và xóa tài khoản '
+      + 'trước ngày đó. Việc bạn tiếp tục sử dụng dịch vụ sau khi '
+      + 'thay đổi có hiệu lực đồng nghĩa với việc bạn chấp nhận điều '
+      + 'khoản mới. Nếu một thay đổi cần sự đồng ý của bạn theo pháp '
+      + 'luật, chúng tôi sẽ xin riêng; việc tiếp tục sử dụng không '
+      + 'được coi là đồng ý.',
+    );
     expect(vietnamese.text()).toContain('Bạn phải từ 16 tuổi trở lên.');
     expect(vietnamese.text()).toContain('pháp luật Việt Nam');
     expect(vietnamese.text()).toContain(
@@ -310,6 +350,19 @@ describe('privacy and terms pages', () => {
     setSiteLocale('en');
     const en = await mountSuspended(TermsPage);
     expect(title(en)).toBe('Terms of Service');
+    expect(en.get('[data-testid="legal-updated"]').text()).toBe(
+      'Last updated October 11, 2026',
+    );
+    expect(paragraphs(en)).toContain(
+      'When these terms change, we update this page and its date. If '
+      + 'a change is material, we will email you at least 15 days '
+      + 'before it applies. If you do not agree, you can export your '
+      + 'data and delete your account before that date. If you keep '
+      + 'using the service after a change takes effect, you accept '
+      + 'the updated terms. If a change needs your consent under the '
+      + 'law, we will ask for it separately; continued use does not '
+      + 'count as consent.',
+    );
     expect(en.text()).toContain('You must be at least 16 years old.');
     expect(en.text()).toContain(
       'If we learn an account belongs to someone under 16, we will delete it.',
