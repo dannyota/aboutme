@@ -19,7 +19,7 @@ func TestAbortPreservesEveryAcceptedRecipientJobPair(t *testing.T) {
 					t.Fatal("absent abort fixture failed")
 				}
 			case "sent", "terminal":
-				if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state=$1,key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=CASE WHEN $1='sent' THEN clock_timestamp() END,terminal_at=CASE WHEN $1='terminal' THEN clock_timestamp() END`, pair.job); err != nil {
+				if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state=$1,attempts=CASE WHEN $1='sent' THEN 1 ELSE attempts END,key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=CASE WHEN $1='sent' THEN clock_timestamp() END,terminal_at=CASE WHEN $1='terminal' THEN clock_timestamp() END`, pair.job); err != nil {
 					t.Fatal("completed abort fixture failed")
 				}
 			case "leased":
