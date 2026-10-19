@@ -324,7 +324,11 @@ if [[ ${NOTICE_DB_DRIFT:-none} == "$stage" ]]; then
   printf 'invalid\n' > /var/lib/aboutme/privacy-notice/epoch
 fi
 if [[ ${NOTICE_DB_HOLD:-none} == "$stage" ]]; then
-  printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/held-child"; printf '%s\n' "$PPID" >"$NOTICE_FIXTURE/held-controller"; read -r -t 10 _ <"$NOTICE_FIXTURE/continue" || exit 1
+  # Readiness must tolerate restore startup beyond two seconds.
+  /usr/bin/sleep 3
+  printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/held-child"; printf '%s\n' "$PPID" >"$NOTICE_FIXTURE/held-controller"
+  printf 'ready\n' >"$NOTICE_FIXTURE/ready-${NOTICE_LATCH_VICTIM:?}"
+  read -r -t 10 _ <"$NOTICE_FIXTURE/continue" || exit 1
 fi
 [[ -z $answer ]] || printf '%s\n' "$answer"
 STUB
@@ -470,17 +474,24 @@ for signal in HUP TERM INT; do NOTICE_SIGNAL=$signal NOTICE_DB_SIGNAL=restore bl
 # A surviving restore descendant must keep the kernel lock after either controller dies. The latch is a fixture FIFO, never a protocol/FD token.
 mkfifo "$work/continue"; exec {continue_fd}<>"$work/continue"
 for victim in outer child; do
-  rm -f "$work/held-child" "$work/held-controller"
-  NOTICE_DB_HOLD=restore "$controller" host-pass latest >"$work/death-out" 2>"$work/death-err" &
-  outer_pid=$!
-  for ((attempt = 0; attempt < 100; attempt++)); do [[ ! -f $work/held-child ]] || break; /usr/bin/sleep 0.02; done
+  rm -f "$work/held-child" "$work/held-controller" "$work/outer-controller"
+  mkfifo "$work/ready-$victim"; exec {ready_fd}<>"$work/ready-$victim"
+  (
+    NOTICE_DB_HOLD=restore NOTICE_LATCH_VICTIM=$victim "$controller" host-pass latest >"$work/death-out" 2>"$work/death-err" &
+    controller_pid=$!; printf '%s\n' "$controller_pid" >"$work/outer-controller"
+    wait "$controller_pid" 2>/dev/null || true
+    printf 'exited\n' >"$work/ready-$victim"
+  ) &
+  fixture_pid=$!; latch_state=
+  if ! read -r -t 10 latch_state <&"$ready_fd" || [[ $latch_state != ready ]]; then fail 'restore descendant never reached latch'; fi
   [[ -f $work/held-child ]] || fail 'restore descendant never reached latch'
+  outer_pid=$(cat "$work/outer-controller")
   if [[ $victim == outer ]]; then kill -KILL "$outer_pid"
   else kill -KILL "$(cat "$work/held-controller")"; fi
   if /usr/bin/flock -n /run/aboutme/workload.lock true; then fail 'controller death lost descendant workload ownership'; fi
   [[ -f $authority/restore-reconciliation ]] || fail 'controller death lost reconciliation'
   jq -e '.operation_kind=="notice_restore"' /var/lib/aboutme/fence.json >/dev/null || fail 'controller death released operation'
-  printf 'continue\n' >&"$continue_fd"; wait "$outer_pid" 2>/dev/null || true
+  printf 'continue\n' >&"$continue_fd"; wait "$fixture_pid" 2>/dev/null || true; exec {ready_fd}>&-
   for ((attempt = 0; attempt < 100; attempt++)); do
     if /usr/bin/flock -n /run/aboutme/workload.lock true; then break; fi
     /usr/bin/sleep 0.02
