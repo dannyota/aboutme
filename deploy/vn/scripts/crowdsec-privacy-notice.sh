@@ -108,7 +108,8 @@ notice_initial_authority() {
 notice_initial_quiescent() {
   aboutme_assert_cutover_quiescent || return 1
   local unit jobs units rc=0
-  for unit in aboutme-migrate aboutme-db-setup crowdsec crowdsec-firewall-bouncer aboutme-crowdsec-retention.timer; do
+  # Five-field SQLite protection may continue; changed ingestion has a separate activation gate.
+  for unit in aboutme-migrate aboutme-db-setup; do
     notice_unit_stopped "$unit" || return 1
   done
   # shellcheck disable=SC2154 # notice_quiesce sources this array from deploy-safety.sh before this check.
@@ -116,9 +117,9 @@ notice_initial_quiescent() {
     notice_unit_stopped "aboutme-job-$unit.timer" && notice_unit_stopped "aboutme-job@$unit.service" || return 1
   done
   jobs=$(systemctl list-jobs --no-legend --no-pager) || return 1
-  [[ ! $jobs =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job|crowdsec) ]] || return 1
+  [[ ! $jobs =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
   units=$(systemctl list-units --all --state=active,activating,deactivating,reloading --no-legend --no-pager) || return 1
-  [[ ! $units =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|crowdsec) ]] || return 1
+  [[ ! $units =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
   pgrep -f '([/]pgbackrest.*restore|[r]estore-drill.sh|[p]ostgres:.*recovery)' >/dev/null || rc=$?
   [[ $rc == 1 ]]
 }
