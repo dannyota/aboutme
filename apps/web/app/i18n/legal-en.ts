@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  privacyUpdated: 'Last updated October 19, 2026',
+  privacyUpdated: 'Last updated October 20, 2026',
   termsUpdated: 'Last updated October 11, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
