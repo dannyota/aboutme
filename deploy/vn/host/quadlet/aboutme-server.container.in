@@ -30,6 +30,7 @@ Secret=smtp-username,type=env,target=SMTP_USERNAME
 Secret=smtp-password,type=env,target=SMTP_PASSWORD
 @SERVER_SECRETS@
 Volume=/run/postgresql:/run/postgresql
+Volume=/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro
 # SYS_ADMIN lets the default seccomp profile allow the user namespaces that
 # Chromium's sandbox needs. The image runs as a non-root user, so the process
 # gains no effective capability (docs/design/single-host-production.md, "Host

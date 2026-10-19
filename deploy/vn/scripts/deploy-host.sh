@@ -71,6 +71,10 @@ image_ok() { # name ref
 checkpoint() {
   [[ $op != - ]] || die "this step needs the operation id"
   "$fence" checkpoint "$op" "$tag" >/dev/null || die "fence checkpoint failed; the lock or the floor no longer holds"
+  case ${step:-} in
+    app-up | restore-previous | render)
+      "$fence" check "$(release_number "$tag")" aboutme-server >/dev/null || die "invalid_state" ;;
+  esac
 }
 
 # Every state file and flags.env is parsed here, by jq, against one strict
