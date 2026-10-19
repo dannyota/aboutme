@@ -100,8 +100,15 @@ func (r initialRow) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
+	if len(dest) != len(r.counts) {
+		return errors.New("initial row: invalid destination count")
+	}
 	for i, value := range r.counts {
-		*dest[i].(*int64) = value
+		destination, ok := dest[i].(*int64)
+		if !ok || destination == nil {
+			return errors.New("initial row: invalid destination type")
+		}
+		*destination = value
 	}
 	return nil
 }
