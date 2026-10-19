@@ -10,9 +10,10 @@ import (
 )
 
 // EnqueueRequest is the caller's full description of a job to enqueue. Exactly
-// one scope FK must be set, matching the kind (D3). TokenDigest is required
+// one scope FK must be set, matching the kind. TokenDigest is required
 // for verify/reset and must be absent for every user-scoped job; authmail only
-// ever receives the 32-byte digest, never a raw token.
+// ever receives the 32-byte digest, never a raw token. Privacy notice expiry may
+// be zero so the outbox derives its exact 24-hour lifetime from the enqueue clock.
 type EnqueueRequest struct {
 	JobID          uuid.UUID
 	Kind           Kind
@@ -54,6 +55,12 @@ func (o *Outbox) EnqueueTx(ctx context.Context, qtx *store.Queries, req EnqueueR
 		return err
 	}
 	now := o.clock()
+	if req.Kind == KindPrivacyNotice {
+		if !req.ExpiresAt.IsZero() && !req.ExpiresAt.Equal(now.Add(24*time.Hour)) {
+			return ErrExpiry
+		}
+		req.ExpiresAt = now.Add(24 * time.Hour)
+	}
 	if err := validateExpiry(req.Kind, req.Payload, now, req.ExpiresAt); err != nil {
 		return err
 	}
@@ -123,7 +130,7 @@ func validateRequest(req EnqueueRequest) error {
 	case KindPasswordChanged, KindSecondFactorEnabled, KindPasskeyAdded,
 		KindPasskeyRemoved, KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
 		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
-		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved, KindPrivacyNotice:
 		if req.UserID == nil || *req.UserID == uuid.Nil {
 			return ErrScope
 		}
@@ -146,6 +153,9 @@ func validateExpiry(kind Kind, payload Payload, now, expiresAt time.Time) error 
 		return ErrExpiry
 	}
 	if expiresAt.After(now.Add(24 * time.Hour)) {
+		return ErrExpiry
+	}
+	if kind == KindPrivacyNotice && !expiresAt.Equal(now.Add(24*time.Hour)) {
 		return ErrExpiry
 	}
 	if isSecurityKind(kind) {

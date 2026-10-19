@@ -923,6 +923,247 @@ WHERE state IN ('pending', 'leased')
   AND expires_at > sqlc.arg(now)::timestamptz
 ORDER BY key_id;
 
+-- name: LockPrivacyNoticeCommand :exec
+SELECT pg_advisory_xact_lock(hashtextextended('crowdsec-postgres-paths-v1', 0));
+
+-- name: GetPrivacyNoticeCampaign :one
+SELECT * FROM privacy_notice_campaigns WHERE id = 'crowdsec-postgres-paths-v1';
+
+-- name: CreatePrivacyNoticeCampaign :one
+INSERT INTO privacy_notice_campaigns(id, content_sha256, cutoff_at, expected_count, state)
+VALUES ('crowdsec-postgres-paths-v1', $1, clock_timestamp(), (SELECT count(*) FROM users), 'capturing')
+RETURNING *;
+
+-- name: ListPrivacyNoticeCaptureUsers :many
+SELECT id FROM users
+WHERE sqlc.narg(capture_cursor)::uuid IS NULL OR id > sqlc.narg(capture_cursor)::uuid
+ORDER BY id LIMIT 100;
+
+-- name: InsertPrivacyNoticeRecipient :exec
+INSERT INTO privacy_notice_recipients(id, campaign_id, user_id, job_id, state)
+VALUES ($1, 'crowdsec-postgres-paths-v1', $2, $3, 'unqueued');
+
+-- name: AdvancePrivacyNoticeCapture :execrows
+UPDATE privacy_notice_campaigns SET capture_cursor = sqlc.arg(capture_cursor)::uuid
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'capturing'
+    AND content_sha256 = sqlc.arg(content_sha256)::bytea;
+
+-- name: PrivacyNoticeCaptureProof :one
+SELECT (SELECT count(*) FROM users)::bigint AS user_count,
+    (SELECT count(*) FROM privacy_notice_recipients WHERE campaign_id = 'crowdsec-postgres-paths-v1')::bigint AS recipient_count,
+    NOT EXISTS (SELECT 1 FROM users u WHERE NOT EXISTS (
+        SELECT 1 FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1' AND r.user_id = u.id)) AS all_users_captured,
+    NOT EXISTS (SELECT 1 FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1'
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = r.user_id)) AS all_recipients_exist;
+
+-- name: SealPrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state = 'sealed', sealed_at = clock_timestamp()
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'capturing'
+    AND content_sha256 = $1;
+
+-- name: ListUnqueuedPrivacyNoticeRecipients :many
+SELECT * FROM privacy_notice_recipients
+WHERE campaign_id = 'crowdsec-postgres-paths-v1' AND state = 'unqueued'
+ORDER BY id LIMIT 100;
+
+-- name: CountLivePrivacyNoticeJobs :one
+SELECT count(*) FROM auth_email_jobs WHERE kind = 'privacy_notice' AND state IN ('pending', 'leased');
+
+-- name: GetPrivacyNoticeRecipientForUpdate :one
+SELECT * FROM privacy_notice_recipients
+WHERE job_id = sqlc.arg(job_id)::uuid AND campaign_id = 'crowdsec-postgres-paths-v1'
+FOR UPDATE;
+
+-- name: GetPrivacyNoticeRecipient :one
+SELECT * FROM privacy_notice_recipients
+WHERE job_id = $1 AND campaign_id = 'crowdsec-postgres-paths-v1';
+
+-- name: ListUserPrivacyNoticeRecipientsForUpdate :many
+SELECT * FROM privacy_notice_recipients WHERE user_id = $1 ORDER BY id FOR UPDATE;
+
+-- name: QueuePrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'queued', queued_at = sqlc.arg(queued_at)::timestamptz
+WHERE id = sqlc.arg(id)::uuid AND state = 'unqueued' AND generation = sqlc.arg(generation)::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = sqlc.arg(content_sha256)::bytea AND state = 'sealed');
+
+-- name: AcceptPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'accepted', accepted_at = sqlc.arg(accepted_at)::timestamptz, failure_code = NULL
+WHERE job_id = sqlc.arg(job_id)::uuid AND state = 'queued' AND generation = sqlc.arg(generation)::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = sqlc.arg(content_sha256)::bytea AND state = 'sealed');
+
+-- name: FailPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'failed', failed_at = sqlc.arg(failed_at)::timestamptz, failure_code = sqlc.arg(failure_code)::text
+WHERE job_id = sqlc.arg(job_id)::uuid AND state = 'queued' AND generation = sqlc.arg(generation)::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = sqlc.arg(content_sha256)::bytea AND state = 'sealed');
+
+-- name: DeletePrivacyNoticeRecipientUser :execrows
+UPDATE privacy_notice_recipients
+SET user_id = NULL, state = CASE WHEN state = 'accepted' THEN 'accepted' ELSE 'deleted' END,
+    deleted_at = CASE WHEN state = 'accepted' THEN deleted_at ELSE sqlc.arg(deleted_at)::timestamptz END,
+    failure_code = NULL
+WHERE id = sqlc.arg(id)::uuid AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = sqlc.arg(content_sha256)::bytea);
+
+-- name: LockPrivacyNoticeJob :exec
+SELECT id FROM auth_email_jobs WHERE id = $1 FOR UPDATE;
+
+-- name: GetPrivacyNoticeJobForUpdate :one
+SELECT * FROM auth_email_jobs WHERE id=$1 FOR UPDATE;
+
+-- name: PrivacyNoticeDatabaseTime :one
+SELECT clock_timestamp()::timestamptz AS at;
+
+-- name: ListFailedPrivacyNoticeRecipients :many
+SELECT * FROM privacy_notice_recipients
+WHERE campaign_id='crowdsec-postgres-paths-v1' AND state='failed' AND failure_code=$1
+ORDER BY id LIMIT 100;
+
+-- name: DeleteRecoveredPrivacyNoticeJob :execrows
+DELETE FROM auth_email_jobs WHERE id=$1 AND kind='privacy_notice' AND state IN ('terminal','sent');
+
+-- name: RecoverPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state='queued', generation=generation+1,
+    queued_at=sqlc.arg(queued_at)::timestamptz, failure_code=NULL
+WHERE id=sqlc.arg(id)::uuid AND state='failed' AND user_id IS NOT NULL
+    AND generation=sqlc.arg(generation)::integer AND generation<2147483647
+    AND failure_code=sqlc.arg(failure_code)::text AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state='sealed' AND c.content_sha256=sqlc.arg(content_sha256)::bytea);
+
+-- name: CountPrivacyNoticeRecovery :execrows
+UPDATE privacy_notice_campaigns SET recovery_count=recovery_count+1,
+    recovery_expired_count=recovery_expired_count+CASE WHEN sqlc.arg(reason)::text='expired' THEN 1 ELSE 0 END,
+    recovery_attempts_exhausted_count=recovery_attempts_exhausted_count+CASE WHEN sqlc.arg(reason)::text='attempts_exhausted' THEN 1 ELSE 0 END,
+    recovery_provider_rejected_count=recovery_provider_rejected_count+CASE WHEN sqlc.arg(reason)::text='provider_rejected' THEN 1 ELSE 0 END,
+    recovery_payload_invalid_count=recovery_payload_invalid_count+CASE WHEN sqlc.arg(reason)::text='payload_invalid' THEN 1 ELSE 0 END,
+    recovery_job_missing_count=recovery_job_missing_count+CASE WHEN sqlc.arg(reason)::text='job_missing' THEN 1 ELSE 0 END,
+    recovery_delivery_failed_count=recovery_delivery_failed_count+CASE WHEN sqlc.arg(reason)::text='delivery_failed' THEN 1 ELSE 0 END
+WHERE id='crowdsec-postgres-paths-v1' AND state='sealed' AND content_sha256=sqlc.arg(content_sha256)::bytea
+    AND recovery_count<9223372036854775807
+    AND sqlc.arg(reason)::text IN ('expired','attempts_exhausted','provider_rejected','payload_invalid','job_missing','delivery_failed');
+
+-- name: RecordPrivacyNoticeLateFailure :execrows
+UPDATE privacy_notice_recipients
+SET state=CASE WHEN user_id IS NULL THEN 'deleted' ELSE 'failed' END,
+    deleted_at=CASE WHEN user_id IS NULL THEN sqlc.arg(at)::timestamptz ELSE deleted_at END,
+    failed_at=CASE WHEN user_id IS NULL THEN failed_at ELSE sqlc.arg(at)::timestamptz END,
+    failure_code=CASE WHEN user_id IS NULL THEN NULL ELSE 'delivery_failed' END
+WHERE job_id=sqlc.arg(job_id)::uuid AND state='accepted' AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state IN ('sealed','activated') AND c.content_sha256=sqlc.arg(content_sha256)::bytea);
+
+-- name: ReopenPrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state='sealed',activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state='activated' AND content_sha256=$1;
+
+-- name: LatchPrivacyNoticeAbort :execrows
+UPDATE privacy_notice_campaigns SET state='aborted',activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state IN ('sealed','activated') AND content_sha256=$1;
+
+-- name: ListPrivacyNoticeAbortCandidates :many
+SELECT * FROM privacy_notice_recipients WHERE campaign_id='crowdsec-postgres-paths-v1'
+    AND state IN ('unqueued','queued') ORDER BY id LIMIT 100;
+
+-- name: CancelPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state='cancelled',cancelled_at=sqlc.arg(at)::timestamptz,failure_code=NULL
+WHERE id=sqlc.arg(id)::uuid AND state IN ('unqueued','queued') AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state='aborted' AND c.content_sha256=sqlc.arg(content_sha256)::bytea);
+
+-- name: PrivacyNoticeAbortProof :one
+SELECT count(*)::bigint AS actual,
+    count(*) FILTER(WHERE r.state IN ('unqueued','queued'))::bigint AS remaining,
+    (count(*) FILTER(WHERE (r.user_id IS NULL AND r.state NOT IN ('accepted','deleted')) OR
+        (j.id IS NOT NULL AND (j.kind<>'privacy_notice' OR j.user_id IS DISTINCT FROM r.user_id)) OR
+        NOT CASE r.state
+            WHEN 'unqueued' THEN j.id IS NULL
+            WHEN 'queued' THEN j.id IS NULL OR j.state IN ('pending','leased')
+            WHEN 'accepted' THEN j.id IS NULL OR j.state='sent'
+            WHEN 'deleted' THEN j.id IS NULL
+            WHEN 'failed' THEN j.id IS NULL OR j.state IN ('terminal','sent')
+            WHEN 'cancelled' THEN j.id IS NULL OR j.state='terminal'
+            ELSE false END) + (SELECT count(*) FROM auth_email_jobs job WHERE job.kind='privacy_notice'
+                AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=job.id)))::bigint AS invalid,
+    (SELECT count(*) FROM auth_email_jobs job WHERE job.kind='privacy_notice' AND
+        (job.state IN ('pending','leased') OR NOT EXISTS(SELECT 1 FROM privacy_notice_recipients recipient WHERE recipient.job_id=job.id)))::bigint AS live_or_orphan
+FROM privacy_notice_recipients r LEFT JOIN auth_email_jobs j ON j.id=r.job_id
+WHERE r.campaign_id='crowdsec-postgres-paths-v1';
+
+-- name: CompletePrivacyNoticeAbort :execrows
+UPDATE privacy_notice_campaigns SET aborted_at=sqlc.arg(at)::timestamptz
+WHERE id='crowdsec-postgres-paths-v1' AND state='aborted' AND aborted_at IS NULL
+    AND content_sha256=sqlc.arg(content_sha256)::bytea;
+
+-- name: RetirePrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state='retired',retired_at=sqlc.arg(at)::timestamptz,activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state IN ('sealed','activated','aborted')
+    AND content_sha256=sqlc.arg(content_sha256)::bytea;
+
+-- name: PurgeRetiredPrivacyNoticeRecipients :execrows
+DELETE FROM privacy_notice_recipients WHERE id IN (
+    SELECT r.id FROM privacy_notice_recipients r JOIN privacy_notice_campaigns c ON c.id=r.campaign_id
+    WHERE c.id='crowdsec-postgres-paths-v1' AND c.state='retired' AND c.retired_at IS NOT NULL
+        AND c.content_sha256=$1 ORDER BY r.id LIMIT 200
+);
+
+-- name: CompletePrivacyNoticePurge :execrows
+UPDATE privacy_notice_campaigns SET purged_at=clock_timestamp()
+WHERE id='crowdsec-postgres-paths-v1' AND state='retired' AND purged_at IS NULL AND content_sha256=$1
+    AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients WHERE campaign_id=privacy_notice_campaigns.id);
+
+-- name: PrivacyNoticeTotals :one
+SELECT count(*)::bigint AS actual,
+    count(*) FILTER (WHERE r.state = 'unqueued')::bigint AS unqueued,
+    count(*) FILTER (WHERE r.state = 'queued')::bigint AS queued,
+    count(*) FILTER (WHERE r.state = 'accepted')::bigint AS accepted,
+    count(*) FILTER (WHERE r.state = 'deleted')::bigint AS deleted,
+    count(*) FILTER (WHERE r.state = 'failed')::bigint AS failed,
+    count(*) FILTER (WHERE r.state = 'cancelled')::bigint AS cancelled,
+    count(*) FILTER (WHERE r.failure_code = 'expired')::bigint AS expired,
+    count(*) FILTER (WHERE r.failure_code = 'attempts_exhausted')::bigint AS attempts_exhausted,
+    count(*) FILTER (WHERE r.failure_code = 'provider_rejected')::bigint AS provider_rejected,
+    count(*) FILTER (WHERE r.failure_code = 'payload_invalid')::bigint AS payload_invalid,
+    count(*) FILTER (WHERE r.failure_code = 'job_missing')::bigint AS job_missing,
+    count(*) FILTER (WHERE r.failure_code = 'delivery_failed')::bigint AS delivery_failed,
+    COALESCE(max(r.accepted_at) FILTER (WHERE r.state = 'accepted'), 'epoch'::timestamptz)::timestamptz AS last_accepted_at,
+    (count(*) FILTER (WHERE (r.user_id IS NULL AND r.state NOT IN ('accepted','deleted'))
+        OR EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id
+            AND (j.kind<>'privacy_notice' OR j.user_id IS DISTINCT FROM r.user_id))
+        OR (r.state = 'queued' AND NOT EXISTS (
+            SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id AND j.kind = 'privacy_notice'
+                AND j.user_id = r.user_id AND j.state IN ('pending','leased')))
+        OR (r.state = 'unqueued' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id))
+        OR (r.state = 'accepted' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id AND j.state <> 'sent'))
+        OR (r.state = 'deleted' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id))
+        OR (r.state = 'failed' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id AND j.state NOT IN ('terminal','sent')))
+        OR (r.state = 'cancelled' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id AND j.state<>'terminal'))
+    ) + (SELECT count(*) FROM auth_email_jobs j WHERE j.kind='privacy_notice'
+        AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=j.id)))::bigint AS inconsistent,
+    (SELECT count(*) FROM auth_email_jobs j WHERE j.kind='privacy_notice' AND j.state IN ('sent','terminal')
+        AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=j.id))::bigint AS orphan_completed
+FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1';
+
+-- name: ActivatePrivacyNoticeCampaign :execrows
+WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS at)
+UPDATE privacy_notice_campaigns
+SET state = 'activated', activated_at = moment.at,
+    first_activated_at = COALESCE(first_activated_at, moment.at), activation_count = activation_count + 1,
+    accepted_count = sqlc.arg(accepted_count)::bigint, deleted_count = sqlc.arg(deleted_count)::bigint,
+    last_accepted_at = sqlc.narg(last_accepted_at)::timestamptz
+FROM moment
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'sealed'
+    AND content_sha256 = sqlc.arg(content_sha256)::bytea
+    AND activation_count < 9223372036854775807 AND moment.at >= sealed_at AND sealed_at >= cutoff_at
+    AND (first_activated_at IS NULL OR moment.at >= first_activated_at)
+    AND (sqlc.narg(last_accepted_at)::timestamptz IS NULL OR moment.at >= sqlc.narg(last_accepted_at)::timestamptz);
+
 -- name: ClaimAuthEmailJobs :many
 -- Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
 -- jobs to leased, increments attempts, stamps the lease pair, and returns the
@@ -938,7 +1179,8 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state = 'pending'
       AND next_attempt_at <= sqlc.arg(now)::timestamptz
-    ORDER BY next_attempt_at, created_at, id
+      AND (kind <> 'privacy_notice' OR sqlc.arg(include_notice)::boolean)
+    ORDER BY (kind = 'privacy_notice'), next_attempt_at, created_at, id
     LIMIT sqlc.arg(limit_rows)::int
     FOR UPDATE SKIP LOCKED
 )
@@ -995,6 +1237,7 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state = 'leased'
       AND lease_expires_at <= sqlc.arg(now)::timestamptz
+      AND (kind <> 'privacy_notice' OR sqlc.arg(include_notice)::boolean)
     ORDER BY lease_expires_at, id
     LIMIT sqlc.arg(limit_rows)::int
     FOR UPDATE SKIP LOCKED
@@ -1026,6 +1269,7 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state IN ('sent', 'terminal')
       AND COALESCE(sent_at, terminal_at) <= sqlc.arg(cutoff)::timestamptz
+      AND (kind <> 'privacy_notice' OR sqlc.arg(include_notice)::boolean)
     ORDER BY COALESCE(sent_at, terminal_at), id
     LIMIT sqlc.arg(limit_rows)::int
 );

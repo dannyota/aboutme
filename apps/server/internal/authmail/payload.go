@@ -12,6 +12,10 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
 )
 
 // Kind names a closed transactional-email type. It is the single authority for
@@ -33,7 +37,11 @@ const (
 	KindTOTPAdded                     Kind = "totp_added"
 	KindTOTPReplaced                  Kind = "totp_replaced"
 	KindTOTPRemoved                   Kind = "totp_removed"
+	KindPrivacyNotice                 Kind = "privacy_notice"
 )
+
+// PrivacyNoticeID is the only accepted privacy notice campaign.
+const PrivacyNoticeID = "crowdsec-postgres-paths-v1"
 
 // payloadVersion remains the closed payload version for existing email jobs.
 const payloadVersion = 1
@@ -53,17 +61,22 @@ const (
 
 // Payload is the closed outbox plaintext. Version 1 has a verification or
 // reset link when required. Version 2 has an exact UTC event time and only
-// recovery-code use carries a remaining count.
+// recovery-code use carries a remaining count. Version 3 binds the fixed privacy
+// notice to an account and ledger generation without message or link fields.
 type Payload struct {
 	Version                int    `json:"version"`
 	To                     string `json:"to"`
 	Link                   string `json:"link,omitempty"`
 	OccurredAt             string `json:"occurredAt,omitempty"`
 	RemainingRecoveryCodes *int   `json:"remainingRecoveryCodes,omitempty"`
+	UserID                 string `json:"-"`
+	NoticeID               string `json:"-"`
+	Generation             int32  `json:"-"`
 
 	linkPresent                   bool
 	occurredAtPresent             bool
 	remainingRecoveryCodesPresent bool
+	noticeFieldsPresent           bool
 }
 
 // Sealed is an encrypted payload plus the metadata the database stores beside
@@ -101,7 +114,7 @@ func validateKind(k Kind) error {
 		KindSecondFactorEnabled, KindPasskeyAdded, KindPasskeyRemoved,
 		KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
 		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
-		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved, KindPrivacyNotice:
 		return nil
 	default:
 		return ErrInvalidKind
@@ -162,7 +175,20 @@ func validatePayload(kind Kind, p Payload) error {
 	if err := validateEmail(p.To); err != nil {
 		return err
 	}
+	if kind != KindPrivacyNotice && (p.noticeFieldsPresent || p.UserID != "" || p.NoticeID != "" || p.Generation != 0) {
+		return ErrStrictJSON
+	}
 	switch kind {
+	case KindPrivacyNotice:
+		canonical, err := accountemail.Canonicalize(p.To)
+		userID, uuidErr := uuid.Parse(p.UserID)
+		if err != nil || canonical != p.To || uuidErr != nil || userID == uuid.Nil || userID.String() != p.UserID {
+			return ErrStrictJSON
+		}
+		if p.Version != 3 || p.NoticeID != PrivacyNoticeID || p.Generation < 0 || p.linkPresent || p.Link != "" || p.occurredAtPresent || p.OccurredAt != "" || p.remainingRecoveryCodesPresent || p.RemainingRecoveryCodes != nil {
+			return ErrStrictJSON
+		}
+		return nil
 	case KindVerify, KindReset, KindPasswordChanged:
 		if p.Version != payloadVersion || p.occurredAtPresent || p.remainingRecoveryCodesPresent || p.OccurredAt != "" || p.RemainingRecoveryCodes != nil {
 			return ErrUnknownVersion
@@ -209,6 +235,15 @@ func validateKeyID(id string) error {
 }
 
 func marshalPayload(p Payload) ([]byte, error) {
+	if p.Version == 3 {
+		return json.Marshal(struct {
+			Version    int    `json:"version"`
+			To         string `json:"to"`
+			UserID     string `json:"userId"`
+			NoticeID   string `json:"noticeId"`
+			Generation int32  `json:"generation"`
+		}{p.Version, p.To, p.UserID, p.NoticeID, p.Generation})
+	}
 	b, err := json.Marshal(p)
 	if err != nil {
 		return nil, ErrStrictJSON
@@ -266,6 +301,24 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 			}
 			p.Link = s
 			p.linkPresent = true
+		case "userId", "noticeId", "generation":
+			var raw json.RawMessage
+			if decodeErr := dec.Decode(&raw); decodeErr != nil || bytes.Equal(raw, []byte("null")) {
+				return Payload{}, ErrStrictJSON
+			}
+			var target any
+			switch key {
+			case "userId":
+				target = &p.UserID
+			case "noticeId":
+				target = &p.NoticeID
+			case "generation":
+				target = &p.Generation
+			}
+			if decodeErr := json.Unmarshal(raw, target); decodeErr != nil {
+				return Payload{}, ErrStrictJSON
+			}
+			p.noticeFieldsPresent = true
 		case "occurredAt":
 			var s string
 			if decodeErr := dec.Decode(&s); decodeErr != nil {
@@ -302,6 +355,9 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 	}
 
 	if !seen["version"] || !seen["to"] {
+		return Payload{}, ErrStrictJSON
+	}
+	if p.Version == 3 && (!seen["userId"] || !seen["noticeId"] || !seen["generation"]) {
 		return Payload{}, ErrStrictJSON
 	}
 
