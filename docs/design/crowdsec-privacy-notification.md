@@ -223,11 +223,12 @@ it, matching notice release, and the CrowdSec retention gate. Reconstruction
 works months later; missing receipts/old epochs cannot reopen ingestion. Forbid
 overrides/hand-supplied success; trust root.
 
-Before activation, the owner checks Bizfly failures and records only production
-aggregates. Reviewed recovery marks accepted existing accounts failed with
-`delivery_failed` on known failure; deleted accounts resolve as `deleted`
-without contact. Absent feedback confirms nothing. The transition table governs
-late failures at any age.
+Before activation, the owner checks Bizfly failures, recording only production
+aggregates. Reviewed recovery atomically marks accepted existing accounts failed
+with `delivery_failed` on known failure; the completed job stays sent until
+normal cleanup. Deleted accounts resolve as `deleted` without contact. Absent
+feedback confirms nothing; the transition table governs late failures at any
+age.
 
 Terminal failure, expiry, job/key loss, or inconsistency blocks activation.
 Forbid automatic re-enqueue, skips, cohort changes, and overrides. Independently
@@ -236,8 +237,9 @@ host locks, stop/join workers and durably revoke send authority before
 failed-to-queued mutation. Keep notices fenced through commit until fresh owner
 authority; ordinary mail may resume with notices disabled. For failed existing
 accounts, atomically increment generation, reuse job ID, reseal current address
-with a fresh nonce, reset attempts/24-hour lifetime, requeue, and clear
-`failure_code`. Under account/recipient/job locks, the same transaction adds one
+with a fresh nonce, reset attempts/24-hour lifetime, requeue even a sent job,
+and clear `failure_code`. Absent jobs are recreated/repaired only by these fixed
+recovery rules. Under account/recipient/job locks, the same transaction adds one
 to `recovery_count` and the counter for the prior failure reason. All six
 reasons qualify; missing/unknown reasons refuse recovery. Queued
 retries/rollback add nothing. Counter/generation overflow rolls back everything;
@@ -263,14 +265,14 @@ Each invocation takes at most 100 unqueued/queued IDs in order under
 account/recipient/job locks and enqueue's time bounds. Changed rows leave this
 selection, so retries advance without a cursor. Valid pairs and atomic outcomes:
 
-| Recipient | Matching job          | Abort outcome                       |
-| --------- | --------------------- | ----------------------------------- |
-| unqueued  | absent                | cancelled                           |
-| queued    | pending/leased/absent | cancelled; terminalize any job      |
-| accepted  | sent/absent           | unchanged                           |
-| deleted   | absent                | unchanged                           |
-| failed    | terminal/absent       | unchanged, including failure reason |
-| cancelled | terminal/absent       | unchanged on retry                  |
+| Recipient | Matching job          | Abort outcome                                          |
+| --------- | --------------------- | ------------------------------------------------------ |
+| unqueued  | absent                | cancelled                                              |
+| queued    | pending/leased/absent | cancelled; terminalize any job                         |
+| accepted  | sent/absent           | unchanged                                              |
+| deleted   | absent                | unchanged                                              |
+| failed    | sent/terminal/absent  | unchanged, including failure reason and sent retention |
+| cancelled | terminal/absent       | unchanged on retry                                     |
 
 Cancellation sets `cancelled_at` to database UTC and clears `failure_code`; it
 is not a delivery failure. Terminalization sets `terminal_at` to that same time
@@ -293,68 +295,66 @@ edits with production reconciliation. Client API and resume schema stay intact.
 
 ### Receipt and aggregate wire contract
 
-Receipts are closed JSON objects, at most 4,096 UTF-8 bytes, no byte-order mark.
+Receipts are closed JSON, at most 4,096 UTF-8 bytes without a byte-order mark.
 Require every field; reject null, unknown/duplicate decoded keys, bad Unicode,
-trailing nonwhite data, or wrong types/versions. Order, whitespace, and
-equivalent escapes do not matter; never hash receipts. Numbers are exact decimal
-integers without signs, fractions, exponents, or leading zeros. Never use
-floats.
+trailing nonwhite data, or wrong types/versions. Order/whitespace/equivalent
+escapes do not matter; never hash receipts. Numbers are exact decimal integers:
+no signs, fractions, exponents, leading zeros, or floats.
 
-Common fields: `schema_version` (number `1`), `campaign_id` (fixed string),
-`content_sha256` (hex string above), `epoch` (lowercase canonical UUID v4
-string, variant bits 10), `cutoff_at` (timestamp string), `expected_count`
-(count number). `send.json` adds only `issued_at` (timestamp). `activation.json`
-adds only `accepted_count`, `deleted_count` (counts), and `activated_at`
-(timestamp). Counts are `0..9223372036854775807`; sum without overflow.
-Activation requires `accepted_count + deleted_count = expected_count`.
+| Receipt fields            | Exact types and encodings                                                                                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Common                    | `schema_version`: number `1`; `campaign_id`: fixed string; `content_sha256`: hex string above; `epoch`: lowercase canonical UUID v4 string, variant bits 10; `cutoff_at`: timestamp string; `expected_count`: count number. |
+| send.json adds only       | `issued_at`: timestamp string.                                                                                                                                                                                              |
+| activation.json adds only | `accepted_count`, `deleted_count`: count numbers; `activated_at`: timestamp string. Require accepted plus deleted equals expected.                                                                                          |
 
-Timestamps are exactly `YYYY-MM-DDTHH:mm:ss.ffffffZ`: Gregorian UTC, years
-0001..9999, seconds 00..59, six fractional digits. Reject offsets, leap seconds,
-infinity, or other precision; compare stored microseconds without rounding. The
-`epoch` file is the current UUID in ASCII plus one LF. Receipt epoch must match
-it; cutoff/count/digest/campaign match the row; activation totals/time match its
-activation record and rechecked ledger. Send issue time uses host UTC, at least
-`sealed_at`, never future-dated; activation time is stored `activated_at`, at
-least `sealed_at` and latest acceptance, never future-dated. Require
-`cutoff_at <= sealed_at`. Clock failure/mismatch refuses authority; no time
-expiry.
+Counts are `0..9223372036854775807`; sum without overflow.
 
-`status` and `activate` emit one closed JSON object plus LF on stdout under the
-receipt parsing rules and 4,096-byte bound, except nullable times below. Fields:
-`schema_version`, `result`, `campaign_id`, `content_sha256`, `cutoff_at`,
-`expected_count`, `state`, `actual_count`, `counts`, `failure_counts`,
-`recovery_count`, `recovery_counts`, `activation_count`, `sealed_at`,
-`first_activated_at`, `activated_at`, `aborted_at`, and `last_accepted_at`.
-State is a campaign-state string. Counts are numbers; `counts` has exactly
-`unqueued`, `queued`, `accepted`, `deleted`, `failed`, `cancelled`;
-`failure_counts` has exactly the six failure-code keys from Durable state. Each
-nested value follows the count bound. Outcome counts sum to actual count;
-failure counts sum to current failed members. `recovery_counts` has the same six
-reason keys, mapped to campaign counters; its sum equals `recovery_count`, not
-current failed count. History remains visible on blocked status. Times use the
-format above; seal/first/current/abort times and activation count mirror the row
-under the lifecycle/null rules above. Latest acceptance is the maximum
-`accepted_at` among current accepted rows, null when none. Emit no recipient/job
-data. The closed `result` string is `ready` (status exit 0, sealed/activated,
-all resolved, valid host), `activated` (activate exit 0), `pending` (exit 2,
-capturing/sealed with work left), or `blocked` (exit 1, failed members or
-aborted/retired state). Pending/blocked activation changes nothing.
-Invalid/unreadable state or host gates emit no JSON, only `invalid_state` plus
-LF on stderr and exit 1. JSON results emit no stderr.
+| Wire validation    | Required rule                                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Timestamps         | Exactly `YYYY-MM-DDTHH:mm:ss.ffffffZ`, Gregorian UTC, years 0001..9999, seconds 00..59, six fractional digits. Reject offsets, leap seconds, infinity, other precision; compare stored microseconds without rounding.                                   |
+| Epoch and identity | Epoch file is current UUID in ASCII plus LF; receipt epoch matches it. Cutoff/count/digest/campaign match row; activation totals/time match activation record and rechecked ledger.                                                                     |
+| Chronology         | Send issue time uses host UTC, at least sealed_at; activation time is stored activated_at, at least sealed_at/latest acceptance. Neither may be future-dated; require cutoff_at <= sealed_at. Clock failure/mismatch refuses authority; no time expiry. |
 
-For send authorization, `status` exit 0 or 2 requires `sealed`, actual equal to
-expected, valid counts, and no failures. Missing receipts permit this read and
-activated recovery, never sending/ingestion. Invalid receipts or restore markers
-return 1. Under host locks, validate the object, read epoch, verify deployed
+All four commands emit one closed JSON object plus LF on stdout, empty stderr,
+and no recipient/job data. Apply receipt parsing rules and the 4,096-byte bound
+including LF, except nullable times below. Fields: `schema_version`, `result`,
+`campaign_id`, `content_sha256`, `cutoff_at`, `expected_count`, `state`,
+`actual_count`, `counts`, `failure_counts`, `recovery_count`, `recovery_counts`,
+`activation_count`, `sealed_at`, `first_activated_at`, `activated_at`,
+`aborted_at`, and `last_accepted_at`. State uses campaign values. `counts` has
+exactly `unqueued`, `queued`, `accepted`, `deleted`, `failed`, `cancelled`,
+summing to actual count. `failure_counts` and `recovery_counts` each have
+exactly the six failure-code keys; their sums equal current failed members and
+historical `recovery_count` respectively. Recovery values map to campaign
+counters, also on blocked status. All counts obey the numeric bound. Times use
+the format above; seal/first/current/abort times and activation count mirror
+row/lifecycle/null rules. Latest acceptance is the maximum current accepted
+`accepted_at`, null when none. Use one consistent post-commit snapshot,
+unchanged on refusal/no-op.
+
+| Command  | Closed result/exit after state/host checks: 0 complete, 2 outstanding/deferred, 1 blocked                                                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prepare  | `sealed`/0 when sealed, including idempotent retry; `pending`/2 while capturing. No send receipt required.                                                                                                                                |
+| enqueue  | Requires current send authority and sealed state. `queue_full`/2 at the backlog cap, without mutation; otherwise `ready`/0 if all resolved, `pending`/2 after a batch or no-op with work left, including queued work awaiting the worker. |
+| status   | `ready`/0 when sealed/activated and all resolved; `pending`/2 when capturing/sealed with work left.                                                                                                                                       |
+| activate | `activated`/0 on activation/reconstruction; `pending`/2 when capturing/sealed with work left, without mutation.                                                                                                                           |
+| all      | `blocked`/1 for failed members or aborted/retired state, without mutation, before command work or queue-cap evaluation.                                                                                                                   |
+
+Invalid/unreadable state, unsupported command state, arguments, host gates, or
+execution failure take precedence: empty stdout, exactly `invalid_state` plus LF
+on stderr, exit 1; never partial JSON.
+
+To authorize send, require `status` exit 0 or 2, sealed state, actual =
+expected, valid counts, and no failures. Missing receipts allow this
+read/activated recovery, never sending/ingestion; invalid receipts/restore
+markers return 1. Under host locks, validate output, read epoch, verify deployed
 pinned server/web release and host bundle match manifest digest/date, then
-construct send. For activation it uses successful `activate` output, requiring
-exit 0, state `activated`, and current accepted plus deleted equal to expected.
-Receipt reconstruction calls `activate` only for an activated campaign,
-returning its unchanged current time/count; first revoke remaining send
-authority with the stop/join sequence. Recheck epoch, marker, and deployed
-release before durable receipt replacement; failure writes nothing. This is a
-local aggregate exchange through the existing four commands, with no new
-arguments, endpoint, credential, or authority source.
+construct send. For activation require `activate` exit 0, activated state,
+accepted + deleted = expected. Receipt reconstruction calls `activate` only for
+an activated campaign, returning its unchanged current time/count; first revoke
+remaining send authority with the stop/join sequence. Recheck epoch, marker, and
+deployed release before durable receipt replacement; failure writes nothing.
+This exchange adds no arguments, endpoint, credential, or authority source.
 
 ## Fixed bilingual message
 
@@ -413,24 +413,24 @@ aggregates.
 
 Hosted proofs must cover:
 
-| Area              | Required hosted proof                                                                                                                                                                                                                                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Manifest          | Frozen manifest bytes/hex for both languages and a fixed date, independently reproduced in Go and shell; deployed text/date match; changed Unicode, LF/CR, field order, content, or date changes the hash; receipt order/escapes do not.                                                                      |
-| Wire fixtures     | Cross-implementation receipt/aggregate fixtures, zero/max/overflow counts, duplicate/unknown keys, bad UTF-8/types/version/times/digests, epoch/release mismatch, receipt-free authorization, and interrupted activation recovery.                                                                            |
-| Recovery counters | Atomic recovery counters for all reasons, retries/rollback/overflow, repeated generations, concurrent deletion, and survival through abort/retirement/purge.                                                                                                                                                  |
-| Activation cycles | First activation, late failure, later acceptance/reactivation, and repeated receipt reconstruction preserve first/count/current rules; old send authority cannot claim recovered generations before renewal, including after crashes.                                                                         |
-| Abort             | Every abort recipient/job pair, missing/orphan jobs, every interruption point, concurrent deletion, legal terminal clearing, and resumable completion.                                                                                                                                                        |
-| Cutoff            | Exact cutoff membership, zero users, pending registration, concurrent account creation, resumed capture, maintenance interruption, and unchanged cutoff.                                                                                                                                                      |
-| Enqueue           | Concurrent/repeated enqueue, batch/backlog limits, statement/command timeouts, missing encryption keys, and rollback between outbox and ledger writes.                                                                                                                                                        |
-| Payload           | Strict payload validation, reparented jobs, generation replay, fixed bilingual text/HTML copy, canonical link, and no raw values in forced-error output.                                                                                                                                                      |
-| Delivery          | Authentication-mail priority, temporary failure, expiry, attempt exhaustion, terminal/decryption failure, stale leases, and acceptance/commit crash.                                                                                                                                                          |
-| Deletion          | Account deletion before enqueue, during a send, after acceptance, and after job cleanup, with unchanged cohort totals, terminal deleted outcomes, correct accepted-plus-deleted totals, and no send after deletion commits.                                                                                   |
-| Durability        | Accepted/terminal atomicity, seven-day cleanup, later activation retries/crashes and delivery failures, retirement-only purge, and no repeat activated/retired notice.                                                                                                                                        |
-| Send gate         | Missing/malformed/stale-epoch send receipts block both claim and send while ordinary mail continues; a receipt revoked after claim blocks SMTP.                                                                                                                                                               |
-| Restore           | Cluster/PITR restore, a restored previously sent job, host replacement, crash/reboot during fence creation or reconciliation, and old-receipt replay keep notices blocked until the owner issues current send authority; prove worker quiescence before revocation and that no restored DB can clear markers. |
-| Activation gate   | All activation paths reject missing/mismatched receipts, incomplete counts, failure, old notice releases, database restore, and unsupported old workers.                                                                                                                                                      |
-| Recovery boundary | Reviewed recovery cannot retry accepted/deleted rows, expose recipients, bypass restore reconciliation, or extend a job lifetime without a new generation; irrecoverable active-account failure can only abort the campaign.                                                                                  |
-| Publication       | The existing privacy promise and new publication date appear in both deployed languages before SMTP begins, and changed ingestion starts only after the gate.                                                                                                                                                 |
+| Area              | Required hosted proof                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest          | Frozen manifest bytes/hex for both languages and a fixed date, independently reproduced in Go and shell; deployed text/date match; changed Unicode, LF/CR, field order, content, or date changes the hash; receipt order/escapes do not.                                                                                                                                                                                                                          |
+| Wire fixtures     | Cross-implementation receipt/aggregate fixtures, zero/max/overflow counts, duplicate/unknown keys, bad UTF-8/types/version/times/digests, epoch/release mismatch, receipt-free authorization, and interrupted activation recovery. All four commands' exact stdout/stderr/exits, sealed prepare retries without send authority, partial capture, enqueue progress/worker wait, no-mutation queue_full, blocked/invalid precedence, and missing enqueue authority. |
+| Recovery counters | Atomic recovery counters for all reasons, retries/rollback/overflow, repeated generations, concurrent deletion, and survival through abort/retirement/purge. Late-failure sent-job abort preserves retention; recovery reuses sent job ID with a new generation or reconstructs an absent job atomically.                                                                                                                                                         |
+| Activation cycles | First activation, late failure, later acceptance/reactivation, and repeated receipt reconstruction preserve first/count/current rules; old send authority cannot claim recovered generations before renewal, including after crashes.                                                                                                                                                                                                                             |
+| Abort             | Every abort recipient/job pair, missing/orphan jobs, every interruption point, concurrent deletion, legal terminal clearing, and resumable completion.                                                                                                                                                                                                                                                                                                            |
+| Cutoff            | Exact cutoff membership, zero users, pending registration, concurrent account creation, resumed capture, maintenance interruption, and unchanged cutoff.                                                                                                                                                                                                                                                                                                          |
+| Enqueue           | Concurrent/repeated enqueue, batch/backlog limits, statement/command timeouts, missing encryption keys, and rollback between outbox and ledger writes.                                                                                                                                                                                                                                                                                                            |
+| Payload           | Strict payload validation, reparented jobs, generation replay, fixed bilingual text/HTML copy, canonical link, and no raw values in forced-error output.                                                                                                                                                                                                                                                                                                          |
+| Delivery          | Authentication-mail priority, temporary failure, expiry, attempt exhaustion, terminal/decryption failure, stale leases, and acceptance/commit crash.                                                                                                                                                                                                                                                                                                              |
+| Deletion          | Account deletion before enqueue, during a send, after acceptance, and after job cleanup, with unchanged cohort totals, terminal deleted outcomes, correct accepted-plus-deleted totals, and no send after deletion commits.                                                                                                                                                                                                                                       |
+| Durability        | Accepted/terminal atomicity, seven-day cleanup, later activation retries/crashes and delivery failures, retirement-only purge, and no repeat activated/retired notice.                                                                                                                                                                                                                                                                                            |
+| Send gate         | Missing/malformed/stale-epoch send receipts block both claim and send while ordinary mail continues; a receipt revoked after claim blocks SMTP.                                                                                                                                                                                                                                                                                                                   |
+| Restore           | Cluster/PITR restore, a restored previously sent job, host replacement, crash/reboot during fence creation or reconciliation, and old-receipt replay keep notices blocked until the owner issues current send authority; prove worker quiescence before revocation and that no restored DB can clear markers.                                                                                                                                                     |
+| Activation gate   | All activation paths reject missing/mismatched receipts, incomplete counts, failure, old notice releases, database restore, and unsupported old workers.                                                                                                                                                                                                                                                                                                          |
+| Recovery boundary | Reviewed recovery cannot retry accepted/deleted rows, expose recipients, bypass restore reconciliation, or extend a job lifetime without a new generation; irrecoverable active-account failure can only abort the campaign.                                                                                                                                                                                                                                      |
+| Publication       | The existing privacy promise and new publication date appear in both deployed languages before SMTP begins, and changed ingestion starts only after the gate.                                                                                                                                                                                                                                                                                                     |
 
 Production evidence contains release digests, publication date, fixed campaign
 and content digest, cutoff, aggregate counts, acceptance/activation times, and
