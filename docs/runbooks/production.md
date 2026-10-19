@@ -138,6 +138,9 @@ Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 
 ## Host operations
 
+Follow the [CrowdSec privacy notice runbook](crowdsec-privacy-notice.md) for
+first adoption, initial reconciliation, notification, and activation.
+
 Account deletion first ships in v0.7.9. Publish the reviewed image, install its
 reviewed bundle, then deploy it before use. Follow the
 [account-deletion runbook](account-delete.md) for confirmation, closed output,
