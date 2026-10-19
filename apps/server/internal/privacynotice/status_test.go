@@ -87,7 +87,7 @@ func TestAbortedStatusRetainsProgressAndRecoveryHistory(t *testing.T) {
 func TestStatusRejectsForeignCompletedJobPair(t *testing.T) {
 	s, enqueue := prepareEnqueueFixture(t, 1)
 	enqueue()
-	if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET kind='password_changed',state='sent',key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
+	if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET kind='password_changed',state='sent',attempts=1,key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
 		t.Fatal("foreign completed pair fixture failed")
 	}
 	if _, err := s.Status(t.Context()); err == nil {
