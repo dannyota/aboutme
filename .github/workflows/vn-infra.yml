@@ -48,11 +48,22 @@ jobs:
       - name: Test deployment safety
         run: |
           for test in deploy/vn/tests/*-test.sh; do
-            if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ]; then
+            if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ]; then
               continue
             fi
             "$test"
           done
+
+  crowdsec-privacy-notice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Test notice guest filesystem protocol
+        run: sudo unshare --mount --propagation private bash deploy/vn/tests/crowdsec-privacy-notice-test.sh
 
   crowdsec-integration:
     runs-on: ubuntu-24.04

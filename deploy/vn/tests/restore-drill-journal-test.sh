@@ -355,4 +355,16 @@ done <"$work/config-paths"
 [[ -z $(find "$work" -maxdepth 1 -name '.drill-journal-read.*' -print -quit) ]] || fail 'download scratch paths leaked'
 grep -Eq -- 'delete-object|--replace|--yes|--if-none-match|--content-type|--region|--project-id|--debug|--query|--endpoint-url' "$work/native.log" && fail 'unsupported or unsafe native operation'
 
+# Drill summaries must distinguish guest denial from app reconciliation and
+# must never publish epoch, receipt, or restored member state as evidence.
+drill=$repo_root/deploy/vn/scripts/restore-drill.sh
+for fixed in 'PASS latest notice restore fence' \
+  'PASS point-in-time notice restore fence' 'notice reconciliation: not performed'; do
+  grep -Fq "$fixed" "$drill" || fail 'missing fixed notice drill result'
+done
+for forbidden in epoch send.json activation.json restore-reconciliation; do
+  if grep -Fq "$forbidden" "$work/native.log"; then
+    fail 'notice authority entered the remote journal'
+  fi
+done
 printf 'restore drill journal tests: ok\n'
