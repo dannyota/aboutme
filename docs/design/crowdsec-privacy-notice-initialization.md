@@ -63,11 +63,13 @@ Take the existing bundle lock, then fresh persistent `cutover` ownership at the
 installed release, then the workload lock. Refuse an existing operation; never
 take it over or accept its ID as input. Revalidate mount identities and release
 after locking. Enter maintenance, stop account writers, drain jobs, join mail
-sends, and prove cutover quiescence. Require stopped migrations, DB setup,
-restore processes/recovery jobs, and changed-ingestion consumers. Persist the
-existing `quiesce` mutation marker before the database call. The operation and
-mutation marker block unattended app starts across reboot. No new operation
-kind, lock, recovery dispatcher, or start exception is needed.
+sends, and prove cutover quiescence. Require stopped migrations, DB setup, and
+restore processes/recovery jobs. Keep expanded target-path collection and
+PostgreSQL attack ingestion disabled; previously disclosed five-field SQLite
+protection may continue. Persist the existing `quiesce` mutation marker before
+the database call. The operation and mutation marker block unattended app starts
+across reboot. No new operation kind, lock, recovery dispatcher, or start
+exception is needed.
 
 Capture initial/current epoch, mount identities, installed release record and
 image digests, manifest digest, and newly acquired operation ID in private
