@@ -1,154 +1,128 @@
 # CrowdSec privacy-change notification
 
-Status: accepted. The owner approved the fixed copy and delivery limits on
-2026-10-19. The accepted [CrowdSec feed design](crowdsec-http-privacy.md) owns
-the collection change.
+Status: accepted. Owner approval is recorded below. The accepted
+[CrowdSec feed design](crowdsec-http-privacy.md) owns the collection change.
 
-The public privacy policy promises email before a change to collection takes
-effect. Publish the revised notice and its date first, then notify every account
-in a durable cutoff cohort. Keep the changed collection disabled until every
-cohort member has an accepted send outcome or has deleted their account. This is
-one fixed transactional notice, with no public or admin endpoint, periodic
-broadcast, recipient export, recipient override, or arbitrary message input.
+Publish the dated notice, then email every cutoff account before collection
+changes, as promised. Disable changes until all sends are accepted or accounts
+deleted. Forbid public/admin endpoints, periodic broadcasts, recipient
+exports/overrides, and arbitrary messages for this fixed transactional notice.
 
 ## Authority and limits
 
-Use the existing encrypted `auth_email_jobs` outbox and Bizfly sender. A small
-application-database ledger preserves cohort membership and outcomes beyond the
-outbox's seven-day cleanup. A root-invoked one-shot command creates and enqueues
-the notice; the existing worker sends it. The command never opens a listener.
+Use the encrypted `auth_email_jobs` outbox and Bizfly sender. An application
+ledger preserves membership/outcomes beyond seven-day outbox cleanup. A root-run
+one-shot command creates/enqueues notices without a listener; the worker sends.
 [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) permits this
 out-of-band operator boundary.
 
-One notice means one logical job per cutoff account. SMTP retries cannot
-guarantee exactly one delivered copy: a crash after provider acceptance but
-before the database commit can cause another delivery. Preserve the existing
-at-least-once retry policy, including this limit. A committed successful SMTP
-reply after `DATA` is an accepted send outcome, not proof of inbox delivery.
-Bizfly has no delivery webhook in the current integration; see the
-[email runbook](../runbooks/email.md#feedback). A known terminal delivery
-failure for an existing account blocks activation even if the provider
-previously accepted the message. Account deletion resolves its notice obligation
-without sending; it never decreases the original cohort count.
+Keep one logical job per account and at-least-once retries: a crash after SMTP
+acceptance before commit can duplicate delivery. A committed successful reply
+after `DATA` means accepted send, not inbox delivery. There is no Bizfly
+webhook; see the [email runbook](../runbooks/email.md#feedback).
 
-A page-only announcement would break the existing promise. Exporting addresses
-to a mailing service adds a data transfer and another delivery authority. A new
-mail queue duplicates encryption and retry work. Reusing only the outbox loses
-completion evidence when jobs expire, are deleted, or are cleaned up.
+A page-only notice breaks the promise. Address export adds a transfer and
+delivery authority; a new queue duplicates encryption/retries. Outbox-only
+evidence disappears on expiry, deletion, or cleanup.
 
 ## Release and cutoff
 
-1. Ship the notice copy specified by the feed design, update both language dates
-   to the actual publication date, and deploy the schema, fixed template, worker
-   support, command, and host send/activation fences. The expanded feed and
-   PostgreSQL attack ingestion remain disabled. Verify `/privacy` in both
-   languages before any notification is sent. Do not change the terms date or
-   promise: this is a privacy notice, not a terms amendment.
-2. Under the host workload lock, enter maintenance, stop the server and all
-   other account writers, and confirm quiescence through the current deployer.
-   Persist a root-owned cohort-capture marker before creating the cutoff. It
-   blocks app restart after interruption until the cohort is sealed. Existing
-   protection may keep its previously disclosed behavior during notification.
-3. `server crowdsec-privacy-notice prepare` fixes the database UTC cutoff time
-   and count of all committed `users` rows while writers are stopped. Copy only
-   account IDs into the ledger in UUID-ordered batches of at most 100. Store the
-   cursor with each batch commit. Pending password registrations are not
-   accounts. On retry, use the existing cutoff and cursor; never take a new
-   cohort or rely on `created_at` or UUID time to classify later accounts.
-4. Seal only after count equality and an anti-join prove exact membership in
-   both directions against the quiescent `users` table. Mark the campaign sealed
-   in the same transaction. Clear the capture marker and resume the app with the
-   updated notice. A crash before sealing resumes capture under maintenance;
-   missing quiescence or a changed account set requires reviewed recovery.
-5. The owner issues the send-authorization receipt described below, enqueues
-   bounded batches, and lets the normal worker drain them. Accounts created
-   after sealing see the updated notice through the existing registration flow
-   and are not added to the cohort. A previously loaded page does not authorize
-   serving the old notice: registration and privacy links must resolve to the
-   deployed notice.
-6. After all members are accepted or deleted, perform the activation check and
-   the feed design's fenced cutover. Never infer permission from elapsed time or
-   queue emptiness. There is no extra waiting period after the last member
-   resolves.
+| Order | Required action                                                                                                                                                                                                                                                                                                                                                               |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Publish the feed design's copy with the actual date in both languages; deploy schema, fixed template, worker, command, and host send/activation fences. Keep expanded feed and PostgreSQL attack ingestion disabled. Verify both `/privacy` languages before sending. Keep the terms date and promise intact.                                                                 |
+| 2     | Under the workload lock, enter maintenance, stop all account writers including the server, and confirm quiescence through the deployer. Before cutoff, persist a root-owned capture marker blocking restart until sealing, including after interruption. Previously disclosed protection may continue during notification.                                                    |
+| 3     | `server crowdsec-privacy-notice prepare` fixes database UTC cutoff and committed `users` count with writers stopped. Capture only account IDs, UUID-ordered, at most 100 per batch, committing the cursor with each batch. Pending password registrations are excluded. Retries reuse cutoff/cursor; never recapture or classify later accounts by `created_at` or UUID time. |
+| 4     | Count equality and bidirectional anti-joins against quiescent `users` prove exact membership in the sealing transaction. Clear the marker and resume with updated notice. Pre-seal crashes resume under maintenance; changed membership or missing quiescence requires reviewed recovery.                                                                                     |
+| 5     | The owner issues send authority below and enqueues bounded batches for the worker. Accounts created after sealing see the updated notice in registration and stay outside the cohort. Even previously loaded pages' registration and privacy links must resolve to the deployed notice.                                                                                       |
+| 6     | Once all members are accepted or deleted, check activation and perform the feed design's fenced cutover. Time and queue emptiness grant no permission; there is no additional waiting period.                                                                                                                                                                                 |
 
-The cutoff is the quiescent account snapshot, not a timestamp filter. The
-capture marker, campaign identity, and stored count make incomplete capture
-visible across reboot. A zero-account cohort is valid only after the same
-membership proof. No production address enters a laptop, artifact, or command
-argument; the existing SMTP transport still sends each address to Bizfly.
+Marker, campaign, and count expose incomplete capture across reboot. Zero
+accounts require the same membership proof. Addresses go only through existing
+SMTP to Bizfly, never to laptops, artifacts, or command arguments.
 
 ## Durable state
 
-Add two application tables through goose with explicit `aboutme_app` grants.
-These belong to the application database, never the CrowdSec database.
+Add two goose tables in the app database with explicit `aboutme_app` grants.
 
-`privacy_notice_campaigns` has exactly one allowed campaign ID,
-`crowdsec-postgres-paths-v1`, with these fields:
+`privacy_notice_campaigns` allows only ID `crowdsec-postgres-paths-v1`:
 
-- `id text PRIMARY KEY`, constrained to that literal;
-- `content_sha256 bytea`, exactly 32 bytes, matching a compiled manifest of the
-  bilingual page copy, email copy, canonical link, and publication date;
-- `cutoff_at timestamptz`, `expected_count bigint >= 0`, and nullable
-  `capture_cursor uuid`;
-- `state text`: `capturing`, `sealed`, `activated`, `aborted`, or `retired`;
-- nullable `sealed_at`, `activated_at`, `retired_at`, and `purged_at`
-  timestamps; sealed/activated require `sealed_at`, activated also requires
-  `activated_at`, and purging requires `retired_at`. Historical timestamps
-  survive recovery;
-- nullable nonnegative `accepted_count bigint`, `deleted_count bigint`, and
-  `last_accepted_at timestamptz`, written at activation; accepted plus deleted
-  must equal expected count. The time is null exactly when accepted count is
-  zero. These aggregate values survive retirement purge.
+| Field                                                                                                                                                                                                                 | Contract                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                                                                                                                                                                                  | Text primary key, fixed campaign literal.                                                                                                                                                                                                                  |
+| `content_sha256`                                                                                                                                                                                                      | `bytea`: 32 raw SHA-256 bytes of the manifest below.                                                                                                                                                                                                       |
+| `cutoff_at`, `expected_count`, `capture_cursor`                                                                                                                                                                       | `timestamptz`, nonnegative `bigint`, nullable UUID respectively.                                                                                                                                                                                           |
+| `state`                                                                                                                                                                                                               | Text: `capturing`, `sealed`, `activated`, `aborted`, or `retired`.                                                                                                                                                                                         |
+| `sealed_at`, `first_activated_at`, `activated_at`, `aborted_at`, `retired_at`, `purged_at`                                                                                                                            | Nullable `timestamptz`. Sealed/activated require seal time; current activation is non-null exactly in activated state; purge requires `retired_at`.                                                                                                        |
+| `activation_count`                                                                                                                                                                                                    | Nonnegative `bigint NOT NULL DEFAULT 0`; first activation is null exactly when count is zero; activated requires count > 0. First time/count history survive every cycle, abort, and purge; current time follows transitions below.                        |
+| `accepted_count`, `deleted_count`, `last_accepted_at`                                                                                                                                                                 | Nullable nonnegative bigints and nullable `timestamptz`, written at activation and retained through retirement purge. Accepted plus deleted equals expected; time is null exactly when accepted is zero.                                                   |
+| `recovery_count`, `recovery_expired_count`, `recovery_attempts_exhausted_count`, `recovery_provider_rejected_count`, `recovery_payload_invalid_count`, `recovery_job_missing_count`, `recovery_delivery_failed_count` | Nonnegative `bigint NOT NULL DEFAULT 0`. Total equals the six reason counters' sum without overflow. Count committed generations, not failed attempts; totals may exceed cohort size. Preserve through deletion, activation, abort, retirement, and purge. |
 
-`privacy_notice_recipients` has a random `id uuid PRIMARY KEY`, campaign foreign
-key with deletion restricted, nullable
-`user_id uuid REFERENCES users(id) ON DELETE SET NULL`, and a unique
-`(campaign_id, user_id)` while non-null. Its `job_id uuid UNIQUE NOT NULL` is
-allocated during capture and never changes. It is not a foreign key to the
-short-lived outbox. Additional fields are:
+`privacy_notice_recipients` has these fixed fields:
 
-- `state`: `unqueued`, `queued`, `accepted`, `deleted`, or `failed`;
-- `generation integer >= 0`, initially zero, incremented only by reviewed
-  recovery; nullable `queued_at`, `accepted_at`, `deleted_at`, and `failed_at`;
-- nullable `failure_code` from `expired`, `attempts_exhausted`,
-  `provider_rejected`, `payload_invalid`, `job_missing`, or `delivery_failed`.
+| Field                                                                 | Contract                                                                                                                                                         |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                                  | Random UUID primary key.                                                                                                                                         |
+| `campaign_id`                                                         | Campaign foreign key with restricted deletion.                                                                                                                   |
+| `user_id`                                                             | Nullable UUID referencing users with ON DELETE SET NULL; unique `(campaign_id, user_id)` while non-null.                                                         |
+| `job_id`                                                              | Immutable UUID, unique and non-null, allocated at capture; no outbox foreign key.                                                                                |
+| `state`                                                               | `unqueued`, `queued`, `accepted`, `deleted`, `failed`, or `cancelled`.                                                                                           |
+| `generation`                                                          | Integer >= 0, initially zero; only reviewed recovery increments it.                                                                                              |
+| `queued_at`, `accepted_at`, `deleted_at`, `failed_at`, `cancelled_at` | Nullable timestamps; require the state's outcome time. Cancellation preserves earlier times; queued/accepted times may survive failure/deletion.                 |
+| `failure_code`                                                        | Nullable `expired`, `attempts_exhausted`, `provider_rejected`, `payload_invalid`, `job_missing`, or `delivery_failed`; forbidden for accepted/deleted/cancelled. |
 
-State constraints require the matching outcome timestamp. Accepted and deleted
-states forbid a failure code; deleted requires null `user_id`. Historical
-queued/accepted timestamps may survive a later failure or deletion. No email,
-name, token, message body, SMTP reply, or provider identifier belongs in either
-table. Index `(campaign_id, state, id)` and `user_id`. The campaign row stores
-no individual identity.
+Deleted requires null user. Index `(campaign_id, state, id)` and `user_id`.
+Neither table stores email, name, token, body, SMTP reply, or provider ID;
+campaign has no individual identity.
 
-Every batch and worker transition verifies the compiled campaign and content
-digest. Unknown campaigns, mismatched digests, invalid state, unexpected jobs,
-or a missing ledger fail closed. Enqueue and worker transactions lock account,
-recipient, then outbox job. Capture and status never lock those rows in reverse
-order. Serialize capture/enqueue/recovery commands with one campaign advisory
-lock; status is read-only and uses one consistent database snapshot.
+Every batch/worker transition verifies compiled campaign and digest. Unknown
+campaign, digest mismatch, invalid state, unexpected jobs, or missing ledger
+fail closed. Enqueue/workers lock account, recipient, then job; capture/status
+never reverse this order. One campaign advisory lock serializes
+capture/enqueue/recovery. Status reads one consistent snapshot without writes.
 
-Keep recipient rows for the lifetime of this collection change, including after
-activation, so delayed receipt recovery and known late failures can resolve
-individual outcomes. Deleted accounts leave null-user rows without an address.
-No seven-day recipient cleanup or scheduled purge is permitted. Only reviewed
-retirement may mark the campaign retired and purge recipient rows in batches of
-at most 200, after permanently disabling this collection change and revoking
-both host receipts. Keep the campaign and aggregate retirement record forever to
-prevent replay. Commands refuse retired or aborted campaigns. Abort revokes both
-receipts, clears queued payloads, and permanently disables the change; its
-ledger remains until retirement. Backups follow the application policy.
+Keep recipients after activation for delayed recovery and late failures; deleted
+accounts leave null-user rows without addresses. Forbid seven-day/scheduled
+purge. Reviewed retirement alone marks retired and purges at most 200 rows per
+batch, after permanent collection disablement and receipt revocation. Keep
+campaign and retirement aggregates forever against replay. Routine commands
+refuse aborted/retired campaigns. Unresolved members require completed abort
+before retirement; abort keeps the ledger. Application backup policy applies.
+
+### Content manifest bytes
+
+Manifest version 1 is UTF-8 without a byte-order mark. Its first line is exactly
+`aboutme-crowdsec-privacy-content-v1`. Append these `key=value` lines in order:
+`campaign_id`, `publication_date`, `canonical_link`, `public_en`, `public_vi`,
+`email_subject`, `email_button`, `email_heading_vi`, `email_heading_en`,
+`email_preheader`, `email_body_vi`, `email_body_en`. Every line, including the
+last, ends with one LF byte (0x0a). There are no blank lines or other bytes.
+
+Use the fixed campaign and `https://aboutme.vn/privacy`. Before preparation, fix
+both notices' actual publication date: Gregorian `YYYY-MM-DD`, years 0001..9999.
+Public values are the quoted
+[notice paragraphs](crowdsec-http-privacy.md#public-notice-and-release); email
+values are the [fixed strings and bodies](#fixed-bilingual-message). Remove
+Markdown quote prefixes and join each paragraph's wrapped lines with one ASCII
+space. Remove Markdown delimiters/labels, preserving all other code points,
+including combining/precomposed Vietnamese. Never normalize, trim, translate,
+HTML-escape, or JSON-encode. Forbid CR, LF, NUL, and edge whitespace in values.
+Render these values; do not hash layout, HTML markup, or the existing footer.
+
+Hash all bytes with SHA-256. CLI/receipt `content_sha256` is 64 lowercase ASCII
+hex characters without prefix/separators, decoding to the database's 32 bytes.
+Go writes literal UTF-8; shell uses `LC_ALL=C`, fixed `printf '%s\n'` per line,
+never `echo`, locale transforms, or JSON. Compiled server and reviewed host
+bundle carry the same manifest and expected digest.
 
 ## Enqueue and delivery
 
-With a valid send receipt and no restore marker,
-`server crowdsec-privacy-notice enqueue` processes at most 100 unqueued members
-per invocation, ordered by ledger ID. Permit at most 100 pending/leased notice
-jobs at once; when full, return a fixed `queue_full` result without mutation.
-Read the live account email inside production and use `Outbox.EnqueueTx` in the
-same transaction that changes the ledger to `queued`. Duplicate calls find the
-same job ID and do not create another job. A failed commit changes neither. Each
-enqueue transaction has a ten-second statement timeout and two-second lock
-timeout; the one-shot command has a five-minute whole-run deadline.
+With valid send authority and no restore marker,
+`server crowdsec-privacy-notice enqueue` handles 100 unqueued members at most,
+in ledger-ID order. Cap concurrent pending/leased notice jobs at 100; return
+fixed `queue_full` without mutation when full. Read live email only in
+production; `Outbox.EnqueueTx` and ledger `queued` commit together or neither
+does. Duplicate calls reuse the job ID. Statement timeout is ten seconds, lock
+timeout two seconds, and command deadline five minutes.
 
 Add the closed kind `privacy_notice` with user-only scope and no token digest.
 Its strict payload version 3 contains only `version`, `to`, `userId`,
@@ -158,157 +132,226 @@ keys. Keep the 4,096-byte plaintext bound. Derive the fixed copy and
 `https://aboutme.vn/privacy` from compiled constants, never from the payload,
 environment, database text, request host, or command arguments.
 
-Keep AES-256-GCM sealing, fresh nonces, existing job/kind/key-ID authenticated
-data, current/previous key custody, and secret injection. Before sending,
-decrypt and compare the payload's account, recipient address, notice, and
-generation against the locked account and ledger. Reparented jobs, replayed
-generations, deleted users, and mismatched ciphertext must not send.
+Keep AES-256-GCM, fresh nonces, job/kind/key-ID authenticated data,
+current/previous key custody, and secret injection. Before sending, decrypt and
+match account, address, notice, and generation against locked account/ledger.
+Reparented jobs, replayed generations, deleted users, or bad ciphertext cannot
+send.
 
-The job expires 24 hours after its own enqueue, not 24 hours after the cohort
-cutoff. Keep the worker's 30-second lease, ten-second send deadline,
-eight-attempt limit, bounded jitter backoff, ten-job claim batch, and two
-concurrent sends. Claim due authentication/security mail before notice mail so a
-notice backlog cannot starve sign-in. Preserve ordinary mail semantics for every
-other kind.
+Expiry is 24 hours after enqueue, not cutoff. Keep the 30-second lease,
+ten-second send deadline, eight attempts, bounded jitter, ten-job claim batch,
+and two concurrent sends. Claim due authentication/security mail first to
+prevent sign-in starvation. Preserve every other mail kind's semantics.
 
-Before claiming any `privacy_notice` job and again under the send locks before
-SMTP, the worker checks the host send gate below and requires a sealed campaign.
-No matching receipt, a restore marker, or unreadable state means no notice claim
-or send. Already leased notices remain unsent until authorized recovery; normal
-mail continues. Neither stale-lease requeue nor an old ciphertext bypasses this
-check. Authentication mail keeps its existing behavior.
+Before notice claim and again under send locks before SMTP, require the host
+send gate and sealed campaign. Missing/mismatched receipts, restore markers, or
+unreadable state forbid claim/send, including already leased notices until
+authorized recovery. Stale-lease requeue and old ciphertext cannot bypass this
+gate; normal mail continues.
 
-Within the send-finalization transaction, set the ledger `accepted` only with
-the corresponding outbox `sent` transition after SMTP acceptance. Set ledger
-`failed` with a fixed reason whenever its job becomes terminal, including expiry
-and decryption failure, and commit both transitions. Clear encrypted payloads on
-sent/terminal as usual. Job cleanup must not erase the ledger outcome. Temporary
-failure or stale-lease recovery keeps the same logical job and ledger `queued`;
-an acceptance/commit crash may resend, but never records acceptance without a
-committed accepted outcome.
+After SMTP acceptance, commit ledger `accepted` with outbox `sent`. Commit
+ledger `failed` and a fixed reason with delivery-terminal transitions, including
+expiry/decryption failure; intentional abort uses cancellation below. Clear
+sent/terminal payloads; cleanup preserves ledger outcomes. Temporary
+failure/stale-lease recovery keeps the job and `queued` ledger.
+Acceptance/commit crashes may resend, never record uncommitted acceptance.
 
-Account deletion locks user, recipient, then job, erases/cascades ordinary
-account and mail data, nulls `user_id`, and commits ledger `deleted` with
-`deleted_at` and no failure code in the same transaction if not already
-accepted. A prior accepted outcome remains accepted with a null user. Never send
-after deletion commits or lower `expected_count`. If sending holds the user lock
-first, deletion waits for its accepted/failure transaction; if deletion wins,
-the sender finds no authority. Deleted is terminal and counts as resolved,
-including deletion after a failed attempt. A null user without an accepted or
-deleted outcome is inconsistent and blocks activation, not an implied deletion.
-Unexplained missing queued jobs also block; missing accepted jobs are normal
-after outbox cleanup. Recovery never recreates a deleted account or its mail.
+Deletion locks user, recipient, then job; erases/cascades ordinary account/mail
+data; nulls `user_id`; and atomically records `deleted`, `deleted_at`, and no
+failure code unless already accepted. Accepted remains accepted with null user.
+Never send after deletion commits or reduce `expected_count`. Deletion waits if
+sending holds the user lock; otherwise sending finds no authority. Deleted is
+terminal/resolved even after failure. Null users without accepted/deleted
+outcomes and unexplained missing queued jobs block activation. Missing accepted
+jobs after cleanup are normal. Recovery never recreates deleted accounts or
+mail.
 
 ## Owner commands, activation, and recovery
 
-Allow only `prepare`, `enqueue`, `status`, and `activate` subcommands. No
-recipient, subject, body, URL, campaign, or cutoff arguments are accepted. The
-host's current release wrapper pins the server image and applies the existing
-release and workload locks. These commands use the Unix socket as `aboutme_app`,
-with `--network=none`, a 256 MiB container memory cap, and no SMTP or media
-credentials. Only enqueue needs the existing mail encryption keys. The normal
-server worker alone uses SMTP credentials and network access. Add no timer for
-these commands and never dispatch them from an HTTP or MCP request.
-
 ### Send authority and restore fence
 
-Keep host authority under root-owned `/var/lib/aboutme/privacy-notice/`, outside
-the restored PostgreSQL data and backups. Use directory mode 0755 and file mode
-0444, with no container-writable parent or alternate authority path. The
-directory contains a current random UUID `epoch`, `send.json`,
-`activation.json`, and a `restore-reconciliation` marker when reconciliation is
-required. Receipt writes use atomic replacement and durable file/directory
-synchronization. Mount this directory read-only into the server and enqueue
-command so replacement and removal remain visible; do not mount individual
-receipt files or cache checks. The server cannot create, replace, or remove any
-host authority file.
+Root host primitives share the existing operation/workload locks in every mode;
+[Vietnam start guards](vietnam-production.md#release-fence) apply.
 
-The owner-run host `authorize-send` action validates a sealed complete cohort,
-matching deployed notice/content digest, and absence of the restore marker. It
-writes `send.json` containing only the fixed campaign, content digest, cutoff,
-expected count, current epoch, and issue time. Every field must match the
-compiled manifest, campaign row, and host epoch. Missing, malformed,
-stale-epoch, or mismatched state fails closed. Only this action may issue the
-initial receipt; startup, deploy, queue retry, and database state alone cannot
-create one.
+| Boundary                          | Required contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| App commands                      | Allow only `prepare`, `enqueue`, `status`, and `activate`, without recipient, subject, body, URL, campaign, or cutoff arguments. The current release wrapper pins the image and holds release/workload locks. Commands use the Unix socket as `aboutme_app`, `--network=none`, 256 MiB memory, and no SMTP/media credentials. Only enqueue needs mail encryption keys; only the normal worker uses SMTP credentials/network access. Forbid command timers and HTTP/MCP dispatch.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Authority                         | Root:root `/var/lib/aboutme/privacy-notice/`, mode 0755, stays outside database restore targets/backups. Files are root:root 0444: `epoch`, `send.json`, `activation.json`, `restore-reconciliation`, and the canonical cohort marker `capture-in-progress` when required. Reject links, special files, unexpected hard links, unsafe modes, and container-writable parents. Never accept an alternate path or recover authority from a database or host snapshot. Mount the whole directory read-only into server/commands; forbid individual mounts and cached checks so replacement/removal stays visible.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Guest mount provenance            | Trust reviewed data-volume provisioning and host root. Require active ext4 `/srv/data`, filesystem root `/`, with source equal to the unique block device resolved by fixed `LABEL=aboutme-data`. Missing, duplicate, ambiguous, or failed resolution refuses access. Require real root-owned, non-group/world-writable source/target paths without symlink ancestors. `/var/lib/aboutme` must be an exact active mountpoint with the same filesystem device, mount root `/aboutme`, and directory device/inode pair as `/srv/data/aboutme`. Reject wrong sources, root-disk shadows, stacked/ambiguous mounts, and nested mounts shadowing either directory, fence, or authority tree.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Mount failure                     | Prove provenance before any fence/authority access, including `fence.sh init`, locking, or directory creation, on every new/replacement/full/drill host and start guard. Inspect only mount/directory metadata. Keep `nofail` for boot recovery, but refuse initialization, restore, or guarded starts on failure; never create fallback state or guess a replacement mount. The operator repairs the existing mount. Preserve observed identities; revalidate after locking and before each authority mutation or restore/start effect, refusing any change. This proves guest provenance, not provider volume-ID authenticity; add no identity file or provisioning path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Host primitive                    | Install root-owned mode-0755 `crowdsec-privacy-notice-host.sh` and its fence/workload dependencies before initialization in both full and `ABOUTME_INSTALL_ONLY=postgres` modes. Fixed root host-only actions are `initialize` and `adopt` with the bootstrap/adoption meanings below. The primitive cannot access the database, call the app, grant authority, clear reconciliation, accept receipts, or execute caller-supplied commands. It requires no image, release record, key, SMTP credential, or Podman runtime. Missing dependencies fail installation. PostgreSQL-only mode adds no application unit/release, consumer, timer, or mail credential; copy program files only and preserve the separate pgBackRest secret pipe.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Operation ownership               | Bootstrap/restore denial uses fixed kind `notice_restore` in existing `fence.json`, serialized by `fence.lock`. New hosts initialize that fence at its existing rebuilt-host floor; never reset/copy a floor. Take persistent operation ownership before `/run/aboutme/workload.lock`; preserve installer bundle serialization and create the runtime lock parent under existing host-directory rules. Verify the exact owning kind/ID, not merely a generic checkpoint. The sole initialization exception is reviewed first adoption below. No new lock or dispatcher exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| App-absent admission              | A verified app-absent host without a release uses validated stored `minimum_tag` only for lock/checkpoint admission to denial, including full/replacement hosts before first deployment. Never create `release.json`, claim an installed image, raise the floor, or authorize an image from it. A changed floor refuses, without retrying at a lower floor. Installed-release hosts keep real-release validation. Application commands and receipt creation still require the deployed pinned release and reviewed bundle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Permanent adoption evidence       | Existing `fence.json` contains `notice_authority` with exactly `version: 1`, `state: "initializing"` or `"adopted"`, and `operation_id` in the existing ID grammar. Every fence write preserves it; unknown/malformed values fail closed. It grants no send/activation authority, is never removed normally, and never moves adopted back to initializing. All new hosts use it under `notice_restore`. Initializing state independently blocks the linked application/ingestion starts even if operation ownership is lost or corrupt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Initialization and durability     | Under the owning locks, persist initializing evidence before creating the authority directory and synchronize its parent. Start with an empty regular reconciliation marker, local secure-random canonical lowercase UUID v4 epoch with variant bits 10 plus LF (37 bytes), no receipts, and no capture marker. Entropy failure refuses. For each authority/evidence replacement use a same-directory temporary file with required metadata, file sync, atomic rename, then directory sync; check every result. Marker must be durable before epoch. Prove receipt absence and sync the directory before persisting adopted state, retaining its operation ID. Ordinary reinstall and later full installation preserve valid epoch, receipts, capture/reconciliation state, and adoption evidence; neither creates new authority from missing state.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| First-adoption eligibility        | An existing application host lacking authority needs a reviewed, one-time fixed operation before ordinary bundle replacement. The primary pins verified installed pre-notice bundle hashes and release record/image digests in its closed eligibility specification, after guest mount checks. Verify those versions predate notice authority; unknown versions refuse. Require absent adoption evidence and authority directory/files, but absence or DB contents alone never proves eligibility. Accept no caller replacement hashes, paths, release, receipts, or force flag. Root invokes it explicitly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| First-adoption sequence           | Hold the installer bundle lock from eligibility inspection through adoption/replacement. Take existing `cutover` ownership at the real installed release, drain jobs, take workload ownership, enter maintenance, stop account writers, join sends, and prove cutover quiescence. Persist the existing `quiesce` mutation marker before adoption writes so old guards block serving. Reuse held locks. With the reviewed helper, durably write initializing evidence bound to that cutover ID before replacing helpers or initializing authority. Only this recorded cutover/quiesce combination permits initialization outside `notice_restore`. After durable initialization, persist adopted state. Verify new guards, fenced state, and stopped writers; clear only the cutover marker through its normal guard and release its exact operation, retaining notice reconciliation.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Adoption interruption and rollout | Before durable intent, retain the cutover guard for inspection. After intent, resume only the recorded operation after quiescence, finishing missing marker/epoch writes without inventing receipts. Missing authority after adoption is corruption; missing evidence with post-notice helpers also refuses. Never downgrade helpers to qualify as legacy, automatically take over locks, delete reconciliation, or add arbitrary repair. Publish compatible notice images and reviewed bundle before rollout; perform first adoption before ordinary bundle replacement, then deploy compatible code under normal gates, keeping maintenance until they pass. No adoption step changes the floor, reconciles the app, sends mail, or enables ingestion. Reconcile explicitly before capture/send authorization; activation still governs ingestion.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Drill controller entry            | Install `deploy/vn/scripts/restore-drill.sh` as root:root 0755 at `/usr/local/lib/aboutme/restore-drill.sh` in both modes. Its host branch precedes laptop imports, parsing, and provisioning. Root-only calls are exactly `/usr/local/lib/aboutme/restore-drill.sh host-pass latest` and `/usr/local/lib/aboutme/restore-drill.sh host-pass time YYYY-MM-DDTHH:MM:SSZ`. Latest has no extra argument; time takes one real UTC calendar time in that exact seconds form, round-tripping unchanged. Render the existing pgBackRest target as argument-array data, never shell text. Recovery wait is fixed at 3,600 seconds. Reject extra arguments and environment overrides for authority, command, path, release, operation identity, timeout, or restore configuration. These drill calls require complete app absence and refuse full application hosts. Preserve `--archive-mode=off` and the fixed stanza, cluster, DB, role checks, and smoke table. The laptop runs latest, then a separate time pass only after success.                                                                                                                                                                                                                                                          |
+| Source-only restore functions     | The notice helper exposes zero-argument source-only functions: `notice_restore_begin` acquires a new persistent operation in the outer controller; `notice_restore_pre_restore` establishes pre-effect denial in its workload-locked child; `notice_restore_postcheck` verifies retained denial after fixed DB checks; `notice_restore_finish` releases the outer controller's exact owner only after successful child/helper completion. Context is private memory/inherited pipes, never environment input. These functions cannot query the DB or dispatch callbacks. `pre-restore`/`postcheck` name source-only boundaries, not public actions. Neither notice wrapper offers public finish, operation-ID input, resume-owned-operation, or command/path selection. Future full-host restore must use these same functions/private protocol/workload helper through a separately reviewed fixed controller containing its own DB procedure and full-host quiescence/start checks; expose no speculative production action or general dispatcher.                                                                                                                                                                                                                                       |
+| Controller and child sequence     | The root SSH-started outer controller validates action/target, preflights mounts before fence/authority access, requires adopted authority/app absence, and refuses an existing operation. Begin derives the admission tag internally and calls `fence.sh lock notice_restore <internally-derived-tag>`; this kind persists `operation_tag`. Capture only its newly returned ID and revalidate mounts; failed acquisition/response never permits reading and adopting an existing owner. With anonymous pipes, execute the fixed argument vector `/usr/local/lib/aboutme/workload-lock.sh 300 /usr/local/lib/aboutme/restore-drill.sh _host-pass`, not shell text. The helper takes workload ownership; the zero-argument private child validates context/owner/mounts and runs pre-restore. The child executes fixed pgBackRest restore, PostgreSQL recovery, and every existing run_checks schema/count/grant/role/smoke check locally under that same lock. Every failed check fails the child; later SSH queries cannot complete it. Measure recovery time around replacement/recovery, excluding later checks. After foreground checks exit and postcheck succeeds, write completion, close its pipe, and exit zero without releasing the operation or explicitly unlocking workload. |
+| Private context pipe              | The fixed child inherits context read FD 3 and completion write FD 4. Require effective root and anonymous pipes, not missing/regular-file descriptors. Parent closes unused ends and writes one context: a closed JSON object at most 1,024 UTF-8 bytes followed by LF and EOF, with exactly `version` integer 1, `operation_id` the newly generated 43-character base64url value, `admission_tag` the internally validated strict tag, `mode` latest/time, `target` null for latest or the validated UTC string, and `mount_identity`. `mount_identity` has exactly nonnegative integer fields `data_mount_id`, `bind_mount_id`, `device_major`, `device_minor`, `data_root_inode`, `aboutme_inode`, captured from canonical guest preflight, not a provider ID/file. Source/bound aboutme directories share device/inode. Rechecks retain these identities and every label/ext4/root/ownership/bind/no-shadow rule; neither process changes mount namespace. Reject duplicate/unknown keys, wrong types, extra records, trailing data, arguments, or mismatched ownership. Child closes context after reading and excludes completion FD 4 from DB/system children.                                                                                                                     |
+| Private completion pipe           | After postcheck only, the child writes one closed JSON object, at most 256 UTF-8 bytes, followed by LF and EOF, with exactly `version` integer 1, the same `operation_id`, and `epoch` equal to this pass's pre-restore UUID. Apply context framing/key/type rejection. It is no receipt, durable recovery token, or transferable finish authority. Neither record reaches public stdout/stderr, temporary files, journals, or artifacts. Malformed records/unexpected exit never permit adopting the fence's owner. The parent requires exact completion plus EOF, joins the workload helper, and requires its zero exit before finish. Losing the child/helper forbids finish even with a completion record. These private branches trust host root and expose no unprivileged service or callback.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Each restore                      | Under the owning operation/workload locks, `notice_restore_pre_restore` verifies bound ownership and inherited mount identity before any database stop, replacement, or startup. Stop the server/account writers and join sends under maintenance, keeping changed-ingestion consumers stopped under their existing gate. The drill instead proves no release record, rendered server unit, server process, or queued start; missing units alone are insufficient. Unexpected/ambiguous state or inspection failure refuses. Persist/sync reconciliation first, rotate to a distinct fresh epoch, then unlink each receipt with a directory sync after each, accepting already absent receipts and removing malformed safe regular receipts without trusting contents. Unsafe objects refuse. Verify durable denial before returning; keep the pass epoch privately. Recheck marker, pass epoch, receipt absence, provenance, quiescence, and ownership before replacement or PostgreSQL start. Every pass rotates, including the first after bootstrap and explicit retries with an existing marker or absent receipts; denial, not epoch bytes, is idempotent.                                                                                                                           |
+| Restore postcheck                 | Before postcheck, the fixed controller proves restore success, connections accepted, recovery ended within the fixed bound, every DB check passed, all restore/check children exited, and no pending PostgreSQL start/recovery job remains. `notice_restore_postcheck` verifies mount identities, exact operation ID/kind/admission tag, adopted authority, ownership/modes, this pass's epoch, durable reconciliation, both receipts absent, and app absence/full-host quiescence. Mismatch retains ownership. Never clear markers, write receipts, infer authority from restored rows, or claim app reconciliation. Read-only checks retain workload ownership. PostgreSQL may remain running after successful recovery, with notices and changed ingestion fenced.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Workload descriptor lifetime      | Use workload-lock.sh unchanged: command-form flock encloses the child, and foreground restore descendants inherit its workload descriptor. Forbid `flock --close`, explicit unlock, second open-and-lock protocol, parallel lock, or reclaimable FD token. Fixed postgres commands use an exec-style privilege drop preserving that descriptor, such as fixed setpriv postgres UID/GID/supplementary-group arguments, not inner sudo that closes it. Close only private context/completion descriptors there; accept no user/group/command/FD/privilege-option input. No background shell work; join foreground children and systemd start/recovery results. On failure or handled HUP/TERM/INT, suppress completion/release and terminate/join owned children where possible; EXIT never releases/reports success. Outer death leaves helper/child holding workload; child death leaves surviving restore descendants holding it; broken completion pipes fail closed. Systemd services do not inherit it: the waiting controller covers normal recovery, retained persistent start blocking covers controller death. All-holder death/reboot releases the kernel lock but retains the durable operation/marker; no daemon/supervisor is added.                                           |
+| Exact restore release             | After successful completion/helper join, `notice_restore_finish` rechecks the private epoch, canonical identity, exact owner, and postcheck state. It alone calls internal `fence.sh notice-restore-release <operation_id>` with its own acquired ID, no tag/path/callback/override. Under existing fence serialization/mount checks require a present exact notice_restore owner; missing/different owners fail, unlike ordinary idempotent release. Validate current adoption/denial state and existing release guards, then atomically/durably remove only that operation's fields. Preserve floor, adoption evidence, reconciliation, epoch, unrelated fields, and generic release/cutover/other guards. Release workload before exact operation; the retained operation excludes other work/guarded starts during that interval, with no DB effects. Public success requires durable release. Missing completion, nonzero exit, or lock-wait timeout retains ownership even before DB effects.                                                                                                                                                                                                                                                                                        |
+| Restore failure and retry         | Failures before final release retain persistent ownership and reconciliation. At final atomic release, crash/lost response can leave the old or durably cleared owner; rename followed by failed directory sync is also uncertain. DB effects/postchecks must already have succeeded; reconciliation/revoked receipts survive either outcome. Never roll back release, recreate the old owner, retry against empty ownership, or emit PASS on ambiguity. Detected SSH loss fails closed; undetected loss may let the host finish, but the laptop reports failed/unknown without confirmed zero exit. Reconnection, reboot, and --resume never grant takeover or prove success from an absent owner. Existing reviewed exact-owner recovery first settles old controller/restore/recovery/sends; add no recovery action. Absent ownership permits only a new explicitly requested pass under fresh admission/ownership, with full rotation/effects/checks, never certification of the lost pass. --resume concerns only the temporary VM.                                                                                                                                                                                                                                                   |
+| Drill proof and limits            | Prove bootstrap, each rotation, durable revocation before replacement, persistent denial, and app absence. Existing recovery-time/aggregate checks remain. The drill proves no application reconciliation, membership, acceptance/delivery, generation recovery, production send quiescence, activation, receipt reconstruction, CrowdSec fresh provisioning, or consumer restart. Restored sent/accepted rows prove none of these. Outbound networking remains open. The controller's existing one-blank-device selection/provisioning stays separate; mount checks do not authenticate provider volume IDs. No real authority is copied/synthesized; replay/crash fixtures run only in hosted tests, never on production-data restore hosts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Host-only output                  | Pure host-only success: empty stdout/stderr, exit 0. Refusal: empty stdout, exactly `invalid_state` plus LF on stderr, exit 1. The drill controller retains only existing recovery-time/aggregate reports: validate numbers and fixed labels, never echo unexpected DB values or raw helper/systemd/filesystem/random-source/provider/DB errors. Its new failure diagnostic is exactly `invalid_state` plus LF. The laptop prints `PASS latest notice restore fence` or `PASS point-in-time notice restore fence` only after that whole host call returns zero; unsuccessful/unknown calls use corresponding FAIL and a failing overall exit, never prior streamed checks as final success. Retain `notice reconciliation: not performed`. Exclude private records, epochs, receipts, operation/row/job/user IDs, payloads, addresses, target paths, and secrets from public output/artifacts; private pipes add no public status/finish interface.                                                                                                                                                                                                                                                                                                                                        |
+| Reconciliation and sending        | The marker forbids all send/activation authorization and survives interruption/reboot. Reviewed production reconciliation handles ambiguous sends and restored ledger/job generations, even for an empty new app DB; restored queues prove no delivery. Only after its commit may a reviewed host operation durably remove the marker. Crashes leave notices disabled pending explicit owner resumption. Compatible ordinary mail may resume after restore/schema work settles, with notices fenced. Only owner-run `authorize-send`, after the wire checks below, issues current epoch/cohort `send.json`; startup, deploy, queue retry, and DB state cannot authorize sending. Stop/join workers before revocation to fence in-flight sends. Activated, aborted, or retired campaigns receive no send receipt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-Before every cluster or point-in-time restore, stop the server and join
-in-flight sends, persist `restore-reconciliation`, rotate the host epoch, and
-remove both receipts durably before replacing the database or permitting server
-startup. Every restore entry point, including a drill and replacement host,
-establishes this fence on its target host first. Never restore this directory
-from an old database or host snapshot as authority. A new host starts fenced. An
-interrupted restore or reboot preserves the marker; the server may resume
-ordinary mail with notices disabled.
+Status/results follow the wire contract below; forbid raw database/provider
+errors. Activation forbids unqueued, queued, failed, cancelled, or unexplained
+members. Empty outbox proves nothing; retained ledger governs recovery and late
+failures.
 
-Reviewed reconciliation accounts for ambiguous external sends and restored
-ledger/job generations inside production. It cannot infer delivery from restored
-queue state. While the marker exists, no action may authorize sending or
-activation. After reconciliation commits, a reviewed host operation durably
-removes the marker; `authorize-send` may then issue a receipt for the current
-epoch and reconciled cohort. A crash in either step leaves notices disabled
-until an explicit owner operation resumes it. Revocation stops/joins the worker
-before removing the receipt, so an in-flight send cannot cross the boundary.
-Activated, aborted, and retired campaigns receive no send receipt.
+`activate` rechecks the ledger under host locks; restore markers forbid it.
 
-`status` reports only the fixed campaign, content digest, cutoff, state,
-expected and actual totals, counts by outcome/fixed reason, and the latest
-acceptance time. Exit 0 means sealed/activated with every member accepted or
-deleted and valid host state; exit 2 means work remains; exit 1 means invalid
-state, a failure, a restore marker, or an aborted/retired campaign. It never
-emits recipient or job IDs, addresses, payloads, or raw database/provider
-errors. Before activation, an outbox count of zero is insufficient; ledger count
-must equal expected count and accepted plus deleted count, with no unqueued,
-queued, failed, or unexplained members. An activated campaign's retained ledger
-remains the authority for receipt recovery and late-failure handling, not its
-old totals.
+| Transition                              | Required behavior                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sealed to activated                     | In one transaction set state activated and current `activated_at` from the database clock at transition, at least seal/first activation/latest acceptance; replace final counts/acceptance time; increment `activation_count`; set `first_activated_at = activated_at` only if first is null. Clock failure or overflow rolls back everything. |
+| activated receipt reconstruction        | Recheck retained ledger; change no timestamps, counts, or state.                                                                                                                                                                                                                                                                               |
+| activated to sealed after known failure | First revoke activation authority and stop changed ingestion; clear current `activated_at`, preserving first time and activation count.                                                                                                                                                                                                        |
 
-`activate` repeats that read and records campaign `activated` atomically, under
-the host operation lock, including the final aggregate counts and acceptance
-time. The host wrapper revokes the send receipt, then writes `activation.json`
-with the current epoch, compiled digest, cutoff, expected/accepted/deleted
-counts, and activation time. A restore marker forbids this action. All
-expanded-feed install, start, rollback, and restore paths require this receipt
-and the matching notice release. The receipt permits the collection change only
-after the normal CrowdSec retention gate passes. A crash between database
-activation and receipt creation resumes by checking the activated campaign and
-ledger again, even months later; it cannot reopen ingestion from a missing
-receipt or use a previous epoch. The wrapper does not expose an override or
-accept a hand-supplied success file. Root remains the operator trust boundary.
+After activation/reconstruction, revoke send authority and write
+`activation.json`. Every expanded-feed install/start/rollback/restore requires
+it, matching notice release, and the CrowdSec retention gate. Reconstruction
+works months later; missing receipts/old epochs cannot reopen ingestion. Forbid
+overrides/hand-supplied success; trust root.
 
-Before activation, the owner checks known Bizfly delivery failures in production
-and records only an aggregate result. If a known delivery failure follows SMTP
-acceptance for a still-existing account, a reviewed recovery operation changes
-that member to failed with `delivery_failed`, invalidating activation
-eligibility. An account deleted after acceptance resolves as `deleted` if a late
-failure arrives; it must not be contacted. No delivery confirmation is inferred
-from an absence of feedback. A known failure after activation revokes the
-activation receipt and stops changed ingestion before setting the campaign back
-to sealed for recovery. The retained ledger supports this regardless of age.
+Before activation, the owner checks Bizfly failures, recording only production
+aggregates. Reviewed recovery atomically marks accepted existing accounts failed
+with `delivery_failed` on known failure; the completed job stays sent until
+normal cleanup. Deleted accounts resolve as `deleted` without contact. Absent
+feedback confirms nothing; the transition table governs late failures at any
+age.
 
-Terminal failure for an existing account, expiry, job loss, key loss, or
-inconsistent state blocks activation. There is no automatic re-enqueue, skip,
-count adjustment, or success override. Recovery requires an independently
-reviewed, owner-run production operation selected by fixed state and reason
-inside production. For a recoverable failed row whose account still exists, it
-increments generation, reuses the logical job ID, reseals to the current account
-address with a fresh nonce, and resets job attempts and the 24-hour enqueue
-lifetime atomically. Never retry accepted or deleted rows. A documented late
-failure first changes accepted to failed as above. Renew send authority only
-after reviewing the recovery, with no restore marker. If an active account
-cannot obtain acceptance, the only finite outcome is permanent campaign abort
-with changed ingestion disabled; never skip it, waive it, or reduce the cutoff
-count. Preserve failure history as aggregate recovery counts and fixed reasons,
-without retaining recipient evidence outside production.
+Terminal failure, expiry, job/key loss, or inconsistency blocks activation.
+Forbid automatic re-enqueue, skips, cohort changes, and overrides. Independently
+reviewed owner-run recovery selects fixed reasons in sealed campaigns. Under
+host locks, stop/join workers and durably revoke send authority before
+failed-to-queued mutation. Keep notices fenced through commit until fresh owner
+authority; ordinary mail may resume with notices disabled. For failed existing
+accounts, atomically increment generation, reuse job ID, reseal current address
+with a fresh nonce, reset attempts/24-hour lifetime, requeue even a sent job,
+and clear `failure_code`. Absent jobs are recreated/repaired only by these fixed
+recovery rules. Under account/recipient/job locks, the same transaction adds one
+to `recovery_count` and the counter for the prior failure reason. All six
+reasons qualify; missing/unknown reasons refuse recovery. Queued
+retries/rollback add nothing. Counter/generation overflow rolls back everything;
+never clamp, wrap, or reset history. Never retry accepted/deleted rows;
+documented late failure first marks accepted as failed. Renew authority after
+recovery without a restore marker. Irrecoverable active accounts require
+permanent abort and disabled changed ingestion. Recipient evidence stays in
+production.
 
-The restore fence above applies to both sending and ingestion, including a
-restored queued generation previously accepted outside the restore point. An
-older v0 binary may not consume the new kind. Stop the worker for schema
-reconciliation, deploy compatible code before enqueue, and recover forward if
-rollback would discard the ledger or notice. Pre-v1 migration history remains
-editable under [ADR 0005](../adr/0005-database-migrations.md); reconcile
-already-applied production state explicitly. No client API or resume schema
-changes are needed.
+### Permanent abort
+
+The owner executes independently reviewed fixed SQL for this campaign as
+`aboutme_app` through the production wrapper, under host/campaign locks and
+command isolation, without mail keys. Abort adds no routine command or arbitrary
+input. Stop/join workers, stop changed ingestion, and durably revoke both
+receipts first. Require sealed membership; finish capturing under maintenance
+first. Atomically latch `aborted` and clear current `activated_at`; retries
+retain the latch and `aborted_at`. Routine notice claim/retry/expiry stop;
+ordinary mail and terminal/sent cleanup may continue. No authority can be
+reissued.
+
+Each invocation takes at most 100 unqueued/queued IDs in order under
+account/recipient/job locks and enqueue's time bounds. Changed rows leave this
+selection, so retries advance without a cursor. Valid pairs and atomic outcomes:
+
+| Recipient | Matching job          | Abort outcome                                          |
+| --------- | --------------------- | ------------------------------------------------------ |
+| unqueued  | absent                | cancelled                                              |
+| queued    | pending/leased/absent | cancelled; terminalize any job                         |
+| accepted  | sent/absent           | unchanged                                              |
+| deleted   | absent                | unchanged                                              |
+| failed    | sent/terminal/absent  | unchanged, including failure reason and sent retention |
+| cancelled | terminal/absent       | unchanged on retry                                     |
+
+Cancellation sets `cancelled_at` to database UTC and clears `failure_code`; it
+is not a delivery failure. Terminalization sets `terminal_at` to that same time
+and nulls `key_id`, `nonce`, `ciphertext`, `next_attempt_at`, `lease_owner`, and
+`lease_expires_at`; `sent_at` stays null. Preserve attempts and creation/expiry
+times. Other pairs, foreign jobs, or invalid state stop the batch with the abort
+latch intact. Never delete jobs for abort or leave processed rows queued.
+Validate all other pairs, count equality, and absence of unqueued/queued rows
+and pending/leased/orphan notice jobs before setting `aborted_at` once to
+database UTC. It stays null until completion; completed retries change nothing.
+Interrupted operations resume; retirement requires completion. Preserve cohort
+count, outcomes, recovery history, and lifetime times; normal atomic account
+deletion still applies.
+
+Restore fences also cover jobs accepted after the restore point. Older v0
+workers may lack this kind: stop workers for schema reconciliation, deploy
+compatible code before enqueue, and recover forward if rollback loses
+ledger/notice. [ADR 0005](../adr/0005-database-migrations.md) permits pre-v1
+edits with production reconciliation. Client API and resume schema stay intact.
+
+### Receipt and aggregate wire contract
+
+Receipts are closed JSON, at most 4,096 UTF-8 bytes without a byte-order mark.
+Require every field; reject null, unknown/duplicate decoded keys, bad Unicode,
+trailing nonwhite data, or wrong types/versions. Order/whitespace/equivalent
+escapes do not matter; never hash receipts. Numbers are exact decimal integers:
+no signs, fractions, exponents, leading zeros, or floats.
+
+| Receipt fields            | Exact types and encodings                                                                                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Common                    | `schema_version`: number `1`; `campaign_id`: fixed string; `content_sha256`: hex string above; `epoch`: lowercase canonical UUID v4 string, variant bits 10; `cutoff_at`: timestamp string; `expected_count`: count number. |
+| send.json adds only       | `issued_at`: timestamp string.                                                                                                                                                                                              |
+| activation.json adds only | `accepted_count`, `deleted_count`: count numbers; `activated_at`: timestamp string. Require accepted plus deleted equals expected.                                                                                          |
+
+Counts are `0..9223372036854775807`; sum without overflow.
+
+| Wire validation    | Required rule                                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Timestamps         | Exactly `YYYY-MM-DDTHH:mm:ss.ffffffZ`, Gregorian UTC, years 0001..9999, seconds 00..59, six fractional digits. Reject offsets, leap seconds, infinity, other precision; compare stored microseconds without rounding.                                   |
+| Epoch and identity | Epoch file is current UUID in ASCII plus LF; receipt epoch matches it. Cutoff/count/digest/campaign match row; activation totals/time match activation record and rechecked ledger.                                                                     |
+| Chronology         | Send issue time uses host UTC, at least sealed_at; activation time is stored activated_at, at least sealed_at/latest acceptance. Neither may be future-dated; require cutoff_at <= sealed_at. Clock failure/mismatch refuses authority; no time expiry. |
+
+All four commands emit one closed JSON object plus LF on stdout, empty stderr,
+and no recipient/job data. Apply receipt parsing rules and the 4,096-byte bound
+including LF, except nullable times below. Fields: `schema_version`, `result`,
+`campaign_id`, `content_sha256`, `cutoff_at`, `expected_count`, `state`,
+`actual_count`, `counts`, `failure_counts`, `recovery_count`, `recovery_counts`,
+`activation_count`, `sealed_at`, `first_activated_at`, `activated_at`,
+`aborted_at`, and `last_accepted_at`. State uses campaign values. `counts` has
+exactly `unqueued`, `queued`, `accepted`, `deleted`, `failed`, `cancelled`,
+summing to actual count. `failure_counts` and `recovery_counts` each have
+exactly the six failure-code keys; their sums equal current failed members and
+historical `recovery_count` respectively. Recovery values map to campaign
+counters, also on blocked status. All counts obey the numeric bound. Times use
+the format above; seal/first/current/abort times and activation count mirror
+row/lifecycle/null rules. Latest acceptance is the maximum current accepted
+`accepted_at`, null when none. Use one consistent post-commit snapshot,
+unchanged on refusal/no-op.
+
+| Command  | Closed result/exit after state/host checks: 0 complete, 2 outstanding/deferred, 1 blocked                                                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prepare  | `sealed`/0 when sealed, including idempotent retry; `pending`/2 while capturing. No send receipt required.                                                                                                                                |
+| enqueue  | Requires current send authority and sealed state. `queue_full`/2 at the backlog cap, without mutation; otherwise `ready`/0 if all resolved, `pending`/2 after a batch or no-op with work left, including queued work awaiting the worker. |
+| status   | `ready`/0 when sealed/activated and all resolved; `pending`/2 when capturing/sealed with work left.                                                                                                                                       |
+| activate | `activated`/0 on activation/reconstruction; `pending`/2 when capturing/sealed with work left, without mutation.                                                                                                                           |
+| all      | `blocked`/1 for failed members or aborted/retired state, without mutation, before command work or queue-cap evaluation.                                                                                                                   |
+
+Invalid/unreadable state, unsupported command state, arguments, host gates, or
+execution failure take precedence: empty stdout, exactly `invalid_state` plus LF
+on stderr, exit 1; never partial JSON.
+
+To authorize send, require `status` exit 0 or 2, sealed state, actual =
+expected, valid counts, and no failures. Missing receipts allow this
+read/activated recovery, never sending/ingestion; invalid receipts/restore
+markers return 1. Under host locks, validate output, read epoch, verify deployed
+pinned server/web release and host bundle match manifest digest/date, then
+construct send. For activation require `activate` exit 0, activated state,
+accepted + deleted = expected. Receipt reconstruction calls `activate` only for
+an activated campaign, returning its unchanged current time/count; first revoke
+remaining send authority with the stop/join sequence. Recheck epoch, marker, and
+deployed release before durable receipt replacement; failure writes nothing.
+This exchange adds no arguments, endpoint, credential, or authority source.
 
 ## Fixed bilingual message
 
@@ -352,58 +395,41 @@ English body:
 
 ## Security and required proof
 
-Anonymous visitors, signed-in users, hostile resume content, stolen sessions,
-and MCP tokens cannot invoke these commands or choose a recipient or copy. The
-fixed HTTPS link grants no capability. Network attackers face the existing
-verified TLS SMTP transport. The CLI receives encryption keys only through host
-secret injection; logs retain fixed codes and aggregate counts only.
+CLI keys use host secret injection; logs contain only fixed codes and
+aggregates.
 
-A compromised web/render container receives neither mail keys nor database
-credentials. A compromised server container already holds the mail and database
-authority and can bypass worker send checks; the independent root-owned
-activation fence limits its ability to enable the feed. The send gate protects
-the normal worker against replay and restored state, not stolen SMTP authority.
-A database writer without application keys cannot forge encrypted payloads but
-can falsify ledger outcomes or change account rows. Completion relies on
-application-database integrity; encryption does not authenticate delivery
-bookkeeping. Host compromise is outside that boundary. Leaked backups retain
-account data under existing protection; encrypted payloads still require
-separately held keys. Persistent host markers and epoch checks keep restored
-jobs from reviving sending or activation. An account owner may end their own
-notice obligation through normal authorized deletion, which erases their account
-and cannot resolve another account's row.
+| Attacker                                                     | Boundary and limit                                                                                                                                                                          |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Visitors, users, hostile content, stolen sessions/MCP tokens | Cannot invoke commands or choose recipients/copy. Authorized deletion erases only the owner's account and obligation, never another account's row.                                          |
+| Network position                                             | Verified SMTP TLS; the fixed HTTPS link grants no capability.                                                                                                                               |
+| Web/render container                                         | No mail keys or database credentials.                                                                                                                                                       |
+| Server container                                             | Holds both authorities and can bypass send checks; the independent root fence limits feed enablement. Send gates protect normal workers against replay/restores, not stolen SMTP authority. |
+| Database writer without keys                                 | Cannot forge ciphertext but can falsify accounts/outcomes. Completion trusts database integrity, not authenticated bookkeeping.                                                             |
+| Leaked backup                                                | Account data keeps existing protection; payloads need separate keys. Persistent markers/epochs fence restored sending/activation.                                                           |
+| Host root                                                    | Trusted; host compromise lies outside this boundary.                                                                                                                                        |
 
 Hosted proofs must cover:
 
-- exact cutoff membership, zero users, pending registration, concurrent account
-  creation, resumed capture, maintenance interruption, and unchanged cutoff;
-- concurrent/repeated enqueue, batch/backlog limits, statement/command timeouts,
-  missing encryption keys, and rollback between outbox and ledger writes;
-- strict payload validation, reparented jobs, generation replay, fixed bilingual
-  text/HTML copy, canonical link, and no raw values in forced-error output;
-- authentication-mail priority, temporary failure, expiry, attempt exhaustion,
-  terminal/decryption failure, stale leases, and acceptance/commit crash;
-- account deletion before enqueue, during a send, after acceptance, and after
-  job cleanup, with unchanged cohort totals, terminal deleted outcomes, correct
-  accepted-plus-deleted totals, and no send after deletion commits;
-- accepted/terminal outcome atomicity, seven-day outbox cleanup, activation
-  retries/crashes delayed beyond seven days, late delivery failure after that
-  interval, retirement-only recipient purge, and refusal to repeat an activated
-  or retired notice;
-- missing/malformed/stale-epoch send receipts block both claim and send while
-  ordinary mail continues; a receipt revoked after claim blocks SMTP;
-- cluster/PITR restore, a restored previously sent job, host replacement,
-  crash/reboot during fence creation or reconciliation, and old-receipt replay
-  keep notices blocked until the owner issues current send authority; prove
-  worker quiescence before revocation and that no restored DB can clear markers;
-- all activation paths reject missing/mismatched receipts, incomplete counts,
-  failure, old notice releases, database restore, and unsupported old workers;
-- reviewed recovery cannot retry accepted/deleted rows, expose recipients,
-  bypass restore reconciliation, or extend a job lifetime without a new
-  generation; irrecoverable active-account failure can only abort the campaign;
-- the existing privacy promise and new publication date appear in both deployed
-  languages before SMTP begins, and changed ingestion starts only after the
-  gate.
+| Area              | Required hosted proof                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest          | Frozen manifest bytes/hex for both languages and a fixed date, independently reproduced in Go and shell; deployed text/date match; changed Unicode, LF/CR, field order, content, or date changes the hash; receipt order/escapes do not.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Wire fixtures     | Cross-implementation receipt/aggregate fixtures, zero/max/overflow counts, duplicate/unknown keys, bad UTF-8/types/version/times/digests, epoch/release mismatch, receipt-free authorization, and interrupted activation recovery. All four commands' exact stdout/stderr/exits, sealed prepare retries without send authority, partial capture, enqueue progress/worker wait, no-mutation queue_full, blocked/invalid precedence, and missing enqueue authority.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Recovery counters | Atomic recovery counters for all reasons, retries/rollback/overflow, repeated generations, concurrent deletion, and survival through abort/retirement/purge. Late-failure sent-job abort preserves retention; recovery reuses sent job ID with a new generation or reconstructs an absent job atomically.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Activation cycles | First activation, late failure, later acceptance/reactivation, and repeated receipt reconstruction preserve first/count/current rules; old send authority cannot claim recovered generations before renewal, including after crashes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Abort             | Every abort recipient/job pair, missing/orphan jobs, every interruption point, concurrent deletion, legal terminal clearing, and resumable completion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Cutoff            | Exact cutoff membership, zero users, pending registration, concurrent account creation, resumed capture, maintenance interruption, and unchanged cutoff.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Enqueue           | Concurrent/repeated enqueue, batch/backlog limits, statement/command timeouts, missing encryption keys, and rollback between outbox and ledger writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Payload           | Strict payload validation, reparented jobs, generation replay, fixed bilingual text/HTML copy, canonical link, and no raw values in forced-error output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Delivery          | Authentication-mail priority, temporary failure, expiry, attempt exhaustion, terminal/decryption failure, stale leases, and acceptance/commit crash.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Deletion          | Account deletion before enqueue, during a send, after acceptance, and after job cleanup, with unchanged cohort totals, terminal deleted outcomes, correct accepted-plus-deleted totals, and no send after deletion commits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Durability        | Accepted/terminal atomicity, seven-day cleanup, later activation retries/crashes and delivery failures, retirement-only purge, and no repeat activated/retired notice.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Send gate         | Missing/malformed/stale-epoch send receipts block both claim and send while ordinary mail continues; a receipt revoked after claim blocks SMTP.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Restore           | Cluster/PITR restore, a restored sent job, host replacement, crash/reboot, and old-receipt replay retain denial until current owner authority; prove pre-revocation worker quiescence and no DB marker clearing. Use actual files, subprocesses, FDs, flock, and controlled fake DB/system commands, not static ordering alone. Cover exact action/root/pipe parsing and override refusal; operation-before-workload contention through replacement, recovery, every DB check and postcheck; privilege-drop descriptor inheritance and parent/child kills with surviving descendants; all-holder death/reboot and systemd recovery settling; distinct initial/latest/PITR/retry epochs despite absent receipts; every check/persistence failure, malformed/truncated/extra pipe record, early EOF, lost helper, signal, SSH loss, and mount/owner/epoch change. Require completion plus helper join, not unlocked SSH checks. Strict release rejects empty/wrong owners; inject failure before store, after rename, after sync, and after release before caller success. Both durable outcomes retain notice denial without false PASS, takeover, or auto-retry. Preserve floor, DB-check meanings/recovery timing, app absence, --resume refusal, and fixed output without private records. Fixtures prove protocol, not physical power loss; drill evidence never replaces full-host reconciliation/send/consumer proofs. |
+| Host mounts       | Both install modes use the same primitive before the PostgreSQL-only exit, without images/app commands or transferred authority. Cover missing/non-ext4 data mounts, absent binds despite root shadow files, missing/duplicate/ambiguous labels, wrong data/bind source, nested/stacked mounts, device/inode mismatch, and changed identity after locking. Refusal precedes authority access; prove guest provenance only, never a provider-ID oracle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Host adoption     | Pinned legacy eligibility rejects unknown/post-notice hosts; intent precedes helper replacement under legacy cutover guards. Cover ownership/modes, unsafe paths, each persistence failure/crash, exact-operation resume, lost/corrupt adopted state, lost evidence, preserved fields on every fence write/reinstall/full-host continuation, and startup denial during initialization. Prove notice_restore start blocking with no db-setup exception, recovery/maintenance availability, and unchanged other-operation guards.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Activation gate   | All activation paths reject missing/mismatched receipts, incomplete counts, failure, old notice releases, database restore, and unsupported old workers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Recovery boundary | Reviewed recovery cannot retry accepted/deleted rows, expose recipients, bypass restore reconciliation, or extend a job lifetime without a new generation; irrecoverable active-account failure can only abort the campaign.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Publication       | The existing privacy promise and new publication date appear in both deployed languages before SMTP begins, and changed ingestion starts only after the gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 Production evidence contains release digests, publication date, fixed campaign
 and content digest, cutoff, aggregate counts, acceptance/activation times, and
@@ -412,22 +438,13 @@ provider screenshots out of artifacts, public CI, and the repository.
 
 ## Owner decisions and sources
 
-The owner approved the message copy, SMTP acceptance threshold with possible
-duplicate delivery on retries, no additional waiting interval, deleted accounts
-counting as resolved without email, and permanent campaign abort for
-irrecoverable active accounts on 2026-10-19. Database-integrity dependence and
-the existing provider's lack of confirmed-delivery callbacks are explicit
-limits. Independent design review passed before implementation.
+The owner approved the copy and delivery/deletion/abort rules above on
+2026-10-19. Database integrity and absent delivery callbacks remain limits.
+Independent design review approved the wire and host-fence clarifications on
+2026-10-19.
 
-Repository sources: the privacy promise in
-[`legal-en.ts`](../../apps/web/app/i18n/legal-en.ts) and
-[`legal-vi.ts`](../../apps/web/app/i18n/legal-vi.ts), the
-[`authmail` worker](../../apps/server/internal/authmail/worker.go),
-[`outbox`](../../apps/server/internal/authmail/outbox.go),
-[`SMTP sender`](../../apps/server/internal/authmail/smtp.go), and
-[`job wrapper`](../../deploy/vn/host/job-run.sh). These are first-party
-repository contracts; no external provider behavior beyond the email runbook is
-assumed. The corresponding upstream repository sources are
-[authmail](https://github.com/dannyota/aboutme/tree/main/apps/server/internal/authmail)
-and the
+First-party privacy: [English](../../apps/web/app/i18n/legal-en.ts) and
+[Vietnamese](../../apps/web/app/i18n/legal-vi.ts);
+[`job wrapper`](../../deploy/vn/host/job-run.sh),
+[mail worker/outbox/SMTP](https://github.com/dannyota/aboutme/tree/main/apps/server/internal/authmail),
 [email runbook](https://github.com/dannyota/aboutme/blob/main/docs/runbooks/email.md).

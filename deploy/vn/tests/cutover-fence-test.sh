@@ -162,4 +162,70 @@ if "$fence" check 4007 aboutme-db-setup 2>/dev/null; then
   exit 1
 fi
 
+rm "$work/fence/cutover-mutation.json"
+# Notice restore ownership has no reset-db exception and survives a new check
+# process, as it does after reboot. Existing deploy/cutover assertions above
+# keep their separate minimum-only and reset-db rules.
+notice_op=$("$fence" lock notice_restore v0.4.7)
+for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
+  aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
+  if "$fence" check 4007 "$unit" >"$work/notice.out" 2>&1; then
+    echo 'notice restore permitted a guarded start' >&2
+    exit 1
+  fi
+done
+"$fence" check 4007 aboutme-maintenance
+"$fence" check 4007 postgresql@18-main
+if "$fence" checkpoint "$request" v0.4.7 >/dev/null 2>&1; then
+  echo 'notice restore accepted another owner' >&2
+  exit 1
+fi
+"$fence" checkpoint "$notice_op" v0.4.7
+if "$fence" notice-restore-release "$request" >/dev/null 2>&1; then
+  echo 'strict notice release accepted a different owner' >&2
+  exit 1
+fi
+# This lightweight fixture has no mounted authority. Successful exact release
+# belongs to the complete mounted host-controller proof, not this setup reset.
+jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' \
+  "$work/fence/fence.json" >"$work/unowned.json"
+cp "$work/unowned.json" "$work/fence/fence.json"
+if "$fence" notice-restore-release "$notice_op" >/dev/null 2>&1; then
+  echo 'strict notice release retried against empty ownership' >&2
+  exit 1
+fi
+for adoption in initializing adopted; do
+  jq --arg state "$adoption" --arg op "$notice_op" \
+    '.notice_authority={version:1,state:$state,operation_id:$op}' \
+    "$work/fence/fence.json" >"$work/evidence.json"
+  cp "$work/evidence.json" "$work/fence/fence.json"
+  if [[ $adoption == initializing ]]; then
+    for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
+      aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
+      if "$fence" check 4007 "$unit" >/dev/null 2>&1; then
+        echo 'initializing evidence permitted a start without ownership' >&2
+        exit 1
+      fi
+    done
+    "$fence" check 4007 aboutme-maintenance
+    "$fence" check 4007 postgresql@18-main
+  fi
+done
+preserved=$(jq -c .notice_authority "$work/fence/fence.json")
+notice_op=$("$fence" lock deploy v0.4.7)
+for verb in checkpoint raise; do
+  "$fence" "$verb" "$notice_op" v0.4.7
+  [[ $(jq -c .notice_authority "$work/fence/fence.json") == "$preserved" ]]
+done
+"$fence" release "$notice_op"
+[[ $(jq -c .notice_authority "$work/fence/fence.json") == "$preserved" ]]
+for evidence in 'null' '{}' '{"version":2,"state":"adopted"}' \
+  '{"version":1,"state":"adopted","operation_id":"bad"}' \
+  '{"version":1,"state":"adopted","operation_id":"bad","extra":true}'; do
+  jq --argjson value "$evidence" '.notice_authority=$value' "$work/evidence.json" >"$work/fence/fence.json"
+  if "$fence" check 4007 aboutme-server >/dev/null 2>&1; then
+    echo 'malformed notice evidence permitted startup' >&2
+    exit 1
+  fi
+done
 echo "cutover fence tests passed"

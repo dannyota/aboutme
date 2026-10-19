@@ -58,6 +58,13 @@ aboutme_assert_cutover_quiescent() {
     echo "deploy-safety: server is active" >&2
     return 1
   fi
+  # Preserve the existing isolated fence fixture; installed quiescence needs
+  # positive stopped state and an empty queued-start job, including mail sends.
+  if [[ ${FENCE_DIR:-/var/lib/aboutme} == /var/lib/aboutme ]]; then
+    local result
+    result=$(systemctl show --all --property=ActiveState --property=Job aboutme-server) || return 1
+    [[ $(wc -l <<<"$result") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" && grep -qxF 'Job=' <<<"$result" || return 1
+  fi
   aboutme_assert_jobs_stopped
 }
 
@@ -96,8 +103,8 @@ aboutme_assert_operation_release() { # request id
   [[ -r /usr/local/lib/aboutme/operation-state.sh && ! -L /usr/local/lib/aboutme/operation-state.sh ]] || return 1
   state=$(bash -c 'source /usr/local/lib/aboutme/operation-state.sh; operation_state load "$1"' bash "$id") || return 1
   jq -e '.closureQuiescent==true and .fenceHeld==false and .reserved==(.phase=="planned") and .pendingVerb=="none" and .intent=="none" and (.phase=="planned" or .phase=="closed" or (.phase=="serving" and (.action.writeOutcome=="committed" or .action.writeOutcome=="absent_after_unknown"))) and (.action.writeOutcome!="unknown")' <<<"$state" >/dev/null || return 1
-  unit_state=$(systemctl show --property=ActiveState --property=Job "aboutme-operation@$id.service") || return 1
-  [[ $(wc -l <<<"$unit_state") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$unit_state" && grep -qxF 'Job=0' <<<"$unit_state" || return 1
+  unit_state=$(systemctl show --all --property=ActiveState --property=Job "aboutme-operation@$id.service") || return 1
+  [[ $(wc -l <<<"$unit_state") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$unit_state" && grep -qxF 'Job=' <<<"$unit_state" || return 1
   containers=$(podman ps -a --format '{{.Names}}') || return 1
   [[ $containers != *"aboutme-operation-$id-"* ]] || return 1
   count=$(timeout 30 runuser -u postgres -- psql -XAt -v ON_ERROR_STOP=1 --dbname aboutme --set=prefix="hostop:$id:" <<'SQL'

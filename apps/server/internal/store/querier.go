@@ -12,12 +12,15 @@ import (
 )
 
 type Querier interface {
+	AcceptPrivacyNoticeRecipient(ctx context.Context, arg AcceptPrivacyNoticeRecipientParams) (int64, error)
+	ActivatePrivacyNoticeCampaign(ctx context.Context, arg ActivatePrivacyNoticeCampaignParams) (int64, error)
 	AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error
 	// Target-list unnest zips the equal-length arrays row by row. The join
 	// skips a resume deleted since the view; the cascade removes its rows
 	// otherwise.
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
+	AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error)
 	// Compare-and-advance on a valid code: the WHERE guard is the single-use
 	// rule, so a replayed step (equal, not greater) affects zero rows and the
 	// caller sees pgx.ErrNoRows. Requires the row already locked by
@@ -41,6 +44,7 @@ type Querier interface {
 	// pgx.ErrNoRows -- that caller lost the race and must not mint a second
 	// successor (see internal/auth.SessionManager.Authenticate).
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
+	CancelPrivacyNoticeRecipient(ctx context.Context, arg CancelPrivacyNoticeRecipientParams) (int64, error)
 	// Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
 	// jobs to leased, increments attempts, stamps the lease pair, and returns the
 	// leased rows. Two concurrent claimers are disjoint because each claims a
@@ -68,6 +72,8 @@ type Querier interface {
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
 	CompleteClaimedMediaDeletion(ctx context.Context, arg CompleteClaimedMediaDeletionParams) (bool, error)
+	CompletePrivacyNoticeAbort(ctx context.Context, arg CompletePrivacyNoticeAbortParams) (int64, error)
+	CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	ConsumeLiveWebAuthnCeremoniesForBinding(ctx context.Context, arg ConsumeLiveWebAuthnCeremoniesForBindingParams) (int64, error)
 	// Single-use consumption (M2). One conditional UPDATE both takes the row lock
@@ -95,6 +101,8 @@ type Querier interface {
 	// (GetUserForUpdate) so two concurrent approvals cannot both read the same
 	// pre-cap count.
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountLivePrivacyNoticeJobs(ctx context.Context) (int64, error)
+	CountPrivacyNoticeRecovery(ctx context.Context, arg CountPrivacyNoticeRecoveryParams) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountShowcase(ctx context.Context, arg CountShowcaseParams) (int64, error)
@@ -151,6 +159,7 @@ type Querier interface {
 	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePendingAuthentication(ctx context.Context, arg CreatePendingAuthenticationParams) (PendingAuthentication, error)
+	CreatePrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (PrivacyNoticeCampaign, error)
 	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
 	CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error)
 	CreateSecondFactorRecoveryCode(ctx context.Context, arg CreateSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
@@ -234,6 +243,8 @@ type Querier interface {
 	DeleteOldResumeViewDaysPage(ctx context.Context, arg DeleteOldResumeViewDaysPageParams) (int64, error)
 	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
+	DeletePrivacyNoticeRecipientUser(ctx context.Context, arg DeletePrivacyNoticeRecipientUserParams) (int64, error)
+	DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	// Revision-CAS delete returning the deleted row, so the caller can
 	// validate the stored photo key and enqueue media cleanup in the same
@@ -271,6 +282,7 @@ type Querier interface {
 	// Lock users before replay rows and usage counters, matching every resume
 	// writer. SKIP LOCKED lets inactive users progress past a busy account.
 	ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempotencyPageParams) (ExpireIdempotencyPageRow, error)
+	FailPrivacyNoticeRecipient(ctx context.Context, arg FailPrivacyNoticeRecipientParams) (int64, error)
 	// Finds the exact unrevoked successor through rotated_from. The partial unique
 	// index in migration 00003 permits at most one successor per predecessor;
 	// timestamps must never be used to reconstruct this lineage. The reverse
@@ -354,6 +366,10 @@ type Querier interface {
 	GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UUID) (PasswordResetToken, error)
 	GetPendingAuthenticationByTokenDigest(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error)
 	GetPendingAuthenticationByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error)
+	GetPrivacyNoticeCampaign(ctx context.Context) (PrivacyNoticeCampaign, error)
+	GetPrivacyNoticeJobForUpdate(ctx context.Context, id uuid.UUID) (AuthEmailJob, error)
+	GetPrivacyNoticeRecipient(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
+	GetPrivacyNoticeRecipientForUpdate(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
@@ -444,6 +460,7 @@ type Querier interface {
 	// Records the unlink's kind and time only: no user, provider, or identity.
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
+	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
 	// review_key and the other review columns are unused; the insert leaves them
 	// to their defaults (docs/design/showcase.md "Data and contract").
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
@@ -461,6 +478,7 @@ type Querier interface {
 	// First install under the user lock. The caller generates id as a UUIDv7 and
 	// seals the secret with it before this insert (docs/design/totp-key-management.md#sealing).
 	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
+	LatchPrivacyNoticeAbort(ctx context.Context, contentSha256 []byte) (int64, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
 	// Carries sign_in_to_view with the other publish settings; the pass epoch
@@ -472,6 +490,7 @@ type Querier interface {
 	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
 	// string instead of a pointer.
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
+	ListFailedPrivacyNoticeRecipients(ctx context.Context, failureCode *string) ([]PrivacyNoticeRecipient, error)
 	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
 	// The bounded idle-client sweep (M1/M5): clients registered before
@@ -517,6 +536,8 @@ type Querier interface {
 	// columns they're compared against. Ordered newest-created first, with id
 	// as a deterministic tiebreaker for equal creation times.
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
+	ListPrivacyNoticeAbortCandidates(ctx context.Context) ([]PrivacyNoticeRecipient, error)
+	ListPrivacyNoticeCaptureUsers(ctx context.Context, captureCursor *uuid.UUID) ([]uuid.UUID, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
@@ -546,6 +567,8 @@ type Querier interface {
 	// expired row here outright instead of decrypting it
 	// (docs/design/totp-key-management.md#rotation).
 	ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error)
+	ListUnqueuedPrivacyNoticeRecipients(ctx context.Context) ([]PrivacyNoticeRecipient, error)
+	ListUserPrivacyNoticeRecipientsForUpdate(ctx context.Context, userID *uuid.UUID) ([]PrivacyNoticeRecipient, error)
 	// Every owned resume that is live or has counts, with totals over the last
 	// 7, 30, and 90 days.
 	ListViewSummaries(ctx context.Context, arg ListViewSummariesParams) ([]ListViewSummariesRow, error)
@@ -554,6 +577,8 @@ type Querier interface {
 	// docs/design/operations.md. The caller takes slug advisory locks and
 	// public_state before these account-scoped locks.
 	LockCanonicalAccountEmail(ctx context.Context, email string) error
+	LockPrivacyNoticeCommand(ctx context.Context) error
+	LockPrivacyNoticeJob(ctx context.Context, id uuid.UUID) error
 	LockPublicState(ctx context.Context) (PublicState, error)
 	// FOR SHARE makes a card store wait for, or block, an unpublish, rename, or
 	// delete of the same resume, since those lock the row for update. The row
@@ -576,6 +601,10 @@ type Querier interface {
 	// reservation must account for — the one canonical byte expression shared
 	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
+	PrivacyNoticeAbortProof(ctx context.Context) (PrivacyNoticeAbortProofRow, error)
+	PrivacyNoticeCaptureProof(ctx context.Context) (PrivacyNoticeCaptureProofRow, error)
+	PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error)
+	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
 	// sign_in_to_view is the caller's already-merged final value (an omitted
 	// publish field keeps the stored value before this query ever runs; see
 	// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
@@ -587,7 +616,10 @@ type Querier interface {
 	// statement evaluates its FROM/SET expressions against the row as it was
 	// before this statement.
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
+	PurgeRetiredPrivacyNoticeRecipients(ctx context.Context, contentSha256 []byte) (int64, error)
+	QueuePrivacyNoticeRecipient(ctx context.Context, arg QueuePrivacyNoticeRecipientParams) (int64, error)
 	RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error)
+	RecordPrivacyNoticeLateFailure(ctx context.Context, arg RecordPrivacyNoticeLateFailureParams) (int64, error)
 	// Increments the consecutive-failure counter, saturating at 1,000, and on
 	// every fifth consecutive failure sets a cool-down of 15 minutes doubling to
 	// at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
@@ -596,6 +628,7 @@ type Querier interface {
 	// down. Every counted failure also sets last_failed_at, which gates whether a
 	// later valid code may reset the budget.
 	RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error)
+	RecoverPrivacyNoticeRecipient(ctx context.Context, arg RecoverPrivacyNoticeRecipientParams) (int64, error)
 	// Session IP and user agent are redacted before the session's absolute expiry
 	// (docs/design/operations.md), not by created_at, so a rotation or reissue
 	// successor that inherits the original absolute expiry cannot extend how long
@@ -613,6 +646,7 @@ type Querier interface {
 	// plus transactional maintenance guarantee this can never underflow the
 	// non-negative checks.
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
+	ReopenPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
 	// Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
 	// existing id and created_at, reseals under a fresh nonce, and resets the
 	// failure budget, including last_failed_at, because a fresh secret cannot
@@ -635,6 +669,7 @@ type Querier interface {
 	// A completed password reset never calls this: it leaves the budget
 	// unchanged.
 	ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error)
+	RetirePrivacyNoticeCampaign(ctx context.Context, arg RetirePrivacyNoticeCampaignParams) (int64, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
@@ -662,6 +697,7 @@ type Querier interface {
 	// result for missing, expired, and differently owned sessions.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
 	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
+	SealPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
 	// Starts a predecessor's short grace period after its successor is first
 	// used. BeginSessionRotation parks rotation_grace_until at
 	// min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the

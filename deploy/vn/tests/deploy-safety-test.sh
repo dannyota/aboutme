@@ -18,7 +18,14 @@ cat >"$work/systemctl" <<'STUB'
 set -euo pipefail
 state=${ABOUTME_TEST_STATE:?}
 case $1 in
-  is-active) [[ -e $state/active/${3} ]] ;;
+  is-active)
+    [[ ! -e $state/inspection-failure ]] || exit 4
+    [[ -e $state/active/${3} ]] ;;
+  show)
+    [[ ! -e $state/inspection-failure ]] || exit 1
+    [[ " $* " == *' --all '* ]] || exit 1
+    printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_UNIT_JOB:-}"
+    ;;
   is-enabled) [[ -e $state/enabled/${3} ]] ;;
   stop)
     shift
@@ -174,4 +181,25 @@ rm "$work/cimd-server.env"
 if cimd_effective_mcp_flag; then echo 'missing MCP configuration accepted' >&2; exit 1; fi
 bash "$root/deploy/vn/scripts/cimd-rollback-test.sh"
 
+# Account-writer and send quiescence needs positive stopped-state evidence.
+# A failed inspection cannot count as a joined server before revocation.
+unset -f systemctl
+: >"$ABOUTME_TEST_STATE/inspection-failure"
+if aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then
+  fail 'inspection failure accepted as send quiescence'
+fi
+rm "$ABOUTME_TEST_STATE/inspection-failure"
+for NOTICE_UNIT_STATE in activating deactivating unknown; do
+  export NOTICE_UNIT_STATE
+  if aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then
+    fail 'ambiguous account writer accepted as send quiescence'
+  fi
+done
+unset NOTICE_UNIT_STATE
+for NOTICE_UNIT_JOB in 0 1 invalid; do
+  export NOTICE_UNIT_JOB
+  if aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then fail 'nonempty server job accepted as send quiescence'; fi
+done
+unset NOTICE_UNIT_JOB
+aboutme_assert_cutover_quiescent
 echo "deployment safety tests passed"
