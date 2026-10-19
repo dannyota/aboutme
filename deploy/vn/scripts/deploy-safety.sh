@@ -58,6 +58,13 @@ aboutme_assert_cutover_quiescent() {
     echo "deploy-safety: server is active" >&2
     return 1
   fi
+  # Preserve the existing isolated fence fixture; installed quiescence needs
+  # positive stopped state and an empty queued-start job, including mail sends.
+  if [[ ${FENCE_DIR:-/var/lib/aboutme} == /var/lib/aboutme ]]; then
+    local result
+    result=$(systemctl show --property=ActiveState --property=Job aboutme-server) || return 1
+    [[ $(wc -l <<<"$result") == 2 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" && grep -qxF 'Job=0' <<<"$result" || return 1
+  fi
   aboutme_assert_jobs_stopped
 }
 
