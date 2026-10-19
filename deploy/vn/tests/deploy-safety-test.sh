@@ -23,7 +23,8 @@ case $1 in
     [[ -e $state/active/${3} ]] ;;
   show)
     [[ ! -e $state/inspection-failure ]] || exit 1
-    printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_UNIT_JOB:-0}"
+    [[ " $* " == *' --all '* ]] || exit 1
+    printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_UNIT_JOB:-}"
     ;;
   is-enabled) [[ -e $state/enabled/${3} ]] ;;
   stop)
@@ -195,7 +196,10 @@ for NOTICE_UNIT_STATE in activating deactivating unknown; do
   fi
 done
 unset NOTICE_UNIT_STATE
-if NOTICE_UNIT_JOB=1 aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then
-  fail 'queued server restart accepted as send quiescence'
-fi
+for NOTICE_UNIT_JOB in 0 1 invalid; do
+  export NOTICE_UNIT_JOB
+  if aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then fail 'nonempty server job accepted as send quiescence'; fi
+done
+unset NOTICE_UNIT_JOB
+aboutme_assert_cutover_quiescent
 echo "deployment safety tests passed"
