@@ -306,7 +306,7 @@ notice_bootstrap() {
   else notice_fence notice-restore-release "$operation" >/dev/null 2>&1; fi
 }
 notice_adopt() {
-  local state tag record base name resuming=no
+  local state tag record base name installed metadata resuming=no
   notice_identity=$(notice_mount_identity) || return 1
   exec {notice_bundle_fd}>>/srv/data/host-operations/.bundle.lock || return 1
   flock -x -w 30 "$notice_bundle_fd" || return 1
@@ -319,6 +319,14 @@ notice_adopt() {
   if [[ $(jq -r '.notice_authority.state // empty' <<<"$state") == initializing ]]; then
     notice_operation=$(jq -er .notice_authority.operation_id <<<"$state") || return 1
     [[ $(jq -r .operation_id <<<"$state") == "$notice_operation" && $(jq -r .operation_kind <<<"$state") == cutover ]] || return 1
+    # Only this recorded adoption may repair an interrupted installed copy.
+    for name in fence deploy-host deploy-safety; do
+      installed=/usr/local/lib/aboutme/$name.sh
+      notice_absent "$installed" && continue
+      [[ -f $installed && ! -L $installed ]] || return 1
+      metadata=$(stat -c '%u:%g:%a:%h' "$installed") || return 1
+      [[ $metadata == 0:0:600:1 || $metadata == 0:0:755:1 ]] || return 1
+    done
     resuming=yes
   else
     [[ $(jq -r '.notice_authority // empty' <<<"$state") == '' ]] && notice_absent /var/lib/aboutme/privacy-notice || return 1
@@ -330,6 +338,7 @@ notice_adopt() {
     $(jq -r .server_image "$record") == "$LEGACY_SERVER_IMAGE" && $(jq -r .web_image "$record") == "$LEGACY_WEB_IMAGE" ]] || return 1
   tag=$(jq -r .release_tag "$record")
   if [[ $resuming == no ]]; then
+    for name in fence deploy-host deploy-safety; do notice_safe_file "/usr/local/lib/aboutme/$name.sh" 755 || return 1; done
     [[ $(sha256sum /usr/local/lib/aboutme/fence.sh | cut -d' ' -f1) == "$LEGACY_FENCE_SHA256" && \
       $(sha256sum /usr/local/lib/aboutme/deploy-host.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_HOST_SHA256" && \
       $(sha256sum /usr/local/lib/aboutme/deploy-safety.sh | cut -d' ' -f1) == "$LEGACY_DEPLOY_SAFETY_SHA256" ]] || return 1
@@ -360,6 +369,7 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     [[ $(id -u) == 0 && $# == 1 ]] && notice_overrides_absent || return 1
     local dependency
     for dependency in fence.sh workload-lock.sh deploy-safety.sh; do
+      if [[ $1 == adopt && $dependency != workload-lock.sh ]]; then continue; fi
       notice_safe_file "/usr/local/lib/aboutme/$dependency" 755 || return 1
     done
     install -d -o root -g root -m 0755 /run/aboutme || return 1

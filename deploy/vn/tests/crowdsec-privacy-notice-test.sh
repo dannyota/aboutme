@@ -507,8 +507,7 @@ legacy_values=("$legacy_tag" "$(sha256sum "$work/legacy/release.json" | cut -d' 
   "$(sha256sum "$work/legacy/deploy-host.sh" | cut -d' ' -f1)"
   "$(sha256sum "$work/legacy/deploy-safety.sh" | cut -d' ' -f1)")
 cp "$primitive" "$work/reviewed/crowdsec-privacy-notice-host.sh"
-for index in "${!legacy_fields[@]}"; do
-  sed -i "s|^readonly ${legacy_fields[$index]}='[^']*'$|readonly ${legacy_fields[$index]}='${legacy_values[$index]}'|" "$work/reviewed/crowdsec-privacy-notice-host.sh"; done
+for index in "${!legacy_fields[@]}"; do sed -i "s|^readonly ${legacy_fields[$index]}='[^']*'$|readonly ${legacy_fields[$index]}='${legacy_values[$index]}'|" "$work/reviewed/crowdsec-privacy-notice-host.sh"; done
 adopt=$work/reviewed/crowdsec-privacy-notice-host.sh
 for command in cp install; do
   stub "$work/bin/$command" <<'STUB'
@@ -516,13 +515,14 @@ set -euo pipefail
 if [[ ${NOTICE_ADOPTION:-0} == 1 ]]; then
   case ${*: -1} in
     /usr/local/lib/aboutme/fence.sh | /usr/local/lib/aboutme/deploy-host.sh | /usr/local/lib/aboutme/deploy-safety.sh)
-      jq -e '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .notice_authority.operation_id==.operation_id' \
-        /var/lib/aboutme/fence.json >/dev/null || exit 1
+      jq -e '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .notice_authority.operation_id==.operation_id' /var/lib/aboutme/fence.json >/dev/null || exit 1
       jq -e '.mutation_kind=="quiesce" and .state=="active"' /var/lib/aboutme/cutover-mutation.json >/dev/null || exit 1
       printf 'helper-replaced\n' >>"$NOTICE_FIXTURE/order"
       [[ ${NOTICE_ADOPT_STOP:-none} != "before:${*: -1}" ]] || exit 1
       [[ ${NOTICE_ADOPT_STOP:-none} != "skip:${*: -1}" ]] || exit 0
       if [[ ${NOTICE_ADOPT_STOP:-none} == "after:${*: -1}" ]]; then "/usr/bin/${0##*/}" "$@"; exit 1; fi
+      [[ ${NOTICE_ADOPT_STOP:-none} != "missing:${*: -1}" ]] || { /usr/bin/rm -f -- "${*: -1}"; exit 1; }
+      if [[ ${NOTICE_ADOPT_STOP:-none} == "mode600:${*: -1}" || ${NOTICE_ADOPT_STOP:-none} == "partial:${*: -1}" ]]; then /usr/bin/install -o root -g root -m 0600 "${@: -2}"; [[ $NOTICE_ADOPT_STOP != "partial:${*: -1}" ]] || printf 'incomplete\n' >"${*: -1}"; exit 1; fi
       ;;
   esac
 fi
@@ -544,7 +544,7 @@ done
 NOTICE_ADOPTION=1 quiet bash "$adopt" adopt; [[ -f $authority/restore-reconciliation && -f $authority/epoch ]] || fail 'eligible adoption did not establish denial'
 jq -e '.notice_authority.state=="adopted" and .minimum_release==4007' /var/lib/aboutme/fence.json >/dev/null || fail 'adoption evidence or floor'
 refuse bash "$adopt" adopt
-for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh skip:deploy-host.sh; do
+for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh skip:deploy-host.sh {missing,mode600,partial}:{fence,deploy-host,deploy-safety}.sh; do
   rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json
   cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
   NOTICE_ADOPTION=1 NOTICE_ADOPT_STOP=${boundary/:/:\/usr\/local\/lib\/aboutme\/} refuse bash "$adopt" adopt
