@@ -26,7 +26,10 @@ func TestReviewedRecoveryUsesNewGenerationAndAtomicHistory(t *testing.T) {
 			if s.pool.QueryRow(t.Context(), `SELECT nonce FROM auth_email_jobs`).Scan(&priorNonce) != nil {
 				t.Fatal("prior generation nonce fixture failed")
 			}
-			if _, err := s.pool.Exec(t.Context(), `DELETE FROM auth_email_jobs; UPDATE privacy_notice_recipients SET state='failed',failed_at=clock_timestamp(),failure_code=$1`, reason); err != nil {
+			if _, err := s.pool.Exec(t.Context(), `DELETE FROM auth_email_jobs`); err != nil {
+				t.Fatal("recovery job cleanup fixture failed")
+			}
+			if _, err := s.pool.Exec(t.Context(), `UPDATE privacy_notice_recipients SET state='failed',failed_at=clock_timestamp(),failure_code=$1`, reason); err != nil {
 				t.Fatal("recovery failure fixture failed")
 			}
 			if s.Recover(t.Context(), reason) == nil {

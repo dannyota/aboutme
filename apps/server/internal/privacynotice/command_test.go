@@ -87,7 +87,7 @@ func TestLateFailureSentJobSurvivesAbortAndRecoveryReusesID(t *testing.T) {
 			if s.pool.QueryRow(t.Context(), `SELECT job_id FROM privacy_notice_recipients`).Scan(&job) != nil {
 				t.Fatal("sent late failure fixture failed")
 			}
-			if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state='sent',key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
+			if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state='sent',attempts=1,key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
 				t.Fatal("sent late failure fixture failed")
 			}
 			if s.RecordLateFailure(t.Context(), job) != nil {
@@ -120,7 +120,7 @@ func TestRetiredStatusRetainsHistoryWhileCompletedJobsAwaitCleanup(t *testing.T)
 	s, enqueue := prepareEnqueueFixture(t, 1)
 	enqueue()
 	revokeNoticeFixture(t, s)
-	if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state='sent',key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
+	if _, err := s.pool.Exec(t.Context(), `UPDATE auth_email_jobs SET state='sent',attempts=1,key_id=NULL,nonce=NULL,ciphertext=NULL,next_attempt_at=NULL,sent_at=clock_timestamp(); UPDATE privacy_notice_recipients SET state='accepted',accepted_at=clock_timestamp()`); err != nil {
 		t.Fatal("retired audit fixture failed")
 	}
 	if _, err := s.Activate(t.Context()); err != nil {
