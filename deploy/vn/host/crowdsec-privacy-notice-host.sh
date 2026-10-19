@@ -59,16 +59,18 @@ notice_safe_file() {
   [[ -f $path && ! -L $path && $(stat -c '%u:%g:%a:%h' "$path") == "0:0:$mode:1" ]]
 }
 notice_absent() { [[ ! -e $1 && ! -L $1 ]]; }
+notice_epoch_check() {
+  notice_safe_file "$1" && [[ $(wc -c <"$1") == 37 ]] &&
+    grep -qxE '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' "$1"
+}
 notice_authority_check() {
   local name
   [[ -d /var/lib/aboutme/privacy-notice && ! -L /var/lib/aboutme/privacy-notice && \
     $(stat -c '%u:%g:%a' /var/lib/aboutme/privacy-notice) == 0:0:755 ]] || return 1
-  for name in epoch send.json activation.json restore-reconciliation capture-in-progress; do
+  for name in epoch initial-epoch send.json activation.json restore-reconciliation capture-in-progress; do
     notice_absent "/var/lib/aboutme/privacy-notice/$name" || notice_safe_file "/var/lib/aboutme/privacy-notice/$name" || return 1
   done
-  notice_safe_file /var/lib/aboutme/privacy-notice/epoch || return 1
-  [[ $(wc -c </var/lib/aboutme/privacy-notice/epoch) == 37 ]] || return 1
-  grep -qxE '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' /var/lib/aboutme/privacy-notice/epoch
+  notice_epoch_check /var/lib/aboutme/privacy-notice/epoch && notice_epoch_check /var/lib/aboutme/privacy-notice/initial-epoch
 }
 notice_replace() {
   local name=$1 tmp
@@ -221,6 +223,13 @@ try:
         else: stamp(v['target'],True)
         obj(v['mount_identity'],'data_mount_id bind_mount_id device_major device_minor data_root_inode aboutme_inode')
         for n in v['mount_identity'].values(): integer(n)
+    elif mode=='initial':
+        obj(v,'schema_version result campaign_id content_sha256 campaign_count recipient_count notice_job_count')
+        assert v['schema_version']==1 and type(v['schema_version']) is int and sys.argv[2]=='0'
+        assert v['result']=='initial_reconciled' and v['campaign_id']=='crowdsec-postgres-paths-v1'
+        assert v['content_sha256']=='bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc'
+        for k in ('campaign_count','recipient_count','notice_job_count'): integer(v[k]); assert v[k]==0
+        assert text.count('\n')==1 and '\r' not in text
     elif mode=='completion':
         obj(v,'version operation_id epoch'); assert v['version']==1 and type(v['version']) is int
         assert re.fullmatch(r'[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]',v['operation_id']); epoch(v['epoch'])
@@ -296,7 +305,15 @@ notice_bootstrap() {
   fi
   [[ $(stat -c '%u:%g:%a' /var/lib/aboutme/privacy-notice) == 0:0:755 && ! -L /var/lib/aboutme/privacy-notice ]] || return 1
   if notice_absent /var/lib/aboutme/privacy-notice/restore-reconciliation; then notice_replace restore-reconciliation </dev/null || return 1; fi
-  if notice_absent /var/lib/aboutme/privacy-notice/epoch; then notice_epoch_rotate || return 1; fi
+  if notice_absent /var/lib/aboutme/privacy-notice/epoch; then
+    notice_absent /var/lib/aboutme/privacy-notice/initial-epoch && notice_epoch_rotate || return 1
+  fi
+  notice_epoch_check /var/lib/aboutme/privacy-notice/epoch || return 1
+  if notice_absent /var/lib/aboutme/privacy-notice/initial-epoch; then
+    notice_replace initial-epoch </var/lib/aboutme/privacy-notice/epoch || return 1
+  fi
+  notice_epoch_check /var/lib/aboutme/privacy-notice/initial-epoch &&
+    cmp -s /var/lib/aboutme/privacy-notice/epoch /var/lib/aboutme/privacy-notice/initial-epoch || return 1
   notice_authority_check && notice_absent /var/lib/aboutme/privacy-notice/send.json && \
     notice_absent /var/lib/aboutme/privacy-notice/activation.json && notice_absent /var/lib/aboutme/privacy-notice/capture-in-progress && sync /var/lib/aboutme/privacy-notice || return 1
   notice_fence notice-authority "$operation" adopted >/dev/null 2>&1 || return 1
@@ -305,14 +322,35 @@ notice_bootstrap() {
     notice_fence mutation-clear "$operation" quiesce >/dev/null 2>&1 && notice_fence release "$operation" >/dev/null 2>&1
   else notice_fence notice-restore-release "$operation" >/dev/null 2>&1; fi
 }
+notice_install_canonical() {
+  local incoming=$1 target=/usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh tmp
+  notice_recheck_mount && { notice_safe_file "$incoming" 644 || notice_safe_file "$incoming" 755; } || return 1
+  python3 -I - "$incoming" "$target" <<'PY' || return 1
+import os,stat,sys
+try:
+    for path in sys.argv[1:]:
+        current='/'
+        for part in os.path.dirname(os.path.abspath(path)).strip('/').split('/'):
+            current=os.path.join(current,part); s=os.lstat(current)
+            assert stat.S_ISDIR(s.st_mode) and s.st_uid==0 and s.st_gid==0 and s.st_mode&0o022==0
+except Exception:
+    sys.exit(1)
+PY
+  notice_absent "$target" || notice_safe_file "$target" 755 || return 1
+  tmp=$(mktemp /usr/local/lib/aboutme/.privacy-notice-host.XXXXXX) || return 1
+  install -o root -g root -m 0755 "$incoming" "$tmp" && sync "$tmp" &&
+    notice_recheck_mount && mv -f "$tmp" "$target" && sync /usr/local/lib/aboutme &&
+    notice_safe_file "$target" 755 && cmp -s "$incoming" "$target"
+}
 notice_adopt() {
-  local state tag record base name installed metadata resuming=no
+  local state tag record base incoming name installed metadata resuming=no
   notice_identity=$(notice_mount_identity) || return 1
   exec {notice_bundle_fd}>>/srv/data/host-operations/.bundle.lock || return 1
   flock -x -w 30 "$notice_bundle_fd" || return 1
   notice_recheck_mount || return 1
   # The incoming reviewed helper reads intent even before its installed copy.
   base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  incoming=$base/crowdsec-privacy-notice-host.sh
   if [[ -f $base/../scripts/fence.sh ]]; then base=$(cd "$base/../scripts" && pwd); fi
   for name in fence deploy-host deploy-safety; do [[ -f $base/$name.sh && ! -L $base/$name.sh ]] || return 1; done
   state=$("$base/fence.sh" read 2>/dev/null) || return 1
@@ -354,6 +392,7 @@ notice_adopt() {
   if [[ $resuming == no ]]; then notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1; fi
   # The legacy helper cannot write evidence; use the incoming reviewed helper.
   "$base/fence.sh" notice-authority "$notice_operation" initializing >/dev/null 2>&1 || return 1
+  notice_install_canonical "$incoming" || return 1
   for name in fence deploy-host deploy-safety; do
     notice_recheck_mount && install -o root -g root -m 0755 "$base/$name.sh" "/usr/local/lib/aboutme/$name.sh" || return 1
   done
