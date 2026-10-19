@@ -216,15 +216,23 @@ export async function provePhotoSessionPersistence(
   await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
   await expectURLUnchanged(page, baseline);
   await expectNoPersistenceWrites(probes);
-  state.editorDiagnosticStage = 'session-reauthenticated';
+  state.editorDiagnosticStage = 'session-reauth-sign-in';
   await loginAsDevelopmentUser(reauthPage);
+  state.editorDiagnosticStage = 'session-reauth-url';
   await expectURLUnchanged(page, baseline);
+  state.editorDiagnosticStage = 'session-reauth-persistence';
   await expectNoPersistenceWrites(probes);
+  state.editorDiagnosticStage = 'session-reauth-draft';
   await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
+  state.editorDiagnosticStage = 'session-resume-activate';
   await page.getByRole('button', { name: 'Resume after sign-in' }).press('Enter');
+  state.editorDiagnosticStage = 'session-resume-saved';
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  state.editorDiagnosticStage = 'session-resume-draft';
   await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
+  state.editorDiagnosticStage = 'session-resume-url';
   await expectURLUnchanged(page, baseline);
+  state.editorDiagnosticStage = 'session-resume-persistence';
   await expectNoPersistenceWrites(probes);
   return reauthPage;
 }
