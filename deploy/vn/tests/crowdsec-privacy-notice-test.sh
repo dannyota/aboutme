@@ -21,7 +21,7 @@ awk '
   /fence.sh/ && !fence {fence=NR}; /restore-drill.sh/ && !controller {controller=NR}
   /if \[ "\$only" = postgres \]/ {postgres=NR}; END {exit !(helper && workload && fence && controller && postgres && helper<postgres && workload<postgres && fence<postgres && controller<postgres)}
 ' "$installer" || fail 'postgres installer skipped shared dependencies'
-work=$(mktemp -d)
+work=$(mktemp -d /run/aboutme-notice-test.XXXXXX)
 # Fixtures share an executable header; bodies retain their own failure rules.
 stub() { local target=$1; { printf '#!/usr/bin/env bash\n'; cat; } >"$target"; chmod 0755 "$target"; }
 loops=()
@@ -43,6 +43,27 @@ for command in sync mv rm; do
   stub "$work/bin/$command" <<'STUB'
 set -euo pipefail; name=${0##*/}
 printf '%s\n' "$name" >>"$NOTICE_FIXTURE/effects"
+if [[ ${NOTICE_INITIAL_FAULT:-none} == "$name:${*: -1}" ]]; then exit 1; fi
+if [[ ${NOTICE_INITIAL_RELEASE:-none} != none && $name == mv && ${*: -1} == /var/lib/aboutme/fence.json ]]; then
+  replacement=${@: -2:1}
+  if jq -e '(.operation_id // null)==null' "$replacement" >/dev/null; then
+    case $NOTICE_INITIAL_RELEASE in
+      before-store) exit 1 ;;
+      after-rename) /usr/bin/mv "$@"; exit 1 ;;
+      after-sync | lost-response) touch "$NOTICE_FIXTURE/initial-release-renamed" ;;
+    esac
+  fi
+fi
+if [[ $name == sync && ${*: -1} == /var/lib/aboutme && -f $NOTICE_FIXTURE/initial-release-renamed ]]; then
+  /usr/bin/sync "$@"
+  if [[ $NOTICE_INITIAL_RELEASE == lost-response ]]; then kill -TERM "$PPID"; fi
+  exit 1
+fi
+if [[ $name == mv && ${*: -1} == /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh ]]; then
+  replacement=${@: -2:1}
+  [[ $(stat -c '%u:%g:%a:%h' "$replacement") == 0:0:755:1 ]] || exit 1
+  [[ $(cat "$NOTICE_FIXTURE/last-file-sync") == "$replacement" ]] || exit 1
+fi
 if [[ $name == mv && ${*: -1} == /var/lib/aboutme/fence.json && ${NOTICE_RELEASE_FAULT:-none} != none ]]; then
   replacement=${@: -2:1}
   if jq -e 'has("notice_authority") and (.operation_id // null)==null' "$replacement" >/dev/null 2>&1; then
@@ -97,12 +118,20 @@ STUB
 done
 stub "$work/bin/systemctl" <<'STUB'
 set -euo pipefail
+printf '%s\n' "$*" >>"$NOTICE_FIXTURE/systemctl-calls"
 case $1 in
-  is-active) [[ ${NOTICE_APP_STATE:-absent} == active || ${*: -1} == aboutme-maintenance* ]] ;;
+  is-active)
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      case ${*: -1} in crowdsec* | aboutme-crowdsec-retention*) exit 0 ;; esac
+    fi
+    [[ ${NOTICE_APP_STATE:-absent} == active || ${*: -1} == aboutme-maintenance* ]] ;;
   show)
     [[ ${NOTICE_APP_STATE:-absent} != inspection-failure ]] || exit 1
     [[ " $* " == *' --all '* ]] || exit 1
     unit_state=${NOTICE_UNIT_STATE:-inactive}; job=${NOTICE_JOB:-}
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      case ${*: -1} in crowdsec* | aboutme-crowdsec-retention*) unit_state=active ;; esac
+    fi
     [[ ${NOTICE_APP_STATE:-absent} != active ]] || unit_state=active
     if [[ ${*: -1} == postgresql@18-main.service ]]; then unit_state=active; job=${NOTICE_POSTGRES_JOB:-}; [[ ${NOTICE_POSTGRES_INSPECTION:-0} == 0 ]] || exit 1; fi
     if [[ ${NOTICE_CLAIMED:-0} == 1 && -f $NOTICE_FIXTURE/stopped && -z $job && $unit_state == inactive ]]; then
@@ -114,7 +143,23 @@ case $1 in
       *Job*) printf '%s\n' "$job" ;;
       *) exit 1 ;;
     esac ;;
-  list-jobs | list-units) : ;;
+  list-jobs)
+    [[ ${NOTICE_INITIAL_INSPECTION:-valid} != jobs ]] || exit 1
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      printf '1 aboutme-crowdsec-retention.service start running\n'
+    fi
+    [[ -z ${NOTICE_INITIAL_JOB:-} ]] || printf '2 %s start waiting\n' "$NOTICE_INITIAL_JOB"
+    ;;
+  list-units)
+    [[ ${NOTICE_INITIAL_INSPECTION:-valid} != units ]] || exit 1
+    if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
+      printf '%s\n' 'crowdsec.service loaded active running protection' \
+        'crowdsec-firewall-bouncer.service loaded active running bouncer' \
+        'aboutme-crowdsec-retention.timer loaded active waiting retention' \
+        'aboutme-crowdsec-retention-startup.service loaded active exited retention'
+    fi
+    [[ -z ${NOTICE_INITIAL_UNIT:-} ]] || printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+    ;;
   stop)
     if [[ ${NOTICE_CAPTURE:-0} == 1 && $* == *aboutme-server* ]]; then
       [[ -f /var/lib/aboutme/privacy-notice/capture-in-progress ]] || exit 1
@@ -193,7 +238,7 @@ denied() {
     fi
   done
 }
-for action in unknown --force --resume authorize-send pre-restore postcheck finish; do refuse "$host" "$action"; done
+for action in unknown --force --resume authorize-send reconcile-initial pre-restore postcheck finish; do refuse "$host" "$action"; done
 refuse "$host" initialize extra; refuse "$host" pre-restore extra
 for action in pre-restore postcheck finish resume-owned-operation; do
   refuse bash "$wrapper" "$action"; refuse "$controller" "$action"
@@ -227,16 +272,20 @@ umount /var/lib/aboutme; NOTICE_LOCK=changed refuse "$host" initialize; [[ ! -e 
 umount /var/lib/aboutme; NOTICE_LOCK=contention refuse "$host" initialize; quiet "$host" initialize
 [[ $(jq -r '.operation_kind // "none"' /var/lib/aboutme/fence.json) == none ]] || fail 'successful bootstrap retained operation'
 [[ $(stat -c '%u:%g:%a' "$authority") == 0:0:755 ]] || fail 'directory metadata'
-for name in epoch restore-reconciliation; do [[ $(stat -c '%u:%g:%a:%h' "$authority/$name") == 0:0:444:1 ]] || fail 'file metadata'; done
+for name in epoch initial-epoch restore-reconciliation; do [[ $(stat -c '%u:%g:%a:%h' "$authority/$name") == 0:0:444:1 ]] || fail 'file metadata'; done
+cmp -s "$authority/epoch" "$authority/initial-epoch" || fail 'bootstrap anchor mismatch'
 [[ ! -s $authority/restore-reconciliation ]] || fail 'marker contents'; [[ $(wc -c <"$authority/epoch") == 37 ]] || fail 'epoch length'
 grep -qxE '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' "$authority/epoch" || fail 'epoch grammar'
 jq -e '.notice_authority | keys==["operation_id","state","version"] and .version==1 and .state=="adopted" and (.operation_id|test("^[A-Za-z0-9_-]{43}$"))' \
   /var/lib/aboutme/fence.json >/dev/null || fail 'permanent evidence'
 cp "$authority/epoch" "$work/initial-epoch"; cp /var/lib/aboutme/fence.json "$work/adopted-fence"; quiet "$host" initialize
 cmp -s "$authority/epoch" "$work/initial-epoch" || fail 'reinstall rotated epoch'; [[ ! -e /var/lib/aboutme/release.json ]] || fail 'bootstrap synthesized release'
+rm "$authority/initial-epoch"; refuse "$host" initialize
+[[ ! -e $authority/initial-epoch ]] || fail 'adopted reinstall recreated anchor'
+cp "$work/initial-epoch" "$authority/initial-epoch"; chmod 0444 "$authority/initial-epoch"
 # Neither ordinary reinstall nor replacement-host bootstrap may derive receipt authority from a minimum release or a restored database.
 [[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'bootstrap issued receipt'
-for command in prepare enqueue status activate authorize-send; do refuse bash "$wrapper" "$command" extra; done
+for command in prepare enqueue status activate authorize-send reconcile-initial; do refuse bash "$wrapper" "$command" extra; done
 refuse bash "$wrapper" --force; refuse bash "$wrapper" --resume
 for override in FENCE_DIR ABOUTME_WORKLOAD_LOCK NOTICE_AUTHORITY_DIR NOTICE_OPERATION_ID \
   RECOVERY_WAIT_SECONDS DB_NAME SMOKE_TABLE PG_TARGET NOTICE_COMMAND NOTICE_CONTROLLER; do refuse env "$override=invalid" "$controller" host-pass latest
@@ -366,6 +415,8 @@ for pass in latest time repeated; do
   printf '{}\n' >"$authority/send.json"; printf '{}\n' >"$authority/activation.json"; chmod 0444 "$authority/send.json" "$authority/activation.json"; cp "$authority/epoch" "$work/previous-epoch"
   : >"$work/order"; quiet restore_pass "$pass"
   ! cmp -s "$authority/epoch" "$work/previous-epoch" || fail 'restore reused epoch'; cp "$authority/epoch" "$work/$pass-epoch"
+  cmp -s "$authority/initial-epoch" "$work/initial-epoch" || fail 'restore changed initial anchor'
+  ! cmp -s "$authority/epoch" "$authority/initial-epoch" || fail 'restored host retained initial admission'
   [[ -f $authority/restore-reconciliation && ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'restore retained authority'
   [[ ! -e /var/lib/aboutme/release.json ]] || fail 'minimum tag became image authority'
   awk '
@@ -472,7 +523,8 @@ jq '.notice_authority.state="initializing" | .operation_id=("B"*43) | .operation
   "$work/adopted-fence" > /var/lib/aboutme/fence.json
 refuse "$host" initialize
 jq --arg id "$initializing_id" '.operation_id=$id' /var/lib/aboutme/fence.json >"$work/resume-fence"
-cp "$work/resume-fence" /var/lib/aboutme/fence.json; rm "$authority/epoch"; quiet "$host" initialize
+cp "$work/resume-fence" /var/lib/aboutme/fence.json; rm "$authority/initial-epoch"; quiet "$host" initialize
+cmp -s "$authority/initial-epoch" "$authority/epoch" || fail 'resumed bootstrap anchor mismatch'
 jq -e --arg id "$initializing_id" '.notice_authority.state=="adopted" and .notice_authority.operation_id==$id' \
   /var/lib/aboutme/fence.json >/dev/null || fail 'initialization changed recorded owner'
 cp /var/lib/aboutme/fence.json "$work/adopted-fence"
@@ -515,6 +567,7 @@ set -euo pipefail
 if [[ ${NOTICE_ADOPTION:-0} == 1 ]]; then
   case ${*: -1} in
     /usr/local/lib/aboutme/fence.sh | /usr/local/lib/aboutme/deploy-host.sh | /usr/local/lib/aboutme/deploy-safety.sh)
+      cmp -s "$NOTICE_FIXTURE/reviewed/crowdsec-privacy-notice-host.sh" /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh || exit 1
       jq -e '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .notice_authority.operation_id==.operation_id' /var/lib/aboutme/fence.json >/dev/null || exit 1
       jq -e '.mutation_kind=="quiesce" and .state=="active"' /var/lib/aboutme/cutover-mutation.json >/dev/null || exit 1
       printf 'helper-replaced\n' >>"$NOTICE_FIXTURE/order"
@@ -530,7 +583,7 @@ exec "/usr/bin/${0##*/}" "$@"
 STUB
 done
 # Remove only the synthetic test state after all its owning processes ended.
-rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/fence.lock; cp "$work/legacy/"*.sh "$work/lib/"; cp "$work/legacy/release.json" /var/lib/aboutme/release.json
+rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/fence.lock "$host"; cp "$work/legacy/"*.sh "$work/lib/"; cp "$work/legacy/release.json" /var/lib/aboutme/release.json
 "$fence" init >"$work/out" 2>"$work/err"
 for fault in unknown-helper unknown-release; do
   if [[ $fault == unknown-helper ]]; then
@@ -541,11 +594,24 @@ for fault in unknown-helper unknown-release; do
   refuse bash "$adopt" adopt; [[ ! -e $authority ]] || fail 'ineligible adoption touched authority'
   cp "$work/legacy/"*.sh "$work/lib/"; cp "$work/legacy/release.json" /var/lib/aboutme/release.json
 done
+for fault in mv:/usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh sync:/usr/local/lib/aboutme; do
+  NOTICE_ADOPTION=1 NOTICE_INITIAL_FAULT=$fault refuse bash "$adopt" adopt
+  jq -e '.notice_authority.state=="initializing" and .operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'helper persistence failure lost adoption'
+  for name in fence deploy-host deploy-safety; do
+    cmp -s "$work/legacy/$name.sh" "$work/lib/$name.sh" || fail 'guard replaced before helper persistence'
+  done
+  NOTICE_ADOPTION=1 quiet bash "$adopt" adopt
+  rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json "$host"
+  cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
+done
 NOTICE_ADOPTION=1 quiet bash "$adopt" adopt; [[ -f $authority/restore-reconciliation && -f $authority/epoch ]] || fail 'eligible adoption did not establish denial'
+cmp -s "$authority/epoch" "$authority/initial-epoch" || fail 'adoption anchor mismatch'
+cmp -s "$adopt" "$host" || fail 'adoption canonical helper mismatch'
 jq -e '.notice_authority.state=="adopted" and .minimum_release==4007' /var/lib/aboutme/fence.json >/dev/null || fail 'adoption evidence or floor'
 refuse bash "$adopt" adopt
 for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh skip:deploy-host.sh {missing,mode600,partial}:{fence,deploy-host,deploy-safety}.sh; do
   rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json
+  rm -f "$host"
   cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
   NOTICE_ADOPTION=1 NOTICE_ADOPT_STOP=${boundary/:/:\/usr\/local\/lib\/aboutme\/} refuse bash "$adopt" adopt
   adoption_owner=$(jq -er '.notice_authority.operation_id' /var/lib/aboutme/fence.json)
@@ -579,9 +645,30 @@ case $* in
   *SMTP* | *MEDIA* | *smtp.env* | *--privileged* | *--network=host*) exit 1 ;;
 esac
 [[ $* == *'privacy-notice:/var/lib/aboutme/privacy-notice:ro'* ]] || exit 1; [[ $* == *'server crowdsec-privacy-notice '* ]] || exit 1
+if [[ ${*: -1} == reconcile-initial ]]; then
+  /usr/bin/flock -n /run/aboutme/workload.lock true && exit 1
+  jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || exit 1
+  jq -e '.mutation_kind=="quiesce"' /var/lib/aboutme/cutover-mutation.json >/dev/null || exit 1
+  printf 'initial-call\n' >>"$NOTICE_FIXTURE/initial-calls"
+  case ${NOTICE_INITIAL_DRIFT:-none} in
+    epoch) printf '00000000-0000-4000-8000-000000000000\n' > /var/lib/aboutme/privacy-notice/epoch ;;
+    release) jq '.release_number=1' /var/lib/aboutme/release.json >"$NOTICE_FIXTURE/drift-release"; /usr/bin/cp "$NOTICE_FIXTURE/drift-release" /var/lib/aboutme/release.json ;;
+    owner) jq '.operation_id=("B"*43)' /var/lib/aboutme/fence.json >"$NOTICE_FIXTURE/drift-owner"; /usr/bin/cp "$NOTICE_FIXTURE/drift-owner" /var/lib/aboutme/fence.json ;;
+    mount) mount --bind /srv/data/other /var/lib/aboutme; touch "$NOTICE_FIXTURE/initial-mount-drift" ;;
+    signal) kill -TERM "$PPID"; exit 1 ;;
+  esac
+  if [[ ${NOTICE_INITIAL_HOLD:-none} == foreground ]]; then
+    printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/initial-held-child"
+    read -r -t 10 _ <"$NOTICE_FIXTURE/initial-continue" || exit 1
+  elif [[ ${NOTICE_INITIAL_HOLD:-none} == descendant ]]; then
+    (exec >/dev/null 2>&1; printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/initial-held-child"
+      read -r -t 10 _ <"$NOTICE_FIXTURE/initial-continue") &
+  fi
+fi
 if [[ $* != *' crowdsec-privacy-notice enqueue'* ]]; then
   case $* in *auth-email-active-key* | *auth-email-previous-key*) exit 1 ;; esac
 fi
+[[ ${NOTICE_APP_STDERR:-0} == 0 ]] || printf 'fixture_failure\n' >&2
 [[ ${NOTICE_APP_ERROR:-0} == 0 ]] || { printf 'fixture_failure\n' >&2; exit 1; }; cat "$NOTICE_FIXTURE/aggregate"
 exit "$(cat "$NOTICE_FIXTURE/app-exit")"
 STUB
@@ -591,7 +678,7 @@ case " $* " in
   *) exec /usr/bin/date --date=2026-11-01T00:00:00Z "$@" ;;
 esac
 STUB
-digest=30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619
+digest=bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc
 literal() { sed -nE "s/^(const )?[[:space:]]*$1[[:space:]]*=[[:space:]]*\"([^\"]*)\"$/\\2/p" "$2"; }
 manifest_source=$root/apps/server/internal/privacynotice/manifest.go; copy_source=$root/apps/server/internal/authmail/privacy_notice_copy.go
 {
@@ -628,8 +715,113 @@ invalid_aggregate() { refuse bash "$wrapper" "${1:-authorize-send}"; jq -e '.ope
 # Reconciliation permits ordinary mail startup; notice SMTP claim/send gates remain backend full-CI proofs.
 "$fence" check 999999 aboutme-server >"$work/out" 2>"$work/err" || fail 'notice marker blocked compatible ordinary mail'
 refuse bash "$wrapper" enqueue; refuse bash "$wrapper" authorize-send
-# Independent reconciliation is represented only by fixture setup, never by a host operation deriving success from a restored queue.
-rm "$authority/restore-reconciliation"
+# Initial proof has its own closed output and never creates mail authority.
+jq -nc --arg digest "$digest" '{schema_version:1,result:"initial_reconciled",campaign_id:"crowdsec-postgres-paths-v1",
+  content_sha256:$digest,campaign_count:0,recipient_count:0,notice_job_count:0}' >"$work/initial"
+cp /var/lib/aboutme/fence.json "$work/initial-fence"; cp "$authority/epoch" "$work/initial-current"
+cp /var/lib/aboutme/release.json "$work/initial-release"
+initial_reset() {
+  cp "$work/initial-fence" /var/lib/aboutme/fence.json; rm -f /var/lib/aboutme/cutover-mutation.json "$work/initial-release-renamed"
+  cp "$work/initial-current" "$authority/epoch"; cp "$work/initial-release" /var/lib/aboutme/release.json
+  cp "$work/initial" "$work/aggregate"; printf '0\n' >"$work/app-exit"
+}
+initial_refuse() {
+  refuse bash "$wrapper" reconcile-initial
+  if [[ -f $work/initial-mount-drift ]]; then umount /var/lib/aboutme; rm "$work/initial-mount-drift"; fi
+  jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'initial failure released owner'
+  [[ -f /var/lib/aboutme/cutover-mutation.json ]] || fail 'initial failure cleared quiesce'
+  [[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'initial failure issued authority'
+  initial_reset
+}
+initial_reset
+for mutation in '.extra=true' '.schema_version=true' '.campaign_count=1' '.recipient_count=-1' '.notice_job_count="0"' \
+  '.result="sealed"' '.content_sha256=("0"*64)' 'del(.recipient_count)'; do
+  jq -c "$mutation" "$work/initial" >"$work/aggregate"; initial_refuse
+done
+for raw in '{}' '{} {}' '{"schema_version":1,"schema_version":1}' '{bad}'; do
+  printf '%s\n' "$raw" >"$work/aggregate"; initial_refuse
+done
+tr -d '\n' <"$work/initial" >"$work/aggregate"; initial_refuse
+cp "$work/initial" "$work/aggregate"; printf '\n' >>"$work/aggregate"; initial_refuse
+head -c 4097 /dev/zero >"$work/aggregate"; initial_refuse
+for result in 1 2; do printf '%s\n' "$result" >"$work/app-exit"; initial_refuse; done
+NOTICE_APP_ERROR=1 initial_refuse
+NOTICE_APP_STDERR=1 initial_refuse
+for drift in epoch release owner mount signal; do NOTICE_INITIAL_DRIFT=$drift initial_refuse; done
+before=$(wc -l <"$work/initial-calls")
+for object in missing symlink hardlink fifo writable malformed mismatch; do
+  rm -f "$authority/initial-epoch"
+  case $object in
+    missing) : ;;
+    symlink) ln -s "$authority/epoch" "$authority/initial-epoch" ;;
+    hardlink) ln "$authority/epoch" "$authority/initial-epoch" ;;
+    fifo) mkfifo "$authority/initial-epoch" ;;
+    writable) cp "$work/initial-current" "$authority/initial-epoch"; chmod 0666 "$authority/initial-epoch" ;;
+    malformed) printf 'invalid\n' >"$authority/initial-epoch"; chmod 0444 "$authority/initial-epoch" ;;
+    mismatch) printf '00000000-0000-4000-8000-000000000000\n' >"$authority/initial-epoch"; chmod 0444 "$authority/initial-epoch" ;;
+  esac
+  refuse bash "$wrapper" reconcile-initial
+  [[ $(wc -l <"$work/initial-calls") == "$before" ]] || fail 'invalid anchor reached database'
+done
+rm -f "$authority/initial-epoch"; cp "$work/initial-current" "$authority/initial-epoch"; chmod 0444 "$authority/initial-epoch"
+for name in send.json activation.json capture-in-progress; do
+  touch "$authority/$name"; chmod 0444 "$authority/$name"; refuse bash "$wrapper" reconcile-initial
+  rm "$authority/$name"
+done
+NOTICE_APP_STATE=inspection-failure refuse bash "$wrapper" reconcile-initial; initial_reset
+NOTICE_JOB=1 refuse bash "$wrapper" reconcile-initial; initial_reset
+before=$(wc -l <"$work/initial-calls")
+for unit in aboutme-migrate.service aboutme-db-setup.service aboutme-job@privacy-retention-sweep.service aboutme-restore.service postgresql-recovery.service; do
+  NOTICE_INITIAL_JOB=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+  NOTICE_INITIAL_UNIT=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+done
+for inspection in jobs units; do NOTICE_INITIAL_INSPECTION=$inspection refuse bash "$wrapper" reconcile-initial; initial_reset; done
+[[ $(wc -l <"$work/initial-calls") == "$before" ]] || fail 'nonquiescent writer reached initial database proof'
+for fault in rm:/var/lib/aboutme/privacy-notice/restore-reconciliation sync:/var/lib/aboutme/privacy-notice; do
+  NOTICE_INITIAL_FAULT=$fault initial_refuse
+done
+mkfifo "$work/initial-continue"; exec {initial_continue_fd}<>"$work/initial-continue"
+NOTICE_INITIAL_HOLD=descendant initial_refuse
+rm -f "$work/initial-held-child"
+NOTICE_INITIAL_HOLD=foreground bash "$wrapper" reconcile-initial >"$work/initial-death-out" 2>"$work/initial-death-err" &
+initial_pid=$!
+for ((attempt = 0; attempt < 100; attempt++)); do [[ ! -f $work/initial-held-child ]] || break; /usr/bin/sleep 0.02; done
+[[ -f $work/initial-held-child ]] || fail 'initial child never reached latch'
+kill -KILL "$initial_pid"; wait "$initial_pid" 2>/dev/null || true
+/usr/bin/flock -n /run/aboutme/workload.lock true && fail 'initial parent death lost inherited lock'
+jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'initial parent death lost owner'
+printf 'continue\n' >&"$initial_continue_fd"
+for ((attempt = 0; attempt < 100; attempt++)); do
+  if /usr/bin/flock -n /run/aboutme/workload.lock true; then break; fi
+  /usr/bin/sleep 0.02
+done
+/usr/bin/flock -n /run/aboutme/workload.lock true || fail 'initial fixture left child alive'
+[[ ! -s $work/initial-death-out ]] || fail 'initial parent death exposed success'
+refuse bash "$wrapper" reconcile-initial; initial_reset; exec {initial_continue_fd}>&-
+# A missing marker never substitutes for another database proof.
+touch "$authority/restore-reconciliation"; chmod 0444 "$authority/restore-reconciliation"
+NOTICE_LOCK=contention refuse bash "$wrapper" reconcile-initial
+[[ -f $authority/restore-reconciliation ]] || fail 'lock contention cleared marker'
+initial_reset; : >"$work/systemctl-calls"
+NOTICE_LEGACY_PROTECTION=active app 0 reconcile-initial
+[[ ! -e $authority/restore-reconciliation && ! -e /var/lib/aboutme/cutover-mutation.json ]] || fail 'initial success retained markers'
+if grep -Eq '^(stop|restart).*crowdsec' "$work/systemctl-calls"; then fail 'initial reconciliation interrupted existing protection'; fi
+cmp -s "$authority/initial-epoch" "$work/initial-current" || fail 'initial action changed anchor'
+[[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'initial success issued authority'
+before=$(wc -l <"$work/initial-calls"); app 0 reconcile-initial
+[[ $(wc -l <"$work/initial-calls") == $((before + 1)) ]] || fail 'absent marker bypassed database proof'
+for fault in before-store after-rename after-sync lost-response; do
+  NOTICE_INITIAL_RELEASE=$fault refuse bash "$wrapper" reconcile-initial
+  [[ ! -e $authority/restore-reconciliation && ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'uncertain release changed notice authority'
+  if [[ $fault == before-store ]]; then
+    jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'failed release store lost owner'
+    refuse bash "$wrapper" reconcile-initial
+  else
+    jq -e '(.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null || fail 'uncertain release recreated owner'
+  fi
+  initial_reset; app 0 reconcile-initial
+done
+cp "$work/sealed" "$work/aggregate"; printf '2\n' >"$work/app-exit"
 # Capture must persist before writer shutdown, remain on a pending batch, and clear only after the sealed postcondition. The fixture has no member data.
 jq '.state="capturing" | .actual_count=0 | .counts.unqueued=0 | .sealed_at=null' "$work/sealed" >"$work/aggregate"
 NOTICE_CAPTURE=1 app 2 prepare; [[ -f $authority/capture-in-progress && ! -s $authority/capture-in-progress ]] || fail 'pending capture lost marker'
@@ -697,4 +889,4 @@ done
 jq '.actual_count=0 | (.counts,.failure_counts) |= map_values(0) | .last_accepted_at=null' "$work/aggregate" >"$work/purged"
 cp "$work/purged" "$work/aggregate"; app 1 status; invalid_aggregate
 jq '.actual_count=2 | .counts.failed=2 | .failure_counts.delivery_failed=2' "$work/purged" >"$work/aggregate"; invalid_aggregate status
-printf 'PASS notice guest filesystem protocol\n'; printf 'notice reconciliation: not performed\n'
+printf 'PASS notice guest filesystem protocol\n'; printf 'notice reconciliation: synthetic initial proof only\n'

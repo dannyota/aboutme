@@ -14,7 +14,12 @@ type privacyNoticeExitError struct{ code int }
 
 func (privacyNoticeExitError) Error() string { return "invalid_state" }
 
-type privacyNoticeRunner func(context.Context, string, func(string) string) (privacynotice.Report, error)
+type privacyNoticeResult struct {
+	report  privacynotice.Report
+	initial *privacynotice.InitialResult
+}
+
+type privacyNoticeRunner func(context.Context, string, func(string) string) (privacyNoticeResult, error)
 
 func runPrivacyNotice(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -34,11 +39,24 @@ func executePrivacyNoticeCommand(ctx context.Context, args []string, getenv func
 	if err != nil {
 		return invalid()
 	}
-	report, err := run(ctx, action, getenv)
+	result, err := run(ctx, action, getenv)
 	if err != nil {
 		return invalid()
 	}
-	data, err := report.JSON(action == "activate")
+	var data []byte
+	code := result.report.Code
+	if action == "reconcile-initial" {
+		if result.initial == nil {
+			return invalid()
+		}
+		data, err = result.initial.JSON()
+		code = 0
+	} else {
+		if result.initial != nil {
+			return invalid()
+		}
+		data, err = result.report.JSON(action == "activate")
+	}
 	if err != nil {
 		return invalid()
 	}
@@ -46,8 +64,8 @@ func executePrivacyNoticeCommand(ctx context.Context, args []string, getenv func
 	if writeErr != nil || written != len(data) {
 		return invalid()
 	}
-	if report.Code != 0 {
-		return privacyNoticeExitError{code: report.Code}
+	if code != 0 {
+		return privacyNoticeExitError{code: code}
 	}
 	return nil
 }

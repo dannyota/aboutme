@@ -12,8 +12,8 @@ import (
 
 const privacyNoticeTimeout = 5 * time.Minute
 
-func executePrivacyNoticeAction(ctx context.Context, action string, getenv func(string) string) (privacynotice.Report, error) {
-	failed := privacynotice.Report{Code: 1}
+func executePrivacyNoticeAction(ctx context.Context, action string, getenv func(string) string) (privacyNoticeResult, error) {
+	failed := privacyNoticeResult{report: privacynotice.Report{Code: 1}}
 	if ctx.Err() != nil {
 		return failed, privacynotice.ErrState
 	}
@@ -50,5 +50,13 @@ func executePrivacyNoticeAction(ctx context.Context, action string, getenv func(
 	if err != nil {
 		return failed, privacynotice.ErrState
 	}
-	return service.Run(ctx, action)
+	if action == "reconcile-initial" {
+		initial, initialErr := service.ReconcileInitial(ctx)
+		if initialErr != nil {
+			return failed, initialErr
+		}
+		return privacyNoticeResult{initial: &initial}, nil
+	}
+	report, err := service.Run(ctx, action)
+	return privacyNoticeResult{report: report}, err
 }
