@@ -111,6 +111,7 @@ notice_initial_quiescent() {
   for unit in aboutme-migrate aboutme-db-setup crowdsec crowdsec-firewall-bouncer aboutme-crowdsec-retention.timer; do
     notice_unit_stopped "$unit" || return 1
   done
+  # shellcheck disable=SC2154 # notice_quiesce sources this array from deploy-safety.sh before this check.
   for unit in "${aboutme_jobs[@]}"; do
     notice_unit_stopped "aboutme-job-$unit.timer" && notice_unit_stopped "aboutme-job@$unit.service" || return 1
   done
