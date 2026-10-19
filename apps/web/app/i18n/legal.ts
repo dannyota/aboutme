@@ -30,7 +30,8 @@ export type LegalDocument = {
 };
 
 export type LegalCopy = {
-  readonly updated: string;
+  readonly privacyUpdated: string;
+  readonly termsUpdated: string;
   readonly privacy: LegalDocument;
   readonly terms: LegalDocument;
   /** Short link labels for the homepage footer and registration. */
