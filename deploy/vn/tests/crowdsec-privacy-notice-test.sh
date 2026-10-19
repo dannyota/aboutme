@@ -591,7 +591,7 @@ case " $* " in
   *) exec /usr/bin/date --date=2026-11-01T00:00:00Z "$@" ;;
 esac
 STUB
-digest=30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619
+digest=bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc
 literal() { sed -nE "s/^(const )?[[:space:]]*$1[[:space:]]*=[[:space:]]*\"([^\"]*)\"$/\\2/p" "$2"; }
 manifest_source=$root/apps/server/internal/privacynotice/manifest.go; copy_source=$root/apps/server/internal/authmail/privacy_notice_copy.go
 {

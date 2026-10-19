@@ -227,7 +227,7 @@ try:
     else:
         common='schema_version campaign_id content_sha256 cutoff_at expected_count'
         assert v['schema_version']==1 and type(v['schema_version']) is int
-        assert v['campaign_id']=='crowdsec-postgres-paths-v1' and v['content_sha256']=='30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619'
+        assert v['campaign_id']=='crowdsec-postgres-paths-v1' and v['content_sha256']=='bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc'
         integer(v['expected_count']); cutoff=stamp(v['cutoff_at'])
         now=stamp(sys.argv[3])
         assert cutoff<=now

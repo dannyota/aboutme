@@ -41,7 +41,7 @@ func revokeNoticeFixture(t *testing.T, s *Service) {
 }
 
 func TestReceiptStrictWire(t *testing.T) {
-	input := `{"schema_version":1,"campaign_id":"crowdsec-postgres-paths-v1","content_sha256":"30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619","epoch":"79446cce-0778-4509-9bd1-b4c13ef728bb","cutoff_at":"2026-10-19T00:00:00.000000Z","expected_count":0,"issued_at":"2026-10-19T00:00:00.000001Z"}`
+	input := `{"schema_version":1,"campaign_id":"crowdsec-postgres-paths-v1","content_sha256":"bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc","epoch":"79446cce-0778-4509-9bd1-b4c13ef728bb","cutoff_at":"2026-10-19T00:00:00.000000Z","expected_count":0,"issued_at":"2026-10-19T00:00:00.000001Z"}`
 	if _, err := parseReceipt([]byte(input), false); err != nil {
 		t.Fatal("valid receipt rejected")
 	}
