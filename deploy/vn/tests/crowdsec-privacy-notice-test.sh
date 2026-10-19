@@ -621,10 +621,11 @@ app() {
   else
     [[ $(wc -c <"$work/out") -le 4096 && $(tail -c 1 "$work/out") == '' ]] || fail 'aggregate output framing'
     [[ $(jq -Sc . "$work/out") == "$(jq -Sc . "$work/aggregate")" ]] || fail 'aggregate output changed'
-  fi
+  fi; cp /var/lib/aboutme/fence.json "$work/owner-baseline"
 }
-# Compatible ordinary mail may restart with reconciliation retained; only notice claim/send and changed ingestion authority remain denied. Actual SMTP
-# claim/send gates are exercised by the backend worker tests in full CI.
+# Reset only known synthetic fixture state, never production recovery or automatic release.
+invalid_aggregate() { refuse bash "$wrapper" "${1:-authorize-send}"; jq -e '.operation_kind=="deploy" and (.operation_id|type=="string")' /var/lib/aboutme/fence.json >/dev/null || fail 'invalid post-call output released owner'; cp "$work/owner-baseline" /var/lib/aboutme/fence.json; }
+# Reconciliation permits ordinary mail startup; notice SMTP claim/send gates remain backend full-CI proofs.
 "$fence" check 999999 aboutme-server >"$work/out" 2>"$work/err" || fail 'notice marker blocked compatible ordinary mail'
 refuse bash "$wrapper" enqueue; refuse bash "$wrapper" authorize-send
 # Independent reconciliation is represented only by fixture setup, never by a host operation deriving success from a restored queue.
@@ -651,13 +652,13 @@ for mutation in '.extra=true' '.schema_version=2' '.expected_count=2' \
   '.cutoff_at="2026-10-19T01:02:03Z"' '.counts.failed=1' \
   '.recovery_count=9223372036854775808' '.actual_count=0'; do
   jq "$mutation" "$work/sealed" >"$work/aggregate"
-  refuse bash "$wrapper" authorize-send; cmp -s "$authority/send.json" "$work/current-send" || fail 'invalid aggregate changed authority'
+  invalid_aggregate; cmp -s "$authority/send.json" "$work/current-send" || fail 'invalid aggregate changed authority'
 done
 for contents in '{}' '{} {}' '{"schema_version":1,"schema_version":1}' '{bad}'; do
-  printf '%s\n' "$contents" >"$work/aggregate"; refuse bash "$wrapper" authorize-send
+  printf '%s\n' "$contents" >"$work/aggregate"; invalid_aggregate
 done
-printf '\377\n' >"$work/aggregate"; refuse bash "$wrapper" authorize-send; head -c 4097 /dev/zero >"$work/aggregate"; refuse bash "$wrapper" authorize-send
-cp "$work/sealed" "$work/aggregate"; NOTICE_APP_ERROR=1 refuse bash "$wrapper" authorize-send; printf '0\n' >"$work/app-exit"; refuse bash "$wrapper" authorize-send
+printf '\377\n' >"$work/aggregate"; invalid_aggregate; head -c 4097 /dev/zero >"$work/aggregate"; invalid_aggregate
+cp "$work/sealed" "$work/aggregate"; NOTICE_APP_ERROR=1 invalid_aggregate; printf '0\n' >"$work/app-exit"; invalid_aggregate
 printf '2\n' >"$work/app-exit"
 # A valid aggregate cannot authorize a different deployed release or image.
 cp /var/lib/aboutme/release.json "$work/current-release"
@@ -668,7 +669,7 @@ refuse bash "$wrapper" authorize-send; cp "$work/current-unit" "$work/units/abou
 for mutation in '.epoch="00000000-0000-4000-8000-000000000000"' '.expected_count=2' \
   '.content_sha256=("0"*64)' '.issued_at="9999-01-01T00:00:00.000000Z"' '.extra=true'; do
   jq "$mutation" "$work/current-send" >"$authority/send.json"
-  chmod 0444 "$authority/send.json"; refuse bash "$wrapper" enqueue
+  chmod 0444 "$authority/send.json"; if [[ $mutation == '.expected_count=2' ]]; then invalid_aggregate enqueue; else refuse bash "$wrapper" enqueue; fi
 done
 printf '{}\n' >"$authority/send.json"; refuse bash "$wrapper" enqueue; cp "$work/current-send" "$authority/send.json"
 jq '.result="activated" | .state="activated" | .counts={unqueued:0,queued:0,accepted:1,deleted:0,failed:0,cancelled:0}
@@ -693,7 +694,7 @@ cp "$work/late-failure" "$work/aggregate"; printf '1\n' >"$work/app-exit"; app 1
 for state in aborted retired; do
   jq --arg state "$state" '.result="blocked" | .state=$state | .activated_at=null
     | .aborted_at="2026-10-19T01:02:06.000000Z"' "$work/aggregate" >"$work/blocked"
-  cp "$work/blocked" "$work/aggregate"; printf '1\n' >"$work/app-exit"; app 1 status; refuse bash "$wrapper" authorize-send
+  cp "$work/blocked" "$work/aggregate"; printf '1\n' >"$work/app-exit"; app 1 status; invalid_aggregate
   [[ ! -e $authority/send.json ]] || fail 'terminal campaign received send authority'
 done
 printf 'PASS notice guest filesystem protocol\n'; printf 'notice reconciliation: not performed\n'
