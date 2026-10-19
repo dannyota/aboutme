@@ -41,7 +41,8 @@ func revokeNoticeFixture(t *testing.T, s *Service) {
 }
 
 func TestReceiptStrictWire(t *testing.T) {
-	input := `{"schema_version":1,"campaign_id":"crowdsec-postgres-paths-v1","content_sha256":"30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619","epoch":"79446cce-0778-4509-9bd1-b4c13ef728bb","cutoff_at":"2026-10-19T00:00:00.000000Z","expected_count":0,"issued_at":"2026-10-19T00:00:00.000001Z"}`
+	const digest = "bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc"
+	input := `{"schema_version":1,"campaign_id":"crowdsec-postgres-paths-v1","content_sha256":"` + digest + `","epoch":"79446cce-0778-4509-9bd1-b4c13ef728bb","cutoff_at":"2026-10-19T00:00:00.000000Z","expected_count":0,"issued_at":"2026-10-19T00:00:00.000001Z"}`
 	if _, err := parseReceipt([]byte(input), false); err != nil {
 		t.Fatal("valid receipt rejected")
 	}
@@ -64,11 +65,14 @@ func TestReceiptStrictWire(t *testing.T) {
 		"oversize":          input + strings.Repeat(" ", 4096),
 		"unicode":           strings.Replace(input, "crowdsec-postgres-paths-v1", `crowdsec-postgres-paths-v1\ud800`, 1),
 		"epoch version":     strings.Replace(input, "4509", "7509", 1),
-		"upper digest":      strings.Replace(input, "30746a25", "30746A25", 1),
+		"upper digest":      strings.Replace(input, digest, strings.ToUpper(digest), 1),
 		"trailing":          input + `{}`,
 		"utf8":              input + string([]byte{255}),
 	} {
 		t.Run(name, func(t *testing.T) {
+			if bad == input {
+				t.Fatal("invalid receipt fixture matches valid input")
+			}
 			if _, err := parseReceipt([]byte(bad), false); err == nil {
 				t.Fatal("invalid receipt accepted")
 			}

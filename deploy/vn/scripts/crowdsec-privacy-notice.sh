@@ -3,14 +3,14 @@
 set -euo pipefail
 # shellcheck source=../host/crowdsec-privacy-notice-host.sh
 source /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh 2>/dev/null || { printf 'invalid_state\n' >&2; exit 1; }
-readonly publication_date=2026-10-19
-readonly content_sha256=30746a25e9d1e8c8e638d22383f1b0acf1b0848f4eb2c283dd74f459db0ba619
+readonly publication_date=2026-10-20
+readonly content_sha256=bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc
 notice_manifest() {
   local line
   while IFS= read -r line; do LC_ALL=C printf '%s\n' "$line"; done <<'MANIFEST'
 aboutme-crowdsec-privacy-content-v1
 campaign_id=crowdsec-postgres-paths-v1
-publication_date=2026-10-19
+publication_date=2026-10-20
 canonical_link=https://aboutme.vn/privacy
 public_en=Attack protection uses your IP address, request time, method, response status, broad route class, and a fixed probe category. Only for unrecognized routes returning 400, 404, or 405, attack alert samples may include the exact escaped target path, without the query, up to 512 bytes. We do not record target paths for known routes, including account, API, and valid public resume routes. Invalid or oversized targets use a fixed category and no path. Queries, headers, and bodies are never included. The request feed stays in RAM; CrowdSec stores attack alert samples and bans, not a full access log. Live records are kept for at most 24 hours. Encrypted database backups in Vietnam may retain earlier records for about five weeks after deletion, under the backup policy below. Backups are used only for disaster recovery. Restored CrowdSec data is discarded before attack protection resumes. None of this data is shared with the CrowdSec community.
 public_vi=Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, phương thức, mã phản hồi, nhóm tuyến truy cập và nhóm dấu hiệu thăm dò cố định. Chỉ với tuyến không được nhận diện trả về mã 400, 404 hoặc 405, mẫu cảnh báo tấn công mới có thể chứa nguyên đường dẫn đích đã mã hóa ký tự, bỏ phần truy vấn, tối đa 512 byte. Chúng tôi không ghi đường dẫn đích của các tuyến đã biết, gồm tuyến tài khoản, API và CV công khai hợp lệ. Đích không hợp lệ hoặc quá dài chỉ được gán nhóm cố định, không ghi đường dẫn. Tham số truy vấn, tiêu đề và nội dung yêu cầu không được ghi. Dữ liệu yêu cầu nằm trong RAM; CrowdSec lưu mẫu cảnh báo tấn công và lệnh chặn, không lưu nhật ký đầy đủ mọi lượt truy cập. Bản ghi đang hoạt động được giữ tối đa 24 giờ. Bản sao lưu cơ sở dữ liệu được mã hóa tại Việt Nam có thể giữ bản ghi cũ trong khoảng năm tuần sau khi xóa, theo chính sách lưu bản sao bên dưới. Bản sao lưu chỉ dùng để khôi phục sau sự cố. Dữ liệu CrowdSec được khôi phục sẽ bị loại bỏ trước khi hệ thống chống tấn công hoạt động trở lại. Không dữ liệu nào được chia sẻ với cộng đồng CrowdSec.
@@ -93,10 +93,130 @@ notice_command() {
   notice_report=$(notice_wire report "$result" "$(notice_now)" <<<"$raw") || return 1
   notice_command_exit=$result
 }
+notice_initial_authority() {
+  notice_recheck_mount && notice_authority_check &&
+    cmp -s /var/lib/aboutme/privacy-notice/epoch /var/lib/aboutme/privacy-notice/initial-epoch || return 1
+  local name
+  for name in send.json activation.json capture-in-progress; do
+    notice_absent "/var/lib/aboutme/privacy-notice/$name" || return 1
+  done
+  if ! notice_absent /var/lib/aboutme/privacy-notice/restore-reconciliation; then
+    notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation &&
+      [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]] || return 1
+  fi
+}
+notice_initial_quiescent() {
+  aboutme_assert_cutover_quiescent || return 1
+  local unit jobs units rc=0
+  # Five-field SQLite protection may continue; changed ingestion has a separate activation gate.
+  for unit in aboutme-migrate aboutme-db-setup; do
+    notice_unit_stopped "$unit" || return 1
+  done
+  # shellcheck disable=SC2154 # notice_quiesce sources this array from deploy-safety.sh before this check.
+  for unit in "${aboutme_jobs[@]}"; do
+    notice_unit_stopped "aboutme-job-$unit.timer" && notice_unit_stopped "aboutme-job@$unit.service" || return 1
+  done
+  jobs=$(systemctl list-jobs --no-legend --no-pager) || return 1
+  [[ ! $jobs =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
+  units=$(systemctl list-units --all --state=active,activating,deactivating,reloading --no-legend --no-pager) || return 1
+  [[ ! $units =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
+  pgrep -f '([/]pgbackrest.*restore|[r]estore-drill.sh|[p]ostgres:.*recovery)' >/dev/null || rc=$?
+  [[ $rc == 1 ]]
+}
+notice_initial_bound() {
+  local state
+  notice_initial_authority && notice_release_read || return 1
+  [[ $notice_release == "$notice_initial_release" && $(cat /var/lib/aboutme/privacy-notice/epoch) == "$notice_initial_epoch" ]] || return 1
+  state=$(notice_fence read 2>/dev/null) || return 1
+  [[ $(jq -r '.notice_authority.state' <<<"$state") == adopted &&
+    $(jq -r '.operation_id' <<<"$state") == "$notice_initial_operation" &&
+    $(jq -r '.operation_kind' <<<"$state") == cutover ]] || return 1
+  [[ $(jq -c '.notice_authority' <<<"$state") == "$notice_initial_evidence" &&
+    $(jq -c '{minimum_release,minimum_tag}' <<<"$state") == "$notice_initial_floor" ]] || return 1
+  notice_safe_file /var/lib/aboutme/cutover-mutation.json 600 &&
+    jq -e --arg id "$notice_initial_operation" 'keys==["mutation_kind","operation_id","started_at","state"] and
+      .operation_id==$id and .mutation_kind=="quiesce" and .state=="active"' /var/lib/aboutme/cutover-mutation.json >/dev/null &&
+    notice_initial_quiescent
+}
+notice_initial_command() {
+  local raw image
+  image=$(jq -r .server_image <<<"$notice_initial_release") || return 1
+  # Preserve the kernel locks in every child, and reject surviving descendants.
+  raw=$(python3 -I - "$image" <<'PY'
+import ctypes,os,selectors,signal,subprocess,sys,time
+child=None
+try:
+    assert ctypes.CDLL(None,use_errno=True).prctl(36,1,0,0,0)==0
+    child=subprocess.Popen(['podman','run','--rm','--network=none','--memory=256m','--read-only','--cap-drop=ALL',
+        '--security-opt=no-new-privileges','--entrypoint','/usr/bin/env','--volume','/run/postgresql:/run/postgresql',
+        '--volume','/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro',
+        '--env','DATABASE_URL=postgres://aboutme_app@localhost/aboutme?host=/run/postgresql',
+        '--secret','db-app-password,type=env,target=PGPASSWORD',sys.argv[1],
+        'server','crowdsec-privacy-notice','reconcile-initial'],
+        stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,close_fds=False,start_new_session=True)
+    deadline=time.monotonic()+300; selector=selectors.DefaultSelector(); data=bytearray()
+    selector.register(child.stdout,selectors.EVENT_READ); selector.register(child.stderr,selectors.EVENT_READ)
+    while selector.get_map():
+        remaining=deadline-time.monotonic(); assert remaining>0
+        for key,_ in selector.select(remaining):
+            block=os.read(key.fileobj.fileno(),4097)
+            if not block: selector.unregister(key.fileobj); continue
+            assert key.fileobj is child.stdout
+            data.extend(block); assert len(data)<=4096
+    assert child.wait(timeout=max(0.001,deadline-time.monotonic()))==0
+    while True:
+        try:
+            pid,status=os.waitpid(-1,os.WNOHANG)
+            assert pid>0 and os.WIFEXITED(status) and os.WEXITSTATUS(status)==0
+        except ChildProcessError: break
+    assert data.endswith(b'\n') and data.count(b'\n')==1 and b'\r' not in data and b'\0' not in data
+    os.write(1,data)
+except Exception:
+    if child is not None:
+        try: os.killpg(child.pid,signal.SIGKILL)
+        except ProcessLookupError: pass
+        try: child.wait(timeout=5)
+        except subprocess.TimeoutExpired: pass
+    sys.exit(1)
+PY
+  ) || return 1
+  notice_initial_report=$(notice_wire initial 0 <<<"$raw")
+}
+notice_reconcile_initial() {
+  local state dependency
+  for dependency in crowdsec-privacy-notice-host.sh fence.sh deploy-safety.sh workload-lock.sh; do
+    notice_safe_file "/usr/local/lib/aboutme/$dependency" 755 || return 1
+  done
+  notice_identity=$(notice_mount_identity) || return 1
+  exec {notice_initial_bundle_fd}>>/srv/data/host-operations/.bundle.lock || return 1
+  flock -x -w 30 "$notice_initial_bundle_fd" || return 1
+  notice_initial_authority && notice_release_read || return 1
+  notice_initial_release=$notice_release
+  notice_initial_epoch=$(cat /var/lib/aboutme/privacy-notice/epoch) || return 1
+  state=$(notice_fence read 2>/dev/null) || return 1
+  [[ $(jq -r '.notice_authority.state' <<<"$state") == adopted && $(jq -r '.operation_id // empty' <<<"$state") == '' ]] || return 1
+  notice_initial_evidence=$(jq -c '.notice_authority' <<<"$state")
+  notice_initial_floor=$(jq -c '{minimum_release,minimum_tag}' <<<"$state")
+  notice_initial_operation=$(notice_fence lock cutover "$notice_tag" 2>/dev/null) || return 1
+  [[ $notice_initial_operation =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || return 1
+  exec {notice_initial_fd}>>/run/aboutme/workload.lock || return 1
+  flock -x -w 300 "$notice_initial_fd" || return 1
+  notice_initial_authority && notice_release_read && [[ $notice_release == "$notice_initial_release" ]] || return 1
+  notice_fence checkpoint "$notice_initial_operation" "$notice_tag" >/dev/null 2>&1 || return 1
+  notice_quiesce >/dev/null && notice_initial_quiescent || return 1
+  notice_fence mutation-start "$notice_initial_operation" "$notice_tag" quiesce >/dev/null 2>&1 || return 1
+  notice_initial_bound && notice_initial_command && notice_initial_bound || return 1
+  notice_revoke restore-reconciliation && notice_initial_bound &&
+    notice_absent /var/lib/aboutme/privacy-notice/restore-reconciliation || return 1
+  notice_fence mutation-clear "$notice_initial_operation" quiesce >/dev/null 2>&1 || return 1
+  exec {notice_initial_fd}>&-
+  notice_fence release "$notice_initial_operation" >/dev/null 2>&1 || return 1
+  printf '%s\n' "$notice_initial_report"
+}
 notice_owner_run() {
   [[ $(id -u) == 0 && $# == 1 ]] && notice_overrides_absent || return 1
   local action=$1 snapshot receipt previous
-  case $action in prepare|enqueue|status|activate|authorize-send) ;; adopt) /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh adopt; return ;; *) return 1 ;; esac
+  case $action in prepare|enqueue|status|activate|authorize-send) ;; reconcile-initial) notice_reconcile_initial; return ;; adopt) /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh adopt; return ;; *) return 1 ;; esac
   # shellcheck disable=SC2034 # Used by the sourced canonical mount recheck.
   notice_identity=$(notice_mount_identity) || return 1
   notice_authority_check && notice_absent /var/lib/aboutme/privacy-notice/restore-reconciliation || return 1

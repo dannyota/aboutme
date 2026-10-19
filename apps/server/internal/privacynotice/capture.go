@@ -26,7 +26,7 @@ type Service struct {
 	authorityFS fs.FS
 }
 
-// New permits a keyless service for capture, status, and activation.
+// New permits a keyless service for every action except enqueue.
 func New(pool *store.Pool, outbox *authmail.Outbox, now func() time.Time) (*Service, error) {
 	if pool == nil || now == nil {
 		return nil, ErrState
