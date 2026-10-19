@@ -18,6 +18,6 @@ useSiteSeo(() => ({
   <LegalDocument
     :document="copy.terms"
     testid="terms-page"
-    :updated="copy.updated"
+    :updated="copy.termsUpdated"
   />
 </template>

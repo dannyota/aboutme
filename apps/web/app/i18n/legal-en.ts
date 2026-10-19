@@ -3,7 +3,8 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  updated: 'Last updated October 11, 2026',
+  privacyUpdated: 'Last updated October 19, 2026',
+  termsUpdated: 'Last updated October 11, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
   verifyLink: 'Verify',
@@ -57,16 +58,21 @@ export const legalEn: LegalCopy = {
           + 'tokens are stored only as hashes.',
           'Ordinary server operational logs do not record request IP '
           + 'addresses or request headers and are kept for up to 30 days.',
-          'Attack protection: CrowdSec receives a five-field request feed '
-          + 'with the UTC timestamp, source IP address, HTTP method, response '
-          + 'status, and broad route class. The feed does not record the '
-          + 'specific path or URI, query string, request or response '
-          + 'headers, or request or response body. The feed stays only in '
-          + 'RAM. CrowdSec attack alerts and bans are stored on the '
-          + 'encrypted Vietnam data volume. We keep the feed and all '
-          + 'CrowdSec attack records, including HTTP and SSH alerts and '
-          + 'bans, for at most 24 hours. None of this data is shared with '
-          + 'the CrowdSec community.',
+          'Attack protection uses your IP address, request time, method, '
+          + 'response status, broad route class, and a fixed probe category. '
+          + 'Only for unrecognized routes returning 400, 404, or 405, attack '
+          + 'alert samples may include the exact escaped target path, without '
+          + 'the query, up to 512 bytes. We do not record target paths for '
+          + 'known routes, including account, API, and valid public resume '
+          + 'routes. Invalid or oversized targets use a fixed category and '
+          + 'no path. Queries, headers, and bodies are never included. The '
+          + 'request feed stays in RAM; CrowdSec stores attack alert samples '
+          + 'and bans, not a full access log. Live records are kept for at '
+          + 'most 24 hours. Encrypted database backups in Vietnam may retain '
+          + 'earlier records for about five weeks after deletion, under the '
+          + 'backup policy below. Backups are used only for disaster recovery. '
+          + 'Restored CrowdSec data is discarded before attack protection '
+          + 'resumes. None of this data is shared with the CrowdSec community.',
           'Password check: when you set a password, we check whether it '
           + 'has appeared in a known breach using Have I Been Pwned. Only '
           + 'the first 5 characters of its SHA-1 hash are sent, never the '
