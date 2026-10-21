@@ -251,12 +251,14 @@ SH
   export PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   retention_fixture_case=fixture-fence-initialization
   /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
-  retention_fixture_case=fixture-fence-ownership
-  retention_fixture_owner=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
-  retention_fixture_case=fixture-fence-mutation
-  /usr/local/lib/aboutme/fence.sh mutation-start "$retention_fixture_owner" v0.8.9 reset-db >/dev/null 2>&1
+  if [[ ${retention_fixture_migration:-no} != yes ]]; then
+    retention_fixture_case=fixture-fence-ownership
+    retention_fixture_owner=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
+    retention_fixture_case=fixture-fence-mutation
+    /usr/local/lib/aboutme/fence.sh mutation-start "$retention_fixture_owner" v0.8.9 reset-db >/dev/null 2>&1
+  fi
   retention_fixture_case=fixture-postgresql-provision
-  printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$retention_fixture_owner" |
+  printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "${retention_fixture_owner:-}" |
     /usr/local/lib/aboutme/crowdsec-provision.sh fresh >/dev/null 2>&1
   # shellcheck disable=SC2034 # The caller's ERR trap reads this fixed case name.
   retention_fixture_case=fixture-postgresql-ready
@@ -315,12 +317,19 @@ spawn() {
 verb=$1
 shift
 case $verb in
+  list-units) exit 0 ;;
   is-enabled | is-active)
+    if [[ -e $fixture/migration-controls ]]; then
+      unit=${!#}
+      if [[ $verb == is-enabled ]]; then [[ -e $fixture/enabled/$unit ]]; exit; fi
+      if [[ $unit == *.timer ]]; then [[ -e $fixture/active/$unit ]]; exit; fi
+    fi
     [[ $* == *timer* ]] && exit 0
     unit=${!#}; pid_for; ((pid>0)) ;;
   show)
     unit=${!#}; pid_for
     state=inactive; ((pid==0)) || state=active
+    if [[ $unit == *.timer && -e $fixture/active/$unit ]]; then state=active; fi
     if [[ $* == *--value* ]]; then printf '%s\n' "$state"
     elif [[ $* == *--property=MainPID* ]]; then
       printf 'ActiveState=%s\nJob=\nMainPID=%s\nControlPID=0\nControlGroup=\n' "$state" "$pid"
@@ -334,12 +343,18 @@ case $verb in
         for _ in {1..20}; do pid_for; ((pid>0)) || break; sleep 0.1; done
         if ((pid>0)); then kill -KILL "$pid"; fi
       fi
-      rm -f -- "$fixture/pids/$unit"
+      rm -f -- "$fixture/pids/$unit" "$fixture/active/$unit"
     done ;;
   start | restart)
     for unit in "$@"; do
-      /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
-      /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh >/dev/null 2>&1
+      if [[ $unit == aboutme-crowdsec-retention-startup.service ]]; then
+        /usr/local/lib/aboutme/crowdsec-retention.sh startup >/dev/null 2>&1
+        continue
+      fi
+      if [[ ! -e $fixture/sqlite-consumers ]]; then
+        /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
+        /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh >/dev/null 2>&1
+      fi
       case $unit in
         crowdsec.service) spawn /usr/bin/crowdsec -c /etc/crowdsec/config.yaml ;;
         crowdsec-firewall-bouncer.service)
@@ -361,7 +376,14 @@ case $verb in
         [[ -n $(ss -Hln 'sport = :8095') ]]
       fi
     done ;;
-  mask | unmask | disable | enable | daemon-reload) exit 0 ;;
+  enable)
+    [[ -e $fixture/migration-controls ]] || exit 0
+    for unit in "$@"; do
+      [[ $unit != --* ]] || continue
+      touch "$fixture/enabled/$unit"
+      if [[ $* == *--now* ]]; then touch "$fixture/active/$unit"; fi
+    done ;;
+  mask | unmask | disable | daemon-reload) exit 0 ;;
   *) exit 1 ;;
 esac
 SH
