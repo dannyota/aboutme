@@ -1,12 +1,35 @@
 # Firewall bouncer overrides (docs/design/vietnam-production.md, "Edge").
 # The bouncer acts only on SSH decisions; the Caddy bouncer handles HTTP.
-# api_key is not in the repository: install.sh registers the bouncer with
-# `cscli bouncers add`, keeps the key on the data volume, and appends it to
-# the installed copy of this file.
+# Owning activation creates the managed key on encrypted storage. Ordinary
+# installation preserves it and appends it only to the protected installed copy.
 api_url: http://127.0.0.1:8095/
 mode: nftables
-log_mode: stdout
-log_level: info
+log_mode: file
+log_dir: /run/aboutme/crowdsec
+log_level: error
+log_compression: false
+log_max_size: 1
+log_max_backups: 1
+log_max_age: 1
+deny_log: false
+update_frequency: 10s
+blacklists_ipv4: crowdsec-blacklists
+blacklists_ipv6: crowdsec6-blacklists
+nftables:
+  ipv4:
+    enabled: true
+    set-only: true
+    table: crowdsec
+    chain: crowdsec-chain
+    priority: -10
+  ipv6:
+    enabled: true
+    set-only: true
+    table: crowdsec6
+    chain: crowdsec6-chain
+    priority: -10
+nftables_hooks:
+  - input
 scenarios_containing:
   - ssh
 deny_action: DROP

@@ -3,7 +3,8 @@ Description=aboutme CrowdSec runtime retention
 # The timer catches up a missed run at boot. The runtime pass waits for the
 # startup gate and runs only while it is active, so the two never delete the
 # same rotated files at once.
-After=aboutme-crowdsec-retention-startup.service crowdsec.service
+After=aboutme-crowdsec-retention-startup.service crowdsec.service postgresql@18-main.service
+Requires=postgresql@18-main.service
 Requisite=aboutme-crowdsec-retention-startup.service
 OnFailure=aboutme-crowdsec-retention-failure.service
 
