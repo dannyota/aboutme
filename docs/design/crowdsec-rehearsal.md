@@ -68,34 +68,47 @@ apply, verify every planned write names only this run's new resources.
 Revalidate the quote if plan inputs change. The primary reviews the concrete
 plan normally.
 
-For that allowance, the primary reads the existing HCM04 project's console
-Information panel: **Total quota** and **Total usage**, not bucket-size sums.
-Record a private `storage-allowance.json` in the run's fixed scratch directory:
-version 1, run ID, exact project/region, observation UTC time, displayed numeric
-values/units/precision, conservative quota-lower and usage-upper bytes, and the
-digest of the private cropped evidence. Capture no keys or account details. The
-primary verifies the transcription; this is evidence input, not a bypass flag or
-caller-selected API endpoint. Bind it to the plan and refresh before `run`; it
-must be at most five minutes old before the first resource creation.
+Use the HCM04 console Information panel's **Total quota** / **Total usage**, or
+a fixed read-only adapter for the
+[recorded project fields](https://github.com/dannyota/vngcloud/blob/master/docs/design/storage-api.md#project),
+`totalQuota` / `usage` in GB. Reuse SDK runtime authentication/profile selection
+and its `WithTransport` hook on `storage.ListProjects`, filtering before typed
+decoding discards usage. Its metadata routes are only HTTPS GET
+`https://vstorage.console.greennode.ai/internal/v1/regions` and
+`/internal/v1/projects`; resolve HCM04 uniquely, then send both `region` and
+`region_id` UUID headers. Preserve existing authentication and redirect guards;
+no new SDK API, arbitrary URL, selector, credential export, or provider write is
+introduced.
 
-Use exact integer byte arithmetic: `quota_lower_bytes - usage_upper_bytes` must
-be at least 2,147,483,648. Exact byte counters need no rounding allowance. For
-rounded displays subtract one displayed quantum from quota and add one to usage
-before converting. For GB without a stated decimal/binary convention, use
-1,000,000,000 bytes for the quota lower bound and 1,073,741,824 for the usage
-upper bound. Reject negative/nonfinite values, absent/ambiguous units, identity
-mismatch, stale observation, missing evidence, or an insufficient bound before
-any create. Omitted usage is never zero. The current SDK's quota-only Project
-type cannot supply this proof; invent no `used` field.
+Bound the read to 30 seconds and 1 MiB. Require HTTP 200, successful envelope,
+complete `datas` (or `data`) array, and exactly one manifest-project match with
+matching region ID/name. Reject duplicate fields/identities and missing, null,
+string, negative, or nonfinite quota/usage. Keep the raw response in memory
+only; never log it, authentication data, or provider error text. Persist only
+selected project/region, quota/usage numeric lexemes, GB units, and local
+observation UTC. Standard output carries only numeric aggregates and fixed
+outcomes.
 
-This gate measures reported project capacity at observation time. Provider
-documentation does not specify Total usage refresh lag or multipart accounting;
-the evidence must state both limits. It is not a reservation or a guarantee
-about unreported in-flight parts or later writes. No bucket-sum inference,
-project-wide object scan, new paid project, quota change, or additional
-freshness claim replaces this operational observation. A storage-full response
-during the rehearsal fails it and enters cleanup; never expand capacity
-automatically.
+Record private `storage-allowance.json` in the run's fixed scratch directory:
+version 1, run/plan identity, selected project/region, source kind, observation
+UTC, values/units/precision, conservative byte bounds, and evidence digest. API
+evidence is the filtered numeric record; console evidence is a private cropped
+capture with primary-verified transcription. Neither contains keys or unrelated
+account data. Refresh before `run`: observation must be at most five minutes old
+before the first create. Missing evidence or identity mismatch refuses.
+
+Require integer `quota_lower_bytes - usage_upper_bytes >= 2147483648`. Exact
+bytes need no adjustment; rounded displays subtract one quantum from quota and
+add one to usage. Raw GB numbers retain decimal precision. Where GB's
+decimal/binary convention is unstated, use 1,000,000,000 for quota and
+1,073,741,824 for usage. Reject absent/ambiguous units or an insufficient bound;
+omitted usage is never zero. The SDK's quota-only Project value is insufficient.
+
+This is provider-reported allowance at observation time, not a reservation.
+State that provider refresh lag and multipart accounting are undocumented; claim
+no guarantee about unreported parts or later writes. Bucket-size sums,
+project-wide object scans, new projects, and quota changes cannot replace it. A
+storage-full response fails the rehearsal and enters cleanup, never expansion.
 
 Origin is exactly `https://cs-rehearsal-<run-id>.aboutme.vn`. Create only that
 DNS-only A record in the existing zone, TTL 300, pointing at this host's
@@ -435,7 +448,3 @@ independent adversarial review and green CI precede the actual rehearsal.
   [host limits](vietnam-host-memory.md), [cutover](crowdsec-cutover.md),
   [HTTP contract](../api/openapi.yaml), and
   [resource patterns](../../deploy/vn/README.md).
-
-The kernel sources define counters; this document selects measurement criteria.
-The vngcloud source was read from the local first-party checkout. No
-secondary-source statement supplies an API or acceptance rule.
