@@ -631,7 +631,7 @@ function checkJobTimeouts(ci, vn) {
   }
   assert.equal(ci.jobs["vn-infra"]["timeout-minutes"], undefined, "reusable VN caller inherits timeouts");
   for (const [name, job] of Object.entries(vn.jobs)) {
-    assert.equal(job["timeout-minutes"], 10, `VN ${name}: timeout-minutes`);
+    assert.equal(job["timeout-minutes"], name === "crowdsec-integration" ? 20 : 10, `VN ${name}: timeout-minutes`);
   }
 }
 
