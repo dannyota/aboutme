@@ -17,6 +17,7 @@ retention_sql() {
   cat <<'SQL'
 SET statement_timeout = '10s';
 SET lock_timeout = '2s';
+SET jit = off;
 SET TIME ZONE 'UTC';
 CREATE TEMP TABLE bounds AS SELECT :'pass_time'::timestamptz AS at,
   :'pass_time'::timestamptz - interval '23 hours' AS cutoff;
