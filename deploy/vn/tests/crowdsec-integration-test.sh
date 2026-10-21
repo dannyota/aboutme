@@ -114,7 +114,8 @@ assert effective['api_key'] not in trace and 'API_KEY=' not in trace
 PY
 
 integration_body() {
-trap 'echo "FAIL real-consumer-proof" >&2' ERR
+integration_stage=consumers
+trap 'printf "FAIL real-consumer-proof %s\n" "$integration_stage" >&2' ERR
 ip link set lo up
 install -d -o 10001 -g 10001 -m 0700 /run/aboutme/caddy-log/crowdsec
 install -o 10001 -g 10001 -m 0600 /dev/null "$feed"
@@ -465,6 +466,7 @@ printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-d
 
 # Restoration drops old samples, statistics and registrations rather than
 # cleaning rows in place. The application sentinel stays in its own database.
+integration_stage=restore-reset
 runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
   -h /run/postgresql -d crowdsec >/dev/null 2>&1 <<'SQL'
 ALTER TABLE public.alerts ALTER COLUMN source_ip SET STATISTICS 1;
@@ -482,6 +484,7 @@ printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$op" |
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 [[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
 old_key=$(sha256sum "$retention_fixture/caddy.key" | cut -d' ' -f1)
+integration_stage=restore-registrations
 crowdsec_admitted_cli machines add -a --force --error >/dev/null 2>&1
 crowdsec_admitted_cli bouncers add aboutme-firewall -o raw >"$retention_fixture/firewall.key" 2>/dev/null
 install -m 0600 "$retention_fixture/caddy.key" "$retention_fixture/old-caddy.key"
@@ -490,6 +493,7 @@ crowdsec_admitted_cli bouncers add aboutme-caddy -o raw >"$retention_fixture/cad
 cat "$edge/bouncers/crowdsec-firewall-bouncer.yaml.local" >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
 printf 'api_key: %s\n' "$(cat "$retention_fixture/firewall.key")" >>/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
+integration_stage=restore-consumers
 systemctl start crowdsec.service
 old_code=$(printf 'header = "X-Api-Key: %s"\n' "$(cat "$retention_fixture/old-caddy.key")" |
   curl -s -o /dev/null -w '%{http_code}' --max-time 5 -K - http://127.0.0.1:8095/v1/decisions)

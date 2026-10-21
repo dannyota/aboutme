@@ -144,6 +144,10 @@ jobs:
           sudo swapoff -a
           sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
             bash deploy/vn/tests/crowdsec-retention-test.sh postgresql
+      - name: Test restored PostgreSQL role boundaries
+        run: |
+          sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
+            bash deploy/vn/tests/crowdsec-restore-test.sh postgresql
 
   crowdsec-cutover:
     runs-on: ubuntu-24.04

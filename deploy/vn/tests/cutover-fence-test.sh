@@ -27,9 +27,10 @@ if [[ ${1:-} == systemd ]]; then
     exit "$result"
   }
   trap cleanup_guest EXIT
-  trap 'echo "FAIL systemd-cutover-boundary" >&2' ERR
+  systemd_stage=helpers
+  trap 'printf "FAIL systemd-cutover-boundary %s\n" "$systemd_stage" >&2' ERR
   for helper in crowdsec-db crowdsec-provision crowdsec-cutover-state crowdsec-privacy-notice-host \
-    crowdsec-retention crowdsec-retention-lease-check crowdsec-retention-fail crowdsec-vacuum; do
+    crowdsec-retention crowdsec-retention-lease-check crowdsec-retention-fail crowdsec-vacuum workload-lock; do
     install -m 0755 "$repo_root/deploy/vn/host/$helper.sh" "$lib/$helper.sh"
   done
   install -m 0755 "$repo_root/deploy/vn/scripts/fence.sh" "$lib/fence.sh"
@@ -40,11 +41,29 @@ if [[ ${1:-} == systemd ]]; then
   install -d -m 0700 /run/aboutme/crowdsec
   install -d -o 10001 -g 10001 -m 0750 /run/aboutme/caddy-log
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
+  systemd_stage=notice-initialize
   "$lib/fence.sh" init >/dev/null 2>&1
   "$lib/crowdsec-privacy-notice-host.sh" initialize >/dev/null 2>&1
-  install -m 0444 /dev/null /var/lib/aboutme/privacy-notice/activation.json
   printf '{"release_tag":"v0.8.9","release_number":8009,"maintenance_tag":"v0.8.9"}\n' >/var/lib/aboutme/release.json
   chmod 0644 /var/lib/aboutme/release.json
+  # Use the installed authority writer for a synthetic zero-recipient receipt.
+  # The notice suite proves application reconciliation and delivery separately.
+  # shellcheck source=/dev/null
+  source "$lib/crowdsec-privacy-notice-host.sh"
+  # shellcheck disable=SC2034 # The sourced authority writer consumes this mount identity.
+  notice_identity=$(notice_mount_identity)
+  notice_authority_check
+  notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation
+  [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]]
+  jq -cn --arg epoch "$(cat /var/lib/aboutme/privacy-notice/epoch)" \
+    '{schema_version:1,campaign_id:"crowdsec-postgres-paths-v1",content_sha256:"bb128b39501f09db59915f3f75759572a49349ec78fe17ad48b6ba40d500ffdc",cutoff_at:"2026-01-01T00:00:00.000000Z",expected_count:0,epoch:$epoch,accepted_count:0,deleted_count:0,activated_at:"2026-01-01T00:00:00.000000Z"}' |
+    notice_wire activation 0 "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" | notice_replace activation.json
+  if "$lib/fence.sh" check-current crowdsec.service >/dev/null 2>&1; then
+    echo 'FAIL notice-reconciliation-start-refusal' >&2; exit 1
+  fi
+  notice_revoke restore-reconciliation
+  "$lib/fence.sh" check-current crowdsec.service
+  systemd_stage=units
   # Real manager invocations/cgroups and real PostgreSQL/retention; consumer
   # payloads here are bounded sleeps, not production images or cache proof.
   for unit in aboutme-server aboutme-web aboutme-caddy aboutme-maintenance crowdsec crowdsec-firewall-bouncer; do
@@ -75,6 +94,7 @@ UNIT
   systemctl daemon-reload
   systemctl stop aboutme-watch.timer aboutme-watch.service aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer
   systemctl disable aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer >/dev/null 2>&1
+  systemd_stage=reset
   owner=$("$lib/fence.sh" lock cutover v0.8.9)
   "$lib/fence.sh" mutation-start "$owner" v0.8.9 reset-db
   printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$owner" | "$lib/crowdsec-provision.sh" restore-reset >/dev/null 2>&1
@@ -82,6 +102,7 @@ UNIT
   for unit in aboutme-migrate.service aboutme-job@privacy-retention-sweep.service aboutme-crowdsec-retention.timer; do
     if "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit" >/dev/null 2>&1; then exit 1; fi
   done
+  systemd_stage=safety
   "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-vacuum.service
   "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-retention-startup.service
   if "$lib/crowdsec-retention-lease-check.sh" >/dev/null 2>&1; then exit 1; fi
@@ -101,6 +122,7 @@ UNIT
   done
   cp -p "$guest/lease" /run/aboutme/crowdsec-retention-ok
   "$lib/fence.sh" cutover-watch "$owner" v0.8.9
+  systemd_stage=consumers
   for unit in crowdsec crowdsec-firewall-bouncer aboutme-web aboutme-server aboutme-caddy; do
     "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"
   done
@@ -111,6 +133,7 @@ UNIT
   mv /etc/systemd/system/aboutme-crowdsec-vacuum.timer "$guest/vacuum.timer"
   ln -s /dev/null /etc/systemd/system/aboutme-crowdsec-vacuum.timer
   systemctl daemon-reload
+  systemd_stage=completion-refusal
   if "$lib/fence.sh" cutover-complete "$owner" v0.8.9 >/dev/null 2>&1; then exit 1; fi
   [[ -f /var/lib/aboutme/cutover-mutation.json ]]
   [[ $("$lib/fence.sh" read | jq -r .operation_id) == "$owner" ]]
@@ -121,6 +144,7 @@ UNIT
   rm /etc/systemd/system/aboutme-crowdsec-vacuum.timer
   mv "$guest/vacuum.timer" /etc/systemd/system/aboutme-crowdsec-vacuum.timer
   systemctl daemon-reload
+  systemd_stage=completion-recovery
   systemctl stop aboutme-crowdsec-retention-startup.service
   for unit in aboutme-crowdsec-vacuum aboutme-crowdsec-retention-startup aboutme-crowdsec-retention; do
     "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"

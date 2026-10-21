@@ -306,7 +306,9 @@ case $verb in
     unit=${!#}; pid_for
     state=inactive; ((pid==0)) || state=active
     if [[ $* == *--value* ]]; then printf '%s\n' "$state"
-    else printf 'ActiveState=%s\nJob=\nMainPID=%s\nControlPID=0\nControlGroup=\n' "$state" "$pid"; fi ;;
+    elif [[ $* == *--property=MainPID* ]]; then
+      printf 'ActiveState=%s\nJob=\nMainPID=%s\nControlPID=0\nControlGroup=\n' "$state" "$pid"
+    else printf 'ActiveState=%s\nJob=\n' "$state"; fi ;;
   stop | kill)
     for unit in "$@"; do
       [[ $unit != --* ]] || continue

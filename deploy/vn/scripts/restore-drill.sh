@@ -73,7 +73,7 @@ SQL
   [[ $out == f ]] || return 1
   printf 'PASS aboutme_app has no CREATE on schema public\n'
   out=$(notice_sql <<'SQL'
-SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_roles
+SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_catalog.pg_authid
  WHERE rolname !~ '^pg_' AND rolname <> 'postgres'
  AND (rolname <> 'crowdsec' OR (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
  AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
