@@ -39,12 +39,22 @@ only=${ABOUTME_INSTALL_ONLY:-}
 case $only in "" | postgres | crowdsec-stage) ;; *) die "invalid installation mode" ;; esac
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
-[ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
+if [[ $only == crowdsec-stage ]]; then
+  [[ $# == 3 && $2 =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ && $3 =~ ^[0-9a-f]{64}$ ]] || die "invalid cutover bundle binding"
+  stage_tag=$2 stage_digest=$3
+else [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"; fi
 bundle=$(readlink -f "$1")
 # Steps run as other users (setpriv, runuser); they need a directory they can
 # enter, not the caller's home.
 cd /
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
+if [[ $only == crowdsec-stage ]]; then
+  [[ ! -L $1 && $(stat -c '%u:%g:%a' "$bundle") == 0:0:700 &&
+    -f $bundle/archive.tar && ! -L $bundle/archive.tar &&
+    $(stat -c '%u:%g:%a:%h' "$bundle/archive.tar") == 0:0:600:1 ]] || die "unsafe cutover bundle"
+  printf '%s  %s\n' "$stage_digest" "$bundle/archive.tar" | sha256sum --check --status || die "cutover archive differs"
+  tar -C "$bundle" --compare -f "$bundle/archive.tar" >/dev/null 2>&1 || die "cutover payload differs"
+fi
 # Validate the incoming denial primitive before any persistent-state access.
 # shellcheck source=crowdsec-privacy-notice-host.sh
 source "$bundle/host/crowdsec-privacy-notice-host.sh"
@@ -85,7 +95,7 @@ done
 
 # Inactive transition staging installs controls and peer policy only. The old
 # storage, parser, serving images, feeds and consumers remain untouched.
-if [[ $only == crowdsec-stage ]]; then
+crowdsec_stage() {
   [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || die 'fence lock missing'
   exec {stage_fd}>>/var/lib/aboutme/fence.lock
   flock -x -w 30 "$stage_fd" || die 'fence is busy'
@@ -108,7 +118,13 @@ if [[ $only == crowdsec-stage ]]; then
     install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/$config" "/etc/postgresql/18/main/$config"
   done
   install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" /etc/postgresql/18/main/conf.d/90-aboutme.conf
-  say 'CrowdSec inactive controls staged'
+  # Keep the outer bundle lock while the ordinary fence helper reacquires the
+  # canonical lock and checks current ownership. Never recursively flock it.
+  exec {stage_fd}>&- || die 'cannot close staging fence guard'
+  /usr/local/lib/aboutme/fence.sh lock cutover "${stage_tag:?validated cutover release required}" || die 'cutover ownership refused'
+}
+if [[ $only == crowdsec-stage ]]; then
+  crowdsec_stage
   exit 0
 fi
 

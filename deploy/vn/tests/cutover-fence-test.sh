@@ -103,6 +103,15 @@ UNIT
     if "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit" >/dev/null 2>&1; then exit 1; fi
   done
   systemd_stage=safety
+  cp /var/lib/aboutme/release.json "$guest/current-release.json"
+  for configured_release in 8008 8010; do
+    jq --argjson number "$configured_release" '.release_number=$number' "$guest/current-release.json" >/var/lib/aboutme/release.json
+    if "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-vacuum.service >/dev/null 2>&1; then
+      echo 'FAIL manager-unit-release-mismatch'; exit 1
+    fi
+    [[ ! -e /run/aboutme/crowdsec-cutover/permit.json ]]
+  done
+  cp "$guest/current-release.json" /var/lib/aboutme/release.json
   "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-vacuum.service
   "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-retention-startup.service
   if "$lib/crowdsec-retention-lease-check.sh" >/dev/null 2>&1; then exit 1; fi
@@ -125,6 +134,9 @@ UNIT
   systemd_stage=consumers
   for unit in crowdsec crowdsec-firewall-bouncer aboutme-web aboutme-server aboutme-caddy; do
     "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"
+  done
+  for setup_unit in aboutme-db-setup aboutme-db-setup.service; do
+    if "$lib/fence.sh" check 8009 "$setup_unit" >/dev/null 2>&1; then exit 1; fi
   done
   if "$lib/fence.sh" check-current aboutme-caddy.service >/dev/null 2>&1; then exit 1; fi
   if "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-maintenance.service >/dev/null 2>&1; then exit 1; fi
@@ -173,6 +185,7 @@ cat >"$work/bin/id" <<'STUB'
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
+case ${1-} in stop|start|disable|enable|kill|restart) printf '%s\n' "$*" >>"$CUTOVER_EFFECTS" ;; esac
 if [[ ${1-} == is-active && ${3-} == aboutme-maintenance ]]; then exit 0; fi
 exit 1
 STUB
@@ -189,7 +202,7 @@ cat >"$work/bin/mountpoint" <<'STUB'
 exit "${MOUNT_ABSENT:-0}"
 STUB
 chmod +x "$work/bin/"*
-export PATH=$work/bin:$PATH FENCE_DIR=$work/fence FENCE_SAFETY_LIB=$safety
+export PATH=$work/bin:$PATH FENCE_DIR=$work/fence FENCE_SAFETY_LIB=$safety CUTOVER_EFFECTS=$work/effects
 
 for template in aboutme-server aboutme-web aboutme-caddy aboutme-migrate aboutme-db-setup; do
   grep -Fq "ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ $template" \
@@ -261,6 +274,30 @@ for unit in aboutme-server aboutme-web aboutme-caddy \
   fi
 done
 "$fence" check 4007 aboutme-db-setup
+# Legacy database-reset authority disappears once this cutover has issued any
+# one-shot start, and both spellings of the database-setup unit stay denied.
+jq '.crowdsec_cutover_started=true' "$work/fence/fence.json" >"$work/started"
+cp "$work/fence/fence.json" "$work/before-starts"
+cp "$work/started" "$work/fence/fence.json"
+for unit in aboutme-db-setup aboutme-db-setup.service; do
+  if "$fence" check 4007 "$unit" >/dev/null 2>&1; then echo 'FAIL cutover-db-setup-refusal'; exit 1; fi
+done
+cp "$work/before-starts" "$work/fence/fence.json"
+# Wrong or stale ownership cannot stop watchdogs, timers, or consumers.
+for kind in cutover deploy; do
+  jq --arg kind "$kind" '.operation_kind=$kind' "$work/before-starts" >"$work/fence/fence.json"
+  for request in wrong-owner wrong-tag wrong-kind; do
+    request_owner=$op request_tag=v0.4.7
+    case $request in wrong-owner) request_owner=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ;; wrong-tag) request_tag=v0.4.8 ;; wrong-kind) [[ $kind != cutover ]] || continue ;; esac
+    for verb in cutover-complete cutover-fail; do
+      : >"$CUTOVER_EFFECTS"
+      if "$fence" "$verb" "$request_owner" "$request_tag" >"$work/out" 2>&1; then echo 'FAIL cutover-owner-refusal'; exit 1; fi
+      [[ ! -s $CUTOVER_EFFECTS ]] || { echo 'FAIL cutover-unauthorized-effects'; exit 1; }
+      cmp "$work/fence/fence.json" <(jq --arg kind "$kind" '.operation_kind=$kind' "$work/before-starts")
+    done
+  done
+done
+cp "$work/before-starts" "$work/fence/fence.json"
 cp "$work/fence/cutover-mutation.json" "$work/reset-db-marker.json"
 jq '.operation_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' \
   "$work/reset-db-marker.json" >"$work/fence/cutover-mutation.json"
@@ -297,6 +334,12 @@ if "$fence" recover-cutover-media "$op" wrong-phrase inspect 2>/dev/null; then
 fi
 "$fence" recover-cutover-media "$op" media-writer-stopped-and-result-inspected inspect
 "$fence" release "$op"
+# A lost reply after durable release never authorizes late failure effects.
+for verb in cutover-complete cutover-fail; do
+  : >"$CUTOVER_EFFECTS"
+  if "$fence" "$verb" "$op" v0.4.7 >"$work/out" 2>&1; then echo 'FAIL released-cutover-reused'; exit 1; fi
+  [[ ! -s $CUTOVER_EFFECTS && ! -e $work/fence/cutover-mutation.json ]]
+done
 
 deploy_op=$("$fence" lock deploy v0.4.7)
 for unit in aboutme-server aboutme-web aboutme-caddy \
@@ -405,4 +448,20 @@ done
 if cutover_invocation aboutme-crowdsec-retention.service >/dev/null 2>&1; then
   echo 'FAIL cutover-invocation-membership'; exit 1
 fi
+# The real consume function must reject both directions before spending a
+# permit. Boundary doubles supply only the already-proved root binding.
+cutover_paths() { cutover_run=$work/permits; mkdir -p "$cutover_run"; }
+cutover_binding() { cutover_release=8009; }
+cutover_record() { return 0; }
+cutover_invocation() { printf '11111111111111111111111111111111\n'; }
+cutover_write() { printf 'spent\n' >>"$work/spends"; cat >"$1"; }
+cutover_paths
+printf '{"issued":0,"deadline":9999999999}\n' >"$cutover_run/permit.json"
+for release in 8008 8010; do
+  if cutover_consume aboutme-crowdsec-vacuum.service "$release" >/dev/null 2>&1; then echo 'FAIL permit-release-mismatch'; exit 1; fi
+  [[ ! -e $work/spends && -e $cutover_run/permit.json ]]
+done
+[[ ${cutover_release:?fixture binding required} == 8009 ]]
+cutover_consume aboutme-crowdsec-vacuum.service 8009
+[[ $(wc -l <"$work/spends") == 1 && ! -e $cutover_run/permit.json ]]
 echo "cutover fence tests passed"

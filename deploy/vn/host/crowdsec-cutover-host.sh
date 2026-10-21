@@ -4,11 +4,20 @@ set -euo pipefail
 umask 077
 lib=/usr/local/lib/aboutme
 fence=$lib/fence.sh
-checkpoint() { "$fence" checkpoint "$op" "$tag" >/dev/null 2>&1; }
+checkpoint() { "$fence" cutover-checkpoint "$op" "$tag" >/dev/null 2>&1; }
 refuse() { printf 'crowdsec_cutover_refused\n' >&2; exit 1; }
 
-activate_bundle() {
+bundle_verify() {
   checkpoint || return 1
+  [[ ${bundle_digest:-} =~ ^[0-9a-f]{64}$ && -d $bundle && ! -L $bundle &&
+    $(stat -c '%u:%g:%a' "$bundle") == 0:0:700 &&
+    -f $bundle/archive.tar && ! -L $bundle/archive.tar &&
+    $(stat -c '%u:%g:%a:%h' "$bundle/archive.tar") == 0:0:600:1 ]] || return 1
+  printf '%s  %s\n' "$bundle_digest" "$bundle/archive.tar" | sha256sum --check --status || return 1
+  tar -C "$bundle" --compare -f "$bundle/archive.tar" >/dev/null 2>&1
+}
+activate_bundle() {
+  bundle_verify || return 1
   # The bundle is the exact reviewed release bundle copied before ownership.
   [[ -d $bundle/host && ! -L $bundle && $(stat -c %u "$bundle") == 0 ]] || return 1
   local helper file relative
@@ -198,12 +207,14 @@ PY
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  [[ $EUID == 0 && $# == 4 && $1 == transition ]] || refuse
-  op=$2 tag=$3 bundle=$(readlink -f "$4")
-  checkpoint || refuse
+  [[ $EUID == 0 && $# == 5 && ( $1 == transition || $1 == quiesce ) ]] || refuse
+  action=$1
+  op=$2 tag=$3 bundle=$4 bundle_digest=$5
+  bundle_verify || refuse
+  if [[ $action == quiesce ]]; then quiesce >/dev/null 2>&1 || refuse; exit 0; fi
   work=$(mktemp -d /run/aboutme/crowdsec-transition.XXXXXX)
   trap 'rm -rf -- "$work"' EXIT
-  trap '"$fence" cutover-fail "$op" >/dev/null 2>&1; exit 1' HUP INT TERM
-  if ! transition >/dev/null 2>&1; then "$fence" cutover-fail "$op" >/dev/null 2>&1 || true; refuse; fi
+  trap '"$fence" cutover-fail "$op" "$tag" >/dev/null 2>&1; exit 1' HUP INT TERM
+  if ! transition >/dev/null 2>&1; then "$fence" cutover-fail "$op" "$tag" >/dev/null 2>&1 || true; refuse; fi
   printf 'PASS cutover-serving-fenced\n'
 fi
