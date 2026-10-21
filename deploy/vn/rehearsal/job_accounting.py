@@ -12,6 +12,26 @@ JOB='aboutme-job@idempotency-expiry-sweep'
 ENVELOPE=pathlib.Path('/sys/fs/cgroup/machine.slice')
 
 
+def _initialize_parent(effect,unit,path):
+    from lifecycle import snapshot
+    require(re.fullmatch(r'[a-z]+\.slice',unit) and path.name==unit)
+    require(not path.is_symlink())
+    previous=path.stat().st_ino if path.exists() else None
+    effect(['systemctl','start',unit],10)
+    effect(['systemctl','is-active','--quiet',unit],5)
+    group=effect(['systemctl','show','--property=ControlGroup','--value',unit],5).decode().strip()
+    require(group=='/'+unit and path.is_dir() and not path.is_symlink())
+    current=snapshot(path)
+    require(previous is None or current['identity']==previous)
+    return int(previous is not None)
+
+
+def initialize_parent(effect):
+    from lifecycle import anchor
+    require(os.geteuid()==0); anchor()
+    return _initialize_parent(effect,'machine.slice',ENVELOPE)
+
+
 def payload_path(group,identifier):
     require(re.fullmatch('[0-9a-f]{64}',identifier))
     require(group=='/machine.slice/libpod-'+identifier+'.scope')

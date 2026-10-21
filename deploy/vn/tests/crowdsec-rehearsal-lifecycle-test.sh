@@ -8,7 +8,34 @@ if [[ ${1:-} == linux-accounting ]]; then
 import json, os, pathlib, subprocess, sys, tempfile, time
 sys.path.insert(0,sys.argv[1])
 from lifecycle import finish, snapshot
+from job_accounting import _initialize_parent, ENVELOPE
 from protocol import require
+def effect(arguments,timeout):
+    return subprocess.run(arguments,check=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=timeout).stdout
+
+# This separate empty slice proves fresh initialization without touching machine.slice users.
+fixture_unit='aboutmerehearsalparentfixture.slice'
+fixture_path=pathlib.Path('/sys/fs/cgroup')/fixture_unit
+fixture_file=pathlib.Path('/run/systemd/system')/fixture_unit
+require(not fixture_path.exists() and not fixture_file.exists() and not fixture_file.is_symlink())
+fixture_content=b'[Unit]\nDescription=Temporary accounting parent fixture\n[Slice]\nMemoryAccounting=yes\n'
+from common import safe_write
+safe_write(fixture_file,fixture_content)
+try:
+    effect(['systemctl','daemon-reload'],10)
+    require(not fixture_path.exists())
+    initial=_initialize_parent(effect,fixture_unit,fixture_path)
+    require(initial==0 and fixture_path.is_dir())
+    print('ISOLATED_PARENT_INITIAL_PRESENT 0',flush=True)
+finally:
+    if fixture_path.exists():
+        require(not fixture_path.joinpath('cgroup.procs').read_text().strip())
+        require(not any(path.is_dir() for path in fixture_path.iterdir()))
+        effect(['systemctl','stop',fixture_unit],10)
+        require(not fixture_path.exists())
+    require(fixture_file.read_bytes()==fixture_content)
+    fixture_file.unlink(); effect(['systemctl','daemon-reload'],10)
+
 unit='aboutme-rehearsal-accounting-test.service'
 with tempfile.TemporaryDirectory(prefix='aboutme-accounting-') as directory:
     root=pathlib.Path(directory); root.chmod(0o700)
@@ -98,7 +125,8 @@ else:
         try:
             subprocess.run(['podman','import',str(archive),image],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=60)
             safe_write(hook_config,json.dumps(hook_value).encode())
-            subprocess.run(['systemctl','start','machine.slice'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+            initially_present=_initialize_parent(effect,'machine.slice',ENVELOPE)
+            print('MACHINE_PARENT_INITIAL_PRESENT '+str(initially_present),flush=True)
             command=['systemd-run','--quiet','--wait','--collect','--unit='+job_unit,
                      '--property=Type=oneshot','--property=MemoryAccounting=yes','--property=TimeoutStartSec=30',
                      '--property=ExecStartPre=/usr/bin/python3 -I '+str(job_hook)+' baseline',

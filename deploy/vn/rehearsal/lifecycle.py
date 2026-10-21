@@ -122,6 +122,8 @@ def install_hooks(effect):
     require('memory_localevents' not in options)
     ROOT.mkdir(mode=0o700,exist_ok=True)
     require(not ROOT.is_symlink() and ROOT.stat().st_uid==0 and ROOT.stat().st_mode&0o777==0o700)
+    from job_accounting import initialize_parent
+    initialize_parent(effect)
     script=str(pathlib.Path(__file__).resolve())
     for unit in UNITS:
         directory=pathlib.Path('/run/systemd/system')/(unit+'.service.d')
