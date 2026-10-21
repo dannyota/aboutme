@@ -73,8 +73,8 @@ write_waf_log_output() {
 }
 
 # Only the direct HTTPS site imports this access logger. The custom encoder
-# drops every source field except the five-item CrowdSec interface. Serving and
-# maintenance own separate writers because both processes run during deploys.
+# emits exactly seven bounded CrowdSec fields. Serving and maintenance own
+# separate writers because both processes run during deploys.
 write_crowdsec_feed_log() {
   case $1 in
     serving | maintenance) ;;
@@ -85,7 +85,6 @@ log crowdsec_$1 {
 	output file /var/log/caddy/crowdsec/$1.json {
 		mode 0600
 		roll_size 1MiB
-		roll_minutes 0
 		roll_uncompressed
 		roll_keep 1
 		roll_keep_for 0
@@ -99,7 +98,6 @@ log crowdsec_plugin_$1 {
 	output file /var/log/caddy/crowdsec/$1-bouncer.json {
 		mode 0600
 		roll_size 1MiB
-		roll_minutes 0
 		roll_uncompressed
 		roll_keep 1
 		roll_keep_for 0
@@ -112,7 +110,6 @@ log direct_unmatched_$1 {
 	output file /var/log/caddy/crowdsec/$1.json {
 		mode 0600
 		roll_size 1MiB
-		roll_minutes 0
 		roll_uncompressed
 		roll_keep 1
 		roll_keep_for 0

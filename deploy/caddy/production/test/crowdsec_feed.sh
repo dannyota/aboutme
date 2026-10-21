@@ -118,6 +118,7 @@ test_direct_crowdsec_feed() {
     exit 1
   fi
   assert_private_log_has_no_markers "$feed_text"
+  test_crowdsec_feed_size_roll
 
   # A wrong Host and a stopped upstream force Caddy error paths while every
   # request surface carries a distinct marker.
@@ -134,6 +135,41 @@ test_direct_crowdsec_feed() {
   assert_private_log_has_no_markers "$logs"
   if grep -qE 'eligible%2[fF]marker|"(uri|request_uri|target_path)"' <<<"$logs"; then
     echo "runtime-error-request-material" >&2
+    exit 1
+  fi
+}
+
+test_crowdsec_feed_size_roll() {
+  local target rolls=0 active_size roll_size
+  target=/unknown/$(printf '%0503d' 0)
+  # Two size rotations prove the writer retains only one uncompressed roll.
+  # Requests stay in the test container's network namespace.
+  timeout 120s podman exec "$name-echo" sh -c '
+    i=0
+    while [ "$i" -lt 3600 ]; do
+      wget -S -q -O /dev/null --no-check-certificate "https://aboutme.vn$1" >/dev/null 2>/tmp/feed-roll-status || :
+      grep -q "HTTP/1.1 404" /tmp/feed-roll-status || exit 1
+      i=$((i + 1))
+    done
+  ' sh "$target" || { echo "feed-size-roll-request-deadline" >&2; exit 1; }
+  for _ in $(seq 1 40); do
+    rolls=$(podman exec "$name" sh -c '
+      count=0
+      for file in /var/log/caddy/crowdsec/serving-*-size.json; do
+        [ ! -f "$file" ] || count=$((count + 1))
+      done
+      printf "%s" "$count"
+    ')
+    [[ $rolls == 1 ]] && break
+    sleep 0.25
+  done
+  [[ $rolls == 1 ]] || { echo "feed-size-roll-count" >&2; exit 1; }
+  active_size=$(podman exec "$name" stat -c %s /var/log/caddy/crowdsec/serving.json)
+  roll_size=$(podman exec "$name" sh -c 'stat -c %s /var/log/caddy/crowdsec/serving-*-size.json')
+  ((active_size > 0 && active_size <= 1048576 && roll_size > 0 && roll_size <= 1048576)) ||
+    { echo "feed-size-roll-bound" >&2; exit 1; }
+  if podman exec "$name" sh -c 'test -n "$(find /var/log/caddy/crowdsec -name "serving-*.gz" -print -quit)"'; then
+    echo "feed-size-roll-compression" >&2
     exit 1
   fi
 }

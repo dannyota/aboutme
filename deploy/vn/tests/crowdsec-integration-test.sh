@@ -56,12 +56,13 @@ systemctl unmask crowdsec.service >/dev/null
 systemctl start crowdsec.service
 
 append_records() { # ip status count route [method] [probe] [target]
-  local ip=$1 status=$2 count=$3 route=$4 method=${5:-GET} probe=${6:-none} target=${7:-} i ts target_json
+  local ip=$1 status=$2 count=$3 route=$4 method=${5:-GET} probe=${6:-none} target=${7:-} i ts target_json destination=$feed
+  [[ $route != maintenance ]] || destination=/run/aboutme/caddy-log/crowdsec/maintenance.json
   target_json=$(jq -cn --arg value "$target" '$value')
   for ((i = 0; i < count; i++)); do
     ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
     printf '{"ts":"%s","source_ip":"%s","method":"%s","status":%s,"route_class":"%s","probe_class":"%s","target_path":%s}\n' \
-      "$ts" "$ip" "$method" "$status" "$route" "$probe" "$target_json" >>"$feed"
+      "$ts" "$ip" "$method" "$status" "$route" "$probe" "$target_json" >>"$destination"
   done
 }
 
@@ -74,6 +75,8 @@ done
 
 # Each invalid shape has its own source and enough scanner events to overflow
 # a bucket if the parser accepts it. Diagnostics report fixed labels only.
+parser_proof_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf '{"malformed":"parserdiagnosticmarker4c8a",\n' >>"$feed"
 rejected_ips=()
 rejection_filters=(
   'del(.probe_class, .target_path)'
@@ -96,13 +99,20 @@ rejection_filters=(
   '.probe_class = "repository"'
   '.target_path = "/api/private"'
   '.target_path = "/%2561pi/private"'
+  '.target_path = "/unrecognized/%252e%252e/%2561pi/private"'
+  '.target_path = "/%2541PP/private"'
+  '.target_path = "/unknown/%25a"'
   '.target_path = "/unknown/%0a"'
+  '.target_path = "/unknown/%C2%85"'
+  '.target_path = "/unknown/%ed%a0%80"'
   '.target_path = "/unknown/%ff"'
   '.target_path = "/unknown/%zz"'
   '.target_path = "/unknown/sample?token=discarded"'
   '.target_path = "/unknown/" + ("x" * 504)'
   '.probe_class = "invalid"'
   '.probe_class = "oversized"'
+  '.ts = "2026-02-30T00:00:00Z"'
+  '.target_path = "/unknown/%252541pi/private" | .probe_class = "repository"'
 )
 for index in "${!rejection_filters[@]}"; do
   ip=192.0.2.$((100 + index))
@@ -115,7 +125,7 @@ for index in "${!rejection_filters[@]}"; do
     printf '%s\n' "$record" >>"$feed"
   done
 done
-duplicate_ip=192.0.2.130
+duplicate_ip=192.0.2.149
 rejected_ips+=("$duplicate_ip")
 for _ in $(seq 21); do
   ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
@@ -175,10 +185,42 @@ for ip in "${rejected_ips[@]}"; do
   fi
 done
 [[ $(sqlite3 /var/lib/crowdsec/data/crowdsec.db \
-  "SELECT count(*) FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip = '$eligible_ip') AND serialized LIKE '%/unknown/eligible%2fmarker%';") -gt 0 ]] || {
+  "SELECT count(*) FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip = '$eligible_ip') AND instr(serialized, '/unknown/eligible%2fmarker') > 0;") -gt 0 ]] || {
   echo "eligible-target-sample-missing" >&2
   exit 1
 }
+
+valid_targets=(
+  'traversal|/unknown/%252e%252e/admin'
+  'secret-config|/unknown/config.json'
+  'repository|/.git/config'
+  'web-shell|/unknown/shell.php'
+  'framework|/wp-admin/index'
+  'other|/unknown/caf%c3%a9'
+  'other|/unknown/a%3Fb'
+  'other|/unknown/%25252egit'
+  'invalid|'
+  'oversized|'
+  "other|/unknown/$(printf '%0503d' 0)"
+)
+for index in "${!valid_targets[@]}"; do
+  ip=192.0.2.$((60 + index))
+  IFS='|' read -r probe target <<<"${valid_targets[$index]}"
+  append_records "$ip" 404 21 unknown GET "$probe" "$target"
+  wait_for_decision "$ip" >/dev/null || { echo "valid-probe-rejected" >&2; exit 1; }
+  if [[ -n $target ]]; then
+    [[ $(sqlite3 /var/lib/crowdsec/data/crowdsec.db \
+      "SELECT count(*) FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip = '$ip') AND instr(serialized, '$target') > 0;") -gt 0 ]] || {
+      echo "valid-probe-sample-missing" >&2
+      exit 1
+    }
+  fi
+done
+parser_logs=$(journalctl --no-pager -o cat -u crowdsec.service --since "$parser_proof_since")
+if grep -qE 'parserdiagnosticmarker4c8a|eligible%2fmarker|/unknown/sample\?token=discarded' <<<"$parser_logs"; then
+  echo "parser-raw-diagnostic" >&2
+  exit 1
+fi
 
 # A shared address sends wrong passwords, throttled requests, and the
 # bouncer's 403s; none of them may create a ban.
