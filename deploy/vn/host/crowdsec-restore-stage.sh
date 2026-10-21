@@ -9,7 +9,8 @@ umask 077
 # APT verifies its signed index using the committed key; the archive digest
 # also binds the exact reviewed control and payload members. No hooks run.
 install -d -m 0755 /etc/apt/keyrings
-gpg --dearmor --yes -o /etc/apt/keyrings/crowdsec.gpg "$bundle/host/keys/crowdsec.asc" >/dev/null 2>&1
+gpg --dearmor --yes -o "$work/crowdsec.gpg" "$bundle/host/keys/crowdsec.asc" >/dev/null 2>&1
+install -o root -g root -m 0644 "$work/crowdsec.gpg" /etc/apt/keyrings/crowdsec.gpg
 printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main' >/etc/apt/sources.list.d/crowdsec.list
 apt-get update -qq >/dev/null 2>&1
 (cd "$work" && apt-get download crowdsec=1.8.1 >/dev/null 2>&1)

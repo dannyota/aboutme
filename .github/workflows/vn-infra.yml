@@ -183,7 +183,10 @@ jobs:
           sudo apt-get update -qq >/dev/null
           sudo apt-get install -y -qq postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2 libpq5=18.6-1.pgdg24.04+2 pgbackrest=2.59.3-1.pgdg24.04+1 python3-yaml >/dev/null
       - name: Stage authenticated standalone executables without package hooks
-        run: sudo bash deploy/vn/host/crowdsec-restore-stage.sh deploy/vn
+        run: |
+          sudo test ! -e /etc/apt/keyrings/crowdsec.gpg
+          sudo test ! -L /etc/apt/keyrings/crowdsec.gpg
+          sudo bash deploy/vn/host/crowdsec-restore-stage.sh deploy/vn
       - name: Prove the private restore controller with real backup and reset
         run: sudo env GITHUB_ACTIONS=true unshare --mount --propagation private bash deploy/vn/tests/crowdsec-restore-integration-test.sh hosted
 
