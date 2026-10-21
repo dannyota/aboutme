@@ -19,8 +19,10 @@ STUB
 cat >"$work/lib/crowdsec-retention-lease-check.sh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-systemctl is-enabled --quiet aboutme-crowdsec-retention.timer
-systemctl is-active --quiet aboutme-crowdsec-retention.timer
+for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
+  systemctl is-enabled --quiet "$timer"
+  systemctl is-active --quiet "$timer"
+done
 lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?}
 [[ -f $lease && ! -L $lease ]]
 modified=$(stat -c %Y "$lease")
@@ -38,6 +40,10 @@ if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
 fi
 if [[ ${1-} == is-active && ${WATCH_TEST_TIMER_INACTIVE:-0} == 1 ]]; then
   exit 1
+fi
+if [[ $* == *vacuum.timer* ]]; then
+  [[ ${1-} != is-enabled || ${WATCH_TEST_VACUUM_TIMER_DISABLED:-0} == 0 ]] || exit 1
+  [[ ${1-} != is-active || ${WATCH_TEST_VACUUM_TIMER_INACTIVE:-0} == 0 ]] || exit 1
 fi
 exit 0
 STUB
@@ -159,6 +165,22 @@ grep -qxF 'retention failure' "$work/inactive.failures" || {
   echo "inactive retention timer did not fail closed" >&2
   exit 1
 }
+
+for state in disabled inactive; do
+  if [[ $state == disabled ]]; then
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=1 WATCH_TEST_VACUUM_TIMER_INACTIVE=0
+  else
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=0 WATCH_TEST_VACUUM_TIMER_INACTIVE=1
+  fi
+  WATCH_TEST_FIXTURE=$base \
+    WATCH_TEST_ALERTS=$work/vacuum-$state.alerts WATCH_TEST_RETENTION_FAILURES=$work/vacuum-$state.failures \
+    "$watch"
+  grep -qxF 'retention failure' "$work/vacuum-$state.failures" || {
+    echo "vacuum safety timer did not invalidate the watcher lease" >&2
+    exit 1
+  }
+done
+unset WATCH_TEST_VACUUM_TIMER_DISABLED WATCH_TEST_VACUUM_TIMER_INACTIVE
 
 for state in changed recovery; do
   if [[ $state == changed ]]; then
