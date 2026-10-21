@@ -65,6 +65,12 @@ PY
     install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/$unit.service.d/90-aboutme-alert.conf" \
       "/etc/systemd/system/$unit.service.d/90-aboutme-alert.conf"
   done
+  # PGDG skips default creation when any cluster exists. Runner clusters must
+  # release the default socket port before this proof starts PostgreSQL 18.
+  systemctl stop postgresql.service >/dev/null 2>&1
+  if ! pg_lsclusters --no-header 18 main >/dev/null 2>&1; then
+    pg_createcluster --port=5432 --start-conf=manual 18 main >/dev/null 2>&1
+  fi
   systemctl daemon-reload
   for file in pg_hba.conf pg_ident.conf; do
     install -o postgres -g postgres -m 0640 "$repo_root/deploy/vn/host/etc/postgresql/18/main/$file" "/etc/postgresql/18/main/$file"
@@ -76,12 +82,16 @@ PY
     install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/config.yaml.local" "/etc/crowdsec/$config"
   done
   install -d -m 0700 /run/aboutme/crowdsec
+  [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w \
+    -h /run/postgresql -p 5432 -d postgres -v ON_ERROR_STOP=1 \
+    -c "SELECT current_setting('server_version_num') = '180006'
+      AND current_setting('config_file') = '/etc/postgresql/18/main/postgresql.conf';" 2>/dev/null) == t ]]
   catalog() {
-    runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -d postgres \
+    runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -h /run/postgresql -p 5432 -d postgres \
       -v ON_ERROR_STOP=1 -c 'SELECT datname FROM pg_database ORDER BY datname; SELECT rolname FROM pg_roles ORDER BY rolname;' 2>/dev/null
   }
   before=$(catalog | sha256sum)
-  [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -d postgres \
+  [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -h /run/postgresql -p 5432 -d postgres \
     -c "SELECT count(*) FROM pg_database WHERE datname='crowdsec';" 2>/dev/null) == 0 ]]
   crowdsec_install_offline apt-get -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
     -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.1
