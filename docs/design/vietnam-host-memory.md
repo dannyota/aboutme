@@ -73,6 +73,41 @@ evidence records each service peak, native pgBackRest use, physical zram use,
 and the combined peak. Less than 256 MiB unused at the combined peak, a
 connection-pool failure, or a migration failure blocks cutover.
 
+For the CrowdSec PostgreSQL cutover, run this rehearsal before production
+cutover on one isolated temporary full-stack host with the same 2 vCPU, 4 GiB,
+service ceilings, PostgreSQL settings, tmpfs, and zram configuration. Use the
+exact candidate images and reviewed host bundle, with synthetic data and
+isolated credentials/storage. Reuse the existing temporary-host provisioning and
+cleanup mechanisms and full-host install/deploy commands. This is a bounded
+rehearsal, not a standing environment or a new provisioning framework. The
+app-absent restore-drill controller keeps its separate contract and cannot run
+these application workloads.
+
+Measure the five scenarios as legal phases on that same host. Serving, print,
+and serving with one job plus backup run under ordinary guards; maintenance
+overlap and stopped-serving migration/setup use the existing deploy ordering.
+Never use cutover permits to start forbidden workloads. Record simultaneous
+whole-host use throughout each phase, including native backup and physical zram
+use counted once. The largest observed combined peak across phases is the gate;
+adding individual peaks from different times is not evidence of that peak. All
+scenarios and repeat runs must pass, not just the largest-memory phase.
+
+Before execution, freeze a bounded command list and sampling protocol under the
+[benchmark rules](budgets.md#benchmark-protocol): candidate/configuration
+identity, representative corpus, expected concurrency, warm-up, duration, sample
+count, repeat runs, and pressure observation criteria. The protocol must cover
+every scenario and the existing failure thresholds; missing commands or
+measurements leave the rehearsal unproved. Keep aggregate resource evidence and
+synthetic-only raw measurements outside the repository, and clean up the
+temporary host through its existing lifecycle after retaining the results.
+
+Production cutover separately records resource use during its permitted safety
+passes and consumer starts. After completion, observe ordinary serving,
+scheduled jobs, retention, vacuum, and backup under normal guards. Those
+observations confirm the deployed result; they cannot replace the pre-cutover
+rehearsal. Any observed breach fails acceptance and requires reviewed recovery
+or capacity/concurrency correction, never a permit exception or SQLite rollback.
+
 ## Storage
 
 The root disk is 30 GB, encrypted, and holds only Ubuntu, public container
