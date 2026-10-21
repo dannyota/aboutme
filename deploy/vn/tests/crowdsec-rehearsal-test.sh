@@ -11,8 +11,39 @@ from metrics import parse_memory, parse_pressure, parse_counters, Collector
 from protocol import check_series
 from api import bounded_body, canonical, Client
 from lifecycle import finish, final_record, validate_command
-from job_accounting import payload_path, completed
+from job_accounting import payload_path, completed, _initialize_parent
 class Counters(unittest.TestCase):
+    def test_missing_parent_is_initialized_before_counter_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent=pathlib.Path(directory)/'fixture.slice'; calls=[]
+            def effect(arguments,timeout):
+                calls.append(arguments)
+                if arguments[:2]==['systemctl','start']:
+                    self.assertFalse(parent.exists()); parent.mkdir()
+                    parent.joinpath('memory.current').write_text('1')
+                    parent.joinpath('memory.peak').write_text('1')
+                    parent.joinpath('memory.events').write_text('low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n')
+                return b'/fixture.slice\n' if '--property=ControlGroup' in arguments else b''
+            self.assertEqual(_initialize_parent(effect,'fixture.slice',parent),0)
+            self.assertEqual(calls[0],['systemctl','start','fixture.slice'])
+    def test_existing_parent_keeps_its_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent=pathlib.Path(directory)/'fixture.slice'; parent.mkdir()
+            parent.joinpath('memory.current').write_text('1')
+            parent.joinpath('memory.peak').write_text('1')
+            parent.joinpath('memory.events').write_text('low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n')
+            identity=parent.stat().st_ino
+            effect=mock.Mock(side_effect=lambda arguments,timeout: b'/fixture.slice\n' if '--property=ControlGroup' in arguments else b'')
+            self.assertEqual(_initialize_parent(effect,'fixture.slice',parent),1)
+            self.assertEqual(parent.stat().st_ino,identity)
+            self.assertFalse(any(call.args[0][1]=='stop' for call in effect.call_args_list))
+    def test_parent_start_failure_does_not_claim_initialization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent=pathlib.Path(directory)/'fixture.slice'
+            with self.assertRaises(ValueError):
+                _initialize_parent(mock.Mock(side_effect=ValueError('start failed')),'fixture.slice',parent)
+            self.assertFalse(parent.exists())
+
     def test_shared_payload_envelope_is_separate_and_observation_bound(self):
         identifier='a'*64; invocation='b'*32; unit='aboutme-job@idempotency-expiry-sweep'
         observed={'unit':unit,'invocation':invocation,'container_id':identifier,
