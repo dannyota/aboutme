@@ -42,20 +42,24 @@ for name in server web caddy; do
   provenance_verify "$name" "$digest" "$tag" "$commit"
   images[$name]=ghcr.io/$repo-$name@$digest
 done
-# A root-owned bundle is staged without activating storage or parser changes.
-# Its bytes are this clean eligible checkout; no mutable tag supplies host code.
+# Each transfer receives a private root directory. Verify exact archive bytes
+# before extraction; no competing candidate can replace this invocation's tree.
 tar -C "$here/.." -cf "$work/bundle.tar" host scripts edge
-ssh -p "$SSH_PORT" -o BatchMode=yes "aboutme-admin@$host" \
-  'sudo sh -c '\''umask 077; mkdir -p /run/aboutme/crowdsec-bundle; tar -C /run/aboutme/crowdsec-bundle -xf -'\''' <"$work/bundle.tar"
-ssh -p "$SSH_PORT" -o BatchMode=yes "aboutme-admin@$host" \
-  'sudo env ABOUTME_INSTALL_ONLY=crowdsec-stage bash /run/aboutme/crowdsec-bundle/host/install.sh /run/aboutme/crowdsec-bundle'
-op=$(remote fence.sh lock cutover "$tag")
+bundle_digest=$(sha256sum "$work/bundle.tar" | cut -d' ' -f1)
+printf -v transfer 'sudo bash -c %q bash %q' 'set -euo pipefail; umask 077; bundle=$(mktemp -d /run/aboutme/crowdsec-bundle.XXXXXXXX); cat >"$bundle/archive.tar"; printf "%s  %s\n" "$1" "$bundle/archive.tar" | sha256sum --check --status; tar -C "$bundle" -xf "$bundle/archive.tar"; printf "%s\n" "$bundle"' "$bundle_digest"
+bundle=$(ssh -p "$SSH_PORT" -o BatchMode=yes "aboutme-admin@$host" "$transfer" <"$work/bundle.tar")
+[[ $bundle =~ ^/run/aboutme/crowdsec-bundle\.[A-Za-z0-9]{8}$ ]] || exit 1
+# The installer retains its existing bundle lock until the ordinary canonical
+# lock helper acquires the owner. An unknown reply never triggers a retry.
+printf -v staging 'sudo env ABOUTME_INSTALL_ONLY=crowdsec-stage bash %q %q %q %q' "$bundle/host/install.sh" "$bundle" "$tag" "$bundle_digest"
+op=$(ssh -p "$SSH_PORT" -o BatchMode=yes "aboutme-admin@$host" "$staging")
 [[ $op =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || exit 1
 # Failure always retains exact ownership; uncertain SSH replies never trigger a
 # release or a database retry. Inspection and forward recovery own that result.
 remote fence.sh mutation-start "$op" "$tag" reset-db
 remote deploy-host.sh "$op" "$tag" pull "${images[server]}" "${images[web]}" "${images[caddy]}"
+remote crowdsec-cutover-host.sh quiesce "$op" "$tag" "$bundle" "$bundle_digest"
 remote deploy-host.sh "$op" "$tag" cutover-render "${images[server]}" "${images[web]}" "${images[caddy]}"
-remote crowdsec-cutover-host.sh transition "$op" "$tag" /run/aboutme/crowdsec-bundle
+remote crowdsec-cutover-host.sh transition "$op" "$tag" "$bundle" "$bundle_digest"
 printf 'PASS cutover-serving-fenced\n'
 printf 'owner %s\n' "$op"

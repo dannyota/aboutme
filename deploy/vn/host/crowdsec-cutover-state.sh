@@ -134,9 +134,19 @@ cutover_mode() { # caller already holds the canonical lock and proved lease epoc
     and all(.outcomes[]; .epoch==$epoch and (.invocation|test("^[0-9a-f]{32}$")))
   ' "$cutover_run/mode.json" >/dev/null
 }
+cutover_validate_owner() { # caller holds the existing canonical fence lock
+  local id=$1 tag=$2 candidate
+  [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || return 1
+  load
+  [[ -n ${owner:-} && $owner == "$id" ]] || return 1
+  [[ $(jq -r .operation_kind <<<"${doc:?loaded fence context required}") == cutover &&
+    $(jq -r .operation_tag <<<"$doc") == "$tag" ]] || return 1
+  candidate=$(candidate_of "$tag") || return 1
+  ((candidate>=${minimum:?loaded release floor required})) || return 1
+}
 cutover_start_prepare() { # called by fence while holding its exclusive lock
   local id=$1 tag=$2 unit=$3 seconds=60
-  cmd_checkpoint "$id" "$tag"
+  cutover_validate_owner "$id" "$tag" && cmd_checkpoint "$id" "$tag" || return 1
   cutover_paths && cutover_binding && cutover_unit_allowed "$unit" || die 'cutover start refused'
   [[ $cutover_owner == "$id" && $cutover_tag == "$tag" ]] || die 'cutover owner differs'
   cutover_timers_disabled || die 'cutover scheduling is active'
@@ -169,15 +179,19 @@ cutover_start_prepare() { # called by fence while holding its exclusive lock
   cutover_new_record "$unit" | jq --argjson issued "$(date +%s)" --argjson seconds "$seconds" \
     '.issued=$issued | .deadline=($issued+$seconds)' | cutover_write "$cutover_run/permit.json" || die 'permit write failed'
   # Persist that ordinary release can never clear a post-start cutover.
-  jq '.crowdsec_cutover_started=true' <<<"${doc:?owning fence document required}" | store
+  if ! jq '.crowdsec_cutover_started=true' <<<"${doc:?owning fence document required}" | store; then
+    rm -f -- "$cutover_run/permit.json" || true
+    return 1
+  fi
 }
 cutover_new_record() {
   jq -cn --arg owner "$cutover_owner" --arg tag "$cutover_tag" --arg marker "$cutover_marker" --arg unit "${1:-}" \
     '{version:1,owner:$owner,tag:$tag,marker:$marker,unit:$unit}'
 }
 cutover_consume() { # exact unit; caller holds exclusive fence lock
-  local unit=$1 invocation
+  local unit=$1 release=${2:-} invocation
   cutover_paths && cutover_binding && cutover_unit_allowed "$unit" || return 1
+  [[ $release == "$cutover_release" ]] || return 1
   cutover_record "$cutover_run/permit.json" "$unit" || return 1
   case $unit in
     aboutme-crowdsec-*.service) ;;
@@ -191,7 +205,7 @@ cutover_consume() { # exact unit; caller holds exclusive fence lock
 }
 cutover_start_finish() {
   local id=$1 tag=$2 unit=$3 state invocation
-  cmd_checkpoint "$id" "$tag"
+  cutover_validate_owner "$id" "$tag" && cmd_checkpoint "$id" "$tag" || return 1
   cutover_paths && cutover_binding && cutover_record "$cutover_run/spent-$unit.json" "$unit" || die 'unit did not consume its permit'
   case $unit in
     aboutme-crowdsec-*.service)
@@ -239,7 +253,7 @@ cutover_internal_lease() {
   crowdsec_lease_check
 }
 cutover_create_mode() {
-  cmd_checkpoint "$1" "$2"
+  cutover_validate_owner "$1" "$2" && cmd_checkpoint "$1" "$2" || return 1
   cutover_paths && cutover_binding && cutover_stopped && cutover_timers_disabled && cutover_internal_db || die 'mode prerequisites refused'
   local unit results='{}' record
   for unit in aboutme-crowdsec-vacuum.service aboutme-crowdsec-retention-startup.service aboutme-crowdsec-retention.service; do
@@ -256,30 +270,33 @@ cutover_create_mode() {
     '.epoch=$epoch | .outcomes=$outcomes' | cutover_write "$cutover_run/mode.json" || die 'mode write failed'
 }
 cutover_watch_pass() {
-  cmd_checkpoint "$1" "$2"
+  cutover_validate_owner "$1" "$2" && cmd_checkpoint "$1" "$2" || return 1
   cutover_internal_lease && cutover_mode || die 'cutover watchdog refused'
   cutover_new_record | jq --arg epoch "${crowdsec_db_epoch:?complete database gate required}" '.epoch=$epoch' |
     cutover_write "$cutover_run/watch.json" || die 'watchdog outcome write failed'
 }
 cutover_restore_marker() {
   # Never create ownership after an uncertain durable release.
-  load
-  [[ ${owner:?loaded fence owner required} == "$1" && $(jq -r .operation_kind <<<"${doc:?owning fence document required}") == cutover ]] || return 1
+  cutover_validate_owner "$1" "$2" || return 1
   if [[ ! -e ${mutation_file:?canonical mutation path required} && ! -L $mutation_file ]]; then
     jq -cn --arg owner "${owner:?loaded fence owner required}" --arg ts "$(now)" \
-      '{operation_id:$owner,mutation_kind:"reset-db",state:"active",started_at:$ts}' | store_mutation
+      '{operation_id:$owner,mutation_kind:"reset-db",state:"active",started_at:$ts}' | store_mutation || return 1
   fi
 }
 cutover_failure() {
-  local id=$1
-  systemctl disable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer >/dev/null 2>&1 || true
+  local id=$1 tag=$2 status=0
+  cutover_validate_owner "$id" "$tag" || return 1
+  systemctl disable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer >/dev/null 2>&1 || status=1
   systemctl stop aboutme-caddy.service aboutme-maintenance.service aboutme-server.service aboutme-web.service \
-    crowdsec-firewall-bouncer.service crowdsec.service >/dev/null 2>&1 || true
-  if cutover_paths; then rm -f -- "$cutover_run/"*.json; fi
-  cutover_restore_marker "$id" && cutover_stopped
+    crowdsec-firewall-bouncer.service crowdsec.service >/dev/null 2>&1 || status=1
+  rm -f -- /run/aboutme/crowdsec-retention-ok || status=1
+  if cutover_paths; then rm -f -- "$cutover_run/"*.json || status=1; else status=1; fi
+  cutover_restore_marker "$id" "$tag" || status=1
+  cutover_stopped || status=1
+  return "$status"
 }
 cutover_complete() {
-  cmd_checkpoint "$1" "$2"
+  cutover_validate_owner "$1" "$2" && cmd_checkpoint "$1" "$2" || return 1
   cutover_internal_lease && cutover_mode || die 'completion admission refused'
   local unit
   for unit in aboutme-server.service aboutme-web.service aboutme-caddy.service crowdsec.service crowdsec-firewall-bouncer.service; do
@@ -288,23 +305,23 @@ cutover_complete() {
   ! systemctl is-active --quiet aboutme-maintenance.service || die 'maintenance remains active'
   cutover_safe /var/lib/aboutme/release.json 644 &&
     jq -e --arg tag "$2" '.release_tag==$tag and .maintenance_tag==$tag' /var/lib/aboutme/release.json >/dev/null || die 'release state differs'
-  rm -f -- "$cutover_run/permit.json" "$cutover_run/"spent-*.json
+  rm -f -- "$cutover_run/permit.json" "$cutover_run/"spent-*.json || return 1
   # Any error after removal restores the marker before this exclusive lock exits.
-  rm -- "${mutation_file:?canonical mutation path required}" && sync "${dir:?canonical fence directory required}" || { cutover_failure "$1"; return 1; }
+  rm -- "${mutation_file:?canonical mutation path required}" && sync "${dir:?canonical fence directory required}" || { cutover_failure "$1" "$2"; return 1; }
   if ! systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer >/dev/null 2>&1; then
-    cutover_failure "$1"; return 1
+    cutover_failure "$1" "$2"; return 1
   fi
-  rm -f -- "$cutover_run/mode.json"
+  if ! rm -f -- "$cutover_run/mode.json"; then cutover_failure "$1" "$2" || true; return 1; fi
   if ! systemctl enable --now aboutme-watch.timer >/dev/null 2>&1 || ! cutover_internal_lease; then
-    cutover_failure "$1"; return 1
+    cutover_failure "$1" "$2"; return 1
   fi
   # This is the watchdog's fixed retention tick under the held canonical lock.
   # Full scheduled watch jobs retain their shared guard before all checks.
   if ! jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at,.crowdsec_cutover_started)' <<<"${doc:?owning fence document required}" | store; then
     # The durable release may have succeeded despite a lost response. Failure
     # recovery never recreates an absent owner; the caller must inspect it.
-    cutover_failure "$1" || true
+    cutover_failure "$1" "$2" || true
     return 1
   fi
-  rm -f -- "$cutover_run/"*.json
+  rm -f -- "$cutover_run/"*.json || return 1
 }
