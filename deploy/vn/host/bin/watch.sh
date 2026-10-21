@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # The five-minute host watch (docs/design/vietnam-production.md, "Logs,
 # metrics, and alarms"). Runs as root from aboutme-watch.service and calls
 # alert.sh for alarm conditions; alert.sh sends at most one message per
@@ -20,9 +21,21 @@ alert() { # key subject [detail]
   printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
 }
 
+# A scheduled tick waits for completion before entering any failure action.
+# The descriptor remains held through the ordinary checks and failure body.
+# shellcheck source=../crowdsec-db.sh
+source "$lib/crowdsec-db.sh"
+unset crowdsec_db_lock_fd
+[[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || exit 1
+exec {crowdsec_db_lock_fd}</var/lib/aboutme/fence.lock
+flock -s -w 30 "$crowdsec_db_lock_fd" || exit 1
+crowdsec_db_held_lock || exit 1
+# shellcheck source=../crowdsec-retention-lease-check.sh
+source "$lib/crowdsec-retention-lease-check.sh"
+
 # The retention timer has its own failure action. This independent lease check
 # also catches a disabled or stuck timer within five minutes.
-if ! "$lib/crowdsec-retention-lease-check.sh"; then
+if ! crowdsec_lease_check; then
   "$lib/crowdsec-retention-fail.sh" || true
 fi
 
@@ -62,7 +75,7 @@ fi
 
 # CrowdSec decisions in the last hour.
 bans=0
-if "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1; then
+if crowdsec_db_ready; then
   bans=$(cscli alerts list --since 1h -o json 2>/dev/null | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
 fi
 ((bans <= crowdsec_bans_per_hour)) || alert crowdsec-bans "CrowdSec raised $bans alerts in the last hour"

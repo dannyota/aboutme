@@ -34,4 +34,17 @@ for restore_roles in aboutme,aboutme_app,aboutme_migrator \
     exit 1
   fi
 done
+# Reset must precede final application validation and completion.
+python3 - "$root" <<'CONTRACT'
+import pathlib,sys
+root=pathlib.Path(sys.argv[1])
+source=(root/'deploy/vn/scripts/restore-drill.sh').read_text()
+child=source.split('notice_host_child() {',1)[1].split('notice_host_parent() {',1)[0]
+assert child.index('crowdsec_restore_reset')<child.index('notice_database_checks')<child.index('notice_restore_postcheck')
+assert '4>&-' in child
+stage=(root/'deploy/vn/host/crowdsec-restore-stage.sh').read_text()
+assert 'd639e87924abe497618795378c13a425e0ffab2bbaecbf50900fae55cbed0ad0' in stage
+assert 'dpkg-deb' in stage and 'apt-get download' in stage
+assert 'crowdsec_install_offline' not in stage
+CONTRACT
 echo 'PASS restore-role-boundary'

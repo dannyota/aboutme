@@ -33,11 +33,10 @@ die() {
 }
 say() { echo "install: $*"; }
 
-# ABOUTME_INSTALL_ONLY=postgres stops once PostgreSQL and pgBackRest are
-# installed and configured, with no timer, agent, or CrowdSec: the restore
-# drill server (scripts/restore-drill.sh) needs nothing else.
+# ABOUTME_INSTALL_ONLY=postgres installs PostgreSQL, pgBackRest and the pinned
+# executable-only fresh-restore dependencies. It installs no consumer or timer.
 only=${ABOUTME_INSTALL_ONLY:-}
-case $only in "" | postgres) ;; *) die "ABOUTME_INSTALL_ONLY must be empty or postgres" ;; esac
+case $only in "" | postgres | crowdsec-stage) ;; *) die "invalid installation mode" ;; esac
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
@@ -83,6 +82,35 @@ for operation in /srv/data/host-operations/*; do
   operation_record=$(operation_state load "${operation##*/}") || die "malformed operation protocol"
   jq -e '.closureQuiescent==true and .fenceHeld==false and (.action.writeOutcome!="unknown") and (.phase=="closed" or .phase=="planned" or .phase=="serving")' <<<"$operation_record" >/dev/null || die "an operation remains unresolved"
 done
+
+# Inactive transition staging installs controls and peer policy only. The old
+# storage, parser, serving images, feeds and consumers remain untouched.
+if [[ $only == crowdsec-stage ]]; then
+  [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || die 'fence lock missing'
+  exec {stage_fd}>>/var/lib/aboutme/fence.lock
+  flock -x -w 30 "$stage_fd" || die 'fence is busy'
+  [[ ! -e /var/lib/aboutme/fence.json ]] || jq -e '(.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null || die 'an operation remains owned'
+  install -d -m 0755 /usr/local/lib/aboutme
+  for helper in crowdsec-db crowdsec-provision crowdsec-offline crowdsec-cutover-state \
+    crowdsec-cutover-host crowdsec-privacy-notice-host; do
+    install -o root -g root -m 0755 "$bundle/host/$helper.sh" "/usr/local/lib/aboutme/$helper.sh"
+  done
+  for helper in fence deploy-safety deploy-host secrets-host; do
+    install -o root -g root -m 0755 "$bundle/scripts/$helper.sh" "/usr/local/lib/aboutme/$helper.sh"
+  done
+  install -d -m 0755 /usr/local/lib/aboutme/quadlet
+  for template in "$bundle"/host/quadlet/*; do
+    install -m 0644 "$template" "/usr/local/lib/aboutme/quadlet/${template##*/}"
+  done
+  install -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv
+  install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
+  for config in pg_hba.conf pg_ident.conf; do
+    install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/$config" "/etc/postgresql/18/main/$config"
+  done
+  install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" /etc/postgresql/18/main/conf.d/90-aboutme.conf
+  say 'CrowdSec inactive controls staged'
+  exit 0
+fi
 
 # Adoption is explicit and precedes ordinary helper replacement on legacy hosts.
 if [[ -e /var/lib/aboutme/fence.json ]]; then
@@ -210,7 +238,8 @@ if [ "$only" = postgres ]; then
   install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
     /etc/postgresql/18/main/conf.d/90-aboutme.conf
   systemctl restart postgresql@18-main.service
-  say "PostgreSQL and pgBackRest only: done"
+  bash "$bundle/host/crowdsec-restore-stage.sh" "$bundle"
+  say "PostgreSQL and fresh-restore dependencies staged"
   exit 0
 fi
 
@@ -294,7 +323,7 @@ done
 # start. Install its scripts early; step 6 refreshes the same copies.
 lib=/usr/local/lib/aboutme
 install -d -m 0755 "$lib"
-for helper in crowdsec-db crowdsec-provision crowdsec-vacuum; do
+for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-cutover-state crowdsec-cutover-host; do
   install -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
 done
 install -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"

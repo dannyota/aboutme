@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Fixed-schema retention and stopped-consumer reconciliation.
 # See docs/design/crowdsec-http-privacy.md, Live retention and failure.
 
@@ -419,15 +420,27 @@ PY
     # during cleanup fails closed rather than authorizing an incomplete pass.
     /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh || return 1
     retention_firewall_init || return 1
-    for unit in crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service; do
-      if [[ " ${restart[*]} " == *" $unit "* ]]; then
-        if [[ $unit == aboutme-caddy.service || $unit == aboutme-maintenance.service ]]; then
+    local retention_restart_unit
+    for retention_restart_unit in crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service; do
+      if [[ " ${restart[*]} " == *" $retention_restart_unit "* ]]; then
+        if [[ $retention_restart_unit == aboutme-caddy.service || $retention_restart_unit == aboutme-maintenance.service ]]; then
           retention_firewall_rebuilt || return 1
         fi
         retention_gate || return 1
-        timeout 10 systemctl start "$unit" >/dev/null 2>&1 || return 1
-        systemctl is-active --quiet "$unit" || return 1
-        if [[ $unit == crowdsec-firewall-bouncer.service ]]; then
+        if [[ -f /run/aboutme/crowdsec-cutover/mode.json ]]; then
+          # Only this live owner-permitted runtime pass may request rebuild.
+          # shellcheck source=crowdsec-cutover-state.sh
+          source /usr/local/lib/aboutme/crowdsec-cutover-state.sh
+          cutover_paths && cutover_binding || return 1
+          cutover_record "${cutover_run:?validated cutover paths required}/spent-aboutme-crowdsec-retention.service.json" aboutme-crowdsec-retention.service || return 1
+          local invocation
+          invocation=$(cutover_invocation aboutme-crowdsec-retention.service) || return 1
+          jq -e --arg invocation "$invocation" '.invocation==$invocation' \
+            "${cutover_run:?validated cutover paths required}/spent-aboutme-crowdsec-retention.service.json" >/dev/null || return 1
+          timeout 10 /usr/local/lib/aboutme/fence.sh start-unit "${cutover_owner:?validated cutover binding required}" "${cutover_tag:?validated cutover binding required}" "$retention_restart_unit" >/dev/null 2>&1 || return 1
+        else timeout 10 systemctl start "$retention_restart_unit" >/dev/null 2>&1 || return 1; fi
+        systemctl is-active --quiet "$retention_restart_unit" || return 1
+        if [[ $retention_restart_unit == crowdsec-firewall-bouncer.service ]]; then
           retention_firewall_rebuilt || return 1
         fi
       fi

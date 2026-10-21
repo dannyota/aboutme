@@ -2,10 +2,20 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-watch=$repo_root/deploy/vn/host/bin/watch.sh
+watch_source=$repo_root/deploy/vn/host/bin/watch.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/lib"
+# Only the canonical lock path and wait duration are redirected in this fixture.
+sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" -e 's/flock -s -w 30 /flock -s -w 0 /' "$watch_source" >"$work/watch.sh"
+chmod +x "$work/watch.sh"
+watch=$work/watch.sh
+: >"$work/fence.lock"
+grep -qF 'flock -s -w 30' "$watch_source"
+cat >"$work/lib/crowdsec-db.sh" <<'STUB'
+crowdsec_db_held_lock() { return 0; }
+crowdsec_db_ready() { [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]; }
+STUB
 
 cat >"$work/lib/alert.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -18,16 +28,17 @@ printf 'retention failure\n' >>"$WATCH_TEST_RETENTION_FAILURES"
 STUB
 cat >"$work/lib/crowdsec-retention-lease-check.sh" <<'STUB'
 #!/usr/bin/env bash
-set -euo pipefail
+crowdsec_lease_check() {
 for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
-  systemctl is-enabled --quiet "$timer"
-  systemctl is-active --quiet "$timer"
+  systemctl is-enabled --quiet "$timer" || return 1
+  systemctl is-active --quiet "$timer" || return 1
 done
 lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?}
-[[ -f $lease && ! -L $lease ]]
+[[ -f $lease && ! -L $lease ]] || return 1
 modified=$(stat -c %Y "$lease")
-((modified <= EPOCHSECONDS && EPOCHSECONDS - modified <= 360))
+((modified <= EPOCHSECONDS && EPOCHSECONDS - modified <= 360)) || return 1
 [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
+}
 STUB
 cat >"$work/bin/df" <<'STUB'
 #!/usr/bin/env bash
@@ -198,4 +209,13 @@ for state in changed recovery; do
 done
 unset WATCH_TEST_DATABASE_CHANGED WATCH_TEST_DATABASE_RECOVERY
 
+# A held completion lock refuses the scheduled tick before any failure body.
+: >"$work/admission.failures"
+exec {guard}>"$work/fence.lock"
+flock -x "$guard"
+if WATCH_TEST_ALERTS=$work/admission.alerts WATCH_TEST_RETENTION_FAILURES=$work/admission.failures "$watch" >"$work/admission.out" 2>&1; then
+  echo 'FAIL watchdog-lock-admission'; exit 1
+fi
+[[ ! -s $work/admission.failures ]]
+flock -u "$guard"
 echo "watch tests passed"

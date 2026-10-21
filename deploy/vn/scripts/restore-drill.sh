@@ -74,10 +74,13 @@ SQL
   printf 'PASS aboutme_app has no CREATE on schema public\n'
   out=$(notice_sql <<'SQL'
 SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_roles
- WHERE rolname !~ '^pg_' AND rolname <> 'postgres';
+ WHERE rolname !~ '^pg_' AND rolname <> 'postgres'
+ AND (rolname <> 'crowdsec' OR (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
+ AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
+ AND rolpassword IS NULL AND rolvaliduntil IS NULL));
 SQL
   ) || return 1
-  [[ $out == aboutme,aboutme_app,aboutme_migrator ]] || return 1
+  [[ $out == aboutme,aboutme_app,aboutme_migrator,crowdsec ]] || return 1
   printf 'PASS role list\n'
   out=$(notice_sql <<<'SET ROLE aboutme_app; SELECT count(*) FROM :"tbl";') || return 1
   [[ $out =~ ^(0|[1-9][0-9]{0,18})$ ]] || return 1
@@ -97,6 +100,12 @@ notice_host_child() {
     if [[ $(readlink "$descriptor") == /run/aboutme/workload.lock ]]; then inherited=1; fi
   done
   ((inherited)) || return 1
+  # Fail missing executable/config provenance before touching restored data.
+  # shellcheck source=../host/crowdsec-provision.sh
+  source /usr/local/lib/aboutme/crowdsec-provision.sh
+  # shellcheck source=../host/crowdsec-db.sh
+  source /usr/local/lib/aboutme/crowdsec-db.sh
+  crowdsec_restore_dependencies 4>&- || return 1
   notice_restore_pre_restore 4>&- || return 1
   start=$SECONDS
   notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
@@ -112,6 +121,7 @@ notice_host_child() {
   done
   ((recovery_started)) || return 1
   elapsed=$((SECONDS - start))
+  crowdsec_restore_reset 4>&- || return 1
   notice_database_checks 4>&- || return 1
   state=$(systemctl show --all --property=ActiveState --property=Job postgresql@18-main.service 4>&-) || return 1
   [[ $(wc -l <<<"$state") == 2 ]] && grep -qxF ActiveState=active <<<"$state" && grep -qxF Job= <<<"$state" || return 1
@@ -510,7 +520,7 @@ install_drill_host() {
   local bundle=/tmp/aboutme-bundle
   say "copying the bundle and installing PostgreSQL and pgBackRest"
   rsh sudo rm -rf "$bundle"
-  tar -C "$here/.." -c host scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
+  tar -C "$here/.." -c host edge scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
     scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
     rsh bash -c 'mkdir -p /tmp/aboutme-bundle && tar -C /tmp/aboutme-bundle -x'
   # The data disk is the one disk that is neither the root disk nor zram.
