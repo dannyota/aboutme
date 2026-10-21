@@ -246,13 +246,18 @@ class Deadlines(unittest.TestCase):
         with mock.patch.dict(os.environ,{'CLOUDFLARE_API_TOKEN':'synthetic'}),mock.patch('fixed_api.request',side_effect=request):
             with self.assertRaises(ValueError): fixed_api.dns_records(manifest,runner)
     def test_cleanup_initialization_uses_attempt_deadline(self):
-        cloud=mock.Mock(); cloud.runner=Runner()
-        cloud.m={'deadline':None}
-        observed=[]
-        cloud.initialize.side_effect=lambda: observed.append(cloud.runner.deadline)
-        with mock.patch('cleanup._cleanup'),mock.patch('cleanup.runtime_directory'),mock.patch('cleanup.time.time',return_value=100):
-            cleanup_attempt(cloud,explicit=True,initialize=True)
-        self.assertEqual(observed,[1900])
+        with tempfile.TemporaryDirectory() as directory:
+            cloud=mock.Mock(); cloud.runner=Runner()
+            cloud.m={'deadline':None}; cloud.runtime=pathlib.Path(directory)
+            credentials=[cloud.runtime/(role+suffix) for role in ('media','backups')
+                         for suffix in ('-cleanup.credentials','.aws-config')]
+            for path in credentials: path.write_text('synthetic'); path.chmod(0o600)
+            observed=[]
+            cloud.initialize.side_effect=lambda: observed.append(cloud.runner.deadline)
+            with mock.patch('cleanup._cleanup'),mock.patch('cleanup.runtime_directory'),mock.patch('cleanup.time.time',return_value=100):
+                cleanup_attempt(cloud,explicit=True,initialize=True)
+            self.assertEqual(observed,[1900])
+            self.assertTrue(all(not path.exists() for path in credentials))
 
 class MeasurementPipes(unittest.TestCase):
     def child(self,program):
@@ -382,8 +387,9 @@ class ObjectPages(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=pathlib.Path(directory); root.chmod(0o700)
             store=Store(root,pathlib.Path('/nonexistent-repository'))
-            root.joinpath('elsewhere').write_text('{}')
-            root.joinpath('operator.json').symlink_to(root/'elsewhere')
-            with self.assertRaises(ValueError): store.read_file('operator.json')
+            with store.lock:
+                root.joinpath('elsewhere').write_text('{}')
+                root.joinpath('operator.json').symlink_to(root/'elsewhere')
+                with self.assertRaises(ValueError): store.read_file('operator.json')
 unittest.main(argv=['lifecycle'])
 PY
