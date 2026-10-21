@@ -119,7 +119,7 @@ notice_initial_quiescent() {
   jobs=$(systemctl list-jobs --no-legend --no-pager) || return 1
   [[ ! $jobs =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
   units=$(systemctl list-units --all --state=active,activating,deactivating,reloading --no-legend --no-pager) || return 1
-  [[ ! $units =~ (restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job) ]] || return 1
+  awk '$1 ~ /(restore|recovery|aboutme-migrate|aboutme-db-setup|aboutme-job)/ { exit 1 }' <<<"$units" || return 1
   pgrep -f '([/]pgbackrest.*restore|[r]estore-drill.sh|[p]ostgres:.*recovery)' >/dev/null || rc=$?
   [[ $rc == 1 ]]
 }
