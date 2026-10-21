@@ -1,0 +1,320 @@
+column	alerts	1	id	bigint	true	d		
+column	alerts	10	source_ip	character varying	false			
+column	alerts	11	source_range	character varying	false			
+column	alerts	12	source_as_number	character varying	false			
+column	alerts	13	source_as_name	character varying	false			
+column	alerts	14	source_country	character varying	false			
+column	alerts	15	source_latitude	real	false			
+column	alerts	16	source_longitude	real	false			
+column	alerts	17	source_scope	character varying	false			
+column	alerts	18	source_value	character varying	false			
+column	alerts	19	capacity	integer	false			
+column	alerts	2	created_at	timestamp with time zone	true			
+column	alerts	20	leak_speed	character varying	false			
+column	alerts	21	scenario_version	character varying	false			
+column	alerts	22	scenario_hash	character varying	false			
+column	alerts	23	simulated	boolean	true		false	
+column	alerts	24	uuid	character varying	false			
+column	alerts	25	remediation	boolean	false			
+column	alerts	26	kind	character varying	false			
+column	alerts	27	machine_alerts	bigint	false			
+column	alerts	3	updated_at	timestamp with time zone	true			
+column	alerts	4	scenario	character varying	true			
+column	alerts	5	bucket_id	character varying	false		''::character varying	
+column	alerts	6	message	character varying	false		''::character varying	
+column	alerts	7	events_count	integer	false		0	
+column	alerts	8	started_at	timestamp with time zone	false			
+column	alerts	9	stopped_at	timestamp with time zone	false			
+column	allow_list_allowlist_items	1	allow_list_id	bigint	true			
+column	allow_list_allowlist_items	2	allow_list_item_id	bigint	true			
+column	allow_list_items	1	id	bigint	true	d		
+column	allow_list_items	10	end_suffix	bigint	false			
+column	allow_list_items	11	ip_size	bigint	false			
+column	allow_list_items	2	created_at	timestamp with time zone	true			
+column	allow_list_items	3	updated_at	timestamp with time zone	true			
+column	allow_list_items	4	expires_at	timestamp with time zone	false			
+column	allow_list_items	5	comment	character varying	false			
+column	allow_list_items	6	value	character varying	true			
+column	allow_list_items	7	start_ip	bigint	false			
+column	allow_list_items	8	end_ip	bigint	false			
+column	allow_list_items	9	start_suffix	bigint	false			
+column	allow_lists	1	id	bigint	true	d		
+column	allow_lists	2	created_at	timestamp with time zone	true			
+column	allow_lists	3	updated_at	timestamp with time zone	true			
+column	allow_lists	4	name	character varying	true			
+column	allow_lists	5	from_console	boolean	true			
+column	allow_lists	6	description	character varying	false			
+column	allow_lists	7	allowlist_id	character varying	false			
+column	bouncers	1	id	bigint	true	d		
+column	bouncers	10	last_pull	timestamp with time zone	false			
+column	bouncers	11	stream_cursor	bigint	true		0	
+column	bouncers	12	auth_type	character varying	true		'api-key'::character varying	
+column	bouncers	13	osname	character varying	false			
+column	bouncers	14	osfamily	character varying	false			
+column	bouncers	15	osversion	character varying	false			
+column	bouncers	16	featureflags	character varying	false			
+column	bouncers	17	auto_created	boolean	true		false	
+column	bouncers	2	created_at	timestamp with time zone	true			
+column	bouncers	3	updated_at	timestamp with time zone	true			
+column	bouncers	4	name	character varying	true			
+column	bouncers	5	api_key	character varying	true			
+column	bouncers	6	revoked	boolean	true			
+column	bouncers	7	ip_address	character varying	false		''::character varying	
+column	bouncers	8	type	character varying	false			
+column	bouncers	9	version	character varying	false			
+column	config_items	1	id	bigint	true	d		
+column	config_items	2	created_at	timestamp with time zone	true			
+column	config_items	3	updated_at	timestamp with time zone	true			
+column	config_items	4	name	character varying	true			
+column	config_items	5	value	text	true			
+column	decisions	1	id	bigint	true	d		
+column	decisions	10	end_suffix	bigint	false			
+column	decisions	11	ip_size	bigint	false			
+column	decisions	12	scope	character varying	true			
+column	decisions	13	value	character varying	true			
+column	decisions	14	origin	character varying	true			
+column	decisions	15	simulated	boolean	true		false	
+column	decisions	16	uuid	character varying	false			
+column	decisions	17	alert_decisions	bigint	false			
+column	decisions	2	created_at	timestamp with time zone	true			
+column	decisions	3	updated_at	timestamp with time zone	true			
+column	decisions	4	until	timestamp with time zone	false			
+column	decisions	5	scenario	character varying	true			
+column	decisions	6	type	character varying	true			
+column	decisions	7	start_ip	bigint	false			
+column	decisions	8	end_ip	bigint	false			
+column	decisions	9	start_suffix	bigint	false			
+column	events	1	id	bigint	true	d		
+column	events	2	created_at	timestamp with time zone	true			
+column	events	3	updated_at	timestamp with time zone	true			
+column	events	4	time	timestamp with time zone	true			
+column	events	5	serialized	character varying	true			
+column	events	6	alert_events	bigint	false			
+column	locks	1	id	bigint	true	d		
+column	locks	2	name	character varying	true			
+column	locks	3	created_at	timestamp with time zone	true			
+column	machines	1	id	bigint	true	d		
+column	machines	10	version	character varying	false			
+column	machines	11	is_validated	boolean	true		false	
+column	machines	12	auth_type	character varying	true		'password'::character varying	
+column	machines	13	osname	character varying	false			
+column	machines	14	osfamily	character varying	false			
+column	machines	15	osversion	character varying	false			
+column	machines	16	featureflags	character varying	false			
+column	machines	17	hubstate	jsonb	false			
+column	machines	18	datasources	jsonb	false			
+column	machines	2	created_at	timestamp with time zone	true			
+column	machines	3	updated_at	timestamp with time zone	true			
+column	machines	4	last_push	timestamp with time zone	false			
+column	machines	5	last_heartbeat	timestamp with time zone	false			
+column	machines	6	machine_id	character varying	true			
+column	machines	7	password	character varying	true			
+column	machines	8	ip_address	character varying	true			
+column	machines	9	scenarios	character varying	false			
+column	meta	1	id	bigint	true	d		
+column	meta	2	created_at	timestamp with time zone	true			
+column	meta	3	updated_at	timestamp with time zone	true			
+column	meta	4	key	character varying	true			
+column	meta	5	value	character varying	true			
+column	meta	6	alert_metas	bigint	false			
+column	metrics	1	id	bigint	true	d		
+column	metrics	2	generated_type	character varying	true			
+column	metrics	3	generated_by	character varying	true			
+column	metrics	4	received_at	timestamp with time zone	true			
+column	metrics	5	pushed_at	timestamp with time zone	false			
+column	metrics	6	payload	text	true			
+constraint	alerts	alerts_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	alerts	alerts_id_not_null	n	NOT NULL id	true	false	false
+constraint	alerts	alerts_machines_alerts	f	FOREIGN KEY (machine_alerts) REFERENCES machines(id) ON DELETE SET NULL	true	false	false
+constraint	alerts	alerts_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	alerts	alerts_scenario_not_null	n	NOT NULL scenario	true	false	false
+constraint	alerts	alerts_simulated_not_null	n	NOT NULL simulated	true	false	false
+constraint	alerts	alerts_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	allow_list_allowlist_items	allow_list_allowlist_items_allow_list_id	f	FOREIGN KEY (allow_list_id) REFERENCES allow_lists(id) ON DELETE CASCADE	true	false	false
+constraint	allow_list_allowlist_items	allow_list_allowlist_items_allow_list_id_not_null	n	NOT NULL allow_list_id	true	false	false
+constraint	allow_list_allowlist_items	allow_list_allowlist_items_allow_list_item_id	f	FOREIGN KEY (allow_list_item_id) REFERENCES allow_list_items(id) ON DELETE CASCADE	true	false	false
+constraint	allow_list_allowlist_items	allow_list_allowlist_items_allow_list_item_id_not_null	n	NOT NULL allow_list_item_id	true	false	false
+constraint	allow_list_allowlist_items	allow_list_allowlist_items_pkey	p	PRIMARY KEY (allow_list_id, allow_list_item_id)	true	false	false
+constraint	allow_list_items	allow_list_items_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	allow_list_items	allow_list_items_id_not_null	n	NOT NULL id	true	false	false
+constraint	allow_list_items	allow_list_items_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	allow_list_items	allow_list_items_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	allow_list_items	allow_list_items_value_not_null	n	NOT NULL value	true	false	false
+constraint	allow_lists	allow_lists_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	allow_lists	allow_lists_from_console_not_null	n	NOT NULL from_console	true	false	false
+constraint	allow_lists	allow_lists_id_not_null	n	NOT NULL id	true	false	false
+constraint	allow_lists	allow_lists_name_not_null	n	NOT NULL name	true	false	false
+constraint	allow_lists	allow_lists_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	allow_lists	allow_lists_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	bouncers	bouncers_api_key_not_null	n	NOT NULL api_key	true	false	false
+constraint	bouncers	bouncers_auth_type_not_null	n	NOT NULL auth_type	true	false	false
+constraint	bouncers	bouncers_auto_created_not_null	n	NOT NULL auto_created	true	false	false
+constraint	bouncers	bouncers_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	bouncers	bouncers_id_not_null	n	NOT NULL id	true	false	false
+constraint	bouncers	bouncers_name_not_null	n	NOT NULL name	true	false	false
+constraint	bouncers	bouncers_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	bouncers	bouncers_revoked_not_null	n	NOT NULL revoked	true	false	false
+constraint	bouncers	bouncers_stream_cursor_not_null	n	NOT NULL stream_cursor	true	false	false
+constraint	bouncers	bouncers_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	config_items	config_items_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	config_items	config_items_id_not_null	n	NOT NULL id	true	false	false
+constraint	config_items	config_items_name_not_null	n	NOT NULL name	true	false	false
+constraint	config_items	config_items_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	config_items	config_items_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	config_items	config_items_value_not_null	n	NOT NULL value	true	false	false
+constraint	decisions	decisions_alerts_decisions	f	FOREIGN KEY (alert_decisions) REFERENCES alerts(id) ON DELETE CASCADE	true	false	false
+constraint	decisions	decisions_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	decisions	decisions_id_not_null	n	NOT NULL id	true	false	false
+constraint	decisions	decisions_origin_not_null	n	NOT NULL origin	true	false	false
+constraint	decisions	decisions_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	decisions	decisions_scenario_not_null	n	NOT NULL scenario	true	false	false
+constraint	decisions	decisions_scope_not_null	n	NOT NULL scope	true	false	false
+constraint	decisions	decisions_simulated_not_null	n	NOT NULL simulated	true	false	false
+constraint	decisions	decisions_type_not_null	n	NOT NULL type	true	false	false
+constraint	decisions	decisions_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	decisions	decisions_value_not_null	n	NOT NULL value	true	false	false
+constraint	events	events_alerts_events	f	FOREIGN KEY (alert_events) REFERENCES alerts(id) ON DELETE CASCADE	true	false	false
+constraint	events	events_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	events	events_id_not_null	n	NOT NULL id	true	false	false
+constraint	events	events_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	events	events_serialized_not_null	n	NOT NULL serialized	true	false	false
+constraint	events	events_time_not_null	n	NOT NULL "time"	true	false	false
+constraint	events	events_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	locks	locks_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	locks	locks_id_not_null	n	NOT NULL id	true	false	false
+constraint	locks	locks_name_not_null	n	NOT NULL name	true	false	false
+constraint	locks	locks_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	machines	machines_auth_type_not_null	n	NOT NULL auth_type	true	false	false
+constraint	machines	machines_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	machines	machines_id_not_null	n	NOT NULL id	true	false	false
+constraint	machines	machines_ip_address_not_null	n	NOT NULL ip_address	true	false	false
+constraint	machines	machines_is_validated_not_null	n	NOT NULL is_validated	true	false	false
+constraint	machines	machines_machine_id_not_null	n	NOT NULL machine_id	true	false	false
+constraint	machines	machines_password_not_null	n	NOT NULL password	true	false	false
+constraint	machines	machines_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	machines	machines_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	meta	meta_alerts_metas	f	FOREIGN KEY (alert_metas) REFERENCES alerts(id) ON DELETE CASCADE	true	false	false
+constraint	meta	meta_created_at_not_null	n	NOT NULL created_at	true	false	false
+constraint	meta	meta_id_not_null	n	NOT NULL id	true	false	false
+constraint	meta	meta_key_not_null	n	NOT NULL key	true	false	false
+constraint	meta	meta_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	meta	meta_updated_at_not_null	n	NOT NULL updated_at	true	false	false
+constraint	meta	meta_value_not_null	n	NOT NULL value	true	false	false
+constraint	metrics	metrics_generated_by_not_null	n	NOT NULL generated_by	true	false	false
+constraint	metrics	metrics_generated_type_not_null	n	NOT NULL generated_type	true	false	false
+constraint	metrics	metrics_id_not_null	n	NOT NULL id	true	false	false
+constraint	metrics	metrics_payload_not_null	n	NOT NULL payload	true	false	false
+constraint	metrics	metrics_pkey	p	PRIMARY KEY (id)	true	false	false
+constraint	metrics	metrics_received_at_not_null	n	NOT NULL received_at	true	false	false
+database	crowdsec	crowdsec	{crowdsec=CTc/crowdsec}
+index	alerts	alert_id	CREATE INDEX alert_id ON public.alerts USING btree (id)	true	true
+index	alerts	alert_scenario	CREATE INDEX alert_scenario ON public.alerts USING btree (scenario)	true	true
+index	alerts	alert_uuid	CREATE INDEX alert_uuid ON public.alerts USING btree (uuid)	true	true
+index	alerts	alerts_pkey	CREATE UNIQUE INDEX alerts_pkey ON public.alerts USING btree (id)	true	true
+index	allow_list_allowlist_items	allow_list_allowlist_items_pkey	CREATE UNIQUE INDEX allow_list_allowlist_items_pkey ON public.allow_list_allowlist_items USING btree (allow_list_id, allow_list_item_id)	true	true
+index	allow_list_items	allow_list_items_pkey	CREATE UNIQUE INDEX allow_list_items_pkey ON public.allow_list_items USING btree (id)	true	true
+index	allow_list_items	allowlistitem_expires_at	CREATE INDEX allowlistitem_expires_at ON public.allow_list_items USING btree (expires_at)	true	true
+index	allow_list_items	allowlistitem_id	CREATE INDEX allowlistitem_id ON public.allow_list_items USING btree (id)	true	true
+index	allow_list_items	allowlistitem_start_ip_end_ip	CREATE INDEX allowlistitem_start_ip_end_ip ON public.allow_list_items USING btree (start_ip, end_ip)	true	true
+index	allow_lists	allow_lists_pkey	CREATE UNIQUE INDEX allow_lists_pkey ON public.allow_lists USING btree (id)	true	true
+index	allow_lists	allowlist_allowlist_id	CREATE INDEX allowlist_allowlist_id ON public.allow_lists USING btree (allowlist_id)	true	true
+index	allow_lists	allowlist_id	CREATE UNIQUE INDEX allowlist_id ON public.allow_lists USING btree (id)	true	true
+index	allow_lists	allowlist_name	CREATE UNIQUE INDEX allowlist_name ON public.allow_lists USING btree (name)	true	true
+index	bouncers	bouncer_api_key_auth_type	CREATE INDEX bouncer_api_key_auth_type ON public.bouncers USING btree (api_key, auth_type)	true	true
+index	bouncers	bouncer_api_key_ip_address	CREATE INDEX bouncer_api_key_ip_address ON public.bouncers USING btree (api_key, ip_address)	true	true
+index	bouncers	bouncer_last_pull_created_at	CREATE INDEX bouncer_last_pull_created_at ON public.bouncers USING btree (last_pull, created_at)	true	true
+index	bouncers	bouncers_name_key	CREATE UNIQUE INDEX bouncers_name_key ON public.bouncers USING btree (name)	true	true
+index	bouncers	bouncers_pkey	CREATE UNIQUE INDEX bouncers_pkey ON public.bouncers USING btree (id)	true	true
+index	config_items	config_items_name_key	CREATE UNIQUE INDEX config_items_name_key ON public.config_items USING btree (name)	true	true
+index	config_items	config_items_pkey	CREATE UNIQUE INDEX config_items_pkey ON public.config_items USING btree (id)	true	true
+index	decisions	decision_alert_decisions	CREATE INDEX decision_alert_decisions ON public.decisions USING btree (alert_decisions)	true	true
+index	decisions	decision_start_ip_end_ip	CREATE INDEX decision_start_ip_end_ip ON public.decisions USING btree (start_ip, end_ip)	true	true
+index	decisions	decision_until	CREATE INDEX decision_until ON public.decisions USING btree (until)	true	true
+index	decisions	decision_value_type_scope_until	CREATE INDEX decision_value_type_scope_until ON public.decisions USING btree (value, type, scope, until)	true	true
+index	decisions	decisions_pkey	CREATE UNIQUE INDEX decisions_pkey ON public.decisions USING btree (id)	true	true
+index	events	event_alert_events	CREATE INDEX event_alert_events ON public.events USING btree (alert_events)	true	true
+index	events	events_pkey	CREATE UNIQUE INDEX events_pkey ON public.events USING btree (id)	true	true
+index	locks	locks_name_key	CREATE UNIQUE INDEX locks_name_key ON public.locks USING btree (name)	true	true
+index	locks	locks_pkey	CREATE UNIQUE INDEX locks_pkey ON public.locks USING btree (id)	true	true
+index	machines	machine_is_validated	CREATE INDEX machine_is_validated ON public.machines USING btree (is_validated)	true	true
+index	machines	machine_last_heartbeat_created_at	CREATE INDEX machine_last_heartbeat_created_at ON public.machines USING btree (last_heartbeat, created_at)	true	true
+index	machines	machines_machine_id_key	CREATE UNIQUE INDEX machines_machine_id_key ON public.machines USING btree (machine_id)	true	true
+index	machines	machines_pkey	CREATE UNIQUE INDEX machines_pkey ON public.machines USING btree (id)	true	true
+index	meta	meta_alert_metas	CREATE INDEX meta_alert_metas ON public.meta USING btree (alert_metas)	true	true
+index	meta	meta_pkey	CREATE UNIQUE INDEX meta_pkey ON public.meta USING btree (id)	true	true
+index	metrics	metric_generated_type_generated_by_pushed_at	CREATE INDEX metric_generated_type_generated_by_pushed_at ON public.metrics USING btree (generated_type, generated_by, pushed_at)	true	true
+index	metrics	metric_received_at	CREATE INDEX metric_received_at ON public.metrics USING btree (received_at)	true	true
+index	metrics	metrics_pkey	CREATE UNIQUE INDEX metrics_pkey ON public.metrics USING btree (id)	true	true
+relation	alert_id	i	crowdsec	
+relation	alert_scenario	i	crowdsec	
+relation	alert_uuid	i	crowdsec	
+relation	alerts	r	crowdsec	
+relation	alerts_id_seq	S	crowdsec	
+relation	alerts_pkey	i	crowdsec	
+relation	allow_list_allowlist_items	r	crowdsec	
+relation	allow_list_allowlist_items_pkey	i	crowdsec	
+relation	allow_list_items	r	crowdsec	
+relation	allow_list_items_id_seq	S	crowdsec	
+relation	allow_list_items_pkey	i	crowdsec	
+relation	allow_lists	r	crowdsec	
+relation	allow_lists_id_seq	S	crowdsec	
+relation	allow_lists_pkey	i	crowdsec	
+relation	allowlist_allowlist_id	i	crowdsec	
+relation	allowlist_id	i	crowdsec	
+relation	allowlist_name	i	crowdsec	
+relation	allowlistitem_expires_at	i	crowdsec	
+relation	allowlistitem_id	i	crowdsec	
+relation	allowlistitem_start_ip_end_ip	i	crowdsec	
+relation	bouncer_api_key_auth_type	i	crowdsec	
+relation	bouncer_api_key_ip_address	i	crowdsec	
+relation	bouncer_last_pull_created_at	i	crowdsec	
+relation	bouncers	r	crowdsec	
+relation	bouncers_id_seq	S	crowdsec	
+relation	bouncers_name_key	i	crowdsec	
+relation	bouncers_pkey	i	crowdsec	
+relation	config_items	r	crowdsec	
+relation	config_items_id_seq	S	crowdsec	
+relation	config_items_name_key	i	crowdsec	
+relation	config_items_pkey	i	crowdsec	
+relation	decision_alert_decisions	i	crowdsec	
+relation	decision_start_ip_end_ip	i	crowdsec	
+relation	decision_until	i	crowdsec	
+relation	decision_value_type_scope_until	i	crowdsec	
+relation	decisions	r	crowdsec	
+relation	decisions_id_seq	S	crowdsec	
+relation	decisions_pkey	i	crowdsec	
+relation	event_alert_events	i	crowdsec	
+relation	events	r	crowdsec	
+relation	events_id_seq	S	crowdsec	
+relation	events_pkey	i	crowdsec	
+relation	locks	r	crowdsec	
+relation	locks_id_seq	S	crowdsec	
+relation	locks_name_key	i	crowdsec	
+relation	locks_pkey	i	crowdsec	
+relation	machine_is_validated	i	crowdsec	
+relation	machine_last_heartbeat_created_at	i	crowdsec	
+relation	machines	r	crowdsec	
+relation	machines_id_seq	S	crowdsec	
+relation	machines_machine_id_key	i	crowdsec	
+relation	machines_pkey	i	crowdsec	
+relation	meta	r	crowdsec	
+relation	meta_alert_metas	i	crowdsec	
+relation	meta_id_seq	S	crowdsec	
+relation	meta_pkey	i	crowdsec	
+relation	metric_generated_type_generated_by_pushed_at	i	crowdsec	
+relation	metric_received_at	i	crowdsec	
+relation	metrics	r	crowdsec	
+relation	metrics_id_seq	S	crowdsec	
+relation	metrics_pkey	i	crowdsec	
+schema	public	crowdsec	{crowdsec=UC/crowdsec}
+sequence	alerts_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	allow_list_items_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	allow_lists_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	bouncers_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	config_items_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	decisions_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	events_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	locks_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	machines_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	meta_id_seq	bigint	1	1	1	9223372036854775807	1	false
+sequence	metrics_id_seq	bigint	1	1	1	9223372036854775807	1	false
