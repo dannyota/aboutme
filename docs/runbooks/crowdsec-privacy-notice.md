@@ -152,10 +152,10 @@ sudo /usr/local/lib/aboutme/crowdsec-privacy-notice.sh activate
 
 Require `activated`, exit 0, and accepted plus deleted equal expected. The
 wrapper revokes send authority and writes activation authority. Perform the
-restart sequence above. Only then proceed with the separately fenced
-[CrowdSec cutover](../design/crowdsec-http-privacy.md#migration-loss-and-release-order),
-which still requires retention, fresh provisioning, and consumer proofs. Notice
-activation alone does not start changed ingestion.
+restart sequence above. Then run the ordinary host-bundle installation;
+`install.sh` runs the storage switch under the design's
+[migration, loss, and release order](../design/crowdsec-http-privacy.md#migration-loss-and-release-order).
+Notice activation alone does not start changed ingestion.
 
 ## Refusals and interrupted work
 

@@ -34,10 +34,20 @@ cleanup() {
 trap cleanup EXIT; mkdir -p "$work/bin" "$work/lib" /srv/data /var/lib/aboutme /usr/local/lib/aboutme; truncate -s 64M "$work/disk"
 mkfs.ext4 -q -L aboutme-data "$work/disk"; device=$(losetup --find --show "$work/disk")
 loops+=("$device"); mount "$device" /srv/data; mkdir /srv/data/aboutme
-install -d -o root -g root -m 0700 /srv/data/host-operations; mount --bind /srv/data/aboutme /var/lib/aboutme
+install -d -o root -g root -m 0700 /srv/data/host-operations
+install -o root -g root -m 0600 /dev/null /srv/data/host-operations/.bundle.lock
+mount --bind /srv/data/aboutme /var/lib/aboutme
 cp "$primitive" "$work/lib/crowdsec-privacy-notice-host.sh"; cp "$controller_source" "$work/lib/restore-drill.sh"
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" \
   "$root/deploy/vn/host/workload-lock.sh" "$work/lib/"
+# Any automated CrowdSec invocation is a regression. Cluster restore itself
+# remains covered by the PostgreSQL fixture stages below.
+for helper in crowdsec-db crowdsec-provision crowdsec-migrate; do
+  stub "$work/lib/$helper.sh" <<'STUB'
+printf 'crowdsec-called\n' >>"$NOTICE_FIXTURE/crowdsec-effects"
+exit 1
+STUB
+done
 mount --bind "$work/lib" /usr/local/lib/aboutme; mkdir -p /run/aboutme; export NOTICE_FIXTURE=$work NOTICE_DEVICE=$device
 for command in sync mv rm; do
   stub "$work/bin/$command" <<'STUB'
@@ -323,7 +333,7 @@ else
     *query_to_xml*) stage=counts; answer='auth_email_jobs|1' ;;
     *aclexplode*) stage=grants; answer=0 ;;
     *has_schema_privilege*) stage=schema; answer=f ;;
-    *string_agg*) stage=roles; answer=aboutme,aboutme_app,aboutme_migrator ;;
+    *string_agg*) stage=roles; answer=aboutme,aboutme_app,aboutme_migrator,crowdsec ;;
     *'SET ROLE aboutme_app'*) stage=smoke; answer=0 ;;
     *) exit 1 ;;
   esac
@@ -473,6 +483,7 @@ for fault in before-store after-rename after-sync lost-response; do
   reset_owner
 done
 rm -f "$work/release-renamed"; printf 'restore\nrecovery\nversion\ncounts\ngrants\nschema\nroles\nsmoke\n' >"$work/expected-stages"; tail -n 8 "$work/db-stages" >"$work/latest-stages"
+[[ ! -e $work/crowdsec-effects ]] || fail 'automatic restore touched CrowdSec'
 cmp -s "$work/expected-stages" "$work/latest-stages" || fail 'pass omitted fixed database checks'
 for stage in restore recovery version counts grants schema roles smoke; do
   : >"$work/db-stages"; NOTICE_DB_FAIL=$stage refuse restore_pass

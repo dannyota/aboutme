@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme CrowdSec hourly vacuum
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=30s
+Persistent=true
+Unit=aboutme-crowdsec-vacuum.service
+
+[Install]
+WantedBy=timers.target
