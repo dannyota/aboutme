@@ -18,6 +18,7 @@ type config struct {
 	RepositoryRoot    string
 	BrowserExecutable string
 	OutputDirectory   string
+	ExportFixtures    string
 	Probe             bool
 }
 
@@ -29,8 +30,33 @@ func parseConfig(args []string) (config, error) {
 	set.StringVar(&result.BrowserExecutable, "chromium-executable", "", "absolute pinned Chromium executable")
 	set.StringVar(&result.OutputDirectory, "output-directory", "", "empty output directory below .dev/phase-7")
 	set.BoolVar(&result.Probe, "probe", false, "run six cold integration probes without claiming measurement success")
+	set.StringVar(&result.ExportFixtures, "export-fixtures", "", "new absolute directory for offline synthetic fixtures")
 	if err := set.Parse(args); err != nil || set.NArg() != 0 {
 		return config{}, errors.New("invalid_arguments")
+	}
+	exportMode, benchmarkFlags := false, false
+	set.Visit(func(value *flag.Flag) {
+		if value.Name == "export-fixtures" {
+			exportMode = true
+		} else if value.Name != "repository-root" {
+			benchmarkFlags = true
+		}
+	})
+	if exportMode {
+		if benchmarkFlags || !cleanAbsolute(result.ExportFixtures) {
+			return config{}, errors.New("invalid_arguments")
+		}
+		if result.RepositoryRoot == "" {
+			root, err := os.Getwd()
+			if err != nil {
+				return config{}, errors.New("invalid_repository_root")
+			}
+			result.RepositoryRoot = root
+		}
+		if err := validateExportRepository(result.RepositoryRoot); err != nil {
+			return config{}, err
+		}
+		return result, nil
 	}
 	if !cleanAbsolute(result.RepositoryRoot) || !cleanAbsolute(result.BrowserExecutable) || !cleanAbsolute(result.OutputDirectory) {
 		return config{}, errors.New("invalid_arguments")
