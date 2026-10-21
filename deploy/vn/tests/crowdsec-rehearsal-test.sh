@@ -47,7 +47,7 @@ class Counters(unittest.TestCase):
     def test_shared_payload_envelope_is_separate_and_observation_bound(self):
         identifier='a'*64; invocation='b'*32; unit='aboutme-job@idempotency-expiry-sweep'
         observed={'unit':unit,'invocation':invocation,'container_id':identifier,
-                  'payload_group':'/machine.slice/libpod-'+identifier+'.scope','envelope_identity':1}
+                  'payload_group':'/machine.slice/libpod-'+identifier+'.scope/container','envelope_identity':1}
         values={'identity':1,'current':1,'peak':1,'events':dict(low=0,high=0,max=0,oom=0,oom_kill=0)}
         base={'unit':unit,'invocation':invocation,'shared_payload_envelope':values}
         final=dict(base,shared_payload_envelope=dict(values,peak=67108864))
@@ -56,14 +56,22 @@ class Counters(unittest.TestCase):
             self.assertEqual(result['shared_envelope'],1); self.assertEqual(result['peak'],67108864)
         with mock.patch('lifecycle.read_record',return_value=dict(observed,invocation='c'*32)):
             with self.assertRaises(ValueError): completed(base,final,pathlib.Path('/unused'))
+        with mock.patch('lifecycle.read_record',return_value=dict(observed,container_id='a'*63+'b')):
+            with self.assertRaises(ValueError): completed(base,final,pathlib.Path('/unused'))
     def test_job_keeps_unchanged_wrapper_and_default_scope(self):
         validate_command('aboutme-job@idempotency-expiry-sweep',
                          '{ path=/usr/local/lib/aboutme/job-run.sh ; argv[]=/usr/local/lib/aboutme/job-run.sh idempotency-expiry-sweep ; }')
-        identifier='a'*64
-        self.assertEqual(payload_path('/machine.slice/libpod-'+identifier+'.scope',identifier),
-                         pathlib.Path('/sys/fs/cgroup/machine.slice/libpod-'+identifier+'.scope'))
-        for group in ('/system.slice/other.service','/machine.slice/libpod-'+('b'*64)+'.scope'):
-            with self.assertRaises(ValueError): payload_path(group,identifier)
+        identifier='a'*64; scope='/machine.slice/libpod-'+identifier+'.scope'
+        self.assertEqual(payload_path(scope+'/container',identifier),
+                         pathlib.Path('/sys/fs/cgroup'+scope+'/container'))
+        for group in (scope,scope+'/other',scope+'/container/child',scope+'/container-sibling',
+                      scope+'-sibling/container',scope+'/container/',scope+'/container/../container',
+                      '/machine.slice/libpod-'+('a'*63+'b')+'.scope/container',
+                      '/system.slice/aboutme-job@idempotency-expiry-sweep.service','/'):
+            with self.subTest(group=group):
+                with self.assertRaises(ValueError): payload_path(group,identifier)
+        for invalid in ('a'*63,identifier+'\n'):
+            with self.assertRaises(ValueError): payload_path('/machine.slice/libpod-'+invalid+'.scope/container',invalid)
         with self.assertRaises(ValueError):
             validate_command('aboutme-job@idempotency-expiry-sweep','podman run --cgroups=split')
     def test_empty_oom_grep_is_valid_but_journal_failure_is_not(self):
