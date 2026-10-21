@@ -92,14 +92,14 @@ use counted once. The largest observed combined peak across phases is the gate;
 adding individual peaks from different times is not evidence of that peak. All
 scenarios and repeat runs must pass, not just the largest-memory phase.
 
-Before execution, freeze a bounded command list and sampling protocol under the
-[benchmark rules](budgets.md#benchmark-protocol): candidate/configuration
-identity, representative corpus, expected concurrency, warm-up, duration, sample
-count, repeat runs, and pressure observation criteria. The protocol must cover
-every scenario and the existing failure thresholds; missing commands or
+The [CrowdSec rehearsal protocol](crowdsec-rehearsal.md) fixes the command
+surfaces, isolated origin/storage, bootstrap sequence, corpus, concurrency,
+warm-up, duration, samples, repeats, pressure criteria, and resource cleanup
+under the [benchmark rules](budgets.md#benchmark-protocol). Missing commands or
 measurements leave the rehearsal unproved. Keep aggregate resource evidence and
-synthetic-only raw measurements outside the repository, and clean up the
-temporary host through its existing lifecycle after retaining the results.
+synthetic-only raw measurements outside the repository. The temporary host's
+first candidate transition establishes the ordinary state to measure; the
+completed capacity result is required before production cutover.
 
 Production cutover separately records resource use during its permitted safety
 passes and consumer starts. After completion, observe ordinary serving,
