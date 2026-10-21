@@ -55,14 +55,73 @@ crowdsec -t >/dev/null
 systemctl unmask crowdsec.service >/dev/null
 systemctl start crowdsec.service
 
-append_records() { # ip status count route [method]
-  local ip=$1 status=$2 count=$3 route=$4 method=${5:-GET} i ts
+append_records() { # ip status count route [method] [probe] [target]
+  local ip=$1 status=$2 count=$3 route=$4 method=${5:-GET} probe=${6:-none} target=${7:-} i ts target_json
+  target_json=$(jq -cn --arg value "$target" '$value')
   for ((i = 0; i < count; i++)); do
     ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
-    printf '{"ts":"%s","source_ip":"%s","method":"%s","status":%s,"route_class":"%s"}\n' \
-      "$ts" "$ip" "$method" "$status" "$route" >>"$feed"
+    printf '{"ts":"%s","source_ip":"%s","method":"%s","status":%s,"route_class":"%s","probe_class":"%s","target_path":%s}\n' \
+      "$ts" "$ip" "$method" "$status" "$route" "$probe" "$target_json" >>"$feed"
   done
 }
+
+for scenario in aboutme-http-rate aboutme-http-status; do
+  if grep -qF target_path "$edge/scenarios/$scenario.yaml"; then
+    echo "scenario-target-grouping" >&2
+    exit 1
+  fi
+done
+
+# Each invalid shape has its own source and enough scanner events to overflow
+# a bucket if the parser accepts it. Diagnostics report fixed labels only.
+rejected_ips=()
+rejection_filters=(
+  'del(.probe_class, .target_path)'
+  'del(.probe_class)'
+  'del(.target_path)'
+  '.extra = "discarded"'
+  '.target_path = null'
+  '.target_path = 7'
+  '.probe_class = "unrecognized"'
+  '.route_class = "unrecognized"'
+  '.method = "TRACE"'
+  '.status = "404"'
+  '.status = 404.5'
+  '.status = 99'
+  '.status = 600'
+  '.probe_class = "none"'
+  '.route_class = "api"'
+  '.status = 200'
+  '.target_path = ""'
+  '.probe_class = "repository"'
+  '.target_path = "/api/private"'
+  '.target_path = "/%2561pi/private"'
+  '.target_path = "/unknown/%0a"'
+  '.target_path = "/unknown/%ff"'
+  '.target_path = "/unknown/%zz"'
+  '.target_path = "/unknown/sample?token=discarded"'
+  '.target_path = "/unknown/" + ("x" * 504)'
+  '.probe_class = "invalid"'
+  '.probe_class = "oversized"'
+)
+for index in "${!rejection_filters[@]}"; do
+  ip=192.0.2.$((100 + index))
+  rejected_ips+=("$ip")
+  ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+  record=$(jq -cn --arg ts "$ts" --arg ip "$ip" \
+    '{ts:$ts,source_ip:$ip,method:"GET",status:404,route_class:"unknown",probe_class:"other",target_path:"/unknown/sample"}' |
+    jq -c "${rejection_filters[$index]}")
+  for _ in $(seq 21); do
+    printf '%s\n' "$record" >>"$feed"
+  done
+done
+duplicate_ip=192.0.2.130
+rejected_ips+=("$duplicate_ip")
+for _ in $(seq 21); do
+  ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+  printf '{"ts":"%s","source_ip":"%s","method":"GET","status":404,"route_class":"unknown","probe_class":"other","target_path":"/unknown/sample","target_path":"/unknown/duplicate"}\n' \
+    "$ts" "$duplicate_ip" >>"$feed"
+done
 
 wait_for_decision() { # ip
   local ip=$1 attempt decisions
@@ -99,6 +158,25 @@ append_records "$mixed_ip" 400 10 static GET
 append_records "$mixed_ip" 405 11 static HEAD
 wait_for_decision "$mixed_ip" >/dev/null || {
   echo "mixed failure scanning created no decision" >&2
+  exit 1
+}
+
+eligible_ip=192.0.2.43
+append_records "$eligible_ip" 404 21 unknown GET other '/unknown/eligible%2fmarker'
+wait_for_decision "$eligible_ip" >/dev/null || {
+  echo "eligible-target-created-no-decision" >&2
+  exit 1
+}
+for ip in "${rejected_ips[@]}"; do
+  if cscli decisions list -o json |
+    jq -e --arg ip "$ip" '.[] | .decisions[] | select(.value == $ip)' >/dev/null; then
+    echo "parser-invalid-feed-accepted" >&2
+    exit 1
+  fi
+done
+[[ $(sqlite3 /var/lib/crowdsec/data/crowdsec.db \
+  "SELECT count(*) FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip = '$eligible_ip') AND serialized LIKE '%/unknown/eligible%2fmarker%';") -gt 0 ]] || {
+  echo "eligible-target-sample-missing" >&2
   exit 1
 }
 
