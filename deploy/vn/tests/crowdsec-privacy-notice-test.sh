@@ -161,7 +161,14 @@ case $1 in
         'aboutme-crowdsec-retention.timer loaded active waiting retention' \
         'aboutme-crowdsec-retention-startup.service loaded active exited retention'
     fi
-    [[ -z ${NOTICE_INITIAL_UNIT:-} ]] || printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+    if [[ -n ${NOTICE_INITIAL_UNIT:-} ]]; then
+      if [[ ${NOTICE_INITIAL_MASKED:-0} == 1 ]]; then
+        [[ " $* " == *' --plain '* ]] || printf '● '
+        printf '%s masked active running Restore\n' "$NOTICE_INITIAL_UNIT"
+      else
+        printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+      fi
+    fi
     ;;
   stop)
     if [[ ${NOTICE_CAPTURE:-0} == 1 && $* == *aboutme-server* ]]; then
@@ -791,6 +798,7 @@ for unit in aboutme-migrate.service aboutme-db-setup.service aboutme-job@privacy
   NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_JOB=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
   NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_UNIT=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
 done
+NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_MASKED=1 NOTICE_INITIAL_UNIT=aboutme-restore.service refuse bash "$wrapper" reconcile-initial; initial_reset
 for inspection in jobs units; do NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_INSPECTION=$inspection refuse bash "$wrapper" reconcile-initial; initial_reset; done
 [[ $(wc -l <"$work/initial-calls") == "$before" ]] || fail 'nonquiescent writer reached initial database proof'
 for fault in rm:/var/lib/aboutme/privacy-notice/restore-reconciliation sync:/var/lib/aboutme/privacy-notice; do
