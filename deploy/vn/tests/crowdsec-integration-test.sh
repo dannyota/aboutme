@@ -320,10 +320,11 @@ assert any(call.startswith('stop ') and all(unit in call.split() for unit in (
 PY
 }
 credentials_status() {
-  local component
+  local component expected
   for component in machine caddy firewall; do
     integration_stage=credential-$1-$component
-    python3 -I - "$retention_fixture" "$1" "$2" "$component" >/dev/null 2>&1 <<'PY'
+    if [[ $component == machine ]]; then expected=$2; else expected=$3; fi
+    python3 -I - "$retention_fixture" "$1" "$expected" "$component" >/dev/null 2>&1 <<'PY'
 import json,pathlib,sys,urllib.error,urllib.request,yaml
 root=pathlib.Path(sys.argv[1]); prefix=sys.argv[2]; expected=int(sys.argv[3])
 component=sys.argv[4]
@@ -373,7 +374,7 @@ migration_refused() {
   done
 }
 integration_stage=migration-sqlite-credentials
-credentials_status sqlite 200
+credentials_status sqlite 200 200
 integration_stage=migration-sqlite-files
 for suffix in '' -shm -wal; do [[ -f /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
 integration_stage=migration-switch
@@ -395,8 +396,8 @@ printf 'PASS real-migration-noop\n'
 retention_fixture_case=real-migration-rejects-all-old-credentials
 integration_stage=migration-old-credentials
 snapshot_credentials switched
-credentials_status sqlite 401
-credentials_status switched 200
+credentials_status sqlite 401 403
+credentials_status switched 200 200
 printf 'PASS real-migration-rejects-all-old-credentials\n'
 
 retention_fixture_case=real-migration-reset
@@ -427,8 +428,8 @@ integration_stage=reset-statistics-removed
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 migration_ready
 snapshot_credentials reset
-credentials_status switched 401
-credentials_status reset 200
+credentials_status switched 401 403
+credentials_status reset 200 200
 printf 'PASS real-migration-reset\n'
 
 retention_fixture_case=real-migration-failure-requires-explicit-reset
@@ -464,8 +465,8 @@ integration_stage=recovery-edge-start
 systemctl start aboutme-caddy.service aboutme-maintenance.service
 migration_ready
 snapshot_credentials recovered
-credentials_status reset 401
-credentials_status recovered 200
+credentials_status reset 401 403
+credentials_status recovered 200 200
 migration_noop
 printf 'PASS real-migration-failure-requires-explicit-reset\n'
 
