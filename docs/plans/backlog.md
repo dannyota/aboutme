@@ -4,6 +4,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- Diagnose any recurrence of `startup-empty-postgresql` failing once in VN run 39557891732. Later runs passed; the original cause remains unknown. Separate controlled measurements proved excessive JIT compilation for the retention candidate query and justified session-scoped JIT disablement, but did not attribute the original startup failure. Evidence: `deploy/vn/tests/crowdsec-retention-test.sh` and runs 39560225083, 39565347582, and 39573660507.
 - Two npm audit exceptions expire on 2026-11-01 (node-forge, braces); check for fixed releases before then. Evidence: `.github/npm-audit-exceptions.json`.
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 - The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
