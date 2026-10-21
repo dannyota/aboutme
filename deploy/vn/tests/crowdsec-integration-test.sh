@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Hosted-only PostgreSQL and real pinned-consumer proof in private namespaces.
-set -euo pipefail
-trap 'echo "FAIL crowdsec-integration" >&2' ERR
+set -Eeuo pipefail
+retention_fixture_case=crowdsec-integration
+exec {integration_error_fd}>&2
+trap 'printf "FAIL %s\n" "$retention_fixture_case" >&"$integration_error_fd"' ERR
 
 ((EUID == 0)) || { echo "run as root" >&2; exit 1; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -12,6 +14,7 @@ source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 # shellcheck source=crowdsec-retention-fixture.sh
 source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
 retention_fixture_start "$repo_root"
+retention_fixture_case=crowdsec-integration
 retention_fixture_consumers
 # A second real pinned listener exercises maintenance's independent bouncer
 # cache. Process control remains the existing explicit namespace adapter.

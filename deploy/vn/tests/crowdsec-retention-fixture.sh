@@ -64,9 +64,11 @@ retention_fixture_feed() {
 }
 
 retention_fixture_start() {
+  retention_fixture_case=fixture-namespace-admission
   [[ $EUID == 0 && ${GITHUB_ACTIONS:-} == true &&
     $(readlink /proc/self/ns/mnt) != "$(readlink /proc/1/ns/mnt)" ]] || return 1
   local root=$1 script
+  retention_fixture_case=fixture-runtime-directory
   retention_fixture=$(mktemp -d /run/crowdsec-retention-fixture.XXXXXX)
   mount -t tmpfs -o size=512m,mode=0755 tmpfs "$retention_fixture"
   trap retention_fixture_cleanup EXIT
@@ -75,6 +77,7 @@ retention_fixture_start() {
   install -d -o root -g postgres -m 2770 "$retention_fixture/queries"
   mount -t tmpfs -o size=16m,mode=0755 tmpfs /run/postgresql
   chown postgres:postgres /run/postgresql
+  retention_fixture_case=fixture-postgresql-initialization
   runuser -u postgres -- /usr/lib/postgresql/18/bin/initdb -D "$retention_fixture/data" \
     --auth-local=peer --auth-host=reject --no-locale --encoding=UTF8 >/dev/null 2>&1
   install -d -m 0755 /etc/postgresql/18/main
@@ -96,9 +99,11 @@ log_statement = 'none'
 log_parameter_max_length = 0
 log_parameter_max_length_on_error = 0
 CONFIG
+  retention_fixture_case=fixture-postgresql-start
   runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/data" \
     -l "$retention_fixture/data/server.log" -w start >/dev/null 2>&1
   retention_fixture_started=yes
+  retention_fixture_case=fixture-application-sentinel
   retention_fixture_admin postgres >/dev/null <<'SQL'
 CREATE ROLE aboutme_migrator LOGIN;
 CREATE ROLE aboutme_app LOGIN;
@@ -109,6 +114,7 @@ SQL
 CREATE TABLE public.retention_sentinel (id integer PRIMARY KEY);
 INSERT INTO public.retention_sentinel VALUES (1);
 SQL
+  retention_fixture_case=fixture-data-volume
   install -d -m 0755 /srv/data /var/lib/aboutme /usr/local/lib/aboutme
   truncate -s 64M "$retention_fixture/fence-disk"
   mkfs.ext4 -q -L aboutme-data "$retention_fixture/fence-disk"
@@ -116,12 +122,14 @@ SQL
   mount "$retention_fixture_loop" /srv/data
   install -d -m 0755 /srv/data/aboutme
   install -d -m 0700 /srv/data/host-operations
+  install -m 0600 /dev/null /srv/data/host-operations/.bundle.lock
   mount --bind /srv/data/aboutme /var/lib/aboutme
   mount -t tmpfs -o size=16m,mode=0755 tmpfs /run/aboutme
   install -d -m 0700 /run/aboutme/crowdsec
   mount -t tmpfs -o size=16m,mode=0755 tmpfs /var/lib/crowdsec
   install -d -m 0700 /var/lib/crowdsec/data
   retention_fixture_feed
+  retention_fixture_case=fixture-installed-helpers
   for script in crowdsec-db crowdsec-provision crowdsec-privacy-notice-host \
     crowdsec-retention crowdsec-retention-fail crowdsec-retention-lease-check crowdsec-vacuum; do
     install -m 0755 "$root/deploy/vn/host/$script.sh" "$retention_fixture/lib/$script.sh"
@@ -136,6 +144,7 @@ SQL
   install -m 0644 "$root/deploy/vn/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
   install -m 0644 "$root/deploy/vn/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
   install -m 0644 "$root/deploy/vn/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
+  retention_fixture_case=fixture-host-controls
   printf '11111111111111111111111111111111\n' >"$retention_fixture/invocation"
   printf 'inactive\n' >"$retention_fixture/consumer-state"
   printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/systemctl"
@@ -200,6 +209,7 @@ SH
   chmod 0755 "$retention_fixture/bin/"*
   mount --bind "$retention_fixture/bin" /usr/local/bin
   mount --bind "$retention_fixture/bin/systemctl" /usr/bin/systemctl
+  retention_fixture_case=fixture-query-adapter
   cp /usr/lib/postgresql/18/bin/psql "$retention_fixture/bin/psql-real"
   printf '#!/usr/bin/env bash\nset -euo pipefail\numask 077\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/psql"
   cat >>"$retention_fixture/bin/psql" <<'SH'
@@ -239,11 +249,17 @@ SH
   chmod 0755 "$retention_fixture/bin/psql" "$retention_fixture/bin/psql-real"
   mount --bind "$retention_fixture/bin/psql" /usr/lib/postgresql/18/bin/psql
   export PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  retention_fixture_case=fixture-fence-initialization
   /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
+  retention_fixture_case=fixture-fence-ownership
   retention_fixture_owner=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
+  retention_fixture_case=fixture-fence-mutation
   /usr/local/lib/aboutme/fence.sh mutation-start "$retention_fixture_owner" v0.8.9 reset-db >/dev/null 2>&1
+  retention_fixture_case=fixture-postgresql-provision
   printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$retention_fixture_owner" |
     /usr/local/lib/aboutme/crowdsec-provision.sh fresh >/dev/null 2>&1
+  # shellcheck disable=SC2034 # The caller's ERR trap reads this fixed case name.
+  retention_fixture_case=fixture-postgresql-ready
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
 }
 

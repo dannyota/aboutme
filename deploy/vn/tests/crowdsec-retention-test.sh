@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 host=$repo_root/deploy/vn/host
@@ -7,7 +7,10 @@ host=$repo_root/deploy/vn/host
 if [[ ${1:-} == postgresql ]]; then
   # shellcheck source=crowdsec-retention-fixture.sh
   source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
-  trap 'printf "FAIL retention-postgresql-command\n"' ERR
+  retention_fixture_case=retention-postgresql-command
+  # Keep fixed diagnostics visible when a failing command discards stderr.
+  exec {retention_error_fd}>&2
+  trap 'printf "FAIL %s\n" "$retention_fixture_case" >&"$retention_error_fd"' ERR
   retention_fixture=''
   retention_fixture_start "$repo_root"
   : "${retention_fixture:?fixture initialization failed}"
@@ -17,8 +20,9 @@ if [[ ${1:-} == postgresql ]]; then
   check_hosted() {
     local label=$1
     shift
+    retention_fixture_case=$label
     if "$@" >/dev/null 2>&1; then printf 'PASS %s\n' "$label"
-    else printf 'FAIL %s\n' "$label"; exit 1; fi
+    else printf 'FAIL %s\n' "$label" >&2; exit 1; fi
   }
 
   check_hosted startup-empty-postgresql run_retention startup

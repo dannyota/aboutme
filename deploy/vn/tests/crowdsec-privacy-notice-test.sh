@@ -34,7 +34,9 @@ cleanup() {
 trap cleanup EXIT; mkdir -p "$work/bin" "$work/lib" /srv/data /var/lib/aboutme /usr/local/lib/aboutme; truncate -s 64M "$work/disk"
 mkfs.ext4 -q -L aboutme-data "$work/disk"; device=$(losetup --find --show "$work/disk")
 loops+=("$device"); mount "$device" /srv/data; mkdir /srv/data/aboutme
-install -d -o root -g root -m 0700 /srv/data/host-operations; mount --bind /srv/data/aboutme /var/lib/aboutme
+install -d -o root -g root -m 0700 /srv/data/host-operations
+install -o root -g root -m 0600 /dev/null /srv/data/host-operations/.bundle.lock
+mount --bind /srv/data/aboutme /var/lib/aboutme
 cp "$primitive" "$work/lib/crowdsec-privacy-notice-host.sh"; cp "$controller_source" "$work/lib/restore-drill.sh"
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" \
   "$root/deploy/vn/host/workload-lock.sh" "$work/lib/"
