@@ -1,41 +1,23 @@
 #!/usr/bin/env bash
-# Stops every CrowdSec consumer after a retention failure. All output and the
-# marker are fixed so no attack address reaches the journal or alert mail.
-set -euo pipefail
-exec >/dev/null 2>/dev/null
+# Shared bounded consumer shutdown and retention failure action.
 
-if ((EUID == 0)) && {
-  [[ -n ${ABOUTME_RETENTION_SYSTEMCTL:-} ]] ||
-    [[ -n ${ABOUTME_RETENTION_ALERT:-} ]] ||
-    [[ -n ${ABOUTME_RETENTION_FAILURE_MARKER:-} ]] ||
-    [[ -n ${ABOUTME_RETENTION_FEED_DIR:-} ]] ||
-    [[ -n ${ABOUTME_RETENTION_SUCCESS_MARKER:-} ]];
-}; then
-  exit 2
-fi
-
-systemctl_cmd=${ABOUTME_RETENTION_SYSTEMCTL:-/usr/bin/systemctl}
-alert=${ABOUTME_RETENTION_ALERT:-/usr/local/lib/aboutme/alert.sh}
-marker=${ABOUTME_RETENTION_FAILURE_MARKER:-/run/aboutme/crowdsec-retention-failed}
-feed_dir=${ABOUTME_RETENTION_FEED_DIR:-/run/aboutme/caddy-log/crowdsec}
-success=${ABOUTME_RETENTION_SUCCESS_MARKER:-/run/aboutme/crowdsec-retention-ok}
-consumers=(
-  aboutme-caddy.service
-  aboutme-maintenance.service
-  crowdsec-firewall-bouncer.service
-  crowdsec.service
-)
-protected_units=("${consumers[@]}" aboutme-crowdsec-retention-startup.service)
-
-quiescent() {
+retention_quiescent() {
   local unit state group container status
+  local -a properties
   for unit in "${protected_units[@]}"; do
-    state=$(timeout 1 "$systemctl_cmd" show --all --property=ActiveState --property=Job \
-      --property=MainPID --property=ControlPID --property=ControlGroup "$unit" 2>/dev/null) || return 1
-    [[ $(wc -l <<<"$state") == 5 ]] || return 1
+    properties=(--property=ActiveState --property=Job)
+    if [[ $unit == *.service ]]; then
+      properties+=(--property=MainPID --property=ControlPID --property=ControlGroup)
+    fi
+    state=$(timeout 1 "$systemctl_cmd" show --all "${properties[@]}" "$unit" 2>/dev/null) || return 1
     grep -qxE 'ActiveState=(inactive|failed)' <<<"$state" &&
-      grep -qxF 'Job=' <<<"$state" && grep -qxF MainPID=0 <<<"$state" &&
-      grep -qxF ControlPID=0 <<<"$state" || return 1
+      grep -qxF 'Job=' <<<"$state" || return 1
+    if [[ $unit == *.timer ]]; then
+      [[ $(wc -l <<<"$state") == 2 ]] || return 1
+      continue
+    fi
+    [[ $(wc -l <<<"$state") == 5 ]] &&
+      grep -qxF MainPID=0 <<<"$state" && grep -qxF ControlPID=0 <<<"$state" || return 1
     group=$(sed -n 's/^ControlGroup=//p' <<<"$state")
     [[ -z $group ]] && continue
     [[ $group == /system.slice/*.service && $group != *..* ]] || return 1
@@ -56,32 +38,69 @@ quiescent() {
   fi
 }
 
-rm -f -- "$success"
-printf 'retention-failed\n' >"$marker"
-timeout 35 "$systemctl_cmd" stop "${protected_units[@]}" || true
-if ! quiescent; then
-  timeout 3 "$systemctl_cmd" kill --kill-whom=all --signal=SIGKILL "${protected_units[@]}" || true
-  timeout 3 "$systemctl_cmd" stop "${protected_units[@]}" || true
-fi
-
-failed=0
-quiescent || failed=1
-if ((failed)); then
-  "$alert" crowdsec-retention "CrowdSec retention failed" || true
-  exit 1
-fi
-if ((EUID == 0)); then
-  /usr/bin/setpriv --reuid 10001 --regid 10001 --clear-groups \
-    /usr/bin/rm -rf --one-file-system -- "$feed_dir" || failed=1
-  if [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
-    $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 &&
-    $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]]; then
-    /usr/bin/rm -rf --one-file-system -- /run/aboutme/crowdsec || failed=1
-  elif [[ -e /run/aboutme/crowdsec || -L /run/aboutme/crowdsec ]]; then
-    failed=1
+retention_stop() {
+  timeout 35 "$systemctl_cmd" stop "${protected_units[@]}" || true
+  if ! retention_quiescent; then
+    timeout 3 "$systemctl_cmd" kill --kill-whom=all --signal=SIGKILL "${protected_units[@]}" || true
+    timeout 3 "$systemctl_cmd" stop "${protected_units[@]}" || true
   fi
-else
-  rm -rf --one-file-system -- "$feed_dir" || failed=1
-fi
-"$alert" crowdsec-retention "CrowdSec retention failed" || true
-exit "$failed"
+
+  retention_quiescent
+}
+
+retention_fail_main() {
+  set -euo pipefail
+  exec >/dev/null 2>/dev/null
+  if ((EUID == 0)) && {
+    [[ -n ${ABOUTME_RETENTION_SYSTEMCTL:-} ]] ||
+      [[ -n ${ABOUTME_RETENTION_ALERT:-} ]] ||
+      [[ -n ${ABOUTME_RETENTION_FAILURE_MARKER:-} ]] ||
+      [[ -n ${ABOUTME_RETENTION_FEED_DIR:-} ]] ||
+      [[ -n ${ABOUTME_RETENTION_SUCCESS_MARKER:-} ]];
+  }; then
+    exit 2
+  fi
+
+  systemctl_cmd=${ABOUTME_RETENTION_SYSTEMCTL:-/usr/bin/systemctl}
+  alert=${ABOUTME_RETENTION_ALERT:-/usr/local/lib/aboutme/alert.sh}
+  marker=${ABOUTME_RETENTION_FAILURE_MARKER:-/run/aboutme/crowdsec-retention-failed}
+  feed_dir=${ABOUTME_RETENTION_FEED_DIR:-/run/aboutme/caddy-log/crowdsec}
+  success=${ABOUTME_RETENTION_SUCCESS_MARKER:-/run/aboutme/crowdsec-retention-ok}
+  consumers=(
+    aboutme-caddy.service
+    aboutme-maintenance.service
+    crowdsec-firewall-bouncer.service
+    crowdsec.service
+  )
+  protected_units=("${consumers[@]}" aboutme-crowdsec-retention-startup.service)
+
+  rm -f -- "$success"
+  printf 'retention-failed\n' >"$marker"
+  retention_stop || {
+    "$alert" crowdsec-retention "CrowdSec retention failed" || true
+    exit 1
+  }
+
+  failed=0
+  retention_quiescent || failed=1
+  if ((failed)); then
+    "$alert" crowdsec-retention "CrowdSec retention failed" || true
+    exit 1
+  fi
+  if ((EUID == 0)); then
+    /usr/bin/setpriv --reuid 10001 --regid 10001 --clear-groups \
+      /usr/bin/rm -rf --one-file-system -- "$feed_dir" || failed=1
+    if [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
+      $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 &&
+      $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]]; then
+      /usr/bin/rm -rf --one-file-system -- /run/aboutme/crowdsec || failed=1
+    elif [[ -e /run/aboutme/crowdsec || -L /run/aboutme/crowdsec ]]; then
+      failed=1
+    fi
+  else
+    rm -rf --one-file-system -- "$feed_dir" || failed=1
+  fi
+  "$alert" crowdsec-retention "CrowdSec retention failed" || true
+  exit "$failed"
+}
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then retention_fail_main "$@"; fi

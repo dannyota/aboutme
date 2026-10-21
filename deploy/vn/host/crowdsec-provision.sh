@@ -82,13 +82,10 @@ SQL
   local crowdsec_db_provisioning=yes
   # The functions run in this process under the existing canonical flock.
   # No lock-taking helper is launched from the protected section.
-  if [[ $1 == fresh ]] && crowdsec_db_ready; then return 0; fi
-  # A retry can resume an empty catalog initialized before policy was applied.
-  if crowdsec_db_empty; then
-    crowdsec_db_authority && crowdsec_db_stopped || return 1
-    timeout 30 /usr/bin/cscli -c /etc/crowdsec/config.yaml.postgresql bouncers list -o json \
-      >/dev/null 2>&1 || return 1
-  fi
+  crowdsec_db_empty || return 1
+  crowdsec_db_authority && crowdsec_db_stopped || return 1
+  timeout 30 /usr/bin/cscli -c /etc/crowdsec/config.yaml.postgresql bouncers list -o json \
+    >/dev/null 2>&1 || return 1
   crowdsec_db_main apply-policy </dev/null || return 1
   crowdsec_db_ready || return 1
   crowdsec_db_authority && crowdsec_db_stopped || return 1

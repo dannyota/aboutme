@@ -60,7 +60,7 @@ Three host-level controls replace AWS WAF:
   returns 403. Its [HTTP privacy contract](crowdsec-http-privacy.md) uses a
   bounded RAM-only feed with conditional rejected-target samples and disables
   community sharing. The owner approved the feed and PostgreSQL amendment on
-  2026-10-18; its contract owns live retention, backups, cutover, and recovery.
+  2026-10-18; its contract owns live retention, backups, the storage switch, and recovery.
 - Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
   before blocking. Raw audit logging stays off because it can record body data.
   Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes

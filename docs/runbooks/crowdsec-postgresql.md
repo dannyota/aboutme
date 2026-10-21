@@ -16,12 +16,20 @@ sudo /usr/local/lib/aboutme/crowdsec-migrate.sh
 ```
 
 The helper runs during every ordinary installation under the existing deploy
-operation lock. PostgreSQL configuration plus a passing database gate makes the
-helper return without stopping services.
+bundle lock, `/srv/data/host-operations/.bundle.lock`. Direct calls hold the
+same lock; installer children reuse its open descriptor. Every call refuses an
+owned fence, unresolved operation, or running operation unit before stopping
+anything, and requires the existing notice activation admission.
+
+A no-op requires PostgreSQL configuration, a passing database gate, a mode 0600
+local machine credential file, both named bouncer registrations, a valid
+retention lease and timers, and both CrowdSec services enabled. It changes no
+service state, including when those services are stopped.
 
 For the first switch, the helper records the active edge service and stops both
-edge modes, CrowdSec, its firewall bouncer, and database maintenance scheduling.
-It provisions the separate database, applies the pinned catalog policy, selects
+edge modes, CrowdSec, its firewall bouncer, the watcher timer and service, and
+database maintenance scheduling. It joins the stopped services and verifies
+quiescence. It provisions the separate database, applies the pinned catalog policy, selects
 PostgreSQL, and deletes only the three named SQLite database files. Old alerts
 and decisions are discarded. Decisions regenerate from live traffic.
 
@@ -30,7 +38,10 @@ retention clears owned cache and firewall state and writes a lease for the new
 database. Both maintenance timers start before CrowdSec. The helper registers
 `aboutme-caddy` through the host secrets helper and `aboutme-firewall` through
 its private key file, then starts the firewall bouncer and the recorded edge
-service. The switch causes a short edge outage.
+service. The watcher timer resumes after normal admission passes. When neither
+edge service was active, neither starts and `crowdsec_migrate_no_edge` appears
+on stderr; restore the intended edge through its normal guards. Zero exit does not prove serving. The switch causes a short edge
+outage.
 
 ## Verification
 
@@ -53,14 +64,17 @@ logs. `crowdsec-migrate-test.sh` covers host ordering with fake commands;
 
 ## Failure recovery
 
-A failed helper stops consumers and both timers, prints
-`crowdsec_migrate_refused`, and fails the deploy. Inspect fixed service results
-and the database gate. Correct the cause and rerun the ordinary deploy. Do not
-remove the application operation fence or bypass the gate to start services. Use
-explicit reset when the database cannot pass its pinned policy. A failure after
-PostgreSQL activation can leave a passing database gate with stopped consumers.
-The no-op condition still applies on a rerun; use `--reset` to repeat
-registration and startup in that state.
+A failed helper stops and joins consumers, the watcher, and both maintenance
+timers, prints `crowdsec_migrate_refused`, and fails the deploy. A shutdown that
+cannot establish quiescence reports `crowdsec_migrate_stop_failed`; keep the host
+closed and resolve the remaining process or job before recovery.
+
+Correct the cause and rerun before schema initialization. `fresh` requires an
+absent database or a verified empty schema. An occupied catalog with incomplete
+activation refuses with consumers stopped, even when the catalog gate passes.
+Use explicit `--reset` after schema initialization or incomplete startup.
+Never remove an application operation fence or bypass startup guards. A complete
+no-op leaves stopped services stopped; use reset to repeat startup.
 
 ## Reset after a cluster restore
 

@@ -408,7 +408,7 @@ fi
 # Keep the reviewed detection and bouncer templates available to the host step.
 install -d -m 0755 "$lib/crowdsec"
 copy_tree "$bundle/edge/crowdsec" "$lib/crowdsec"
-"$lib/crowdsec-migrate.sh" || die "crowdsec_migrate_refused"
+ABOUTME_MIGRATE_BUNDLE_FD=$operation_bundle_fd "$lib/crowdsec-migrate.sh" || die "crowdsec_migrate_refused"
 if ((${#edge_restart[@]})); then systemctl start "${edge_restart[@]}"; fi
 
 # 7. Apply settings and start units. The job timers start with the first

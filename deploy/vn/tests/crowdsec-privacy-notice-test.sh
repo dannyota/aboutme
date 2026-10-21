@@ -38,22 +38,14 @@ install -d -o root -g root -m 0700 /srv/data/host-operations; mount --bind /srv/
 cp "$primitive" "$work/lib/crowdsec-privacy-notice-host.sh"; cp "$controller_source" "$work/lib/restore-drill.sh"
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" \
   "$root/deploy/vn/host/workload-lock.sh" "$work/lib/"
-# Database reset is a boundary double in this protocol fixture. The real pinned
-# provisioner and PostgreSQL replacement are exercised in the integration job.
-cat >"$work/lib/crowdsec-db.sh" <<'STUB'
-# Source-only dependency for the fixed restore child fixture.
+# Any automated CrowdSec invocation is a regression. Cluster restore itself
+# remains covered by the PostgreSQL fixture stages below.
+for helper in crowdsec-db crowdsec-provision crowdsec-migrate; do
+  stub "$work/lib/$helper.sh" <<'STUB'
+printf 'crowdsec-called\n' >>"$NOTICE_FIXTURE/crowdsec-effects"
+exit 1
 STUB
-cat >"$work/lib/crowdsec-provision.sh" <<'STUB'
-crowdsec_restore_dependencies() { [[ ${NOTICE_DEPENDENCIES_FAIL:-0} == 0 ]]; }
-crowdsec_restore_reset() {
-  [[ $# == 0 && ! -e /proc/self/fd/3 && ! -e /proc/self/fd/4 ]] || return 1
-  if /usr/bin/flock -n /run/aboutme/workload.lock true; then return 1; fi
-  notice_restore_denial || return 1
-  printf 'reset\n' >>"$NOTICE_FIXTURE/db-stages"
-  [[ ${NOTICE_DB_FAIL:-none} != reset ]]
-}
-STUB
-chmod 0755 "$work/lib/crowdsec-db.sh" "$work/lib/crowdsec-provision.sh"
+done
 mount --bind "$work/lib" /usr/local/lib/aboutme; mkdir -p /run/aboutme; export NOTICE_FIXTURE=$work NOTICE_DEVICE=$device
 for command in sync mv rm; do
   stub "$work/bin/$command" <<'STUB'
@@ -461,10 +453,6 @@ for context in missing regular empty truncated extra duplicate unknown type vers
   : >"$work/db-stages"; NOTICE_CONTEXT=$context refuse restore_pass
   [[ ! -s $work/db-stages ]] || fail 'invalid context reached database effect'; retained; reset_owner
 done
- : >"$work/db-stages"
-NOTICE_DEPENDENCIES_FAIL=1 refuse restore_pass
-[[ ! -s $work/db-stages ]] || fail 'missing reset dependency reached restore'
-retained; reset_owner
 for completion in missing regular empty truncated extra duplicate unknown type version epoch owner oversized; do
   NOTICE_COMPLETION=$completion blocked_pass
 done
@@ -492,9 +480,10 @@ for fault in before-store after-rename after-sync lost-response; do
   fi
   reset_owner
 done
-rm -f "$work/release-renamed"; printf 'restore\nrecovery\nreset\nversion\ncounts\ngrants\nschema\nroles\nsmoke\n' >"$work/expected-stages"; tail -n 9 "$work/db-stages" >"$work/latest-stages"
+rm -f "$work/release-renamed"; printf 'restore\nrecovery\nversion\ncounts\ngrants\nschema\nroles\nsmoke\n' >"$work/expected-stages"; tail -n 8 "$work/db-stages" >"$work/latest-stages"
+[[ ! -e $work/crowdsec-effects ]] || fail 'automatic restore touched CrowdSec'
 cmp -s "$work/expected-stages" "$work/latest-stages" || fail 'pass omitted fixed database checks'
-for stage in restore recovery reset version counts grants schema roles smoke; do
+for stage in restore recovery version counts grants schema roles smoke; do
   : >"$work/db-stages"; NOTICE_DB_FAIL=$stage refuse restore_pass
   jq -e '.operation_kind=="notice_restore"' /var/lib/aboutme/fence.json >/dev/null || fail 'database failure released owner'
   [[ -f $authority/restore-reconciliation && ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'database failure lost denial'
