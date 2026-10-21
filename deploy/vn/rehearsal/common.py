@@ -24,18 +24,22 @@ class Runner:
         return remaining
 
     def call(self,arguments,input_data=None,timeout=90,cwd=None,env=None,private_error=False):
+        timeout=min(timeout,self.bound(timeout+5)-5)
+        require(timeout>0)
         child=subprocess.Popen(arguments,stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
                                stdout=subprocess.PIPE,stderr=subprocess.PIPE if private_error else subprocess.DEVNULL,cwd=cwd,env=env,start_new_session=True)
         try:
             output,error=child.communicate(input_data,timeout=self.bound(timeout))
-            require(len(output)<=16777216 and (error is None or len(error)<=65536))
+            require(len(output)<=33554432 and (error is None or len(error)<=65536))
+            self.bound(1)
             if private_error: return child.returncode,output,error
             require(child.returncode==0)
             return output
         except BaseException:
             if child.poll() is None:
                 os.killpg(child.pid,signal.SIGTERM)
-                try: child.wait(timeout=5)
+                grace=5 if self.deadline is None else max(0,min(5,self.deadline-time.time(),self.monotonic_deadline-time.monotonic()))
+                try: child.wait(timeout=grace)
                 except subprocess.TimeoutExpired:
                     os.killpg(child.pid,signal.SIGKILL); child.wait()
             raise
@@ -88,3 +92,13 @@ def safe_write(path,data):
     descriptor=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     with os.fdopen(descriptor,'wb') as stream:
         stream.write(data)
+
+
+def runtime_directory(runner,manifest):
+    parent=pathlib.Path(os.environ['XDG_RUNTIME_DIR'])
+    require(parent.is_absolute() and str(parent)==str(parent.resolve()) and parent.stat().st_uid==os.getuid())
+    require(runner.call(['findmnt','-n','-o','FSTYPE','-T',str(parent)]).decode().strip()=='tmpfs')
+    path=parent/manifest['name']
+    if not path.exists(): path.mkdir(mode=0o700)
+    require(not path.is_symlink() and stat.S_IMODE(path.stat().st_mode)==0o700 and path.stat().st_uid==os.getuid())
+    return path

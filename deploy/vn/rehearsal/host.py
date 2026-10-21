@@ -12,6 +12,7 @@ import threading
 import time
 from protocol import BASELINE, digest, require, validate_manifest
 from metrics import Collector, capture
+from lifecycle import install_hooks, final_record, final_records
 
 ROOT=pathlib.Path('/run/aboutme-rehearsal')
 LIB='/usr/local/lib/aboutme/'
@@ -109,6 +110,7 @@ def deploy(manifest,baseline=False,first=False,observe=None):
         if unit:
             after=capture(['systemctl','show','--property=InvocationID','--value',unit+'.service']).strip()
             require(after and after!=before)
+            final_record(unit,after)
         if observe: observe(command)
         return result
     # Failures preserve the existing operation owner. Only teardown follows.
@@ -150,6 +152,7 @@ def install(manifest):
         effect([LIB+'secrets-host.sh','import',name],30,value)
     effect([LIB+'secrets-host.sh','podman-sync'])
     isolated(manifest)
+    install_hooks(effect)
 
 
 def bootstrap(manifest,options):
@@ -185,7 +188,7 @@ def bootstrap(manifest,options):
     check_series(rows,0.1,2)
     require(collector.kernel_oom()==collector.kernel_initial)
     verify(manifest,{})
-    return {'valid':1,'cold_start':1,'samples':len(rows),'combined_peak':max(row['used'] for row in rows),
+    return {'final_lifecycles':final_records(),'valid':1,'cold_start':1,'samples':len(rows),'combined_peak':max(row['used'] for row in rows),
             'minimum_available':min(row['available'] for row in rows),
             'retired_cgroup_peaks':list(collector.last_groups.values())}
 
@@ -317,6 +320,7 @@ def measure(manifest,options):
                     effect(['systemctl','start','aboutme-job@idempotency-expiry-sweep.service'],1800)
                     after=capture(['systemctl','show','--property=InvocationID','--value','aboutme-job@idempotency-expiry-sweep.service']).strip()
                     require(after and after!=before)
+                    final_record('aboutme-job@idempotency-expiry-sweep',after)
                     require(backup.wait(timeout=min(1800,manifest['deadline']-time.time()))==0)
                     require(capture(['systemctl','show','--property=Result','--value','aboutme-job@idempotency-expiry-sweep.service']).strip()=='success')
                 finally:
@@ -346,7 +350,7 @@ def measure(manifest,options):
         check_series(rows,1,120)
         for before,after in zip(rows,rows[1:]): require(after['t']-before['t']<=2*before['interval']+0.001)
         require(collector.kernel_oom()==collector.kernel_initial)
-        print(json.dumps({'valid':1,'samples':len(rows),'overlap':1,'combined_peak':max(x['used'] for x in rows),
+        print(json.dumps({'final_lifecycles':final_records(),'valid':1,'samples':len(rows),'overlap':1,'combined_peak':max(x['used'] for x in rows),
                           'minimum_available':min(x['available'] for x in rows),'migration_noop':migration_noop[0]},separators=(',',':')),flush=True)
     finally:
         worker.join(1810)

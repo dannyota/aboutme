@@ -6,5 +6,4 @@ case "$#:${1:-}" in
   *) printf 'INVALID arguments\n' >&2; exit 2 ;;
 esac
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-exec timeout --signal=TERM --kill-after=10s 3600s \
-  python3 -Es "$here/../rehearsal/host.py" "$1"
+exec python3 -Es "$here/../rehearsal/host_deadline.py" "$1"
