@@ -81,7 +81,27 @@ run `sudo systemctl start ssh-keygen.service`, then
 `sudo systemctl show ssh-keygen.service -p Result -p ExecMainStatus`. Both must
 report success (`Result=success`, `ExecMainStatus=0`). SSH needs no restart.
 
+## CrowdSec PostgreSQL transition
+
+For the first PostgreSQL storage transition, the source provides
+`scripts/crowdsec-cutover.sh <tag>` and the separate `--complete <tag> <owner>`
+operation. Follow the
+[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md) for
+release eligibility, the isolated rehearsal, private incident-copy expiry,
+proofs, and exact-owner failure recovery. Do not use the ordinary full installer
+or deployer before this first transition. Do not resend or recapture the
+completed privacy-notice campaign.
+
+The host bundle separates CrowdSec's PostgreSQL role/database from application
+roles, gates schema-capable calls, and installs startup/runtime retention and an
+hourly no-analyze vacuum. Image rollback after completion keeps that host bundle
+and its monotonic release floor. Storage, feed, logging, and backup limits
+belong to the [privacy contract](../../docs/design/crowdsec-http-privacy.md).
+
 ## Build order
+
+This order describes host setup. The first production CrowdSec storage
+transition uses the procedure above rather than a full reinstall.
 
 1. Confirm each provider fact below on the account.
 2. `scripts/buckets.sh --storage-project-id <id>`: the media, backup, and state
@@ -212,7 +232,10 @@ or foreign value remains at the printed recovery key for attended resolution.
 reaches its private IP through the production host as an SSH jump host, installs
 PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
 target. It checks versions, row counts, grants, and an `aboutme_app` read. The
-exit trap deletes the server and volume unless `--keep` was requested.
+[CrowdSec restore boundary](../../docs/runbooks/crowdsec-postgresql.md#restore)
+also requires fresh CrowdSec storage without restoring attack data or
+identities. The exit trap deletes the server and volume unless `--keep` was
+requested.
 
 The server has no floating IP and no NAT, so it has no outbound internet for
 packages or vStorage. Outbound networking remains open. GreenNode Public NAT
