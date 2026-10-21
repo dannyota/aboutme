@@ -41,11 +41,13 @@ cannot establish admission. Root owns all records and their safe parent paths.
 
 ## Quiescent bootstrap
 
-1. Complete notice activation. Stop both Caddy modes, engine, firewall bouncer,
-   and application workloads. Disable and join retention/vacuum scheduling and
-   pending safety-unit jobs before issuing permits. Prove quiescence, including
-   pending jobs, processes, and container state. Package hooks cannot restart
-   consumers. Activate only the reviewed PostgreSQL/feed bundle under the fence.
+1. Pass the [temporary-host rehearsal](vietnam-host-memory.md#rehearsal-gate)
+   before production cutover. Complete notice activation. Stop both Caddy modes,
+   engine, firewall bouncer, and application workloads. Disable and join
+   retention/vacuum scheduling and pending safety-unit jobs before issuing
+   permits. Prove quiescence, including pending jobs, processes, and container
+   state. Package hooks cannot restart consumers. Activate only the reviewed
+   PostgreSQL/feed bundle under the fence.
 2. Provision authentication and PostgreSQL configuration before any CrowdSec
    binary runs. Only the fenced provisioner accepts verified empty schema. Apply
    policy and pass the complete gate before registration. Generate fresh
@@ -99,6 +101,12 @@ consumers start; only the complete mode supports this later timer-disabled
 interval. Every start still consumes its own exact permit.
 
 ## Completion and failure
+
+The pre-cutover rehearsal proves workloads that cutover permits cannot start.
+Completion verifies that evidence and the resource observations from permitted
+cutover work. It does not run application jobs, migrations, or database setup
+under cutover ownership. Final release acceptance also needs the memory
+contract's normal post-completion observations; those do not replace rehearsal.
 
 Completion validates the mode, full database gate, fresh lease, current release,
 expected final consumers/app state, inactive maintenance mode, and all required
