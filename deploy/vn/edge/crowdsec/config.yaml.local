@@ -18,6 +18,7 @@ config_paths:
 cscli:
   output: json
   color: never
+  hub_branch: master
 
 db_config:
   type: pgx

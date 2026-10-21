@@ -108,7 +108,8 @@ unsampled requests disappear with feed cleanup. HTTP scenario names start with
 `aboutme/http-`. The bouncer enforces current IP decisions with 403, which never
 feeds status-based ban escalation. Community API, console, intelligence clients,
 and online credentials are absent, so no attack data reaches threat-intelligence
-recipients. The local API listens only on `127.0.0.1:8095`.
+recipients. The local API listens only on `127.0.0.1:8095`. Pin
+`cscli.hub_branch: master` to reuse cached detection without release lookup.
 
 ## Database and authorization
 
