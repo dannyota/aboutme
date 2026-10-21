@@ -4,17 +4,21 @@ set -euo pipefail
 umask 077
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 [[ ${1:-} == hosted && $EUID == 0 && ${GITHUB_ACTIONS:-} == true ]] || exit 2
+stage=staging
+trap 'printf "FAIL standalone-restore %s\n" "$stage" >&2' ERR
+[[ $(stat -c '%u:%g:%a:%h' /etc/apt/keyrings/crowdsec.gpg) == 0:0:644:1 ]]
+runuser -u _apt -- test -r /etc/apt/keyrings/crowdsec.gpg
 [[ $(dpkg-query -W -f='${Status}' crowdsec 2>/dev/null || true) != 'install ok installed' ]]
 [[ ! -e /etc/crowdsec/config.yaml && ! -e /etc/crowdsec/local_api_credentials.yaml ]]
 [[ $(find /etc/crowdsec -type f -printf '%P\n' | LC_ALL=C sort) == $'config.yaml.postgresql\nconsole.yaml\nprofiles.yaml' ]]
 [[ -z $(find /var/lib/crowdsec/data -mindepth 1 -print -quit) ]]
 (cd / && sha256sum --check --status /usr/local/lib/aboutme/crowdsec-restore-binaries.sha256)
+echo 'PASS fresh-signing-key-and-authenticated-standalone-stage'
 # shellcheck source=crowdsec-restore-integration-fixture.sh
 source "$root/deploy/vn/tests/crowdsec-restore-integration-fixture.sh"
 restore_fixture_start "$root"
 trap restore_fixture_cleanup EXIT
 stage=application
-trap 'printf "FAIL standalone-restore %s\n" "$stage" >&2' ERR
 restore_admin >/dev/null <<'SQL'
 CREATE ROLE aboutme LOGIN;
 CREATE ROLE aboutme_app LOGIN;
