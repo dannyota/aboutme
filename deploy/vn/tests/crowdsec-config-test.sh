@@ -34,6 +34,9 @@ for line in (
 assert not re.search(r"(?im)^\s*(password|use_wal):|sqlite|crowdsec\.db", db)
 assert "  log_media: file" in config and "  log_dir: /run/aboutme/crowdsec" in config
 assert "online_client:" not in config
+# A cached collection install must not resolve the latest engine release.
+cscli = config.split("\ncscli:\n", 1)[1].split("\n\n", 1)[0]
+assert "  hub_branch: master" in cscli.splitlines()
 PY
 
 check installer-postgresql-admission python3 - "$base/host/install.sh" <<'PY'
