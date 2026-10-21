@@ -15,8 +15,6 @@
 #   fence.sh raise <id> <tag>          raise the minimum to <tag>
 #   fence.sh release <id>              release the lock this id owns
 #   fence.sh check <release> <unit>    ExecStartPre: refuse an unsafe start
-#   fence.sh cutover-checkpoint <id> <tag> validate exact cutover ownership
-#   fence.sh cutover-fail <id> <tag>    stop only that current cutover's consumers
 #   fence.sh clear <reason>            privileged manual clear of a stale lock
 #
 # There is no time-based takeover: a crash leaves the lock closed until a
@@ -69,16 +67,15 @@ load() {
 
 store() { # new document on stdin
   local tmp
-  tmp=$(mktemp "$dir/.fence.XXXXXX") || return 1
+  tmp=$(mktemp "$dir/.fence.XXXXXX")
   if ! jq 'if type == "object" and (.minimum_release | type) == "number" then . else error("malformed") end' >"$tmp"; then
-    rm -f "$tmp" || true
-    return 1
+    rm -f "$tmp"
+    die "refusing to write a malformed document"
   fi
-  if ! chmod 0644 "$tmp" || ! sync "$tmp" || ! mv -f "$tmp" "$file"; then
-    rm -f -- "$tmp" || true
-    return 1
-  fi
-  sync "$dir" || return 1
+  chmod 0644 "$tmp"
+  sync "$tmp"
+  mv -f "$tmp" "$file"
+  sync "$dir"
 }
 
 candidate_of() { # tag
@@ -88,7 +85,7 @@ candidate_of() { # tag
 with_lock() { # mode command...
   local mode=$1
   shift
-  exec {fd}>>"$lockfile" || return 1
+  exec {fd}>>"$lockfile"
   flock "$mode" -w 30 "$fd" || die "could not take $lockfile within 30 s"
   if [[ $dir == /var/lib/aboutme ]]; then notice_recheck_mount || die "invalid data mounts"; fi
   "$@"
@@ -101,7 +98,7 @@ cmd_init() {
     return 0
   fi
   jq -n --argjson r "$floor_release" --arg t "$floor_tag" --arg s "$(now)" \
-    '{minimum_release: $r, minimum_tag: $t, updated_at: $s}' | store || return 1
+    '{minimum_release: $r, minimum_tag: $t, updated_at: $s}' | store
   say "created $file at $floor_tag ($floor_release)"
 }
 
@@ -124,7 +121,7 @@ cmd_lock() { # kind tag
   ts=$(now)
   jq --arg o "$oid" --arg k "$kind" --arg s "$ts" --arg tag "$2" \
     '.operation_id = $o | .operation_kind = $k | .operation_started_at = $s | .operation_checked_at = $s
-     | .operation_tag=$tag' <<<"$doc" | store || return 1
+     | if $k=="notice_restore" then .operation_tag=$tag else . end' <<<"$doc" | store
   printf '%s\n' "$oid"
 }
 
@@ -142,7 +139,7 @@ cmd_lock_for() { # kind tag request id
   fi
   ts=$(now)
   jq --arg id "$id" --arg kind "$kind" --arg tag "$tag" --arg ts "$ts" \
-    '.operation_id=$id | .operation_kind=$kind | .operation_tag=$tag | .operation_started_at=$ts | .operation_checked_at=$ts' <<<"$doc" | store || return 1
+    '.operation_id=$id | .operation_kind=$kind | .operation_tag=$tag | .operation_started_at=$ts | .operation_checked_at=$ts' <<<"$doc" | store
   printf '%s\n' "$id"
 }
 
@@ -171,7 +168,7 @@ cmd_checkpoint() { # id tag
     [[ $(jq -r .operation_tag <<<"$doc") == "$2" ]] || die "the bound operation tag differs"
   fi
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
-  jq --arg s "$(now)" '.operation_checked_at = $s' <<<"$doc" | store || return 1
+  jq --arg s "$(now)" '.operation_checked_at = $s' <<<"$doc" | store
 }
 
 cmd_raise() { # id tag
@@ -180,7 +177,7 @@ cmd_raise() { # id tag
   owned_or_die "$1"
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
   jq --argjson r "$candidate" --arg t "$2" --arg s "$(now)" \
-    '.minimum_release = $r | .minimum_tag = $t | .updated_at = $s' <<<"$doc" | store || return 1
+    '.minimum_release = $r | .minimum_tag = $t | .updated_at = $s' <<<"$doc" | store
   say "raised the minimum to $2 ($candidate)"
 }
 
@@ -200,12 +197,12 @@ load_mutation() {
 
 store_mutation() { # document on stdin
   local tmp
-  tmp=$(mktemp "$dir/.cutover-mutation.XXXXXX") || return 1
-  if ! cat >"$tmp" || ! chmod 0600 "$tmp" || ! sync "$tmp" || ! mv -f "$tmp" "$mutation_file"; then
-    rm -f -- "$tmp" || true
-    return 1
-  fi
-  sync "$dir" || return 1
+  tmp=$(mktemp "$dir/.cutover-mutation.XXXXXX")
+  cat >"$tmp"
+  chmod 0600 "$tmp"
+  sync "$tmp"
+  mv -f "$tmp" "$mutation_file"
+  sync "$dir"
 }
 
 assert_cutover_owner() { # id
@@ -238,7 +235,7 @@ cmd_mutation_start() { # id tag kind
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
   [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker already exists"
   jq -n --arg o "$1" --arg k "$3" --arg s "$(now)" \
-    '{operation_id: $o, mutation_kind: $k, state: "active", started_at: $s}' | store_mutation || return 1
+    '{operation_id: $o, mutation_kind: $k, state: "active", started_at: $s}' | store_mutation
 }
 
 cmd_mutation_clear() { # id kind
@@ -248,7 +245,8 @@ cmd_mutation_clear() { # id kind
   [[ $(jq -r .operation_id <<<"$mutation") == "$1" && $(jq -r .mutation_kind <<<"$mutation") == "$2" ]] ||
     die "the cutover mutation marker belongs to another operation or kind"
   assert_cutover_quiescent
-  rm -f "$mutation_file" && sync "$dir" || return 1
+  rm -f "$mutation_file"
+  sync "$dir"
 }
 
 # Releasing an already released lock succeeds, so a retried release after a
@@ -263,9 +261,8 @@ cmd_release() { # id
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover && ( -e $mutation_file || -L $mutation_file ) ]]; then
     die "the cutover mutation marker remains; recover or clear it first"
   fi
-  [[ $(jq -r '.crowdsec_cutover_started // false' <<<"$doc") != true ]] || die "cutover requires exact completion"
   operation_release_guard
-  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store || return 1
+  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
 }
 
 # ExecStartPre for every production-image start. Takes a shared lock so it
@@ -300,15 +297,13 @@ cmd_check() { # release unit
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") != cutover && ! -e $mutation_file && ! -L $mutation_file ]]; then
     return 0
   fi
-  if [[ $unit == aboutme-db-setup && $(jq -r '.crowdsec_cutover_started // false' <<<"$doc") != true ]] && cutover_owner_is_valid; then
+  if [[ $unit == aboutme-db-setup ]] && cutover_owner_is_valid; then
     load_mutation
     if [[ $(jq -r .operation_id <<<"$mutation") == "$owner" &&
       $(jq -r .mutation_kind <<<"$mutation") == reset-db ]]; then
       return 0
     fi
   fi
-  if [[ $unit != *.service ]]; then unit+=.service; fi
-  if load_cutover_library && cutover_consume "$unit" "$release"; then return 0; fi
   echo "aboutme-fence-refused unit=$unit retained-cutover-state"
   exit 1
 }
@@ -325,14 +320,13 @@ cmd_clear() { # reason
   [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker remains; recover it first"
   load
   [[ $(jq -r '.operation_kind // empty' <<<"$doc") != notice_restore ]] || die "notice restore requires exact-owner recovery"
-  [[ $(jq -r '.crowdsec_cutover_started // false' <<<"$doc") != true ]] || die "cutover requires exact completion"
   [[ -n $owner ]] || {
     say "no lock to clear"
     return 0
   }
   logger -t aboutme-fence "manual clear of $(jq -c '{operation_kind, operation_started_at, operation_checked_at}' <<<"$doc") by ${SUDO_USER:-root}: $reason"
   operation_release_guard
-  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store || return 1
+  jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
   say "cleared"
 }
 
@@ -358,7 +352,8 @@ recover_marker() { # id kind reason [attestation]
   recover_processes_stopped "$kind"
   assert_cutover_quiescent
   logger -t aboutme-fence "cutover mutation recovery marker=$mutation by ${SUDO_USER:-root} attestation=${attestation:-none}: $reason"
-  rm -f "$mutation_file" && sync "$dir" || return 1
+  rm -f "$mutation_file"
+  sync "$dir"
   say "cleared the cutover mutation marker; the operation lock remains"
 }
 
@@ -392,7 +387,7 @@ cmd_notice_authority() {
       notice_absent /var/lib/aboutme/privacy-notice/send.json && notice_absent /var/lib/aboutme/privacy-notice/activation.json &&
       sync /var/lib/aboutme/privacy-notice || die "invalid adopted authority"
   fi
-  jq --arg id "$id" --arg state "$state" '.notice_authority={version:1,state:$state,operation_id:$id}' <<<"$doc" | store || return 1
+  jq --arg id "$id" --arg state "$state" '.notice_authority={version:1,state:$state,operation_id:$id}' <<<"$doc" | store
 }
 cmd_notice_restore_release() {
   owned_or_die "$1"
@@ -401,50 +396,15 @@ cmd_notice_restore_release() {
   notice_authority_check && notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation &&
     [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]] &&
     notice_absent /var/lib/aboutme/privacy-notice/send.json && notice_absent /var/lib/aboutme/privacy-notice/activation.json || die "restore denial is incomplete"
-  jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' <<<"$doc" | store || return 1
+  jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' <<<"$doc" | store
 }
 
 cmd_check_current() {
   load
   local number
-  cutover_safe /var/lib/aboutme/release.json 644 || die 'release record missing'
-  number=$(jq -er .release_number /var/lib/aboutme/release.json) || die 'release number missing'
+  notice_safe_file /var/lib/aboutme/release.json 644 || die "release record missing"
+  number=$(jq -er .release_number /var/lib/aboutme/release.json) || die "release number missing"
   cmd_check "$number" "$1"
-}
-cmd_start_unit() {
-  local id=$1 tag=$2 unit=$3 result=0
-  (with_lock -x cutover_start_prepare "$id" "$tag" "$unit") || return 1
-  # ExecStartPre takes the same lock; never retain it across this wait.
-  systemctl start "$unit" >/dev/null 2>&1 || result=1
-  if ((result==0)); then
-    (with_lock -x cutover_start_finish "$id" "$tag" "$unit") && return 0
-  fi
-  (with_lock -x cutover_failure "$id" "$tag") || true
-  return 1
-}
-cmd_prepare_completion() {
-  # Hold shared ownership while joining the watcher. A running watcher can
-  # finish under its own shared guard; no exclusive helper runs here.
-  cutover_validate_owner "$1" "$2" || return 1
-  systemctl stop aboutme-watch.timer aboutme-watch.service >/dev/null 2>&1 || return 1
-}
-cmd_complete_cutover() {
-  (with_lock -s cmd_prepare_completion "$1" "$2") || return 1
-  if ! (with_lock -x cutover_complete "$1" "$2"); then
-    (with_lock -x cutover_failure "$1" "$2") || true
-    return 1
-  fi
-}
-cmd_cutover_checkpoint() {
-  cutover_validate_owner "$1" "$2" && cmd_checkpoint "$1" "$2"
-}
-load_cutover_library() {
-  local cutover_library
-  cutover_library=$(dirname "${BASH_SOURCE[0]}")/crowdsec-cutover-state.sh
-  if [[ ! -f $cutover_library ]]; then cutover_library=$(dirname "${BASH_SOURCE[0]}")/../host/crowdsec-cutover-state.sh; fi
-  [[ -f $cutover_library && ! -L $cutover_library ]] || return 1
-  # shellcheck source=../host/crowdsec-cutover-state.sh
-  source "$cutover_library"
 }
 
 [[ $(id -u) == 0 ]] || die "run as root on the host"
@@ -473,15 +433,8 @@ case "$#:${1-}" in
   2:release) with_lock -x cmd_release "$2" ;;
   3:notice-authority) with_lock -x cmd_notice_authority "$2" "$3" ;;
   2:notice-restore-release) with_lock -x cmd_notice_restore_release "$2" ;;
-  3:check) with_lock -x cmd_check "$2" "$3" ;;
-  2:safety-result) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_safety_result "$2" ;;
-  2:check-current) load_cutover_library || die 'cutover helper missing'; with_lock -x cmd_check_current "$2" ;;
-  4:start-unit) load_cutover_library || die 'cutover helper missing'; cmd_start_unit "$2" "$3" "$4" ;;
-  3:cutover-mode) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_create_mode "$2" "$3" ;;
-  3:cutover-watch) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_watch_pass "$2" "$3" ;;
-  3:cutover-complete) load_cutover_library || die 'cutover helper missing'; cmd_complete_cutover "$2" "$3" ;;
-  3:cutover-fail) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_failure "$2" "$3" ;;
-  3:cutover-checkpoint) load_cutover_library || die 'cutover helper missing'; with_lock -x cmd_cutover_checkpoint "$2" "$3" ;;
+  3:check) with_lock -s cmd_check "$2" "$3" ;;
+  2:check-current) with_lock -s cmd_check_current "$2" ;;
   2:clear) with_lock -x cmd_clear "$2" ;;
   4:recover-cutover) with_lock -x cmd_recover_cutover "$2" "$3" "$4" ;;
   4:recover-cutover-media) with_lock -x cmd_recover_cutover_media "$2" "$3" "$4" ;;

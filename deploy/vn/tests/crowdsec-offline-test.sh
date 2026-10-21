@@ -133,14 +133,7 @@ PY
   [[ -z $(find /var/lib/crowdsec -type f -name '*.db*' -print -quit) ]]
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-  before_stage=$(catalog | sha256sum)
-  strace -f -e trace=execve -o "$proof/restore-stage-exec" \
-    bash "$repo_root/deploy/vn/host/crowdsec-restore-stage.sh" "$repo_root/deploy/vn" >/dev/null 2>&1
-  [[ $(catalog | sha256sum) == "$before_stage" ]]
-  (cd / && sha256sum --check --status /usr/local/lib/aboutme/crowdsec-restore-binaries.sha256)
-  if grep -Eq 'execve\("/usr/bin/(cscli|crowdsec)"|--configure|postinst|preinst' "$proof/restore-stage-exec"; then exit 1; fi
-  [[ ! -e /usr/local/lib/aboutme/quadlet && ! -e /var/lib/aboutme/release.json ]]
-  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\nPASS authenticated-executable-only-restore-stage\n'
+  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
   exit 0
 fi
 

@@ -11,7 +11,6 @@ OnFailure=aboutme-crowdsec-retention-failure.service
 [Service]
 Type=oneshot
 ExecStartPre=/usr/local/lib/aboutme/fence.sh check-current aboutme-crowdsec-retention.service
-ExecStartPost=/usr/local/lib/aboutme/fence.sh safety-result aboutme-crowdsec-retention.service
 ExecStart=/usr/local/lib/aboutme/crowdsec-retention.sh runtime
 TimeoutStartSec=1min
 StandardOutput=null

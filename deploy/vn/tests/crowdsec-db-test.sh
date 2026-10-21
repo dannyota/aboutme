@@ -225,14 +225,12 @@ regressions() {
     return
   fi
   prepare_installed_fixture
-  check invalid-ownership-refuses fresh_refuses_invalid_owner
-  check missing-marker-refuses fresh_refuses_missing_marker
   check active-consumer-refuses active_consumer_refused
   check sourced-gate-cannot-bypass-owner source_cannot_bypass
-  check fresh-nested-lock-completes provision fresh
+  check fresh-provisioning-completes provision fresh
   check schema-actions-follow-read-only action_trace_valid
   check initialized-ready gate preflight-ready
-  check empty-preflight-refuses-unfenced gate_refuses_empty
+  check empty-preflight-refuses-external-call gate_refuses_empty
   check role-budget runtime_boolean <<'SQL'
 SELECT count(*) = 1 FROM pg_roles WHERE rolname = 'crowdsec' AND rolcanlogin
 AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication
@@ -284,8 +282,7 @@ SQL
 REVOKE CONNECT ON DATABASE crowdsec FROM aboutme_app;
 SQL
   check repaired-catalog-ready gate preflight-ready
-  check fresh-refuses-existing-schema fresh_refuses_existing
-  check owner-marker-retained marker_retained
+  check fresh-preserves-ready-schema provision fresh
   check peer-root-admitted runtime_boolean <<'SQL'
 SELECT current_user = 'crowdsec' AND current_database() = 'crowdsec'
 AND system_user = 'peer:root' AND inet_client_addr() IS NULL;
@@ -356,8 +353,6 @@ prepare_installed_fixture() {
   mount --bind "$scratch/bin/systemctl" /usr/bin/systemctl
   instrument_actions
   /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
-  operation=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
-  /usr/local/lib/aboutme/fence.sh mutation-start "$operation" v0.8.9 reset-db >/dev/null 2>&1
   admin aboutme >/dev/null <<'SQL'
 CREATE TABLE public.provisioner_sentinel (id integer PRIMARY KEY);
 INSERT INTO public.provisioner_sentinel VALUES (1);
@@ -368,20 +363,7 @@ DROP ROLE crowdsec;
 SQL
 }
 
-authority() { printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$operation"; }
-provision() { authority | timeout 45 bash /usr/local/lib/aboutme/crowdsec-provision.sh "$1"; }
-fresh_refuses_invalid_owner() {
-  ! printf '{"operation_id":"%043d","release_tag":"v0.8.9"}\n' 0 | \
-    timeout 10 bash /usr/local/lib/aboutme/crowdsec-provision.sh fresh
-}
-fresh_refuses_missing_marker() {
-  mv /var/lib/aboutme/cutover-mutation.json "$scratch/marker"
-  local rc=0
-  provision fresh || rc=$?
-  mv "$scratch/marker" /var/lib/aboutme/cutover-mutation.json
-  ((rc != 0))
-}
-fresh_refuses_existing() { ! provision fresh; }
+provision() { timeout 45 bash /usr/local/lib/aboutme/crowdsec-provision.sh "$1" </dev/null; }
 active_consumer_refused() {
   printf 'active\n' >"$scratch/consumer-state"
   local rc=0
@@ -391,10 +373,6 @@ active_consumer_refused() {
 }
 source_cannot_bypass() {
   ! bash -c 'source /usr/local/lib/aboutme/crowdsec-db.sh; crowdsec_db_provisioning=yes; crowdsec_db_empty'
-}
-marker_retained() {
-  jq -e --arg owner "$operation" '.operation_id == $owner and .mutation_kind == "reset-db"' \
-    /var/lib/aboutme/cutover-mutation.json >/dev/null
 }
 application_identity_refused() {
   ! runuser -u nobody -- "$test_psql" -XAt -w -h /run/postgresql -U crowdsec -d crowdsec -c 'SELECT 1'
@@ -516,7 +494,7 @@ contamination_rejected() {
   # the production boundary requires database replacement, never catalog edits.
   admin <<<'ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 100; ANALYZE public.events; ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 0;' >/dev/null
   ! gate preflight-ready </dev/null || return 1
-  ! authority | gate apply-policy || return 1
+  ! gate apply-policy || return 1
   provision restore-reset
 }
 same_epoch() {
@@ -560,7 +538,7 @@ recovery_rejected() {
 empty_refused_without_mutation() {
   admin <<<'DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION crowdsec; REVOKE ALL ON SCHEMA public FROM PUBLIC;' >/dev/null
   ! gate preflight-ready </dev/null || return 1
-  ! authority | gate preflight-empty || return 1
+  ! gate preflight-empty || return 1
   [[ $(admin <<<'SELECT count(*) FROM pg_class WHERE relnamespace = '\''public'\''::regnamespace;') == 0 ]]
 }
 malformed_epoch() { ! printf 'malformed\n' | gate preflight-ready; }

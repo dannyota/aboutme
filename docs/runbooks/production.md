@@ -82,10 +82,9 @@ and delivery checks.
 
 ## Deploy
 
-For the first CrowdSec PostgreSQL storage transition, use the
-[CrowdSec PostgreSQL runbook](crowdsec-postgresql.md). Do not run the ordinary
-full installer or deployer before that transition. Source configuration alone
-does not establish that transition or its production proofs.
+Every ordinary host installation runs the idempotent CrowdSec PostgreSQL
+migration. Follow the [CrowdSec PostgreSQL runbook](crowdsec-postgresql.md) for
+verification, failure recovery, and explicit reset after a cluster restore.
 
 Use the current reviewed checkout's deployer. Publication and deployment share
 `scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
@@ -216,10 +215,9 @@ The clear records its reason and never lowers the floor. Account-deletion
 release and clear also refuse an unresolved request, active unit/container, or
 matching database backend. Missing data mounts and key-change markers block
 image starts. Recover through the owning request; neither manual clear nor an
-EXIT trap bypasses these checks. It refuses a retained cutover mutation marker.
-A retained cutover lock or marker also blocks serving and job starts across
-reboot; maintenance remains available. Inspect and recover the exact mutation
-before clearing its lock. Do not delete fence files to restart the app.
+EXIT trap bypasses these checks. A retained operation or mutation marker can
+block serving and job starts across reboot. Inspect and recover the exact
+mutation before clearing its lock. Do not delete fence files to restart the app.
 
 ## Backups and restore
 
@@ -237,10 +235,10 @@ The quarterly [restore drill](../../deploy/vn/README.md#restore-drill) restores
 the latest backup and a point-in-time target to a temporary encrypted server.
 Outbound networking for that server remains open; do not claim a completed drill
 from backup configuration alone. The
-[CrowdSec restore procedure](crowdsec-postgresql.md#restore) discards restored
-attack data, statistics, and registrations before consumer restart.
-Whole-cluster backups include CrowdSec under its accepted recovery and
-expiration policy.
+[CrowdSec reset procedure](crowdsec-postgresql.md#reset-after-a-cluster-restore)
+requires the operator to discard restored attack data, statistics, and
+registrations before consumer restart. Whole-cluster backups include CrowdSec
+under its accepted recovery and expiration policy.
 
 ## Alarms
 
@@ -383,9 +381,9 @@ Healthy state has these properties:
 - `aboutme-caddy`, `aboutme-server`, and `aboutme-web` are active;
   `aboutme-maintenance` is inactive.
 - Public `/healthz` and `/readyz` return 200, and `www` redirects to the apex.
-- The four job timers, backup timers, host watcher, and CrowdSec retention timer
-  are enabled and active. After the PostgreSQL transition, the CrowdSec vacuum
-  timer is also enabled and active, with normal scheduled passes observed.
+- The four job timers, backup timers, host watcher, and both CrowdSec
+  maintenance timers are enabled and active, with normal scheduled passes
+  observed.
 - The fence has no operation lock or mutation marker between operations.
 - vMonitor `aboutme-readyz` is healthy, both quotas are active, and the uptime
   backstop is enabled with recent successful runs.

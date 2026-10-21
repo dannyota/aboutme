@@ -428,18 +428,7 @@ PY
           retention_firewall_rebuilt || return 1
         fi
         retention_gate || return 1
-        if [[ -f /run/aboutme/crowdsec-cutover/mode.json ]]; then
-          # Only this live owner-permitted runtime pass may request rebuild.
-          # shellcheck source=crowdsec-cutover-state.sh
-          source /usr/local/lib/aboutme/crowdsec-cutover-state.sh
-          cutover_paths && cutover_binding || return 1
-          cutover_record "${cutover_run:?validated cutover paths required}/spent-aboutme-crowdsec-retention.service.json" aboutme-crowdsec-retention.service || return 1
-          local invocation
-          invocation=$(cutover_invocation aboutme-crowdsec-retention.service) || return 1
-          jq -e --arg invocation "$invocation" '.invocation==$invocation' \
-            "${cutover_run:?validated cutover paths required}/spent-aboutme-crowdsec-retention.service.json" >/dev/null || return 1
-          timeout 10 /usr/local/lib/aboutme/fence.sh start-unit "${cutover_owner:?validated cutover binding required}" "${cutover_tag:?validated cutover binding required}" "$retention_restart_unit" >/dev/null 2>&1 || return 1
-        else timeout 10 systemctl start "$retention_restart_unit" >/dev/null 2>&1 || return 1; fi
+        timeout 10 systemctl start "$retention_restart_unit" >/dev/null 2>&1 || return 1
         systemctl is-active --quiet "$retention_restart_unit" || return 1
         if [[ $retention_restart_unit == crowdsec-firewall-bouncer.service ]]; then
           retention_firewall_rebuilt || return 1

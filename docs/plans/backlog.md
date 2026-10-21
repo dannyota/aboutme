@@ -10,6 +10,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
 - `e2e/chrome.spec.ts:188` (hero sheet centered on phones, WebKit light vi) timed out once at 20 s in run 38134235232 and passed on the next run; five widths, each launching WebKit, navigating, and awaiting fonts, share one 20 s budget. If it recurs, troubleshoot with both runs' logs. Evidence: `apps/web/e2e/chrome.spec.ts`.
 
+- Complete exact-candidate migration/reset CI and production database, retention, backup, and resource acceptance. Evidence: [remaining release work](crowdsec-postgresql.md) and the CrowdSec acceptance rows.
+
 ## Production acceptance
 
 - Renew the free vMonitor Synthetic Test and email quotas each month, and automate renewal once the `vngcloud` CLI supports it; current expiries are Synthetic 2026-10-25 21:43 UTC and email 2026-11-13 03:10 UTC. Evidence: [external readiness monitoring](./traceability/vietnam-operations.md#external-readiness-monitoring).

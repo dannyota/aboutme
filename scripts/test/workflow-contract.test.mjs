@@ -491,7 +491,7 @@ test("CI rejects changed job timeouts", () => {
   for (const name of Object.keys(readWorkflow("vn-infra").jobs)) {
     const vn = readWorkflow("vn-infra");
     for (const minutes of [1, 10, 20, 21]) {
-      const expected = name === "crowdsec-integration" || name === "crowdsec-cutover" ? 20 : 10;
+      const expected = name === "crowdsec-integration" ? 20 : 10;
       if (minutes === expected) continue;
       vn.jobs[name]["timeout-minutes"] = minutes;
       assert.throws(() => checkJobTimeouts(readWorkflow("ci"), vn), /timeout-minutes/, `${name}/${minutes}`);
@@ -615,38 +615,15 @@ function checkPreflightBases(ci) {
   }
 }
 
-function checkRehearsalArtifact(vn) {
-  const job = vn.jobs["crowdsec-rehearsal-fixtures"];
-  assert.ok(job, "rehearsal artifact job");
-  assert.equal(job["timeout-minutes"], 10, "rehearsal timeout");
-  assert.ok(!job.if && !job["continue-on-error"], "rehearsal must block");
-  assert.ok(job.steps.every((step) => !step.if && !step["continue-on-error"]), "rehearsal steps must block");
-  const reader = job.steps.find((step) => step["working-directory"] === "deploy/vn/rehearsal/allowance-adapter");
-  assert.equal(reader?.env?.GOWORK, "off", "rehearsal independent module");
-  assert.match(reader.run, /go test -mod=readonly \.\/\.\.\./, "rehearsal reader tests");
-  assert.match(reader.run, /go build -mod=readonly/, "rehearsal reader build");
-  assert.match(reader.run, /sha256sum render-budget allowance-adapter fixtures\/\*/, "rehearsal artifact hashes");
-  const upload = job.steps.find((step) => step.with?.name === "crowdsec-rehearsal-fixtures");
-  assert.equal(upload?.with?.["if-no-files-found"], "error", "rehearsal artifact required");
-  assert.equal(upload?.with?.["retention-days"], 7, "rehearsal artifact retention");
-}
-
-test("rehearsal exports the corpus and an independent allowance reader", () => {
-  checkRehearsalArtifact(readWorkflow("vn-infra"));
-  for (const mutate of [
-    (job) => { job["continue-on-error"] = true; },
-    (job) => { job.steps.find((step) => step.env?.GOWORK).env.GOWORK = "auto"; },
-    (job) => { job.steps.find((step) => step.env?.GOWORK).run = "go build ."; },
-    (job) => {
-      const reader = job.steps.find((step) => step.env?.GOWORK);
-      reader.run = reader.run.replace("go test -mod=readonly ./...", "go test -mod=readonly ...");
-    },
-    (job) => { job.steps.find((step) => step.with?.name === "crowdsec-rehearsal-fixtures").with["if-no-files-found"] = "warn"; },
-  ]) {
-    const vn = readWorkflow("vn-infra");
-    mutate(vn.jobs["crowdsec-rehearsal-fixtures"]);
-    assert.throws(() => checkRehearsalArtifact(vn), /rehearsal/);
-  }
+test("VN keeps database migration in the PostgreSQL job", () => {
+  const vn = readWorkflow("vn-infra");
+  assert.deepEqual(Object.keys(vn.jobs).sort(), [
+    "check", "crowdsec-integration", "crowdsec-postgresql", "crowdsec-privacy-notice",
+  ]);
+  const job = vn.jobs["crowdsec-postgresql"];
+  const step = job.steps.find((entry) => entry.run === "sudo bash deploy/vn/tests/crowdsec-migrate-test.sh");
+  assert.ok(step, "migration test step");
+  assert.ok(!step.if && !step["continue-on-error"], "migration test must block");
 });
 
 function checkJobTimeouts(ci, vn) {
@@ -669,7 +646,7 @@ function checkJobTimeouts(ci, vn) {
   }
   assert.equal(ci.jobs["vn-infra"]["timeout-minutes"], undefined, "reusable VN caller inherits timeouts");
   for (const [name, job] of Object.entries(vn.jobs)) {
-    assert.equal(job["timeout-minutes"], name === "crowdsec-integration" || name === "crowdsec-cutover" ? 20 : 10, `VN ${name}: timeout-minutes`);
+    assert.equal(job["timeout-minutes"], name === "crowdsec-integration" ? 20 : 10, `VN ${name}: timeout-minutes`);
   }
 }
 

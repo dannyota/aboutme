@@ -33,12 +33,6 @@ jobs:
           tofu -chdir=deploy/vn/dns validate
       - name: Test mocked DNS plans
         run: tofu -chdir=deploy/vn/dns test
-      - name: Validate the isolated rehearsal root
-        run: |
-          tofu -chdir=deploy/vn/rehearsal init -backend=false -input=false >/dev/null
-          tofu -chdir=deploy/vn/rehearsal validate
-      - name: Check rehearsal Python modules
-        run: python3 -m py_compile deploy/vn/rehearsal/*.py
       - name: Check shell scripts
         run: |
           shellcheck --version
@@ -55,8 +49,8 @@ jobs:
         run: |
           for test in deploy/vn/tests/*-test.sh; do
             if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ] || \
-               [ "$test" = deploy/vn/tests/crowdsec-restore-integration-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-db-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-migrate-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-config-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-retention-test.sh ] || \
@@ -151,78 +145,5 @@ jobs:
           sudo swapoff -a
           sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
             bash deploy/vn/tests/crowdsec-retention-test.sh postgresql
-      - name: Test restored PostgreSQL role boundaries
-        run: |
-          sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
-            bash deploy/vn/tests/crowdsec-restore-test.sh postgresql
-
-  crowdsec-cutover:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Inspect signed packages and stage the pinned engine
-        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
-      - name: Install container inspection and disable disk swap
-        run: |
-          sudo apt-get install -y -qq podman >/dev/null
-          sudo swapoff -a
-      - name: Prove owner permits and completion with real systemd
-        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/cutover-fence-test.sh systemd
-      - name: Test complete rehearsal cgroup lifecycles
-        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-rehearsal-lifecycle-test.sh linux-accounting
-
-  crowdsec-restore:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install only PostgreSQL and restore dependencies
-        run: |
-          sudo install -d -m 0755 /etc/apt/keyrings
-          sudo install -m 0644 deploy/vn/host/keys/pgdg.asc /etc/apt/keyrings/postgresql.asc
-          echo 'deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update -qq >/dev/null
-          sudo apt-get install -y -qq postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2 libpq5=18.6-1.pgdg24.04+2 pgbackrest=2.59.3-1.pgdg24.04+1 python3-yaml >/dev/null
-      - name: Stage authenticated standalone executables without package hooks
-        run: |
-          sudo test ! -e /etc/apt/keyrings/crowdsec.gpg
-          sudo test ! -L /etc/apt/keyrings/crowdsec.gpg
-          sudo bash deploy/vn/host/crowdsec-restore-stage.sh deploy/vn
-      - name: Prove the private restore controller with real backup and reset
-        run: sudo env GITHUB_ACTIONS=true unshare --mount --propagation private bash deploy/vn/tests/crowdsec-restore-integration-test.sh hosted
-
-  crowdsec-rehearsal-fixtures:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-go
-      - name: Build the offline fixture exporter
-        working-directory: apps/server
-        run: go build -o "$RUNNER_TEMP/render-budget" ./cmd/render-budget
-      - name: Export the fixed synthetic corpus
-        run: |
-          set -euo pipefail
-          mkdir -m 700 "$RUNNER_TEMP/rehearsal-artifact"
-          "$RUNNER_TEMP/render-budget" --repository-root "$GITHUB_WORKSPACE" \
-            --export-fixtures "$RUNNER_TEMP/rehearsal-artifact/fixtures"
-          install -m 700 "$RUNNER_TEMP/render-budget" "$RUNNER_TEMP/rehearsal-artifact/render-budget"
-          printf '%s\n' "$GITHUB_SHA" >"$RUNNER_TEMP/rehearsal-artifact/source-commit.txt"
-      - name: Test and build the fixed allowance reader
-        working-directory: deploy/vn/rehearsal/allowance-adapter
-        env:
-          GOWORK: "off"
-        run: |
-          go test -mod=readonly ./...
-          go build -mod=readonly -o "$RUNNER_TEMP/rehearsal-artifact/allowance-adapter" .
-          (cd "$RUNNER_TEMP/rehearsal-artifact" && sha256sum render-budget allowance-adapter fixtures/* > SHA256SUMS)
-      - name: Upload candidate-bound fixtures
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: crowdsec-rehearsal-fixtures
-          path: ${{ runner.temp }}/rehearsal-artifact
-          if-no-files-found: error
-          retention-days: 7
+      - name: Test PostgreSQL migration order and failure recovery
+        run: sudo bash deploy/vn/tests/crowdsec-migrate-test.sh

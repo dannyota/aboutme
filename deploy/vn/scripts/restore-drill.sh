@@ -73,14 +73,16 @@ SQL
   [[ $out == f ]] || return 1
   printf 'PASS aboutme_app has no CREATE on schema public\n'
   out=$(notice_sql <<'SQL'
-SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_catalog.pg_authid
- WHERE rolname !~ '^pg_' AND rolname <> 'postgres'
- AND (rolname <> 'crowdsec' OR (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
- AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
- AND rolpassword IS NULL AND rolvaliduntil IS NULL));
+SELECT CASE WHEN NOT EXISTS (
+ SELECT FROM pg_catalog.pg_authid WHERE rolname='crowdsec'
+ AND NOT (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+ AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
+ AND rolpassword IS NULL AND rolvaliduntil IS NULL))
+ THEN string_agg(rolname, ',' ORDER BY rolname) ELSE 'invalid' END
+ FROM pg_catalog.pg_authid WHERE rolname !~ '^pg_' AND rolname <> 'postgres';
 SQL
   ) || return 1
-  [[ $out == aboutme,aboutme_app,aboutme_migrator,crowdsec ]] || return 1
+  [[ $out == aboutme,aboutme_app,aboutme_migrator || $out == aboutme,aboutme_app,aboutme_migrator,crowdsec ]] || return 1
   printf 'PASS role list\n'
   out=$(notice_sql <<<'SET ROLE aboutme_app; SELECT count(*) FROM :"tbl";') || return 1
   [[ $out =~ ^(0|[1-9][0-9]{0,18})$ ]] || return 1
@@ -100,12 +102,6 @@ notice_host_child() {
     if [[ $(readlink "$descriptor") == /run/aboutme/workload.lock ]]; then inherited=1; fi
   done
   ((inherited)) || return 1
-  # Fail missing executable/config provenance before touching restored data.
-  # shellcheck source=../host/crowdsec-provision.sh
-  source /usr/local/lib/aboutme/crowdsec-provision.sh
-  # shellcheck source=../host/crowdsec-db.sh
-  source /usr/local/lib/aboutme/crowdsec-db.sh
-  crowdsec_restore_dependencies 4>&- || return 1
   notice_restore_pre_restore 4>&- || return 1
   start=$SECONDS
   notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
@@ -122,7 +118,6 @@ notice_host_child() {
   done
   ((recovery_started)) || return 1
   elapsed=$((SECONDS - start))
-  crowdsec_restore_reset 4>&- || return 1
   notice_database_checks 4>&- || return 1
   state=$(systemctl show --all --property=ActiveState --property=Job postgresql@18-main.service 4>&-) || return 1
   [[ $(wc -l <<<"$state") == 2 ]] && grep -qxF ActiveState=active <<<"$state" && grep -qxF Job= <<<"$state" || return 1
