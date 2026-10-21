@@ -6,7 +6,14 @@ fence=$repo_root/deploy/vn/scripts/fence.sh
 safety=$repo_root/deploy/vn/scripts/deploy-safety.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/bin" "$work/fence"
+mkdir -p "$work/bin" "$work/fence" "$work/operations"
+chmod 0700 "$work/operations"
+: >"$work/operations/.bundle.lock"
+chmod 0600 "$work/operations/.bundle.lock"
+# Redirect the fixed host path without adding a production override.
+sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/fence.sh"
+chmod +x "$work/fence.sh"
+fence=$work/fence.sh
 
 cat >"$work/bin/id" <<'STUB'
 #!/usr/bin/env bash
@@ -46,6 +53,57 @@ grep -Fq '"$lib/fence.sh" check "$number" "aboutme-job@$name"' \
 }
 
 "$fence" init
+# Record real flock calls and prove bundle admission precedes the fence lock.
+export FLOCK_CALLS=$work/flock-calls BUNDLE_PATH=$work/operations/.bundle.lock
+export REAL_FLOCK
+REAL_FLOCK=$(command -v flock)
+cat >"$work/bin/flock" <<'STUB'
+#!/usr/bin/env bash
+descriptor=${!#}
+path=$(readlink "/proc/$PPID/fd/$descriptor")
+printf '%s\n' "$path" >>"$FLOCK_CALLS"
+if [[ $path == "$BUNDLE_PATH" ]]; then touch "$FLOCK_CALLS.bundle"; fi
+exec "$REAL_FLOCK" "$@"
+STUB
+chmod +x "$work/bin/flock"
+: >"$FLOCK_CALLS"
+bundle_op=$("$fence" lock deploy v0.4.7)
+printf '%s\n' "$BUNDLE_PATH" "$work/fence/fence.lock" >"$work/expected-locks"
+cmp "$work/expected-locks" "$FLOCK_CALLS"
+"$REAL_FLOCK" -x -n "$BUNDLE_PATH" true
+[[ $(jq -r .operation_id "$work/fence/fence.json") == "$bundle_op" ]]
+if "$fence" lock deploy v0.4.7 >/dev/null 2>&1; then exit 1; fi
+"$REAL_FLOCK" -x -n "$BUNDLE_PATH" true
+"$fence" release "$bundle_op"
+
+exec {bundle_fd}>>"$BUNDLE_PATH"
+"$REAL_FLOCK" -x "$bundle_fd"
+rm -f "$FLOCK_CALLS.bundle"
+started=$SECONDS
+(
+  exec {bundle_fd}>&-
+  timeout 40 "$fence" lock deploy v0.4.7
+) >"$work/busy.out" 2>"$work/busy.err" &
+waiting=$!
+for ((attempt=0; attempt<100; attempt++)); do
+  [[ ! -e $FLOCK_CALLS.bundle ]] || break
+  sleep 0.05
+done
+[[ -e $FLOCK_CALLS.bundle ]]
+kill -0 "$waiting"
+"$REAL_FLOCK" -x -n "$work/fence/fence.lock" true
+if wait "$waiting"; then echo 'bundle contention allowed ownership' >&2; exit 1; else status=$?; fi
+[[ $status == 1 && $((SECONDS-started)) -ge 29 && $((SECONDS-started)) -lt 40 ]]
+[[ ! -s $work/busy.out ]]
+grep -qxF "fence: could not take $BUNDLE_PATH within 30 s" "$work/busy.err"
+[[ $(jq -r '.operation_id // empty' "$work/fence/fence.json") == '' ]]
+# An installer or notice adopter passes its exclusive open description to the
+# child. Acquiring ownership must neither deadlock nor unlock the caller.
+bundle_op=$(timeout 5 "$fence" lock deploy v0.4.7)
+if "$REAL_FLOCK" -x -n "$BUNDLE_PATH" true; then exit 1; fi
+"$fence" release "$bundle_op"
+exec {bundle_fd}>&-
+rm "$work/bin/flock"
 if MOUNT_ABSENT=1 "$fence" check 4007 aboutme-server 2>/dev/null; then
   echo "the server started without its data mount" >&2
   exit 1
@@ -78,7 +136,6 @@ if "$fence" lock-for account_delete v0.4.6 "$request" 2>/dev/null; then
   exit 1
 fi
 # A private copy redirects only the fixed marker path for CI fixtures.
-mkdir -p "$work/operations"
 sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/marker-fence.sh"
 chmod +x "$work/marker-fence.sh"
 for marker in malformed symlink; do

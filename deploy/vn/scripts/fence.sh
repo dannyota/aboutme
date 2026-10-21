@@ -91,6 +91,24 @@ with_lock() { # mode command...
   "$@"
 }
 
+with_bundle_lock() (
+  local path=/srv/data/host-operations/.bundle.lock entry bundle_fd
+  [[ -d ${path%/*} && ! -L ${path%/*} && $(stat -c '%u:%a' "${path%/*}") == 0:700 &&
+    -f $path && ! -L $path && $(stat -c '%u:%a' "$path") == 0:600 ]] || die "unsafe bundle lock"
+  # Installation and notice adoption already hold an inherited exclusive lock.
+  # Reuse its open description instead of waiting on our own caller.
+  for entry in /proc/"$BASHPID"/fd/*; do
+    if [[ $entry -ef $path ]] &&
+      grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE' "/proc/$BASHPID/fdinfo/${entry##*/}"; then
+      with_lock -x "$@"
+      return
+    fi
+  done
+  exec {bundle_fd}>>"$path" || die "could not open bundle lock"
+  flock -x -w 30 "$bundle_fd" || die "could not take $path within 30 s"
+  with_lock -x "$@"
+)
+
 cmd_init() {
   if [[ -e $file ]]; then
     load
@@ -424,7 +442,7 @@ mkdir -p "$dir"
 case "$#:${1-}" in
   1:init) with_lock -x cmd_init ;;
   1:read) with_lock -s cmd_read ;;
-  3:lock) with_lock -x cmd_lock "$2" "$3" ;;
+  3:lock) with_bundle_lock cmd_lock "$2" "$3" ;;
   4:lock-for) with_lock -x cmd_lock_for "$2" "$3" "$4" ;;
   3:checkpoint) with_lock -x cmd_checkpoint "$2" "$3" ;;
   4:mutation-start) with_lock -x cmd_mutation_start "$2" "$3" "$4" ;;

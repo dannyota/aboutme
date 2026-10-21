@@ -378,7 +378,7 @@ of the blanket path exclusion and the retention sentences:
 > backup policy below. Backups are used only for disaster recovery. Restored
 > CrowdSec data is discarded before attack protection resumes. None of this data
 > is shared with the CrowdSec community.
-
+>
 > Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, phương thức, mã
 > phản hồi, nhóm tuyến truy cập và nhóm dấu hiệu thăm dò cố định. Chỉ với tuyến
 > không được nhận diện trả về mã 400, 404 hoặc 405, mẫu cảnh báo tấn công mới có

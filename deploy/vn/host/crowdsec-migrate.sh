@@ -193,16 +193,21 @@ migrate_run() {
   [[ $EUID == 0 && ( $# == 0 || ( $# == 1 && $1 == --reset ) ) ]] || {
     printf 'crowdsec_migrate_refused\n' >&2; return 1;
   }
-  local migrate_changed=no migrate_no_edge=no
+  local migrate_changed=no migrate_no_edge=no migrate_error_fd
   if ! { migrate_lock && migrate_idle && migrate_notice; } >/dev/null 2>&1; then
     printf 'crowdsec_migrate_refused\n' >&2; return 1
   fi
-  trap 'migrate_failure; exit 1' HUP INT TERM
+  # Signal traps also run inside migrate_main's discarded diagnostics.
+  exec {migrate_error_fd}>&2
+  trap 'migrate_failure 2>&"$migrate_error_fd"; exit 1' HUP INT TERM
   if ! migrate_main "$@" >/dev/null 2>&1; then
+    trap - HUP INT TERM
+    exec {migrate_error_fd}>&-
     migrate_failure
     return 1
   fi
   trap - HUP INT TERM
+  exec {migrate_error_fd}>&-
   if [[ $migrate_no_edge == yes ]]; then printf 'crowdsec_migrate_no_edge\n' >&2; fi
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

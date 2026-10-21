@@ -29,9 +29,10 @@ service state, including when those services are stopped.
 For the first switch, the helper records the active edge service and stops both
 edge modes, CrowdSec, its firewall bouncer, the watcher timer and service, and
 database maintenance scheduling. It joins the stopped services and verifies
-quiescence. It provisions the separate database, applies the pinned catalog policy, selects
-PostgreSQL, and deletes only the three named SQLite database files. Old alerts
-and decisions are discarded. Decisions regenerate from live traffic.
+quiescence. It provisions the separate database, applies the pinned catalog
+policy, selects PostgreSQL, and deletes only the three named SQLite database
+files. Old alerts and decisions are discarded. Decisions regenerate from live
+traffic.
 
 The helper registers the local machine before starting CrowdSec. Startup
 retention clears owned cache and firewall state and writes a lease for the new
@@ -40,8 +41,8 @@ database. Both maintenance timers start before CrowdSec. The helper registers
 its private key file, then starts the firewall bouncer and the recorded edge
 service. The watcher timer resumes after normal admission passes. When neither
 edge service was active, neither starts and `crowdsec_migrate_no_edge` appears
-on stderr; restore the intended edge through its normal guards. Zero exit does not prove serving. The switch causes a short edge
-outage.
+on stderr; restore the intended edge through its normal guards. Zero exit does
+not prove serving. The switch causes a short edge outage.
 
 ## Verification
 
@@ -66,15 +67,15 @@ logs. `crowdsec-migrate-test.sh` covers host ordering with fake commands;
 
 A failed helper stops and joins consumers, the watcher, and both maintenance
 timers, prints `crowdsec_migrate_refused`, and fails the deploy. A shutdown that
-cannot establish quiescence reports `crowdsec_migrate_stop_failed`; keep the host
-closed and resolve the remaining process or job before recovery.
+cannot establish quiescence reports `crowdsec_migrate_stop_failed`; keep the
+host closed and resolve the remaining process or job before recovery.
 
 Correct the cause and rerun before schema initialization. `fresh` requires an
 absent database or a verified empty schema. An occupied catalog with incomplete
 activation refuses with consumers stopped, even when the catalog gate passes.
-Use explicit `--reset` after schema initialization or incomplete startup.
-Never remove an application operation fence or bypass startup guards. A complete
-no-op leaves stopped services stopped; use reset to repeat startup.
+Use explicit `--reset` after schema initialization or incomplete startup. Never
+remove an application operation fence or bypass startup guards. A complete no-op
+leaves stopped services stopped; use reset to repeat startup.
 
 ## Reset after a cluster restore
 
