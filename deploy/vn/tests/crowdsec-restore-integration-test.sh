@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hosted app-absent restore with authenticated standalone CrowdSec executables.
-set -euo pipefail
+set -Eeuo pipefail
 umask 077
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 [[ ${1:-} == hosted && $EUID == 0 && ${GITHUB_ACTIONS:-} == true ]] || exit 2
@@ -92,7 +92,7 @@ stage=restored-old-state
 pass latest
 [[ $(restore_admin aboutme <<<'SELECT count(*) FROM resumes;') == 2 ]]
 stage=point-in-time
-pass time "$target"
+TZ=Asia/Ho_Chi_Minh pass time "$target"
 [[ $(restore_admin aboutme <<<'SELECT count(*) FROM resumes;') == 1 ]]
 [[ $(wc -l <"$guest/reset-locks") == 3 ]]
 [[ ! -e /etc/crowdsec/config.yaml && ! -e /etc/crowdsec/acquis.yaml ]]
