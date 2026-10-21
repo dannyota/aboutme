@@ -152,13 +152,23 @@ case $1 in
     ;;
   list-units)
     [[ ${NOTICE_INITIAL_INSPECTION:-valid} != units ]] || exit 1
+    if [[ ${NOTICE_INITIAL_SLICE:-absent} == active ]]; then
+      printf '%s\n' 'system-aboutme\x2djob.slice loaded active active Slice /system/aboutme-job'
+    fi
     if [[ ${NOTICE_LEGACY_PROTECTION:-inactive} == active ]]; then
       printf '%s\n' 'crowdsec.service loaded active running protection' \
         'crowdsec-firewall-bouncer.service loaded active running bouncer' \
         'aboutme-crowdsec-retention.timer loaded active waiting retention' \
         'aboutme-crowdsec-retention-startup.service loaded active exited retention'
     fi
-    [[ -z ${NOTICE_INITIAL_UNIT:-} ]] || printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+    if [[ -n ${NOTICE_INITIAL_UNIT:-} ]]; then
+      if [[ ${NOTICE_INITIAL_MASKED:-0} == 1 ]]; then
+        [[ " $* " == *' --plain '* ]] || printf '● '
+        printf '%s masked active running Restore\n' "$NOTICE_INITIAL_UNIT"
+      else
+        printf '%s loaded active running writer\n' "$NOTICE_INITIAL_UNIT"
+      fi
+    fi
     ;;
   stop)
     if [[ ${NOTICE_CAPTURE:-0} == 1 && $* == *aboutme-server* ]]; then
@@ -782,11 +792,14 @@ done
 NOTICE_APP_STATE=inspection-failure refuse bash "$wrapper" reconcile-initial; initial_reset
 NOTICE_JOB=1 refuse bash "$wrapper" reconcile-initial; initial_reset
 before=$(wc -l <"$work/initial-calls")
-for unit in aboutme-migrate.service aboutme-db-setup.service aboutme-job@privacy-retention-sweep.service aboutme-restore.service postgresql-recovery.service; do
-  NOTICE_INITIAL_JOB=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
-  NOTICE_INITIAL_UNIT=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+for unit in aboutme-migrate.service aboutme-db-setup.service aboutme-job@privacy-retention-sweep.service \
+  'aboutme-job@privacy\x2dretention\x2dsweep.service' 'aboutme-job-privacy\x2dretention\x2dsweep.timer' \
+  aboutme-restore.service 'aboutme-restore\x2ddrill.service' postgresql-recovery.service; do
+  NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_JOB=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
+  NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_UNIT=$unit refuse bash "$wrapper" reconcile-initial; initial_reset
 done
-for inspection in jobs units; do NOTICE_INITIAL_INSPECTION=$inspection refuse bash "$wrapper" reconcile-initial; initial_reset; done
+NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_MASKED=1 NOTICE_INITIAL_UNIT=aboutme-restore.service refuse bash "$wrapper" reconcile-initial; initial_reset
+for inspection in jobs units; do NOTICE_INITIAL_SLICE=active NOTICE_INITIAL_INSPECTION=$inspection refuse bash "$wrapper" reconcile-initial; initial_reset; done
 [[ $(wc -l <"$work/initial-calls") == "$before" ]] || fail 'nonquiescent writer reached initial database proof'
 for fault in rm:/var/lib/aboutme/privacy-notice/restore-reconciliation sync:/var/lib/aboutme/privacy-notice; do
   NOTICE_INITIAL_FAULT=$fault initial_refuse
@@ -814,7 +827,10 @@ touch "$authority/restore-reconciliation"; chmod 0444 "$authority/restore-reconc
 NOTICE_LOCK=contention refuse bash "$wrapper" reconcile-initial
 [[ -f $authority/restore-reconciliation ]] || fail 'lock contention cleared marker'
 initial_reset; : >"$work/systemctl-calls"
-NOTICE_LEGACY_PROTECTION=active app 0 reconcile-initial
+# An inert job slice's description does not make it an account writer.
+before=$(wc -l <"$work/initial-calls")
+NOTICE_INITIAL_SLICE=active NOTICE_LEGACY_PROTECTION=active app 0 reconcile-initial
+[[ $(wc -l <"$work/initial-calls") == $((before + 1)) ]] || fail 'inert job slice blocked initial database proof'
 [[ ! -e $authority/restore-reconciliation && ! -e /var/lib/aboutme/cutover-mutation.json ]] || fail 'initial success retained markers'
 if grep -Eq '^(stop|restart).*crowdsec' "$work/systemctl-calls"; then fail 'initial reconciliation interrupted existing protection'; fi
 cmp -s "$authority/initial-epoch" "$work/initial-current" || fail 'initial action changed anchor'
