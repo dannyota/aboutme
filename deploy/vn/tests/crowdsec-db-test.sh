@@ -163,9 +163,17 @@ config = {
                   "db_path": "/run/postgresql", "host": "", "port": 0,
                   "sslmode": "disable", "max_open_conns": 4,
                   "log_level": "error", "flush": {"max_age": "0s", "max_items": None}},
-    "api": {"server": {"enable": False}},
+    "api": {"server": {"enable": True,
+                        "listen_socket": str(root / "lapi.sock"),
+                        "profiles_path": str(root / "config/profiles.yaml"),
+                        "console_path": str(root / "config/console.yaml")}},
     "cscli": {"output": "json", "color": "never"},
 }
+(root / "config/profiles.yaml").write_text(yaml.safe_dump(
+    {"name": "catalog-only", "filters": ["false"], "decisions": []}))
+(root / "config/console.yaml").write_text(yaml.safe_dump(
+    {"share_custom": False, "share_tainted": False,
+     "share_manual_decisions": False, "share_context": False}))
 (root / "config/config.yaml").write_text(yaml.safe_dump(config))
 PY
   # This exception belongs only to the disposable, verified-empty derivation DB.
