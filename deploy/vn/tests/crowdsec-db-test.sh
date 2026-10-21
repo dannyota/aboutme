@@ -282,7 +282,7 @@ SQL
 REVOKE CONNECT ON DATABASE crowdsec FROM aboutme_app;
 SQL
   check repaired-catalog-ready gate preflight-ready
-  check fresh-preserves-ready-schema provision fresh
+  check fresh-refuses-ready-schema fresh_refused
   check peer-root-admitted runtime_boolean <<'SQL'
 SELECT current_user = 'crowdsec' AND current_database() = 'crowdsec'
 AND system_user = 'peer:root' AND inet_client_addr() IS NULL;
@@ -582,6 +582,8 @@ action_trace_valid() { [[ $(<"$scratch/trace/actions") == $'cscli\ncrowdsec' ]];
 gate_refuses_empty() { ! gate preflight-empty; }
 runtime_boolean() { [[ $(runtime) == t ]]; }
 logging_refuses_write() { ! runtime <<<'SET log_min_error_statement = '\''error'\'';'; }
+
+fresh_refused() { ! provision fresh; }
 
 case $mode in
   static) static_tests ;;

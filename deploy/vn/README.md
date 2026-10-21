@@ -232,9 +232,10 @@ or foreign value remains at the printed recovery key for attended resolution.
 reaches its private IP through the production host as an SSH jump host, installs
 PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
 target. It checks versions, row counts, grants, and an `aboutme_app` read. The
-[CrowdSec restore boundary](../../docs/runbooks/crowdsec-postgresql.md#restore)
-also requires fresh CrowdSec storage without restoring attack data or
-identities. The exit trap deletes the server and volume unless `--keep` was
+[CrowdSec restore boundary](../../docs/runbooks/crowdsec-postgresql.md#reset-after-a-cluster-restore)
+requires notice reconciliation and an explicit operator reset before consumers
+resume. The cluster restore brings back CrowdSec data and identities; automation
+does not reset them. The exit trap deletes the server and volume unless `--keep` was
 requested.
 
 The server has no floating IP and no NAT, so it has no outbound internet for
