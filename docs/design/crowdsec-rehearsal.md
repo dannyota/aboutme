@@ -62,10 +62,40 @@ Reuse `quote.sh --plan <saved-plan> --max-price 1047880` for the server, disks,
 encryption, and floating IP. This is a monthly-equivalent ceiling in VND,
 including the existing quote's VAT treatment, not an asserted actual charge. Any
 missing/zero price or higher total refuses creation. Use the existing vStorage
-project only after proving at least 2 GiB unused allowance; create no new paid
-storage project and change no quota/renewal setting. Before apply, verify every
-planned write names only this run's new resources. Revalidate the quote if plan
-inputs change. The primary reviews the concrete plan normally.
+project only after proving at least 2 GiB provider-reported unused allowance;
+create no new paid storage project and change no quota/renewal setting. Before
+apply, verify every planned write names only this run's new resources.
+Revalidate the quote if plan inputs change. The primary reviews the concrete
+plan normally.
+
+For that allowance, the primary reads the existing HCM04 project's console
+Information panel: **Total quota** and **Total usage**, not bucket-size sums.
+Record a private `storage-allowance.json` in the run's fixed scratch directory:
+version 1, run ID, exact project/region, observation UTC time, displayed numeric
+values/units/precision, conservative quota-lower and usage-upper bytes, and the
+digest of the private cropped evidence. Capture no keys or account details. The
+primary verifies the transcription; this is evidence input, not a bypass flag or
+caller-selected API endpoint. Bind it to the plan and refresh before `run`; it
+must be at most five minutes old before the first resource creation.
+
+Use exact integer byte arithmetic: `quota_lower_bytes - usage_upper_bytes` must
+be at least 2,147,483,648. Exact byte counters need no rounding allowance. For
+rounded displays subtract one displayed quantum from quota and add one to usage
+before converting. For GB without a stated decimal/binary convention, use
+1,000,000,000 bytes for the quota lower bound and 1,073,741,824 for the usage
+upper bound. Reject negative/nonfinite values, absent/ambiguous units, identity
+mismatch, stale observation, missing evidence, or an insufficient bound before
+any create. Omitted usage is never zero. The current SDK's quota-only Project
+type cannot supply this proof; invent no `used` field.
+
+This gate measures reported project capacity at observation time. Provider
+documentation does not specify Total usage refresh lag or multipart accounting;
+the evidence must state both limits. It is not a reservation or a guarantee
+about unreported in-flight parts or later writes. No bucket-sum inference,
+project-wide object scan, new paid project, quota change, or additional
+freshness claim replaces this operational observation. A storage-full response
+during the rehearsal fails it and enters cleanup; never expand capacity
+automatically.
 
 Origin is exactly `https://cs-rehearsal-<run-id>.aboutme.vn`. Create only that
 DNS-only A record in the existing zone, TTL 300, pointing at this host's
@@ -293,22 +323,77 @@ blocks production cutover pending a reviewed fix and new complete run.
 
 ## Cleanup and evidence
 
-Before deletion stop load and host writes. Remove this run's DNS record and
-verify its exact provider ID is gone. Delete synthetic objects and multipart
-uploads only inside the two manifest-owned buckets, using bounded paginated
-operations; require versioning disabled before first use. Delete bucket
-policies, then attached S3 keys without detaching them, verify absence, and
-remove their dedicated accounts and empty buckets. Reconcile unknown outcomes by
-exact IDs. Destroy only this root's recorded server, floating IP,
-volume/attachment, and security rules/group. Preserve shared network/project
-resources and every production resource. Verify all created resources absent,
-then remove local credential files, encrypted state, host-key private material,
-and active marker.
+Cleanup runs only in the existing coordinator, including after a lost host. It
+adds no host-helper operation, secret export, remote callback, or replacement
+host. Serialize cleanup for this run and durably record each intended effect and
+result in its private manifest before proceeding. Stop external load, delete the
+exact workload S3 keys while still attached, and verify their absence. Destroy
+this root's recorded DNS record, server, floating IP, volume/attachment, and
+security rules/group; confirm absence before creating cleanup credentials. This
+terminates host writers even when SSH is unavailable. Preserve shared
+network/project resources and all production resources.
 
-Only cleanup may continue after the four-hour deadline. It has a 30-minute
-attempt bound; unresolved resources retain the manifest and a failed result for
-exact operator recovery. Never delete by a broad prefix or infer deletion from a
-failed listing. No production backup, row, key, or restore is involved.
+Keep each run-owned bucket policy and service account until its bucket is empty.
+Require versioning disabled before first use. For each bucket in turn, verify
+its exact project, name, recorded account ID/principal, and unchanged
+single-bucket policy. Use the existing management provisioner to create one
+fresh attached S3 key on that existing account with
+`create-s3-key --service-account-id <recorded-id> --secret-file <fresh-path>`.
+The path is a new mode-0600 file in a private tmpfs directory. Confirm its
+`UserKeyID` and attachment from key inventory before object access. No account,
+bucket, policy grant, or paid resource is added. Never detach a key or recover
+an old key's secret. Original handoff files remain deleted after import.
+
+The coordinator's fixed object-cleanup adapter reads this fresh file locally; it
+never prints credentials or sends them to a host. Use fixed SigV4 requests for
+`ListMultipartUploads`, `AbortMultipartUpload`, `ListParts`, `ListObjectsV2`,
+and `DeleteObjects`, or their AWS CLI `s3api` equivalents, with explicit HCM04
+region/HTTPS endpoint and path-style addressing. No AWS SDK is required. Load
+only the isolated credential file; disable ambient credential fallback. Every
+bucket argument comes from the validated manifest; object keys, upload IDs, and
+continuation markers come only from that bucket's private list responses. Accept
+no caller-selected endpoint, bucket, command, or key. Keep TLS verification
+enabled and output private, emitting only fixed outcomes and counts. Each
+request has a 30-second outer timeout; each list page or delete batch has at
+most 100 entries. Abort outstanding uploads, delete listed objects, and repeat
+bounded passes until both listings are empty. Pagination cycles, unexpected
+responses, per-object delete errors, or deadline expiry fail cleanup. Do not
+treat permission errors as absence or broaden a policy to make it pass.
+Multipart pagination carries both returned next-key and next-upload-ID markers;
+object listing carries its opaque continuation token. Paginate `ListParts` with
+its returned next-part-number marker. Parse successful bodies, including
+per-object delete errors, rather than trusting HTTP status alone. After abort,
+verify known upload parts are empty or return exact `NoSuchUpload`; other
+404/403 responses are not proof. Recheck listings within the deadline, since
+in-flight parts may need another abort. No AWS-only extension is assumed to work
+on HCM04; incompatible responses fail cleanup.
+
+After confirming emptiness, remove that bucket's policy, delete the fresh key
+while attached, and verify both absent. Remove only the account's known IAM
+policy attachments, delete the account and empty bucket, and confirm absence. On
+any error or interruption, attempt fresh-key deletion within the remaining
+cleanup deadline and remove its local secret file. Record unresolved key IDs;
+never retain the secret for a later attempt. A later explicit `cleanup` resumes
+from the manifest and may create another fresh key only after prior attempted
+keys are reconciled and retired. Record before/after key inventories around
+creation; an uncertain create must be attributed to this exact owned account and
+serialized attempt, never to an unfamiliar project key. Ambiguous ownership or a
+missing account/policy while objects remain stops for exact operator recovery;
+it does not authorize a replacement identity or wider grant. After a process
+crash, revoke the recorded or reconciled attempted key before removing any
+leftover private credential file and creating a new key. Key lifetime is bounded
+by cleanup and explicit revocation, not a provider TTL.
+
+Verify all created resources absent before removing encrypted state, host-key
+private material, and the active marker. A failed or interrupted rehearsal stays
+failed even if a later cleanup succeeds; cleanup cannot rerun measurement.
+
+Only cleanup may continue after the four-hour deadline. Each explicit cleanup
+attempt has a 30-minute bound covering reconciliation, requests, and key
+retirement; it never extends the workload deadline or retries automatically.
+Unresolved resources retain the manifest and block another run. Never delete by
+a broad prefix or infer deletion from a failed listing. No production backup,
+row, key, or restore is involved.
 
 Evidence contains public candidate digests, corpus hashes, protocol version, UTC
 times, sample counts, latency/resource aggregates, fixed phase outcomes, and
@@ -326,7 +411,8 @@ corpus-equivalence checks. No product API, development DB guard, production
 bucket names, existing restore controller, or shared deployment guard changes.
 
 Hosted tests prove production-target refusal, manifest/host mismatch, unsafe
-paths, quote refusal, wrong-resource cleanup, uncertain creates, secret-free
+paths, quote refusal, wrong-resource cleanup, lost-host cleanup, uncertain key
+creates, interrupted key retirement, exhausted cleanup deadlines, secret-free
 outputs, empty-cohort-before-user ordering, synthetic SQL bounds, API body/rate
 limits, missing samples, pressure arithmetic, and failure propagation. Verify
 the fixed bootstrap/candidate sequence and exact provider shapes before a paid
@@ -337,7 +423,14 @@ independent adversarial review and green CI precede the actual rehearsal.
 
 - [Linux pressure metrics](https://docs.kernel.org/accounting/psi.html).
 - [Linux memory counters](https://docs.kernel.org/filesystems/proc.html).
+- [HCM04 project information](https://docs.greennode.ai/vstorage/object-storage/object-storage-hcm04/cac-tinh-nang-cua-object-storage/lam-viec-voi-project.md).
+- [S3 multipart listing](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html)
+  and
+  [abort semantics](https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html).
 - [vngcloud workload credentials and retirement](https://github.com/dannyota/vngcloud/blob/master/docs/wiki/Storage-Workload-Access.md).
+- [vngcloud object client boundaries](https://github.com/dannyota/vngcloud/blob/master/docs/wiki/Storage-Objects.md)
+  and
+  [recorded HCM04 S3 behavior](https://github.com/dannyota/vngcloud/blob/master/docs/wiki/Storage.md).
 - Repository authorities: [benchmark protocol](budgets.md#benchmark-protocol),
   [host limits](vietnam-host-memory.md), [cutover](crowdsec-cutover.md),
   [HTTP contract](../api/openapi.yaml), and
