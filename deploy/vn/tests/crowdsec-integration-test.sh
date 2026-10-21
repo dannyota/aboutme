@@ -13,6 +13,8 @@ feed=/run/aboutme/caddy-log/crowdsec/serving.json
 source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 # shellcheck source=crowdsec-retention-fixture.sh
 source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
+# shellcheck disable=SC2034 # The sourced fixture selects idle migration admission.
+retention_fixture_migration=yes
 retention_fixture_start "$repo_root"
 retention_fixture_case=crowdsec-integration
 retention_fixture_consumers
@@ -467,43 +469,233 @@ runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-database-loss-stops-consumers-and-removes-feeds\n'
 
-# Restoration drops old samples, statistics and registrations rather than
-# cleaning rows in place. The application sentinel stays in its own database.
-integration_stage=restore-reset
-runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
-  -h /run/postgresql -d crowdsec >/dev/null 2>&1 <<'SQL'
+# Exercise the installed entry point with real catalogs and consumers. Only
+# systemd and Podman's secret transport use the namespace adapters.
+integration_stage=migration-switch
+lib=/usr/local/lib/aboutme
+for helper in crowdsec-migrate crowdsec-offline operation-state; do
+  install -m 0755 "$repo_root/deploy/vn/host/$helper.sh" "$lib/$helper.sh"
+done
+cp -a "$edge" "$lib/crowdsec"
+install -m 0755 "$repo_root/deploy/vn/scripts/secrets-host.sh" "$lib/secrets-host-real.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$lib/secrets-host.sh"
+cat >>"$lib/secrets-host.sh" <<'SH'
+[[ $* == bouncer-register ]]
+printf 'bouncer-register\n' >>"$fixture/control-log"
+if [[ -e $fixture/register-fail-once ]]; then
+  rm "$fixture/register-fail-once"
+  exit 1
+fi
+exec /usr/local/lib/aboutme/secrets-host-real.sh "$@"
+SH
+chmod 0755 "$lib/secrets-host.sh"
+# Podman is outside this namespace proof. Deliver the real host helper's key
+# to the file read by both real Caddy processes, without exposing its value.
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/podman"
+cat >>"$retention_fixture/bin/podman" <<'SH'
+case "$*" in
+  'container exists '*) exit 1 ;;
+  'secret rm crowdsec-bouncer-key') rm -f "$fixture/caddy.key" ;;
+  'secret create crowdsec-bouncer-key /etc/aboutme/secrets/crowdsec-bouncer-key')
+    install -m 0600 /etc/aboutme/secrets/crowdsec-bouncer-key "$fixture/caddy.key" ;;
+  *) exit 2 ;;
+esac
+SH
+install -d -m 0700 "$retention_fixture/enabled" "$retention_fixture/active" /srv/data/crowdsec
+install -d -m 0755 /etc/aboutme
+mount -t tmpfs -o size=1m,mode=0700 tmpfs /etc/aboutme
+install -d -m 0700 /etc/aboutme/secrets /var/lib/aboutme/privacy-notice
+printf '{"release_number":8009}\n' >/var/lib/aboutme/release.json
+chmod 0644 /var/lib/aboutme/release.json
+install -m 0444 /dev/null /var/lib/aboutme/privacy-notice/activation.json
+systemctl stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service
+retention_fixture_admin postgres <<<'DROP DATABASE crowdsec;' >/dev/null
+python3 -I - <<'PY'
+import pathlib,yaml
+path=pathlib.Path('/etc/crowdsec/config.yaml.local')
+config=yaml.safe_load(path.read_text())
+config['db_config']={'type':'sqlite','db_path':'/var/lib/crowdsec/data/crowdsec.db',
+                     'use_wal':True,'log_level':'error','flush':{'max_age':'0s','max_items':None}}
+path.write_text(yaml.safe_dump(config))
+PY
+cscli machines add -a --force --error >/dev/null 2>&1
+chmod 0600 /etc/crowdsec/local_api_credentials.yaml
+cscli bouncers add aboutme-caddy -o raw >"$retention_fixture/caddy.key" 2>/dev/null
+cscli bouncers add aboutme-firewall -o raw >"$retention_fixture/firewall.key" 2>/dev/null
+cat "$edge/bouncers/crowdsec-firewall-bouncer.yaml.local" >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+printf 'api_key: %s\n' "$(cat "$retention_fixture/firewall.key")" >>/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+# Preserve all three SQLite-era files so deletion cannot pass vacuously.
+[[ -s /var/lib/crowdsec/data/crowdsec.db ]]
+touch /var/lib/crowdsec/data/crowdsec.db-shm /var/lib/crowdsec/data/crowdsec.db-wal
+snapshot_credentials() {
+  install -m 0600 /etc/crowdsec/local_api_credentials.yaml "$retention_fixture/$1-machine.yaml"
+  install -m 0600 "$retention_fixture/caddy.key" "$retention_fixture/$1-caddy.key"
+  install -m 0600 "$retention_fixture/firewall.key" "$retention_fixture/$1-firewall.key"
+}
+snapshot_credentials sqlite
+# The pre-switch services must be real processes, even with a SQLite catalog.
+touch "$retention_fixture/sqlite-consumers"
+systemctl start crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service
+cscli lapi status >/dev/null 2>&1
+rm "$retention_fixture/sqlite-consumers"
+touch "$retention_fixture/migration-controls"
+for unit in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer aboutme-watch.timer; do
+  touch "$retention_fixture/enabled/$unit" "$retention_fixture/active/$unit"
+done
+
+migration_run() {
+  : >"$retention_fixture/control-log"
+  "$lib/crowdsec-migrate.sh" "$@" >"$retention_fixture/migrate-out" 2>"$retention_fixture/migrate-err" || return $?
+  [[ ! -s $retention_fixture/migrate-out ]]
+}
+migration_ready() {
+  crowdsec_assert_postgresql
+  "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
+  "$lib/crowdsec-retention-lease-check.sh"
+  cscli lapi status >/dev/null 2>&1
+  [[ $(stat -c '%u:%g:%a' /etc/crowdsec/local_api_credentials.yaml) == 0:0:600 ]]
+  cscli machines list -o json >"$retention_fixture/machines.json" 2>/dev/null
+  cscli bouncers list -o json >"$retention_fixture/bouncers.json" 2>/dev/null
+  python3 -I - "$retention_fixture" >/dev/null 2>&1 <<'PY'
+import json,pathlib,sys,yaml
+root=pathlib.Path(sys.argv[1])
+creds=yaml.safe_load(pathlib.Path('/etc/crowdsec/local_api_credentials.yaml').read_text())
+machines=json.loads((root/'machines.json').read_text())
+assert len(machines)==1 and machines[0]['machineId']==creds['login'] and machines[0]['isValidated']
+bouncers=json.loads((root/'bouncers.json').read_text())
+assert len(bouncers)==2 and {b['name'] for b in bouncers}=={'aboutme-caddy','aboutme-firewall'}
+assert (root/'caddy.key').read_bytes()==pathlib.Path('/etc/aboutme/secrets/crowdsec-bouncer-key').read_bytes()
+assert (root/'firewall.key').read_bytes()==pathlib.Path('/srv/data/crowdsec/firewall-bouncer.key').read_bytes()
+firewall=yaml.safe_load(pathlib.Path('/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local').read_text())
+assert firewall['api_key']==(root/'firewall.key').read_text().strip()
+PY
+  for unit in crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service \
+    aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer aboutme-watch.timer; do
+    systemctl is-active --quiet "$unit"
+  done
+  wait_status 200 192.0.2.41 http://127.0.0.1:18080/
+  wait_status 503 192.0.2.41 http://127.0.0.1:18081/
+  [[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
+}
+migration_order() {
+  python3 -I - "$retention_fixture/control-log" >/dev/null 2>&1 <<'PY'
+import pathlib,sys
+calls=pathlib.Path(sys.argv[1]).read_text().splitlines()
+expected=['start aboutme-crowdsec-retention-startup.service',
+'enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer',
+'start crowdsec.service','bouncer-register','start crowdsec-firewall-bouncer.service',
+'start aboutme-caddy.service aboutme-maintenance.service','enable --now aboutme-watch.timer']
+positions=[calls.index(call) for call in expected]
+assert positions==sorted(positions)
+assert any(call.startswith('stop ') and all(unit in call.split() for unit in (
+'aboutme-caddy.service','aboutme-maintenance.service','crowdsec.service',
+'crowdsec-firewall-bouncer.service','aboutme-crowdsec-retention.timer',
+'aboutme-crowdsec-vacuum.timer','aboutme-watch.timer','aboutme-watch.service',
+'aboutme-crowdsec-retention.service','aboutme-crowdsec-vacuum.service',
+'aboutme-crowdsec-retention-startup.service')) for call in calls[:positions[0]])
+PY
+}
+credentials_status() {
+  python3 -I - "$retention_fixture" "$1" "$2" >/dev/null 2>&1 <<'PY'
+import json,pathlib,sys,urllib.error,urllib.request,yaml
+root=pathlib.Path(sys.argv[1]); prefix=sys.argv[2]; expected=int(sys.argv[3])
+def status(request):
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request,timeout=5) as response:
+            return response.status
+    except urllib.error.HTTPError as error: return error.code
+creds=yaml.safe_load((root/(prefix+'-machine.yaml')).read_text())
+request=urllib.request.Request('http://127.0.0.1:8095/v1/watchers/login',
+    data=json.dumps({'machine_id':creds['login'],'password':creds['password']}).encode(),
+    headers={'Content-Type':'application/json'})
+assert status(request)==expected
+for name in ('caddy','firewall'):
+    key=(root/(prefix+'-'+name+'.key')).read_text().strip()
+    assert status(urllib.request.Request('http://127.0.0.1:8095/v1/decisions',headers={'X-Api-Key':key}))==expected
+PY
+}
+migration_noop() {
+  local before after
+  before=$(sha256sum "$retention_fixture/pids/"*)
+  migration_run
+  ! grep -qE '^(stop|start|restart|kill|enable|disable|mask|unmask) ' "$retention_fixture/control-log"
+  after=$(sha256sum "$retention_fixture/pids/"*)
+  [[ $before == "$after" ]]
+  migration_ready
+}
+migration_refused() {
+  if migration_run "$@"; then return 1; fi
+  [[ ! -s $retention_fixture/migrate-out ]]
+  [[ $(cat "$retention_fixture/migrate-err") == crowdsec_migrate_refused ]]
+  for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service \
+    aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer aboutme-crowdsec-retention.service \
+    aboutme-crowdsec-vacuum.service aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service; do
+    [[ $(systemctl show --property=ActiveState --value "$unit") == inactive ]]
+  done
+}
+credentials_status sqlite 200
+for suffix in '' -shm -wal; do [[ -f /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
+migration_run
+migration_order
+install -m 0600 /srv/data/crowdsec/firewall-bouncer.key "$retention_fixture/firewall.key"
+migration_ready
+for suffix in '' -shm -wal; do [[ ! -e /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
+printf 'PASS real-migration-switch\n'
+integration_stage=migration-noop
+migration_noop
+printf 'PASS real-migration-noop\n'
+integration_stage=migration-old-credentials
+snapshot_credentials switched
+credentials_status sqlite 401
+credentials_status switched 200
+printf 'PASS real-migration-rejects-all-old-credentials\n'
+
+integration_stage=migration-reset
+# A live row and collected statistics distinguish recreation from cleanup.
+sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip,source_scope,source_value,capacity,events_count,leak_speed,simulated)
+ VALUES (99000,now(),now(),now(),now(),'crowdsecurity/ssh-bf','192.0.2.90','Ip','192.0.2.90',1,1,'1s',false);" >/dev/null
+catalog_before=$(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';")
+retention_fixture_admin <<'SQL' >/dev/null
 ALTER TABLE public.alerts ALTER COLUMN source_ip SET STATISTICS 1;
 ANALYZE public.alerts;
 SQL
-if /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1; then
-  echo 'FAIL contaminated-statistics-admission'; exit 1
-fi
-op=$(jq -r .operation_id /var/lib/aboutme/fence.json)
-printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$op" |
-  /usr/local/lib/aboutme/crowdsec-provision.sh restore-reset >/dev/null 2>&1
-[[ $(sql 'SELECT count(*) FROM alerts;') == 0 ]]
-[[ $(sql 'SELECT count(*) FROM machines;') == 0 ]]
-[[ $(sql 'SELECT count(*) FROM bouncers;') == 0 ]]
+if "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1; then exit 1; fi
+migration_run --reset
+migration_order
+install -m 0600 /srv/data/crowdsec/firewall-bouncer.key "$retention_fixture/firewall.key"
+[[ $(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';") != "$catalog_before" ]]
+[[ $(sql 'SELECT (SELECT count(*) FROM alerts)+(SELECT count(*) FROM decisions)+(SELECT count(*) FROM events)+(SELECT count(*) FROM meta);') == 0 ]]
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
-[[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
-old_key=$(sha256sum "$retention_fixture/caddy.key" | cut -d' ' -f1)
-integration_stage=restore-registrations
-crowdsec_admitted_cli machines add -a --force --error >/dev/null 2>&1
-crowdsec_admitted_cli bouncers add aboutme-firewall -o raw >"$retention_fixture/firewall.key" 2>/dev/null
-install -m 0600 "$retention_fixture/caddy.key" "$retention_fixture/old-caddy.key"
-crowdsec_admitted_cli bouncers add aboutme-caddy -o raw >"$retention_fixture/caddy.key" 2>/dev/null
-[[ $(sha256sum "$retention_fixture/caddy.key" | cut -d' ' -f1) != "$old_key" ]]
-cat "$edge/bouncers/crowdsec-firewall-bouncer.yaml.local" >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
-printf 'api_key: %s\n' "$(cat "$retention_fixture/firewall.key")" >>/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
-/usr/local/lib/aboutme/crowdsec-retention.sh startup
-integration_stage=restore-consumers
-systemctl start crowdsec.service
-old_code=$(printf 'header = "X-Api-Key: %s"\n' "$(cat "$retention_fixture/old-caddy.key")" |
-  curl -s -o /dev/null -w '%{http_code}' --max-time 5 -K - http://127.0.0.1:8095/v1/decisions)
-[[ $old_code == 401 || $old_code == 403 ]]
-systemctl start crowdsec-firewall-bouncer.service aboutme-caddy.service
-wait_status 200 192.0.2.41 http://127.0.0.1:18080/
-printf 'PASS fresh-reset-discards-statistics-and-registrations\nPASS replaced-credential-rejects-old-key\n'
+migration_ready
+snapshot_credentials reset
+credentials_status switched 401
+credentials_status reset 200
+printf 'PASS real-migration-reset\n'
+
+integration_stage=migration-failure-boundary
+touch "$retention_fixture/register-fail-once"
+migration_refused --reset
+[[ ! -e $retention_fixture/register-fail-once ]]
+# The injection ran after catalog initialization and machine registration.
+"$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
+[[ $(sql 'SELECT count(*) FROM machines;') == 1 ]]
+[[ $(sql 'SELECT count(*) FROM bouncers;') == 0 ]]
+catalog_failed=$(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';")
+migration_refused
+[[ $(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';") == "$catalog_failed" ]]
+! grep -qF bouncer-register "$retention_fixture/control-log"
+migration_run --reset
+[[ $(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';") != "$catalog_failed" ]]
+# Failure discarded the active-edge record; recovery preserves stopped edges.
+[[ $(cat "$retention_fixture/migrate-err") == crowdsec_migrate_no_edge ]]
+install -m 0600 /srv/data/crowdsec/firewall-bouncer.key "$retention_fixture/firewall.key"
+systemctl start aboutme-caddy.service aboutme-maintenance.service
+migration_ready
+snapshot_credentials recovered
+credentials_status reset 401
+credentials_status recovered 200
+migration_noop
+printf 'PASS real-migration-failure-requires-explicit-reset\n'
 
 [[ ! -e /etc/crowdsec/online_api_credentials.yaml ]] || {
   echo "central API credentials exist" >&2
