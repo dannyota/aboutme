@@ -55,6 +55,7 @@ install -m 0644 "$edge/acquis.d/aboutme-http.yaml" /etc/crowdsec/acquis.d/aboutm
 install -m 0644 "$edge/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
 install -m 0644 "$edge/parsers/s01-parse/aboutme-http.yaml" \
   /etc/crowdsec/parsers/s01-parse/aboutme-http.yaml
+install -d -m 0755 /etc/crowdsec/parsers/s02-enrich
 install -m 0644 "$edge/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
   /etc/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml
 install -m 0644 "$edge/scenarios/aboutme-http-rate.yaml" \
