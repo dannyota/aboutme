@@ -23,6 +23,7 @@ PodmanArgs=--memory=128m
 LogDriver=journald
 
 [Service]
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @MAINTENANCE_NUMBER@ aboutme-maintenance
 ExecStartPre=/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 LimitCORE=0
 Restart=no

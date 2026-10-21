@@ -481,7 +481,7 @@ test("CI job timeouts match their workloads and retain VN timeouts", () => {
   checkJobTimeouts(readWorkflow("ci"), readWorkflow("vn-infra"));
 });
 
-test("CI rejects too-short job timeouts", () => {
+test("CI rejects changed job timeouts", () => {
   for (const name of Object.keys(readWorkflow("ci").jobs)) {
     if (name === "vn-infra") continue;
     const ci = readWorkflow("ci");
@@ -490,8 +490,12 @@ test("CI rejects too-short job timeouts", () => {
   }
   for (const name of Object.keys(readWorkflow("vn-infra").jobs)) {
     const vn = readWorkflow("vn-infra");
-    vn.jobs[name]["timeout-minutes"] = 1;
-    assert.throws(() => checkJobTimeouts(readWorkflow("ci"), vn), /timeout-minutes/, name);
+    for (const minutes of [1, 10, 20, 21]) {
+      const expected = name === "crowdsec-integration" ? 20 : 10;
+      if (minutes === expected) continue;
+      vn.jobs[name]["timeout-minutes"] = minutes;
+      assert.throws(() => checkJobTimeouts(readWorkflow("ci"), vn), /timeout-minutes/, `${name}/${minutes}`);
+    }
   }
 });
 
@@ -611,6 +615,17 @@ function checkPreflightBases(ci) {
   }
 }
 
+test("VN keeps database migration in the PostgreSQL job", () => {
+  const vn = readWorkflow("vn-infra");
+  assert.deepEqual(Object.keys(vn.jobs).sort(), [
+    "check", "crowdsec-integration", "crowdsec-postgresql", "crowdsec-privacy-notice",
+  ]);
+  const job = vn.jobs["crowdsec-postgresql"];
+  const step = job.steps.find((entry) => entry.run === "sudo bash deploy/vn/tests/crowdsec-migrate-test.sh");
+  assert.ok(step, "migration test step");
+  assert.ok(!step.if && !step["continue-on-error"], "migration test must block");
+});
+
 function checkJobTimeouts(ci, vn) {
   const timeouts = {
     preflight: 5,
@@ -631,7 +646,7 @@ function checkJobTimeouts(ci, vn) {
   }
   assert.equal(ci.jobs["vn-infra"]["timeout-minutes"], undefined, "reusable VN caller inherits timeouts");
   for (const [name, job] of Object.entries(vn.jobs)) {
-    assert.equal(job["timeout-minutes"], 10, `VN ${name}: timeout-minutes`);
+    assert.equal(job["timeout-minutes"], name === "crowdsec-integration" ? 20 : 10, `VN ${name}: timeout-minutes`);
   }
 }
 

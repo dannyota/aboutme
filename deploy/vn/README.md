@@ -24,7 +24,7 @@ v0.7.3, and AWS was removed. Cloudflare provides DNS-only records managed by
 | `host/keys/`                 | The apt signing keys `install.sh` trusts, checked against pinned fingerprints |
 | `edge/`                      | CrowdSec configuration and the vWAF escalation checklist                      |
 | `probe/`                     | Host fact checks                                                              |
-| `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, cutover               |
+| `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, data migration        |
 
 ## DNS root
 
@@ -81,7 +81,27 @@ run `sudo systemctl start ssh-keygen.service`, then
 `sudo systemctl show ssh-keygen.service -p Result -p ExecMainStatus`. Both must
 report success (`Result=success`, `ExecMainStatus=0`). SSH needs no restart.
 
+## CrowdSec PostgreSQL transition
+
+Every ordinary host installation runs `host/crowdsec-migrate.sh`. It returns
+without stopping services when PostgreSQL is selected and the database gate
+passes. Otherwise it provisions PostgreSQL, discards old SQLite alerts and
+decisions, runs startup retention, registers the machine and bouncers, and
+restarts protection. Follow the
+[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md) for
+verification, failure recovery, and explicit `--reset` after a cluster restore.
+Do not resend or recapture the completed privacy-notice campaign.
+
+The host bundle separates CrowdSec's PostgreSQL role/database from application
+roles, gates schema-capable calls, and installs startup/runtime retention and an
+hourly no-analyze vacuum. Image rollback after completion keeps that host bundle
+and its monotonic release floor. Storage, feed, logging, and backup limits
+belong to the [privacy contract](../../docs/design/crowdsec-http-privacy.md).
+
 ## Build order
+
+This order describes host setup. The first production CrowdSec storage
+transition uses the procedure above rather than a full reinstall.
 
 1. Confirm each provider fact below on the account.
 2. `scripts/buckets.sh --storage-project-id <id>`: the media, backup, and state
@@ -212,7 +232,11 @@ or foreign value remains at the printed recovery key for attended resolution.
 reaches its private IP through the production host as an SSH jump host, installs
 PostgreSQL and pgBackRest, then restores the latest backup and a point-in-time
 target. It checks versions, row counts, grants, and an `aboutme_app` read. The
-exit trap deletes the server and volume unless `--keep` was requested.
+[CrowdSec restore boundary](../../docs/runbooks/crowdsec-postgresql.md#reset-after-a-cluster-restore)
+requires notice reconciliation and an explicit operator reset before consumers
+resume. The cluster restore brings back CrowdSec data and identities; automation
+does not reset them. The exit trap deletes the server and volume unless `--keep`
+was requested.
 
 The server has no floating IP and no NAT, so it has no outbound internet for
 packages or vStorage. Outbound networking remains open. GreenNode Public NAT
@@ -221,12 +245,12 @@ traffic through it. Do not add a Public NAT to the production VPC for the drill.
 
 ## Cutover prerequisites
 
-`scripts/cutover.sh` is a reference for an AWS-to-Vietnam data move. Before
-`preflight`, the Vietnam host must already serve maintenance with its server
-stopped. Preflight stops job timers and active jobs and checks that state; it
-does not start maintenance. AWS must also serve maintenance with its app and
-schedules stopped. The AWS stack is not deployed, so the script cannot run
-against the current infrastructure.
+The AWS-to-Vietnam data move reference is separate from host installation.
+Before `preflight`, the Vietnam host must already serve maintenance with its
+server stopped. Preflight stops job timers and active jobs and checks that
+state; it does not start maintenance. AWS must also serve maintenance with its
+app and schedules stopped. The AWS stack is not deployed, so the script cannot
+run against the current infrastructure.
 
 ## Reboot
 

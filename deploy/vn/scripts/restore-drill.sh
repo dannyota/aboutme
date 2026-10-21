@@ -73,11 +73,16 @@ SQL
   [[ $out == f ]] || return 1
   printf 'PASS aboutme_app has no CREATE on schema public\n'
   out=$(notice_sql <<'SQL'
-SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_roles
- WHERE rolname !~ '^pg_' AND rolname <> 'postgres';
+SELECT CASE WHEN NOT EXISTS (
+ SELECT FROM pg_catalog.pg_authid WHERE rolname='crowdsec'
+ AND NOT (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+ AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
+ AND rolpassword IS NULL AND rolvaliduntil IS NULL))
+ THEN string_agg(rolname, ',' ORDER BY rolname) ELSE 'invalid' END
+ FROM pg_catalog.pg_authid WHERE rolname !~ '^pg_' AND rolname <> 'postgres';
 SQL
   ) || return 1
-  [[ $out == aboutme,aboutme_app,aboutme_migrator ]] || return 1
+  [[ $out == aboutme,aboutme_app,aboutme_migrator || $out == aboutme,aboutme_app,aboutme_migrator,crowdsec ]] || return 1
   printf 'PASS role list\n'
   out=$(notice_sql <<<'SET ROLE aboutme_app; SELECT count(*) FROM :"tbl";') || return 1
   [[ $out =~ ^(0|[1-9][0-9]{0,18})$ ]] || return 1
@@ -102,7 +107,8 @@ notice_host_child() {
   notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
   local restore_args=(--stanza=aboutme --delta --archive-mode=off)
   if [[ $notice_mode == time ]]; then
-    restore_args+=(--type=time "--target=$notice_target" --target-action=promote)
+    # Automatic backup selection requires a space and an explicit UTC offset.
+    restore_args+=(--type=time "--target=${notice_target:0:10} ${notice_target:11:8}+00" --target-action=promote)
   fi
   notice_restore_denial 4>&- && notice_postgres pgbackrest "${restore_args[@]}" restore || return 1
   notice_restore_denial 4>&- && systemctl start postgresql@18-main.service 4>&- || return 1
@@ -510,7 +516,7 @@ install_drill_host() {
   local bundle=/tmp/aboutme-bundle
   say "copying the bundle and installing PostgreSQL and pgBackRest"
   rsh sudo rm -rf "$bundle"
-  tar -C "$here/.." -c host scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
+  tar -C "$here/.." -c host edge scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
     scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
     rsh bash -c 'mkdir -p /tmp/aboutme-bundle && tar -C /tmp/aboutme-bundle -x'
   # The data disk is the one disk that is neither the root disk nor zram.

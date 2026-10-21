@@ -1,9 +1,9 @@
 # CrowdSec HTTP privacy
 
 The Vietnam direct edge supplies CrowdSec with a bounded abuse-detection feed.
-The owner approved the initial feed on 2026-10-10 and PostgreSQL storage,
-backups, and conditional target samples on 2026-10-18. Approval is not
-deployment evidence; the release and hosted proofs below must pass.
+The owner approved the feed on 2026-10-10, PostgreSQL storage, backups, and
+conditional target samples on 2026-10-18, and the one-step storage switch that
+discards SQLite history on 2026-10-21.
 
 ## Request feed
 
@@ -20,11 +20,11 @@ Caddy writes JSON lines to tmpfs with exactly these fields:
 | `target_path` | string | Eligible escaped path, at most 512 bytes, or the empty string          |
 
 All seven keys are mandatory, with no extra or duplicate keys. The encoder
-constructs this allowlist, never copies an access event. It excludes queries,
+constructs this allowlist and never copies an access event; it excludes queries,
 headers, bodies, host, port, TLS details, duration, and user or resume fields.
 Only the direct listener's socket supplies `source_ip`, with IPv4-in-IPv6
-unmapping; forwarding headers cannot supply it. Unknown methods become `OTHER`.
-Invalid base fields drop the record. Errors emit fixed reason codes only.
+unmapping; forwarding headers cannot. Unknown methods become `OTHER`; invalid
+base fields drop the record; errors emit fixed reason codes only.
 
 Route classification uses the first matching row:
 
@@ -39,28 +39,28 @@ Route classification uses the first matching row:
 | `public`      | Root, valid public resume routes, guide, privacy, terms, showcase, and templates routes       |
 | `unknown`     | Every other path, including reserved names and probes                                         |
 
-Only `route_class=unknown` with status 400, 404, or 405 permits a target sample.
-Every other request emits `probe_class: "none"` and `target_path: ""`, including
+Only `route_class=unknown` with status 400, 404, or 405 permits a target sample;
+every other request emits `probe_class: "none"` and `target_path: ""`, including
 known routes returning those statuses. Valid public resume route syntax stays
 `public` even when the resume does not exist. Match protected route classes
 ASCII case-insensitively against the original parsed path and every exclusion
-view: the escaped path's first two decoded views and their dot-segment/slash
-normalizations. This matches pinned Caddy path behavior. If any view matches,
-emit that class by the table's priority and no target sample.
+view (the escaped path's first two decoded views and their dot-segment and slash
+normalizations), matching pinned Caddy path behavior. If any view matches, emit
+that class by table priority and no target sample.
 
 Capture the original parsed URL before rewrites. For an eligible valid URL,
 `target_path` equals Go `URL.EscapedPath()`: preserve valid original escapes and
-their case, encoded slashes, double encoding, and UTF-8 encoding. Do not clean,
-decode, truncate, or normalize the stored path. Never use `URL.String()` or
-`RequestURI()` because they can include forbidden fields. `RawQuery`, host,
-userinfo, and fragment never enter this field. A literal encoded `%3F` remains
-path data; an actual query delimiter and everything after it are excluded.
+their case, encoded slashes, double encoding, and UTF-8 encoding; do not clean,
+decode, truncate, or normalize it. Never use `URL.String()` or `RequestURI()`,
+which can include forbidden fields; `RawQuery`, host, userinfo, and fragment
+never enter this field. A literal `%3F` remains path data; a query delimiter and
+everything after it are excluded.
 
 Validate before capture: a nonempty absolute path starting with `/`, consistent
 `RawPath` when present, valid percent triplets, and valid UTF-8 without control
 characters in the decoded views. Authority-only, opaque, or asterisk targets,
 malformed escapes, inconsistent URL fields, and controls yield
-`probe_class: "invalid"`, `target_path: ""`. A valid escaped path longer than
+`probe_class: "invalid"`, `target_path: ""`; a valid escaped path longer than
 512 bytes before JSON encoding yields `oversized` and the empty string. Never
 repair an invalid raw path through `EscapedPath()` fallback. If parsing fails
 before the encoder runs, emit no record or raw diagnostic. Validation and
@@ -81,263 +81,290 @@ normalize backslashes to slashes for matching only. A decode error is invalid.
 
 The complete allowlist adds only `none`, `invalid`, and `oversized`. Classes
 contain no attacker text and do not themselves trigger bans. Target samples can
-contain visitor-supplied text; this trade-off does not anonymize paths.
-
-Serving and maintenance write `serving.json` and `maintenance.json` under
+contain visitor-supplied text; this trade-off does not anonymize paths. Serving
+and maintenance write `serving.json` and `maintenance.json` under
 `/var/log/caddy/crowdsec`, mounted from no-swap tmpfs `/run/aboutme/caddy-log`.
 Each private file caps at 1 MiB plus one uncompressed size roll; timed rotation
 is off. Precreate exact paths and tail without globs. At startup and every five
-minutes, `crowdsec-retention.sh` truncates request/bouncer feeds and removes
+minutes, `crowdsec-retention.sh` truncates request and bouncer feeds and removes
 rolls; prove parser continuity after truncation. Reboot removes the feeds. Caddy
-excludes both access logger names and removes URI data from runtime errors. The
-CloudFront listener emits no feed, even in a shared image.
+excludes both access logger names, removes URI data from runtime errors, and
+emits no feed from the CloudFront listener, even in a shared image.
 
 ## Detection
 
 CrowdSec acquisition labels both files `type: aboutme-http`. The parser rejects
-wrong keys, types, classes, bounds, escapes, or combinations. `none` requires an
-ineligible request and empty path. `invalid`/`oversized` require eligibility and
-an empty path. Other classes require an eligible valid path and matching fixed
-classification. Never reconstruct a missing path. Scenarios group by source
-address and coarse fields, never by target text. HTTP and SSH windows last at
-most 30 minutes; maintenance 503 is neutral.
+wrong keys, types, classes, bounds, escapes, or combinations: `none` requires an
+ineligible request and empty path; `invalid` and `oversized` require eligibility
+and an empty path; other classes require an eligible valid path and matching
+fixed classification. Never reconstruct a missing path. Scenarios group by
+source address and coarse fields, never by target text; HTTP and SSH windows
+last at most 30 minutes, and maintenance 503 is neutral.
 
-No GeoIP, autonomous system, reverse DNS, or intelligence enrichment is added.
-CrowdSec persists alert samples, not the full request feed or an access log.
-Samples may contain the seven fields plus scenario, counts, timestamps, and
-decision expiry. Unsampled requests disappear with feed cleanup. HTTP scenario
-names start with `aboutme/http-`. The bouncer uses current IP decisions and
-returns 403; that response never contributes to status-based ban escalation.
-
-Community API, console, intelligence clients, and online credentials are absent.
-No attack data is shared with threat-intelligence recipients. The local API
-listens only on `127.0.0.1:8095`; backups follow the separate contract below.
+No GeoIP, autonomous-system, reverse-DNS, or intelligence enrichment exists.
+CrowdSec persists alert samples, not the request feed or an access log; samples
+hold the seven fields plus scenario, counts, timestamps, and decision expiry;
+unsampled requests disappear with feed cleanup. HTTP scenario names start with
+`aboutme/http-`. The bouncer enforces current IP decisions with 403, which never
+feeds status-based ban escalation. Community API, console, intelligence clients,
+and online credentials are absent, so no attack data reaches threat-intelligence
+recipients. The local API listens only on `127.0.0.1:8095`. Pin
+`cscli.hub_branch: master` to reuse cached detection without release lookup.
 
 ## Database and authorization
 
 Use a separate `crowdsec` database and role in the existing PostgreSQL 18
-cluster. CrowdSec owns its schema, separately from application migrations.
-Sharing application tables would mix these authorities; sharing the cluster
-still shares resources, WAL, backups, and failures. A second cluster would add
-isolation but another service on the bounded host.
+cluster; CrowdSec owns its schema apart from application migrations. Sharing
+application tables would mix authorities; sharing the cluster still shares
+resources, WAL, backups, and failures; a second cluster would add a service.
 
 Effective `db_config`: `type: pgx`, `db_name: crowdsec`, `user: crowdsec`,
-`db_path: /run/postgresql` (socket directory), empty `host`, `port: 0`, and
-`sslmode: disable`. No password, TCP, SQLite path, or `use_wal` setting may be
-inherited. Set `max_open_conns: 4` and role connection limit 8. Retention CLI
+`db_path: /run/postgresql` (socket directory), empty `host`, `port: 0`,
+`sslmode: disable`, and `max_open_conns: 4`, with role connection limit 8. No
+password, TCP, SQLite path, or `use_wal` setting may be inherited. Retention CLI
 and SQL steps run sequentially within that budget.
 
 HBA permits `crowdsec` only into its database through a named peer map from OS
-`root`, the existing engine identity. No wildcard, application identity, or
-`trust` rule is allowed. Bootstrap uses `postgres`; runtime and retention use
-`crowdsec`. Revoke public database/schema access. The role owns its database and
-objects, has no memberships, and has no superuser, database/role-creation,
-replication, or bypass-RLS privilege. Refuse conflicting ownership or grants.
-
+`root`, the existing engine identity; no wildcard, application identity, or
+`trust` rule. Bootstrap uses `postgres`; runtime and retention use `crowdsec`.
+Revoke public database and schema access. The role owns its database and
+objects, has no memberships, and no superuser, database or role creation,
+replication, or bypass-RLS privilege; refuse conflicting ownership or grants.
 Generate machine and bouncer credentials into protected encrypted-volume files,
 never arguments or logs. Revocation removes the registration and replaces the
-consumer's credential and cache; prove old credentials fail before restart. Host
-root remains trusted. Keep the [host budgets](vietnam-host-memory.md) and
-monitor volume, connections, and backup age; alert count is not a hard size cap.
+consumer's credential and cache; prove old credentials fail before restart. Keep
+the [host budgets](vietnam-host-memory.md) and monitor volume, connections, and
+backup age; alert count is not a hard size cap.
 
 Before every schema-capable `cscli` or CrowdSec action, including flushes,
 starts, config checks, and registration, run side-effect-free `psql -X` with
 `ON_ERROR_STOP=1` in a read-only transaction. Check database identity, current
-role, and the expected CrowdSec 1.8.1 catalog manifest (tables, columns, types,
-constraints, and indexes), ownership, grants, logging, and statistics policy. Do
-not invent a vendor schema-version table: the reviewed manifest and pinned
-binary identify the expected version. Failure prevents the binary action. Repeat
-preflight before SQL cleanup; an exit from `cscli` is not evidence that missing
-schema was safe. Only the fenced provisioner may accept a verified empty
-database, initialize it, apply policy, and pass the full gate. All schema
-changes require stopped ingestion, reviewed policy, and fresh proofs.
+role, the CrowdSec 1.8.1 catalog manifest (tables, columns, types, constraints,
+and indexes), ownership, grants, logging, and statistics policy; the reviewed
+manifest and pinned binary identify the version without a vendor schema-version
+table. Failure prevents the binary action. Repeat preflight before SQL cleanup;
+a `cscli` exit does not prove missing schema was safe. Only
+`crowdsec-provision.sh` may accept a verified empty database, initialize it,
+apply policy, and pass the full gate. Schema changes require stopped ingestion,
+reviewed policy, and fresh proofs.
 
 ## Planner statistics and vacuum
 
-During fenced fresh provisioning, before any attack ingestion, set
+During fresh provisioning, before any attack ingestion, set
 `autovacuum_enabled=false` on every CrowdSec table and `STATISTICS 0` on every
-user column. This includes IPs, decision values, serialized events and target
-paths, metadata, and credential fields. Reject unexpected relations, expression
+user column, including IPs, decision values, serialized events and target paths,
+metadata, and credential fields; reject unexpected relations, expression
 indexes, and extended-statistics objects. The gate checks table reloptions and
-column targets, and requires aggregate absence of CrowdSec rows in `pg_stats`
-without selecting sampled values. It also rejects extended-statistics state.
+column targets and requires no CrowdSec rows in `pg_stats`, in aggregate.
 
-PostgreSQL's table switch disables ordinary automatic VACUUM and ANALYZE
-together; large analyze thresholds are not an off switch. Retain ordinary
-`VACUUM (ANALYZE FALSE)` in a separate hourly maintenance job with a five-minute
-deadline, no overlapping vacuum runs, and fixed-name, fixed-reason alarms.
-Wraparound protection remains enabled. Never run manual ANALYZE or
-`VACUUM ANALYZE` for CrowdSec. Zero targets prevent per-column collection but do
-not prove removal of old statistics; even analyzing an empty table can retain
-them. Any statistics contamination fails the gate and requires fenced database
-replacement, not catalog edits. Restore always uses the fresh-state boundary
-below. Lower planner accuracy and explicit vacuum maintenance are trade-offs.
+PostgreSQL's table switch disables automatic VACUUM and ANALYZE together; large
+analyze thresholds are not an off switch. Run `VACUUM (ANALYZE FALSE)` in a
+separate hourly job with a five-minute deadline, no overlapping runs, and
+fixed-name, fixed-reason alarms; wraparound protection stays enabled. Never run
+manual ANALYZE or `VACUUM ANALYZE` for CrowdSec. Zero targets prevent collection
+but do not remove old statistics; even analyzing an empty table can retain them,
+so contamination fails the gate and requires `crowdsec-migrate.sh --reset`, not
+catalog edits. Lower planner accuracy and explicit vacuum are the trade-offs.
 
 ## Live retention and failure
 
-The request feed stays in tmpfs and follows the cleanup schedule above. Feed and
-live database attack records have a 24-hour logical retention and access bound.
-Backup copies have the separate lifetime below. Attack data never enters release
-artifacts, support bundles, or routine diagnostic copies.
-
-Decisions last at most 22 hours, including SSH and manual tests. HTTP bans start
-at 15 minutes, then one hour and four hours for repeat offenses while prior
-decisions remain. This limits harm to shared addresses. The status scenario
-counts 400, 404, 405, and unknown-route scanner signals; rate detection excludes
-static assets and health checks. The HTTP profile precedes and stops catch-all
-evaluation. The host targets records older than 23 hours. Effective engine
-settings are `db_config.flush.max_age: 0s` and `max_items: null`: pinned
-CrowdSec 1.8.1 skips age/count deletion with those values, preventing its minute
-flush from deleting decisions before bouncer reconciliation. Its orphan cleanup
-still runs; orphan decisions are invalid state, not a supported delivery
-mechanism. Re-prove these version-specific behaviors on every upgrade.
+The request feed stays in tmpfs under the cleanup schedule above. Feed and live
+database attack records have a 24-hour logical retention and access bound;
+backup copies have the separate lifetime below. Attack data never enters release
+artifacts, support bundles, or diagnostic copies. Decisions last at most 22
+hours, including SSH and manual tests. HTTP bans start at 15 minutes, then one
+hour and four hours for repeat offenses while prior decisions remain, limiting
+harm to shared addresses. The status scenario counts 400, 404, 405, and
+unknown-route scanner signals; rate detection excludes static assets and health
+checks; the HTTP profile precedes and stops catch-all evaluation. The host
+targets records older than 23 hours. Effective engine settings are
+`db_config.flush.max_age: 0s` and `max_items: null`: pinned CrowdSec 1.8.1 skips
+age and count deletion with those values, so its minute flush cannot delete
+decisions before bouncer reconciliation; its orphan cleanup still runs, and
+orphan decisions are invalid state, not a delivery mechanism. Re-prove these
+version-specific behaviors on every upgrade.
 
 Startup requires the data mount, synchronized clock, and
-`postgresql@18-main.service`; consumers stay stopped during cleanup. CrowdSec,
-the firewall bouncer, and both Caddy modes require a successful gate, not just
-unit ordering. PostgreSQL restart or recovery invalidates the gate and lease;
-consumer restart requires a fresh pass, not saved oneshot success.
-
+`postgresql@18-main.service`; consumers stay stopped during cleanup and require
+a successful gate, not unit ordering alone. PostgreSQL restart or recovery
+invalidates the gate and lease; restart needs a fresh pass, not saved success.
 After preflight, runtime selects an exact bounded candidate set and reconciles
 its decisions with every active bouncer before SQL physically removes stale
 graphs, expired decisions, and orphan events or metadata. Only stopped-consumer
 cleanup may use `cscli alerts flush --max-age 23h --max-items 5000`, after its
-preflight. Startup uses SQL without the engine or local API. Missing schema
-never renews the lease or silently triggers initialization.
+preflight; startup uses SQL without the engine or local API. Missing schema
+never renews the lease or triggers initialization.
 
 Serialize passes with a host lock. Use fixed SQL identifiers, UTC cutoffs, short
-transactions, and at most 1,000 candidates per batch. Statement timeout is 10
-seconds, lock timeout 2 seconds; the pass deadline bounds cascades and loops.
-Check each alert, decision, event, and metadata timestamp, including occurrence
-time. Purge stale graphs; reject missing or non-finite times, dangling links,
-and excessive decision duration. Verification finds no record aged 23 hours 30
-minutes or more. Preserve fresh records and registrations. Never interpolate
-request text or accept an exit code as cleanup proof.
+transactions, and at most 1,000 candidates per batch; statement timeout is 10
+seconds, lock timeout 2 seconds, and the pass deadline bounds cascades and
+loops. Check each alert, decision, event, and metadata timestamp, including
+occurrence time; purge stale graphs; reject missing or non-finite times,
+dangling links, and excessive decision duration. Verification finds no record
+aged 23 hours 30 minutes or more while fresh records and registrations remain.
+Never interpolate request text or accept an exit code as cleanup proof.
 
 Natural expiries and supported explicit revocations first travel through the
-LAPI/bouncer stream. Allow at most 20 seconds within the runtime deadline to
-obtain consumer acknowledgement that each candidate was removed or expired from
-all active Caddy caches and the SSH nftables set. Prove the acknowledgement
-mechanism against the pinned consumers; a stream response or `last_pull` alone
-does not establish that consumers applied deletion. Recheck the same candidate
-IDs and eligibility before deletion; do not expand the set or run a blanket
-flush while consumers serve. No unreconciled decision means no routine Caddy
-restart.
+LAPI/bouncer stream. Allow at most 20 seconds within the runtime deadline for
+consumer acknowledgement that each candidate left all active Caddy caches and
+the SSH nftables set; prove that mechanism against the pinned consumers, since a
+stream response or `last_pull` alone does not establish applied deletion.
+Recheck the same candidate IDs and eligibility before deletion; never expand the
+set or run a blanket flush while consumers serve. No unreconciled decision means
+no routine Caddy restart. Missed polls, unavailable acknowledgement, early
+revocation, or invalid active decisions still unreconciled at the deadline close
+the gate: stop both Caddy modes, the firewall bouncer, and the engine; prove
+quiescence, clear in-memory caches and the bouncer-owned nftables state, then
+physically delete; verify and rebuild from current decisions before reopening,
+leaving unrelated firewall rules intact. This fallback is mandatory if the
+pinned consumers expose no sufficient acknowledgement. SQL targets the pinned
+schema, not a vendor API. Retention never waits for SQLite, checkpoints, forced
+vacuum, or WAL archival.
 
-Missed polls, unavailable acknowledgement, early revocation, or invalid active
-decisions that remain unreconciled at the deadline close the gate. Stop both
-Caddy modes, the firewall bouncer, and engine; prove quiescence, clear in-memory
-caches and the bouncer-owned nftables state, then physically delete. Verify and
-rebuild from current decisions before reopening. Unrelated firewall rules stay
-intact. This fallback is mandatory if the pinned consumers expose no sufficient
-acknowledgement. SQL targets the pinned schema, not a stable vendor API.
-Retention never waits for SQLite, database checkpoints, forced vacuum, or WAL
-archival.
-
-| Control                       | Bound       |
-| ----------------------------- | ----------- |
-| Runtime interval              | 300 seconds |
-| Runtime whole-pass deadline   | 60 seconds  |
-| Startup whole-pass deadline   | 300 seconds |
-| Successful lease maximum age  | 360 seconds |
-| Independent watchdog interval | 300 seconds |
-| Consumer stop deadline        | 60 seconds  |
-
-Only full success renews the root-owned lease. The independent watchdog rejects
-missing, stale, future-dated, or malformed leases and disabled cleanup timers.
-The lease, watchdog, and stop bounds total 12 minutes, inside the 30-minute
-verification margin. Any clock, authentication, schema, or cleanup failure
-blocks startup or stops all consumers. Confirm quiescence, remove tmpfs feeds,
-and alarm with fixed codes. Keep PostgreSQL available to the app. Failed cleanup
-keeps the gate closed until verified recovery; stopping ingestion is not
-deletion.
+Bounds: runtime interval 300 seconds, runtime whole-pass deadline 60 seconds,
+startup whole-pass deadline 300 seconds, lease maximum age 360 seconds, watchdog
+interval 300 seconds, and consumer stop deadline 60 seconds. Only full success
+renews the root-owned lease; the independent watchdog rejects missing, stale,
+future-dated, or malformed leases and disabled cleanup timers. The lease,
+watchdog, and stop bounds total 12 minutes, inside the 30-minute verification
+margin. Any clock, authentication, schema, or cleanup failure blocks startup or
+stops all consumers: confirm quiescence, remove tmpfs feeds, alarm with fixed
+codes, and keep PostgreSQL available to the app. Failed cleanup keeps the gate
+closed until verified recovery; stopping is not deletion.
 
 ## Log privacy
 
 CrowdSec, firewall-bouncer, and Caddy bouncer logs that can contain an HTTP
-source address or event stay on tmpfs and use the feed's retention bound. Their
-journals contain fixed operational messages only. Caddy and CrowdSec have core
-dumps disabled. The host uses zram and has no disk swap.
+source address or event stay on tmpfs under the feed's retention bound; journals
+hold fixed operational messages only. Caddy and CrowdSec disable core dumps; the
+host uses zram and has no disk swap.
 
 PostgreSQL errors, parameters, rows, and context must not leak attack values to
-durable logs. `log_statement = none` alone is insufficient. Before any CrowdSec
+durable logs; `log_statement = none` alone is insufficient. Before any CrowdSec
 connection set role-specific `log_min_messages = panic`,
 `log_min_error_statement = panic`, `log_error_verbosity = terse`,
 `log_statement = none`, `log_min_duration_statement = -1`,
 `log_min_duration_sample = -1`, `log_statement_sample_rate = 0`,
 `log_transaction_sample_rate = 0`, `log_parameter_max_length = 0`, and
 `log_parameter_max_length_on_error = 0`. Do not grant the role permission to
-weaken protected logging settings. Keep debug SQL logging disabled in CrowdSec.
-Client diagnostics go only to the bounded private log path or are discarded;
-journal and alarm output contain fixed reason codes and aggregate counts.
-Forced-error proofs must cover the database server as well as the client.
+weaken them. Keep debug SQL logging disabled in CrowdSec. Client diagnostics go
+only to the bounded private log path or are discarded; journal and alarm output
+contain fixed reason codes and aggregate counts. Forced-error proofs must cover
+the database server as well as the client.
 
 ## Backups and restore
 
 pgBackRest copies the whole cluster, including CrowdSec records, credentials,
-and WAL, to encrypted private vStorage in Vietnam. Selective restore does not
+and WAL, to encrypted private vStorage in Vietnam; selective restore does not
 exclude data from backups. Keys stay in protected pgBackRest configuration; the
-CrowdSec role receives none. A decrypted backup exposes stored attack data. The
-30-day recovery window and weekly fulls normally retain copies for about five
-weeks after live deletion. Backup/expiration failures require alarms; this is
-not a strict physical erasure deadline. Backups serve recovery only. Live
-deletion does not promise forensic erasure of pages, WAL, or backups. Encryption
-protects an unpowered host; cleanup must precede consumer restart.
-
-Every cluster or point-in-time restore keeps consumers fenced. Drop the restored
-`crowdsec` database and fresh-provision schema, statistics policy, and
-credentials; row cleanup cannot remove all old statistics or revoked identities.
-Pre-cutover restores also provision fresh state. Clear caches and owned nftables
-state, verify empty attack state and new credentials, then pass the gate. All
-restored history and bans are discarded. Never rewind the app cluster solely to
-repair CrowdSec.
+CrowdSec role receives none, and a decrypted backup exposes stored attack data.
+The 30-day recovery window and weekly fulls normally retain copies for about
+five weeks after live deletion; backup and expiration failures require alarms,
+and this is not a strict erasure deadline. Backups serve recovery only; live
+deletion promises no forensic erasure of pages, WAL, or backups, and encryption
+protects only an unpowered host. A cluster or point-in-time restore brings back
+CrowdSec rows, planner statistics, and registrations; row cleanup cannot remove
+old statistics or revoked identities. Neither automated restore nor retention
+resets this state, and a passing gate does not prove the database was never
+restored. The operator keeps every consumer stopped until the explicit `--reset`
+below succeeds. Restore also revokes notice authority: complete the
+[notice reconciliation and activation rules](crowdsec-privacy-notification.md#send-authority-and-restore-fence)
+before consumer startup. Reset neither clears notice denial nor grants
+activation. Never rewind the application cluster for CrowdSec.
 
 ## Migration, loss, and release order
 
-Cutover imports no SQLite data: history, bans, detection windows, and
-registrations start fresh. One approved local incident snapshot has restricted
-access on encrypted storage and expires 30 days after capture. It is neither a
-fallback nor a recurring backup; never copy it into support, CI, the repository,
-or the backup bucket.
+`deploy/vn/host/crowdsec-migrate.sh` switches SQLite to PostgreSQL. `install.sh`
+runs it as root on every ordinary installation after installing packages,
+configuration, units, and helpers, under the installer's bundle lock
+`/srv/data/host-operations/.bundle.lock`. Package hooks cannot initialize,
+register, or start CrowdSec or the bouncer during installation; a fresh bouncer
+package receives a private, unregistered bootstrap key only to suppress its
+automatic registration, and the migration replaces that key before the bouncer
+starts. The approved loss covers SQLite alerts, decisions, detection windows,
+and registrations; CrowdSec documents no backend migration. One approved
+incident snapshot stays on restricted encrypted local storage, expires after 30
+days, and never reaches support, CI, the repository, or backups. The migration
+holds the bundle lock for its whole run, inherited from `install.sh` or acquired
+by a direct call such as `--reset`, refuses while any fence operation is owned
+or an operation unit runs, and never takes fence ownership itself. Every path
+that takes fence operation ownership, including `deploy.sh` and restore
+admission, first takes this bundle lock and releases it once ownership is
+recorded: bundle lock, then fence lock, never the reverse. No new lock or marker
+exists. Install the host bundle before the separate image deploy.
 
-Complete the [notice and email gate](crowdsec-privacy-notification.md) before
-ingestion. Under the operation lock, persist a marker blocking unattended starts
-after crashes/reboots. Stop both Caddy modes, engine, firewall bouncer, and
-retention scheduling; package hooks must not restart them.
+Notice admission, PostgreSQL configuration, passing `preflight-ready`, and a
+registered machine and both bouncers make the step a no-op; otherwise:
 
-Provision authentication and database; install PostgreSQL configuration before
-any CrowdSec binary runs. The fenced empty-database preflight permits initial
-schema creation only. Apply the statistics policy and pass the complete
-preflight before registration or ingestion. Generate fresh machine and bouncer
-credentials directly into protected files. Synchronize the Caddy Podman secret.
-Rebuild caches/nftables, pass startup cleanup, enable the timer, start CrowdSec,
-verify authentication, then start consumers and prove enforcement. Only the
-owning operation authorizes these starts while marked, after the gate passes.
-Clear the marker after success; interrupted work resumes under that marker and
-refuses ambiguous state.
+1. Stop `aboutme-caddy.service`, `aboutme-maintenance.service`,
+   `crowdsec-firewall-bouncer.service`, `crowdsec.service`,
+   `aboutme-watch.timer`, `aboutme-watch.service`, and the retention and vacuum
+   timers. Join their services and the startup retention oneshot before any
+   migration effect; an admitted watchdog tick would run
+   `crowdsec-retention-fail.sh` and tear down the lease and runtime directories.
+   Record active edge services before stopping; accept the short edge outage.
+2. `crowdsec-provision.sh fresh`: role, protected logging settings, database,
+   verified empty schema, pinned catalog, statistics policy, full gate.
+3. Activate the PostgreSQL configuration and delete the SQLite files.
+4. Gate `cscli machines add -a --force --error`; write the machine credential
+   file `/etc/crowdsec/local_api_credentials.yaml` as root-only mode 0600.
+5. `crowdsec-retention.sh startup`: gate, clear caches and owned nftables state,
+   initialize firewall tables, remove feeds, and write the database-bound lease.
+6. Enable and start both maintenance timers, as the lease check requires; only
+   then re-enable `aboutme-watch.timer`, after startup retention and the timers
+   establish ordinary admission. Enable both CrowdSec services and start the
+   engine through its normal startup guards.
+7. Register `aboutme-caddy` through `secrets-host.sh bouncer-register` (key in
+   the `crowdsec-bouncer-key` host and Podman secrets) and `aboutme-firewall`
+   (key in `/srv/data/crowdsec/firewall-bouncer.key` and the bouncer
+   configuration); keys travel through protected files only.
+8. Start the firewall bouncer, verify its owned nftables state was rebuilt, then
+   start only the edge services recorded in step 1.
+9. Verify `cscli lapi status` and `crowdsec-db.sh preflight-ready`.
 
-Installers, helpers, units, and tests have no SQLite checkpoint or fallback.
-Keep non-database assets and credential directories. Image rollback retains the
-reviewed PostgreSQL host bundle and compatible notice, with no SQLite rollback.
-No client API or resume schema changes. Deploy parser and encoder together under
-the fence, draining tmpfs first; mixed five/seven-field records are rejected.
+Failure stops and joins consumers/timers, prints `crowdsec_migrate_refused`, and
+exits non-zero. `fresh` accepts an absent database or verified empty schema,
+never an existing catalog, even without attack rows. Rerun before schema
+initialization; afterwards a failed no-op check needs explicit `--reset`. A
+passing check leaves stopped services stopped. Use reset for incomplete startup.
+The active-edge record dies with the invocation; the operator restores the
+intended edge through normal guards. Zero exit does not prove serving.
+
+`--reset` bypasses the no-op, uses the same lock and stop set, and substitutes
+`crowdsec-provision.sh restore-reset` for step 2: drop and recreate only the
+CrowdSec database without `FORCE`, so an unaccounted connection blocks
+replacement. Continue from step 3, replacing the machine file, both bouncer
+keys, firewall configuration key, and Caddy Podman secret before their consumers
+start. Old registrations must fail authentication. Only explicit reset discards
+PostgreSQL history, bans, statistics, and registrations, preserving application
+data and the notice ledger. Invalid role grants still require repair.
+
+Require the [notice activation gate](crowdsec-privacy-notification.md) before
+mutation or a no-op on every install. Release the seven-field encoder, parser,
+and host bundle together; stop writers and clear feeds before the parser rejects
+five-field lines. Image rollback retains the PostgreSQL bundle and compatible
+notice; SQLite never resumes. No client API or resume schema changes.
 
 ## Security boundaries
 
-Visitors, hostile content, and network attackers cannot add feed fields or forge
-socket addresses. Users and stolen app tokens gain no CrowdSec DB access. App
-containers cannot have both the socket and host UID 0; test their actual
-identities. A CrowdSec DB writer can damage security state, not access app data
-or keys. Invalid state closes the gate; host root and superusers remain trusted.
-Backup controls cover leaked copies and revived credentials.
+Root owns migration, peer authentication, and credentials; no new principal
+exists. Administrative SQL uses `runuser` as `postgres` with an empty
+environment. After a kill or reboot, normal startup guards apply, but no
+completion guard exists. Restore safety relies on the operator stopping
+consumers until reset succeeds. Visitors, signed-in users, hostile resume
+content, and stolen session/MCP tokens have no host-command surface. Eligible
+path text stays bounded untrusted data, never SQL or command input. TLS protects
+traffic; forwarding headers cannot select `source_ip`. A compromised container
+lacks the host UID 0 plus socket access that peer authentication needs.
+Compromised Caddy can read decisions and ignore bans; its key cannot write
+alerts. A CrowdSec database writer can corrupt protection but has no application
+grants. An app database writer can falsify notice outcomes. Host root and
+database superusers stay trusted; loopback LAPI cannot contain them.
 
 ## Public notice and release
 
-The notices in `apps/web/app/i18n/legal-en.ts` and `legal-vi.ts` use this exact
-attack-protection copy. It replaces the blanket path exclusion as well as the
-retention sentences:
-
-English:
+`apps/web/app/i18n/legal-en.ts` and `legal-vi.ts` carry this exact copy in place
+of the blanket path exclusion and the retention sentences:
 
 > Attack protection uses your IP address, request time, method, response status,
 > broad route class, and a fixed probe category. Only for unrecognized routes
@@ -352,9 +379,7 @@ English:
 > backup policy below. Backups are used only for disaster recovery. Restored
 > CrowdSec data is discarded before attack protection resumes. None of this data
 > is shared with the CrowdSec community.
-
-Vietnamese:
-
+>
 > Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, phương thức, mã
 > phản hồi, nhóm tuyến truy cập và nhóm dấu hiệu thăm dò cố định. Chỉ với tuyến
 > không được nhận diện trả về mã 400, 404 hoặc 405, mẫu cảnh báo tấn công mới có
@@ -370,60 +395,37 @@ Vietnamese:
 > Dữ liệu CrowdSec được khôi phục sẽ bị loại bỏ trước khi hệ thống chống tấn
 > công hoạt động trở lại. Không dữ liệu nào được chia sẻ với cộng đồng CrowdSec.
 
-The production notices name GreenNode and Bizfly in Vietnam. Cloudflare provides
-DNS-only records; requests reach the Vietnam host directly.
-
 ## Required proof
 
-Hosted tests use distinct markers in eligible paths and forbidden fields:
+Paths without a directory are under `deploy/vn/tests/`; jobs are in
+`vn-infra.yml` unless `ci.yml` is named. A listing is not evidence of a pass.
 
-- the feed/parser enforce seven keys, fixed empty values, classes, eligibility,
-  and socket address; only eligible alert samples persist exact escaped paths;
-- percent and double encoding, encoded slashes, Unicode, control characters,
-  malformed and oversized paths, and 512-byte boundaries follow the contract;
-- valid resume handles, nonexistent valid resume routes, auth/API paths, and
-  every other protected route class emit no target, including mixed-case and
-  percent-encoded case aliases in every decoded/normalized exclusion view;
-- query, header, body, host, and forbidden-path markers reach no feed or alert
-  sample; target markers reach no durable log or alarm, including forced errors;
-- installed detection creates 15-minute and repeat one-hour bans enforced by
-  Caddy 403; a benign sequence creates no decision;
-- CrowdSec 1.8.1 initializes and operates against PostgreSQL 18 through the
-  configured Unix socket and peer map, with no TCP or password fallback;
-- application roles and container identities cannot access CrowdSec, and the
-  CrowdSec role cannot access application data or privileged database actions;
-- seeded 23-hour-30-minute HTTP and SSH graphs, stale child events, expired
-  decisions, and orphans disappear from live tables in runtime and startup paths
-  while fresh records and machine and bouncer credentials remain;
-- non-finite timestamps, invalid durations, missing schema, incorrect grants,
-  lock contention, clock failure, and database loss fail closed within the
-  configured bounds;
-- missing tables, columns, manifest mismatch, or changed statistics policy stop
-  every schema-capable command before it runs, without recreating anything;
-- fresh provisioning establishes zero column targets and table policy before
-  ingestion; aggregate checks show no value-bearing planner statistics after
-  sustained events and ordinary VACUUM; contamination closes the gate;
-- natural expiry, explicit revocation, missed polls, and concurrent expiry
-  reconcile the exact deletion set; failed acknowledgement clears consumer state
-  before deletion, while healthy reconciled cleanup needs no restart;
-- a missing, stale, or disabled cleanup timer expires the independent lease and
-  stops both Caddy modes, CrowdSec, and the firewall bouncer;
-- a forced cleanup failure blocks startup or stops consumers without a database
-  checkpoint, forced vacuum, or archive-completion dependency;
-- forced SQL errors, including bad values and constraint failures, leak no
-  attack fields into PostgreSQL logs, process logs, the journal, or alarm mail;
-- bootstrap interruption, reboot, PostgreSQL restart, and restored old state
-  cannot bypass cleanup or resurrect revoked registrations or cached bans;
-- a cluster restore with old rows, statistics, and revoked credentials replaces
-  the CrowdSec database before startup; the application database stays valid;
-- fresh registrations, Caddy bans, firewall state, and expiry work after
-  cutover, with no SQLite database created or command executed; and
-- central API credentials and traffic remain absent.
+| Test files                                                                                                                                                                           | CI job                                                                    | Scope                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `deploy/caddy/production/build/crowdsec_feed_test.go`                                                                                                                                | `ci.yml` / `server-integration` through `deploy/caddy/production/test.sh` | Encoder keys, route exclusions, socket address, escapes, and bounds                                            |
+| `deploy/caddy/production/test/crowdsec_feed.sh`, `deploy/caddy/production/test/direct_maintenance.sh` through `deploy/caddy/production/test.sh`                                      | `ci.yml` / `server-integration`                                           | Serving and maintenance feed/log privacy with production Caddy                                                 |
+| `crowdsec-config-test.sh`, `crowdsec-retention-test.sh`, `crowdsec-lease-test.sh`, `crowdsec-vacuum-test.sh`, `crowdsec-window-test.sh`, `crowdsec-offline-test.sh`, `watch-test.sh` | `check`                                                                   | Configuration, cleanup, lease, vacuum, window, offline, and watchdog contracts                                 |
+| `crowdsec-db-test.sh derive` and `integration`, `crowdsec-retention-test.sh postgresql`, `crowdsec-offline-test.sh packages`                                                         | `crowdsec-postgresql`                                                     | Pinned catalog, peer/grant isolation, logging, statistics, bounded SQL, reset isolation, package suppression   |
+| `crowdsec-migrate-test.sh`                                                                                                                                                           | `crowdsec-postgresql`                                                     | Fake-command no-op, switch/reset ordering, provisioning-failure stop                                           |
+| `crowdsec-integration-test.sh`, `crowdsec-config-test.sh`, `crowdsec-offline-test.sh packages`                                                                                       | `crowdsec-integration`                                                    | Real parser, bans, retention, consumer rebuild, database loss, direct provisioner reset, old Caddy key refusal |
+| `crowdsec-privacy-notice-test.sh`                                                                                                                                                    | `crowdsec-privacy-notice`                                                 | Notice authority and restore denial                                                                            |
 
-Pinned hosted integration and static checks cover these contracts. Require
-exact-commit CI and independent adversarial review before deployment. Production
-proofs report metadata, service state, counts, leases, backups, and enforcement,
-never rows or credentials. A TCP-only database probe is insufficient.
+Prove every feed, detection, gate, retention, log, and offline rule above with
+eligible and forbidden markers, including forced SQL errors and stale graphs.
+Fake commands prove order only; integration calls the provisioner directly.
+Required cases in `crowdsec-migrate-test.sh`: missing registrations, failure at
+each step, pre-schema retry, occupied-schema refusal, late no-op with stopped
+services, and reset with no edge active. Exercise real switch/reset effects
+through `crowdsec-integration-test.sh`: discarded SQLite files and old
+rows/statistics, only new registrations, rejection of old machine and both
+bouncer credentials, intact application data, lease/timer guards, and passing
+LAPI/database checks. Prove direct-call bundle-lock and notice refusal before
+mutation. Distinguish these requirements from existing assertions.
+
+Require exact-commit CI and independent adversarial review before deployment.
+Production proof reports service state, counts, lease, backups, resource bounds,
+and a banned address's 403, never rows or credentials. Observe absent central
+API traffic; a TCP probe or missing credentials file alone is insufficient.
 
 ## Sources
 
@@ -432,18 +434,17 @@ never rows or credentials. A TCP-only database probe is insufficient.
 - [CrowdSec 1.8.1 flush implementation](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/flush.go)
 - [CrowdSec 1.8.1 decision expiry and deletion](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/decisions.go)
 - [Caddy access logging and file rotation](https://caddyserver.com/docs/caddyfile/directives/log)
-- [Caddy access-log fields](https://caddyserver.com/docs/formatters#access-logs)
+- [CrowdSec database backends and backend switch](https://docs.crowdsec.net/docs/local_api/database)
+- [CrowdSec `db_config` reference](https://docs.crowdsec.net/docs/configuration/crowdsec_configuration)
 - [CrowdSec alert flush command](https://docs.crowdsec.net/docs/cscli/cscli_alerts_flush/)
 - [CrowdSec machine registration](https://docs.crowdsec.net/docs/cscli/cscli_machines_add/)
 - [CrowdSec bouncer registration](https://docs.crowdsec.net/docs/cscli/cscli_bouncers_add/)
+- [CrowdSec local API status check](https://docs.crowdsec.net/docs/cscli/cscli_lapi_status/)
 - [PostgreSQL 18 peer authentication](https://www.postgresql.org/docs/18/auth-peer.html)
 - [PostgreSQL 18 user maps](https://www.postgresql.org/docs/18/auth-username-maps.html)
 - [PostgreSQL 18 logging controls](https://www.postgresql.org/docs/18/runtime-config-logging.html)
 - [PostgreSQL 18 table maintenance settings](https://www.postgresql.org/docs/18/sql-createtable.html#SQL-CREATETABLE-STORAGE-PARAMETERS)
 - [PostgreSQL 18 statistics collection and persistence](https://www.postgresql.org/docs/18/sql-analyze.html)
-- [PostgreSQL 18 statistics view](https://www.postgresql.org/docs/18/view-pg-stats.html)
 - [PostgreSQL 18 VACUUM](https://www.postgresql.org/docs/18/sql-vacuum.html)
 - [Go escaped URL paths](https://pkg.go.dev/net/url#URL.EscapedPath)
-- [RFC 3986 percent encoding](https://www.rfc-editor.org/rfc/rfc3986#section-2.1)
 - [pgBackRest backup, retention, and restore](https://pgbackrest.org/user-guide.html)
-- [systemd dependency semantics](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html)

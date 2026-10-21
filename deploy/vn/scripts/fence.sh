@@ -91,6 +91,24 @@ with_lock() { # mode command...
   "$@"
 }
 
+with_bundle_lock() (
+  local path=/srv/data/host-operations/.bundle.lock entry bundle_fd
+  [[ -d ${path%/*} && ! -L ${path%/*} && $(stat -c '%u:%a' "${path%/*}") == 0:700 &&
+    -f $path && ! -L $path && $(stat -c '%u:%a' "$path") == 0:600 ]] || die "unsafe bundle lock"
+  # Installation and notice adoption already hold an inherited exclusive lock.
+  # Reuse its open description instead of waiting on our own caller.
+  for entry in /proc/"$BASHPID"/fd/*; do
+    if [[ $entry -ef $path ]] &&
+      grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE' "/proc/$BASHPID/fdinfo/${entry##*/}"; then
+      with_lock -x "$@"
+      return
+    fi
+  done
+  exec {bundle_fd}>>"$path" || die "could not open bundle lock"
+  flock -x -w 30 "$bundle_fd" || die "could not take $path within 30 s"
+  with_lock -x "$@"
+)
+
 cmd_init() {
   if [[ -e $file ]]; then
     load
@@ -399,6 +417,14 @@ cmd_notice_restore_release() {
   jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' <<<"$doc" | store
 }
 
+cmd_check_current() {
+  load
+  local number
+  notice_safe_file /var/lib/aboutme/release.json 644 || die "release record missing"
+  number=$(jq -er .release_number /var/lib/aboutme/release.json) || die "release number missing"
+  cmd_check "$number" "$1"
+}
+
 [[ $(id -u) == 0 ]] || die "run as root on the host"
 umask 022
 # Keep the existing root-only fixture seam; installed access always proves the
@@ -416,7 +442,7 @@ mkdir -p "$dir"
 case "$#:${1-}" in
   1:init) with_lock -x cmd_init ;;
   1:read) with_lock -s cmd_read ;;
-  3:lock) with_lock -x cmd_lock "$2" "$3" ;;
+  3:lock) with_bundle_lock cmd_lock "$2" "$3" ;;
   4:lock-for) with_lock -x cmd_lock_for "$2" "$3" "$4" ;;
   3:checkpoint) with_lock -x cmd_checkpoint "$2" "$3" ;;
   4:mutation-start) with_lock -x cmd_mutation_start "$2" "$3" "$4" ;;
@@ -426,6 +452,7 @@ case "$#:${1-}" in
   3:notice-authority) with_lock -x cmd_notice_authority "$2" "$3" ;;
   2:notice-restore-release) with_lock -x cmd_notice_restore_release "$2" ;;
   3:check) with_lock -s cmd_check "$2" "$3" ;;
+  2:check-current) with_lock -s cmd_check_current "$2" ;;
   2:clear) with_lock -x cmd_clear "$2" ;;
   4:recover-cutover) with_lock -x cmd_recover_cutover "$2" "$3" "$4" ;;
   4:recover-cutover-media) with_lock -x cmd_recover_cutover_media "$2" "$3" "$4" ;;

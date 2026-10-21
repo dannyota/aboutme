@@ -2,10 +2,20 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-watch=$repo_root/deploy/vn/host/bin/watch.sh
+watch_source=$repo_root/deploy/vn/host/bin/watch.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/lib"
+# Only the canonical lock path and wait duration are redirected in this fixture.
+sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" -e 's/flock -s -w 30 /flock -s -w 0 /' "$watch_source" >"$work/watch.sh"
+chmod +x "$work/watch.sh"
+watch=$work/watch.sh
+: >"$work/fence.lock"
+grep -qF 'flock -s -w 30' "$watch_source"
+cat >"$work/lib/crowdsec-db.sh" <<'STUB'
+crowdsec_db_held_lock() { return 0; }
+crowdsec_db_ready() { [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]; }
+STUB
 
 cat >"$work/lib/alert.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -15,6 +25,20 @@ STUB
 cat >"$work/lib/crowdsec-retention-fail.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'retention failure\n' >>"$WATCH_TEST_RETENTION_FAILURES"
+STUB
+cat >"$work/lib/crowdsec-retention-lease-check.sh" <<'STUB'
+#!/usr/bin/env bash
+crowdsec_lease_check() {
+for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
+  systemctl is-enabled --quiet "$timer" || return 1
+  systemctl is-active --quiet "$timer" || return 1
+done
+lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?}
+[[ -f $lease && ! -L $lease ]] || return 1
+modified=$(stat -c %Y "$lease")
+((modified <= EPOCHSECONDS && EPOCHSECONDS - modified <= 360)) || return 1
+[[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
+}
 STUB
 cat >"$work/bin/df" <<'STUB'
 #!/usr/bin/env bash
@@ -27,6 +51,10 @@ if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
 fi
 if [[ ${1-} == is-active && ${WATCH_TEST_TIMER_INACTIVE:-0} == 1 ]]; then
   exit 1
+fi
+if [[ $* == *vacuum.timer* ]]; then
+  [[ ${1-} != is-enabled || ${WATCH_TEST_VACUUM_TIMER_DISABLED:-0} == 0 ]] || exit 1
+  [[ ${1-} != is-active || ${WATCH_TEST_VACUUM_TIMER_INACTIVE:-0} == 0 ]] || exit 1
 fi
 exit 0
 STUB
@@ -149,4 +177,45 @@ grep -qxF 'retention failure' "$work/inactive.failures" || {
   exit 1
 }
 
+for state in disabled inactive; do
+  if [[ $state == disabled ]]; then
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=1 WATCH_TEST_VACUUM_TIMER_INACTIVE=0
+  else
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=0 WATCH_TEST_VACUUM_TIMER_INACTIVE=1
+  fi
+  WATCH_TEST_FIXTURE=$base \
+    WATCH_TEST_ALERTS=$work/vacuum-$state.alerts WATCH_TEST_RETENTION_FAILURES=$work/vacuum-$state.failures \
+    "$watch"
+  grep -qxF 'retention failure' "$work/vacuum-$state.failures" || {
+    echo "vacuum safety timer did not invalidate the watcher lease" >&2
+    exit 1
+  }
+done
+unset WATCH_TEST_VACUUM_TIMER_DISABLED WATCH_TEST_VACUUM_TIMER_INACTIVE
+
+for state in changed recovery; do
+  if [[ $state == changed ]]; then
+    export WATCH_TEST_DATABASE_CHANGED=1 WATCH_TEST_DATABASE_RECOVERY=0
+  else
+    export WATCH_TEST_DATABASE_CHANGED=0 WATCH_TEST_DATABASE_RECOVERY=1
+  fi
+  WATCH_TEST_FIXTURE=$base \
+    WATCH_TEST_ALERTS=$work/database-$state.alerts WATCH_TEST_RETENTION_FAILURES=$work/database-$state.failures \
+    "$watch"
+  grep -qxF 'retention failure' "$work/database-$state.failures" || {
+    echo "database epoch or recovery did not invalidate the watcher lease" >&2
+    exit 1
+  }
+done
+unset WATCH_TEST_DATABASE_CHANGED WATCH_TEST_DATABASE_RECOVERY
+
+# A held completion lock refuses the scheduled tick before any failure body.
+: >"$work/admission.failures"
+exec {guard}>"$work/fence.lock"
+flock -x "$guard"
+if WATCH_TEST_ALERTS=$work/admission.alerts WATCH_TEST_RETENTION_FAILURES=$work/admission.failures "$watch" >"$work/admission.out" 2>&1; then
+  echo 'FAIL watchdog-lock-admission'; exit 1
+fi
+[[ ! -s $work/admission.failures ]]
+flock -u "$guard"
 echo "watch tests passed"
