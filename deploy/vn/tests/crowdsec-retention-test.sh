@@ -22,6 +22,7 @@ if [[ ${1:-} == postgresql ]]; then
   }
 
   check_hosted startup-empty-postgresql run_retention startup
+  check_hosted candidate-selection-skips-jit retention_fixture_candidate_no_jit
   check_hosted valid-current-epoch-lease lease_check
   touch "$retention_fixture/timer-disabled"
   check_hosted valid-lease-disabled-timer refused lease_check

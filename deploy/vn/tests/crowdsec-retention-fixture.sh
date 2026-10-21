@@ -11,6 +11,27 @@ retention_fixture_sql() {
     -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
 }
 
+retention_fixture_candidate_no_jit() {
+  local retention_time plan=$retention_fixture/candidate-plan.json
+  # shellcheck source=deploy/vn/host/crowdsec-retention.sh
+  source /usr/local/lib/aboutme/crowdsec-retention.sh || return 1
+  retention_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ) || return 1
+  install -m 0600 /dev/null "$plan" || return 1
+  {
+    printf 'SET jit = on;\n'
+    retention_sql
+    printf 'EXPLAIN (ANALYZE, FORMAT JSON)\n'
+    retention_select_sql
+  } | retention_psql >"$plan" || return 1
+  python3 -I - "$plan" <<'PY' || return 1
+import json,pathlib,sys
+result=json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert len(result)==1 and isinstance(result[0]['Plan'],dict)
+assert result[0].get('JIT',{}).get('Functions',0)==0
+PY
+  rm -- "$plan"
+}
+
 retention_fixture_cleanup() {
   local status=$?
   trap - EXIT
