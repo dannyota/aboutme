@@ -121,6 +121,7 @@ PY
 integration_body() {
 integration_stage=consumers
 trap 'printf "FAIL real-consumer-proof %s\n" "$integration_stage" >&2' ERR
+declare -F crowdsec_assert_postgresql >/dev/null
 ip link set lo up
 install -d -o 10001 -g 10001 -m 0700 /run/aboutme/caddy-log/crowdsec
 install -o 10001 -g 10001 -m 0600 /dev/null "$feed"
@@ -550,7 +551,7 @@ migration_run() {
   "$lib/crowdsec-migrate.sh" "$@" >"$retention_fixture/migrate-out" 2>"$retention_fixture/migrate-err" || status=$?
   if ((status)); then
     diagnostic=$(cat "$retention_fixture/migrate-err")
-    if [[ $diagnostic =~ ^crowdsec_migrate_refused\ step=(arguments|lock|idle|notice|stop|fresh-admission|provision|activate|discard-sqlite|machine|startup-retention|maintenance-timers|unmask|enable|engine|caddy-register|firewall-register|firewall-start|firewall-ready|edge-start|lapi|final-gate|lease|watch)$ ||
+    if [[ $diagnostic =~ ^crowdsec_migrate_refused\ step=(arguments|lock|idle|notice|stop|fresh-admission|provision|activate|activate-config|activate-offline|activate-gate|activate-config-proof|activate-detection|activate-files|discard-sqlite|machine|startup-retention|maintenance-timers|unmask|enable|engine|caddy-register|firewall-register|firewall-start|firewall-ready|edge-start|lapi|final-gate|lease|watch)$ ||
       $diagnostic == crowdsec_migrate_stop_failed ]]; then
       printf '%s\n' "$diagnostic" >&2
     else
@@ -730,6 +731,7 @@ printf 'PASS real-migration-failure-requires-explicit-reset\n'
 
 echo "CrowdSec 1.8.1 integration tests passed"
 }
-export -f integration_body sql retention_fixture_sql retention_fixture_admin crowdsec_admitted_cli
+export -f integration_body sql retention_fixture_sql retention_fixture_admin \
+  crowdsec_admitted_cli crowdsec_assert_postgresql
 export repo_root edge feed retention_fixture PATH
 unshare --net bash -euo pipefail -c integration_body

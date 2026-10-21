@@ -4,14 +4,16 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
-# Redirect only the credential path; exercise the production predicate.
-sed "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.yaml|g" \
+# Redirect configuration paths; exercise the production predicates and activation.
+sed -e "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.yaml|g" \
+  -e "s|/etc/crowdsec/|$work/config/|g" \
   "$root/deploy/vn/host/crowdsec-migrate.sh" >"$work/crowdsec-migrate.sh"
 # shellcheck source=../host/crowdsec-migrate.sh
 source "$work/crowdsec-migrate.sh"
 # Keep the real lock implementation for descriptor and contention proofs.
 eval "$(declare -f migrate_lock | sed '1s/migrate_lock/real_migrate_lock/')"
 eval "$(declare -f migrate_firewall_register | sed '1s/migrate_firewall_register/real_firewall_register/')"
+eval "$(declare -f migrate_activate | sed '1s/migrate_activate/real_migrate_activate/')"
 lib=$work/lib
 mkdir -p "$lib"
 export MIGRATE_CALLS=$work/calls
@@ -251,6 +253,38 @@ ABOUTME_MIGRATE_BUNDLE_FD=$held_fd real_migrate_lock
 exec {held_fd}>&-
 (real_migrate_lock)
 printf 'PASS bundle-lock-busy-and-inherited-descriptor\n'
+
+# Exercise activation's real command boundaries with private fixture paths.
+(
+  migrate_activate() { real_migrate_activate; }
+  mkdir -p "$work/config/acquis.d" "$lib/crowdsec/acquis.d"
+  cp "$root/deploy/vn/edge/crowdsec/config.yaml.local" "$work/config/config.yaml.postgresql"
+  printf 'reviewed-acquisition\n' >"$lib/crowdsec/acquis.d/fixture.yaml"
+  cat >"$lib/crowdsec-offline.sh" <<'SH'
+crowdsec_remove_online() { [[ ${MIGRATE_FAIL:-} != offline ]]; }
+crowdsec_assert_postgresql() { [[ ${MIGRATE_FAIL:-} != config-proof ]]; }
+crowdsec_configure_local_detection() { [[ ${MIGRATE_FAIL:-} != detection ]]; }
+SH
+  install() {
+    if [[ ${MIGRATE_FAIL:-} == config && ${!#} == "$work/config/config.yaml.local" ]] ||
+      [[ ${MIGRATE_FAIL:-} == files && ${!#} == "$work/config/acquis.d/fixture.yaml" ]]; then
+      printf 'discarded-activation-diagnostic\n' >&2
+      return 1
+    fi
+    /usr/bin/install "$@"
+  }
+  for fault in config:activate-config offline:activate-offline gate:activate-gate \
+    config-proof:activate-config-proof detection:activate-detection files:activate-files; do
+    IFS=: read -r failure step <<<"$fault"
+    : >"$MIGRATE_CALLS"
+    MIGRATE_FAIL=$failure refused "$step" --reset
+    [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
+  done
+  real_migrate_activate
+  cmp "$work/config/config.yaml.postgresql" "$work/config/config.yaml.local"
+  cmp "$lib/crowdsec/acquis.d/fixture.yaml" "$work/config/acquis.d/fixture.yaml"
+)
+printf 'PASS activation-boundaries-hide-command-output\n'
 
 # Gate each schema-capable bouncer command even when the prior list passed.
 cat >"$lib/crowdsec-db.sh" <<'SH'

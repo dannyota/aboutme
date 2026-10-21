@@ -69,7 +69,9 @@ logs. `crowdsec-migrate-test.sh` covers host ordering with fake commands;
 A failed helper stops and joins consumers, the watcher, and both maintenance
 timers, prints `crowdsec_migrate_refused step=<step>`, and fails the deploy. The
 step is a fixed code: `arguments`, `lock`, `idle`, `notice`, `stop`,
-`fresh-admission`, `provision`, `activate`, `discard-sqlite`, `machine`,
+`fresh-admission`, `provision`, `activate`, `activate-config`,
+`activate-offline`, `activate-gate`, `activate-config-proof`,
+`activate-detection`, `activate-files`, `discard-sqlite`, `machine`,
 `startup-retention`, `maintenance-timers`, `unmask`, `enable`, `engine`,
 `caddy-register`, `firewall-register`, `firewall-start`, `firewall-ready`,
 `edge-start`, `lapi`, `final-gate`, `lease`, or `watch`. The code identifies the

@@ -96,19 +96,21 @@ assert config==expected and config['type']=='pgx'
 PY
 }
 migrate_activate() {
-  install -o root -g root -m 0644 /etc/crowdsec/config.yaml.postgresql /etc/crowdsec/config.yaml.local || return 1
+  migrate_at activate-config install -o root -g root -m 0644 \
+    /etc/crowdsec/config.yaml.postgresql /etc/crowdsec/config.yaml.local || return 1
   # Remove inherited database keys so the installed overlay selects only pgx.
   # shellcheck source=crowdsec-offline.sh
-  source "$lib/crowdsec-offline.sh"
+  migrate_at activate-offline source "$lib/crowdsec-offline.sh" || return 1
   crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
     /etc/crowdsec/online_api_credentials.yaml || return 1
-  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
-  crowdsec_assert_postgresql && crowdsec_configure_local_detection || return 1
+  migrate_at activate-gate "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  migrate_at activate-config-proof crowdsec_assert_postgresql || return 1
+  migrate_at activate-detection crowdsec_configure_local_detection || return 1
   local group file
   for group in acquis.d parsers/s01-parse parsers/s02-enrich scenarios; do
     for file in "$lib/crowdsec/$group/"*.yaml; do
       [[ -f $file ]] || continue
-      install -m 0644 "$file" "/etc/crowdsec/$group/${file##*/}" || return 1
+      migrate_at activate-files install -m 0644 "$file" "/etc/crowdsec/$group/${file##*/}" || return 1
     done
   done
 }
