@@ -3,10 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -32,7 +37,7 @@ func encodeFeed(t *testing.T, mode string, entry zapcore.Entry, request *feedReq
 	t.Helper()
 	enc := newCrowdSecFeedEncoder(mode)
 	if request != nil {
-		if err := enc.AddObject("request", *request); err != nil {
+		if err := enc.AddObject("request", realFeedRequest(*request)); err != nil {
 			t.Fatal("feed-request-collection")
 		}
 	}
@@ -42,6 +47,18 @@ func encodeFeed(t *testing.T, mode string, entry zapcore.Entry, request *feedReq
 	}
 	defer encoded.Free()
 	return encoded.String()
+}
+
+func realFeedRequest(request feedRequest) caddyhttp.LoggableHTTPRequest {
+	parsed, err := url.ParseRequestURI(request.uri)
+	if err != nil {
+		parsed = &url.URL{Path: request.uri, RawPath: request.uri}
+	}
+	return caddyhttp.LoggableHTTPRequest{Request: &http.Request{
+		Method: request.method, URL: parsed, RequestURI: request.uri,
+		RemoteAddr: net.JoinHostPort(request.remoteIP, "49152"), Host: "secret-host.example",
+		Header: http.Header{"X-Real-Ip": {"198.51.100.77"}, "X-Probe": {"headermarker-6f7a"}},
+	}}
 }
 
 func TestCrowdSecFeedEncoderExactSchema(t *testing.T) {
@@ -189,7 +206,6 @@ func TestCrowdSecFeedEncoderDropsMalformedRecords(t *testing.T) {
 		{name: "ip", mode: feedModeServing, entry: validEntry, request: &feedRequest{remoteIP: "192.0.2.1:443", method: "GET", uri: "/api"}, fields: []zapcore.Field{zap.Int("status", 200)}},
 		{name: "ip zone", mode: feedModeServing, entry: validEntry, request: &feedRequest{remoteIP: "fe80::1%eth0", method: "GET", uri: "/api"}, fields: []zapcore.Field{zap.Int("status", 200)}},
 		{name: "method", mode: feedModeServing, entry: validEntry, request: &feedRequest{remoteIP: "192.0.2.1", uri: "/api"}, fields: []zapcore.Field{zap.Int("status", 200)}},
-		{name: "uri", mode: feedModeServing, entry: validEntry, request: &feedRequest{remoteIP: "192.0.2.1", method: "GET", uri: "http://secret.example/api"}, fields: []zapcore.Field{zap.Int("status", 200)}},
 		{name: "status missing", mode: feedModeServing, entry: validEntry, request: &validRequest},
 		{name: "status low", mode: feedModeServing, entry: validEntry, request: &validRequest, fields: []zapcore.Field{zap.Int("status", 99)}},
 		{name: "status high", mode: feedModeServing, entry: validEntry, request: &validRequest, fields: []zapcore.Field{zap.Int("status", 600)}},
@@ -224,7 +240,7 @@ func TestCrowdSecFeedEncoderCloneKeepsRequest(t *testing.T) {
 	t.Parallel()
 
 	enc := newCrowdSecFeedEncoder(feedModeServing)
-	if err := enc.AddObject("request", feedRequest{remoteIP: "192.0.2.4", method: "GET", uri: "/api"}); err != nil {
+	if err := enc.AddObject("request", realFeedRequest(feedRequest{remoteIP: "192.0.2.4", method: "GET", uri: "/api"})); err != nil {
 		t.Fatal("feed-request-collection")
 	}
 	clone := enc.Clone()
@@ -236,6 +252,112 @@ func TestCrowdSecFeedEncoderCloneKeepsRequest(t *testing.T) {
 	if !strings.Contains(encoded.String(), `"source_ip":"192.0.2.4"`) {
 		t.Fatal("feed-clone-request")
 	}
+}
+
+func TestCrowdSecFeedEncoderOriginalParsedURL(t *testing.T) {
+	t.Parallel()
+	request := realFeedRequest(feedRequest{remoteIP: "192.0.2.1", method: "GET", uri: "/unknown/original%2fmarker?token=discarded"})
+	request.URL.User = url.User("discarded")
+	request.URL.Fragment, request.URL.RawFragment = "discarded", "discarded"
+	prepared := caddyhttp.PrepareRequest(request.Request, caddy.NewReplacer(), nil, nil)
+	prepared.URL.Path, prepared.URL.RawPath = "/api/rewrite", ""
+	prepared.RequestURI = "/api/rewrite"
+	request.Request = prepared
+	enc := newCrowdSecFeedEncoder(feedModeServing)
+	if err := enc.AddObject("request", request); err != nil {
+		t.Fatal("feed-request-collection")
+	}
+	prepared.URL.Path = "/app/another-rewrite"
+	encoded, err := enc.EncodeEntry(zapcore.Entry{Time: time.Unix(1_700_000_000, 0)}, []zapcore.Field{zap.Int("status", 404)})
+	if err != nil {
+		t.Fatal("feed-encoding")
+	}
+	defer encoded.Free()
+	var got map[string]any
+	if err := json.Unmarshal(encoded.Bytes(), &got); err != nil {
+		t.Fatal("feed-json")
+	}
+	if got["route_class"] != "unknown" || got["probe_class"] != "other" || got["target_path"] != "/unknown/original%2fmarker" {
+		t.Error("feed-original-parsed-url")
+	}
+	if strings.Contains(encoded.String(), "discarded") || strings.Contains(encoded.String(), "rewrite") {
+		t.Error("feed-original-url-privacy")
+	}
+}
+
+func TestCrowdSecFeedEncoderInconsistentRawPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, path, raw string }{
+		{"mismatch", "/unknown/sample", "/unknown/other"},
+		{"malformed", "/unknown/sample", "/unknown/%zz"},
+		{"unescaped", "/unknown/raw space", "/unknown/raw space"},
+		{"mixed-utf8", "/unknown/caf\u00e9/a/b", "/unknown/caf\u00e9/a%2fb"},
+		{"encoded-leading-slash", "/unknown/sample", "%2funknown/sample"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := realFeedRequest(feedRequest{remoteIP: "192.0.2.1", method: "GET", uri: "/unknown/sample"})
+			request.URL.Path, request.URL.RawPath = tc.path, tc.raw
+			enc := newCrowdSecFeedEncoder(feedModeServing)
+			if err := enc.AddObject("request", request); err != nil {
+				t.Fatal("feed-request-collection")
+			}
+			out, err := enc.EncodeEntry(zapcore.Entry{Time: time.Unix(1_700_000_000, 0)}, []zapcore.Field{zap.Int("status", 404)})
+			if err != nil {
+				t.Fatal("feed-encoding")
+			}
+			defer out.Free()
+			var got map[string]any
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatal("feed-json")
+			}
+			if got["probe_class"] != "invalid" || got["target_path"] != "" {
+				t.Error("feed-invalid-raw-path")
+			}
+		})
+	}
+}
+
+func TestCrowdSecFeedEncoderUnicodePathWithoutRawPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, path, target string }{
+		{"utf8", "/unknown/caf\u00e9", "/unknown/caf%C3%A9"},
+		{"replacement-codepoint", "/unknown/\ufffd", "/unknown/%EF%BF%BD"},
+		{"ascii-case-only", "/.well-\u212anown/sample", "/.well-%E2%84%AAnown/sample"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := realFeedRequest(feedRequest{remoteIP: "192.0.2.1", method: "GET", uri: "/unknown/sample"})
+			request.URL.Path, request.URL.RawPath = tc.path, ""
+			enc := newCrowdSecFeedEncoder(feedModeServing)
+			if err := enc.AddObject("request", request); err != nil {
+				t.Fatal("feed-request-collection")
+			}
+			out, err := enc.EncodeEntry(zapcore.Entry{Time: time.Unix(1_700_000_000, 0)}, []zapcore.Field{zap.Int("status", 404)})
+			if err != nil {
+				t.Fatal("feed-encoding")
+			}
+			defer out.Free()
+			var got map[string]any
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatal("feed-json")
+			}
+			if got["route_class"] != "unknown" || got["probe_class"] != "other" || got["target_path"] != tc.target {
+				t.Error("feed-unicode-path")
+			}
+		})
+	}
+}
+
+func TestCrowdSecFeedEncoderAbsoluteForm(t *testing.T) {
+	t.Parallel()
+	assertFeedTarget(t, feedModeServing, "http://discarded.example/api?token=discarded", 200, "api", "none", "")
+	assertFeedTarget(t, feedModeServing, "http://discarded.example/unknown/sample%2fdata?token=discarded", 404, "unknown", "other", "/unknown/sample%2fdata")
+}
+
+func TestCrowdSecFeedEncoderRoutePriority(t *testing.T) {
+	t.Parallel()
+	assertFeedTarget(t, feedModeServing, "/api/../healthz", 404, "system", "none", "")
+	assertFeedTarget(t, feedModeServing, "/_nuxt/../api", 404, "static", "none", "")
+	assertFeedTarget(t, feedModeServing, "/unknown/%252541pi/private", 404, "unknown", "other", "/unknown/%252541pi/private")
 }
 
 func assertFeedTarget(t *testing.T, mode, uri string, status int, route, probe, target string) {
@@ -398,7 +520,7 @@ func TestCrowdSecFeedEncoderEscapedTargets(t *testing.T) {
 	}{
 		{"escape-case", "/unknown/a%2fb%2Fc", "/unknown/a%2fb%2Fc", "other"},
 		{"double-encoding", "/unknown/a%252Fb", "/unknown/a%252Fb", "other"},
-		{"utf8", "/unknown/caf\u00e9", "/unknown/caf%C3%A9", "other"},
+		{"raw-utf8", "/unknown/caf\u00e9", "", "invalid"},
 		{"escaped-utf8", "/unknown/caf%c3%a9", "/unknown/caf%c3%a9", "other"},
 		{"encoded-question", "/unknown/a%3Fb?token=discarded", "/unknown/a%3Fb", "other"},
 		{"query", "/unknown/sample?token=discarded", "/unknown/sample", "other"},
@@ -408,6 +530,7 @@ func TestCrowdSecFeedEncoderEscapedTargets(t *testing.T) {
 		{"escaped-oversized", "/unknown/" + strings.Repeat("%41", 168), "", "oversized"},
 		{"nul", "/unknown/%00", "", "invalid"}, {"newline", "/unknown/%0a", "", "invalid"},
 		{"delete", "/unknown/%7f", "", "invalid"}, {"double-control", "/unknown/%250A", "", "invalid"},
+		{"unicode-control", "/unknown/%C2%85", "", "invalid"},
 		{"invalid-utf8", "/unknown/%ff", "", "invalid"},
 		{"percent-short", "/unknown/%a", "", "invalid"},
 		{"percent-nonhex", "/unknown/%zz", "", "invalid"},
