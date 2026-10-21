@@ -10,6 +10,11 @@ migrate_consumers=(aboutme-caddy.service aboutme-maintenance.service
   aboutme-crowdsec-retention.service aboutme-crowdsec-vacuum.service
   aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service)
 
+migrate_at() {
+  migrate_step=$1
+  shift
+  "$@"
+}
 migrate_lock() {
   local path=$migrate_bundle_path parent
   parent=${path%/*}
@@ -168,30 +173,30 @@ migrate_main() {
   done
   if ((${#edge[@]}==0)); then migrate_no_edge=yes; fi
   migrate_changed=yes
-  migrate_stop || return 1
-  if [[ $mode == fresh ]]; then migrate_fresh_admission || return 1; fi
-  "$lib/crowdsec-provision.sh" "$mode" </dev/null || return 1
-  migrate_activate && migrate_remove_sqlite || return 1
-  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  migrate_at stop migrate_stop || return 1
+  if [[ $mode == fresh ]]; then migrate_at fresh-admission migrate_fresh_admission || return 1; fi
+  migrate_at provision "$lib/crowdsec-provision.sh" "$mode" </dev/null || return 1
+  migrate_at activate migrate_activate && migrate_at discard-sqlite migrate_remove_sqlite || return 1
+  migrate_at machine "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   cscli machines add -a --force --error || return 1
   chmod 0600 /etc/crowdsec/local_api_credentials.yaml || return 1
   # Startup retention clears owned cache/firewall state and binds the new lease.
-  systemctl start aboutme-crowdsec-retention-startup.service || return 1
-  systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer || return 1
-  systemctl unmask --runtime crowdsec.service crowdsec-firewall-bouncer.service || return 1
-  systemctl enable crowdsec.service crowdsec-firewall-bouncer.service || return 1
-  systemctl start crowdsec.service || return 1
-  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  migrate_at startup-retention systemctl start aboutme-crowdsec-retention-startup.service || return 1
+  migrate_at maintenance-timers systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer || return 1
+  migrate_at unmask systemctl unmask --runtime crowdsec.service crowdsec-firewall-bouncer.service || return 1
+  migrate_at enable systemctl enable crowdsec.service crowdsec-firewall-bouncer.service || return 1
+  migrate_at engine systemctl start crowdsec.service || return 1
+  migrate_at caddy-register "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   "$lib/secrets-host.sh" bouncer-register || return 1
-  migrate_firewall_register || return 1
-  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  migrate_at firewall-register migrate_firewall_register || return 1
+  migrate_at firewall-start "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   systemctl start crowdsec-firewall-bouncer.service || return 1
-  migrate_firewall_ready || return 1
-  if ((${#edge[@]})); then systemctl start "${edge[@]}" || return 1; fi
-  cscli lapi status || return 1
-  "$lib/crowdsec-db.sh" preflight-ready </dev/null &&
-    "$lib/crowdsec-retention-lease-check.sh" &&
-    systemctl enable --now aboutme-watch.timer
+  migrate_at firewall-ready migrate_firewall_ready || return 1
+  if ((${#edge[@]})); then migrate_at edge-start systemctl start "${edge[@]}" || return 1; fi
+  migrate_at lapi cscli lapi status || return 1
+  migrate_at final-gate "$lib/crowdsec-db.sh" preflight-ready </dev/null &&
+    migrate_at lease "$lib/crowdsec-retention-lease-check.sh" &&
+    migrate_at watch systemctl enable --now aboutme-watch.timer
 }
 migrate_failure() {
   if [[ ${migrate_changed:-no} == yes ]]; then
@@ -200,16 +205,16 @@ migrate_failure() {
       return 1
     fi
   fi
-  printf 'crowdsec_migrate_refused\n' >&2
+  printf 'crowdsec_migrate_refused step=%s\n' "$migrate_step" >&2
   return 1
 }
 migrate_run() {
+  local migrate_changed=no migrate_no_edge=no migrate_error_fd migrate_step=arguments
   [[ $EUID == 0 && ( $# == 0 || ( $# == 1 && $1 == --reset ) ) ]] || {
-    printf 'crowdsec_migrate_refused\n' >&2; return 1;
+    migrate_failure; return 1;
   }
-  local migrate_changed=no migrate_no_edge=no migrate_error_fd
-  if ! { migrate_lock && migrate_idle && migrate_notice; } >/dev/null 2>&1; then
-    printf 'crowdsec_migrate_refused\n' >&2; return 1
+  if ! { migrate_at lock migrate_lock && migrate_at idle migrate_idle && migrate_at notice migrate_notice; } >/dev/null 2>&1; then
+    migrate_failure; return 1
   fi
   # Signal traps also run inside migrate_main's discarded diagnostics.
   exec {migrate_error_fd}>&2

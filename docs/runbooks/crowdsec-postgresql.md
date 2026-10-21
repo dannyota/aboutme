@@ -67,9 +67,15 @@ logs. `crowdsec-migrate-test.sh` covers host ordering with fake commands;
 ## Failure recovery
 
 A failed helper stops and joins consumers, the watcher, and both maintenance
-timers, prints `crowdsec_migrate_refused`, and fails the deploy. A shutdown that
-cannot establish quiescence reports `crowdsec_migrate_stop_failed`; keep the
-host closed and resolve the remaining process or job before recovery.
+timers, prints `crowdsec_migrate_refused step=<step>`, and fails the deploy. The
+step is a fixed code: `arguments`, `lock`, `idle`, `notice`, `stop`,
+`fresh-admission`, `provision`, `activate`, `discard-sqlite`, `machine`,
+`startup-retention`, `maintenance-timers`, `unmask`, `enable`, `engine`,
+`caddy-register`, `firewall-register`, `firewall-start`, `firewall-ready`,
+`edge-start`, `lapi`, `final-gate`, `lease`, or `watch`. The code identifies the
+failed step without exposing command output. A shutdown that cannot establish
+quiescence reports `crowdsec_migrate_stop_failed`; keep the host closed and
+resolve the remaining process or job before recovery.
 
 Correct the cause and rerun before schema initialization. `fresh` requires an
 absent database or a verified empty schema. An occupied catalog with incomplete
