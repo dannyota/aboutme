@@ -11,7 +11,9 @@ mode=${1:-static}
 failures=0
 scratch=''
 pg_started=no
+loop_device=''
 pgbin=/usr/lib/postgresql/18/bin
+test_psql=$pgbin/psql
 
 pass() { printf 'PASS %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1"; failures=$((failures + 1)); }
@@ -76,6 +78,10 @@ cleanup() {
   fi
   # Only the exact mktemp mount created by this process can be removed.
   if [[ $scratch == /run/crowdsec-db-test.* ]]; then
+    if [[ -n $loop_device ]]; then
+      umount /var/lib/aboutme /srv/data
+      losetup -d "$loop_device"
+    fi
     umount "$scratch"
     rmdir -- "$scratch"
   fi
@@ -83,12 +89,12 @@ cleanup() {
 }
 
 admin() {
-  runuser -u postgres -- "$pgbin/psql" -X -qAt -v ON_ERROR_STOP=1 \
+  runuser -u postgres -- "$test_psql" -X -qAt -v ON_ERROR_STOP=1 \
     -h /run/postgresql -U postgres -d "${1:-crowdsec}"
 }
 
 runtime() {
-  "$pgbin/psql" -X -qAt -v ON_ERROR_STOP=1 \
+  "$test_psql" -X -qAt -v ON_ERROR_STOP=1 \
     -h /run/postgresql -U crowdsec -d crowdsec
 }
 
@@ -120,7 +126,7 @@ start_harness() {
   printf 'crowdsec_test root crowdsec\n' >"$scratch/data/pg_ident.conf"
   runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" \
     -l "$scratch/data/server.log" -w start \
-    -o "-c listen_addresses='' -c unix_socket_directories=/run/postgresql -c shared_buffers=32MB -c max_connections=16 -c log_statement=none -c log_min_messages=panic -c log_min_error_statement=panic -c log_error_verbosity=terse -c log_parameter_max_length=0 -c log_parameter_max_length_on_error=0" \
+    -o "-c listen_addresses='' -c unix_socket_directories=/run/postgresql -c shared_buffers=32MB -c max_connections=40 -c log_statement=none -c log_min_messages=panic -c log_min_error_statement=panic -c log_error_verbosity=terse -c log_parameter_max_length=0 -c log_parameter_max_length_on_error=0" \
     >/dev/null 2>&1
   pg_started=yes
   admin postgres >/dev/null 2>&1 <<'SQL'
@@ -217,7 +223,13 @@ regressions() {
     fail provisioner-required-before-policy
     return
   fi
-  check policy-application gate apply-policy
+  prepare_installed_fixture
+  check invalid-ownership-refuses fresh_refuses_invalid_owner
+  check missing-marker-refuses fresh_refuses_missing_marker
+  check active-consumer-refuses active_consumer_refused
+  check sourced-gate-cannot-bypass-owner source_cannot_bypass
+  check fresh-nested-lock-completes provision fresh
+  check schema-actions-follow-read-only action_trace_valid
   check initialized-ready gate preflight-ready
   check empty-preflight-refuses-unfenced gate_refuses_empty
   check role-budget runtime_boolean <<'SQL'
@@ -271,7 +283,320 @@ SQL
 REVOKE CONNECT ON DATABASE crowdsec FROM aboutme_app;
 SQL
   check repaired-catalog-ready gate preflight-ready
+  check fresh-refuses-existing-schema fresh_refuses_existing
+  check owner-marker-retained marker_retained
+  check peer-root-admitted runtime_boolean <<'SQL'
+SELECT current_user = 'crowdsec' AND current_database() = 'crowdsec'
+AND system_user = 'peer:root' AND inet_client_addr() IS NULL;
+SQL
+  check application-os-user-refused application_identity_refused
+  check container-uids-refused container_uids_refused
+  check tcp-refused tcp_refused
+  check missing-column-closes-gate missing_column_rejected
+  check missing-index-closes-gate missing_index_rejected
+  check missing-constraint-closes-gate missing_constraint_rejected
+  check statistics-target-closes-gate target_rejected
+  check expression-index-closes-gate expression_rejected
+  check extended-statistics-closes-gate extended_rejected
+  check public-grant-closes-gate public_grant_rejected
+  check role-membership-closes-gate membership_rejected
+  check global-default-grant-closes-gate global_default_rejected
+  check logging-grant-closes-gate logging_grant_rejected
+  check database-owner-closes-gate database_owner_rejected
+  check changed-manifest-closes-gate manifest_rejected
+  check config-overlay-refused config_overlay_rejected
+  check forced-errors-stay-private forced_errors_private
+  check ordinary-vacuum-stays-private ordinary_vacuum_private
+  check planner-contamination-refuses-repair contamination_rejected
+  check same-epoch-admitted same_epoch
+  check service-invocation-invalidates-epoch invocation_invalidates
+  check restart-invalidates-epoch restart_invalidates
+  check restore-replaces-only-crowdsec restore_isolated
+  check recovery-closes-gate recovery_rejected
+  check empty-outside-provisioner-stays-empty empty_refused_without_mutation
+  check malformed-epoch-refused malformed_epoch
 }
+
+prepare_installed_fixture() {
+  install -d -m 0755 /srv/data /var/lib/aboutme /usr/local/lib/aboutme
+  truncate -s 64M "$scratch/fence-disk"
+  mkfs.ext4 -q -L aboutme-data "$scratch/fence-disk"
+  loop_device=$(losetup --find --show "$scratch/fence-disk")
+  mount "$loop_device" /srv/data
+  install -d -m 0755 /srv/data/aboutme
+  install -d -m 0700 /srv/data/host-operations
+  mount --bind /srv/data/aboutme /var/lib/aboutme
+  install -d -m 0755 "$scratch/lib" "$scratch/bin"
+  for script in crowdsec-db.sh crowdsec-provision.sh crowdsec-privacy-notice-host.sh; do
+    install -m 0755 "$host/$script" "$scratch/lib/$script"
+  done
+  install -m 0755 "$repo_root/deploy/vn/scripts/fence.sh" "$scratch/lib/fence.sh"
+  install -m 0644 "$host/crowdsec-schema-v1.8.1.tsv" "$scratch/lib/"
+  mount --bind "$scratch/lib" /usr/local/lib/aboutme
+  install -m 0644 "$candidate" /etc/crowdsec/config.yaml.postgresql
+  install -d -m 0755 /run/aboutme
+  mount -t tmpfs -o size=16m,mode=0755 tmpfs /run/aboutme
+  install -d -m 0700 /run/aboutme/crowdsec
+  mount -t tmpfs -o size=16m,mode=0755 tmpfs /var/lib/crowdsec
+  install -d -m 0700 /var/lib/crowdsec/data
+  install -d -m 0755 "$scratch/pgconfig" /etc/postgresql/18/main
+  install -m 0644 "$host/etc/postgresql/18/main/pg_ident.conf" "$scratch/pgconfig/pg_ident.conf"
+  install -m 0644 "$host/etc/postgresql/18/main/pg_hba.conf" "$scratch/pgconfig/pg_hba.conf"
+  mount --bind "$scratch/pgconfig" /etc/postgresql/18/main
+  printf "hba_file = '/etc/postgresql/18/main/pg_hba.conf'\nident_file = '/etc/postgresql/18/main/pg_ident.conf'\n" >>"$scratch/data/postgresql.conf"
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w restart >/dev/null 2>&1
+  cp /usr/bin/systemctl "$scratch/bin/systemctl-real"
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n' >"$scratch/bin/systemctl"
+  printf 'case "$*" in\n*MainPID*) printf "ActiveState=active\\nJob=\\nMainPID=%%s\\nInvocationID=%%s\\n" "$(head -n1 %q/data/postmaster.pid)" "$(cat %q/invocation)" ;;\n*show*) printf "ActiveState=%%s\\nJob=\\n" "$(cat %q/consumer-state)" ;;\n*) exit 1 ;;\nesac\n' \
+    "$scratch" "$scratch" "$scratch" >>"$scratch/bin/systemctl"
+  chmod 0755 "$scratch/bin/systemctl"
+  printf 'inactive\n' >"$scratch/consumer-state"
+  printf '11111111111111111111111111111111\n' >"$scratch/invocation"
+  mount --bind "$scratch/bin/systemctl" /usr/bin/systemctl
+  instrument_actions
+  /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
+  operation=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
+  /usr/local/lib/aboutme/fence.sh mutation-start "$operation" v0.8.9 reset-db >/dev/null 2>&1
+  admin aboutme >/dev/null <<'SQL'
+CREATE TABLE public.provisioner_sentinel (id integer PRIMARY KEY);
+INSERT INTO public.provisioner_sentinel VALUES (1);
+SQL
+  admin postgres >/dev/null <<'SQL'
+DROP DATABASE crowdsec;
+DROP ROLE crowdsec;
+SQL
+}
+
+authority() { printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$operation"; }
+provision() { authority | timeout 45 bash /usr/local/lib/aboutme/crowdsec-provision.sh "$1"; }
+fresh_refuses_invalid_owner() {
+  ! printf '{"operation_id":"%043d","release_tag":"v0.8.9"}\n' 0 | \
+    timeout 10 bash /usr/local/lib/aboutme/crowdsec-provision.sh fresh
+}
+fresh_refuses_missing_marker() {
+  mv /var/lib/aboutme/cutover-mutation.json "$scratch/marker"
+  local rc=0
+  provision fresh || rc=$?
+  mv "$scratch/marker" /var/lib/aboutme/cutover-mutation.json
+  ((rc != 0))
+}
+fresh_refuses_existing() { ! provision fresh; }
+active_consumer_refused() {
+  printf 'active\n' >"$scratch/consumer-state"
+  local rc=0
+  provision fresh || rc=$?
+  printf 'inactive\n' >"$scratch/consumer-state"
+  ((rc != 0))
+}
+source_cannot_bypass() {
+  ! bash -c 'source /usr/local/lib/aboutme/crowdsec-db.sh; crowdsec_db_provisioning=yes; crowdsec_db_empty'
+}
+marker_retained() {
+  jq -e --arg owner "$operation" '.operation_id == $owner and .mutation_kind == "reset-db"' \
+    /var/lib/aboutme/cutover-mutation.json >/dev/null
+}
+application_identity_refused() {
+  ! runuser -u nobody -- "$test_psql" -XAt -w -h /run/postgresql -U crowdsec -d crowdsec -c 'SELECT 1'
+}
+container_uids_refused() {
+  local uid
+  for uid in 1000 10001; do
+    if setpriv --reuid "$uid" --regid "$uid" --clear-groups \
+      "$test_psql" -XAt -w -h /run/postgresql -U crowdsec -d crowdsec -c 'SELECT 1'; then
+      return 1
+    fi
+  done
+}
+tcp_refused() { ! "$test_psql" -XAt -w -h 127.0.0.1 -p 20999 -U crowdsec -d crowdsec -c 'SELECT 1'; }
+missing_column_rejected() {
+  admin <<<'ALTER TABLE public.events RENAME COLUMN serialized TO unexpected;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'ALTER TABLE public.events RENAME COLUMN unexpected TO serialized;' >/dev/null
+  ((rc != 0))
+}
+missing_index_rejected() {
+  admin <<<'ALTER INDEX public.alert_id RENAME TO unexpected;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'ALTER INDEX public.unexpected RENAME TO alert_id;' >/dev/null
+  ((rc != 0))
+}
+missing_constraint_rejected() {
+  admin <<<'ALTER TABLE public.events DROP CONSTRAINT events_alerts_events;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'ALTER TABLE public.events ADD CONSTRAINT events_alerts_events FOREIGN KEY (alert_events) REFERENCES public.alerts(id) ON DELETE CASCADE;' >/dev/null
+  ((rc != 0))
+}
+target_rejected() {
+  admin <<<'ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 1;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 0;' >/dev/null
+  ((rc != 0))
+}
+expression_rejected() {
+  admin <<<'CREATE INDEX unexpected ON public.events ((length(serialized)));' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'DROP INDEX public.unexpected;' >/dev/null
+  ((rc != 0))
+}
+extended_rejected() {
+  admin <<<'CREATE STATISTICS unexpected ON created_at, updated_at FROM public.events;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'DROP STATISTICS public.unexpected;' >/dev/null
+  ((rc != 0))
+}
+public_grant_rejected() {
+  admin <<<'GRANT CONNECT ON DATABASE crowdsec TO PUBLIC;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'REVOKE CONNECT ON DATABASE crowdsec FROM PUBLIC;' >/dev/null
+  ((rc != 0))
+}
+membership_rejected() {
+  admin <<<'GRANT aboutme_app TO crowdsec;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'REVOKE aboutme_app FROM crowdsec;' >/dev/null
+  ((rc != 0))
+}
+global_default_rejected() {
+  admin <<<'ALTER DEFAULT PRIVILEGES FOR ROLE crowdsec GRANT SELECT ON TABLES TO aboutme_app;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'ALTER DEFAULT PRIVILEGES FOR ROLE crowdsec REVOKE SELECT ON TABLES FROM aboutme_app;' >/dev/null
+  ((rc != 0))
+}
+logging_grant_rejected() {
+  admin <<<'GRANT SET ON PARAMETER log_min_error_statement TO crowdsec;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin <<<'REVOKE SET ON PARAMETER log_min_error_statement FROM crowdsec;' >/dev/null
+  ((rc != 0))
+}
+database_owner_rejected() {
+  admin postgres <<<'ALTER DATABASE crowdsec OWNER TO postgres;' >/dev/null
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  admin postgres <<<'ALTER DATABASE crowdsec OWNER TO crowdsec;' >/dev/null
+  ((rc != 0))
+}
+manifest_rejected() {
+  cp /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv "$scratch/manifest"
+  printf 'relation\tunexpected\tr\tcrowdsec\t\n' >>/usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  cp "$scratch/manifest" /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv
+  ((rc != 0))
+}
+config_overlay_rejected() {
+  printf 'db_config:\n  type: sqlite\n' >/etc/crowdsec/config.yaml.postgresql.local
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  rm /etc/crowdsec/config.yaml.postgresql.local
+  ((rc != 0))
+}
+forced_errors_private() {
+  runtime <<<'INSERT INTO events (created_at, updated_at, time, serialized) SELECT now(), now(), now(), '\''private-test-marker'\'' FROM generate_series(1,64);' >/dev/null
+  ! runtime <<<'SELECT '\''private-test-marker'\''::integer;' >/dev/null 2>&1 || return 1
+  ! runtime <<<'INSERT INTO events (serialized) VALUES ('\''private-test-marker'\'');' >/dev/null 2>&1 || return 1
+  ! grep -qF private-test-marker "$scratch/data/server.log"
+}
+ordinary_vacuum_private() {
+  runtime <<<'VACUUM (ANALYZE FALSE) public.events;' >/dev/null
+  gate preflight-ready </dev/null
+}
+contamination_rejected() {
+  # The disposable fixture deliberately contaminates planner state to prove
+  # the production boundary requires database replacement, never catalog edits.
+  admin <<<'ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 100; ANALYZE public.events; ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 0;' >/dev/null
+  ! gate preflight-ready </dev/null || return 1
+  ! authority | gate apply-policy || return 1
+  provision restore-reset
+}
+same_epoch() {
+  gate preflight-ready </dev/null 3>"$scratch/epoch"
+  [[ $(wc -c <"$scratch/epoch") == 65 ]] || return 1
+  gate preflight-ready <"$scratch/epoch"
+}
+invocation_invalidates() {
+  gate preflight-ready </dev/null 3>"$scratch/epoch"
+  printf '22222222222222222222222222222222\n' >"$scratch/invocation"
+  local rc=0
+  gate preflight-ready <"$scratch/epoch" || rc=$?
+  printf '11111111111111111111111111111111\n' >"$scratch/invocation"
+  ((rc != 0))
+}
+restart_invalidates() {
+  gate preflight-ready </dev/null 3>"$scratch/epoch"
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w restart >/dev/null 2>&1
+  ! gate preflight-ready <"$scratch/epoch"
+}
+restore_isolated() {
+  provision restore-reset || return 1
+  [[ $(admin aboutme <<<'SELECT count(*) FROM public.provisioner_sentinel;') == 1 ]] || return 1
+  [[ $(runtime <<<'SELECT count(*) FROM public.events;') == 0 ]] || return 1
+  gate preflight-ready </dev/null
+}
+recovery_rejected() {
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w stop >/dev/null 2>&1
+  touch "$scratch/data/standby.signal"
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" -w start >/dev/null 2>&1
+  [[ $(admin <<<'SELECT pg_is_in_recovery();') == t ]] || return 1
+  local rc=0
+  gate preflight-ready </dev/null || rc=$?
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w stop >/dev/null 2>&1
+  rm "$scratch/data/standby.signal"
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" -w start >/dev/null 2>&1
+  ((rc != 0)) && gate preflight-ready </dev/null
+}
+empty_refused_without_mutation() {
+  admin <<<'DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION crowdsec; REVOKE ALL ON SCHEMA public FROM PUBLIC;' >/dev/null
+  ! gate preflight-ready </dev/null || return 1
+  ! authority | gate preflight-empty || return 1
+  [[ $(admin <<<'SELECT count(*) FROM pg_class WHERE relnamespace = '\''public'\''::regnamespace;') == 0 ]]
+}
+malformed_epoch() { ! printf 'malformed\n' | gate preflight-ready; }
+
+instrument_actions() {
+  install -d -o root -g postgres -m 2770 "$scratch/trace"
+  cp "$pgbin/psql" "$scratch/bin/psql-real"
+  chmod 0755 "$scratch/bin/psql-real"
+  test_psql=$scratch/bin/psql-real
+  printf '#!/usr/bin/env bash\nset -euo pipefail\numask 007\nfixture=%q\n' "$scratch" >"$scratch/bin/psql"
+  cat >>"$scratch/bin/psql" <<'SH'
+[[ " $* " == *' -X '* && " $* " == *' ON_ERROR_STOP=1 '* ]] || exit 1
+input=$(mktemp "$fixture/trace/sql.XXXXXX")
+trap 'rm -f "$input"' EXIT
+cat >"$input"
+rm -f "$fixture/trace/read-only"
+"$fixture/bin/psql-real" "$@" <"$input"
+if grep -qE '^BEGIN .*READ ONLY;' "$input"; then
+  printf 'read-only\n' >"$fixture/trace/read-only"
+fi
+SH
+  chmod 0755 "$scratch/bin/psql"
+  mount --bind "$scratch/bin/psql" "$pgbin/psql"
+  local binary
+  for binary in cscli crowdsec; do
+    cp "/usr/bin/$binary" "$scratch/bin/$binary-real"
+    chmod 0755 "$scratch/bin/$binary-real"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\nbinary=%q\n' "$scratch" "$binary" >"$scratch/bin/$binary"
+    cat >>"$scratch/bin/$binary" <<'SH'
+[[ -s $fixture/trace/read-only ]] || exit 1
+rm "$fixture/trace/read-only"
+printf '%s\n' "$binary" >>"$fixture/trace/actions"
+exec "$fixture/bin/$binary-real" "$@"
+SH
+    chmod 0755 "$scratch/bin/$binary"
+    mount --bind "$scratch/bin/$binary" "/usr/bin/$binary"
+  done
+}
+action_trace_valid() { [[ $(<"$scratch/trace/actions") == $'cscli\ncrowdsec' ]]; }
 
 gate_refuses_empty() { ! gate preflight-empty; }
 runtime_boolean() { [[ $(runtime) == t ]]; }

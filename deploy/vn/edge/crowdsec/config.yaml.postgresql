@@ -1,0 +1,46 @@
+# Self-contained provisioning config. It never inherits SQLite overrides.
+common:
+  daemonize: false
+  log_media: file
+  log_level: error
+  log_dir: /run/aboutme/crowdsec
+  log_max_size: 1
+  log_max_files: 1
+  compress_logs: false
+
+config_paths:
+  config_dir: /etc/crowdsec
+  data_dir: /var/lib/crowdsec/data
+  hub_dir: /etc/crowdsec/hub
+  index_path: /etc/crowdsec/hub/.index.json
+
+cscli:
+  output: json
+  color: never
+
+db_config:
+  type: pgx
+  db_name: crowdsec
+  user: crowdsec
+  db_path: /run/postgresql
+  host: ""
+  port: 0
+  sslmode: disable
+  max_open_conns: 4
+  log_level: error
+  flush:
+    max_age: 0s
+    max_items: null
+
+api:
+  cti:
+    enabled: false
+  server:
+    enable: true
+    log_level: error
+    listen_uri: 127.0.0.1:8095
+    profiles_path: /etc/crowdsec/profiles.yaml
+    console_path: /etc/crowdsec/console.yaml
+
+prometheus:
+  enabled: false
