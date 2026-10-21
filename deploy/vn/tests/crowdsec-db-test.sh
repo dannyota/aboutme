@@ -191,19 +191,19 @@ SELECT 'database' || E'\t' || datname || E'\t' || pg_get_userbyid(datdba) || E'\
 FROM pg_database WHERE datname = current_database();
 SELECT 'schema' || E'\t' || nspname || E'\t' || pg_get_userbyid(nspowner) || E'\t' || coalesce(nspacl::text, '')
 FROM pg_namespace WHERE nspname = 'public';
-SELECT 'relation' || E'\t' || c.relname || E'\t' || c.relkind || E'\t' || pg_get_userbyid(c.relowner) || E'\t' || coalesce(c.relacl::text, '')
+SELECT 'relation' || E'\t' || c.relname || E'\t' || c.relkind::text || E'\t' || pg_get_userbyid(c.relowner) || E'\t' || coalesce(c.relacl::text, '')
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public';
-SELECT 'column' || E'\t' || c.relname || E'\t' || a.attnum || E'\t' || a.attname || E'\t' || format_type(a.atttypid, a.atttypmod) || E'\t' || a.attnotnull || E'\t' || a.attidentity || E'\t' || coalesce(pg_get_expr(d.adbin, d.adrelid), '') || E'\t' || coalesce(a.attacl::text, '')
+SELECT 'column' || E'\t' || c.relname || E'\t' || a.attnum || E'\t' || a.attname || E'\t' || format_type(a.atttypid, a.atttypmod) || E'\t' || a.attnotnull || E'\t' || a.attidentity::text || E'\t' || coalesce(pg_get_expr(d.adbin, d.adrelid), '') || E'\t' || coalesce(a.attacl::text, '')
 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE n.nspname = 'public' AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p');
-SELECT 'constraint' || E'\t' || c.relname || E'\t' || con.conname || E'\t' || con.contype || E'\t' || pg_get_constraintdef(con.oid, true) || E'\t' || con.convalidated || E'\t' || con.condeferrable || E'\t' || con.condeferred
+SELECT 'constraint' || E'\t' || c.relname || E'\t' || con.conname || E'\t' || con.contype::text || E'\t' || pg_get_constraintdef(con.oid, true) || E'\t' || con.convalidated || E'\t' || con.condeferrable || E'\t' || con.condeferred
 FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public';
 SELECT 'index' || E'\t' || c.relname || E'\t' || i.relname || E'\t' || pg_get_indexdef(i.oid) || E'\t' || x.indisvalid || E'\t' || x.indisready
 FROM pg_index x JOIN pg_class c ON c.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public';
 SELECT 'sequence' || E'\t' || c.relname || E'\t' || format_type(s.seqtypid, NULL) || E'\t' || s.seqstart || E'\t' || s.seqincrement || E'\t' || s.seqmin || E'\t' || s.seqmax || E'\t' || s.seqcache || E'\t' || s.seqcycle
 FROM pg_sequence s JOIN pg_class c ON c.oid = s.seqrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public';
-SELECT 'default-acl' || E'\t' || pg_get_userbyid(defaclrole) || E'\t' || defaclobjtype || E'\t' || defaclacl::text
+SELECT 'default-acl' || E'\t' || pg_get_userbyid(defaclrole) || E'\t' || defaclobjtype::text || E'\t' || defaclacl::text
 FROM pg_default_acl WHERE defaclnamespace = 'public'::regnamespace;
 COMMIT;
 SQL
