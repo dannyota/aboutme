@@ -60,7 +60,15 @@ cscli() {
   esac
 }
 migrate_postgresql_selected() { [[ ${selected:-no} == yes ]]; }
-migrate_activate() { if [[ ${MIGRATE_FAIL:-} == signal ]]; then kill -TERM "$BASHPID"; return 1; fi; [[ ${MIGRATE_FAIL:-} != activate ]] || return 1; printf 'activate\n' >>"$MIGRATE_CALLS"; }
+migrate_activate() {
+  if [[ ${MIGRATE_FAIL:-} == signal ]]; then kill -TERM "$BASHPID"; return 1; fi
+  if [[ ${MIGRATE_FAIL:-} == activate ]]; then
+    printf 'discarded-command-output\n'
+    printf 'discarded-command-diagnostic\n' >&2
+    return 1
+  fi
+  printf 'activate\n' >>"$MIGRATE_CALLS"
+}
 migrate_remove_sqlite() { [[ ${MIGRATE_FAIL:-} != discard ]] || return 1; printf 'discard\n' >>"$MIGRATE_CALLS"; }
 migrate_firewall_register() { [[ ${MIGRATE_FAIL:-} != firewall ]] || return 1; printf 'firewall-register\n' >>"$MIGRATE_CALLS"; }
 migrate_firewall_ready() { [[ ${MIGRATE_FAIL:-} != rebuild ]] || return 1; printf 'firewall-ready\n' >>"$MIGRATE_CALLS"; }
@@ -71,17 +79,23 @@ migrate_notice() { [[ ${notice:-yes} == yes ]]; }
 migrate_fresh_admission() { [[ ${selected:-no} != yes ]]; }
 migrate_stop() { printf 'stop-joined\n' >>"$MIGRATE_CALLS"; [[ ${stop_failed:-no} == no ]]; }
 refused() {
+  local step=$1
+  shift
   if (migrate_run "$@") >"$work/out" 2>"$work/err"; then exit 1; fi
   [[ ! -s $work/out ]]
+  [[ $(cat "$work/err") == "crowdsec_migrate_refused step=$step" ]]
 }
+refused arguments --unknown
+printf 'PASS argument-refusal-step\n'
 for admission in lock_busy owned; do
   : >"$MIGRATE_CALLS"
   printf -v "$admission" yes
-  refused --reset
+  if [[ $admission == lock_busy ]]; then step=lock; else step=idle; fi
+  refused "$step" --reset
   [[ ! -s $MIGRATE_CALLS ]]
   printf -v "$admission" no
 done
-notice=no; refused --reset; [[ ! -s $MIGRATE_CALLS ]]; notice=yes
+notice=no; refused notice --reset; [[ ! -s $MIGRATE_CALLS ]]; notice=yes
 printf 'PASS lock-owner-and-notice-before-stop\n'
 selected=yes
 for credentials in missing empty malformed absent unvalidated complete; do
@@ -105,10 +119,9 @@ for credentials in missing empty malformed absent unvalidated complete; do
   if [[ $credentials == complete ]]; then
     migrate_run
   else
-    refused
+    refused fresh-admission
     [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
     ! grep -q '^provision' "$MIGRATE_CALLS"
-    grep -qxF crowdsec_migrate_refused "$work/err"
   fi
 done
 cat >"$work/no-op-expected" <<'CALLS'
@@ -130,7 +143,7 @@ unset active_edge
 printf 'PASS complete-no-op-preserves-stopped-consumers\n'
 listed_bouncers='[{"name":"aboutme-caddy"}]'
 : >"$MIGRATE_CALLS"
-refused
+refused fresh-admission
 [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
 ! grep -q '^provision' "$MIGRATE_CALLS"
 listed_bouncers='[{"name":"aboutme-caddy"},{"name":"aboutme-firewall"}]'
@@ -164,18 +177,21 @@ CALLS
 cmp "$work/expected" "$MIGRATE_CALLS"
 printf 'PASS switch-and-watcher-order\n'
 : >"$MIGRATE_CALLS"
-MIGRATE_FAIL=provision refused
+MIGRATE_FAIL=provision refused provision
 : >"$MIGRATE_CALLS"
 migrate_run
 grep -qxF 'provision fresh' "$MIGRATE_CALLS"
 printf 'PASS pre-schema-retry\n'
 # Inject failures across provisioning, registration, startup, and final checks.
-for failure in provision activate discard machine startup timers unmask enable engine caddy firewall bouncer rebuild lapi gate lease signal; do
+for fault in provision:provision activate:activate discard:discard-sqlite machine:machine \
+  startup:startup-retention timers:maintenance-timers unmask:unmask enable:enable \
+  engine:engine caddy:caddy-register firewall:firewall-register bouncer:firewall-start \
+  rebuild:firewall-ready lapi:lapi gate:machine lease:lease signal:activate; do
+  IFS=: read -r failure step <<<"$fault"
   : >"$MIGRATE_CALLS"
   export MIGRATE_FAIL=$failure
-  refused --reset
+  refused "$step" --reset
   [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
-  grep -qxF crowdsec_migrate_refused "$work/err"
 done
 unset MIGRATE_FAIL
 printf 'PASS failures-join-consumers\n'

@@ -471,7 +471,7 @@ printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-d
 
 # Exercise the installed entry point with real catalogs and consumers. Only
 # systemd and Podman's secret transport use the namespace adapters.
-integration_stage=migration-switch
+integration_stage=migration-setup
 lib=/usr/local/lib/aboutme
 for helper in crowdsec-migrate crowdsec-offline operation-state; do
   install -m 0755 "$repo_root/deploy/vn/host/$helper.sh" "$lib/$helper.sh"
@@ -534,6 +534,7 @@ snapshot_credentials() {
 }
 snapshot_credentials sqlite
 # The pre-switch services must be real processes, even with a SQLite catalog.
+integration_stage=migration-sqlite-start
 touch "$retention_fixture/sqlite-consumers"
 systemctl start crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service
 cscli lapi status >/dev/null 2>&1
@@ -544,8 +545,19 @@ for unit in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer about
 done
 
 migration_run() {
+  local status=0 diagnostic
   : >"$retention_fixture/control-log"
-  "$lib/crowdsec-migrate.sh" "$@" >"$retention_fixture/migrate-out" 2>"$retention_fixture/migrate-err" || return $?
+  "$lib/crowdsec-migrate.sh" "$@" >"$retention_fixture/migrate-out" 2>"$retention_fixture/migrate-err" || status=$?
+  if ((status)); then
+    diagnostic=$(cat "$retention_fixture/migrate-err")
+    if [[ $diagnostic =~ ^crowdsec_migrate_refused\ step=(arguments|lock|idle|notice|stop|fresh-admission|provision|activate|discard-sqlite|machine|startup-retention|maintenance-timers|unmask|enable|engine|caddy-register|firewall-register|firewall-start|firewall-ready|edge-start|lapi|final-gate|lease|watch)$ ||
+      $diagnostic == crowdsec_migrate_stop_failed ]]; then
+      printf '%s\n' "$diagnostic" >&2
+    else
+      printf 'crowdsec_migrate_diagnostic_invalid\n' >&2
+    fi
+    return "$status"
+  fi
   [[ ! -s $retention_fixture/migrate-out ]]
 }
 migration_ready() {
@@ -624,21 +636,29 @@ migration_noop() {
   migration_ready
 }
 migration_refused() {
+  local step=$1
+  shift
   if migration_run "$@"; then return 1; fi
   [[ ! -s $retention_fixture/migrate-out ]]
-  [[ $(cat "$retention_fixture/migrate-err") == crowdsec_migrate_refused ]]
+  [[ $(cat "$retention_fixture/migrate-err") == "crowdsec_migrate_refused step=$step" ]]
   for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service \
     aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer aboutme-crowdsec-retention.service \
     aboutme-crowdsec-vacuum.service aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service; do
     [[ $(systemctl show --property=ActiveState --value "$unit") == inactive ]]
   done
 }
+integration_stage=migration-sqlite-credentials
 credentials_status sqlite 200
+integration_stage=migration-sqlite-files
 for suffix in '' -shm -wal; do [[ -f /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
+integration_stage=migration-switch
 migration_run
+integration_stage=migration-switch-order
 migration_order
+integration_stage=migration-switch-readiness
 install -m 0600 /srv/data/crowdsec/firewall-bouncer.key "$retention_fixture/firewall.key"
 migration_ready
+integration_stage=migration-sqlite-removed
 for suffix in '' -shm -wal; do [[ ! -e /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
 printf 'PASS real-migration-switch\n'
 integration_stage=migration-noop
@@ -674,14 +694,14 @@ printf 'PASS real-migration-reset\n'
 
 integration_stage=migration-failure-boundary
 touch "$retention_fixture/register-fail-once"
-migration_refused --reset
+migration_refused caddy-register --reset
 [[ ! -e $retention_fixture/register-fail-once ]]
 # The injection ran after catalog initialization and machine registration.
 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
 [[ $(sql 'SELECT count(*) FROM machines;') == 1 ]]
 [[ $(sql 'SELECT count(*) FROM bouncers;') == 0 ]]
 catalog_failed=$(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';")
-migration_refused
+migration_refused fresh-admission
 [[ $(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';") == "$catalog_failed" ]]
 ! grep -qF bouncer-register "$retention_fixture/control-log"
 migration_run --reset
