@@ -1,7 +1,8 @@
 """Cleanup never starts a host or recovers a workload credential."""
 import os
+from contextlib import contextmanager
 import time
-from common import Runner
+from common import Runner, runtime_directory
 from fixed_api import dns_records, delete_floating
 from object_cleanup import Objects
 from protocol import require
@@ -24,7 +25,7 @@ def retire_compute(cloud):
         require(not any(field(row,'name','Name') in (cloud.m['name'],cloud.m['name']+'-data') for row in rows))
     require(resources.get('boot_volume_id') or not resources.get('server_id'))
     require(not any(identity(row)==resources.get('boot_volume_id') for row in cloud.pages('volume','list-volumes')))
-    rows=dns_records(cloud.m)
+    rows=dns_records(cloud.m,cloud.runner)
     require(not any(row['id']==resources.get('dns_record_id') or row['name']==cloud.m['origin'][8:] for row in rows))
     ips=cloud.pages('network','list-wanips')
     matches=[row for row in ips if identity(row)==resources.get('floating_ip_id')]
@@ -34,7 +35,7 @@ def retire_compute(cloud):
         require(resources['floating_ip'] in (row.get('ipAddress'),row.get('floatingIp')))
         require(not field(row,'serverId','ServerID') and not field(row,'networkInterfaceId','NetworkInterfaceID'))
         cloud.record('delete-floating-ip')
-        delete_floating(cloud.m)
+        delete_floating(cloud.m,cloud.runner)
         require(not any(identity(row)==resources['floating_ip_id'] for row in cloud.pages('network','list-wanips')))
         cloud.completed()
     if resources.get('server_id'): require(resources.get('floating_ip_id'))
@@ -85,9 +86,8 @@ def retire_bucket(cloud,role):
     else:
         cloud.check_policy(role)
         require(not cloud.keys_for(record['subuser']))
-        file=cloud.make_key(role,'cleanup')
-        configuration=cloud.runtime/(role+'.aws-config')
-        try:
+        with cleanup_key(cloud,role) as file:
+            configuration=cloud.runtime/(role+'.aws-config')
             client=Objects(Runner(cloud.runner.deadline-120),file,configuration,bucket)
             counts=client.empty()
             record['cleanup_counts']=counts; cloud.store.save(cloud.m)
@@ -95,13 +95,11 @@ def retire_bucket(cloud,role):
             cloud.storage('delete-bucket-policy','--bucket',bucket)
             require(cloud.storage('get-bucket-policy','--bucket',bucket,read=True)['Policy'] in ('',None))
             record['policy_retired']=True; cloud.completed()
-        finally:
-            try: cloud.retire_key(role,'cleanup')
-            finally:
-                if file.exists(): file.unlink()
-                if configuration.exists(): configuration.unlink()
         require(record.get('policy_retired') is True)
     if not record.get('account_retired'):
+        if 'iam_policies' not in record:
+            require('principal' not in record)
+            record['iam_policies']=[]; cloud.store.save(cloud.m)
         attached=[]
         for page in range(50):
             rows=cloud.vng('iam','list-service-account-policies','--service-account-id',record['account_id'],
@@ -124,9 +122,6 @@ def retire_bucket(cloud,role):
 
 
 def _cleanup(cloud,explicit=False):
-    deadline=time.time()+1800
-    if not explicit and cloud.m.get('deadline') is not None: deadline=min(deadline,cloud.m['deadline'])
-    cloud.runner=Runner(deadline)
     was_planned=cloud.m.get('created_at') is None
     cloud.m['state']='cleanup'; cloud.store.save(cloud.m)
     cloud.runtime.mkdir(mode=0o700,exist_ok=True)
@@ -152,6 +147,10 @@ def _cleanup(cloud,explicit=False):
 
 
 def cleanup(cloud,explicit=False):
+    if cloud.runner.deadline is None or not explicit:
+        deadline=time.time()+cloud.runner.bound(1800)
+        if not explicit and cloud.m.get('deadline') is not None: deadline=min(deadline,cloud.m['deadline'])
+        cloud.runner=Runner(deadline)
     try:
         _cleanup(cloud,explicit)
     finally:
@@ -162,3 +161,25 @@ def cleanup(cloud,explicit=False):
                 if path.exists() or path.is_symlink():
                     require(path.is_file() and not path.is_symlink() and path.stat().st_uid==os.getuid())
                     path.unlink()
+
+
+@contextmanager
+def cleanup_key(cloud,role):
+    try:
+        file=cloud.make_key(role,'cleanup')
+        yield file
+    finally:
+        try:
+            cloud.reconcile_key()
+        finally:
+            cloud.retire_key(role,'cleanup')
+
+
+def cleanup_attempt(cloud,explicit=False,initialize=False):
+    deadline=time.time()+cloud.runner.bound(1800)
+    if not explicit and cloud.m.get('deadline') is not None: deadline=min(deadline,cloud.m['deadline'])
+    cloud.runner=Runner(deadline)
+    if initialize:
+        runtime_directory(cloud.runner,cloud.m)
+        cloud.initialize()
+    cleanup(cloud,explicit)

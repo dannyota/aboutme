@@ -13,8 +13,8 @@ import tempfile
 import time
 from allowance import validate_allowance
 from api import Client, Load
-from cleanup import cleanup
-from common import Runner, Store, safe_write
+from cleanup import cleanup, cleanup_attempt
+from common import Runner, Store, safe_write, runtime_directory
 from fixed_api import dns_records
 from images import bundles, resolve_images, fixture_artifact
 from protocol import BASELINE, TAG, MAX_PRICE, ZONE, FLAVOR, IMAGE, VOLUME_TYPE, digest, require, resource_name, validate_config, validate_plan
@@ -22,16 +22,6 @@ from resources import Cloud, field
 from transport import Remote
 
 REPOSITORY=pathlib.Path(__file__).resolve().parents[3]
-
-
-def runtime_directory(runner,manifest):
-    parent=pathlib.Path(os.environ['XDG_RUNTIME_DIR'])
-    require(parent.is_absolute() and str(parent)==str(parent.resolve()) and parent.stat().st_uid==os.getuid())
-    require(runner.call(['findmnt','-n','-o','FSTYPE','-T',str(parent)]).decode().strip()=='tmpfs')
-    path=parent/manifest['name']
-    if not path.exists(): path.mkdir(mode=0o700)
-    require(not path.is_symlink() and stat.S_IMODE(path.stat().st_mode)==0o700 and path.stat().st_uid==os.getuid())
-    return path
 
 
 def release(runner,tag):
@@ -74,7 +64,7 @@ def check_new_names(cloud):
     name=cloud.m['name']
     for service,operation in (('compute','list-servers'),('volume','list-volumes'),('network','list-security-groups')):
         require(not any(field(row,'name','Name') in (name,name+'-data') for row in cloud.pages(service,operation)))
-    require(not any(row['name']==cloud.m['origin'][8:] for row in dns_records(cloud.m)))
+    require(not any(row['name']==cloud.m['origin'][8:] for row in dns_records(cloud.m,cloud.runner)))
     buckets=cloud.storage('list-buckets',read=True)['Items']
     require(not any(field(row,'name','Name') in (name+'-media',name+'-backups') for row in buckets))
     for role in ('media','backups'):
@@ -201,7 +191,7 @@ def run(runner,store,tag):
         safe_write(cloud.work/'cold-start.json',json.dumps(cold,separators=(',',':')).encode())
         remote.operation('verify',{})
         manifest['state']='running'; store.save(manifest)
-        client=Client(manifest,cloud.work/'artifact/fixtures')
+        client=Client(manifest,cloud.work/'artifact/fixtures',cloud.runner)
         client.register(remote.operation); client.seed()
         manifest['setup_passed']=True; store.save(manifest); print('PASS setup')
         workloads(cloud,remote,client)
@@ -226,14 +216,14 @@ def main():
         require(operation in ('plan','run','cleanup') and len(sys.argv)==(2 if operation=='cleanup' else 3))
         for tool in ('tofu','vngcloud','aws','ssh','ssh-keygen','gh','bash','findmnt'):
             require(shutil.which(tool) is not None)
-        runner=Runner()
+        runner=Runner(time.time()+1800 if operation=='cleanup' else None)
         require(json.loads(runner.call(['tofu','version','-json']))['terraform_version']=='1.12.6')
         store=Store(os.environ['ABOUTME_REHEARSAL_SCRATCH'],REPOSITORY)
         if operation=='plan': plan(runner,store,sys.argv[2])
         elif operation=='run': run(runner,store,sys.argv[2])
         else:
             cloud=Cloud(runner,store,store.load(),REPOSITORY)
-            runtime_directory(runner,cloud.m); cloud.initialize(); cleanup(cloud,explicit=True)
+            cleanup_attempt(cloud,explicit=True,initialize=True)
     except BaseException:
         print('FAIL rehearsal-operation',file=sys.stderr)
         return 1

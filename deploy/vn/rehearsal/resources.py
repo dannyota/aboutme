@@ -122,6 +122,7 @@ class Cloud:
                 require(not file.is_symlink() and file.stat().st_uid==os.getuid()); file.unlink()
             raise
         identifier=field(result,'UserKeyID','userKeyId')
+        record[purpose+'_key']=identifier; self.store.save(self.m)
         rows=[x for x in self.keys_for(record['subuser']) if field(x,'UserKeyID','userKeyId')==identifier]
         require(len(rows)==1 and file.is_file() and file.stat().st_mode&0o777==0o600)
         record[purpose+'_key']=identifier
@@ -176,7 +177,7 @@ class Cloud:
                 if secret.exists(): secret.unlink()
             accounts=self.vng('iam','list-service-accounts','--name',bucket,read=True)['Items']
             require(len(accounts)==1 and field(accounts[0],'Name','name')==bucket)
-            record=self.m['storage'][role]; record['account_id']=field(accounts[0],'ID','id')
+            record=self.m['storage'][role]; record['account_id']=field(accounts[0],'ID','id'); record['iam_policies']=[]
             self.completed()
             self.record('resolve-principal-'+role)
             principal=self.storage('ensure-service-account-principal','--service-account-id',record['account_id'])

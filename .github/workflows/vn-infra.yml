@@ -169,6 +169,8 @@ jobs:
           sudo swapoff -a
       - name: Prove owner permits and completion with real systemd
         run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/cutover-fence-test.sh systemd
+      - name: Test complete rehearsal cgroup lifecycles
+        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-rehearsal-lifecycle-test.sh linux-accounting
 
   crowdsec-restore:
     runs-on: ubuntu-24.04

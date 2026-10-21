@@ -78,11 +78,14 @@ class Collector:
         require(self.kernel_initial==0 and self.vm['oom_kill']==0)
         self.group_paths={}
         self.container_paths={}
+        self.seen_units={}
         for unit in UNITS:
             group=capture(['systemctl','show','--property=ControlGroup','--value',unit+'.service']).strip()
             if group:
                 require(group.startswith('/system.slice/') and '..' not in group)
                 self.group_paths[unit]=pathlib.Path('/sys/fs/cgroup'+group)
+            elif unit=='aboutme-job@idempotency-expiry-sweep':
+                self.group_paths[unit]=None
             else:
                 parent='/sys/fs/cgroup/system.slice/'
                 if '@' in unit:
@@ -90,8 +93,15 @@ class Collector:
                 self.group_paths[unit]=pathlib.Path(parent+unit+'.service')
 
     def kernel_oom(self):
-        result=capture(['journalctl','--boot','--kernel','--quiet','--no-pager','--output=cat',
-                        '--grep=Out of memory:|Killed process [0-9]+|oom-kill:'],10)
+        environment={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C','HOME':'/root'}
+        command=['journalctl','--boot','--kernel','--quiet','--no-pager','--output=cat']
+        probe=subprocess.run([*command,'-n','0'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10,env=environment)
+        require(probe.returncode==0 and not probe.stderr)
+        result=subprocess.run([*command,'--grep=Out of memory:|Killed process [0-9]+|oom-kill:'],
+                              stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10,env=environment)
+        require(len(result.stdout)<65536 and not result.stderr)
+        require(result.returncode==0 or result.returncode==1 and not result.stdout)
+        result=result.stdout.decode()
         return sum(bool(re.search(r'Out of memory:|Killed process [0-9]+|oom-kill:',line))
                    for line in result.splitlines())
 
@@ -100,26 +110,48 @@ class Collector:
         names=[name for name in names if name in CONTAINERS]
         paths={}
         if names:
-            raw=capture(['podman','inspect','--format','{{.Name}} {{.State.Pid}}',*names])
+            raw=capture(['podman','inspect','--format','{{.Name}} {{.State.Pid}} {{.Id}}',*names])
             for line in raw.splitlines():
-                name,pid=line.split(); name=name.removeprefix('/')
+                name,pid,identifier=line.split(); name=name.removeprefix('/')
                 require(name in names and pid.isdigit() and int(pid)>0)
                 records=pathlib.Path('/proc/'+pid+'/cgroup').read_text().splitlines()
                 matches=[record.removeprefix('0::') for record in records if record.startswith('0::')]
                 require(len(matches)==1 and matches[0].startswith('/') and '..' not in matches[0])
-                paths['container-'+name.removeprefix('aboutme-')]=pathlib.Path('/sys/fs/cgroup'+matches[0])
+                unit='aboutme-job@idempotency-expiry-sweep' if name=='aboutme-job-idempotency-expiry-sweep' else name
+                parent=self.group_paths[unit]
+                payload=pathlib.Path('/sys/fs/cgroup'+matches[0])
+                if name=='aboutme-job-idempotency-expiry-sweep':
+                    from job_accounting import payload_path
+                    require(payload==payload_path(matches[0],identifier))
+                else:
+                    require(payload.parent==parent and payload.name=='libpod-payload-'+identifier)
+                paths['container-'+name.removeprefix('aboutme-')]=payload
         self.container_paths=paths
 
     def cgroups(self):
+        unit='aboutme-job@idempotency-expiry-sweep'
+        group=capture(['systemctl','show','--property=ControlGroup','--value',unit+'.service']).strip()
+        if group:
+            require(group.startswith('/system.slice/') and '..' not in group)
+            self.group_paths[unit]=pathlib.Path('/sys/fs/cgroup'+group)
         self.containers()
         result={}
         for name in CONTAINERS:
             result['container-'+name.removeprefix('aboutme-')]={'present':0}
         for unit,path in dict(self.group_paths,**self.container_paths).items():
-            if not path.exists():
+            if path is None or not path.exists():
+                if unit in self.seen_units:
+                    from lifecycle import final_for_identity
+                    final_for_identity(unit,self.seen_units[unit])
                 result[unit]={'present':0}
                 continue
             inode=path.stat().st_ino
+            from lifecycle import UNITS as measured_units, final_for_identity
+            if unit in measured_units:
+                previous=self.seen_units.get(unit)
+                if previous is not None and previous!=inode:
+                    final_for_identity(unit,previous)
+                self.seen_units[unit]=inode
             current=numeric_file(path/'memory.current'); peak=numeric_file(path/'memory.peak')
             values=counters(path/'memory.events')
             require({'low','high','max','oom','oom_kill'}<=set(values))
@@ -179,7 +211,8 @@ class Collector:
             next_sample+=interval
         check_series(rows,interval,max(2,int(duration/interval)))
         require(self.kernel_oom()==self.kernel_initial)
-        print(json.dumps({'valid':1,'samples':len(rows),'combined_peak':max(x['used'] for x in rows),
+        from lifecycle import final_records
+        print(json.dumps({'final_lifecycles':final_records(),'valid':1,'samples':len(rows),'combined_peak':max(x['used'] for x in rows),
                           'minimum_available':min(x['available'] for x in rows),
                           'retired_cgroup_peaks':[value for value in self.last_groups.values()]},
                          separators=(',',':')),flush=True)

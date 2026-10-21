@@ -13,6 +13,9 @@ import urllib.error
 import urllib.request
 import uuid
 from protocol import require, digest
+from common import Runner
+from http_exchange import NoRedirect, exchange
+from types import SimpleNamespace
 
 
 def canonical(document):
@@ -28,13 +31,9 @@ def bounded_body(value):
     return data
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self,req,fp,code,msg,headers,newurl):
-        raise ValueError('unexpected_redirect')
-
-
 class Client:
-    def __init__(self,manifest,fixtures):
+    def __init__(self,manifest,fixtures,runner):
+        self.runner=runner
         self.manifest=manifest
         self.origin=manifest['origin']
         self.fixtures=pathlib.Path(fixtures)
@@ -54,6 +53,7 @@ class Client:
 
     def request(self,method,path,body=None,expected=200,revision=None,content_type='application/json',pdf=False,maintenance=False):
         require(path.startswith('/api/v1/') or path.startswith('/cs-'+self.manifest['run_id']+'-'))
+        self.runner.bound(1)
         headers={'Origin':self.origin}
         if method not in ('GET','HEAD'):
             headers['Content-Type']=content_type
@@ -61,29 +61,29 @@ class Client:
         if '/resumes' in path and not pdf:
             headers['X-Resume-Schema-Version']=str(self.schema)
             if method not in ('GET','HEAD'):
-                time.sleep(max(0,0.5-(time.monotonic()-self.last_write)))
+                delay=max(0,0.5-(time.monotonic()-self.last_write))
+                if delay: time.sleep(self.runner.bound(delay))
+                self.runner.bound(1)
                 self.last_write=time.monotonic()
                 headers['Idempotency-Key']=str(uuid.uuid4())
                 if revision is not None: headers['If-Match']='"r'+str(revision)+'"'
         payload=bounded_body(body) if isinstance(body,dict) else body
         req=urllib.request.Request(self.origin+path,data=payload,headers=headers,method=method)
         started=time.monotonic()
-        try:
-            response=self.opener.open(req,timeout=20 if pdf else 10)
-        except urllib.error.HTTPError as error:
-            response=error
-        with response:
-            raw=response.read(16777217 if pdf else 2097153)
-            if maintenance and response.code==503:
-                require(b'aboutme:maintenance' in raw)
-                return None,time.monotonic()-started
-            require(response.code==expected)
-            if pdf:
-                require(raw.startswith(b'%PDF-') and raw.rstrip().endswith(b'%%EOF') and len(raw)<=16777216)
-                require(response.headers.get('Cache-Control')=='no-store, no-transform')
-            elapsed=time.monotonic()-started
-            require(elapsed<=20 if pdf else elapsed<=10)
-            return (json.loads(raw)['data'] if raw and response.headers.get_content_type()=='application/json' else raw),elapsed
+        self.cookies.add_cookie_header(req)
+        code,headers,raw=exchange(self.runner,req,16777216 if pdf else 2097152,20 if pdf else 10)
+        self.runner.bound(1)
+        self.cookies.extract_cookies(SimpleNamespace(info=lambda:headers),req)
+        if maintenance and code==503:
+            require(b'aboutme:maintenance' in raw)
+            return None,time.monotonic()-started
+        require(code==expected)
+        if pdf:
+            require(raw.startswith(b'%PDF-') and raw.rstrip().endswith(b'%%EOF') and len(raw)<=16777216)
+            require(headers.get('Cache-Control')=='no-store, no-transform')
+        elapsed=time.monotonic()-started
+        require(elapsed<=20 if pdf else elapsed<=10)
+        return (json.loads(raw)['data'] if raw and headers.get_content_type()=='application/json' else raw),elapsed
 
     def register(self,remote):
         password=secrets.token_urlsafe(32)
@@ -163,7 +163,13 @@ class Load:
     def worker(self,index):
         next_start=self.started+index*0.5; number=0
         while not self.stop.is_set():
-            if self.stop.wait(max(0,next_start-time.monotonic())): break
+            try:
+                delay=max(0,next_start-time.monotonic())
+                if delay and self.stop.wait(self.client.runner.bound(delay)): break
+                self.client.runner.bound(1)
+            except Exception:
+                with self.lock: self.errors.append(1)
+                self.stop.set(); return
             try:
                 latency=self.client.request_load(self.name,public=number%2==1,maintenance=self.maintenance)
                 with self.lock: self.results.append((time.monotonic(), 'maintenance' if latency is None else ('public' if number%2 else 'api'),latency))
@@ -175,7 +181,13 @@ class Load:
     def pdf_worker(self):
         next_start=self.started
         while not self.stop.is_set():
-            if self.stop.wait(max(0,next_start-time.monotonic())): break
+            try:
+                delay=max(0,next_start-time.monotonic())
+                if delay and self.stop.wait(self.client.runner.bound(delay)): break
+                self.client.runner.bound(1)
+            except Exception:
+                with self.lock: self.errors.append(1)
+                self.stop.set(); return
             try:
                 latency=self.client.request_load(self.name,pdf=True)
                 with self.lock: self.results.append((time.monotonic(),'pdf',latency))
@@ -184,16 +196,28 @@ class Load:
                 self.stop.set(); return
             next_start=max(next_start+7.5,time.monotonic())
 
+    def runner_join_budget(self):
+        runner=self.client.runner
+        if runner.deadline is None: return 25
+        return max(0,min(25,runner.deadline-time.time(),runner.monotonic_deadline-time.monotonic()))
+
     def __enter__(self):
-        for index in range(4):
-            worker=threading.Thread(target=self.worker,args=(index,)); worker.start(); self.workers.append(worker)
-        if self.printing:
-            worker=threading.Thread(target=self.pdf_worker); worker.start(); self.workers.append(worker)
-        return self
+        try:
+            for index in range(4):
+                self.client.runner.bound(1)
+                worker=threading.Thread(target=self.worker,args=(index,)); worker.start(); self.workers.append(worker)
+            if self.printing:
+                self.client.runner.bound(1)
+                worker=threading.Thread(target=self.pdf_worker); worker.start(); self.workers.append(worker)
+            return self
+        except BaseException:
+            self.stop.set()
+            for worker in self.workers: worker.join(self.runner_join_budget())
+            raise
 
     def __exit__(self,*args):
         self.stop.set()
-        for worker in self.workers: worker.join(25)
+        for worker in self.workers: worker.join(self.runner_join_budget())
         require(all(not worker.is_alive() for worker in self.workers))
         require(not self.errors)
 
