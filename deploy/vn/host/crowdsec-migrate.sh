@@ -50,7 +50,21 @@ migrate_notice() { "$lib/fence.sh" check-current crowdsec.service; }
 migrate_registered() {
   [[ -f /etc/crowdsec/local_api_credentials.yaml && ! -L /etc/crowdsec/local_api_credentials.yaml &&
     $(stat -c '%u:%g:%a' /etc/crowdsec/local_api_credentials.yaml) == 0:0:600 ]] || return 1
-  local registrations
+  local registrations machine
+  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  machine=$(python3 -I - <<'PY' 2>/dev/null
+import pathlib,yaml
+credentials=yaml.safe_load(pathlib.Path('/etc/crowdsec/local_api_credentials.yaml').read_text())
+assert isinstance(credentials,dict)
+login=credentials.get('login')
+assert isinstance(login,str) and login and not any(c.isspace() for c in login)
+print(login,end='')
+PY
+  ) || return 1
+  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
+  registrations=$(cscli machines list -o json) || return 1
+  jq -e --arg machine "$machine" 'any(.[]; .machineId==$machine and .isValidated==true)' <<<"$registrations" >/dev/null || return 1
+  "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   registrations=$(cscli bouncers list -o json) || return 1
   jq -e 'any(.[]; .name=="aboutme-caddy") and any(.[]; .name=="aboutme-firewall")' <<<"$registrations" >/dev/null || return 1
   "$lib/crowdsec-retention-lease-check.sh" &&
