@@ -111,7 +111,8 @@ notice_host_child() {
   notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
   local restore_args=(--stanza=aboutme --delta --archive-mode=off)
   if [[ $notice_mode == time ]]; then
-    restore_args+=(--type=time "--target=$notice_target" --target-action=promote)
+    # Automatic backup selection requires a space and an explicit UTC offset.
+    restore_args+=(--type=time "--target=${notice_target:0:10} ${notice_target:11:8}+00" --target-action=promote)
   fi
   notice_restore_denial 4>&- && notice_postgres pgbackrest "${restore_args[@]}" restore || return 1
   notice_restore_denial 4>&- && systemctl start postgresql@18-main.service 4>&- || return 1
