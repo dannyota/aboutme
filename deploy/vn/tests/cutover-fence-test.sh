@@ -10,8 +10,11 @@ mkdir -p "$work/bin" "$work/fence" "$work/operations"
 chmod 0700 "$work/operations"
 : >"$work/operations/.bundle.lock"
 chmod 0600 "$work/operations/.bundle.lock"
-# Redirect the fixed host path without adding a production override.
-sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/fence.sh"
+# Use the runner's UID only in the private copy; modes and locks stay real.
+fixture_uid=$(id -u)
+sed -e "s|/srv/data/host-operations|$work/operations|g" \
+  -e "s/== 0:700/== $fixture_uid:700/; s/== 0:600/== $fixture_uid:600/" \
+  "$fence" >"$work/fence.sh"
 chmod +x "$work/fence.sh"
 fence=$work/fence.sh
 
@@ -53,6 +56,29 @@ grep -Fq '"$lib/fence.sh" check "$number" "aboutme-job@$name"' \
 }
 
 "$fence" init
+for invalid in missing-directory directory-mode missing-lock lock-mode symlink-lock; do
+  case $invalid in
+    missing-directory) mv "$work/operations" "$work/saved-operations" ;;
+    directory-mode) chmod 0755 "$work/operations" ;;
+    missing-lock) mv "$work/operations/.bundle.lock" "$work/saved-lock" ;;
+    lock-mode) chmod 0644 "$work/operations/.bundle.lock" ;;
+    symlink-lock)
+      mv "$work/operations/.bundle.lock" "$work/saved-lock"
+      ln -s "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+  esac
+  if "$fence" lock deploy v0.4.7 >"$work/unsafe.out" 2>"$work/unsafe.err"; then
+    echo 'FAIL unsafe-bundle-admitted-owner' >&2; exit 1
+  fi
+  [[ ! -s $work/unsafe.out ]] && grep -qxF 'fence: unsafe bundle lock' "$work/unsafe.err"
+  [[ $(jq -r '.operation_id // empty' "$work/fence/fence.json") == '' ]]
+  case $invalid in
+    missing-directory) mv "$work/saved-operations" "$work/operations" ;;
+    directory-mode) chmod 0700 "$work/operations" ;;
+    missing-lock) mv "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+    lock-mode) chmod 0600 "$work/operations/.bundle.lock" ;;
+    symlink-lock) rm "$work/operations/.bundle.lock"; mv "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+  esac
+done
 # Record real flock calls and prove bundle admission precedes the fence lock.
 export FLOCK_CALLS=$work/flock-calls BUNDLE_PATH=$work/operations/.bundle.lock
 export REAL_FLOCK
