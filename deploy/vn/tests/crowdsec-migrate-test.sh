@@ -4,8 +4,11 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
+# Redirect only the credential path; exercise the production predicate.
+sed "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.yaml|g" \
+  "$root/deploy/vn/host/crowdsec-migrate.sh" >"$work/crowdsec-migrate.sh"
 # shellcheck source=../host/crowdsec-migrate.sh
-source "$root/deploy/vn/host/crowdsec-migrate.sh"
+source "$work/crowdsec-migrate.sh"
 # Keep the real lock implementation for descriptor and contention proofs.
 eval "$(declare -f migrate_lock | sed '1s/migrate_lock/real_migrate_lock/')"
 eval "$(declare -f migrate_firewall_register | sed '1s/migrate_firewall_register/real_firewall_register/')"
@@ -45,7 +48,17 @@ systemctl() {
     'start crowdsec-firewall-bouncer.service') [[ ${MIGRATE_FAIL:-} != bouncer ]] ;;
   esac
 }
-cscli() { [[ ${MIGRATE_FAIL:-} != machine || $1 != machines ]] || return 1; [[ ${MIGRATE_FAIL:-} != lapi || $1 != lapi ]] || return 1; printf 'cli %s\n' "$*" >>"$MIGRATE_CALLS"; }
+listed_machines='[{"machineId":"fixture-machine","isValidated":true}]'
+listed_bouncers='[{"name":"aboutme-caddy"},{"name":"aboutme-firewall"}]'
+cscli() {
+  [[ ${MIGRATE_FAIL:-} != machine || $1 != machines ]] || return 1
+  [[ ${MIGRATE_FAIL:-} != lapi || $1 != lapi ]] || return 1
+  printf 'cli %s\n' "$*" >>"$MIGRATE_CALLS"
+  case "$*" in
+    'machines list -o json') printf '%s\n' "$listed_machines" ;;
+    'bouncers list -o json') printf '%s\n' "$listed_bouncers" ;;
+  esac
+}
 migrate_postgresql_selected() { [[ ${selected:-no} == yes ]]; }
 migrate_activate() { if [[ ${MIGRATE_FAIL:-} == signal ]]; then kill -TERM "$BASHPID"; return 1; fi; [[ ${MIGRATE_FAIL:-} != activate ]] || return 1; printf 'activate\n' >>"$MIGRATE_CALLS"; }
 migrate_remove_sqlite() { [[ ${MIGRATE_FAIL:-} != discard ]] || return 1; printf 'discard\n' >>"$MIGRATE_CALLS"; }
@@ -56,7 +69,6 @@ migrate_lock() { [[ ${lock_busy:-no} == no ]]; }
 migrate_idle() { [[ ${owned:-no} == no ]]; }
 migrate_notice() { [[ ${notice:-yes} == yes ]]; }
 migrate_fresh_admission() { [[ ${selected:-no} != yes ]]; }
-migrate_registered() { [[ ${registered:-yes} == yes ]]; }
 migrate_stop() { printf 'stop-joined\n' >>"$MIGRATE_CALLS"; [[ ${stop_failed:-no} == no ]]; }
 refused() {
   if (migrate_run "$@") >"$work/out" 2>"$work/err"; then exit 1; fi
@@ -72,21 +84,56 @@ done
 notice=no; refused --reset; [[ ! -s $MIGRATE_CALLS ]]; notice=yes
 printf 'PASS lock-owner-and-notice-before-stop\n'
 selected=yes
-: >"$MIGRATE_CALLS"
-migrate_run
-[[ $(cat "$MIGRATE_CALLS") == gate ]]
+for credentials in missing empty malformed absent unvalidated complete; do
+  rm -f "$work/local_api_credentials.yaml"
+  listed_machines='[{"machineId":"fixture-machine","isValidated":true}]'
+  case $credentials in
+    missing) ;;
+    empty) : >"$work/local_api_credentials.yaml" ;;
+    malformed) printf 'login: [\n' >"$work/local_api_credentials.yaml" ;;
+    *)
+      printf 'login: fixture-machine\n' >"$work/local_api_credentials.yaml"
+      case $credentials in
+        absent) listed_machines='[{"machineId":"other-machine","isValidated":true}]' ;;
+        unvalidated) listed_machines='[{"machineId":"fixture-machine","isValidated":false}]' ;;
+      esac ;;
+  esac
+  if [[ -f $work/local_api_credentials.yaml ]]; then
+    /usr/bin/chmod 0600 "$work/local_api_credentials.yaml"
+  fi
+  : >"$MIGRATE_CALLS"
+  if [[ $credentials == complete ]]; then
+    migrate_run
+  else
+    refused
+    [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
+    ! grep -q '^provision' "$MIGRATE_CALLS"
+    grep -qxF crowdsec_migrate_refused "$work/err"
+  fi
+done
+cat >"$work/no-op-expected" <<'CALLS'
+gate
+gate
+gate
+cli machines list -o json
+gate
+cli bouncers list -o json
+unit is-enabled --quiet crowdsec.service
+unit is-enabled --quiet crowdsec-firewall-bouncer.service
+CALLS
+cmp "$work/no-op-expected" "$MIGRATE_CALLS"
 active_edge=none
 : >"$MIGRATE_CALLS"
 migrate_run
-[[ $(cat "$MIGRATE_CALLS") == gate ]]
+cmp "$work/no-op-expected" "$MIGRATE_CALLS"
 unset active_edge
 printf 'PASS complete-no-op-preserves-stopped-consumers\n'
-registered=no
+listed_bouncers='[{"name":"aboutme-caddy"}]'
 : >"$MIGRATE_CALLS"
 refused
 [[ $(tail -n1 "$MIGRATE_CALLS") == stop-joined ]]
 ! grep -q '^provision' "$MIGRATE_CALLS"
-registered=yes
+listed_bouncers='[{"name":"aboutme-caddy"},{"name":"aboutme-firewall"}]'
 printf 'PASS missing-registration-refuses-occupied-catalog\n'
 selected=no
 : >"$MIGRATE_CALLS"

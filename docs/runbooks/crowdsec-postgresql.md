@@ -22,9 +22,10 @@ owned fence, unresolved operation, or running operation unit before stopping
 anything, and requires the existing notice activation admission.
 
 A no-op requires PostgreSQL configuration, a passing database gate, a mode 0600
-local machine credential file, both named bouncer registrations, a valid
-retention lease and timers, and both CrowdSec services enabled. It changes no
-service state, including when those services are stopped.
+local machine credential file whose machine is validated in the current
+database, both named bouncer registrations, a valid retention lease and timers,
+and both CrowdSec services enabled. It changes no service state, including when
+those services are stopped.
 
 For the first switch, the helper records the active edge service and stops both
 edge modes, CrowdSec, its firewall bouncer, the watcher timer and service, and
