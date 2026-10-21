@@ -34,7 +34,7 @@ def initialize_parent(effect):
 
 def payload_path(group,identifier):
     require(re.fullmatch('[0-9a-f]{64}',identifier))
-    require(group=='/machine.slice/libpod-'+identifier+'.scope')
+    require(group=='/machine.slice/libpod-'+identifier+'.scope/container')
     return pathlib.Path('/sys/fs/cgroup'+group)
 
 
