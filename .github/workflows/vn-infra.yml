@@ -50,11 +50,24 @@ jobs:
           for test in deploy/vn/tests/*-test.sh; do
             if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-db-test.sh ] || \
-               [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ]; then
+               [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-config-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-retention-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-lease-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-vacuum-test.sh ] || \
+               [ "$test" = deploy/vn/tests/watch-test.sh ]; then
               continue
             fi
             "$test"
           done
+      - name: Test PostgreSQL retention contracts
+        if: ${{ !cancelled() }}
+        run: |
+          failed=0
+          for test in crowdsec-config crowdsec-retention crowdsec-lease crowdsec-vacuum watch; do
+            bash "deploy/vn/tests/$test-test.sh" || failed=1
+          done
+          exit "$failed"
 
   crowdsec-privacy-notice:
     runs-on: ubuntu-24.04
@@ -91,6 +104,8 @@ jobs:
           cat /proc/swaps
           sudo swapoff -a
           [ "$(wc -l </proc/swaps)" -eq 1 ]
+      - name: Require PostgreSQL retention configuration
+        run: bash deploy/vn/tests/crowdsec-config-test.sh
       - name: Test pinned parser and scenarios
         run: |
           sudo systemctl unmask --runtime crowdsec.service
