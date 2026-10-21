@@ -1,6 +1,36 @@
 #!/usr/bin/env bash
 # Hosted PostgreSQL is real; host controls below are explicit boundary doubles.
 
+retention_fixture_diagnostics() {
+  exec {retention_fixture_error_fd}>&2
+  trap retention_fixture_report_failure EXIT
+}
+
+retention_fixture_report_failure() {
+  local status=$?
+  trap - EXIT
+  if ((status)); then
+    printf 'FAIL %s stage=%s\n' "$retention_fixture_case" "${integration_stage:-fixture}" >&"$retention_fixture_error_fd"
+  fi
+  exit "$status"
+}
+
+retention_fixture_pid_for() {
+  local pid_root=$1 unit=$2 process_stat
+  pid=0
+  if [[ -f $pid_root/pids/$unit ]]; then
+    read -r pid <"$pid_root/pids/$unit"
+    [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
+    # A stopped process can disappear between its PID-file read and this read.
+    if ! { IFS= read -r process_stat <"/proc/$pid/stat"; } 2>/dev/null; then
+      [[ ! -e /proc/$pid ]] || return 1
+      pid=0
+    elif [[ ${process_stat##*) } == Z\ * ]]; then
+      pid=0
+    fi
+  fi
+}
+
 retention_fixture_admin() {
   runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w \
     -v ON_ERROR_STOP=1 -h /run/postgresql -U postgres -d "${1:-crowdsec}" 2>/dev/null
@@ -293,16 +323,10 @@ retention_fixture_consumers() {
 }
 EOF
   printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/control"
+  declare -f retention_fixture_pid_for >>"$retention_fixture/control"
   cat >>"$retention_fixture/control" <<'SH'
 [[ ${SYSTEMD_OFFLINE:-} != 1 ]] || exit 0
-pid_for() {
-  pid=0
-  if [[ -f $fixture/pids/$unit ]]; then
-    read -r pid <"$fixture/pids/$unit"
-    [[ $pid =~ ^[1-9][0-9]*$ ]] || exit 1
-    if [[ ! -e /proc/$pid/stat || $(awk '{print $3}' "/proc/$pid/stat") == Z ]]; then pid=0; fi
-  fi
-}
+pid_for() { retention_fixture_pid_for "$fixture" "$unit"; }
 spawn() {
   (
     # A real system manager does not pass the caller's retention lock into a
@@ -339,7 +363,10 @@ case $verb in
       [[ $unit != --* ]] || continue
       pid_for
       if ((pid>0)); then
-        kill -TERM "$pid" 2>/dev/null || true
+        if ! kill -TERM "$pid" 2>/dev/null; then
+          pid_for
+          ((pid==0)) || exit 1
+        fi
         for _ in {1..20}; do pid_for; ((pid>0)) || break; sleep 0.1; done
         if ((pid>0)); then kill -KILL "$pid"; fi
       fi
