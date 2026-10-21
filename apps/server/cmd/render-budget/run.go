@@ -21,6 +21,9 @@ import (
 )
 
 func run(ctx context.Context, settings config) (resultErr error) {
+	if settings.ExportFixtures != "" {
+		return exportFixtures(settings.RepositoryRoot, settings.ExportFixtures)
+	}
 	if err := prepareOutputDirectory(settings.RepositoryRoot, settings.OutputDirectory); err != nil {
 		return err
 	}
