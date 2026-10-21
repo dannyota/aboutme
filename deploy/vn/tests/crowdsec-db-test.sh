@@ -14,6 +14,7 @@ pg_started=no
 loop_device=''
 pgbin=/usr/lib/postgresql/18/bin
 test_psql=$pgbin/psql
+pg_start_options="-c listen_addresses='' -c unix_socket_directories=/run/postgresql -c shared_buffers=32MB -c max_connections=40 -c log_statement=none -c log_min_messages=panic -c log_min_error_statement=panic -c log_error_verbosity=terse -c log_parameter_max_length=0 -c log_parameter_max_length_on_error=0"
 
 pass() { printf 'PASS %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1"; failures=$((failures + 1)); }
@@ -126,7 +127,7 @@ start_harness() {
   printf 'crowdsec_test root crowdsec\n' >"$scratch/data/pg_ident.conf"
   runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" \
     -l "$scratch/data/server.log" -w start \
-    -o "-c listen_addresses='' -c unix_socket_directories=/run/postgresql -c shared_buffers=32MB -c max_connections=40 -c log_statement=none -c log_min_messages=panic -c log_min_error_statement=panic -c log_error_verbosity=terse -c log_parameter_max_length=0 -c log_parameter_max_length_on_error=0" \
+    -o "$pg_start_options" \
     >/dev/null 2>&1
   pg_started=yes
   admin postgres >/dev/null 2>&1 <<'SQL'
@@ -545,13 +546,15 @@ restore_isolated() {
 recovery_rejected() {
   runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w stop >/dev/null 2>&1
   touch "$scratch/data/standby.signal"
-  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" -w start >/dev/null 2>&1
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" \
+    -w start -o "$pg_start_options" >/dev/null 2>&1
   [[ $(admin <<<'SELECT pg_is_in_recovery();') == t ]] || return 1
   local rc=0
   gate preflight-ready </dev/null || rc=$?
   runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -m fast -w stop >/dev/null 2>&1
   rm "$scratch/data/standby.signal"
-  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" -w start >/dev/null 2>&1
+  runuser -u postgres -- "$pgbin/pg_ctl" -D "$scratch/data" -l "$scratch/data/server.log" \
+    -w start -o "$pg_start_options" >/dev/null 2>&1
   ((rc != 0)) && gate preflight-ready </dev/null
 }
 empty_refused_without_mutation() {
