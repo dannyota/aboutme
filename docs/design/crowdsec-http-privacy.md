@@ -244,8 +244,9 @@ archival.
 | Consumer stop deadline        | 60 seconds  |
 
 Only full success renews the root-owned lease. The independent watchdog rejects
-missing, stale, future-dated, or malformed leases and disabled cleanup timers.
-The lease, watchdog, and stop bounds total 12 minutes, inside the 30-minute
+missing, stale, future-dated, or malformed leases and disabled cleanup timers,
+except for the exact [cutover mode](crowdsec-cutover.md#cutover-mode). The
+lease, watchdog, and stop bounds total 12 minutes, inside the 30-minute
 verification margin. Any clock, authentication, schema, or cleanup failure
 blocks startup or stops all consumers. Confirm quiescence, remove tmpfs feeds,
 and alarm with fixed codes. Keep PostgreSQL available to the app. Failed cleanup
@@ -301,20 +302,18 @@ fallback nor a recurring backup; never copy it into support, CI, the repository,
 or the backup bucket.
 
 Complete the [notice and email gate](crowdsec-privacy-notification.md) before
-ingestion. Under the operation lock, persist a marker blocking unattended starts
-after crashes/reboots. Stop both Caddy modes, engine, firewall bouncer, and
-retention scheduling; package hooks must not restart them.
+ingestion. The [cutover contract](crowdsec-cutover.md) owns exact start permits,
+quiescent bootstrap, manual safety-pass order, watchdog coverage, atomic
+completion, and failure recovery under the existing operation fence. Its narrow
+same-invocation runtime admission preserves ordinary disabled-timer refusal;
+only completed safety passes establish the later cutover mode.
 
-Provision authentication and database; install PostgreSQL configuration before
-any CrowdSec binary runs. The fenced empty-database preflight permits initial
-schema creation only. Apply the statistics policy and pass the complete
-preflight before registration or ingestion. Generate fresh machine and bouncer
-credentials directly into protected files. Synchronize the Caddy Podman secret.
-Rebuild caches/nftables, pass startup cleanup, enable the timer, start CrowdSec,
-verify authentication, then start consumers and prove enforcement. Only the
-owning operation authorizes these starts while marked, after the gate passes.
-Clear the marker after success; interrupted work resumes under that marker and
-refuses ambiguous state.
+Provision authentication and PostgreSQL configuration before CrowdSec runs. Only
+the fenced provisioner may initialize verified empty schema. Apply the
+statistics policy and pass the full gate before registration or ingestion.
+Generate fresh credentials in protected files and synchronize the Caddy secret.
+The [restore composition](crowdsec-cutover.md#restore-composition) retains the
+notice restore owner through fresh CrowdSec provisioning and private completion.
 
 Installers, helpers, units, and tests have no SQLite checkpoint or fallback.
 Keep non-database assets and credential directories. Image rollback retains the
@@ -406,8 +405,9 @@ Hosted tests use distinct markers in eligible paths and forbidden fields:
 - natural expiry, explicit revocation, missed polls, and concurrent expiry
   reconcile the exact deletion set; failed acknowledgement clears consumer state
   before deletion, while healthy reconciled cleanup needs no restart;
-- a missing, stale, or disabled cleanup timer expires the independent lease and
-  stops both Caddy modes, CrowdSec, and the firewall bouncer;
+- missing/stale leases and ordinary disabled timers stop all consumers; the
+  [cutover and restore proofs](crowdsec-cutover.md#required-proof) cover the
+  bounded exceptions, invocation identity, watchdog coverage, and completion;
 - a forced cleanup failure blocks startup or stops consumers without a database
   checkpoint, forced vacuum, or archive-completion dependency;
 - forced SQL errors, including bad values and constraint failures, leak no
