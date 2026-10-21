@@ -623,7 +623,7 @@ function checkRehearsalArtifact(vn) {
   assert.ok(job.steps.every((step) => !step.if && !step["continue-on-error"]), "rehearsal steps must block");
   const reader = job.steps.find((step) => step["working-directory"] === "deploy/vn/rehearsal/allowance-adapter");
   assert.equal(reader?.env?.GOWORK, "off", "rehearsal independent module");
-  assert.match(reader.run, /go test -mod=readonly \.\.\./, "rehearsal reader tests");
+  assert.match(reader.run, /go test -mod=readonly \.\/\.\.\./, "rehearsal reader tests");
   assert.match(reader.run, /go build -mod=readonly/, "rehearsal reader build");
   assert.match(reader.run, /sha256sum render-budget allowance-adapter fixtures\/\*/, "rehearsal artifact hashes");
   const upload = job.steps.find((step) => step.with?.name === "crowdsec-rehearsal-fixtures");
@@ -637,6 +637,10 @@ test("rehearsal exports the corpus and an independent allowance reader", () => {
     (job) => { job["continue-on-error"] = true; },
     (job) => { job.steps.find((step) => step.env?.GOWORK).env.GOWORK = "auto"; },
     (job) => { job.steps.find((step) => step.env?.GOWORK).run = "go build ."; },
+    (job) => {
+      const reader = job.steps.find((step) => step.env?.GOWORK);
+      reader.run = reader.run.replace("go test -mod=readonly ./...", "go test -mod=readonly ...");
+    },
     (job) => { job.steps.find((step) => step.with?.name === "crowdsec-rehearsal-fixtures").with["if-no-files-found"] = "warn"; },
   ]) {
     const vn = readWorkflow("vn-infra");
