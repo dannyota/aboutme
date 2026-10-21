@@ -235,8 +235,8 @@ target. It checks versions, row counts, grants, and an `aboutme_app` read. The
 [CrowdSec restore boundary](../../docs/runbooks/crowdsec-postgresql.md#reset-after-a-cluster-restore)
 requires notice reconciliation and an explicit operator reset before consumers
 resume. The cluster restore brings back CrowdSec data and identities; automation
-does not reset them. The exit trap deletes the server and volume unless `--keep` was
-requested.
+does not reset them. The exit trap deletes the server and volume unless `--keep`
+was requested.
 
 The server has no floating IP and no NAT, so it has no outbound internet for
 packages or vStorage. Outbound networking remains open. GreenNode Public NAT

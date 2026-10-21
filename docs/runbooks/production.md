@@ -192,6 +192,9 @@ nonexpiring operation lock outside PostgreSQL. `fence.sh` writes it under
 deploy, rollback, and activation takes the lock; host image starts check the
 floor before Podman runs.
 
+Before taking fence ownership, take `/srv/data/host-operations/.bundle.lock`,
+then the fence lock, and release the bundle lock after recording ownership.
+
 Activation requires the exact candidate server to be running:
 
 ```sh
