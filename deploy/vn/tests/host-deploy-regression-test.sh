@@ -108,4 +108,31 @@ for operation in restore app-up; do
   [[ ! -e $work/notice-effects ]]
   grep -qxF invalid_state "$work/notice-out"
 done
+# A new full gate is required before each schema-capable smoke action.
+sed -n '/^step_ban_test() {/,/^}/p' "$host" |
+  sed 's|/usr/local/lib/aboutme/crowdsec-db.sh|crowdsec_gate|g' >"$work/ban-function"
+# shellcheck disable=SC1091
+source "$work/ban-function"
+crowdsec_gate() {
+  [[ $* == preflight-ready ]] || return 1
+  printf 'gate\n' >>"$work/ban-calls"
+  [[ ! -e $work/schema-invalid ]]
+}
+cscli() { printf 'vendor\n' >>"$work/ban-calls"; }
+for action in add del; do
+  : >"$work/ban-calls"
+  rm -f "$work/schema-invalid"
+  (step_ban_test "$action" 192.0.2.1)
+  [[ $(cat "$work/ban-calls") == $'gate\nvendor' ]] || {
+    echo 'FAIL smoke-per-call-admission' >&2; exit 1;
+  }
+  : >"$work/ban-calls"
+  touch "$work/schema-invalid"
+  if (step_ban_test "$action" 192.0.2.1) >"$work/out" 2>&1; then
+    echo 'FAIL smoke-corrupt-schema-refusal' >&2; exit 1
+  fi
+  [[ $(cat "$work/ban-calls") == gate ]] || {
+    echo 'FAIL smoke-vendor-before-refusal' >&2; exit 1;
+  }
+done
 echo 'host migration, saved release, and socket DSN tests passed'
