@@ -6,7 +6,7 @@ trap 'printf "FAIL harness-command\n"' ERR
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 host=$repo_root/deploy/vn/host
-candidate=$repo_root/deploy/vn/edge/crowdsec/config.yaml.postgresql
+candidate=$repo_root/deploy/vn/edge/crowdsec/config.yaml.local
 mode=${1:-static}
 failures=0
 scratch=''

@@ -27,24 +27,45 @@ consumers=(
 )
 protected_units=("${consumers[@]}" aboutme-crowdsec-retention-startup.service)
 
+quiescent() {
+  local unit state group container status
+  for unit in "${protected_units[@]}"; do
+    state=$(timeout 1 "$systemctl_cmd" show --all --property=ActiveState --property=Job \
+      --property=MainPID --property=ControlPID --property=ControlGroup "$unit" 2>/dev/null) || return 1
+    [[ $(wc -l <<<"$state") == 5 ]] || return 1
+    grep -qxE 'ActiveState=(inactive|failed)' <<<"$state" &&
+      grep -qxF 'Job=' <<<"$state" && grep -qxF MainPID=0 <<<"$state" &&
+      grep -qxF ControlPID=0 <<<"$state" || return 1
+    group=$(sed -n 's/^ControlGroup=//p' <<<"$state")
+    [[ -z $group ]] && continue
+    [[ $group == /system.slice/*.service && $group != *..* ]] || return 1
+    if [[ -e /sys/fs/cgroup$group/cgroup.events ]]; then
+      grep -qxF 'populated 0' "/sys/fs/cgroup$group/cgroup.events" || return 1
+    fi
+  done
+  if ((EUID == 0)); then
+    for container in aboutme-caddy aboutme-maintenance; do
+      status=0
+      timeout 1 podman container exists "$container" >/dev/null 2>&1 || status=$?
+      case $status in
+        0) [[ $(timeout 1 podman inspect --format '{{.State.Running}} {{.State.Pid}}' "$container" 2>/dev/null) == 'false 0' ]] || return 1 ;;
+        1) ;;
+        *) return 1 ;;
+      esac
+    done
+  fi
+}
+
 rm -f -- "$success"
 printf 'retention-failed\n' >"$marker"
-"$systemctl_cmd" stop "${protected_units[@]}" || true
-still_active=()
-for unit in "${protected_units[@]}"; do
-  if "$systemctl_cmd" is-active --quiet "$unit"; then
-    still_active+=("$unit")
-  fi
-done
-if ((${#still_active[@]})); then
-  "$systemctl_cmd" kill --kill-whom=all --signal=SIGKILL "${still_active[@]}" || true
-  "$systemctl_cmd" stop "${still_active[@]}" || true
+timeout 35 "$systemctl_cmd" stop "${protected_units[@]}" || true
+if ! quiescent; then
+  timeout 3 "$systemctl_cmd" kill --kill-whom=all --signal=SIGKILL "${protected_units[@]}" || true
+  timeout 3 "$systemctl_cmd" stop "${protected_units[@]}" || true
 fi
 
 failed=0
-for unit in "${protected_units[@]}"; do
-  "$systemctl_cmd" is-active --quiet "$unit" && failed=1
-done
+quiescent || failed=1
 if ((failed)); then
   "$alert" crowdsec-retention "CrowdSec retention failed" || true
   exit 1
@@ -52,6 +73,13 @@ fi
 if ((EUID == 0)); then
   /usr/bin/setpriv --reuid 10001 --regid 10001 --clear-groups \
     /usr/bin/rm -rf --one-file-system -- "$feed_dir" || failed=1
+  if [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
+    $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 &&
+    $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]]; then
+    /usr/bin/rm -rf --one-file-system -- /run/aboutme/crowdsec || failed=1
+  elif [[ -e /run/aboutme/crowdsec || -L /run/aboutme/crowdsec ]]; then
+    failed=1
+  fi
 else
   rm -rf --one-file-system -- "$feed_dir" || failed=1
 fi

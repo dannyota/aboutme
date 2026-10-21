@@ -71,6 +71,13 @@ for unit in ("crowdsec", "crowdsec-firewall-bouncer"):
     source = (root / (unit + ".service.d/90-aboutme-alert.conf")).read_text()
     assert "postgresql@18-main.service" in source
     assert "crowdsec-retention-lease-check.sh" in source
+    pre=[line.split('=',1)[1] for line in source.splitlines() if line.startswith('ExecStartPre=')]
+    assert pre[0]=='' and len(pre)==4
+    assert pre[1]==pre[3]=='/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh'
+    assert pre[2].startswith('/usr/bin/'+unit+' -c ') and ' -t' in pre[2]
+    if unit=='crowdsec':
+        reloads=[line.split('=',1)[1] for line in source.splitlines() if line.startswith('ExecReload=')]
+        assert reloads==['',pre[1],pre[2],pre[3],'/bin/kill -HUP $MAINPID']
 PY
 grep -qxF '    duration: 15m' "$base/edge/crowdsec/profiles.yaml"
 grep -qF "GetDecisionsCount(Alert.GetValue()) == 1 ? '1h' : '4h'" "$base/edge/crowdsec/profiles.yaml"
