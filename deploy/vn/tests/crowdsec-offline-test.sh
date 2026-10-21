@@ -104,7 +104,11 @@ PY
   systemctl mask --runtime crowdsec.service >/dev/null 2>&1
   python3 -I - "$proof/engine-commands" <<'PY'
 import pathlib,re,sys
-commands=dict(line.split('=',1) for line in pathlib.Path(sys.argv[1]).read_text().splitlines())
+commands={}
+# systemctl prints one assignment per command under the same property name.
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    key,value=line.split('=',1)
+    commands[key]=commands.get(key,'')+' '+value
 gate='/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh'
 def paths(key): return re.findall(r'\bpath=([^ ;]+)',commands[key])
 assert paths('ExecStartPre')==[gate,'/usr/bin/crowdsec',gate]
