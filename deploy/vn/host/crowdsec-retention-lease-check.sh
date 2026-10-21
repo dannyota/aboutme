@@ -29,10 +29,7 @@ crowdsec_lease_check() {
     systemctl is-enabled --quiet "$timer" && systemctl is-active --quiet "$timer" || normal=no
   done
   if [[ $normal == yes ]]; then return 0; fi
-  # The state composition imports this lease library; avoid recursive static expansion.
-  # shellcheck source=/dev/null
-  source /usr/local/lib/aboutme/crowdsec-cutover-state.sh
-  cutover_mode || cutover_bootstrap
+  return 1
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   set -euo pipefail

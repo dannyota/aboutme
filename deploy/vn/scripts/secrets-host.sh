@@ -257,9 +257,6 @@ case "${1-}:$#" in
   import:2 | import:3) cmd_import "$2" "${3-}" ;;
   import-s3:2 | import-s3:3) cmd_import_s3 "$2" "${3-}" ;;
   podman-sync:1) cmd_podman_sync ;;
-  podman-sync:3)
-    [[ $2 == --replace && $3 == crowdsec-bouncer-key ]] || die 'unsupported secret replacement'
-    cmd_podman_sync --replace crowdsec-bouncer-key ;;
   bouncer-register:1) cmd_bouncer_register ;;
   list:1) cmd_list ;;
   age-copy:2) cmd_age_copy "$2" ;;

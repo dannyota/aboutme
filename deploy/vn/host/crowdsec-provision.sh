@@ -11,8 +11,7 @@ provision() {
   # shellcheck source=deploy/vn/host/crowdsec-db.sh
   source /usr/local/lib/aboutme/crowdsec-db.sh
   crowdsec_db_owned_lock && crowdsec_db_config && crowdsec_db_auth || return 1
-  local inventory auth
-  auth=$(printf '{"operation_id":"%s","release_tag":"%s"}' "$crowdsec_db_owner" "$crowdsec_db_tag")
+  local inventory
   inventory=$({ crowdsec_db_begin; printf '%s\n' "
 SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = 'crowdsec') || '|' || EXISTS (SELECT FROM pg_database WHERE datname = 'crowdsec');
 COMMIT;"; } | crowdsec_db_admin postgres) || return 1
@@ -76,20 +75,21 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 COMMIT;
 SQL
   fi
-  if [[ ${crowdsec_db_restore:-} == yes ]]; then
-    crowdsec_restore_dependencies || return 1
-  else [[ $(dpkg-query -W -f='${Version}' crowdsec 2>/dev/null) == 1.8.1 ]] || return 1; fi
+  [[ $(dpkg-query -W -f='${Version}' crowdsec 2>/dev/null) == 1.8.1 ]] || return 1
   [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec && \
     $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 && \
     $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]] || return 1
   local crowdsec_db_provisioning=yes
   # The functions run in this process under the existing canonical flock.
   # No lock-taking helper is launched from the protected section.
-  crowdsec_db_main preflight-empty <<<"$auth" || return 1
-  crowdsec_db_authority && crowdsec_db_stopped || return 1
-  timeout 30 /usr/bin/cscli -c /etc/crowdsec/config.yaml.postgresql bouncers list -o json \
-    >/dev/null 2>&1 || return 1
-  crowdsec_db_main apply-policy <<<"$auth" || return 1
+  if [[ $1 == fresh ]] && crowdsec_db_ready; then return 0; fi
+  # A retry can resume an empty catalog initialized before policy was applied.
+  if crowdsec_db_empty; then
+    crowdsec_db_authority && crowdsec_db_stopped || return 1
+    timeout 30 /usr/bin/cscli -c /etc/crowdsec/config.yaml.postgresql bouncers list -o json \
+      >/dev/null 2>&1 || return 1
+  fi
+  crowdsec_db_main apply-policy </dev/null || return 1
   crowdsec_db_ready || return 1
   crowdsec_db_authority && crowdsec_db_stopped || return 1
   timeout 30 /usr/bin/crowdsec -c /etc/crowdsec/config.yaml.postgresql -no-cs -t \
@@ -107,32 +107,8 @@ SQL
   [[ $empty == t ]]
 }
 
-crowdsec_restore_dependencies() {
-  # The source inventory is generated from the authenticated pinned archive.
-  crowdsec_db_safe /usr/local/lib/aboutme/crowdsec-restore-binaries.sha256 644 && crowdsec_db_config || return 1
-  local file
-  for file in profiles.yaml console.yaml; do crowdsec_db_safe "/etc/crowdsec/$file" 644 || return 1; done
-  (cd / && sha256sum --check --status /usr/local/lib/aboutme/crowdsec-restore-binaries.sha256)
-}
-crowdsec_restore_reset() {
-  (($#==0)) || return 1
-  # Only the validated workload-locked child sources this fixed composition.
-  # No argument, environment selector, operation switch, or public entry exists.
-  # shellcheck source=crowdsec-db.sh
-  source /usr/local/lib/aboutme/crowdsec-db.sh
-  local crowdsec_db_restore=yes crowdsec_db_owner=$notice_operation crowdsec_db_tag=$notice_admission
-  local crowdsec_db_lock_fd crowdsec_db_mount_identity
-  crowdsec_db_root && crowdsec_restore_dependencies && notice_restore_denial && crowdsec_db_stopped || return 1
-  local status=0
-  provision restore-reset </dev/null || status=$?
-  if [[ -n ${crowdsec_db_lock_fd:-} ]]; then exec {crowdsec_db_lock_fd}>&-; fi
-  ((status==0)) || return 1
-  # Restored registrations are never retained even on an app-absent drill.
-  rm -f -- /etc/crowdsec/local_api_credentials.yaml /srv/data/crowdsec/firewall-bouncer.key \
-    /etc/aboutme/secrets/crowdsec-bouncer-key || return 1
-}
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  unset crowdsec_db_restore crowdsec_db_lock_fd
+  unset crowdsec_db_lock_fd
   if ! provision "$@" 2>/dev/null; then
     printf 'crowdsec_provision_refused\n' >&2
     exit 1

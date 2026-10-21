@@ -24,7 +24,7 @@ v0.7.3, and AWS was removed. Cloudflare provides DNS-only records managed by
 | `host/keys/`                 | The apt signing keys `install.sh` trusts, checked against pinned fingerprints |
 | `edge/`                      | CrowdSec configuration and the vWAF escalation checklist                      |
 | `probe/`                     | Host fact checks                                                              |
-| `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, cutover               |
+| `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, data migration        |
 
 ## DNS root
 
@@ -83,14 +83,14 @@ report success (`Result=success`, `ExecMainStatus=0`). SSH needs no restart.
 
 ## CrowdSec PostgreSQL transition
 
-For the first PostgreSQL storage transition, the source provides
-`scripts/crowdsec-cutover.sh <tag>` and the separate `--complete <tag> <owner>`
-operation. Follow the
+Every ordinary host installation runs `host/crowdsec-migrate.sh`. It returns
+without stopping services when PostgreSQL is selected and the database gate
+passes. Otherwise it provisions PostgreSQL, discards old SQLite alerts and
+decisions, runs startup retention, registers the machine and bouncers, and
+restarts protection. Follow the
 [CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md) for
-release eligibility, the isolated rehearsal, private incident-copy expiry,
-proofs, and exact-owner failure recovery. Do not use the ordinary full installer
-or deployer before this first transition. Do not resend or recapture the
-completed privacy-notice campaign.
+verification, failure recovery, and explicit `--reset` after a cluster restore.
+Do not resend or recapture the completed privacy-notice campaign.
 
 The host bundle separates CrowdSec's PostgreSQL role/database from application
 roles, gates schema-capable calls, and installs startup/runtime retention and an
@@ -244,12 +244,12 @@ traffic through it. Do not add a Public NAT to the production VPC for the drill.
 
 ## Cutover prerequisites
 
-`scripts/cutover.sh` is a reference for an AWS-to-Vietnam data move. Before
-`preflight`, the Vietnam host must already serve maintenance with its server
-stopped. Preflight stops job timers and active jobs and checks that state; it
-does not start maintenance. AWS must also serve maintenance with its app and
-schedules stopped. The AWS stack is not deployed, so the script cannot run
-against the current infrastructure.
+The AWS-to-Vietnam data move reference is separate from host installation.
+Before `preflight`, the Vietnam host must already serve maintenance with its
+server stopped. Preflight stops job timers and active jobs and checks that
+state; it does not start maintenance. AWS must also serve maintenance with its
+app and schedules stopped. The AWS stack is not deployed, so the script cannot
+run against the current infrastructure.
 
 ## Reboot
 

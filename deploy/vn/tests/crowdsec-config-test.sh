@@ -48,6 +48,8 @@ assert "/etc/crowdsec/config.yaml.postgresql" in source
 assert "pg_ident.conf" in source
 assert "crowdsec-db.sh" in source and "crowdsec-provision.sh" in source
 assert "crowdsec-vacuum.sh" in source and "aboutme-crowdsec-vacuum.timer" in source
+assert '"$lib/crowdsec-migrate.sh"' in source
+source += pathlib.Path(sys.argv[1]).with_name("crowdsec-migrate.sh").read_text()
 binary = re.search(r"(?m)^\s*(?:timeout\s+\S+\s+)?(?:\S*/)?(?:cscli|crowdsec)(?:\s|$)", source)
 assert binary is not None
 assert source.index("python3-yaml") < binary.start()
