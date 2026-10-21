@@ -74,8 +74,8 @@ Every schema-capable engine or `cscli` call requires the complete read-only
 catalog, ownership, grants, logging, statistics, and database-epoch gate. Fresh
 provisioning disables table autovacuum and sets every column statistics target
 to zero before ingestion. An hourly serialized `VACUUM (ANALYZE FALSE)` replaces
-ordinary automatic maintenance. Statistics contamination requires fenced fresh
-provisioning. The
+ordinary automatic maintenance. Statistics contamination requires the operator's
+`crowdsec-migrate.sh --reset`. The
 [privacy contract](design/crowdsec-http-privacy.md#database-and-authorization)
 owns exact connection, policy, and logging bounds.
 
@@ -84,8 +84,14 @@ short-lived root-owned lease only on success. An independent watchdog closes
 consumer admission on invalid policy, database epoch, clock, lease, or
 scheduling state. Failure stops both Caddy modes, CrowdSec, and the firewall
 bouncer, clears their owned state, and leaves PostgreSQL available to the app.
-Every cluster or point-in-time restore replaces CrowdSec storage and
-registrations; application data is preserved.
+Ordinary host-bundle installation invokes `crowdsec-migrate.sh` before the
+separate image deployment. Its no-op path leaves service state unchanged; it is
+not a health repair. The
+[storage-switch contract](design/crowdsec-http-privacy.md#migration-loss-and-release-order)
+owns order, loss, and recovery. Automated cluster restore does not reset
+CrowdSec; the operator must complete notice reconciliation and explicit reset
+before consumers resume under the
+[restore contract](design/crowdsec-http-privacy.md#backups-and-restore).
 
 The direct-edge feed has seven allowlisted fields. Only unknown routes returning
 400, 404, or 405 may contribute an escaped target path of at most 512 bytes;
@@ -97,8 +103,8 @@ CrowdSec under the
 [accepted backup lifetime](design/crowdsec-http-privacy.md#backups-and-restore).
 
 This section describes implemented source and configuration. Deployment requires
-exact-release CI, the isolated pre-cutover rehearsal, and production proof
-through the [CrowdSec PostgreSQL runbook](runbooks/crowdsec-postgresql.md).
+exact-release CI and production proof through the
+[CrowdSec PostgreSQL runbook](runbooks/crowdsec-postgresql.md).
 
 ## Dependencies and trust boundaries
 

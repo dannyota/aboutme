@@ -33,10 +33,9 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CloudFront origin](cloudfront-origin.md)                              | AWS reference origin access, certificates, and client-address trust        |
 | Other   | [CloudFront delivery](cloudfront-delivery.md)                          | AWS reference TLS, DNS, forwarding, caching, headers, WAF, and operations  |
 | Other   | [CloudFront verification](cloudfront-verification.md)                  | AWS reference migration, parity, tests, and unresolved facts               |
-| 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, and abuse detection                     |
-| Other   | [CrowdSec cutover](crowdsec-cutover.md)                                | Exact safety-pass admission, completion, and restore ownership             |
+| 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, storage switch, and abuse detection     |
+| Other   | [CrowdSec privacy notification](crowdsec-privacy-notification.md)      | Notice, email acceptance, activation, and restore denial                   |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
-| Other   | [CrowdSec rehearsal](crowdsec-rehearsal.md)                            | Synthetic host lifecycle, fixed workloads, sampling, and capacity gate     |
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                  |
@@ -80,10 +79,6 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [UI: showcase results](ui/showcase-results.md)                         | Grid, tiles, invitation, pagination, and result states                     |
 | Other   | [UI: shell and editor](ui/shell-and-editor.md)                         | App shell, account pages, resume list, editor, and settings                |
 | Other   | [UI: responsive and accessibility](ui/responsive-and-accessibility.md) | Narrow editor layouts, motion, and accessibility                           |
-| Section | File                                                                   | Purpose                                                                    |
-| ------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------      |
-| Section | File                                                                   | Purpose                                                                    |
-| ------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------  |
 
 ## System summary
 
