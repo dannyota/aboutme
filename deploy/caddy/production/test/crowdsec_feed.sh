@@ -140,18 +140,20 @@ test_direct_crowdsec_feed() {
 }
 
 test_crowdsec_feed_size_roll() {
-  local target rolls=0 active_size roll_size
-  target=/unknown/$(printf '%0503d' 0)
+  local target rolls=0 active_size roll_size statuses=$work/feed-roll-status
+  target=/unknown/$(printf '%0499d' 0)'[0001-3600]'
   # Two size rotations prove the writer retains only one uncompressed roll.
-  # Requests stay in the test container's network namespace.
-  timeout 120s podman exec "$name-echo" sh -c '
-    i=0
-    while [ "$i" -lt 3600 ]; do
-      wget -S -q -O /dev/null --no-check-certificate "https://aboutme.vn$1" >/dev/null 2>/tmp/feed-roll-status || :
-      grep -q "HTTP/1.1 404" /tmp/feed-roll-status || exit 1
-      i=$((i + 1))
-    done
-  ' sh "$target" || { echo "feed-size-roll-request-deadline" >&2; exit 1; }
+  # One client avoids per-request helper processes. The four-digit expansion
+  # keeps every target at 512 bytes; each expanded response goes to /dev/null.
+  timeout 120s curl --disable --silent --fail-early --max-time 10 \
+    --noproxy '*' --resolve "aboutme.vn:$dport:127.0.0.1" --cacert "$work/direct-ca.pem" \
+    --output /dev/null --write-out '%{http_code}\n' "https://aboutme.vn:$dport$target" \
+    >"$statuses" 2>/dev/null || { echo "feed-size-roll-requests" >&2; exit 1; }
+  [[ $(wc -l <"$statuses") == 3600 ]] || { echo "feed-size-roll-response-count" >&2; exit 1; }
+  if grep -qvx '404' "$statuses"; then
+    echo "feed-size-roll-response-status" >&2
+    exit 1
+  fi
   for _ in $(seq 1 40); do
     rolls=$(podman exec "$name" sh -c '
       count=0
