@@ -50,11 +50,24 @@ jobs:
           for test in deploy/vn/tests/*-test.sh; do
             if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ] || \
                [ "$test" = deploy/vn/tests/crowdsec-db-test.sh ] || \
-               [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ]; then
+               [ "$test" = deploy/vn/tests/crowdsec-privacy-notice-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-config-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-retention-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-lease-test.sh ] || \
+               [ "$test" = deploy/vn/tests/crowdsec-vacuum-test.sh ] || \
+               [ "$test" = deploy/vn/tests/watch-test.sh ]; then
               continue
             fi
             "$test"
           done
+      - name: Test PostgreSQL retention contracts
+        if: ${{ !cancelled() }}
+        run: |
+          failed=0
+          for test in crowdsec-config crowdsec-retention crowdsec-lease crowdsec-vacuum watch; do
+            bash "deploy/vn/tests/$test-test.sh" || failed=1
+          done
+          exit "$failed"
 
   crowdsec-privacy-notice:
     runs-on: ubuntu-24.04
@@ -68,22 +81,19 @@ jobs:
 
   crowdsec-integration:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install pinned CrowdSec
+      - name: Inspect signed packages and prove suppressed engine setup
         run: |
-          sudo install -d -m 0755 /etc/apt/keyrings
-          gpg --dearmor --yes -o /tmp/crowdsec.gpg deploy/vn/host/keys/crowdsec.asc
-          sudo install -m 0644 /tmp/crowdsec.gpg /etc/apt/keyrings/crowdsec.gpg
-          echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" | \
-            sudo tee /etc/apt/sources.list.d/crowdsec.list >/dev/null
-          sudo apt-get update -qq
-          sudo bash -c '
-            unset CROWDSEC_POLICY_RC_D CROWDSEC_SYSTEMCTL
-            . deploy/vn/host/crowdsec-offline.sh
-            crowdsec_install_offline apt-get install -y -qq crowdsec=1.8.1 sqlite3
-          '
+          sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
+      - name: Build the pinned production Caddy binary
+        run: |
+          sudo apt-get install -y -qq podman >/dev/null
+          sudo podman build --target caddy-build -f deploy/caddy/production/Dockerfile -t retention-caddy .
+          container=$(sudo podman create --entrypoint /bin/true retention-caddy)
+          trap 'sudo podman rm "$container" >/dev/null' EXIT
+          sudo podman cp "$container:/out/caddy" "$RUNNER_TEMP/caddy"
       - name: Disable disk swap
         # Retention refuses to run while attack records could reach a swap
         # device other than zram.
@@ -91,10 +101,12 @@ jobs:
           cat /proc/swaps
           sudo swapoff -a
           [ "$(wc -l </proc/swaps)" -eq 1 ]
-      - name: Test pinned parser and scenarios
+      - name: Require PostgreSQL retention configuration
+        run: bash deploy/vn/tests/crowdsec-config-test.sh
+      - name: Test PostgreSQL parser, retention and real consumer rebuild
         run: |
-          sudo systemctl unmask --runtime crowdsec.service
-          sudo deploy/vn/tests/crowdsec-integration-test.sh
+          sudo env GITHUB_ACTIONS=true CROWDSEC_TEST_CADDY_BINARY="$RUNNER_TEMP/caddy" \
+            unshare --mount --propagation private bash deploy/vn/tests/crowdsec-integration-test.sh
 
   crowdsec-postgresql:
     runs-on: ubuntu-24.04
@@ -103,29 +115,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install pinned PostgreSQL and CrowdSec
+      - name: Inspect signed packages and prove suppressed engine setup
         run: |
-          set -euo pipefail
-          trap 'echo "FAIL database-package-install"' ERR
-          sudo install -d -m 0755 /etc/apt/keyrings
-          sudo install -m 0644 deploy/vn/host/keys/pgdg.asc /etc/apt/keyrings/postgresql.asc
-          echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | \
-            sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          gpg --dearmor --yes -o /tmp/crowdsec.gpg deploy/vn/host/keys/crowdsec.asc
-          sudo install -m 0644 /tmp/crowdsec.gpg /etc/apt/keyrings/crowdsec.gpg
-          echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" | \
-            sudo tee /etc/apt/sources.list.d/crowdsec.list >/dev/null
-          sudo apt-get update -qq >/dev/null 2>&1
-          sudo bash -c '
-            set -euo pipefail
-            unset CROWDSEC_POLICY_RC_D CROWDSEC_SYSTEMCTL
-            . deploy/vn/host/crowdsec-offline.sh
-            crowdsec_install_offline apt-get install -y -qq \
-              postgresql-common=293.pgdg24.04+1 \
-              postgresql-18=18.6-1.pgdg24.04+2 \
-              postgresql-client-18=18.6-1.pgdg24.04+2 \
-              crowdsec=1.8.1 python3-yaml
-          ' >/dev/null 2>&1
+          sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
       - name: Derive pinned catalog metadata
         run: |
           set -euo pipefail
@@ -147,3 +139,8 @@ jobs:
         run: |
           sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
             bash deploy/vn/tests/crowdsec-db-test.sh integration
+      - name: Test PostgreSQL retention and lease boundaries
+        run: |
+          sudo swapoff -a
+          sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
+            bash deploy/vn/tests/crowdsec-retention-test.sh postgresql

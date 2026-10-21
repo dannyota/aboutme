@@ -16,6 +16,19 @@ cat >"$work/lib/crowdsec-retention-fail.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'retention failure\n' >>"$WATCH_TEST_RETENTION_FAILURES"
 STUB
+cat >"$work/lib/crowdsec-retention-lease-check.sh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
+  systemctl is-enabled --quiet "$timer"
+  systemctl is-active --quiet "$timer"
+done
+lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?}
+[[ -f $lease && ! -L $lease ]]
+modified=$(stat -c %Y "$lease")
+((modified <= EPOCHSECONDS && EPOCHSECONDS - modified <= 360))
+[[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
+STUB
 cat >"$work/bin/df" <<'STUB'
 #!/usr/bin/env bash
 printf 'Use%%\n10%%\n'
@@ -27,6 +40,10 @@ if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
 fi
 if [[ ${1-} == is-active && ${WATCH_TEST_TIMER_INACTIVE:-0} == 1 ]]; then
   exit 1
+fi
+if [[ $* == *vacuum.timer* ]]; then
+  [[ ${1-} != is-enabled || ${WATCH_TEST_VACUUM_TIMER_DISABLED:-0} == 0 ]] || exit 1
+  [[ ${1-} != is-active || ${WATCH_TEST_VACUUM_TIMER_INACTIVE:-0} == 0 ]] || exit 1
 fi
 exit 0
 STUB
@@ -148,5 +165,37 @@ grep -qxF 'retention failure' "$work/inactive.failures" || {
   echo "inactive retention timer did not fail closed" >&2
   exit 1
 }
+
+for state in disabled inactive; do
+  if [[ $state == disabled ]]; then
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=1 WATCH_TEST_VACUUM_TIMER_INACTIVE=0
+  else
+    export WATCH_TEST_VACUUM_TIMER_DISABLED=0 WATCH_TEST_VACUUM_TIMER_INACTIVE=1
+  fi
+  WATCH_TEST_FIXTURE=$base \
+    WATCH_TEST_ALERTS=$work/vacuum-$state.alerts WATCH_TEST_RETENTION_FAILURES=$work/vacuum-$state.failures \
+    "$watch"
+  grep -qxF 'retention failure' "$work/vacuum-$state.failures" || {
+    echo "vacuum safety timer did not invalidate the watcher lease" >&2
+    exit 1
+  }
+done
+unset WATCH_TEST_VACUUM_TIMER_DISABLED WATCH_TEST_VACUUM_TIMER_INACTIVE
+
+for state in changed recovery; do
+  if [[ $state == changed ]]; then
+    export WATCH_TEST_DATABASE_CHANGED=1 WATCH_TEST_DATABASE_RECOVERY=0
+  else
+    export WATCH_TEST_DATABASE_CHANGED=0 WATCH_TEST_DATABASE_RECOVERY=1
+  fi
+  WATCH_TEST_FIXTURE=$base \
+    WATCH_TEST_ALERTS=$work/database-$state.alerts WATCH_TEST_RETENTION_FAILURES=$work/database-$state.failures \
+    "$watch"
+  grep -qxF 'retention failure' "$work/database-$state.failures" || {
+    echo "database epoch or recovery did not invalidate the watcher lease" >&2
+    exit 1
+  }
+done
+unset WATCH_TEST_DATABASE_CHANGED WATCH_TEST_DATABASE_RECOVERY
 
 echo "watch tests passed"

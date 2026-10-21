@@ -15,23 +15,6 @@ fi
 disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
-if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
-  retention_lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?watch test lease is required}
-else
-  retention_lease=/run/aboutme/crowdsec-retention-ok
-fi
-retention_lease_owner_bad=no
-retention_lease_stale=yes
-if [[ -z ${ABOUTME_WATCH_TEST_LIB:-} && -e $retention_lease ]] &&
-  [[ $(stat -c '%u:%g:%a' "$retention_lease" 2>/dev/null || true) != 0:0:600 ]]; then
-  retention_lease_owner_bad=yes
-fi
-if [[ -f $retention_lease && ! -L $retention_lease ]]; then
-  lease_mtime=$(stat -c %Y "$retention_lease" 2>/dev/null || echo 0)
-  if ((lease_mtime <= EPOCHSECONDS && EPOCHSECONDS - lease_mtime <= 360)); then
-    retention_lease_stale=no
-  fi
-fi
 
 alert() { # key subject [detail]
   printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
@@ -39,11 +22,7 @@ alert() { # key subject [detail]
 
 # The retention timer has its own failure action. This independent lease check
 # also catches a disabled or stuck timer within five minutes.
-if ! systemctl is-enabled --quiet aboutme-crowdsec-retention.timer ||
-  ! systemctl is-active --quiet aboutme-crowdsec-retention.timer ||
-  [[ ! -f $retention_lease || -L $retention_lease ]] ||
-  [[ $retention_lease_owner_bad == yes ]] ||
-  [[ $retention_lease_stale == yes ]]; then
+if ! "$lib/crowdsec-retention-lease-check.sh"; then
   "$lib/crowdsec-retention-fail.sh" || true
 fi
 
@@ -82,7 +61,10 @@ elif ((($(date +%s) - newest) / 3600 >= backup_hours)); then
 fi
 
 # CrowdSec decisions in the last hour.
-bans=$(cscli alerts list --since 1h -o json 2>/dev/null | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
+bans=0
+if "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1; then
+  bans=$(cscli alerts list --since 1h -o json 2>/dev/null | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
+fi
 ((bans <= crowdsec_bans_per_hour)) || alert crowdsec-bans "CrowdSec raised $bans alerts in the last hour"
 
 # Coraza writes metadata only. Each Caddy process owns one current file and at
