@@ -144,3 +144,17 @@ jobs:
           sudo swapoff -a
           sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
             bash deploy/vn/tests/crowdsec-retention-test.sh postgresql
+
+  crowdsec-cutover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Inspect signed packages and stage the pinned engine
+        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
+      - name: Install container inspection and disable disk swap
+        run: |
+          sudo apt-get install -y -qq podman >/dev/null
+          sudo swapoff -a
+      - name: Prove owner permits and completion with real systemd
+        run: sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/cutover-fence-test.sh systemd

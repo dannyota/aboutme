@@ -121,7 +121,7 @@ cmd_lock() { # kind tag
   ts=$(now)
   jq --arg o "$oid" --arg k "$kind" --arg s "$ts" --arg tag "$2" \
     '.operation_id = $o | .operation_kind = $k | .operation_started_at = $s | .operation_checked_at = $s
-     | if $k=="notice_restore" then .operation_tag=$tag else . end' <<<"$doc" | store
+     | .operation_tag=$tag' <<<"$doc" | store
   printf '%s\n' "$oid"
 }
 
@@ -261,6 +261,7 @@ cmd_release() { # id
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover && ( -e $mutation_file || -L $mutation_file ) ]]; then
     die "the cutover mutation marker remains; recover or clear it first"
   fi
+  [[ $(jq -r '.crowdsec_cutover_started // false' <<<"$doc") != true ]] || die "cutover requires exact completion"
   operation_release_guard
   jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
 }
@@ -304,6 +305,8 @@ cmd_check() { # release unit
       return 0
     fi
   fi
+  if [[ $unit != *.service ]]; then unit+=.service; fi
+  if load_cutover_library && cutover_consume "$unit"; then return 0; fi
   echo "aboutme-fence-refused unit=$unit retained-cutover-state"
   exit 1
 }
@@ -320,6 +323,7 @@ cmd_clear() { # reason
   [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker remains; recover it first"
   load
   [[ $(jq -r '.operation_kind // empty' <<<"$doc") != notice_restore ]] || die "notice restore requires exact-owner recovery"
+  [[ $(jq -r '.crowdsec_cutover_started // false' <<<"$doc") != true ]] || die "cutover requires exact completion"
   [[ -n $owner ]] || {
     say "no lock to clear"
     return 0
@@ -399,6 +403,44 @@ cmd_notice_restore_release() {
   jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' <<<"$doc" | store
 }
 
+cmd_check_current() {
+  load
+  local number
+  if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover ]]; then
+    number=$(candidate_of "$(jq -r .operation_tag <<<"$doc")")
+  else
+    cutover_safe /var/lib/aboutme/release.json 644 || die 'release record missing'
+    number=$(jq -er .release_number /var/lib/aboutme/release.json) || die 'release number missing'
+  fi
+  cmd_check "$number" "$1"
+}
+cmd_start_unit() {
+  local id=$1 tag=$2 unit=$3 result=0
+  (with_lock -x cutover_start_prepare "$id" "$tag" "$unit") || return 1
+  # ExecStartPre takes the same lock; never retain it across this wait.
+  systemctl start "$unit" >/dev/null 2>&1 || result=1
+  if ((result==0)); then
+    (with_lock -x cutover_start_finish "$id" "$tag" "$unit") && return 0
+  fi
+  (with_lock -x cutover_failure "$id") || true
+  return 1
+}
+cmd_complete_cutover() {
+  systemctl stop aboutme-watch.timer aboutme-watch.service >/dev/null 2>&1 || return 1
+  if ! (with_lock -x cutover_complete "$1" "$2"); then
+    (with_lock -x cutover_failure "$1") || true
+    return 1
+  fi
+}
+load_cutover_library() {
+  local cutover_library
+  cutover_library=$(dirname "${BASH_SOURCE[0]}")/crowdsec-cutover-state.sh
+  if [[ ! -f $cutover_library ]]; then cutover_library=$(dirname "${BASH_SOURCE[0]}")/../host/crowdsec-cutover-state.sh; fi
+  [[ -f $cutover_library && ! -L $cutover_library ]] || return 1
+  # shellcheck source=../host/crowdsec-cutover-state.sh
+  source "$cutover_library"
+}
+
 [[ $(id -u) == 0 ]] || die "run as root on the host"
 umask 022
 # Keep the existing root-only fixture seam; installed access always proves the
@@ -425,7 +467,14 @@ case "$#:${1-}" in
   2:release) with_lock -x cmd_release "$2" ;;
   3:notice-authority) with_lock -x cmd_notice_authority "$2" "$3" ;;
   2:notice-restore-release) with_lock -x cmd_notice_restore_release "$2" ;;
-  3:check) with_lock -s cmd_check "$2" "$3" ;;
+  3:check) with_lock -x cmd_check "$2" "$3" ;;
+  2:safety-result) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_safety_result "$2" ;;
+  2:check-current) load_cutover_library || die 'cutover helper missing'; with_lock -x cmd_check_current "$2" ;;
+  4:start-unit) load_cutover_library || die 'cutover helper missing'; cmd_start_unit "$2" "$3" "$4" ;;
+  3:cutover-mode) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_create_mode "$2" "$3" ;;
+  3:cutover-watch) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_watch_pass "$2" "$3" ;;
+  3:cutover-complete) load_cutover_library || die 'cutover helper missing'; cmd_complete_cutover "$2" "$3" ;;
+  2:cutover-fail) load_cutover_library || die 'cutover helper missing'; with_lock -x cutover_failure "$2" ;;
   2:clear) with_lock -x cmd_clear "$2" ;;
   4:recover-cutover) with_lock -x cmd_recover_cutover "$2" "$3" "$4" ;;
   4:recover-cutover-media) with_lock -x cmd_recover_cutover_media "$2" "$3" "$4" ;;

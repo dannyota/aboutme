@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Read-only admission and fenced policy for the pinned CrowdSec catalog.
 # See docs/design/crowdsec-http-privacy.md, Database and authorization.
 
@@ -16,11 +17,13 @@ crowdsec_db_root() {
     crowdsec_db_safe /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv 644
 }
 crowdsec_db_psql() {
+  if [[ ${crowdsec_db_restore:-} == yes ]]; then crowdsec_restore_authority || return 1; fi
   timeout 15 env -i PATH=/usr/bin:/bin PGPASSFILE=/dev/null PGSSLMODE=disable \
     /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
     -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
 }
 crowdsec_db_admin() {
+  if [[ ${crowdsec_db_restore:-} == yes ]]; then crowdsec_restore_authority || return 1; fi
   case ${1:-crowdsec} in postgres | crowdsec) ;; *) return 1 ;; esac
   timeout 15 runuser -u postgres -- env -i PATH=/usr/bin:/bin PGPASSFILE=/dev/null PGSSLMODE=disable \
     /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
@@ -54,15 +57,19 @@ except Exception: sys.exit(1)
 }
 crowdsec_db_mount() {
   # shellcheck source=crowdsec-privacy-notice-host.sh
-  source /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh
+  if ! declare -F notice_mount_identity >/dev/null; then
+    source /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh
+  fi
   crowdsec_db_mount_identity=$(notice_mount_identity) || return 1
 }
 crowdsec_db_authority() {
   local candidate
   [[ -n ${crowdsec_db_lock_fd:-} && -n ${crowdsec_db_owner:-} ]] || return 1
   [[ $(notice_mount_identity) == "$crowdsec_db_mount_identity" ]] || return 1
-  crowdsec_db_safe /var/lib/aboutme/fence.json 644 &&
+  crowdsec_db_safe /var/lib/aboutme/fence.json 644 || return 1
+  if [[ ${crowdsec_db_restore:-} != yes ]]; then
     crowdsec_db_safe /var/lib/aboutme/cutover-mutation.json 600 || return 1
+  fi
   [[ $(stat -Lc '%d:%i' "/proc/$$/fd/$crowdsec_db_lock_fd") == \
     "$(stat -c '%d:%i' /var/lib/aboutme/fence.lock)" ]] || return 1
   grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE' \
@@ -71,6 +78,10 @@ crowdsec_db_authority() {
   # exact same authority again while holding it, without a recursive helper.
   [[ $crowdsec_db_tag =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || return 1
   candidate=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
+  if [[ ${crowdsec_db_restore:-} == yes ]]; then
+    crowdsec_restore_authority
+    return
+  fi
   jq -e --arg owner "$crowdsec_db_owner" --arg tag "$crowdsec_db_tag" --argjson candidate "$candidate" '
     .operation_id == $owner and .operation_kind == "cutover"
     and (.minimum_release | type == "number" and . >= 0 and . == floor)
@@ -84,12 +95,44 @@ crowdsec_db_authority() {
       and .state == "active" and (.started_at | type == "string")
     ' /var/lib/aboutme/cutover-mutation.json >/dev/null 2>&1
 }
+crowdsec_restore_authority() {
+  [[ ${crowdsec_db_restore:-} == yes && $crowdsec_db_owner == "${notice_operation:?validated restore child context required}" && $crowdsec_db_tag == "${notice_admission:?validated restore child context required}" ]] || return 1
+  [[ $(notice_mount_identity) == "${notice_identity:?validated restore child context required}" ]] && notice_authority_check || return 1
+  jq -e --arg id "${notice_operation:?validated restore child context required}" --arg tag "${notice_admission:?validated restore child context required}" '
+    .operation_id==$id and .operation_kind=="notice_restore" and .operation_tag==$tag
+    and .notice_authority.state=="adopted"
+  ' /var/lib/aboutme/fence.json >/dev/null || return 1
+  [[ $(cat /var/lib/aboutme/privacy-notice/epoch) == "${notice_epoch:?validated restore child context required}" ]] &&
+    notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation &&
+    [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]] &&
+    notice_absent /var/lib/aboutme/privacy-notice/send.json &&
+    notice_absent /var/lib/aboutme/privacy-notice/activation.json &&
+    notice_absent /var/lib/aboutme/cutover-mutation.json || return 1
+  local entry descriptor held=no
+  for entry in /proc/$BASHPID/fd/*; do
+    if [[ $(readlink "$entry") == /run/aboutme/workload.lock ]]; then
+      descriptor=${entry##*/}
+      if grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE' "/proc/$BASHPID/fdinfo/$descriptor"; then held=yes; fi
+    fi
+  done
+  [[ $held == yes ]] || return 1
+  if notice_absent /var/lib/aboutme/release.json; then
+    notice_app_absent || return 1
+    ! pgrep -f '([/]usr/bin/crowdsec( |$)|[/]usr/bin/crowdsec-firewall-bouncer( |$)|[/]usr/bin/caddy( |$))' >/dev/null || return 1
+  else
+    # The state composition imports this library; lint both entry points separately.
+    # shellcheck source=/dev/null
+    source /usr/local/lib/aboutme/crowdsec-cutover-state.sh
+    cutover_stopped || return 1
+  fi
+}
 crowdsec_db_stopped() {
   local unit state
   for unit in crowdsec.service crowdsec-firewall-bouncer.service \
     aboutme-caddy.service aboutme-maintenance.service \
     aboutme-crowdsec-retention.timer aboutme-crowdsec-retention.service \
-    aboutme-crowdsec-retention-startup.service; do
+    aboutme-crowdsec-retention-startup.service aboutme-crowdsec-vacuum.timer \
+    aboutme-crowdsec-vacuum.service aboutme-watch.timer aboutme-watch.service; do
     state=$(systemctl show --all --property=ActiveState --property=Job "$unit" 2>/dev/null) || return 1
     [[ $(wc -l <<<"$state") == 2 ]] &&
       grep -qxE 'ActiveState=(inactive|failed)' <<<"$state" &&
@@ -97,7 +140,9 @@ crowdsec_db_stopped() {
   done
 }
 crowdsec_db_owned_lock() {
-  crowdsec_db_root && crowdsec_db_authority_input && crowdsec_db_mount || return 1
+  crowdsec_db_root || return 1
+  if [[ ${crowdsec_db_restore:-} != yes ]]; then crowdsec_db_authority_input || return 1; fi
+  crowdsec_db_mount || return 1
   # fence.sh owns checkpoint validation and durability. Do this before the
   # in-process lock and never call it from the protected section.
   /usr/local/lib/aboutme/fence.sh checkpoint "$crowdsec_db_owner" "$crowdsec_db_tag" \
@@ -269,8 +314,14 @@ crowdsec_db_ready() {
     "$(sha256sum /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv | cut -d' ' -f1)" | sha256sum | cut -d' ' -f1) || return 1
   [[ -z $expected || $expected == "$crowdsec_db_epoch" ]]
 }
+crowdsec_db_held_lock() {
+  [[ ${crowdsec_db_lock_fd:-} =~ ^[0-9]+$ && -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || return 1
+  [[ $(stat -Lc '%d:%i' "/proc/$BASHPID/fd/$crowdsec_db_lock_fd") == "$(stat -c '%d:%i' /var/lib/aboutme/fence.lock)" ]] || return 1
+  grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+(READ|WRITE)' "/proc/$BASHPID/fdinfo/$crowdsec_db_lock_fd"
+}
 crowdsec_db_read_lock() {
   crowdsec_db_root && crowdsec_db_mount || return 1
+  if [[ -n ${crowdsec_db_lock_fd:-} ]]; then crowdsec_db_held_lock; return; fi
   [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || return 1
   exec {crowdsec_db_lock_fd}</var/lib/aboutme/fence.lock || return 1
   flock -s -w 2 "$crowdsec_db_lock_fd"
@@ -360,5 +411,6 @@ except Exception: sys.exit(1)
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   set -euo pipefail
   umask 077
+  unset crowdsec_db_lock_fd
   crowdsec_db_main "$@" 2>/dev/null || { printf 'crowdsec_db_refused\n' >&2; exit 1; }
 fi

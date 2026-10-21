@@ -223,7 +223,12 @@ write_release_json() { # tag number server web caddy maintenance-image maintenan
 
 render_all() { # tag number server web caddy maintenance-image maintenance-tag maintenance-number
   local t name
-  "$fence" check "$2" deploy-host-render >/dev/null || die "$1 ($2) is below the release fence"
+  # Rendering is not a unit start. Exact ownership and candidate floors still
+  # apply while the cutover marker keeps every unattended start closed.
+  checkpoint
+  local floor
+  floor=$("$fence" read | jq -er .minimum_release) || die 'release floor unavailable'
+  (($2 >= floor)) || die "$1 ($2) is below the release fence"
   flags=$(flags_json)
   flags_check "$2"
   secrets_block=$(server_secrets)
@@ -388,6 +393,16 @@ step_render() { # server web caddy [observer]
   say "rendered $tag"
 }
 
+step_cutover_render() {
+  checkpoint
+  [[ $("$fence" read | jq -r .operation_kind) == cutover ]] || die 'cutover ownership required'
+  local number
+  number=$(release_number "$tag")
+  image_ok server "$1"; image_ok web "$2"; image_ok caddy "$3"
+  cimd_rollback_check "$number"
+  render_all "$tag" "$number" "$1" "$2" "$3" "$3" "$tag" "$number"
+}
+
 # Failed-deploy restoration: render the release that ran before this one.
 # It must still meet the fence, so an image below the floor never returns.
 step_restore_previous() {
@@ -434,10 +449,12 @@ step_secrets_check() {
 # bouncer acts only on SSH scenarios, so SSH stays open.
 step_ban_test() { # add|del ip
   [[ $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "'$2' is not an IPv4 address"
+  /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
+    die "CrowdSec database admission refused"
   if [[ $1 == add ]]; then
-    cscli decisions add --ip "$2" --duration 3m --type ban --reason aboutme-deploy-smoke >/dev/null
+    cscli decisions add --ip "$2" --duration 3m --type ban --reason aboutme-deploy-smoke >/dev/null 2>&1
   else
-    cscli decisions delete --ip "$2" >/dev/null
+    cscli decisions delete --ip "$2" >/dev/null 2>&1
   fi
 }
 
@@ -617,6 +634,7 @@ case "$step:$#" in
   ban-test:2) step_ban_test "$@" ;;
   app-down:0) step_app_down ;;
   render:3 | render:4) step_render "$@" ;;
+  cutover-render:3) step_cutover_render "$@" ;;
   restore-previous:0 | restore-previous:1) step_restore_previous "$@" ;;
   secrets-check:0) step_secrets_check ;;
   db-setup:0) step_oneshot aboutme-db-setup ;;

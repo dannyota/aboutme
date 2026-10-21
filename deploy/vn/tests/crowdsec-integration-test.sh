@@ -13,6 +13,20 @@ source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
 retention_fixture_start "$repo_root"
 retention_fixture_consumers
+# A second real pinned listener exercises maintenance's independent bouncer
+# cache. Process control remains the existing explicit namespace adapter.
+sed -e 's/:18080 {/:18081 {/' -e 's/respond "allowed" 200/respond "maintenance" 503/' \
+  "$retention_fixture/Caddyfile" >"$retention_fixture/Caddyfile.maintenance"
+python3 -I - "$retention_fixture/control" <<'PYCONTROL'
+import pathlib,sys
+path=pathlib.Path(sys.argv[1]); text=path.read_text()
+old='aboutme-maintenance.service) exit 1 ;;'
+assert text.count(old)==1
+text=text.replace(old,'''aboutme-maintenance.service)
+          spawn env XDG_CONFIG_HOME="$fixture/maintenance-state" XDG_DATA_HOME="$fixture/maintenance-state" \
+            "$fixture/bin/caddy" run --config "$fixture/Caddyfile.maintenance" --adapter caddyfile ;;''')
+path.write_text(text)
+PYCONTROL
 sql() {
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
   printf '%s\n' "$1" | retention_fixture_sql
@@ -372,6 +386,9 @@ ip addr add 192.0.2.81/32 dev lo >/dev/null 2>&1
 ip -6 addr add 2001:db8::81/128 dev lo >/dev/null 2>&1
 wait_status 403 192.0.2.41 http://127.0.0.1:18080/
 wait_status 403 192.0.2.45 http://127.0.0.1:18080/
+systemctl start aboutme-maintenance.service
+wait_status 403 192.0.2.41 http://127.0.0.1:18081/
+wait_status 403 192.0.2.45 http://127.0.0.1:18081/
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip,source_scope,source_value,capacity,events_count,leak_speed,simulated) VALUES
  (90000,now(),now(),now(),now(),'crowdsecurity/ssh-bf','192.0.2.80','Ip','192.0.2.80',1,1,'1s',false),
  (90001,now(),now(),now(),now(),'crowdsecurity/ssh-bf','2001:db8::80','Ip','2001:db8::80',1,1,'1s',false),
@@ -410,6 +427,8 @@ sql "UPDATE alerts SET created_at=now()-interval '23 hours 31 minutes'
 [[ $(sql 'SELECT name,api_key FROM bouncers ORDER BY id;' | sha256sum) == "$bouncer_digest" ]]
 nft list table inet retention_unrelated >/dev/null
 wait_status 200 192.0.2.41 http://127.0.0.1:18080/
+wait_status 503 192.0.2.41 http://127.0.0.1:18081/
+wait_status 403 192.0.2.45 http://127.0.0.1:18081/
 wait_status 200 192.0.2.80 http://127.0.0.1:18080/
 wait_status 200 2001:db8::80 'http://[::1]:18080/'
 wait_status timeout 192.0.2.81 http://127.0.0.1:18080/
@@ -420,7 +439,7 @@ wait_status 403 192.0.2.45 http://127.0.0.1:18080/
 /usr/local/lib/aboutme/crowdsec-vacuum.sh
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 # A genuine lease is accepted before independent failures remove authorization.
-systemctl stop aboutme-caddy.service crowdsec-firewall-bouncer.service crowdsec.service
+systemctl stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service
 sql "UPDATE alerts SET created_at=now()-interval '23 hours 31 minutes' WHERE source_ip='192.0.2.45';" >/dev/null
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.45';") == 0 ]]
@@ -443,6 +462,41 @@ runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-database-loss-stops-consumers-and-removes-feeds\n'
+
+# Restoration drops old samples, statistics and registrations rather than
+# cleaning rows in place. The application sentinel stays in its own database.
+runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
+  -h /run/postgresql -d crowdsec >/dev/null 2>&1 <<'SQL'
+ALTER TABLE public.alerts ALTER COLUMN source_ip SET STATISTICS 1;
+ANALYZE public.alerts;
+SQL
+if /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1; then
+  echo 'FAIL contaminated-statistics-admission'; exit 1
+fi
+op=$(jq -r .operation_id /var/lib/aboutme/fence.json)
+printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$op" |
+  /usr/local/lib/aboutme/crowdsec-provision.sh restore-reset >/dev/null 2>&1
+[[ $(sql 'SELECT count(*) FROM alerts;') == 0 ]]
+[[ $(sql 'SELECT count(*) FROM machines;') == 0 ]]
+[[ $(sql 'SELECT count(*) FROM bouncers;') == 0 ]]
+[[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
+[[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
+old_key=$(sha256sum "$retention_fixture/caddy.key" | cut -d' ' -f1)
+crowdsec_admitted_cli machines add -a --force --error >/dev/null 2>&1
+crowdsec_admitted_cli bouncers add aboutme-firewall -o raw >"$retention_fixture/firewall.key" 2>/dev/null
+install -m 0600 "$retention_fixture/caddy.key" "$retention_fixture/old-caddy.key"
+crowdsec_admitted_cli bouncers add aboutme-caddy -o raw >"$retention_fixture/caddy.key" 2>/dev/null
+[[ $(sha256sum "$retention_fixture/caddy.key" | cut -d' ' -f1) != "$old_key" ]]
+cat "$edge/bouncers/crowdsec-firewall-bouncer.yaml.local" >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+printf 'api_key: %s\n' "$(cat "$retention_fixture/firewall.key")" >>/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+/usr/local/lib/aboutme/crowdsec-retention.sh startup
+systemctl start crowdsec.service
+old_code=$(printf 'header = "X-Api-Key: %s"\n' "$(cat "$retention_fixture/old-caddy.key")" |
+  curl -s -o /dev/null -w '%{http_code}' --max-time 5 -K - http://127.0.0.1:8095/v1/decisions)
+[[ $old_code == 401 || $old_code == 403 ]]
+systemctl start crowdsec-firewall-bouncer.service aboutme-caddy.service
+wait_status 200 192.0.2.41 http://127.0.0.1:18080/
+printf 'PASS fresh-reset-discards-statistics-and-registrations\nPASS replaced-credential-rejects-old-key\n'
 
 [[ ! -e /etc/crowdsec/online_api_credentials.yaml ]] || {
   echo "central API credentials exist" >&2

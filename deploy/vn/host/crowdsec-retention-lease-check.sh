@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
-# Every start revalidates the current database epoch and the retention lease.
-set -euo pipefail
+# shellcheck source-path=SCRIPTDIR
+# Every check revalidates the current epoch; source-only callers retain their lock.
 
-lease=${1:-/run/aboutme/crowdsec-retention-ok}
-if ((EUID == 0)) && (($# != 0)); then exit 2; fi
-for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
-  systemctl is-enabled --quiet "$timer"
-  systemctl is-active --quiet "$timer"
-done
-[[ -f $lease && ! -L $lease ]]
-epoch=$(python3 -I - "$lease" <<'PY' 2>/dev/null
+crowdsec_lease_file() {
+  crowdsec_lease_epoch=$(python3 -I - /run/aboutme/crowdsec-retention-ok <<'PY' 2>/dev/null
 import os,re,stat,sys,time
 try:
     fd=os.open(sys.argv[1],os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
@@ -22,6 +16,27 @@ try:
     print(raw.decode('ascii'),end='')
 except Exception: sys.exit(1)
 PY
-) || exit 1
-printf '%s\n' "$epoch" | /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready \
-  >/dev/null 2>&1
+  )
+}
+crowdsec_lease_check() {
+  # The executed preflight-ready interface and this source-only path use the
+  # same complete read-only gate. Internal callers retain the canonical lock.
+  # shellcheck source=crowdsec-db.sh
+  source /usr/local/lib/aboutme/crowdsec-db.sh
+  crowdsec_db_read_lock && crowdsec_lease_file && crowdsec_db_ready "$crowdsec_lease_epoch" || return 1
+  local timer normal=yes
+  for timer in aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer; do
+    systemctl is-enabled --quiet "$timer" && systemctl is-active --quiet "$timer" || normal=no
+  done
+  if [[ $normal == yes ]]; then return 0; fi
+  # The state composition imports this lease library; avoid recursive static expansion.
+  # shellcheck source=/dev/null
+  source /usr/local/lib/aboutme/crowdsec-cutover-state.sh
+  cutover_mode || cutover_bootstrap
+}
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  set -euo pipefail
+  (($#==0)) || exit 2
+  unset crowdsec_db_lock_fd
+  crowdsec_lease_check >/dev/null 2>&1
+fi

@@ -7,6 +7,8 @@ OnFailure=aboutme-alert@%N.service
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check-current aboutme-crowdsec-vacuum.service
+ExecStartPost=/usr/local/lib/aboutme/fence.sh safety-result aboutme-crowdsec-vacuum.service
 ExecStart=/usr/local/lib/aboutme/crowdsec-vacuum.sh
 TimeoutStartSec=5min
 StandardOutput=null

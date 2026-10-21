@@ -57,7 +57,7 @@ for path in sys.argv[1:]:
             if value: commands.append(value)
             else: commands=[]
 gate='/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh'
-assert commands==[gate,'/usr/bin/crowdsec-firewall-bouncer -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml -t',gate]
+assert commands==['/usr/local/lib/aboutme/fence.sh check-current crowdsec-firewall-bouncer.service',gate,'/usr/bin/crowdsec-firewall-bouncer -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml -t',gate]
 PY
   install -d -m 0755 /etc/crowdsec /etc/systemd/system/crowdsec.service.d \
     /etc/systemd/system/crowdsec-firewall-bouncer.service.d
@@ -111,7 +111,7 @@ for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
     commands[key]=commands.get(key,'')+' '+value
 gate='/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh'
 def paths(key): return re.findall(r'\bpath=([^ ;]+)',commands[key])
-assert paths('ExecStartPre')==[gate,'/usr/bin/crowdsec',gate]
+assert paths('ExecStartPre')==['/usr/local/lib/aboutme/fence.sh',gate,'/usr/bin/crowdsec',gate]
 assert paths('ExecStart')==['/usr/bin/crowdsec']
 assert paths('ExecReload')==[gate,'/usr/bin/crowdsec',gate,'/bin/kill']
 assert '-t -error' in commands['ExecStartPre'] and '-t -error' in commands['ExecReload']
@@ -133,7 +133,14 @@ PY
   [[ -z $(find /var/lib/crowdsec -type f -name '*.db*' -print -quit) ]]
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
+  before_stage=$(catalog | sha256sum)
+  strace -f -e trace=execve -o "$proof/restore-stage-exec" \
+    bash "$repo_root/deploy/vn/host/crowdsec-restore-stage.sh" "$repo_root/deploy/vn" >/dev/null 2>&1
+  [[ $(catalog | sha256sum) == "$before_stage" ]]
+  (cd / && sha256sum --check --status /usr/local/lib/aboutme/crowdsec-restore-binaries.sha256)
+  if grep -Eq 'execve\("/usr/bin/(cscli|crowdsec)"|--configure|postinst|preinst' "$proof/restore-stage-exec"; then exit 1; fi
+  [[ ! -e /usr/local/lib/aboutme/quadlet && ! -e /var/lib/aboutme/release.json ]]
+  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\nPASS authenticated-executable-only-restore-stage\n'
   exit 0
 fi
 

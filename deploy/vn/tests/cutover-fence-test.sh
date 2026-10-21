@@ -2,6 +2,141 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+if [[ ${1:-} == systemd ]]; then
+  [[ $EUID == 0 && ${GITHUB_ACTIONS:-} == true ]] || exit 2
+  lib=/usr/local/lib/aboutme
+  install -d -m 0755 "$lib" /run/aboutme /srv/data /var/lib/aboutme
+  guest=$(mktemp -d /run/cutover-systemd.XXXXXX)
+  truncate -s 64M "$guest/disk"
+  mkfs.ext4 -q -L aboutme-data "$guest/disk"
+  device=$(losetup --find --show "$guest/disk")
+  mount "$device" /srv/data
+  install -d -m 0755 /srv/data/aboutme
+  install -d -m 0700 /srv/data/host-operations
+  mount --bind /srv/data/aboutme /var/lib/aboutme
+  cleanup_guest() {
+    local result=$?
+    trap - EXIT
+    systemctl stop aboutme-watch.timer aboutme-watch.service aboutme-crowdsec-retention.timer \
+      aboutme-crowdsec-vacuum.timer aboutme-crowdsec-retention.service aboutme-crowdsec-vacuum.service \
+      aboutme-crowdsec-retention-startup.service aboutme-caddy.service aboutme-maintenance.service \
+      aboutme-server.service aboutme-web.service crowdsec.service crowdsec-firewall-bouncer.service >/dev/null 2>&1 || true
+    umount /var/lib/aboutme /srv/data || result=1
+    losetup -d "$device" || result=1
+    rm -rf -- "$guest"
+    exit "$result"
+  }
+  trap cleanup_guest EXIT
+  trap 'echo "FAIL systemd-cutover-boundary" >&2' ERR
+  for helper in crowdsec-db crowdsec-provision crowdsec-cutover-state crowdsec-privacy-notice-host \
+    crowdsec-retention crowdsec-retention-lease-check crowdsec-retention-fail crowdsec-vacuum; do
+    install -m 0755 "$repo_root/deploy/vn/host/$helper.sh" "$lib/$helper.sh"
+  done
+  install -m 0755 "$repo_root/deploy/vn/scripts/fence.sh" "$lib/fence.sh"
+  install -m 0755 "$repo_root/deploy/vn/scripts/deploy-safety.sh" "$lib/deploy-safety.sh"
+  install -m 0644 "$repo_root/deploy/vn/host/crowdsec-schema-v1.8.1.tsv" "$lib/"
+  printf '#!/bin/sh\nexit 0\n' >"$lib/alert.sh"
+  chmod 0755 "$lib/alert.sh"
+  install -d -m 0700 /run/aboutme/crowdsec
+  install -d -o 10001 -g 10001 -m 0750 /run/aboutme/caddy-log
+  install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
+  "$lib/fence.sh" init >/dev/null 2>&1
+  "$lib/crowdsec-privacy-notice-host.sh" initialize >/dev/null 2>&1
+  install -m 0444 /dev/null /var/lib/aboutme/privacy-notice/activation.json
+  printf '{"release_tag":"v0.8.9","release_number":8009,"maintenance_tag":"v0.8.9"}\n' >/var/lib/aboutme/release.json
+  chmod 0644 /var/lib/aboutme/release.json
+  # Real manager invocations/cgroups and real PostgreSQL/retention; consumer
+  # payloads here are bounded sleeps, not production images or cache proof.
+  for unit in aboutme-server aboutme-web aboutme-caddy aboutme-maintenance crowdsec crowdsec-firewall-bouncer; do
+    systemctl unmask --runtime "$unit.service" >/dev/null 2>&1
+    cat >"/etc/systemd/system/$unit.service" <<UNIT
+[Service]
+Type=simple
+ExecStartPre=$lib/fence.sh check-current $unit.service
+ExecStart=/bin/sleep 600
+UNIT
+    install -d -m 0755 "/etc/systemd/system/$unit.service.d"
+    cat >"/etc/systemd/system/$unit.service.d/99-cutover-fixture.conf" <<UNIT
+[Service]
+ExecStartPre=
+ExecStartPre=$lib/fence.sh check-current $unit.service
+UNIT
+  done
+  install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/aboutme-crowdsec-retention-failure.service" /etc/systemd/system/aboutme-crowdsec-retention-failure.service
+  for unit in aboutme-crowdsec-retention-startup aboutme-crowdsec-retention aboutme-crowdsec-vacuum; do
+    install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/$unit.service" "/etc/systemd/system/$unit.service"
+  done
+  for unit in aboutme-crowdsec-retention aboutme-crowdsec-vacuum; do
+    install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/$unit.timer" "/etc/systemd/system/$unit.timer"
+  done
+  install -m 0755 "$repo_root/deploy/vn/host/bin/watch.sh" "$lib/watch.sh"
+  install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/aboutme-watch.service" /etc/systemd/system/aboutme-watch.service
+  install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/aboutme-watch.timer" /etc/systemd/system/aboutme-watch.timer
+  systemctl daemon-reload
+  systemctl stop aboutme-watch.timer aboutme-watch.service aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer
+  systemctl disable aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer >/dev/null 2>&1
+  owner=$("$lib/fence.sh" lock cutover v0.8.9)
+  "$lib/fence.sh" mutation-start "$owner" v0.8.9 reset-db
+  printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "$owner" | "$lib/crowdsec-provision.sh" restore-reset >/dev/null 2>&1
+  if "$lib/fence.sh" start-unit AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA v0.8.9 aboutme-server.service >/dev/null 2>&1; then exit 1; fi
+  for unit in aboutme-migrate.service aboutme-job@privacy-retention-sweep.service aboutme-crowdsec-retention.timer; do
+    if "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit" >/dev/null 2>&1; then exit 1; fi
+  done
+  "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-vacuum.service
+  "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-retention-startup.service
+  if "$lib/crowdsec-retention-lease-check.sh" >/dev/null 2>&1; then exit 1; fi
+  "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-crowdsec-retention.service
+  "$lib/fence.sh" cutover-mode "$owner" v0.8.9
+  cp -p /run/aboutme/crowdsec-cutover/mode.json "$guest/mode.json"
+  for fault in marker epoch outcomes; do
+    jq --arg fault "$fault" 'if $fault=="outcomes" then .outcomes={} else .[$fault]="invalid" end' \
+      "$guest/mode.json" >/run/aboutme/crowdsec-cutover/mode.json
+    if "$lib/crowdsec-retention-lease-check.sh" >/dev/null 2>&1; then exit 1; fi
+  done
+  cp -p "$guest/mode.json" /run/aboutme/crowdsec-cutover/mode.json
+  cp -p /run/aboutme/crowdsec-retention-ok "$guest/lease"
+  for timestamp in '7 minutes ago' '+1 minute'; do
+    touch -d "$timestamp" /run/aboutme/crowdsec-retention-ok
+    if "$lib/crowdsec-retention-lease-check.sh" >/dev/null 2>&1; then exit 1; fi
+  done
+  cp -p "$guest/lease" /run/aboutme/crowdsec-retention-ok
+  "$lib/fence.sh" cutover-watch "$owner" v0.8.9
+  for unit in crowdsec crowdsec-firewall-bouncer aboutme-web aboutme-server aboutme-caddy; do
+    "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"
+  done
+  if "$lib/fence.sh" check-current aboutme-caddy.service >/dev/null 2>&1; then exit 1; fi
+  if "$lib/fence.sh" start-unit "$owner" v0.8.9 aboutme-maintenance.service >/dev/null 2>&1; then exit 1; fi
+  # A real masked timer forces a post-marker completion failure. The same
+  # owner and restored marker must block every start until fresh safety passes.
+  mv /etc/systemd/system/aboutme-crowdsec-vacuum.timer "$guest/vacuum.timer"
+  ln -s /dev/null /etc/systemd/system/aboutme-crowdsec-vacuum.timer
+  systemctl daemon-reload
+  if "$lib/fence.sh" cutover-complete "$owner" v0.8.9 >/dev/null 2>&1; then exit 1; fi
+  [[ -f /var/lib/aboutme/cutover-mutation.json ]]
+  [[ $("$lib/fence.sh" read | jq -r .operation_id) == "$owner" ]]
+  for unit in aboutme-caddy crowdsec crowdsec-firewall-bouncer; do
+    ! systemctl is-active --quiet "$unit.service"
+    if "$lib/fence.sh" check-current "$unit.service" >/dev/null 2>&1; then exit 1; fi
+  done
+  rm /etc/systemd/system/aboutme-crowdsec-vacuum.timer
+  mv "$guest/vacuum.timer" /etc/systemd/system/aboutme-crowdsec-vacuum.timer
+  systemctl daemon-reload
+  systemctl stop aboutme-crowdsec-retention-startup.service
+  for unit in aboutme-crowdsec-vacuum aboutme-crowdsec-retention-startup aboutme-crowdsec-retention; do
+    "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"
+  done
+  "$lib/fence.sh" cutover-mode "$owner" v0.8.9
+  "$lib/fence.sh" cutover-watch "$owner" v0.8.9
+  for unit in crowdsec crowdsec-firewall-bouncer aboutme-web aboutme-server aboutme-caddy; do
+    "$lib/fence.sh" start-unit "$owner" v0.8.9 "$unit.service"
+  done
+  "$lib/fence.sh" cutover-complete "$owner" v0.8.9
+  [[ $("$lib/fence.sh" read | jq -r '.operation_id // empty') == '' ]]
+  [[ ! -e /var/lib/aboutme/cutover-mutation.json ]]
+  "$lib/crowdsec-retention-lease-check.sh"
+  echo 'PASS systemd-cutover-lifecycle'
+  exit 0
+fi
 fence=$repo_root/deploy/vn/scripts/fence.sh
 safety=$repo_root/deploy/vn/scripts/deploy-safety.sh
 work=$(mktemp -d)
@@ -228,4 +363,22 @@ for evidence in 'null' '{}' '{"version":2,"state":"adopted"}' \
     exit 1
   fi
 done
+# The unit set is exact; normalization cannot turn an unlisted name into authority.
+# shellcheck source=../host/crowdsec-cutover-state.sh
+source "$repo_root/deploy/vn/host/crowdsec-cutover-state.sh"
+for unit in aboutme-server.service aboutme-web.service crowdsec.service \
+  crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service \
+  aboutme-crowdsec-retention-startup.service aboutme-crowdsec-retention.service \
+  aboutme-crowdsec-vacuum.service; do
+  cutover_unit_allowed "$unit"
+done
+for unit in aboutme-job@privacy-retention-sweep.service aboutme-migrate.service \
+  aboutme-db-setup.service aboutme-crowdsec-retention.timer arbitrary.service \
+  ../aboutme-server.service aboutme-server; do
+  if cutover_unit_allowed "$unit"; then echo 'FAIL cutover-unit-allowlist'; exit 1; fi
+done
+# An argument or process environment is not live service membership.
+if cutover_invocation aboutme-crowdsec-retention.service >/dev/null 2>&1; then
+  echo 'FAIL cutover-invocation-membership'; exit 1
+fi
 echo "cutover fence tests passed"
