@@ -82,6 +82,11 @@ and delivery checks.
 
 ## Deploy
 
+For the first CrowdSec PostgreSQL storage transition, use the
+[CrowdSec PostgreSQL runbook](crowdsec-postgresql.md). Do not run the ordinary
+full installer or deployer before that transition. Source configuration alone
+does not establish that transition or its production proofs.
+
 Use the current reviewed checkout's deployer. Publication and deployment share
 `scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
 resolve to a commit on `main` fetched from `dannyota/aboutme`, and have a
@@ -139,7 +144,9 @@ Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 ## Host operations
 
 Follow the [CrowdSec privacy notice runbook](crowdsec-privacy-notice.md) for
-first adoption, initial reconciliation, notification, and activation.
+first adoption, initial reconciliation, notification, and activation. The
+existing production campaign is complete; do not resend it or recapture its
+cohort for the storage transition.
 
 Account deletion first ships in v0.7.9. Publish the reviewed image, install its
 reviewed bundle, then deploy it before use. Follow the
@@ -229,7 +236,11 @@ is no AWS recovery copy.
 The quarterly [restore drill](../../deploy/vn/README.md#restore-drill) restores
 the latest backup and a point-in-time target to a temporary encrypted server.
 Outbound networking for that server remains open; do not claim a completed drill
-from backup configuration alone.
+from backup configuration alone. The
+[CrowdSec restore procedure](crowdsec-postgresql.md#restore) discards restored
+attack data, statistics, and registrations before consumer restart.
+Whole-cluster backups include CrowdSec under its accepted recovery and
+expiration policy.
 
 ## Alarms
 
@@ -283,8 +294,8 @@ Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 - Root and data volume use above 70%, failed units, and PostgreSQL on its
   socket.
 - WAL archive failure, unreadable backups, and newest backup age at 26 hours.
-- CrowdSec retention timer and lease, CrowdSec alert counts, and malformed
-  Coraza logs or unknown record kinds in the last hour.
+- CrowdSec retention/vacuum timers and lease, CrowdSec alert counts, and
+  malformed Coraza logs or unknown record kinds in the last hour.
 - `totp_unavailable` in the server journal.
 
 Operation request and retention units also trigger `OnFailure=` mail. Their
@@ -373,7 +384,8 @@ Healthy state has these properties:
   `aboutme-maintenance` is inactive.
 - Public `/healthz` and `/readyz` return 200, and `www` redirects to the apex.
 - The four job timers, backup timers, host watcher, and CrowdSec retention timer
-  are enabled and active.
+  are enabled and active. After the PostgreSQL transition, the CrowdSec vacuum
+  timer is also enabled and active, with normal scheduled passes observed.
 - The fence has no operation lock or mutation marker between operations.
 - vMonitor `aboutme-readyz` is healthy, both quotas are active, and the uptime
   backstop is enabled with recent successful runs.

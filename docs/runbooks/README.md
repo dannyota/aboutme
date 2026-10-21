@@ -14,6 +14,7 @@ can support setup while leaving key rotation open.
 | [Realtime](realtime.md)                               | Supported                           | Check stream bounds, recovery, refresh, and revocation                     |
 | [Authentication email](email.md)                      | Supported                           | Operate Bizfly SMTP and the Google Workspace mailbox                       |
 | [CrowdSec privacy notice](crowdsec-privacy-notice.md) | Supported                           | First adoption, initial reconciliation, notification, and activation       |
+| [CrowdSec PostgreSQL](crowdsec-postgresql.md)         | Supported                           | First storage transition (pending), retention failure, and restore         |
 | [Production](production.md)                           | Supported                           | Deploy, rollback, access, edge settings, and secrets                       |
 | [DNS](dns.md)                                         | Supported                           | Cloudflare DNS-only records and DNSSEC                                     |
 | [CloudFront](cloudfront.md)                           | Reference                           | Certificates and edge checks for the undeployed AWS path                   |

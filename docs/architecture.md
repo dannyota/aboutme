@@ -62,6 +62,44 @@ lifecycle commands and backup expiry.
 Database role and migration boundaries are described in
 [resume data](architecture/resume-data.md#database-roles).
 
+## Implemented CrowdSec storage and privacy
+
+The host source uses a separate `crowdsec` database and least-privilege role in
+the existing PostgreSQL 18 cluster. Root peer authentication through the Unix
+socket admits the engine and retention helpers; application identities have no
+access. There is no TCP, password, application-database, or SQLite fallback. The
+cluster still shares memory, WAL, backups, and recovery failures.
+
+Every schema-capable engine or `cscli` call requires the complete read-only
+catalog, ownership, grants, logging, statistics, and database-epoch gate. Fresh
+provisioning disables table autovacuum and sets every column statistics target
+to zero before ingestion. An hourly serialized `VACUUM (ANALYZE FALSE)` replaces
+ordinary automatic maintenance. Statistics contamination requires fenced fresh
+provisioning. The
+[privacy contract](design/crowdsec-http-privacy.md#database-and-authorization)
+owns exact connection, policy, and logging bounds.
+
+Startup and five-minute runtime retention verify physical cleanup and renew a
+short-lived root-owned lease only on success. An independent watchdog closes
+consumer admission on invalid policy, database epoch, clock, lease, or
+scheduling state. Failure stops both Caddy modes, CrowdSec, and the firewall
+bouncer, clears their owned state, and leaves PostgreSQL available to the app.
+Every cluster or point-in-time restore replaces CrowdSec storage and
+registrations; application data is preserved.
+
+The direct-edge feed has seven allowlisted fields. Only unknown routes returning
+400, 404, or 405 may contribute an escaped target path of at most 512 bytes;
+known routes, queries, headers, and bodies contribute no target sample. Feeds
+and sensitive consumer logs stay on no-swap tmpfs. Configuration disables
+community, console, and intelligence clients; this describes configuration, not
+an observed absence of outbound traffic. Physical cluster backups include
+CrowdSec under the
+[accepted backup lifetime](design/crowdsec-http-privacy.md#backups-and-restore).
+
+This section describes implemented source and configuration. Deployment requires
+exact-release CI, the isolated pre-cutover rehearsal, and production proof
+through the [CrowdSec PostgreSQL runbook](runbooks/crowdsec-postgresql.md).
+
 ## Dependencies and trust boundaries
 
 The [repository design](design/repository.md) owns dependency direction. Caddy
