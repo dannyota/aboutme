@@ -410,6 +410,15 @@ describe('useResumeList', () => {
       const first = list.create('First', undefined);
       const second = list.create('First', undefined);
       expect(coordinator.createResume).toHaveBeenCalledTimes(1);
+      await expect(list.create('Second', undefined)).resolves.toEqual({
+        kind: 'blocked', intentId: '', reason: 'unknown',
+      });
+      await expect(list.create('First', undefined, undefined, {
+        isCurrent: () => true,
+      })).resolves.toEqual({
+        kind: 'blocked', intentId: '', reason: 'unknown',
+      });
+      expect(coordinator.createResume).toHaveBeenCalledTimes(1);
       resolveCreate?.({ kind: 'rejected', code: 'request_invalid' });
 
       await expect(second).resolves.toEqual(await first);
@@ -1595,7 +1604,7 @@ describe('resume list page language action', () => {
     vi.mocked(navigateTo).mockReset();
     forgetLanguageTwin();
     const ownerId = ref('owner-1');
-    const authState = ref<'authenticated' | 'anonymous'>('authenticated');
+    const authState = ref<authModule.AuthState>('authenticated');
     const auth = {
       user: computed(() => ({ id: ownerId.value })),
       authState,
@@ -1680,6 +1689,76 @@ describe('resume list page language action', () => {
     }
   });
 
+  it('opens the twin and hands off its checklist after a same-owner refresh',
+    async () => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValue(new Promise(
+          (resolve) => { resolveCreate = resolve; },
+        ));
+        await context.selectTwin();
+        context.authState.value = 'loading';
+        await flushPromises();
+        context.authState.value = 'authenticated';
+        await flushPromises();
+        resolveCreate({
+          kind: 'created',
+          resume: acceptedFixture({
+            metadata: { ...context.accepted.metadata, id: 'twin' },
+          }),
+        });
+        await flushPromises();
+        expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
+        expect(readLanguageTwin('twin')?.target).toBe('vi');
+      } finally {
+        context.dispose();
+      }
+    });
+
+  it.each(['rejected', 'opaque-create'])(
+    'does not give a later owner a pending create result of %s',
+    async (kind) => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValueOnce(new Promise(
+          (resolve) => { resolveCreate = resolve; },
+        ));
+        await context.selectTwin();
+        context.authState.value = 'loading';
+        await flushPromises();
+        context.ownerId.value = 'owner-2';
+        context.api.list.mockResolvedValue({
+          kind: 'ready', items: [summary({ id: 'resume-2' })],
+        });
+        context.authState.value = 'authenticated';
+        await flushPromises();
+        await context.selectTwin();
+        expect(context.coordinator.createResume).toHaveBeenCalledTimes(1);
+        resolveCreate(kind === 'rejected'
+          ? { kind, code: 'resume_cap_exceeded' }
+          : { kind, outcome: opaqueOutcome() });
+        await flushPromises();
+        expect(document.body.textContent).not.toContain('Refresh list');
+        expect(document.body.textContent).not.toContain('Abandon');
+        expect(document.body.textContent).not.toContain(
+          'You have reached the resume limit.',
+        );
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+        await context.selectTwin();
+        expect(context.coordinator.createResume).toHaveBeenCalledTimes(2);
+        expect(context.coordinator.createResume).toHaveBeenLastCalledWith(
+          expect.objectContaining({ ownerId: 'owner-2' }),
+        );
+        expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
+      } finally {
+        context.dispose();
+      }
+    },
+  );
+
   it('opens recovery after an uncertain twin and offers refresh and abandon',
     async () => {
       const context = await page();
@@ -1751,7 +1830,7 @@ describe('resume list page language action', () => {
       }
     });
 
-  it.each(['owner-change', 'unmount'])(
+  it.each(['owner-change', 'session-loss', 'unmount'])(
     'does not open a completed twin after %s',
     async (change) => {
       const context = await page();
@@ -1763,7 +1842,10 @@ describe('resume list page language action', () => {
         await context.selectTwin();
         expect(context.coordinator.createResume).toHaveBeenCalledTimes(1);
         if (change === 'unmount') context.unmount();
-        else context.ownerId.value = 'owner-2';
+        else if (change === 'session-loss') {
+          context.authState.value = 'anonymous';
+          context.authState.value = 'authenticated';
+        } else context.ownerId.value = 'owner-2';
         resolveCreate({
           kind: 'created',
           resume: acceptedFixture({
