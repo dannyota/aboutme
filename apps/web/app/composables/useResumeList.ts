@@ -247,7 +247,12 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       ...(document === undefined ? {} : { document }),
     };
     const promise = coordinator.createResume(intent).then(async (result) => {
-      await waitForAuth();
+      while (
+        !disposed.value
+        && (authState.value === 'loading' || authState.value === 'error')
+      ) {
+        await waitForAuth();
+      }
       if (
         disposed.value
         || ownerId.value !== intent.ownerId
