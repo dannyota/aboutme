@@ -33,11 +33,9 @@ die() {
 }
 say() { echo "install: $*"; }
 
-# ABOUTME_INSTALL_ONLY=postgres stops once PostgreSQL and pgBackRest are
-# installed and configured, with no timer, agent, or CrowdSec: the restore
-# drill server (scripts/restore-drill.sh) needs nothing else.
+# ABOUTME_INSTALL_ONLY=postgres installs PostgreSQL and pgBackRest only.
 only=${ABOUTME_INSTALL_ONLY:-}
-case $only in "" | postgres) ;; *) die "ABOUTME_INSTALL_ONLY must be empty or postgres" ;; esac
+case $only in "" | postgres) ;; *) die "invalid installation mode" ;; esac
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
@@ -46,6 +44,10 @@ bundle=$(readlink -f "$1")
 # enter, not the caller's home.
 cd /
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
+# Validate the incoming denial primitive before any persistent-state access.
+# shellcheck source=crowdsec-privacy-notice-host.sh
+source "$bundle/host/crowdsec-privacy-notice-host.sh"
+notice_mount_identity >/dev/null 2>&1 || die "invalid_state"
 mountpoint -q /srv/data || die "/srv/data is not a mountpoint; run host/data-volume.sh first"
 # shellcheck source=crowdsec-offline.sh
 source "$bundle/host/crowdsec-offline.sh"
@@ -80,15 +82,43 @@ for operation in /srv/data/host-operations/*; do
   jq -e '.closureQuiescent==true and .fenceHeld==false and (.action.writeOutcome!="unknown") and (.phase=="closed" or .phase=="planned" or .phase=="serving")' <<<"$operation_record" >/dev/null || die "an operation remains unresolved"
 done
 
+# Adoption is explicit and precedes ordinary helper replacement on legacy hosts.
+if [[ -e /var/lib/aboutme/fence.json ]]; then
+  jq -e '(.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null 2>&1 || die "an operation remains owned"
+fi
+if [[ -e /var/lib/aboutme/release.json ]]; then
+  jq -e '.notice_authority.state=="adopted"' /var/lib/aboutme/fence.json >/dev/null 2>&1 || die "notice adoption is required"
+fi
+lib=/usr/local/lib/aboutme
+install -d -o root -g root -m 0755 "$lib" /run/aboutme
+for required in host/crowdsec-privacy-notice-host.sh host/workload-lock.sh \
+  scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh \
+  scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh; do
+  [[ -f $bundle/$required && ! -L $bundle/$required ]] || die "required notice helper is missing"
+  install -o root -g root -m 0755 "$bundle/$required" "$lib/${required##*/}"
+done
+"$lib/crowdsec-privacy-notice-host.sh" initialize || die "invalid_state"
+
 export DEBIAN_FRONTEND=noninteractive
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+crowdsec_install_closed=no
+cleanup_install() {
+  local status=$?
+  trap - EXIT
+  if [[ $crowdsec_install_closed == yes ]]; then
+    "$lib/crowdsec-retention-fail.sh" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$tmp"
+  exit "$status"
+}
+trap cleanup_install EXIT
 
 timers=(
   aboutme-operation-retention.timer
   aboutme-watch.timer
   aboutme-deployment-document.timer
   aboutme-crowdsec-retention.timer
+  aboutme-crowdsec-vacuum.timer
   aboutme-backup-full.timer
   aboutme-backup-diff.timer
   aboutme-backup-verify.timer
@@ -140,7 +170,7 @@ apt-get update -qq
 # age encrypts the secrets copy; msmtp sends alert.sh's mail; catatonit is
 # the init process for units run with --init. All come from
 # the Ubuntu archive.
-apt-get install -y -qq ca-certificates curl gnupg age msmtp sqlite3 catatonit >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg age msmtp python3-yaml catatonit openssl >/dev/null
 
 install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
@@ -161,11 +191,13 @@ if [ "$only" = postgres ]; then
   install -m 0644 "$bundle/host/etc/pgbackrest/pgbackrest.conf" /etc/pgbackrest/pgbackrest.conf
   install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_hba.conf" \
     /etc/postgresql/18/main/pg_hba.conf
+  install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_ident.conf" \
+    /etc/postgresql/18/main/pg_ident.conf
   install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
   install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
     /etc/postgresql/18/main/conf.d/90-aboutme.conf
   systemctl restart postgresql@18-main.service
-  say "PostgreSQL and pgBackRest only: done"
+  say "PostgreSQL and pgBackRest installed"
   exit 0
 fi
 
@@ -180,6 +212,7 @@ apt-get update -qq
 # local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
 install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
 install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
 install -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
@@ -208,18 +241,27 @@ install -m 0644 \
   "$bundle/host/etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf" \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf
 systemctl daemon-reload
-# CrowdSec 1.8.1 registers with its central API in the package post-install
-# script before it starts the service. Set the package's supported debconf
-# choice and inhibit service startup while allowing the package to enable its
-# units. Disable every package-enabled unit, and keep CrowdSec, the bouncer, and
-# the vendor hub updater masked until the controlled configuration is ready.
-unset CROWDSEC_POLICY_RC_D CROWDSEC_SYSTEMCTL
-crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" \
-  "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
-crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
-  /etc/crowdsec/online_api_credentials.yaml || die "CrowdSec central API opt-out failed"
-crowdsec_configure_local_detection || die "CrowdSec local detection setup failed"
-say "pinned packages installed"
+# Suppress package registration and startup until the migration provisions pgx.
+for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"; do
+  package_state=$(dpkg-query -W -f='${Status}\t${Version}' "${package_pin%%=*}" 2>/dev/null) || package_state=absent
+  if [[ $package_state != $'install ok installed\t'"${package_pin#*=}" ]]; then
+    if [[ $package_pin == crowdsec-firewall-bouncer-nftables=* ]]; then
+      install -d -m 0700 /etc/crowdsec/bouncers
+      # The package needs a key to skip automatic registration. The migration
+      # replaces this unregistered private value before starting the bouncer.
+      if [[ ! -s /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local ]]; then
+        install -m 0600 /dev/null /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+        (umask 077
+         cat "$bundle/edge/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local"
+         printf 'api_key: '
+         openssl rand -hex 32) >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+      fi
+    fi
+    crowdsec_install_closed=yes
+    crowdsec_install_offline install_pinned "$package_pin" || die "crowdsec_package_refused"
+  fi
+  apt-mark hold "${package_pin%%=*}" >/dev/null
+done
 
 
 # 4. Configuration files. PostgreSQL files belong to postgres; the firewall
@@ -228,8 +270,10 @@ systemctl stop aboutme-deployment-document.timer aboutme-deployment-document.ser
 etc=$bundle/host/etc
 copy_tree "$etc" /etc \
   postgresql/18/main/pg_hba.conf \
+  postgresql/18/main/pg_ident.conf \
   postgresql/18/main/conf.d/90-aboutme.conf
 install -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_hba.conf" /etc/postgresql/18/main/pg_hba.conf
+install -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_ident.conf" /etc/postgresql/18/main/pg_ident.conf
 install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
 install -o postgres -g postgres -m 0644 "$etc/postgresql/18/main/conf.d/90-aboutme.conf" \
   /etc/postgresql/18/main/conf.d/90-aboutme.conf
@@ -255,12 +299,20 @@ done
 # start. Install its scripts early; step 6 refreshes the same copies.
 lib=/usr/local/lib/aboutme
 install -d -m 0755 "$lib"
+for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-migrate; do
+  install -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
+done
+install -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"
 install -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
 install -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
 install -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
 install -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
 
+# Reload peer and logging policy without changing the PostgreSQL process epoch.
+systemctl reload postgresql@18-main.service
+[[ $(findmnt -n -o FSTYPE -T /run/aboutme) == tmpfs ]] || die "CrowdSec diagnostics require tmpfs"
+install -d -o root -g root -m 0700 /run/aboutme/crowdsec
 "$lib/crowdsec-window-check.sh"
 systemctl daemon-reload
 edge_restart=()
@@ -285,36 +337,8 @@ done
 [[ ,$log_mount_options, == *,size=65536k,* || ,$log_mount_options, == *,size=64M,* ]] || \
   die "Caddy log mount is not capped at 64 MiB"
 systemd-tmpfiles --create /etc/tmpfiles.d/aboutme.conf
-systemctl start aboutme-crowdsec-retention-startup.service
-systemctl enable --now aboutme-crowdsec-retention.timer >/dev/null
-systemctl unmask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null
 rm -f /var/log/crowdsec.log /var/log/crowdsec-firewall-bouncer.log
 say "configuration copied to /etc"
-
-# 5. CrowdSec: point the agent at the local API, register the firewall
-# bouncer once, and keep its key on the data volume. The key is never printed.
-# /etc/crowdsec is itself bound from the data volume (data-volume.sh), so the
-# agent's credentials and this bouncer file never touch the root disk.
-sed -i 's|^url: .*|url: http://127.0.0.1:8095|' /etc/crowdsec/local_api_credentials.yaml
-systemctl restart crowdsec
-keyfile=/srv/data/crowdsec/firewall-bouncer.key
-bouncer=aboutme-firewall
-if [ ! -s "$keyfile" ]; then
-  cscli bouncers delete "$bouncer" >/dev/null 2>&1 || true
-  (umask 077 && cscli bouncers add "$bouncer" -o raw >"$keyfile")
-  say "registered CrowdSec bouncer $bouncer"
-fi
-conf=/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
-(
-  umask 077
-  cat "$bundle/edge/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local" >"$conf"
-  printf 'api_key: %s\n' "$(cat "$keyfile")" >>"$conf"
-)
-systemctl enable crowdsec crowdsec-firewall-bouncer >/dev/null
-systemctl restart crowdsec-firewall-bouncer
-if ((${#edge_restart[@]})); then
-  systemctl start "${edge_restart[@]}"
-fi
 
 # 6. Host scripts, quadlet templates, and environment files.
 install -d -m 0755 "$lib" /etc/aboutme
@@ -333,6 +357,10 @@ copy_script "$bundle/host/crowdsec-offline.sh"
 copy_script "$bundle/host/crowdsec-retention.sh"
 copy_script "$bundle/host/crowdsec-retention-fail.sh"
 copy_script "$bundle/host/crowdsec-retention-lease-check.sh"
+copy_script "$bundle/host/crowdsec-db.sh"
+copy_script "$bundle/host/crowdsec-provision.sh"
+copy_script "$bundle/host/crowdsec-migrate.sh"
+copy_script "$bundle/host/crowdsec-vacuum.sh"
 copy_script "$bundle/host/crowdsec-window-check.sh"
 copy_script "$bundle/host/operation-run.sh"
 copy_script "$bundle/host/operation-state.sh"
@@ -377,6 +405,12 @@ else
   say "fence.sh not installed; skipping fence init"
 fi
 
+# Keep the reviewed detection and bouncer templates available to the host step.
+install -d -m 0755 "$lib/crowdsec"
+copy_tree "$bundle/edge/crowdsec" "$lib/crowdsec"
+ABOUTME_MIGRATE_BUNDLE_FD=$operation_bundle_fd "$lib/crowdsec-migrate.sh" || die "crowdsec_migrate_refused"
+if ((${#edge_restart[@]})); then systemctl start "${edge_restart[@]}"; fi
+
 # 7. Apply settings and start units. The job timers start with the first
 # deploy (deploy-host.sh start-timers), since no release exists before it.
 systemd-tmpfiles --create /etc/tmpfiles.d/aboutme.conf
@@ -396,9 +430,9 @@ else
     systemctl restart systemd-zram-setup@zram0.service
   fi
 fi
-systemctl restart postgresql@18-main.service
 systemctl start aboutme-deployment-document.service
 systemctl enable --now "${timers[@]}" >/dev/null
 systemctl enable --now unattended-upgrades.service >/dev/null
 
+crowdsec_install_closed=no
 say "done"

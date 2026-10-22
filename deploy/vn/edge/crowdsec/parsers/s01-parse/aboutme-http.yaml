@@ -1,14 +1,84 @@
 name: aboutme/http
 description: Parse the bounded aboutme HTTP security feed
+# The lexical gate runs before UnmarshalJSON, whose error path logs its input.
+# Seven flat pairs and seven decoded keys also reject duplicate JSON names.
 filter: |
+  let text = `"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"`;
+  let space = `[ \t\r\n]*`;
+  let pair = text + space + ':' + space + '(?:' + text + '|[1-5][0-9]{2})';
   evt.Line.Labels.type == 'aboutme-http' &&
+  len(evt.Line.Raw) <= 8192 &&
+  evt.Line.Raw matches ('^' + space + '\\{' + space + pair + '(?:' + space + ',' + space + pair + '){6}' + space + '\\}' + space + '$') &&
   UnmarshalJSON(evt.Line.Raw, evt.Unmarshaled, 'aboutme') in ['', nil] &&
-  len(evt.Unmarshaled.aboutme) == 5 &&
-  evt.Unmarshaled.aboutme.ts matches '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$' &&
-  IsIP(evt.Unmarshaled.aboutme.source_ip) &&
-  evt.Unmarshaled.aboutme.method in ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] &&
-  int(evt.Unmarshaled.aboutme.status) >= 100 && int(evt.Unmarshaled.aboutme.status) <= 599 &&
-  evt.Unmarshaled.aboutme.route_class in ['system', 'static', 'auth', 'api', 'mcp', 'public', 'unknown', 'maintenance']
+  (let record = evt.Unmarshaled.aboutme;
+   type(record) == 'map' && len(record) == 7 &&
+   all(['ts', 'source_ip', 'method', 'route_class', 'probe_class', 'target_path'], {# in record && type(record[#]) == 'string'}) &&
+   type(record.status) == 'float' && record.status >= 100 && record.status <= 599 && record.status == int(record.status) &&
+   record.ts matches `^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]{1,9})?Z$` &&
+   record.method in ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] &&
+   record.route_class in ['system', 'static', 'auth', 'api', 'mcp', 'public', 'unknown', 'maintenance'] &&
+   evt.Line.Labels.feed_mode in ['serving', 'maintenance'] &&
+   (record.route_class == 'maintenance') == (evt.Line.Labels.feed_mode == 'maintenance') &&
+   (let octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
+    let hextet = '[0-9a-f]{1,4}';
+    let ipv6 = '(?:' +
+      '(?:' + hextet + ':){7}' + hextet + '|' +
+      '(?:' + hextet + ':){1,7}:|' +
+      '(?:' + hextet + ':){1,6}:' + hextet + '|' +
+      '(?:' + hextet + ':){1,5}(?::' + hextet + '){1,2}|' +
+      '(?:' + hextet + ':){1,4}(?::' + hextet + '){1,3}|' +
+      '(?:' + hextet + ':){1,3}(?::' + hextet + '){1,4}|' +
+      '(?:' + hextet + ':){1,2}(?::' + hextet + '){1,5}|' +
+      hextet + ':(?:(?::' + hextet + '){1,6})|' +
+      ':(?:(?::' + hextet + '){1,7}|:))';
+    (record.source_ip matches ('^' + octet + '(?:\\.' + octet + '){3}$') ||
+     (record.source_ip matches ('^' + ipv6 + '$') && IpToRange(record.source_ip, '128') == record.source_ip + '/128'))) &&
+   (let eligible = record.route_class == 'unknown' && record.status in [400, 404, 405];
+    record.probe_class == 'none' ? (!eligible && record.target_path == '') :
+    eligible &&
+    (record.probe_class in ['invalid', 'oversized'] ? record.target_path == '' :
+     record.probe_class in ['traversal', 'secret-config', 'repository', 'web-shell', 'framework', 'other'] &&
+     record.target_path matches `^/(?:[a-zA-Z0-9._~!$&'()*+,;=:@/\[\]-]|%[0-9a-fA-F]{2})*$` &&
+     len(record.target_path) <= 512 &&
+     (let decodedOnce = PathUnescape(record.target_path);
+      decodedOnce matches `^(?:[^%]|%[0-9a-fA-F]{2})*$` &&
+      (let decodedTwice = PathUnescape(decodedOnce);
+       let continuation = '%[89ab][0-9a-f]';
+       let utf8 = `(?:[a-z0-9._~!$&'()*+,;=:@/\[\]-]|%(?:[2-6][0-9a-f]|7[0-9a-e])|%c2%[ab][0-9a-f]|%(?:c[3-9a-f]|d[0-9a-f])` + continuation +
+         '|%e0%[ab][0-9a-f]' + continuation +
+         '|%e[1-9abcef](?:' + continuation + '){2}' +
+         '|%ed%[89][0-9a-f]' + continuation +
+         '|%f0%[9ab][0-9a-f](?:' + continuation + '){2}' +
+         '|%f[1-3](?:' + continuation + '){3}' +
+         '|%f4%8[0-9a-f](?:' + continuation + '){2})';
+       all([decodedOnce, decodedTwice], {Lower(PathEscape(#)) matches ('^' + utf8 + '*$')}) &&
+       (let ascii = [['A','a'],['B','b'],['C','c'],['D','d'],['E','e'],['F','f'],['G','g'],['H','h'],['I','i'],['J','j'],['K','k'],['L','l'],['M','m'],['N','n'],['O','o'],['P','p'],['Q','q'],['R','r'],['S','s'],['T','t'],['U','u'],['V','v'],['W','w'],['X','x'],['Y','y'],['Z','z']];
+        let views = map([record.target_path, decodedOnce, decodedTwice], {
+          let value = #;
+          ReplaceAll(reduce(ascii, {ReplaceAll(#acc, #[0], #[1])}, value), '\\', '/')
+        });
+        let normalized = map(views, {
+          let parts = reduce(Split(#, '/'), {
+            # in ['', '.'] ? #acc :
+            # == '..' ? (len(#acc) > 0 ? #acc[:len(#acc)-1] : #acc) : concat(#acc, [#])
+          }, []);
+          '/' + join(parts, '/')
+        });
+        !any(concat(views, normalized), {
+          # matches `^/(?:\.well-known|robots\.txt|sitemap\.xml|llms\.txt|_nuxt|app|api|mcp)(?:/|$)` ||
+          # matches `^/(?:healthz|readyz|print|internal-render|authorize|oauth|login|register|forgot-password|reset-password|verify|verify-email|guide|privacy|terms|showcase|templates)(?:/|$|\.md$)` ||
+          # == '/' ||
+          (# matches `^/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.md)?$` &&
+           # not in ['/admin', '/people', '/admin.md', '/people.md'] &&
+           (hasSuffix(#, '.md') ? len(#) >= 8 && len(#) <= 34 : len(#) >= 5 && len(#) <= 31))
+        }) &&
+        (let probe =
+          any(views, {# matches `(?:^|/)\.\.(?:/|$)`}) ? 'traversal' :
+          any(views, {# matches `(?:^|/)\.env(?:\.[^/]*)?(?:/|$)` || # matches `(?:^|/)(?:config\.(?:json|yml|yaml|php)|wp-config\.php|id_rsa|id_ed25519)$` || # in ['/etc/passwd', '/etc/shadow']}) ? 'secret-config' :
+          any(views, {# matches `(?:^|/)\.(?:git|svn|hg)(?:/|$)`}) ? 'repository' :
+          any(views, {# matches `(?:^|/)(?:shell\.php|cmd\.php|c99\.php|r57\.php|wso\.php|webshell\.php|shell\.jsp|shell\.aspx)$`}) ? 'web-shell' :
+          any(views, {# matches `^/(?:wp-admin|wp-content|wp-includes|phpmyadmin|phpunit|vendor|actuator|cgi-bin)(?:/|$)` || # matches `(?:^|/)(?:wp-login\.php|xmlrpc\.php)$`}) ? 'framework' : 'other';
+         record.probe_class == probe)))))))
 onsuccess: next_stage
 statics:
   - target: evt.StrTime
@@ -25,5 +95,9 @@ statics:
     expression: Sprintf("%v", evt.Unmarshaled.aboutme.status)
   - meta: route_class
     expression: evt.Unmarshaled.aboutme.route_class
+  - meta: probe_class
+    expression: evt.Unmarshaled.aboutme.probe_class
+  - meta: target_path
+    expression: evt.Unmarshaled.aboutme.target_path
   - meta: feed_mode
     expression: evt.Line.Labels.feed_mode

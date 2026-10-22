@@ -55,6 +55,14 @@ load() {
   tag=$(jq -er '.minimum_tag | strings' <<<"$doc" 2>/dev/null) || die "$file is malformed: minimum_tag"
   [[ $(release_number "$tag" || true) == "$minimum" ]] || die "$file is malformed: minimum_tag does not match minimum_release"
   owner=$(jq -r '.operation_id // empty' <<<"$doc")
+  jq -e 'if has("notice_authority") then
+    .notice_authority | type=="object" and keys==["operation_id","state","version"]
+      and .version==1 and (.state=="initializing" or .state=="adopted")
+      and (.operation_id|type=="string" and test("^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"))
+    else true end' <<<"$doc" >/dev/null 2>&1 || die "invalid notice evidence"
+  if [[ $dir == /var/lib/aboutme && $(jq -r '.notice_authority.state // empty' <<<"$doc") == adopted ]]; then
+    notice_authority_check || die "invalid notice authority"
+  fi
 }
 
 store() { # new document on stdin
@@ -79,8 +87,27 @@ with_lock() { # mode command...
   shift
   exec {fd}>>"$lockfile"
   flock "$mode" -w 30 "$fd" || die "could not take $lockfile within 30 s"
+  if [[ $dir == /var/lib/aboutme ]]; then notice_recheck_mount || die "invalid data mounts"; fi
   "$@"
 }
+
+with_bundle_lock() (
+  local path=/srv/data/host-operations/.bundle.lock entry bundle_fd
+  [[ -d ${path%/*} && ! -L ${path%/*} && $(stat -c '%u:%a' "${path%/*}") == 0:700 &&
+    -f $path && ! -L $path && $(stat -c '%u:%a' "$path") == 0:600 ]] || die "unsafe bundle lock"
+  # Installation and notice adoption already hold an inherited exclusive lock.
+  # Reuse its open description instead of waiting on our own caller.
+  for entry in /proc/"$BASHPID"/fd/*; do
+    if [[ $entry -ef $path ]] &&
+      grep -qE '^lock:.*FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE' "/proc/$BASHPID/fdinfo/${entry##*/}"; then
+      with_lock -x "$@"
+      return
+    fi
+  done
+  exec {bundle_fd}>>"$path" || die "could not open bundle lock"
+  flock -x -w 30 "$bundle_fd" || die "could not take $path within 30 s"
+  with_lock -x "$@"
+)
 
 cmd_init() {
   if [[ -e $file ]]; then
@@ -101,7 +128,7 @@ cmd_read() {
 cmd_lock() { # kind tag
   local kind=$1 candidate oid ts
   case $kind in
-    deploy | rollback | activate | totp_reencrypt | account_delete | view_pass_rotate | cutover) ;;
+    deploy | rollback | activate | totp_reencrypt | account_delete | view_pass_rotate | cutover | notice_restore) ;;
     *) die "unknown operation kind '$kind'" ;;
   esac
   candidate=$(candidate_of "$2")
@@ -110,8 +137,9 @@ cmd_lock() { # kind tag
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
   oid=$(head -c32 /dev/urandom | basenc --base64url | tr -d '=')
   ts=$(now)
-  jq --arg o "$oid" --arg k "$kind" --arg s "$ts" \
-    '.operation_id = $o | .operation_kind = $k | .operation_started_at = $s | .operation_checked_at = $s' <<<"$doc" | store
+  jq --arg o "$oid" --arg k "$kind" --arg s "$ts" --arg tag "$2" \
+    '.operation_id = $o | .operation_kind = $k | .operation_started_at = $s | .operation_checked_at = $s
+     | if $k=="notice_restore" then .operation_tag=$tag else . end' <<<"$doc" | store
   printf '%s\n' "$oid"
 }
 
@@ -247,6 +275,7 @@ cmd_release() { # id
     return 0
   fi
   [[ $owner == "$1" ]] || die "the lock belongs to another operation; the manual clear owns it"
+  [[ $(jq -r .operation_kind <<<"$doc") != notice_restore ]] || die "notice restore needs exact completion"
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover && ( -e $mutation_file || -L $mutation_file ) ]]; then
     die "the cutover mutation marker remains; recover or clear it first"
   fi
@@ -266,6 +295,22 @@ cmd_check() { # release unit
   if ((release < minimum)); then
     echo "aboutme-fence-refused unit=$unit release=$release minimum=$minimum"
     exit 1
+  fi
+  if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == notice_restore ||
+    $(jq -r '.notice_authority.state // empty' <<<"$doc") == initializing ]]; then
+    case $unit in aboutme-maintenance | postgresql@18-main | postgresql@18-main.service) return 0 ;; esac
+    die "notice restore blocks starts"
+  fi
+  if [[ $dir == /var/lib/aboutme ]]; then
+    case $unit in
+      aboutme-maintenance | postgresql@18-main | postgresql@18-main.service) ;;
+      *) notice_absent /var/lib/aboutme/privacy-notice/capture-in-progress || die "notice capture blocks starts" ;;
+    esac
+    case $unit in
+      crowdsec* | aboutme-crowdsec*)
+        notice_absent /var/lib/aboutme/privacy-notice/restore-reconciliation &&
+          notice_safe_file /var/lib/aboutme/privacy-notice/activation.json || die "notice activation required" ;;
+    esac
   fi
   if [[ $(jq -r '.operation_kind // empty' <<<"$doc") != cutover && ! -e $mutation_file && ! -L $mutation_file ]]; then
     return 0
@@ -292,6 +337,7 @@ cmd_clear() { # reason
   fi
   [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker remains; recover it first"
   load
+  [[ $(jq -r '.operation_kind // empty' <<<"$doc") != notice_restore ]] || die "notice restore requires exact-owner recovery"
   [[ -n $owner ]] || {
     say "no lock to clear"
     return 0
@@ -339,21 +385,74 @@ cmd_recover_cutover_media() { # id attestation reason
   recover_marker "$1" media "$3" "$2"
 }
 
+cmd_notice_authority() {
+  local id=$1 state=$2 kind previous
+  [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ && ( $state == initializing || $state == adopted ) ]] || die "invalid notice evidence"
+  owned_or_die "$id"
+  kind=$(jq -r .operation_kind <<<"$doc")
+  if [[ $kind == cutover ]]; then
+    load_mutation
+    [[ $(jq -r .operation_id <<<"$mutation") == "$id" && $(jq -r .mutation_kind <<<"$mutation") == quiesce ]] || die "notice adoption needs quiescence"
+  else [[ $kind == notice_restore ]] || die "invalid notice operation"; fi
+  previous=$(jq -r '.notice_authority.state // empty' <<<"$doc")
+  [[ $previous != adopted || $state == adopted ]] || die "notice adoption cannot regress"
+  if [[ $previous != '' ]]; then
+    [[ $(jq -r .notice_authority.operation_id <<<"$doc") == "$id" ]] || die "notice evidence belongs to another operation"
+  fi
+  if [[ $state == adopted ]]; then
+    notice_authority_check && notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation &&
+      [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]] &&
+      notice_absent /var/lib/aboutme/privacy-notice/send.json && notice_absent /var/lib/aboutme/privacy-notice/activation.json &&
+      sync /var/lib/aboutme/privacy-notice || die "invalid adopted authority"
+  fi
+  jq --arg id "$id" --arg state "$state" '.notice_authority={version:1,state:$state,operation_id:$id}' <<<"$doc" | store
+}
+cmd_notice_restore_release() {
+  owned_or_die "$1"
+  [[ $(jq -r .operation_kind <<<"$doc") == notice_restore && $(jq -r .notice_authority.state <<<"$doc") == adopted ]] || die "invalid restore owner"
+  operation_release_guard
+  notice_authority_check && notice_safe_file /var/lib/aboutme/privacy-notice/restore-reconciliation &&
+    [[ ! -s /var/lib/aboutme/privacy-notice/restore-reconciliation ]] &&
+    notice_absent /var/lib/aboutme/privacy-notice/send.json && notice_absent /var/lib/aboutme/privacy-notice/activation.json || die "restore denial is incomplete"
+  jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' <<<"$doc" | store
+}
+
+cmd_check_current() {
+  load
+  local number
+  notice_safe_file /var/lib/aboutme/release.json 644 || die "release record missing"
+  number=$(jq -er .release_number /var/lib/aboutme/release.json) || die "release number missing"
+  cmd_check "$number" "$1"
+}
+
 [[ $(id -u) == 0 ]] || die "run as root on the host"
 umask 022
+# Keep the existing root-only fixture seam; installed access always proves the
+# canonical guest mounts before touching fence state or opening its lock.
+if [[ $dir == /var/lib/aboutme ]]; then
+  notice_library=$(dirname "${BASH_SOURCE[0]}")/crowdsec-privacy-notice-host.sh
+  if [[ ! -f $notice_library ]]; then notice_library=$(dirname "${BASH_SOURCE[0]}")/../host/crowdsec-privacy-notice-host.sh; fi
+  # shellcheck source=../host/crowdsec-privacy-notice-host.sh
+  source "$notice_library"
+  # shellcheck disable=SC2034 # Used by the sourced canonical mount recheck.
+  notice_identity=$(notice_mount_identity) || die "invalid data mounts"
+fi
 mkdir -p "$dir"
 
 case "$#:${1-}" in
   1:init) with_lock -x cmd_init ;;
   1:read) with_lock -s cmd_read ;;
-  3:lock) with_lock -x cmd_lock "$2" "$3" ;;
+  3:lock) with_bundle_lock cmd_lock "$2" "$3" ;;
   4:lock-for) with_lock -x cmd_lock_for "$2" "$3" "$4" ;;
   3:checkpoint) with_lock -x cmd_checkpoint "$2" "$3" ;;
   4:mutation-start) with_lock -x cmd_mutation_start "$2" "$3" "$4" ;;
   3:mutation-clear) with_lock -x cmd_mutation_clear "$2" "$3" ;;
   3:raise) with_lock -x cmd_raise "$2" "$3" ;;
   2:release) with_lock -x cmd_release "$2" ;;
+  3:notice-authority) with_lock -x cmd_notice_authority "$2" "$3" ;;
+  2:notice-restore-release) with_lock -x cmd_notice_restore_release "$2" ;;
   3:check) with_lock -s cmd_check "$2" "$3" ;;
+  2:check-current) with_lock -s cmd_check_current "$2" ;;
   2:clear) with_lock -x cmd_clear "$2" ;;
   4:recover-cutover) with_lock -x cmd_recover_cutover "$2" "$3" "$4" ;;
   4:recover-cutover-media) with_lock -x cmd_recover_cutover_media "$2" "$3" "$4" ;;

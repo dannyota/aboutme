@@ -1,6 +1,6 @@
 module github.com/dannyota/aboutme/deploy/caddy/production/build
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/caddyserver/caddy/v2 v2.11.4

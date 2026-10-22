@@ -4,9 +4,9 @@
 # Go module outside go.work.
 
 # ---- build ----
-# Match the module's own go.mod (go 1.27.2). Digest pins the multi-arch index
+# Match the module's own go.mod (go 1.27.3). Digest pins the multi-arch index
 # so the same reference resolves on amd64 and arm64.
-FROM docker.io/library/golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS build
+FROM docker.io/library/golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS build
 
 WORKDIR /src
 

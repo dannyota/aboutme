@@ -1,8 +1,8 @@
 # Vietnam host memory and storage
 
 The Vietnam production host has 2 vCPU and 4 GiB of RAM. These limits are
-planning ceilings, not reservations or measured usage. Rehearsal measures real
-peaks before cutover. A failed memory gate means resizing the host or reducing
+planning ceilings, not reservations or measured usage. Production observation
+measures real peaks. A failed memory gate means resizing the host or reducing
 concurrency, not raising a limit without evidence.
 
 ## Memory budget
@@ -23,8 +23,7 @@ CrowdSec, the firewall bouncer, one 256 MiB job, and a full 64 MiB log tmpfs.
 This leaves 1.5 GiB outside those ceilings. The plan allows 1 GiB for the
 kernel, systemd, Podman, journald, SSH, native pgBackRest work, and useful page
 cache. The remaining 512 MiB is shared by physical zram use and safety margin.
-Rehearsal requires at least 256 MiB unused at the combined peak after counting
-zram. These allowances are not reservations.
+These allowances are not reservations.
 
 Zram has a 512 MiB logical ceiling. It consumes physical RAM as compressed pages
 fill it and replaces resident pages; it is not extra capacity. The gate records
@@ -52,14 +51,14 @@ used several times by one query or parallel worker. Multiplying it once by the
 connection count is not a memory bound. `effective_cache_size` is a planner
 estimate and allocates no memory. The API and each job can configure a 20
 connection store pool, so implementation must not lower the database limit
-without proving every pool, backup, and admin allowance. Rehearsal exercises API
-traffic and one job together and records connection exhaustion.
+without proving every pool, backup, and admin allowance. Verification observes
+API traffic and one job together and records connection exhaustion.
 
-## Rehearsal gate
+## Memory gate
 
-The rehearsal records cgroup current and peak memory, `memory.events`, zram use,
-swap input and output, pressure stall information, the kernel OOM journal, and
-tmpfs high-water use. It covers:
+The owner's production observation records cgroup current and peak memory,
+`memory.events`, zram use, swap input and output, pressure stall information,
+the kernel OOM journal, and tmpfs high-water use during:
 
 - ordinary serving at the expected concurrency;
 - concurrent Chromium print work;
@@ -67,11 +66,21 @@ tmpfs high-water use. It covers:
 - maintenance startup while serving still answers; and
 - migration and database setup after serving stops.
 
-Cutover requires no kernel or cgroup out-of-memory kill, no tmpfs exhaustion, no
-sustained memory pressure, and enough unused memory for the host allowance. The
-evidence records each service peak, native pgBackRest use, physical zram use,
-and the combined peak. Less than 256 MiB unused at the combined peak, a
-connection-pool failure, or a migration failure blocks cutover.
+The gate requires no kernel or cgroup out-of-memory kill, no tmpfs exhaustion,
+no sustained memory pressure, and enough unused memory for the host allowance.
+The evidence records each service peak, native pgBackRest use, physical zram
+use, and the combined peak, with native backup and zram counted once. The
+largest observed combined peak is the gate; adding individual peaks from
+different times is not evidence of that peak. Less than 256 MiB unused at the
+combined peak, a connection-pool failure, or a migration failure fails
+acceptance and requires reviewed capacity or concurrency correction, never a
+raised limit. Keep aggregate resource evidence outside the repository; record no
+request data. After the CrowdSec storage switch, observe ordinary serving,
+scheduled jobs, retention, vacuum, and backup under normal guards. Include
+migration and maintenance helper processes in the combined host peak; the
+engine's ceiling alone does not bound them. These observations measure capacity
+after installation; they do not authorize consumer startup or replace the
+[CrowdSec privacy gates](crowdsec-http-privacy.md#live-retention-and-failure).
 
 ## Storage
 
