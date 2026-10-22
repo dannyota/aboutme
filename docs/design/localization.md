@@ -46,6 +46,12 @@ Only an explicit resume-language edit changes `metadata.lng` and the renderer's
 language-derived defaults. It never translates authored fields. An interface
 toggle never writes `metadata.lng` and never sends a resume write.
 
+A [language twin](ui/shell-and-editor.md#language-twin) is a new resume whose
+`metadata.lng` is the other guide language; the source keeps its own. Generated
+headings follow the [guide](vietnam-tech-resumes.md#section-headings). Headings
+and the title suffix follow target resume language. Interface language controls
+the twin action, review checklist, and rewrite prompt.
+
 ## Surfaces and controls
 
 Application chrome is every visible and assistive string outside the pure

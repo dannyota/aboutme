@@ -46,11 +46,14 @@ at least 160 px high, so it stays white with neutral ink in dark theme. It lifts
 4 px over 200 ms on hover unless reduced motion is set. The whole card opens the
 editor. It shows the title, the relative updated time in paper-muted text, and a
 public seal and link or the Draft mark at the bottom. An overflow menu at the
-top right offers Rename and Delete. Create resume, a large primary button with a
-plus icon in the page header, is the one create control; it is disabled at three
-resumes. Remaining slots are 2 px dashed outlines with the sheet radius on a
-half-opaque card fill, reading Empty slot. For an empty list, the first slot
-says “No resumes yet.” and how to start, and that three are allowed.
+top right offers the [twin action](#language-twin) for a `vi` or `en` resume,
+then Rename and Delete. Create resume, a large primary button with a plus icon
+in the page header, is the one control that creates a new resume from blank, a
+sample, or an import; the twin action copies an existing resume. Both are
+disabled at three resumes. Remaining slots are 2 px dashed outlines with the
+sheet radius on a half-opaque card fill, reading Empty slot. For an empty list,
+the first slot says “No resumes yet.” and how to start, and that three are
+allowed.
 
 The editor is a four-region workspace on the flat `--editor-canvas` fill, with
 no canvas glows:
@@ -118,3 +121,84 @@ agents and sign-in providers appear only when their capabilities are enabled.
 Connected agents links the [MCP guide](../mcp-guide.md) at `/guide/mcp` from its
 empty state (“Xem cách kết nối trợ lý AI” or “See how to connect an AI
 assistant”) and again under the grant list when it has entries.
+
+## Language twin
+
+A language twin copies a `vi` resume into `en`, or `en` into `vi`, using the
+[guide](../vietnam-tech-resumes.md). The owner or an agent rewrites prose. The
+source stays unchanged. The twin action uses the menu rules above.
+
+The browser reads the source and uses the existing create path, including its
+server cap, authorization, validation, notices, and uncertain-create recovery
+(Refresh list and Abandon, blocking further creates until resolved). Success
+opens the editor. Creation binds to the initiating owner; an owner change or
+leaving the list before dispatch cancels it. Session loss during the source read
+opens sign-in. The twin gets new metadata and a transformed document copy:
+
+| Field                      | Rule                                                                                                                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata.lng`             | The other language.                                                                                                                                                                                                           |
+| `metadata.title`           | Append “ · Tiếng Việt” or “ · English”; remove an existing suffix of either kind first and trim the base to fit 160 Unicode characters.                                                                                       |
+| Section `displayName`      | Use the target heading from the guide's [table](../vietnam-tech-resumes.md#section-headings). Fill blank non-custom headings with their target defaults; leave blank custom headings alone. Preserve and flag other headings. |
+| `customization.dateFormat` | `MM/YYYY` for Vietnamese, `Mon YYYY` for English ([dates](../vietnam-tech-resumes.md#dates)).                                                                                                                                 |
+| `personalDetails.photo`    | Remove from every twin because its storage key belongs to the source and is forbidden in a create request.                                                                                                                    |
+| Birth details              | For English, remove `custom` details labelled Ngày sinh, Năm sinh, Nam sinh, Date of birth, Birth date, Birth year, DOB, or Birthday, ignoring case and surrounding whitespace.                                               |
+| Zalo details               | For English, remove `custom` details labelled Zalo, ignoring case and surrounding whitespace.                                                                                                                                 |
+
+Common source-heading aliases are allowed, but generated headings use only the
+guide's table. The transform never adds a contact detail, entry, or section;
+prose, entries, stored dates, layout, and other customization stay unchanged.
+Headings and the title suffix follow
+[resume language](../localization.md#resume-language).
+
+The review checklist uses a bordered card, standard radius, 16 px padding, 12 px
+bottom offset, 50vh maximum height, and scrolling. Below 640 px: 12 px side
+margins, 32 rem maximum width; from 640 px: 24 rem wide, 16 px from the right.
+At every width it sits above the preview and below dialogs. Copy follows
+interface language; checklist rows run from Sentences to Created.
+
+| Element or condition                                  | Vietnamese interface                                                                                                                      | English interface                                                                                                                                           |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Twin action, English target                           | Tạo bản tiếng Anh                                                                                                                         | Create the English version                                                                                                                                  |
+| Twin action, Vietnamese target                        | Tạo bản tiếng Việt                                                                                                                        | Create the Vietnamese version                                                                                                                               |
+| Review checklist title                                | Xem lại bản ngôn ngữ kia                                                                                                                  | Review the other language                                                                                                                                   |
+| Sentences, Vietnamese target                          | Viết lại câu bằng tiếng Việt. Giữ nguyên chức danh và tên công nghệ bằng tiếng Anh.                                                       | Rewrite the sentences in Vietnamese. Keep English job titles and technology names.                                                                          |
+| Sentences, English target                             | Viết lại câu bằng tiếng Anh. Đừng dịch từng chữ chức danh và tên công nghệ.                                                               | Rewrite the sentences in English. Do not translate job titles and technology names word for word.                                                           |
+| Numbers, Vietnamese target                            | Số liệu tiếng Việt dùng 10.000 và 1,9.                                                                                                    | Vietnamese numbers use 10.000 and 1,9.                                                                                                                      |
+| Numbers, English target                               | Số liệu tiếng Anh dùng 10,000 và 1.9.                                                                                                     | English numbers use 10,000 and 1.9.                                                                                                                         |
+| Photo removed, Vietnamese target                      | Ảnh chưa được sao chép. Thêm lại nếu nhà tuyển dụng trong nước cần ảnh.                                                                   | The photo was not copied. Add it again if a local employer expects one.                                                                                     |
+| Photo removed, English target                         | Ảnh được bỏ ra. CV tiếng Anh cho công ty sản phẩm hoặc nhà tuyển dụng nước ngoài không dùng ảnh.                                          | The photo was left off. English resumes for product and foreign employers leave it out.                                                                     |
+| Birth detail removed                                  | Ngày sinh đã được bỏ khỏi bản tiếng Anh.                                                                                                  | The birth date was left off the English copy.                                                                                                               |
+| Zalo suggestion, every Vietnamese target              | Thêm Zalo nếu bạn dùng và muốn nhà tuyển dụng liên hệ qua đó.                                                                             | Add Zalo if you use it and want recruiters to contact you there.                                                                                            |
+| Zalo detail removed                                   | Gợi ý Zalo đã được bỏ khỏi bản tiếng Anh.                                                                                                 | The Zalo hint was left off the English copy.                                                                                                                |
+| Unrecognized heading retained                         | Một số tiêu đề mục không nằm trong danh sách chuẩn. Hãy đọc lại.                                                                          | Some section headings are outside the standard list. Read them again.                                                                                       |
+| Created, always last                                  | CV này được tạo dưới dạng bản sao chưa công khai.                                                                                         | This resume was created as an unpublished copy.                                                                                                             |
+| Agent with `resumes:write`                            | Tác nhân đã kết nối có thể viết lại câu. Tác nhân không thể đăng CV này.                                                                  | A connected agent can rewrite the sentences. It cannot publish this copy.                                                                                   |
+| Otherwise, including failed grant read                | Sửa câu tại đây, hoặc kết nối một tác nhân rồi dán hướng dẫn.                                                                             | Edit the sentences here, or connect an agent and paste the instructions.                                                                                    |
+| Link after that fallback, to `/app/settings/sessions` | Tác nhân đã kết nối                                                                                                                       | Connected agents                                                                                                                                            |
+| Copy button, then success                             | Sao chép hướng dẫn / Đã sao chép                                                                                                          | Copy instructions / Copied                                                                                                                                  |
+| Outline dismiss button                                | Đã xem xong                                                                                                                               | Done reviewing                                                                                                                                              |
+| Rewrite prompt                                        | `Viết lại CV "<title>" sang <language>. Giữ chức danh và tên công nghệ bằng tiếng Anh. Dùng cách viết số của ngôn ngữ đó. Không đăng CV.` | `Rewrite the resume "<title>" into <language>. Keep English job titles and technology names. Use that language's number format. Do not publish the resume.` |
+
+Created describes a past event, never current publication state. The review
+checklist stays in module memory for that resume until dismissal, reload, full
+page load, or replacement by the next twin; it never reaches browser storage,
+the document, or the server. Small buttons copy or dismiss. Copy includes only
+the current title, target name (Tiếng Việt or English), and fixed instructions.
+Clipboard failure reveals selectable prompt text inside the panel.
+
+Tests prove:
+
+- The twin action appears only for `vi` and `en`, names the target in both
+  interface languages, and is disabled at three; Rename and Delete stay enabled.
+- Each transform rule has triggering and non-triggering inputs; output validates
+  against the current schema; source and preserved content stay unchanged; no
+  contact, entry, or section is added; suffix replacement fits 160 characters.
+- Through the list: success opens the editor and review checklist; uncertain
+  creation exposes recovery and blocks creates; cap rejection shows its notice;
+  owner change or leaving before dispatch cancels; session loss opens sign-in.
+- Review checklist lines match notes; dismissal and reload remove it; the next
+  twin replaces it; publishing keeps Created true; no browser storage writes.
+- Copied text equals the prompt with only title, target name, and instructions;
+  clipboard failure exposes it. Catalog parity and the localized-route literal
+  guard cover twin copy; only target headings and title suffix enter the resume.
