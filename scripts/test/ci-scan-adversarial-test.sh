@@ -384,6 +384,15 @@ test_live_db_gate_includes_dev_seed() {
   fi
 }
 
+test_live_db_gate_includes_privacy_notices() {
+  local output
+  output=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n server-test-db 2>&1) ||
+    return 1
+  if ! grep -Eq '^[[:space:]]*go test ([^[:space:]]+[[:space:]])*\./internal/privacynotice/\.\.\.([[:space:]]|$)' <<<"$output"; then
+    note_failure 'server-test-db omits the live privacy-notice package' || return 1
+  fi
+}
+
 run_test "phase scan fails closed without connected Semgrep and still runs gitleaks" \
   test_phase_scan_requires_connected_semgrep
 run_test "local CI preserves a shared DB under pipefail and checks generated Go" \
@@ -398,6 +407,8 @@ run_test "operational gate includes render topology and HTTPS parity" \
   test_operational_gate_includes_render_topology
 run_test "live DB gate includes dev-seed" \
   test_live_db_gate_includes_dev_seed
+run_test "live DB gate includes privacy notices" \
+  test_live_db_gate_includes_privacy_notices
 
 printf '\n%s passed; %s failed\n' "$passes" "$failures"
 [ "$failures" -eq 0 ]

@@ -6,7 +6,17 @@ fence=$repo_root/deploy/vn/scripts/fence.sh
 safety=$repo_root/deploy/vn/scripts/deploy-safety.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/bin" "$work/fence"
+mkdir -p "$work/bin" "$work/fence" "$work/operations"
+chmod 0700 "$work/operations"
+: >"$work/operations/.bundle.lock"
+chmod 0600 "$work/operations/.bundle.lock"
+# Use the runner's UID only in the private copy; modes and locks stay real.
+fixture_uid=$(id -u)
+sed -e "s|/srv/data/host-operations|$work/operations|g" \
+  -e "s/== 0:700/== $fixture_uid:700/; s/== 0:600/== $fixture_uid:600/" \
+  "$fence" >"$work/fence.sh"
+chmod +x "$work/fence.sh"
+fence=$work/fence.sh
 
 cat >"$work/bin/id" <<'STUB'
 #!/usr/bin/env bash
@@ -46,6 +56,80 @@ grep -Fq '"$lib/fence.sh" check "$number" "aboutme-job@$name"' \
 }
 
 "$fence" init
+for invalid in missing-directory directory-mode missing-lock lock-mode symlink-lock; do
+  case $invalid in
+    missing-directory) mv "$work/operations" "$work/saved-operations" ;;
+    directory-mode) chmod 0755 "$work/operations" ;;
+    missing-lock) mv "$work/operations/.bundle.lock" "$work/saved-lock" ;;
+    lock-mode) chmod 0644 "$work/operations/.bundle.lock" ;;
+    symlink-lock)
+      mv "$work/operations/.bundle.lock" "$work/saved-lock"
+      ln -s "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+  esac
+  if "$fence" lock deploy v0.4.7 >"$work/unsafe.out" 2>"$work/unsafe.err"; then
+    echo 'FAIL unsafe-bundle-admitted-owner' >&2; exit 1
+  fi
+  [[ ! -s $work/unsafe.out ]] && grep -qxF 'fence: unsafe bundle lock' "$work/unsafe.err"
+  [[ $(jq -r '.operation_id // empty' "$work/fence/fence.json") == '' ]]
+  case $invalid in
+    missing-directory) mv "$work/saved-operations" "$work/operations" ;;
+    directory-mode) chmod 0700 "$work/operations" ;;
+    missing-lock) mv "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+    lock-mode) chmod 0600 "$work/operations/.bundle.lock" ;;
+    symlink-lock) rm "$work/operations/.bundle.lock"; mv "$work/saved-lock" "$work/operations/.bundle.lock" ;;
+  esac
+done
+# Record real flock calls and prove bundle admission precedes the fence lock.
+export FLOCK_CALLS=$work/flock-calls BUNDLE_PATH=$work/operations/.bundle.lock
+export REAL_FLOCK
+REAL_FLOCK=$(command -v flock)
+cat >"$work/bin/flock" <<'STUB'
+#!/usr/bin/env bash
+descriptor=${!#}
+path=$(readlink "/proc/$PPID/fd/$descriptor")
+printf '%s\n' "$path" >>"$FLOCK_CALLS"
+if [[ $path == "$BUNDLE_PATH" ]]; then touch "$FLOCK_CALLS.bundle"; fi
+exec "$REAL_FLOCK" "$@"
+STUB
+chmod +x "$work/bin/flock"
+: >"$FLOCK_CALLS"
+bundle_op=$("$fence" lock deploy v0.4.7)
+printf '%s\n' "$BUNDLE_PATH" "$work/fence/fence.lock" >"$work/expected-locks"
+cmp "$work/expected-locks" "$FLOCK_CALLS"
+"$REAL_FLOCK" -x -n "$BUNDLE_PATH" true
+[[ $(jq -r .operation_id "$work/fence/fence.json") == "$bundle_op" ]]
+if "$fence" lock deploy v0.4.7 >/dev/null 2>&1; then exit 1; fi
+"$REAL_FLOCK" -x -n "$BUNDLE_PATH" true
+"$fence" release "$bundle_op"
+
+exec {bundle_fd}>>"$BUNDLE_PATH"
+"$REAL_FLOCK" -x "$bundle_fd"
+rm -f "$FLOCK_CALLS.bundle"
+started=$SECONDS
+(
+  exec {bundle_fd}>&-
+  timeout 40 "$fence" lock deploy v0.4.7
+) >"$work/busy.out" 2>"$work/busy.err" &
+waiting=$!
+for ((attempt=0; attempt<100; attempt++)); do
+  [[ ! -e $FLOCK_CALLS.bundle ]] || break
+  sleep 0.05
+done
+[[ -e $FLOCK_CALLS.bundle ]]
+kill -0 "$waiting"
+"$REAL_FLOCK" -x -n "$work/fence/fence.lock" true
+if wait "$waiting"; then echo 'bundle contention allowed ownership' >&2; exit 1; else status=$?; fi
+[[ $status == 1 && $((SECONDS-started)) -ge 29 && $((SECONDS-started)) -lt 40 ]]
+[[ ! -s $work/busy.out ]]
+grep -qxF "fence: could not take $BUNDLE_PATH within 30 s" "$work/busy.err"
+[[ $(jq -r '.operation_id // empty' "$work/fence/fence.json") == '' ]]
+# An installer or notice adopter passes its exclusive open description to the
+# child. Acquiring ownership must neither deadlock nor unlock the caller.
+bundle_op=$(timeout 5 "$fence" lock deploy v0.4.7)
+if "$REAL_FLOCK" -x -n "$BUNDLE_PATH" true; then exit 1; fi
+"$fence" release "$bundle_op"
+exec {bundle_fd}>&-
+rm "$work/bin/flock"
 if MOUNT_ABSENT=1 "$fence" check 4007 aboutme-server 2>/dev/null; then
   echo "the server started without its data mount" >&2
   exit 1
@@ -78,7 +162,6 @@ if "$fence" lock-for account_delete v0.4.6 "$request" 2>/dev/null; then
   exit 1
 fi
 # A private copy redirects only the fixed marker path for CI fixtures.
-mkdir -p "$work/operations"
 sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/marker-fence.sh"
 chmod +x "$work/marker-fence.sh"
 for marker in malformed symlink; do
@@ -162,4 +245,70 @@ if "$fence" check 4007 aboutme-db-setup 2>/dev/null; then
   exit 1
 fi
 
+rm "$work/fence/cutover-mutation.json"
+# Notice restore ownership has no reset-db exception and survives a new check
+# process, as it does after reboot. Existing deploy/cutover assertions above
+# keep their separate minimum-only and reset-db rules.
+notice_op=$("$fence" lock notice_restore v0.4.7)
+for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
+  aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
+  if "$fence" check 4007 "$unit" >"$work/notice.out" 2>&1; then
+    echo 'notice restore permitted a guarded start' >&2
+    exit 1
+  fi
+done
+"$fence" check 4007 aboutme-maintenance
+"$fence" check 4007 postgresql@18-main
+if "$fence" checkpoint "$request" v0.4.7 >/dev/null 2>&1; then
+  echo 'notice restore accepted another owner' >&2
+  exit 1
+fi
+"$fence" checkpoint "$notice_op" v0.4.7
+if "$fence" notice-restore-release "$request" >/dev/null 2>&1; then
+  echo 'strict notice release accepted a different owner' >&2
+  exit 1
+fi
+# This lightweight fixture has no mounted authority. Successful exact release
+# belongs to the complete mounted host-controller proof, not this setup reset.
+jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' \
+  "$work/fence/fence.json" >"$work/unowned.json"
+cp "$work/unowned.json" "$work/fence/fence.json"
+if "$fence" notice-restore-release "$notice_op" >/dev/null 2>&1; then
+  echo 'strict notice release retried against empty ownership' >&2
+  exit 1
+fi
+for adoption in initializing adopted; do
+  jq --arg state "$adoption" --arg op "$notice_op" \
+    '.notice_authority={version:1,state:$state,operation_id:$op}' \
+    "$work/fence/fence.json" >"$work/evidence.json"
+  cp "$work/evidence.json" "$work/fence/fence.json"
+  if [[ $adoption == initializing ]]; then
+    for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
+      aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
+      if "$fence" check 4007 "$unit" >/dev/null 2>&1; then
+        echo 'initializing evidence permitted a start without ownership' >&2
+        exit 1
+      fi
+    done
+    "$fence" check 4007 aboutme-maintenance
+    "$fence" check 4007 postgresql@18-main
+  fi
+done
+preserved=$(jq -c .notice_authority "$work/fence/fence.json")
+notice_op=$("$fence" lock deploy v0.4.7)
+for verb in checkpoint raise; do
+  "$fence" "$verb" "$notice_op" v0.4.7
+  [[ $(jq -c .notice_authority "$work/fence/fence.json") == "$preserved" ]]
+done
+"$fence" release "$notice_op"
+[[ $(jq -c .notice_authority "$work/fence/fence.json") == "$preserved" ]]
+for evidence in 'null' '{}' '{"version":2,"state":"adopted"}' \
+  '{"version":1,"state":"adopted","operation_id":"bad"}' \
+  '{"version":1,"state":"adopted","operation_id":"bad","extra":true}'; do
+  jq --argjson value "$evidence" '.notice_authority=$value' "$work/evidence.json" >"$work/fence/fence.json"
+  if "$fence" check 4007 aboutme-server >/dev/null 2>&1; then
+    echo 'malformed notice evidence permitted startup' >&2
+    exit 1
+  fi
+done
 echo "cutover fence tests passed"

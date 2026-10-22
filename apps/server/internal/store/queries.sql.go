@@ -14,6 +14,69 @@ import (
 	"github.com/google/uuid"
 )
 
+const acceptPrivacyNoticeRecipient = `-- name: AcceptPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'accepted', accepted_at = $1::timestamptz, failure_code = NULL
+WHERE job_id = $2::uuid AND state = 'queued' AND generation = $3::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = $4::bytea AND state = 'sealed')
+`
+
+type AcceptPrivacyNoticeRecipientParams struct {
+	AcceptedAt    time.Time
+	JobID         uuid.UUID
+	Generation    int32
+	ContentSha256 []byte
+}
+
+func (q *Queries) AcceptPrivacyNoticeRecipient(ctx context.Context, arg AcceptPrivacyNoticeRecipientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptPrivacyNoticeRecipient,
+		arg.AcceptedAt,
+		arg.JobID,
+		arg.Generation,
+		arg.ContentSha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const activatePrivacyNoticeCampaign = `-- name: ActivatePrivacyNoticeCampaign :execrows
+WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS at)
+UPDATE privacy_notice_campaigns
+SET state = 'activated', activated_at = moment.at,
+    first_activated_at = COALESCE(first_activated_at, moment.at), activation_count = activation_count + 1,
+    accepted_count = $1::bigint, deleted_count = $2::bigint,
+    last_accepted_at = $3::timestamptz
+FROM moment
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'sealed'
+    AND content_sha256 = $4::bytea
+    AND activation_count < 9223372036854775807 AND moment.at >= sealed_at AND sealed_at >= cutoff_at
+    AND (first_activated_at IS NULL OR moment.at >= first_activated_at)
+    AND ($3::timestamptz IS NULL OR moment.at >= $3::timestamptz)
+`
+
+type ActivatePrivacyNoticeCampaignParams struct {
+	AcceptedCount  int64
+	DeletedCount   int64
+	LastAcceptedAt *time.Time
+	ContentSha256  []byte
+}
+
+func (q *Queries) ActivatePrivacyNoticeCampaign(ctx context.Context, arg ActivatePrivacyNoticeCampaignParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activatePrivacyNoticeCampaign,
+		arg.AcceptedCount,
+		arg.DeletedCount,
+		arg.LastAcceptedAt,
+		arg.ContentSha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const advanceDiscoveryGeneration = `-- name: AdvanceDiscoveryGeneration :one
 UPDATE public_state
 SET discovery_generation = discovery_generation + 1
@@ -26,6 +89,25 @@ func (q *Queries) AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	var discovery_generation int64
 	err := row.Scan(&discovery_generation)
 	return discovery_generation, err
+}
+
+const advancePrivacyNoticeCapture = `-- name: AdvancePrivacyNoticeCapture :execrows
+UPDATE privacy_notice_campaigns SET capture_cursor = $1::uuid
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'capturing'
+    AND content_sha256 = $2::bytea
+`
+
+type AdvancePrivacyNoticeCaptureParams struct {
+	CaptureCursor uuid.UUID
+	ContentSha256 []byte
+}
+
+func (q *Queries) AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advancePrivacyNoticeCapture, arg.CaptureCursor, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const advanceUserAuthEpoch = `-- name: AdvanceUserAuthEpoch :one
@@ -120,6 +202,27 @@ func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRota
 	return id, err
 }
 
+const cancelPrivacyNoticeRecipient = `-- name: CancelPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state='cancelled',cancelled_at=$1::timestamptz,failure_code=NULL
+WHERE id=$2::uuid AND state IN ('unqueued','queued') AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state='aborted' AND c.content_sha256=$3::bytea)
+`
+
+type CancelPrivacyNoticeRecipientParams struct {
+	At            time.Time
+	ID            uuid.UUID
+	ContentSha256 []byte
+}
+
+func (q *Queries) CancelPrivacyNoticeRecipient(ctx context.Context, arg CancelPrivacyNoticeRecipientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelPrivacyNoticeRecipient, arg.At, arg.ID, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimAuthEmailJobs = `-- name: ClaimAuthEmailJobs :many
 UPDATE auth_email_jobs
 SET state = 'leased',
@@ -131,8 +234,9 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state = 'pending'
       AND next_attempt_at <= $3::timestamptz
-    ORDER BY next_attempt_at, created_at, id
-    LIMIT $4::int
+      AND (kind <> 'privacy_notice' OR $4::boolean)
+    ORDER BY (kind = 'privacy_notice'), next_attempt_at, created_at, id
+    LIMIT $5::int
     FOR UPDATE SKIP LOCKED
 )
 RETURNING id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at
@@ -142,6 +246,7 @@ type ClaimAuthEmailJobsParams struct {
 	LeaseOwner     string
 	LeaseExpiresAt time.Time
 	Now            time.Time
+	IncludeNotice  bool
 	LimitRows      int32
 }
 
@@ -154,6 +259,7 @@ func (q *Queries) ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobs
 		arg.LeaseOwner,
 		arg.LeaseExpiresAt,
 		arg.Now,
+		arg.IncludeNotice,
 		arg.LimitRows,
 	)
 	if err != nil {
@@ -314,20 +420,55 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state IN ('sent', 'terminal')
       AND COALESCE(sent_at, terminal_at) <= $1::timestamptz
+      AND (kind <> 'privacy_notice' OR $2::boolean)
     ORDER BY COALESCE(sent_at, terminal_at), id
-    LIMIT $2::int
+    LIMIT $3::int
 )
 `
 
 type CleanupFinishedAuthEmailJobsParams struct {
-	Cutoff    time.Time
-	LimitRows int32
+	Cutoff        time.Time
+	IncludeNotice bool
+	LimitRows     int32
 }
 
 // Sent/terminal jobs are retained for seven days of audit, then removed in a
 // bounded page, oldest outcome first.
 func (q *Queries) CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cleanupFinishedAuthEmailJobs, arg.Cutoff, arg.LimitRows)
+	result, err := q.db.Exec(ctx, cleanupFinishedAuthEmailJobs, arg.Cutoff, arg.IncludeNotice, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completePrivacyNoticeAbort = `-- name: CompletePrivacyNoticeAbort :execrows
+UPDATE privacy_notice_campaigns SET aborted_at=$1::timestamptz
+WHERE id='crowdsec-postgres-paths-v1' AND state='aborted' AND aborted_at IS NULL
+    AND content_sha256=$2::bytea
+`
+
+type CompletePrivacyNoticeAbortParams struct {
+	At            time.Time
+	ContentSha256 []byte
+}
+
+func (q *Queries) CompletePrivacyNoticeAbort(ctx context.Context, arg CompletePrivacyNoticeAbortParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completePrivacyNoticeAbort, arg.At, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completePrivacyNoticePurge = `-- name: CompletePrivacyNoticePurge :execrows
+UPDATE privacy_notice_campaigns SET purged_at=clock_timestamp()
+WHERE id='crowdsec-postgres-paths-v1' AND state='retired' AND purged_at IS NULL AND content_sha256=$1
+    AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients WHERE campaign_id=privacy_notice_campaigns.id)
+`
+
+func (q *Queries) CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, completePrivacyNoticePurge, contentSha256)
 	if err != nil {
 		return 0, err
 	}
@@ -562,6 +703,43 @@ func (q *Queries) CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.U
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countLivePrivacyNoticeJobs = `-- name: CountLivePrivacyNoticeJobs :one
+SELECT count(*) FROM auth_email_jobs WHERE kind = 'privacy_notice' AND state IN ('pending', 'leased')
+`
+
+func (q *Queries) CountLivePrivacyNoticeJobs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countLivePrivacyNoticeJobs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPrivacyNoticeRecovery = `-- name: CountPrivacyNoticeRecovery :execrows
+UPDATE privacy_notice_campaigns SET recovery_count=recovery_count+1,
+    recovery_expired_count=recovery_expired_count+CASE WHEN $1::text='expired' THEN 1 ELSE 0 END,
+    recovery_attempts_exhausted_count=recovery_attempts_exhausted_count+CASE WHEN $1::text='attempts_exhausted' THEN 1 ELSE 0 END,
+    recovery_provider_rejected_count=recovery_provider_rejected_count+CASE WHEN $1::text='provider_rejected' THEN 1 ELSE 0 END,
+    recovery_payload_invalid_count=recovery_payload_invalid_count+CASE WHEN $1::text='payload_invalid' THEN 1 ELSE 0 END,
+    recovery_job_missing_count=recovery_job_missing_count+CASE WHEN $1::text='job_missing' THEN 1 ELSE 0 END,
+    recovery_delivery_failed_count=recovery_delivery_failed_count+CASE WHEN $1::text='delivery_failed' THEN 1 ELSE 0 END
+WHERE id='crowdsec-postgres-paths-v1' AND state='sealed' AND content_sha256=$2::bytea
+    AND recovery_count<9223372036854775807
+    AND $1::text IN ('expired','attempts_exhausted','provider_rejected','payload_invalid','job_missing','delivery_failed')
+`
+
+type CountPrivacyNoticeRecoveryParams struct {
+	Reason        string
+	ContentSha256 []byte
+}
+
+func (q *Queries) CountPrivacyNoticeRecovery(ctx context.Context, arg CountPrivacyNoticeRecoveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, countPrivacyNoticeRecovery, arg.Reason, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const countResumesForUser = `-- name: CountResumesForUser :one
@@ -1068,6 +1246,43 @@ func (q *Queries) CreatePendingAuthentication(ctx context.Context, arg CreatePen
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const createPrivacyNoticeCampaign = `-- name: CreatePrivacyNoticeCampaign :one
+INSERT INTO privacy_notice_campaigns(id, content_sha256, cutoff_at, expected_count, state)
+VALUES ('crowdsec-postgres-paths-v1', $1, clock_timestamp(), (SELECT count(*) FROM users), 'capturing')
+RETURNING id, content_sha256, cutoff_at, expected_count, capture_cursor, state, sealed_at, first_activated_at, activated_at, aborted_at, retired_at, purged_at, activation_count, accepted_count, deleted_count, last_accepted_at, recovery_count, recovery_expired_count, recovery_attempts_exhausted_count, recovery_provider_rejected_count, recovery_payload_invalid_count, recovery_job_missing_count, recovery_delivery_failed_count
+`
+
+func (q *Queries) CreatePrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (PrivacyNoticeCampaign, error) {
+	row := q.db.QueryRow(ctx, createPrivacyNoticeCampaign, contentSha256)
+	var i PrivacyNoticeCampaign
+	err := row.Scan(
+		&i.ID,
+		&i.ContentSha256,
+		&i.CutoffAt,
+		&i.ExpectedCount,
+		&i.CaptureCursor,
+		&i.State,
+		&i.SealedAt,
+		&i.FirstActivatedAt,
+		&i.ActivatedAt,
+		&i.AbortedAt,
+		&i.RetiredAt,
+		&i.PurgedAt,
+		&i.ActivationCount,
+		&i.AcceptedCount,
+		&i.DeletedCount,
+		&i.LastAcceptedAt,
+		&i.RecoveryCount,
+		&i.RecoveryExpiredCount,
+		&i.RecoveryAttemptsExhaustedCount,
+		&i.RecoveryProviderRejectedCount,
+		&i.RecoveryPayloadInvalidCount,
+		&i.RecoveryJobMissingCount,
+		&i.RecoveryDeliveryFailedCount,
 	)
 	return i, err
 }
@@ -1682,6 +1897,42 @@ func (q *Queries) DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (i
 	return result.RowsAffected(), nil
 }
 
+const deletePrivacyNoticeRecipientUser = `-- name: DeletePrivacyNoticeRecipientUser :execrows
+UPDATE privacy_notice_recipients
+SET user_id = NULL, state = CASE WHEN state = 'accepted' THEN 'accepted' ELSE 'deleted' END,
+    deleted_at = CASE WHEN state = 'accepted' THEN deleted_at ELSE $1::timestamptz END,
+    failure_code = NULL
+WHERE id = $2::uuid AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = $3::bytea)
+`
+
+type DeletePrivacyNoticeRecipientUserParams struct {
+	DeletedAt     time.Time
+	ID            uuid.UUID
+	ContentSha256 []byte
+}
+
+func (q *Queries) DeletePrivacyNoticeRecipientUser(ctx context.Context, arg DeletePrivacyNoticeRecipientUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrivacyNoticeRecipientUser, arg.DeletedAt, arg.ID, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteRecoveredPrivacyNoticeJob = `-- name: DeleteRecoveredPrivacyNoticeJob :execrows
+DELETE FROM auth_email_jobs WHERE id=$1 AND kind='privacy_notice' AND state IN ('terminal','sent')
+`
+
+func (q *Queries) DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRecoveredPrivacyNoticeJob, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteResumeForUser = `-- name: DeleteResumeForUser :execrows
 DELETE FROM resumes WHERE id = $1 AND user_id = $2
 `
@@ -1892,6 +2143,36 @@ type EnqueueMediaDeletionJobParams struct {
 // table's own check constraint rejects a malformed or cross-resume key.
 func (q *Queries) EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enqueueMediaDeletionJob, arg.ResumeID, arg.ObjectKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failPrivacyNoticeRecipient = `-- name: FailPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'failed', failed_at = $1::timestamptz, failure_code = $2::text
+WHERE job_id = $3::uuid AND state = 'queued' AND generation = $4::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = $5::bytea AND state = 'sealed')
+`
+
+type FailPrivacyNoticeRecipientParams struct {
+	FailedAt      time.Time
+	FailureCode   string
+	JobID         uuid.UUID
+	Generation    int32
+	ContentSha256 []byte
+}
+
+func (q *Queries) FailPrivacyNoticeRecipient(ctx context.Context, arg FailPrivacyNoticeRecipientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failPrivacyNoticeRecipient,
+		arg.FailedAt,
+		arg.FailureCode,
+		arg.JobID,
+		arg.Generation,
+		arg.ContentSha256,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -2537,6 +2818,122 @@ func (q *Queries) GetPendingAuthenticationByTokenDigestForUpdate(ctx context.Con
 	return i, err
 }
 
+const getPrivacyNoticeCampaign = `-- name: GetPrivacyNoticeCampaign :one
+SELECT id, content_sha256, cutoff_at, expected_count, capture_cursor, state, sealed_at, first_activated_at, activated_at, aborted_at, retired_at, purged_at, activation_count, accepted_count, deleted_count, last_accepted_at, recovery_count, recovery_expired_count, recovery_attempts_exhausted_count, recovery_provider_rejected_count, recovery_payload_invalid_count, recovery_job_missing_count, recovery_delivery_failed_count FROM privacy_notice_campaigns WHERE id = 'crowdsec-postgres-paths-v1'
+`
+
+func (q *Queries) GetPrivacyNoticeCampaign(ctx context.Context) (PrivacyNoticeCampaign, error) {
+	row := q.db.QueryRow(ctx, getPrivacyNoticeCampaign)
+	var i PrivacyNoticeCampaign
+	err := row.Scan(
+		&i.ID,
+		&i.ContentSha256,
+		&i.CutoffAt,
+		&i.ExpectedCount,
+		&i.CaptureCursor,
+		&i.State,
+		&i.SealedAt,
+		&i.FirstActivatedAt,
+		&i.ActivatedAt,
+		&i.AbortedAt,
+		&i.RetiredAt,
+		&i.PurgedAt,
+		&i.ActivationCount,
+		&i.AcceptedCount,
+		&i.DeletedCount,
+		&i.LastAcceptedAt,
+		&i.RecoveryCount,
+		&i.RecoveryExpiredCount,
+		&i.RecoveryAttemptsExhaustedCount,
+		&i.RecoveryProviderRejectedCount,
+		&i.RecoveryPayloadInvalidCount,
+		&i.RecoveryJobMissingCount,
+		&i.RecoveryDeliveryFailedCount,
+	)
+	return i, err
+}
+
+const getPrivacyNoticeJobForUpdate = `-- name: GetPrivacyNoticeJobForUpdate :one
+SELECT id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at FROM auth_email_jobs WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) GetPrivacyNoticeJobForUpdate(ctx context.Context, id uuid.UUID) (AuthEmailJob, error) {
+	row := q.db.QueryRow(ctx, getPrivacyNoticeJobForUpdate, id)
+	var i AuthEmailJob
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.State,
+		&i.RegistrationID,
+		&i.ResetTokenID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.KeyID,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.NextAttemptAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.SentAt,
+		&i.TerminalAt,
+	)
+	return i, err
+}
+
+const getPrivacyNoticeRecipient = `-- name: GetPrivacyNoticeRecipient :one
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients
+WHERE job_id = $1 AND campaign_id = 'crowdsec-postgres-paths-v1'
+`
+
+func (q *Queries) GetPrivacyNoticeRecipient(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error) {
+	row := q.db.QueryRow(ctx, getPrivacyNoticeRecipient, jobID)
+	var i PrivacyNoticeRecipient
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.UserID,
+		&i.JobID,
+		&i.State,
+		&i.Generation,
+		&i.QueuedAt,
+		&i.AcceptedAt,
+		&i.DeletedAt,
+		&i.FailedAt,
+		&i.CancelledAt,
+		&i.FailureCode,
+	)
+	return i, err
+}
+
+const getPrivacyNoticeRecipientForUpdate = `-- name: GetPrivacyNoticeRecipientForUpdate :one
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients
+WHERE job_id = $1::uuid AND campaign_id = 'crowdsec-postgres-paths-v1'
+FOR UPDATE
+`
+
+func (q *Queries) GetPrivacyNoticeRecipientForUpdate(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error) {
+	row := q.db.QueryRow(ctx, getPrivacyNoticeRecipientForUpdate, jobID)
+	var i PrivacyNoticeRecipient
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.UserID,
+		&i.JobID,
+		&i.State,
+		&i.Generation,
+		&i.QueuedAt,
+		&i.AcceptedAt,
+		&i.DeletedAt,
+		&i.FailedAt,
+		&i.CancelledAt,
+		&i.FailureCode,
+	)
+	return i, err
+}
+
 const getPublicDiscoverySnapshot = `-- name: GetPublicDiscoverySnapshot :one
 SELECT
     ps.discovery_generation,
@@ -3098,6 +3495,22 @@ func (q *Queries) InsertPasskeyCounterSecurityEvent(ctx context.Context, arg Ins
 	return i, err
 }
 
+const insertPrivacyNoticeRecipient = `-- name: InsertPrivacyNoticeRecipient :exec
+INSERT INTO privacy_notice_recipients(id, campaign_id, user_id, job_id, state)
+VALUES ($1, 'crowdsec-postgres-paths-v1', $2, $3, 'unqueued')
+`
+
+type InsertPrivacyNoticeRecipientParams struct {
+	ID     uuid.UUID
+	UserID *uuid.UUID
+	JobID  uuid.UUID
+}
+
+func (q *Queries) InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error {
+	_, err := q.db.Exec(ctx, insertPrivacyNoticeRecipient, arg.ID, arg.UserID, arg.JobID)
+	return err
+}
+
 const insertRotatedOAuthToken = `-- name: InsertRotatedOAuthToken :one
 INSERT INTO oauth_tokens (
     token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id,
@@ -3180,6 +3593,19 @@ func (q *Queries) InsertSlugTombstone(ctx context.Context, arg InsertSlugTombsto
 	return i, err
 }
 
+const latchPrivacyNoticeAbort = `-- name: LatchPrivacyNoticeAbort :execrows
+UPDATE privacy_notice_campaigns SET state='aborted',activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state IN ('sealed','activated') AND content_sha256=$1
+`
+
+func (q *Queries) LatchPrivacyNoticeAbort(ctx context.Context, contentSha256 []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, latchPrivacyNoticeAbort, contentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listEligiblePublicSlugs = `-- name: ListEligiblePublicSlugs :many
 SELECT COALESCE(slug, '')::text AS slug
 FROM resumes
@@ -3204,6 +3630,45 @@ func (q *Queries) ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 			return nil, err
 		}
 		items = append(items, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFailedPrivacyNoticeRecipients = `-- name: ListFailedPrivacyNoticeRecipients :many
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients
+WHERE campaign_id='crowdsec-postgres-paths-v1' AND state='failed' AND failure_code=$1
+ORDER BY id LIMIT 100
+`
+
+func (q *Queries) ListFailedPrivacyNoticeRecipients(ctx context.Context, failureCode *string) ([]PrivacyNoticeRecipient, error) {
+	rows, err := q.db.Query(ctx, listFailedPrivacyNoticeRecipients, failureCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrivacyNoticeRecipient
+	for rows.Next() {
+		var i PrivacyNoticeRecipient
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.UserID,
+			&i.JobID,
+			&i.State,
+			&i.Generation,
+			&i.QueuedAt,
+			&i.AcceptedAt,
+			&i.DeletedAt,
+			&i.FailedAt,
+			&i.CancelledAt,
+			&i.FailureCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3467,6 +3932,70 @@ func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessi
 	return items, nil
 }
 
+const listPrivacyNoticeAbortCandidates = `-- name: ListPrivacyNoticeAbortCandidates :many
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients WHERE campaign_id='crowdsec-postgres-paths-v1'
+    AND state IN ('unqueued','queued') ORDER BY id LIMIT 100
+`
+
+func (q *Queries) ListPrivacyNoticeAbortCandidates(ctx context.Context) ([]PrivacyNoticeRecipient, error) {
+	rows, err := q.db.Query(ctx, listPrivacyNoticeAbortCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrivacyNoticeRecipient
+	for rows.Next() {
+		var i PrivacyNoticeRecipient
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.UserID,
+			&i.JobID,
+			&i.State,
+			&i.Generation,
+			&i.QueuedAt,
+			&i.AcceptedAt,
+			&i.DeletedAt,
+			&i.FailedAt,
+			&i.CancelledAt,
+			&i.FailureCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrivacyNoticeCaptureUsers = `-- name: ListPrivacyNoticeCaptureUsers :many
+SELECT id FROM users
+WHERE $1::uuid IS NULL OR id > $1::uuid
+ORDER BY id LIMIT 100
+`
+
+func (q *Queries) ListPrivacyNoticeCaptureUsers(ctx context.Context, captureCursor *uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPrivacyNoticeCaptureUsers, captureCursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResumeIDsBelowSchemaVersion = `-- name: ListResumeIDsBelowSchemaVersion :many
 SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2
 `
@@ -3540,6 +4069,82 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 	return items, nil
 }
 
+const listUnqueuedPrivacyNoticeRecipients = `-- name: ListUnqueuedPrivacyNoticeRecipients :many
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients
+WHERE campaign_id = 'crowdsec-postgres-paths-v1' AND state = 'unqueued'
+ORDER BY id LIMIT 100
+`
+
+func (q *Queries) ListUnqueuedPrivacyNoticeRecipients(ctx context.Context) ([]PrivacyNoticeRecipient, error) {
+	rows, err := q.db.Query(ctx, listUnqueuedPrivacyNoticeRecipients)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrivacyNoticeRecipient
+	for rows.Next() {
+		var i PrivacyNoticeRecipient
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.UserID,
+			&i.JobID,
+			&i.State,
+			&i.Generation,
+			&i.QueuedAt,
+			&i.AcceptedAt,
+			&i.DeletedAt,
+			&i.FailedAt,
+			&i.CancelledAt,
+			&i.FailureCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserPrivacyNoticeRecipientsForUpdate = `-- name: ListUserPrivacyNoticeRecipientsForUpdate :many
+SELECT id, campaign_id, user_id, job_id, state, generation, queued_at, accepted_at, deleted_at, failed_at, cancelled_at, failure_code FROM privacy_notice_recipients WHERE user_id = $1 ORDER BY id FOR UPDATE
+`
+
+func (q *Queries) ListUserPrivacyNoticeRecipientsForUpdate(ctx context.Context, userID *uuid.UUID) ([]PrivacyNoticeRecipient, error) {
+	rows, err := q.db.Query(ctx, listUserPrivacyNoticeRecipientsForUpdate, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrivacyNoticeRecipient
+	for rows.Next() {
+		var i PrivacyNoticeRecipient
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.UserID,
+			&i.JobID,
+			&i.State,
+			&i.Generation,
+			&i.QueuedAt,
+			&i.AcceptedAt,
+			&i.DeletedAt,
+			&i.FailedAt,
+			&i.CancelledAt,
+			&i.FailureCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWebAuthnCredentialsForUser = `-- name: ListWebAuthnCredentialsForUser :many
 SELECT id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at FROM webauthn_credentials
 WHERE user_id = $1::uuid
@@ -3575,6 +4180,24 @@ func (q *Queries) ListWebAuthnCredentialsForUser(ctx context.Context, userID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockPrivacyNoticeCommand = `-- name: LockPrivacyNoticeCommand :exec
+SELECT pg_advisory_xact_lock(hashtextextended('crowdsec-postgres-paths-v1', 0))
+`
+
+func (q *Queries) LockPrivacyNoticeCommand(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockPrivacyNoticeCommand)
+	return err
+}
+
+const lockPrivacyNoticeJob = `-- name: LockPrivacyNoticeJob :exec
+SELECT id FROM auth_email_jobs WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockPrivacyNoticeJob(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockPrivacyNoticeJob, id)
+	return err
 }
 
 const lockPublicState = `-- name: LockPublicState :one
@@ -3688,6 +4311,160 @@ func (q *Queries) NormalizeIdempotencyResponse(ctx context.Context, arg Normaliz
 	return i, err
 }
 
+const privacyNoticeAbortProof = `-- name: PrivacyNoticeAbortProof :one
+SELECT count(*)::bigint AS actual,
+    count(*) FILTER(WHERE r.state IN ('unqueued','queued'))::bigint AS remaining,
+    (count(*) FILTER(WHERE (r.user_id IS NULL AND r.state NOT IN ('accepted','deleted')) OR
+        (j.id IS NOT NULL AND (j.kind<>'privacy_notice' OR j.user_id IS DISTINCT FROM r.user_id)) OR
+        NOT CASE r.state
+            WHEN 'unqueued' THEN j.id IS NULL
+            WHEN 'queued' THEN j.id IS NULL OR j.state IN ('pending','leased')
+            WHEN 'accepted' THEN j.id IS NULL OR j.state='sent'
+            WHEN 'deleted' THEN j.id IS NULL
+            WHEN 'failed' THEN j.id IS NULL OR j.state IN ('terminal','sent')
+            WHEN 'cancelled' THEN j.id IS NULL OR j.state='terminal'
+            ELSE false END) + (SELECT count(*) FROM auth_email_jobs job WHERE job.kind='privacy_notice'
+                AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=job.id)))::bigint AS invalid,
+    (SELECT count(*) FROM auth_email_jobs job WHERE job.kind='privacy_notice' AND
+        (job.state IN ('pending','leased') OR NOT EXISTS(SELECT 1 FROM privacy_notice_recipients recipient WHERE recipient.job_id=job.id)))::bigint AS live_or_orphan
+FROM privacy_notice_recipients r LEFT JOIN auth_email_jobs j ON j.id=r.job_id
+WHERE r.campaign_id='crowdsec-postgres-paths-v1'
+`
+
+type PrivacyNoticeAbortProofRow struct {
+	Actual       int64
+	Remaining    int64
+	Invalid      int64
+	LiveOrOrphan int64
+}
+
+func (q *Queries) PrivacyNoticeAbortProof(ctx context.Context) (PrivacyNoticeAbortProofRow, error) {
+	row := q.db.QueryRow(ctx, privacyNoticeAbortProof)
+	var i PrivacyNoticeAbortProofRow
+	err := row.Scan(
+		&i.Actual,
+		&i.Remaining,
+		&i.Invalid,
+		&i.LiveOrOrphan,
+	)
+	return i, err
+}
+
+const privacyNoticeCaptureProof = `-- name: PrivacyNoticeCaptureProof :one
+SELECT (SELECT count(*) FROM users)::bigint AS user_count,
+    (SELECT count(*) FROM privacy_notice_recipients WHERE campaign_id = 'crowdsec-postgres-paths-v1')::bigint AS recipient_count,
+    NOT EXISTS (SELECT 1 FROM users u WHERE NOT EXISTS (
+        SELECT 1 FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1' AND r.user_id = u.id)) AS all_users_captured,
+    NOT EXISTS (SELECT 1 FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1'
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = r.user_id)) AS all_recipients_exist
+`
+
+type PrivacyNoticeCaptureProofRow struct {
+	UserCount          int64
+	RecipientCount     int64
+	AllUsersCaptured   bool
+	AllRecipientsExist bool
+}
+
+func (q *Queries) PrivacyNoticeCaptureProof(ctx context.Context) (PrivacyNoticeCaptureProofRow, error) {
+	row := q.db.QueryRow(ctx, privacyNoticeCaptureProof)
+	var i PrivacyNoticeCaptureProofRow
+	err := row.Scan(
+		&i.UserCount,
+		&i.RecipientCount,
+		&i.AllUsersCaptured,
+		&i.AllRecipientsExist,
+	)
+	return i, err
+}
+
+const privacyNoticeDatabaseTime = `-- name: PrivacyNoticeDatabaseTime :one
+SELECT clock_timestamp()::timestamptz AS at
+`
+
+func (q *Queries) PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, privacyNoticeDatabaseTime)
+	var at time.Time
+	err := row.Scan(&at)
+	return at, err
+}
+
+const privacyNoticeTotals = `-- name: PrivacyNoticeTotals :one
+SELECT count(*)::bigint AS actual,
+    count(*) FILTER (WHERE r.state = 'unqueued')::bigint AS unqueued,
+    count(*) FILTER (WHERE r.state = 'queued')::bigint AS queued,
+    count(*) FILTER (WHERE r.state = 'accepted')::bigint AS accepted,
+    count(*) FILTER (WHERE r.state = 'deleted')::bigint AS deleted,
+    count(*) FILTER (WHERE r.state = 'failed')::bigint AS failed,
+    count(*) FILTER (WHERE r.state = 'cancelled')::bigint AS cancelled,
+    count(*) FILTER (WHERE r.failure_code = 'expired')::bigint AS expired,
+    count(*) FILTER (WHERE r.failure_code = 'attempts_exhausted')::bigint AS attempts_exhausted,
+    count(*) FILTER (WHERE r.failure_code = 'provider_rejected')::bigint AS provider_rejected,
+    count(*) FILTER (WHERE r.failure_code = 'payload_invalid')::bigint AS payload_invalid,
+    count(*) FILTER (WHERE r.failure_code = 'job_missing')::bigint AS job_missing,
+    count(*) FILTER (WHERE r.failure_code = 'delivery_failed')::bigint AS delivery_failed,
+    COALESCE(max(r.accepted_at) FILTER (WHERE r.state = 'accepted'), 'epoch'::timestamptz)::timestamptz AS last_accepted_at,
+    (count(*) FILTER (WHERE (r.user_id IS NULL AND r.state NOT IN ('accepted','deleted'))
+        OR EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id
+            AND (j.kind<>'privacy_notice' OR j.user_id IS DISTINCT FROM r.user_id))
+        OR (r.state = 'queued' AND NOT EXISTS (
+            SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id AND j.kind = 'privacy_notice'
+                AND j.user_id = r.user_id AND j.state IN ('pending','leased')))
+        OR (r.state = 'unqueued' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id))
+        OR (r.state = 'accepted' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id = r.job_id AND j.state <> 'sent'))
+        OR (r.state = 'deleted' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id))
+        OR (r.state = 'failed' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id AND j.state NOT IN ('terminal','sent')))
+        OR (r.state = 'cancelled' AND EXISTS (SELECT 1 FROM auth_email_jobs j WHERE j.id=r.job_id AND j.state<>'terminal'))
+    ) + (SELECT count(*) FROM auth_email_jobs j WHERE j.kind='privacy_notice'
+        AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=j.id)))::bigint AS inconsistent,
+    (SELECT count(*) FROM auth_email_jobs j WHERE j.kind='privacy_notice' AND j.state IN ('sent','terminal')
+        AND NOT EXISTS(SELECT 1 FROM privacy_notice_recipients member WHERE member.job_id=j.id))::bigint AS orphan_completed
+FROM privacy_notice_recipients r WHERE r.campaign_id = 'crowdsec-postgres-paths-v1'
+`
+
+type PrivacyNoticeTotalsRow struct {
+	Actual            int64
+	Unqueued          int64
+	Queued            int64
+	Accepted          int64
+	Deleted           int64
+	Failed            int64
+	Cancelled         int64
+	Expired           int64
+	AttemptsExhausted int64
+	ProviderRejected  int64
+	PayloadInvalid    int64
+	JobMissing        int64
+	DeliveryFailed    int64
+	LastAcceptedAt    time.Time
+	Inconsistent      int64
+	OrphanCompleted   int64
+}
+
+func (q *Queries) PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error) {
+	row := q.db.QueryRow(ctx, privacyNoticeTotals)
+	var i PrivacyNoticeTotalsRow
+	err := row.Scan(
+		&i.Actual,
+		&i.Unqueued,
+		&i.Queued,
+		&i.Accepted,
+		&i.Deleted,
+		&i.Failed,
+		&i.Cancelled,
+		&i.Expired,
+		&i.AttemptsExhausted,
+		&i.ProviderRejected,
+		&i.PayloadInvalid,
+		&i.JobMissing,
+		&i.DeliveryFailed,
+		&i.LastAcceptedAt,
+		&i.Inconsistent,
+		&i.OrphanCompleted,
+	)
+	return i, err
+}
+
 const publishResumeCAS = `-- name: PublishResumeCAS :one
 WITH input AS (
   SELECT
@@ -3791,6 +4568,50 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 	return i, err
 }
 
+const purgeRetiredPrivacyNoticeRecipients = `-- name: PurgeRetiredPrivacyNoticeRecipients :execrows
+DELETE FROM privacy_notice_recipients WHERE id IN (
+    SELECT r.id FROM privacy_notice_recipients r JOIN privacy_notice_campaigns c ON c.id=r.campaign_id
+    WHERE c.id='crowdsec-postgres-paths-v1' AND c.state='retired' AND c.retired_at IS NOT NULL
+        AND c.content_sha256=$1 ORDER BY r.id LIMIT 200
+)
+`
+
+func (q *Queries) PurgeRetiredPrivacyNoticeRecipients(ctx context.Context, contentSha256 []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeRetiredPrivacyNoticeRecipients, contentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const queuePrivacyNoticeRecipient = `-- name: QueuePrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state = 'queued', queued_at = $1::timestamptz
+WHERE id = $2::uuid AND state = 'unqueued' AND generation = $3::integer
+    AND campaign_id = 'crowdsec-postgres-paths-v1'
+    AND EXISTS (SELECT 1 FROM privacy_notice_campaigns WHERE id = privacy_notice_recipients.campaign_id
+        AND content_sha256 = $4::bytea AND state = 'sealed')
+`
+
+type QueuePrivacyNoticeRecipientParams struct {
+	QueuedAt      time.Time
+	ID            uuid.UUID
+	Generation    int32
+	ContentSha256 []byte
+}
+
+func (q *Queries) QueuePrivacyNoticeRecipient(ctx context.Context, arg QueuePrivacyNoticeRecipientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, queuePrivacyNoticeRecipient,
+		arg.QueuedAt,
+		arg.ID,
+		arg.Generation,
+		arg.ContentSha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordPendingAuthenticationFailure = `-- name: RecordPendingAuthenticationFailure :one
 UPDATE pending_authentications
 SET failed_attempts = failed_attempts + 1,
@@ -3831,6 +4652,63 @@ func (q *Queries) RecordPendingAuthenticationFailure(ctx context.Context, arg Re
 	return i, err
 }
 
+const recordPrivacyNoticeLateFailure = `-- name: RecordPrivacyNoticeLateFailure :execrows
+UPDATE privacy_notice_recipients
+SET state=CASE WHEN user_id IS NULL THEN 'deleted' ELSE 'failed' END,
+    deleted_at=CASE WHEN user_id IS NULL THEN $1::timestamptz ELSE deleted_at END,
+    failed_at=CASE WHEN user_id IS NULL THEN failed_at ELSE $1::timestamptz END,
+    failure_code=CASE WHEN user_id IS NULL THEN NULL ELSE 'delivery_failed' END
+WHERE job_id=$2::uuid AND state='accepted' AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state IN ('sealed','activated') AND c.content_sha256=$3::bytea)
+`
+
+type RecordPrivacyNoticeLateFailureParams struct {
+	At            time.Time
+	JobID         uuid.UUID
+	ContentSha256 []byte
+}
+
+func (q *Queries) RecordPrivacyNoticeLateFailure(ctx context.Context, arg RecordPrivacyNoticeLateFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPrivacyNoticeLateFailure, arg.At, arg.JobID, arg.ContentSha256)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recoverPrivacyNoticeRecipient = `-- name: RecoverPrivacyNoticeRecipient :execrows
+UPDATE privacy_notice_recipients SET state='queued', generation=generation+1,
+    queued_at=$1::timestamptz, failure_code=NULL
+WHERE id=$2::uuid AND state='failed' AND user_id IS NOT NULL
+    AND generation=$3::integer AND generation<2147483647
+    AND failure_code=$4::text AND campaign_id='crowdsec-postgres-paths-v1'
+    AND EXISTS(SELECT 1 FROM privacy_notice_campaigns c WHERE c.id=privacy_notice_recipients.campaign_id
+        AND c.state='sealed' AND c.content_sha256=$5::bytea)
+`
+
+type RecoverPrivacyNoticeRecipientParams struct {
+	QueuedAt      time.Time
+	ID            uuid.UUID
+	Generation    int32
+	FailureCode   string
+	ContentSha256 []byte
+}
+
+func (q *Queries) RecoverPrivacyNoticeRecipient(ctx context.Context, arg RecoverPrivacyNoticeRecipientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverPrivacyNoticeRecipient,
+		arg.QueuedAt,
+		arg.ID,
+		arg.Generation,
+		arg.FailureCode,
+		arg.ContentSha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseIdempotencyUsage = `-- name: ReleaseIdempotencyUsage :execrows
 UPDATE idempotency_usage
 SET retained_records = retained_records - $2::bigint,
@@ -3850,6 +4728,19 @@ type ReleaseIdempotencyUsageParams struct {
 // non-negative checks.
 func (q *Queries) ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseIdempotencyUsage, arg.UserID, arg.Records, arg.ReleasedBytes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reopenPrivacyNoticeCampaign = `-- name: ReopenPrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state='sealed',activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state='activated' AND content_sha256=$1
+`
+
+func (q *Queries) ReopenPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, reopenPrivacyNoticeCampaign, contentSha256)
 	if err != nil {
 		return 0, err
 	}
@@ -3890,15 +4781,17 @@ WHERE id IN (
     SELECT id FROM auth_email_jobs
     WHERE state = 'leased'
       AND lease_expires_at <= $1::timestamptz
+      AND (kind <> 'privacy_notice' OR $2::boolean)
     ORDER BY lease_expires_at, id
-    LIMIT $2::int
+    LIMIT $3::int
     FOR UPDATE SKIP LOCKED
 )
 `
 
 type RequeueExpiredAuthEmailLeasesParams struct {
-	Now       time.Time
-	LimitRows int32
+	Now           time.Time
+	IncludeNotice bool
+	LimitRows     int32
 }
 
 // Bounded stale-lease recovery: a lease that expired without a completed send
@@ -3906,7 +4799,26 @@ type RequeueExpiredAuthEmailLeasesParams struct {
 // never happened) and re-dueing immediately. Ordered so repeated calls make
 // monotonic progress.
 func (q *Queries) RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, requeueExpiredAuthEmailLeases, arg.Now, arg.LimitRows)
+	result, err := q.db.Exec(ctx, requeueExpiredAuthEmailLeases, arg.Now, arg.IncludeNotice, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retirePrivacyNoticeCampaign = `-- name: RetirePrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state='retired',retired_at=$1::timestamptz,activated_at=NULL
+WHERE id='crowdsec-postgres-paths-v1' AND state IN ('sealed','activated','aborted')
+    AND content_sha256=$2::bytea
+`
+
+type RetirePrivacyNoticeCampaignParams struct {
+	At            time.Time
+	ContentSha256 []byte
+}
+
+func (q *Queries) RetirePrivacyNoticeCampaign(ctx context.Context, arg RetirePrivacyNoticeCampaignParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retirePrivacyNoticeCampaign, arg.At, arg.ContentSha256)
 	if err != nil {
 		return 0, err
 	}
@@ -4075,6 +4987,20 @@ func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionFor
 		arg.IdleCutoff,
 		arg.Now,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sealPrivacyNoticeCampaign = `-- name: SealPrivacyNoticeCampaign :execrows
+UPDATE privacy_notice_campaigns SET state = 'sealed', sealed_at = clock_timestamp()
+WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'capturing'
+    AND content_sha256 = $1
+`
+
+func (q *Queries) SealPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, sealPrivacyNoticeCampaign, contentSha256)
 	if err != nil {
 		return 0, err
 	}

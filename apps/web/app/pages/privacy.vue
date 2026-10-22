@@ -18,6 +18,6 @@ useSiteSeo(() => ({
   <LegalDocument
     :document="copy.privacy"
     testid="privacy-page"
-    :updated="copy.updated"
+    :updated="copy.privacyUpdated"
   />
 </template>

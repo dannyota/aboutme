@@ -3,7 +3,14 @@
 # test uses a temporary root.
 
 crowdsec_preseed_offline() {
-  printf 'crowdsec crowdsec/capi boolean false\n' | debconf-set-selections
+  local selected
+  printf '%s\n' \
+    'crowdsec crowdsec/lapi boolean false' \
+    'crowdsec crowdsec/capi boolean false' \
+    'crowdsec crowdsec/lapi_host string 127.0.0.1:8095' | debconf-set-selections || return $?
+  selected=$(printf '%s\n' 'GET crowdsec/lapi' 'GET crowdsec/capi' 'GET crowdsec/lapi_host' |
+    debconf-communicate crowdsec 2>/dev/null) || return $?
+  [[ $selected == $'0 false\n0 false\n0 127.0.0.1:8095' ]]
 }
 
 crowdsec_install_offline() { # install-command package...
@@ -11,12 +18,43 @@ crowdsec_install_offline() { # install-command package...
     set -euo pipefail
     local policy=${CROWDSEC_POLICY_RC_D:-/usr/sbin/policy-rc.d}
     local systemctl=${CROWDSEC_SYSTEMCTL:-systemctl}
-    local backup='' backup_dir='' had_policy=no cleanup_status=0 load_state state status unit
+    local backup='' backup_dir='' had_policy=no cleanup_status=0 load_state state status unit spec
     local -a enable_units=(crowdsec.service crowdsec-firewall-bouncer.service)
     local -a hub_units=(crowdsec-hubupdate.timer crowdsec-hubupdate.service)
     local -a disable_units=("${enable_units[@]}" crowdsec-hubupdate.timer)
     local -a units=("${enable_units[@]}" "${hub_units[@]}")
 
+    if ((EUID==0)); then
+      # This checks configuration only. It grants no database admission.
+      python3 -I - /etc/crowdsec/config.yaml.local /etc/crowdsec/config.yaml.postgresql >/dev/null 2>&1 <<'PY' || exit 1
+import os,stat,sys,yaml
+configs=[]
+for path in sys.argv[1:]:
+    info=os.lstat(path)
+    assert stat.S_ISREG(info.st_mode) and info.st_uid==0 and info.st_nlink==1
+    assert stat.S_IMODE(info.st_mode)==0o644
+    configs.append(yaml.safe_load(open(path)))
+assert configs[0]==configs[1]
+db=configs[0]['db_config']
+assert db['type']=='pgx' and db['db_name']==db['user']=='crowdsec'
+assert db['db_path']=='/run/postgresql' and db['host']=='' and db['port']==0
+assert db['max_open_conns']==4 and db['flush']=={'max_age':'0s','max_items':None}
+assert 'password' not in db and 'use_wal' not in db
+assert 'online_client' not in configs[0]['api']['server']
+PY
+      for spec in "$@"; do
+        if [[ $spec == crowdsec-firewall-bouncer-nftables=* ]]; then
+          python3 -I - /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local >/dev/null 2>&1 <<'PY' || exit 1
+import os,stat,sys,yaml
+path=sys.argv[1]; info=os.lstat(path)
+assert stat.S_ISREG(info.st_mode) and info.st_uid==info.st_gid==0
+assert info.st_nlink==1 and stat.S_IMODE(info.st_mode)==0o600
+key=yaml.safe_load(open(path))['api_key']
+assert isinstance(key,str) and key and not any(c in key for c in '$<>\n\r')
+PY
+        fi
+      done
+    fi
     crowdsec_preseed_offline || exit $?
     "$systemctl" stop "${units[@]}" 2>/dev/null || true
     for unit in "${units[@]}"; do
@@ -73,7 +111,35 @@ crowdsec_install_offline() { # install-command package...
     chmod 0755 "$policy" || exit $?
     "$systemctl" mask "${hub_units[@]}" || exit $?
     "$systemctl" unmask --runtime "${enable_units[@]}" || exit $?
-    SYSTEMD_OFFLINE=1 "$@"
+    DEBIAN_FRONTEND=noninteractive SYSTEMD_OFFLINE=1 CROWDSEC_SETUP_UNATTENDED_DISABLE=1 "$@" >/dev/null 2>&1
+  )
+}
+
+crowdsec_admitted_cli() {
+  /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 || return 1
+  /usr/bin/cscli "$@"
+}
+
+crowdsec_assert_postgresql() {
+  (
+    set -euo pipefail
+    umask 077
+    local work
+    work=$(mktemp -d /run/aboutme/crowdsec-config-proof.XXXXXX)
+    trap 'rm -rf -- "$work"' EXIT
+    crowdsec_admitted_cli config show --key Config.DbConfig -o json >"$work/active" 2>/dev/null
+    crowdsec_admitted_cli -c /etc/crowdsec/config.yaml.postgresql config show \
+      --key Config.DbConfig -o json >"$work/candidate" 2>/dev/null
+    python3 -I - "$work/active" "$work/candidate" >/dev/null 2>&1 <<'PY'
+import json,sys
+active,candidate=(json.load(open(path)) for path in sys.argv[1:])
+assert active==candidate
+assert active['Type']=='pgx' and active['DbName']==active['User']=='crowdsec'
+assert active['DbPath']=='/run/postgresql' and active['Host']=='' and active['Port']==0
+assert active['SSLMode']=='disable' and active['MaxOpenConns']==4
+assert active['Password']=='' and active['UseWal'] is None
+assert active['Flush']['MaxItems'] is None
+PY
   )
 }
 
@@ -85,9 +151,9 @@ crowdsec_configure_local_detection() {
   : >/etc/crowdsec/acquis.yaml || return $?
   find /etc/crowdsec/acquis.d -mindepth 1 -maxdepth 1 -delete || return $?
   for item_type in "${item_types[@]}"; do
-    cscli "$item_type" remove --all --force >/dev/null || return $?
+    crowdsec_admitted_cli "$item_type" remove --all --force >/dev/null 2>&1 || return $?
   done
-  cscli collections install crowdsecurity/sshd >/dev/null || return $?
+  crowdsec_admitted_cli collections install crowdsecurity/sshd >/dev/null 2>&1 || return $?
   rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml || return $?
 }
 
@@ -113,6 +179,9 @@ crowdsec_remove_online() { # base-config local-config credentials
   local base=$1 local_config=$2 credentials=$3 tmp
   tmp=$(mktemp "${base}.XXXXXX")
   awk '
+    /^db_config:/ { skip_db = 1; next }
+    skip_db && (/^[[:space:]]/ || /^$/) { next }
+    { skip_db = 0 }
     /^    online_client:/ { skip = 1; next }
     skip && /^      / { next }
     { skip = 0; print }

@@ -220,4 +220,66 @@ run_case delete-output-failure || fail 'final HEAD did not settle delete output 
 [[ $(grep -c delete-object "$work/delete-output-failure.log") == 1 ]] || fail 'delete output failure retried'
 run_case delete-ambiguous || fail 'final HEAD did not settle ambiguous delete'
 [[ $(grep -c delete-object "$work/delete-ambiguous.log") == 1 ]] || fail 'ambiguous delete retried'
+# Each pass is one host controller call. Later SSH queries cannot complete a
+# restore after its workload ownership has ended.
+drill=$repo_root/deploy/vn/scripts/restore-drill.sh
+sed -n '/^restore_run() {/,/^}/p' "$drill" >"$work/restore-function"
+grep -Fq '/usr/local/lib/aboutme/restore-drill.sh' "$work/restore-function" || fail 'pass omitted fixed host controller'
+grep -Fq 'host-pass' "$work/restore-function" || fail 'pass omitted whole host call'
+if grep -Eq 'pgbackrest|psql|run_checks|pre-restore|postcheck|notice_restore_finish' "$work/restore-function"; then
+  fail 'laptop split locked host completion'
+fi
+grep -Fq -- '--archive-mode=off' "$drill" || fail 'notice restore enabled archival'
+for boundary in notice_restore_begin notice_restore_pre_restore notice_restore_postcheck notice_restore_finish; do
+  grep -Fq "$boundary" "$drill" || fail 'controller omitted source-only boundary'
+done
+grep -Fq '_host-pass' "$drill" || fail 'controller omitted private child'
+grep -Eq 'workload-lock.sh["[:space:]]+300' "$drill" || fail 'controller changed fixed workload admission'
+if grep -Eq '^[[:space:]]*[^#].*(flock[[:space:]].*--close|flock[[:space:]]+-u|sudo[[:space:]]+-u[[:space:]]+postgres)' "$drill"; then
+  fail 'controller closes inherited workload ownership'
+fi
+grep -Fq 'restore_run latest' "$drill" || fail 'latest restore pass absent'
+grep -Fq 'restore_run time' "$drill" || fail 'PITR restore pass absent'
+if grep -Eq '^run_checks[[:space:]]+(latest|"point-in-time")' "$drill"; then
+  fail 'laptop completed database checks outside host ownership'
+fi
+# A streamed check cannot certify a lost SSH reply. Exercise only the laptop
+# call wrapper, with its transport closed over the two permitted argument lists.
+(
+  die() { printf 'invalid_state\n' >&2; exit 1; }
+  say() { :; }
+  record() { printf '%s %s\n' "$2" "$1"; }
+  pg_target=2026-10-19T00:00:00Z
+  # shellcheck disable=SC2034 # Used by the sourced restore_run function.
+  target_time=$pg_target
+  rsh() {
+    case $* in
+      'sudo /usr/local/lib/aboutme/restore-drill.sh host-pass latest' | \
+      'sudo /usr/local/lib/aboutme/restore-drill.sh host-pass time 2026-10-19T00:00:00Z') : ;;
+      *) exit 1 ;;
+    esac
+    printf 'PASS latest goose version\n'
+    return 255
+  }
+  # shellcheck source=/dev/null
+  source "$work/restore-function"
+  for mode in latest time; do
+    if (restore_run "$mode") >"$work/lost-ssh-out" 2>"$work/lost-ssh-err"; then
+      fail 'lost SSH response certified restore success'
+    fi
+    if grep -Eq '^PASS (latest|point-in-time) notice restore fence$' "$work/lost-ssh-out"; then
+      fail 'lost SSH response emitted final notice PASS'
+    fi
+  done
+)
+sed -n '/^install_drill_host() {/,/^}/p' "$drill" >"$work/install-function"
+grep -Fq 'host' "$work/install-function" || fail 'drill omitted shared host primitive'
+for forbidden in 'send.json' 'activation.json' 'privacy-notice/epoch' 'release.json'; do
+  if grep -Fq "$forbidden" "$work/install-function"; then
+    fail 'drill transferred app or notice authority'
+  fi
+done
+if grep -Eq 'trap .*?(notice_restore|restore-reconciliation|fence.sh.*(clear|release))' "$drill"; then
+  fail 'drill clears ownership on exit'
+fi
 printf 'restore drill state proof tests: ok\n'

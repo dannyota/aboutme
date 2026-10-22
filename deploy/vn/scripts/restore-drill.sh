@@ -31,6 +31,165 @@
 # never touches the laptop disk.
 set -euo pipefail
 
+# Host entry points precede every laptop import and cloud operation.
+notice_host_invalid() { printf 'invalid_state\n' >&2; exit 1; }
+notice_postgres() {
+  setpriv --reuid="$(id -u postgres)" --regid="$(id -g postgres)" --init-groups "$@" 3<&- 4>&-
+}
+notice_sql() {
+  notice_postgres psql -X -q -At -F '|' -v ON_ERROR_STOP=1 -v tbl=resumes -h /run/postgresql -d aboutme -f -
+}
+notice_database_checks() {
+  local out table count extra rows=0
+  out=$(notice_sql <<<'SELECT max(version_id) FROM goose_db_version;') || return 1
+  [[ $out =~ ^(0|[1-9][0-9]{0,17})$ ]] || return 1
+  printf 'PASS goose version: %s\n' "$out"
+  out=$(notice_sql <<'SQL'
+SELECT table_name, (xpath('/row/c/text()',
+ query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name),
+ false, true, '')))[1]::text FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1;
+SQL
+  ) || return 1
+  [[ -n $out && ${#out} -le 32768 ]] || return 1
+  while IFS='|' read -r table count extra; do
+    case $table in
+      goose_db_version|users|identities|oauth_transactions|sessions|idempotency_records|resumes|slug_tombstones|idempotency_usage|media_deletion_jobs|public_state|password_credentials|password_registrations|password_reset_tokens|auth_email_jobs|oauth_clients|oauth_authorization_codes|oauth_grants|oauth_tokens|lifecycle_audit_events|privacy_sweep_state|second_factor_policies|webauthn_credentials|second_factor_recovery_codes|pending_authentications|webauthn_ceremonies|authentication_security_events|totp_credentials|totp_enrollments|resume_preview_cards|resume_view_days|resume_share_signal_days|resume_showcase|privacy_notice_campaigns|privacy_notice_recipients) ;;
+      *) return 1 ;;
+    esac
+    [[ -z $extra && $count =~ ^(0|[1-9][0-9]{0,18})$ ]] || return 1
+    printf 'COUNT %s %s\n' "$table" "$count"; rows=$((rows + 1))
+  done <<<"$out"
+  printf 'PASS row counts: %s tables\n' "$rows"
+  out=$(notice_sql <<'SQL'
+SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='public'
+ AND c.relkind IN ('r','p','v','m','S','f') AND a.grantee=0;
+SQL
+  ) || return 1
+  [[ $out == 0 ]] || return 1
+  printf 'PASS no PUBLIC grant on a public table\n'
+  out=$(notice_sql <<<"SELECT has_schema_privilege('aboutme_app', 'public', 'CREATE');") || return 1
+  [[ $out == f ]] || return 1
+  printf 'PASS aboutme_app has no CREATE on schema public\n'
+  out=$(notice_sql <<'SQL'
+SELECT CASE WHEN NOT EXISTS (
+ SELECT FROM pg_catalog.pg_authid WHERE rolname='crowdsec'
+ AND NOT (rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole
+ AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=8
+ AND rolpassword IS NULL AND rolvaliduntil IS NULL))
+ THEN string_agg(rolname, ',' ORDER BY rolname) ELSE 'invalid' END
+ FROM pg_catalog.pg_authid WHERE rolname !~ '^pg_' AND rolname <> 'postgres';
+SQL
+  ) || return 1
+  [[ $out == aboutme,aboutme_app,aboutme_migrator || $out == aboutme,aboutme_app,aboutme_migrator,crowdsec ]] || return 1
+  printf 'PASS role list\n'
+  out=$(notice_sql <<<'SET ROLE aboutme_app; SELECT count(*) FROM :"tbl";') || return 1
+  [[ $out =~ ^(0|[1-9][0-9]{0,18})$ ]] || return 1
+  printf 'PASS store smoke as aboutme_app on resumes: %s\n' "$out"
+}
+notice_host_child() {
+  (($# == 0)) || return 1
+  [[ $(stat -Lc %F /proc/self/fd/3) == fifo && $(stat -Lc %F /proc/self/fd/4) == fifo ]] || return 1
+  local context state start elapsed recovery_started=0 descriptor inherited=0
+  context=$(notice_wire context <&3) || return 1
+  exec 3<&-
+  notice_operation=$(jq -r .operation_id <<<"$context")
+  notice_admission=$(jq -r .admission_tag <<<"$context")
+  notice_identity=$(jq -c .mount_identity <<<"$context")
+  notice_mode=$(jq -r .mode <<<"$context"); notice_target=$(jq -r '.target // empty' <<<"$context")
+  for descriptor in /proc/$$/fd/*; do
+    if [[ $(readlink "$descriptor") == /run/aboutme/workload.lock ]]; then inherited=1; fi
+  done
+  ((inherited)) || return 1
+  notice_restore_pre_restore 4>&- || return 1
+  start=$SECONDS
+  notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
+  local restore_args=(--stanza=aboutme --delta --archive-mode=off)
+  if [[ $notice_mode == time ]]; then
+    # Automatic backup selection requires a space and an explicit UTC offset.
+    restore_args+=(--type=time "--target=${notice_target:0:10} ${notice_target:11:8}+00" --target-action=promote)
+  fi
+  notice_restore_denial 4>&- && notice_postgres pgbackrest "${restore_args[@]}" restore || return 1
+  notice_restore_denial 4>&- && systemctl start postgresql@18-main.service 4>&- || return 1
+  while ((SECONDS - start <= 3600)); do
+    state=$(notice_postgres psql -X -q -At -h /run/postgresql -d postgres -c 'select pg_is_in_recovery()') || return 1
+    case $state in f) recovery_started=1; break ;; t) sleep 1 4>&- ;; *) return 1 ;; esac
+  done
+  ((recovery_started)) || return 1
+  elapsed=$((SECONDS - start))
+  notice_database_checks 4>&- || return 1
+  state=$(systemctl show --all --property=ActiveState --property=Job postgresql@18-main.service 4>&-) || return 1
+  [[ $(wc -l <<<"$state") == 2 ]] && grep -qxF ActiveState=active <<<"$state" && grep -qxF Job= <<<"$state" || return 1
+  ! pgrep -f '[/]pgbackrest.*restore' 4>&- >/dev/null || return 1
+  notice_restore_postcheck 4>&- || return 1
+  printf 'RECOVERY %s\n' "$elapsed"
+  jq -cn --arg id "$notice_operation" --arg epoch "$notice_epoch" '{version:1,operation_id:$id,epoch:$epoch}' >&4 || return 1
+  exec 4>&-
+}
+notice_host_parent() {
+  local mode=$1 target=${2:-} context completion report_fd
+  notice_app_absent && notice_restore_begin || return 1
+  context=$(jq -cn --arg id "$notice_operation" --arg tag "$notice_admission" --arg mode "$mode" \
+    --arg target "$target" --argjson identity "$notice_identity" \
+    '{version:1,operation_id:$id,admission_tag:$tag,mode:$mode,target:(if $mode=="latest" then null else $target end),mount_identity:$identity}') || return 1
+  exec {report_fd}>&1
+  completion=$(python3 -I - 5<<<"$context" 6>&"$report_fd" <<'PY'
+import fcntl,os,subprocess,sys
+try:
+    data=os.fdopen(5,'rb').read(1025); assert len(data)<=1024
+    def pipe():
+        r,w=os.pipe()
+        high=[fcntl.fcntl(fd,fcntl.F_DUPFD_CLOEXEC,10) for fd in (r,w)]
+        os.close(r); os.close(w); return high
+    cr,cw=pipe(); rr,rw=pipe()
+    os.dup2(cr,3,inheritable=True); os.dup2(rw,4,inheritable=True)
+    child=subprocess.Popen('/usr/local/lib/aboutme/workload-lock.sh 300 /usr/local/lib/aboutme/restore-drill.sh _host-pass'.split(),
+        pass_fds=(3,4),stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    os.close(3); os.close(4); os.close(cr); os.close(rw)
+    assert os.write(cw,data)==len(data); os.close(cw)
+    reports,_=child.communicate()
+    completion=os.fdopen(rr,'rb').read(258)
+    assert child.returncode==0 and 0<len(completion)<=256
+    assert completion.endswith(b'\n') and b'\n' not in completion[:-1] and b'\r' not in completion and b'\0' not in completion
+    assert len(reports)<=65536
+    for line in reports.decode('ascii').splitlines():
+        assert line.startswith(('PASS goose version: ','COUNT ','PASS row counts: ','PASS no PUBLIC grant on a public table','PASS aboutme_app has no CREATE on schema public','PASS role list','PASS store smoke as aboutme_app on resumes: ','RECOVERY '))
+    os.write(6,reports); os.write(1,completion)
+except Exception:
+    sys.exit(1)
+PY
+  ) || { exec {report_fd}>&-; return 1; }
+  exec {report_fd}>&-
+  completion=$(notice_wire completion <<<"$completion") || return 1
+  [[ $(jq -r .operation_id <<<"$completion") == "$notice_operation" ]] || return 1
+  notice_epoch=$(jq -r .epoch <<<"$completion")
+  # shellcheck disable=SC2034 # Consumed by the sourced exact-owner finish.
+  notice_completed=yes notice_helper_joined=yes
+  notice_restore_finish
+}
+notice_host_entry() {
+  [[ $(id -u) == 0 ]] || return 1
+  notice_overrides_absent || return 1
+  trap 'exit 1' HUP TERM INT
+  case "$#:${1-}:${2-}" in
+    2:host-pass:latest) notice_host_parent latest ;;
+    3:host-pass:time)
+      python3 -I -c 'import datetime,re,sys; s=sys.argv[1]; assert re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",s); datetime.datetime.strptime(s,"%Y-%m-%dT%H:%M:%SZ")' "$3" || return 1
+      notice_host_parent time "$3" ;;
+    1:_host-pass:) notice_host_child "${@:2}" ;;
+    *) return 1 ;;
+  esac
+}
+case ${1-} in
+  host-pass|_host-pass|pre-restore|postcheck|finish|resume-owned-operation)
+    # shellcheck source=../host/crowdsec-privacy-notice-host.sh
+    source /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh 2>/dev/null || notice_host_invalid
+    if ! notice_host_entry "$@" 2>/dev/null; then notice_host_invalid; fi
+    exit 0 ;;
+esac
+
+
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=ssh-lib.sh
 source "$here/ssh-lib.sh"
@@ -39,12 +198,6 @@ source "$here/ssh-lib.sh"
 
 SERVER_NAME=aboutme-restore-drill
 ADMIN_USER=aboutme-admin
-# The database to check and the table the aboutme_app smoke reads. Both are
-# values to confirm against the schema before the first drill.
-DB_NAME=aboutme
-SMOKE_TABLE=resumes
-RECOVERY_WAIT_SECONDS=3600
-
 # Sizes and IDs match quote.sh, so the drill is priced like production. Keep
 # the defaults in sync with it. The encryption type is the one switch for the
 # drill disks' encryption, as disk_encryption_type is for production.
@@ -363,7 +516,8 @@ install_drill_host() {
   local bundle=/tmp/aboutme-bundle
   say "copying the bundle and installing PostgreSQL and pgBackRest"
   rsh sudo rm -rf "$bundle"
-  tar -C "$here/.." -c host scripts/fence.sh scripts/deploy-host.sh |
+  tar -C "$here/.." -c host edge scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
+    scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
     rsh bash -c 'mkdir -p /tmp/aboutme-bundle && tar -C /tmp/aboutme-bundle -x'
   # The data disk is the one disk that is neither the root disk nor zram.
   # shellcheck disable=SC2016 # runs on the drill host
@@ -394,105 +548,21 @@ copy_secrets() {
     die "secrets.conf on the drill host is empty"
 }
 
-# restore_run <latest|time>: stops PostgreSQL, restores, starts it, and waits
-# until it accepts connections and has left recovery. The restore sets
-# archive_mode=off so the promoted cluster never writes to the production
-# repository. Sets restore_seconds.
+# One confirmed SSH result covers replacement, recovery, and every locked check.
 restore_run() {
-  local mode=$1 start
-  start=$SECONDS
-  # shellcheck disable=SC2016 # runs on the drill host
-  rsh sudo bash -s -- "$mode" "$pg_target" "$RECOVERY_WAIT_SECONDS" <<'REMOTE'
-set -euo pipefail
-mode=$1 target=$2 wait_s=$3
-systemctl stop postgresql@18-main.service
-args=(--stanza=aboutme --delta --archive-mode=off)
-if [ "$mode" = time ]; then
-  args+=(--type=time "--target=$target" --target-action=promote)
-fi
-sudo -u postgres pgbackrest "${args[@]}" restore
-systemctl start postgresql@18-main.service
-for _ in $(seq 1 "$wait_s"); do
-  state=$(sudo -u postgres psql -X -q -At -h /run/postgresql -d postgres \
-    -c 'select pg_is_in_recovery()' 2>/dev/null || true)
-  [ "$state" = f ] && exit 0
-  sleep 1
-done
-echo "PostgreSQL did not leave recovery within ${wait_s}s" >&2
-exit 1
-REMOTE
-  restore_seconds=$((SECONDS - start))
-}
-
-# psql_drill reads SQL on stdin and prints unaligned tuples as postgres over
-# the socket. The smoke table is passed as the psql variable tbl.
-psql_drill() {
-  rsh sudo -u postgres psql -X -q -At -F '|' -v ON_ERROR_STOP=1 \
-    -v "tbl=$SMOKE_TABLE" -h /run/postgresql -d "$DB_NAME" -f -
-}
-
-record() {
-  local name=$1 status=$2 detail=${3:-}
-  result_lines+=("$status $name${detail:+: $detail}")
-  say "  $status $name${detail:+: $detail}"
-  [[ $status == PASS ]] || failures=$((failures + 1))
-}
-
-# run_checks <label> prints and records the checks of design "PostgreSQL":
-# goose version, row counts, the catalog grant test, and a store smoke.
-run_checks() {
-  local label=$1 out
-  say "checks after the $label restore"
-  if out=$(psql_drill <<<'SELECT max(version_id) FROM goose_db_version;' 2>&1); then
-    record "$label goose version" PASS "max version_id $out"
-  else
-    record "$label goose version" FAIL "query failed"
+  local mode=$1 out label=latest
+  local call=(sudo /usr/local/lib/aboutme/restore-drill.sh host-pass "$mode")
+  if [[ $mode == time ]]; then call+=("$target_time"); label=point-in-time; fi
+  if ! out=$(rsh "${call[@]}"); then
+    printf 'FAIL %s notice restore fence\n' "$label"
+    die "invalid_state"
   fi
-
-  # shellcheck disable=SC2016 # SQL, not shell
-  if out=$(psql_drill <<<"SELECT table_name, (xpath('/row/c/text()',
-      query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name),
-      false, true, '')))[1]::text FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1;" 2>&1); then
-    say "  row counts:"
-    printf '%s\n' "$out" | awk -F'|' '{ printf "    %-40s %s\n", $1, $2 }'
-    count_lines+=("[$label]")
-    while IFS='|' read -r t n; do count_lines+=("  $t $n"); done <<<"$out"
-    record "$label row counts" PASS "$(printf '%s\n' "$out" | grep -c .) tables"
-  else
-    record "$label row counts" FAIL "query failed"
-  fi
-
-  out=$(psql_drill <<<"SELECT count(*) FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      CROSS JOIN LATERAL aclexplode(c.relacl) a
-      WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','S','f')
-      AND a.grantee = 0;" 2>&1) || out=error
-  if [[ $out == 0 ]]; then
-    record "$label no PUBLIC grant on a public table" PASS
-  else
-    record "$label no PUBLIC grant on a public table" FAIL "count $out"
-  fi
-  out=$(psql_drill <<<"SELECT has_schema_privilege('aboutme_app', 'public', 'CREATE');" 2>&1) || out=error
-  if [[ $out == f ]]; then
-    record "$label aboutme_app has no CREATE on schema public" PASS
-  else
-    record "$label aboutme_app has no CREATE on schema public" FAIL "got $out"
-  fi
-  out=$(psql_drill <<<"SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_roles
-      WHERE rolname !~ '^pg_' AND rolname <> 'postgres';" 2>&1) || out=error
-  if [[ $out == aboutme,aboutme_app,aboutme_migrator ]]; then
-    record "$label role list" PASS "$out"
-  else
-    record "$label role list" FAIL "got $out"
-  fi
-
-  # shellcheck disable=SC2016 # psql variable, not shell
-  if out=$(psql_drill <<<'SET ROLE aboutme_app; SELECT count(*) FROM :"tbl";' 2>&1); then
-    record "$label store smoke as aboutme_app on $SMOKE_TABLE" PASS "count $out"
-  else
-    record "$label store smoke as aboutme_app on $SMOKE_TABLE" FAIL "read refused or failed"
-  fi
+  restore_seconds=$(sed -n 's/^RECOVERY \([0-9][0-9]*\)$/\1/p' <<<"$out")
+  [[ $restore_seconds =~ ^(0|[1-9][0-9]{0,3})$ && $restore_seconds -le 3600 ]] || die "invalid_state"
+  printf '%s\n' "$out"
+  if [[ $mode == latest ]]; then printf 'PASS latest notice restore fence\n'
+  else printf 'PASS point-in-time notice restore fence\n'; fi
+  result_lines+=("PASS $label notice restore fence")
 }
 
 # ---- Main ----------------------------------------------------------------
@@ -515,15 +585,14 @@ copy_secrets
 restore_run latest
 latest_seconds=$restore_seconds
 say "latest restore took ${latest_seconds}s"
-run_checks latest
 
 restore_run time
 time_seconds=$restore_seconds
 say "point-in-time restore to $pg_target took ${time_seconds}s"
-run_checks "point-in-time"
 
 # ---- Summary -------------------------------------------------------------
 
+printf 'notice reconciliation: not performed\n'
 summary=$(
   printf 'restore drill %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'latest backup recovery: %ss\n' "$latest_seconds"

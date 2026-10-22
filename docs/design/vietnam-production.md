@@ -58,8 +58,10 @@ Three host-level controls replace AWS WAF:
 - Go's rate limits stay the application control.
 - CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer ban attacks; Caddy
   returns 403. Its [HTTP privacy contract](crowdsec-http-privacy.md) uses a
-  five-field RAM-only feed, keeps encrypted attack records for at most 24 hours,
-  and disables community sharing (owner, 2026-10-10).
+  bounded RAM-only feed with conditional rejected-target samples and disables
+  community sharing. The owner approved the feed and PostgreSQL amendment on
+  2026-10-18; its contract owns live retention, backups, the storage switch, and
+  recovery.
 - Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
   before blocking. Raw audit logging stays off because it can record body data.
   Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
@@ -205,7 +207,13 @@ PostgreSQL 18 from the PGDG packages, pinned to the minor version.
   `peer` for `postgres`. `DATABASE_URL` uses `host=/run/postgresql`.
 - The `aboutme` role owns the database with `CREATEROLE`, like the RDS master,
   and runs `db-setup`. Only pgBackRest and restores use the `postgres`
-  superuser.
+  superuser, apart from provisioning the separate CrowdSec database and role.
+
+The approved CrowdSec architecture uses a separate `crowdsec` database and
+least-privilege role in this cluster, with Unix-socket peer authentication. Its
+[storage and privacy contract](crowdsec-http-privacy.md) owns the grants,
+retention gate, backup inclusion, release order, and fresh state after restore.
+Approval does not establish that production cutover has completed.
 
 pgBackRest archives WAL continuously to a private backup bucket with
 `archive_timeout = 60s`, so about a minute of commits is at risk. It runs a full
@@ -248,16 +256,29 @@ outside PostgreSQL under `flock` per the
 Podman; new hosts start at floor 4007. Each `cutover` subcommand locks the
 installed tag, checkpoints before mutation, and holds through quiescence;
 `verify` locks. Before mutation, the fence writes a marker with its ID, kind,
-state, and start time. A retained cutover operation or any marker refuses
+state, and start time. A retained cutover operation or cutover marker refuses
 server, web, serving Caddy, migrate, and scheduled-job starts before Podman,
 including after reboot. Maintenance can start. `db-setup` starts only for a
 valid active `reset-db` marker sharing the cutover lock ID; missing, symlinked,
-malformed, wrong-kind, or mismatched state refuses it. Non-cutover operations
-keep the minimum-only rule. The owning operation removes its marker after safe
-quiescence. Uncertainty keeps the marker and lock closed. Manual clear refuses a
-marker; privileged recovery logs its reason and clears it after inspection.
-Cleanup releases the exact ID only without a marker. A retry cannot replace its
-owner.
+malformed, wrong-kind, or mismatched state refuses it. The owning cutover
+operation removes its marker after safe quiescence. Uncertainty keeps the marker
+and lock closed. Manual clear refuses a marker; privileged recovery logs its
+reason and clears it after inspection. Cleanup releases the exact ID only
+without a cutover marker. A retry cannot replace its owner.
+
+The
+[notice host contract](crowdsec-privacy-notification.md#send-authority-and-restore-fence)
+owns canonical guest mount checks, bootstrap/adoption, app-absent admission,
+restore sequencing, and proof limits. Its fixed `notice_restore` kind uses the
+same persistent operation fence, then the workload lock. Retained ownership
+blocks server, web, serving Caddy, migrate, db-setup, scheduled-job, and
+changed-ingestion consumer starts across reboot. It has no db-setup exception;
+PostgreSQL recovery and static maintenance remain subject to their existing
+gates. The contract's initializing adoption state independently blocks the same
+application/ingestion starts. Other non-cutover operation kinds keep
+minimum-only behavior, subject to existing mount, key-change, and other safety
+guards. Restore completion releases only its exact operation ownership; it never
+clears notice reconciliation or grants send/activation authority.
 
 ## Scheduled jobs
 

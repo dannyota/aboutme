@@ -71,6 +71,10 @@ image_ok() { # name ref
 checkpoint() {
   [[ $op != - ]] || die "this step needs the operation id"
   "$fence" checkpoint "$op" "$tag" >/dev/null || die "fence checkpoint failed; the lock or the floor no longer holds"
+  case ${step:-} in
+    app-up | restore-previous | render)
+      "$fence" check "$(release_number "$tag")" aboutme-server >/dev/null || die "invalid_state" ;;
+  esac
 }
 
 # Every state file and flags.env is parsed here, by jq, against one strict
@@ -430,10 +434,12 @@ step_secrets_check() {
 # bouncer acts only on SSH scenarios, so SSH stays open.
 step_ban_test() { # add|del ip
   [[ $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "'$2' is not an IPv4 address"
+  /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
+    die "CrowdSec database admission refused"
   if [[ $1 == add ]]; then
-    cscli decisions add --ip "$2" --duration 3m --type ban --reason aboutme-deploy-smoke >/dev/null
+    cscli decisions add --ip "$2" --duration 3m --type ban --reason aboutme-deploy-smoke >/dev/null 2>&1
   else
-    cscli decisions delete --ip "$2" >/dev/null
+    cscli decisions delete --ip "$2" >/dev/null 2>&1
   fi
 }
 

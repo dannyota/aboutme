@@ -58,6 +58,10 @@ type publicRuntime struct {
 
 func main() {
 	if err := dispatch(os.Args[1:]); err != nil {
+		var noticeExit privacyNoticeExitError
+		if errors.As(err, &noticeExit) {
+			os.Exit(noticeExit.code)
+		}
 		var occupancyExit rootOccupancyExitError
 		if errors.As(err, &occupancyExit) {
 			os.Exit(occupancyExit.code)
@@ -76,6 +80,9 @@ func main() {
 
 // dispatch handles operator commands before the default server and privacy jobs.
 func dispatch(args []string) error {
+	if len(args) > 0 && args[0] == privacyNoticeCommandName {
+		return runPrivacyNotice(args[1:])
+	}
 	if len(args) > 0 && args[0] == checkPublicRootCommandName {
 		return runCheckPublicRoot(args[1:])
 	}

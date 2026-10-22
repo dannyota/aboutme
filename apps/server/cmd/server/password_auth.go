@@ -23,6 +23,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/mailcapture"
 	"github.com/dannyota/aboutme/apps/server/internal/password"
+	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -100,16 +101,21 @@ func newPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 		return nil, fmt.Errorf("create password service: %w", err)
 	}
 
+	notices, err := privacynotice.New(pool, outbox, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("create privacy notice service: %w", err)
+	}
 	worker, err := authmail.NewWorker(authmail.WorkerOptions{
-		Pool:       pool,
-		Queries:    queries,
-		KeyRing:    ring,
-		Sender:     sender,
-		FooterNote: authmail.FooterNoteForMode(cfg.AuthEmail.Mode),
-		Clock:      time.Now,
-		Jitter:     fullJitter,
-		Logger:     logger,
-		WorkerID:   uuid.New(),
+		Pool:            pool,
+		Queries:         queries,
+		KeyRing:         ring,
+		Sender:          sender,
+		FooterNote:      authmail.FooterNoteForMode(cfg.AuthEmail.Mode),
+		Clock:           time.Now,
+		Jitter:          fullJitter,
+		Logger:          logger,
+		WorkerID:        uuid.New(),
+		NoticeAuthority: notices,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mail worker: %w", err)

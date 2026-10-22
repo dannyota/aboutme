@@ -205,8 +205,12 @@ bouncer_key_valid() {
 
 # cscli generates the key directly into a private file. No value reaches argv.
 cmd_bouncer_register() {
-  local tmp
-  if cscli bouncers list -o json | jq -e '[.[]? | select(.name == "aboutme-caddy")] | length == 1' >/dev/null; then
+  local tmp registrations
+  /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
+    die "CrowdSec database admission refused"
+  registrations=$(cscli bouncers list -o json 2>/dev/null) || die "could not list CrowdSec bouncers"
+  jq -e 'type == "array"' <<<"$registrations" >/dev/null 2>&1 || die "invalid CrowdSec bouncer list"
+  if jq -e '[.[]? | select(.name == "aboutme-caddy")] | length == 1' <<<"$registrations" >/dev/null; then
     [[ -s $dir/crowdsec-bouncer-key ]] || die "the registered bouncer has no local key"
     # A registration interrupted before the key file moved leaves an older
     # key here; refuse it rather than sync a key the local API rejects.
@@ -216,6 +220,8 @@ cmd_bouncer_register() {
     say "kept the aboutme-caddy bouncer"
     return 0
   fi
+  /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
+    die "CrowdSec database admission refused"
   tmp=$(mktemp "$dir/.bouncer.XXXXXX")
   chmod 0600 "$tmp"
   if ! cscli bouncers add aboutme-caddy -o raw >"$tmp" 2>/dev/null; then
