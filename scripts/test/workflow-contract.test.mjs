@@ -509,6 +509,19 @@ test("browser artifacts contain only staged diagnostics and candidate metadata",
   checkBrowserArtifacts(readWorkflow("ci"), readWorkflow("baselines"));
 });
 
+test("contracts retains sanitized startup evidence when a check fails", () => {
+  const steps = readWorkflow("ci").jobs.contracts.steps;
+  const start = steps.find((step) => step.name === "Start the dev-https static suite shards");
+  assert.equal(start.env.DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR, "${{ runner.temp }}/dev-https-startup-diagnostics");
+  const upload = steps.find((step) => step.with?.name === "dev-https-startup-diagnostics");
+  assert.ok(upload, "contracts needs startup evidence after fixture cleanup");
+  assert.equal(upload.if, "${{ failure() && !cancelled() }}");
+  assert.equal(upload.with.path, "${{ runner.temp }}/dev-https-startup-diagnostics/*.txt");
+  assert.equal(upload.with["retention-days"], 14);
+  assert.equal(upload.with["if-no-files-found"], "ignore");
+  assert.ok(!upload["continue-on-error"]);
+});
+
 test("browser artifact contract rejects unsafe uploads and masked failures", () => {
   const fixtures = [
     ["raw results", (ci) => { browserUpload(ci).with.path = ".dev/web-e2e-results/"; }],
