@@ -45,6 +45,39 @@ edge service was active, neither starts and `crowdsec_migrate_no_edge` appears
 on stderr; restore the intended edge through its normal guards. Zero exit does
 not prove serving. The switch causes a short edge outage.
 
+## Engine and hub upgrades
+
+`deploy/vn/edge/crowdsec/config.yaml.local` pins `cscli.hub_branch: master` so
+offline activation can reuse cached detection without calling
+`https://version.crowdsec.net/latest` to select a branch. The pin selects a
+branch, not content versions, and does not make uncached operations work
+offline. `cscli hub update` needs network and fetches the `master` index
+regardless of the installed engine version; `cscli hub upgrade` needs network
+for downloads and uses that index. See the CrowdSec 1.8.1
+[branch selection](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/cmd/crowdsec-cli/core/require/branch.go)
+and
+[hub commands](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/cmd/crowdsec-cli/clihub/hub.go).
+
+Refresh the hub only with a reviewed engine package upgrade, never during a
+release switch. Re-prove the
+[version-specific behavior](../design/crowdsec-http-privacy.md#live-retention-and-failure)
+for that upgrade. On the host:
+
+1. Hold `/srv/data/host-operations/.bundle.lock` and use the existing fence and
+   operation admission rules. Follow the privacy design's
+   [stop and startup order](../design/crowdsec-http-privacy.md#migration-loss-and-release-order):
+   record the active edge, stop both edge modes, the firewall bouncer, CrowdSec,
+   the watcher, and maintenance timers, then join services and verify
+   quiescence.
+2. Upgrade the reviewed engine package with package startup suppressed as in the
+   documented installation path.
+3. Run `sudo cscli hub update`, then `sudo cscli hub upgrade`.
+4. Confirm `sudo cscli hub list`. Resume startup retention, maintenance timers,
+   and the engine through the documented guards; confirm
+   `sudo cscli lapi status` before starting the firewall bouncer and recorded
+   edge and resuming the watcher through that path. A migration no-op leaves
+   stopped services stopped.
+
 ## Verification
 
 Run these commands on the host. Retain fixed results and service state only:
