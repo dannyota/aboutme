@@ -80,6 +80,49 @@ function resume(): Resume {
 }
 
 describe('languageTwin', () => {
+  it.each([
+    { lng: 'en', heading: 'Custom section' },
+    { lng: 'vi', heading: 'Phần tùy chỉnh' },
+  ])('preserves and flags $heading', ({ lng, heading }) => {
+    const document = resume();
+    document.content.extra!.displayName = heading;
+
+    const twin = languageTwin({ title: 'Backend', lng, document });
+
+    expect(twin?.document.content.extra?.displayName).toBe(heading);
+    expect(twin?.notes).toContain('headings-left');
+  });
+
+  it.each([
+    { lng: 'en', heading: 'Kinh nghiệm làm việc' },
+    { lng: 'vi', heading: 'Experience' },
+  ])('fills blank work headings for $lng and leaves custom blank', ({
+    lng,
+    heading,
+  }) => {
+    const document = resume();
+    document.content.work!.displayName = '';
+    document.content.extra!.displayName = '';
+
+    const twin = languageTwin({ title: 'Backend', lng, document });
+
+    expect(twin?.document.content.work?.displayName).toBe(heading);
+    expect(twin?.document.content.extra?.displayName).toBe('');
+    expect(twin?.notes).not.toContain('headings-left');
+  });
+
+  it('translates the Hồ sơ alias into Summary', () => {
+    const document = resume();
+    document.content = {
+      profile: { sectionType: 'profile', displayName: 'Hồ sơ', entries: [] },
+    };
+
+    const twin = languageTwin({ title: 'Backend', lng: 'vi', document });
+
+    expect(twin?.document.content.profile?.displayName).toBe('Summary');
+    expect(twin?.notes).not.toContain('headings-left');
+  });
+
   it('copies a Vietnamese resume into an unpublished English draft', () => {
     const document = resume();
     const before = structuredClone(document);
