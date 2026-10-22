@@ -9,6 +9,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 - The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
 - `e2e/chrome.spec.ts:188` (hero sheet centered on phones, WebKit light vi) timed out once at 20 s in run 38134235232 and passed on the next run; five widths, each launching WebKit, navigating, and awaiting fonts, share one 20 s budget. If it recurs, troubleshoot with both runs' logs. Evidence: `apps/web/e2e/chrome.spec.ts`.
+- `contracts` is cancelled at its 20-minute job timeout when the npm registry is degraded: each `npm ci` took 300 s during the npm incident of 2026-10-22 (run 39711009477, attempt 1 and its rerun). Give `npm ci` a step-level timeout and one retry instead of letting the job budget absorb it. Evidence: `.github/workflows/ci.yml` (`contracts`) and status.npmjs.org for 2026-10-22.
 
 - Complete exact-candidate migration/reset CI and production database, retention, backup, and resource acceptance. Evidence: [remaining release work](crowdsec-postgresql.md) and the CrowdSec acceptance rows.
 
@@ -24,6 +25,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Add a static-asset flood scenario with a measured threshold.
 - Add and review a host procedure for TOTP key re-encryption.
 - Add and review a host procedure for rotating the sign-in-to-view key.
+- The deploy smoke bans `${SSH_CLIENT%% *}` and expects the HTTPS probe to answer 403, so it assumes one egress address for SSH and HTTPS. On 2026-10-22 the v0.8.11 deploy ran behind Cloudflare WARP, the two flows left through different addresses, the probe never saw 403, and the deployer left maintenance up with the app stopped although no migration had run. Ban the address the edge sees for the probe, or refuse to start when the two differ. Evidence: `deploy/vn/scripts/deploy.sh` (step 10) and the host journal for 2026-10-22 05:17 to 05:19 UTC.
+- On 2026-10-22 `app-down` sent SIGTERM to the v0.8.10 Caddy, which waited on its eternal grace period until podman sent SIGKILL after 10 s and the unit's OnFailure alert fired; the v0.8.11 Caddy stopped in under a second at 05:18:42 UTC. Find what holds the grace period open and bound it below the stop timeout. Evidence: host journal for `aboutme-caddy.service`, 2026-10-22 05:16:59 to 05:17:12 UTC.
 
 ## Acceptance evidence gaps
 
