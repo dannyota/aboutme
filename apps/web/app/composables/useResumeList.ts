@@ -38,6 +38,7 @@ export type CreateNotice
 export type ResumeListNotice = 'resume-changed' | null;
 
 export interface CreateOpenOptions {
+  readonly isCurrent?: () => boolean;
   readonly beforeOpen?: (resumeId: string) => void;
 }
 
@@ -183,6 +184,9 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     document?: Resume,
     options?: CreateOpenOptions,
   ): Promise<CreateResumeResult> => {
+    if (options?.isCurrent?.() === false) {
+      return { kind: 'blocked', intentId: '', reason: 'session-lost' };
+    }
     if (creating !== null) return creating;
     actionNotice.value = null;
     if (retainedCreate.value !== null) {
@@ -206,6 +210,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       ...(document === undefined ? {} : { document }),
     };
     creating = coordinator.createResume(intent).then(async (result) => {
+      if (options?.isCurrent?.() === false) return result;
       if (result.kind === 'created') {
         options?.beforeOpen?.(result.resume.metadata.id);
         await navigateTo(

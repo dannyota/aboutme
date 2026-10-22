@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Resume } from '@aboutme/schema';
+import { useAuth } from '../../../composables/useAuth';
 import {
   languageTwin,
   rememberLanguageTwin,
@@ -8,7 +9,10 @@ import {
   createResumeApi,
   type ResumeSummary,
 } from '../../../editor/resumeApi';
-import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
+import type {
+  CreateResumeResult,
+  OpaqueCreateOutcome,
+} from '../../../editor/coordinator';
 import type { CreateNotice } from '../../../composables/useResumeList';
 import LoadingState from '@/components/app/LoadingState.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -25,7 +29,18 @@ const copy = computed(() => resumeListCopy[locale.value]);
 
 useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 
+const auth = useAuth();
 const list = useResumeList();
+let twinGeneration = 0;
+let disposed = false;
+watch(
+  () => [auth.user.value?.id, auth.authState.value],
+  () => { twinGeneration++; },
+  { flush: 'sync' },
+);
+onBeforeUnmount(() => {
+  disposed = true;
+});
 const api = createResumeApi();
 const now = useNow();
 const createOpen = ref(false);
@@ -69,7 +84,14 @@ async function create(
   createNoticeCode.value = null;
   const result = await list.create(title, lng, document);
   createBusy.value = false;
-  if (result.kind === 'opaque-create') retained.value = result.outcome;
+  finishCreate(result);
+}
+
+function finishCreate(result: CreateResumeResult): void {
+  if (result.kind === 'opaque-create') {
+    retained.value = result.outcome;
+    createOpen.value = true;
+  }
   createNoticeCode.value = createNotice(result);
   if (result.kind === 'created') {
     createOpen.value = false;
@@ -88,42 +110,53 @@ function abandonCreate(intentId: string): void {
 }
 
 async function createOtherLanguage(item: ResumeSummary): Promise<void> {
+  const ownerId = auth.user.value?.id;
+  if (ownerId === undefined || auth.authState.value !== 'authenticated') {
+    await navigateTo('/login');
+    return;
+  }
+  const generation = twinGeneration;
+  const isCurrent = (): boolean => !disposed
+    && generation === twinGeneration
+    && auth.user.value?.id === ownerId
+    && auth.authState.value === 'authenticated';
   begin(item.id);
   createNoticeCode.value = null;
-  const read = await api.read(item.id);
-  if (read.kind === 'session-lost') {
-    createNoticeCode.value = 'session-lost';
+  try {
+    const read = await api.read(item.id);
+    if (!isCurrent()) return;
+    if (read.kind === 'session-lost') {
+      createNoticeCode.value = 'session-lost';
+      await navigateTo('/login');
+      return;
+    }
+    if (read.kind === 'rate-limited') {
+      createNoticeCode.value = 'retry-later';
+      return;
+    }
+    if (read.kind !== 'complete') {
+      createNoticeCode.value = 'create-failed';
+      return;
+    }
+    const twin = languageTwin({
+      title: read.accepted.metadata.title,
+      lng: read.accepted.metadata.lng,
+      document: read.accepted.document,
+    });
+    if (twin === null) {
+      createNoticeCode.value = 'create-failed';
+      return;
+    }
+    const result = await list.create(twin.title, twin.lng, twin.document, {
+      isCurrent,
+      beforeOpen(id: string): void {
+        rememberLanguageTwin(id, twin);
+      },
+    });
+    if (isCurrent()) finishCreate(result);
+  } finally {
     end(item.id);
-    return;
   }
-  if (read.kind === 'rate-limited') {
-    createNoticeCode.value = 'retry-later';
-    end(item.id);
-    return;
-  }
-  if (read.kind !== 'complete') {
-    createNoticeCode.value = 'create-failed';
-    end(item.id);
-    return;
-  }
-  const twin = languageTwin({
-    title: read.accepted.metadata.title,
-    lng: read.accepted.metadata.lng,
-    document: read.accepted.document,
-    newId: () => globalThis.crypto.randomUUID(),
-  });
-  if (twin === null) {
-    createNoticeCode.value = 'create-failed';
-    end(item.id);
-    return;
-  }
-  const result = await list.create(twin.title, twin.lng, twin.document, {
-    beforeOpen(id: string): void {
-      rememberLanguageTwin(id, twin);
-    },
-  });
-  end(item.id);
-  createNoticeCode.value = createNotice(result);
 }
 
 async function rename(id: string, title: string): Promise<void> {

@@ -7,13 +7,11 @@ export type LanguageTwinCopy = {
   readonly title: string;
   readonly sentences: Readonly<Record<TwinLanguage, string>>;
   readonly numbers: Readonly<Record<TwinLanguage, string>>;
-  readonly unpublished: string;
+  readonly createdUnpublished: string;
   readonly photoRemoved: Readonly<Record<TwinLanguage, string>>;
   readonly birthRemoved: string;
-  readonly zaloAdded: string;
-  readonly zaloFull: string;
+  readonly zaloSuggested: string;
   readonly zaloRemoved: string;
-  readonly noPhone: string;
   readonly headingsLeft: string;
   readonly agentReady: string;
   readonly agentAbsent: string;
@@ -42,7 +40,7 @@ export const languageTwinCopy: WorkspaceCopy<LanguageTwinCopy> = {
       vi: 'Số liệu tiếng Việt dùng 10.000 và 1,9.',
       en: 'Số liệu tiếng Anh dùng 10,000 và 1.9.',
     },
-    unpublished: 'Bản này chưa công khai. Hãy xem lại trước khi đăng.',
+    createdUnpublished: 'CV này được tạo dưới dạng bản sao chưa công khai.',
     photoRemoved: {
       vi: 'Ảnh chưa được sao chép. Thêm lại nếu nhà tuyển dụng '
         + 'trong nước cần ảnh.',
@@ -50,10 +48,9 @@ export const languageTwinCopy: WorkspaceCopy<LanguageTwinCopy> = {
         + 'hoặc nhà tuyển dụng nước ngoài không dùng ảnh.',
     },
     birthRemoved: 'Ngày sinh đã được bỏ khỏi bản tiếng Anh.',
-    zaloAdded: 'Đã thêm Zalo với nội dung “cùng số”, trỏ tới số điện thoại.',
-    zaloFull: 'Không thêm được Zalo vì phần liên hệ đã đủ 16 mục.',
+    zaloSuggested: 'Thêm Zalo nếu bạn dùng và muốn nhà tuyển dụng '
+      + 'liên hệ qua đó.',
     zaloRemoved: 'Gợi ý Zalo đã được bỏ khỏi bản tiếng Anh.',
-    noPhone: 'Chưa có số điện thoại để ghi Zalo là cùng số.',
     headingsLeft: 'Một số tiêu đề mục không nằm trong danh sách chuẩn. '
       + 'Hãy đọc lại.',
     agentReady: 'Tác nhân đã kết nối có thể viết lại câu. '
@@ -87,7 +84,7 @@ export const languageTwinCopy: WorkspaceCopy<LanguageTwinCopy> = {
       vi: 'Vietnamese numbers use 10.000 and 1,9.',
       en: 'English numbers use 10,000 and 1.9.',
     },
-    unpublished: 'This copy is not public. Review it before you publish.',
+    createdUnpublished: 'This resume was created as an unpublished copy.',
     photoRemoved: {
       vi: 'The photo was not copied. Add it again if a local '
         + 'employer expects one.',
@@ -95,12 +92,9 @@ export const languageTwinCopy: WorkspaceCopy<LanguageTwinCopy> = {
         + 'and foreign employers leave it out.',
     },
     birthRemoved: 'The birth date was left off the English copy.',
-    zaloAdded: 'A Zalo line was added as “cùng số”, '
-      + 'pointing at the phone number.',
-    zaloFull: 'Zalo was not added because the contact list '
-      + 'already has 16 items.',
+    zaloSuggested: 'Add Zalo if you use it and want recruiters '
+      + 'to contact you there.',
     zaloRemoved: 'The Zalo hint was left off the English copy.',
-    noPhone: 'There is no phone number to point a Zalo line at.',
     headingsLeft: 'Some section headings are outside the standard list. '
       + 'Read them again.',
     agentReady: 'A connected agent can rewrite the sentences. '

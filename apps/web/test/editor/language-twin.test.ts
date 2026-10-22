@@ -1,5 +1,10 @@
 import type { PersonalDetail, Resume } from '@aboutme/schema';
-import { afterEach, describe, expect, it } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import LanguageTwinReview
+  from '../../app/components/editor/LanguageTwinReview.vue';
+import { setSiteLocale } from '../support/locale';
 
 import { parseCurrentDocument } from '../../app/editor/documentValidation';
 import {
@@ -15,7 +20,12 @@ import { acceptedFixture } from './fixture';
 const PHONE = '123e4567-e89b-12d3-a456-426614174001';
 const BIRTH = '123e4567-e89b-12d3-a456-426614174002';
 const ZALO = '123e4567-e89b-12d3-a456-426614174003';
-const NEW_ZALO = '123e4567-e89b-12d3-a456-426614174004';
+vi.mock('../../app/composables/agentGrants', () => ({
+  useAgentGrants: () => ({
+    grants: { value: [] },
+    refresh: async () => {},
+  }),
+}));
 
 afterEach(() => {
   forgetLanguageTwin();
@@ -77,7 +87,6 @@ describe('languageTwin', () => {
       title: 'Backend',
       lng: 'vi',
       document,
-      newId: () => NEW_ZALO,
     });
 
     expect(twin).not.toBeNull();
@@ -99,7 +108,7 @@ describe('languageTwin', () => {
     expect(parseCurrentDocument(twin?.document)).toEqual(twin?.document);
   });
 
-  it('copies an English resume into Vietnamese and adds Zalo', () => {
+  it('copies into Vietnamese and suggests optional Zalo', () => {
     const document = resume();
     document.personalDetails.details = [
       detail(PHONE, 'phone', '+84 90 000 0001'),
@@ -121,7 +130,6 @@ describe('languageTwin', () => {
       title: 'Backend · English',
       lng: 'en',
       document,
-      newId: () => NEW_ZALO,
     });
 
     expect(twin?.lng).toBe('vi');
@@ -131,9 +139,8 @@ describe('languageTwin', () => {
       .toBe('Kinh nghiệm làm việc');
     expect(twin?.document.personalDetails.details).toEqual([
       detail(PHONE, 'phone', '+84 90 000 0001'),
-      detail(NEW_ZALO, 'custom', 'cùng số', 'Zalo'),
     ]);
-    expect(twin?.notes).toEqual(['photo-removed', 'zalo-added']);
+    expect(twin?.notes).toEqual(['photo-removed', 'zalo-suggested']);
     expect(parseCurrentDocument(twin?.document)).toEqual(twin?.document);
   });
 
@@ -154,13 +161,27 @@ describe('languageTwin', () => {
       title: 'Backend',
       lng: 'en',
       document,
-      newId: () => NEW_ZALO,
     });
 
     expect(twin?.document.personalDetails.details).toHaveLength(16);
-    expect(twin?.notes).toContain('zalo-full');
-    expect(twin?.notes).not.toContain('zalo-added');
+    expect(twin?.notes).toContain('zalo-suggested');
+    expect(twin?.document.personalDetails.details)
+      .toEqual(document.personalDetails.details);
   });
+
+  it.each([
+    { details: [] },
+    { details: [detail(PHONE, 'phone', '+84 90 000 0001')] },
+  ])(
+    'preserves contacts and suggests Zalo regardless of phone presence',
+    ({ details }) => {
+      const document = resume();
+      document.personalDetails.details = details;
+      const twin = languageTwin({ title: 'Backend', lng: 'en', document });
+      expect(twin?.document.personalDetails.details).toEqual(details);
+      expect(twin?.notes).toContain('zalo-suggested');
+    },
+  );
 
   it('refuses a resume whose language is not Vietnamese or English', () => {
     expect(twinTarget('ja')).toBeNull();
@@ -169,7 +190,6 @@ describe('languageTwin', () => {
       title: 'Backend',
       lng: 'ja',
       document: resume(),
-      newId: () => NEW_ZALO,
     })).toBeNull();
   });
 
@@ -178,7 +198,6 @@ describe('languageTwin', () => {
       title: 'á'.repeat(200),
       lng: 'vi',
       document: resume(),
-      newId: () => NEW_ZALO,
     });
     expect(Array.from(twin?.title ?? '')).toHaveLength(160);
     expect(twin?.title.endsWith(' · English')).toBe(true);
@@ -189,7 +208,6 @@ describe('languageTwin', () => {
       title: 'Backend',
       lng: 'vi',
       document: resume(),
-      newId: () => NEW_ZALO,
     });
     expect(twin).not.toBeNull();
     if (twin === null) return;
@@ -199,4 +217,47 @@ describe('languageTwin', () => {
     dismissLanguageTwin('created');
     expect(readLanguageTwin('created')).toBeNull();
   });
+});
+
+describe('LanguageTwinReview', () => {
+  it.each([
+    ['en', 'This resume was created as an unpublished copy.',
+      'Add Zalo if you use it and want recruiters to contact you there.',
+      'Done reviewing'],
+    ['vi', 'CV này được tạo dưới dạng bản sao chưa công khai.',
+      'Thêm Zalo nếu bạn dùng và muốn nhà tuyển dụng liên hệ qua đó.',
+      'Đã xem xong'],
+  ] as const)(
+    'describes creation in the past and dismisses the %s checklist',
+    async (locale, created, zalo, dismiss) => {
+      setSiteLocale(locale);
+      const twin = languageTwin({
+        title: 'Backend', lng: 'en', document: resume(),
+      })!;
+      rememberLanguageTwin('created', twin);
+      const wrapper = mount(LanguageTwinReview, {
+        props: { resumeId: 'created', title: twin.title },
+        global: { stubs: { NuxtLink: true } },
+      });
+      await flushPromises();
+      expect(wrapper.text()).toContain(created);
+      expect(wrapper.text()).toContain(zalo);
+      expect(wrapper.text()).not.toContain('This copy is not public');
+      expect(wrapper.text()).not.toContain('Bản này chưa công khai');
+      const button = wrapper.findAll('button')
+        .find((item) => item.text() === dismiss)!;
+      await button.trigger('click');
+      expect(wrapper.find('[data-testid="language-twin-review"]').exists())
+        .toBe(false);
+      expect(readLanguageTwin('created')).toBeNull();
+      wrapper.unmount();
+      const reopened = mount(LanguageTwinReview, {
+        props: { resumeId: 'created', title: twin.title },
+      });
+      await flushPromises();
+      expect(reopened.find('[data-testid="language-twin-review"]').exists())
+        .toBe(false);
+      reopened.unmount();
+    },
+  );
 });
