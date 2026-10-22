@@ -385,7 +385,7 @@ build:*)
   ;;
 image:inspect)
   if [[ " $* " == *Config.Labels* ]]; then
-    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.64.0|2:3.98-1ubuntu0.2\n' \
+    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.64.0|2:3.98-1ubuntu0.3\n' \
       "${FAKE_HTTPS_IMAGE_ID#sha256:}" "$FAKE_HTTPS_BASE"
   else
     printf '%s\n' "${FAKE_HTTPS_IMAGE_ID#sha256:}"

@@ -152,7 +152,7 @@ build)
   exit 1
   ;;
 image)
-  printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.64.0|2:3.98-1ubuntu0.2\n' \
+  printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.64.0|2:3.98-1ubuntu0.3\n' \
     "$image" 'mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
   ;;
 run)
