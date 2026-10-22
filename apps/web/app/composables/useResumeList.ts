@@ -1,4 +1,7 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import {
+  computed, getCurrentScope, onScopeDispose, ref, watch,
+  type ComputedRef, type Ref,
+} from 'vue';
 import type { Resume } from '@aboutme/schema';
 
 import type { CreateResumeIntent } from '../editor/commands';
@@ -121,6 +124,26 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   } | null = null;
   let settling: Promise<void> = Promise.resolve();
   let wasAuthenticated = false;
+  const disposed = ref(false);
+  if (getCurrentScope() !== undefined) {
+    onScopeDispose(() => {
+      disposed.value = true;
+    });
+  }
+
+  const waitForAuth = async (): Promise<void> => {
+    if (
+      disposed.value
+      || (authState.value !== 'loading' && authState.value !== 'error')
+    ) return;
+    await new Promise<void>((resolve) => {
+      const stop = watch([authState, disposed], ([state, isDisposed]) => {
+        if (!isDisposed && (state === 'loading' || state === 'error')) return;
+        stop();
+        resolve();
+      }, { flush: 'sync' });
+    });
+  };
 
   const items = computed<readonly ResumeSummary[]>(() =>
     view.value.kind === 'ready' ? view.value.items : [],
@@ -224,8 +247,10 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       ...(document === undefined ? {} : { document }),
     };
     const promise = coordinator.createResume(intent).then(async (result) => {
+      await waitForAuth();
       if (
-        ownerId.value !== intent.ownerId
+        disposed.value
+        || ownerId.value !== intent.ownerId
         || authState.value !== 'authenticated'
         || options?.isCurrent?.() === false
       ) {
