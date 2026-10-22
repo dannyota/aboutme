@@ -3,12 +3,12 @@ FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc7
 LABEL io.aboutme.dev-https-browser.contract="2" \
       io.aboutme.dev-https-browser.base="mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462" \
       io.aboutme.dev-https-browser.playwright="1.64.0" \
-      io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.2"
+      io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.3"
 
 USER root
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libnss3-tools=2:3.98-1ubuntu0.2 \
+    && apt-get install -y --no-install-recommends libnss3-tools=2:3.98-1ubuntu0.3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/aboutme-auth
