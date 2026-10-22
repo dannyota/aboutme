@@ -32,10 +32,17 @@ useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 const auth = useAuth();
 const list = useResumeList();
 let twinGeneration = 0;
+let twinOwner = auth.user.value?.id;
 let disposed = false;
 watch(
-  () => [auth.user.value?.id, auth.authState.value],
-  () => { twinGeneration++; },
+  () => [auth.user.value?.id, auth.authState.value] as const,
+  ([ownerId, state]) => {
+    if (state === 'loading' || state === 'error') return;
+    if (state === 'anonymous' || ownerId !== twinOwner) {
+      twinGeneration++;
+      twinOwner = state === 'anonymous' ? undefined : ownerId;
+    }
+  },
   { flush: 'sync' },
 );
 onBeforeUnmount(() => {
