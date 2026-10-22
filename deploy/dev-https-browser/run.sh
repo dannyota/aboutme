@@ -4,7 +4,7 @@ set -Eeuo pipefail
 readonly IMAGE_CONTRACT=2
 readonly IMAGE_BASE='mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
 readonly IMAGE_PLAYWRIGHT=1.64.0
-readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
+readonly IMAGE_NSS='2:3.98-1ubuntu0.3'
 readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
 readonly MCP_CLIENT_NAME_RE='^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
