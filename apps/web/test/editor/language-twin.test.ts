@@ -1,7 +1,10 @@
+import { createPinia, setActivePinia } from 'pinia';
+import { defineComponent, h } from 'vue';
 import type { PersonalDetail, Resume } from '@aboutme/schema';
 import { mount, flushPromises } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useResumeStore } from '../../app/stores/resumes';
 import LanguageTwinReview
   from '../../app/components/editor/LanguageTwinReview.vue';
 import { setSiteLocale } from '../support/locale';
@@ -27,8 +30,24 @@ vi.mock('../../app/composables/agentGrants', () => ({
   }),
 }));
 
+const clipboardDescriptor = Object.getOwnPropertyDescriptor(
+  navigator, 'clipboard',
+);
+beforeEach(() => {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: vi.fn() },
+  });
+});
+
 afterEach(() => {
   forgetLanguageTwin();
+  vi.restoreAllMocks();
+  if (clipboardDescriptor === undefined) {
+    Reflect.deleteProperty(navigator, 'clipboard');
+  } else {
+    Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+  }
 });
 
 function detail(
@@ -263,6 +282,137 @@ describe('languageTwin', () => {
 });
 
 describe('LanguageTwinReview', () => {
+  it('copies only the current title, target name and fixed instructions',
+    async () => {
+      setSiteLocale('en');
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(writeText);
+      const twin = languageTwin({
+        title: 'Backend', lng: 'en', document: resume(),
+      })!;
+      rememberLanguageTwin('created', twin);
+      const wrapper = mount(LanguageTwinReview, {
+        props: { resumeId: 'created', title: twin.title },
+        global: { stubs: { NuxtLink: true } },
+      });
+      await flushPromises();
+      await wrapper.setProps({ title: 'Updated title' });
+      await wrapper.findAll('button')
+        .find((button) => button.text() === 'Copy instructions')!
+        .trigger('click');
+      await flushPromises();
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(
+        'Rewrite the resume "Updated title" into Tiếng Việt. '
+        + 'Keep English job titles and technology names. '
+        + 'Use that language\'s number format. Do not publish the resume.',
+      );
+      expect(wrapper.text()).toContain('Copied');
+      wrapper.unmount();
+    });
+
+  it('reveals selectable prompt text when copying fails', async () => {
+    setSiteLocale('en');
+    vi.spyOn(navigator.clipboard, 'writeText')
+      .mockRejectedValue(new Error('Clipboard unavailable'));
+    const twin = languageTwin({
+      title: 'Backend', lng: 'vi', document: resume(),
+    })!;
+    rememberLanguageTwin('created', twin);
+    const wrapper = mount(LanguageTwinReview, {
+      props: { resumeId: 'created', title: twin.title },
+      global: { stubs: { NuxtLink: true } },
+    });
+    await flushPromises();
+    expect(wrapper.find('pre').exists()).toBe(false);
+    await wrapper.findAll('button')
+      .find((button) => button.text() === 'Copy instructions')!
+      .trigger('click');
+    await flushPromises();
+    const prompt = wrapper.get('pre');
+    expect(prompt.text()).toBe(
+      'Rewrite the resume "Backend · English" into English. '
+      + 'Keep English job titles and technology names. '
+      + 'Use that language\'s number format. Do not publish the resume.',
+    );
+    expect(prompt.classes()).not.toContain('select-none');
+    expect(wrapper.text()).not.toContain('Copied');
+    wrapper.unmount();
+  });
+
+  it('loses the checklist after reloading module state', async () => {
+    const twin = languageTwin({
+      title: 'Backend', lng: 'vi', document: resume(),
+    })!;
+    rememberLanguageTwin('created', twin);
+    expect(readLanguageTwin('created')).not.toBeNull();
+    vi.resetModules();
+    const reloaded = await import('../../app/editor/languageTwin');
+    expect(reloaded.readLanguageTwin('created')).toBeNull();
+  });
+
+  it('replaces the checklist with the next twin', async () => {
+    const first = languageTwin({
+      title: 'First', lng: 'vi', document: resume(),
+    })!;
+    const next = languageTwin({
+      title: 'Next', lng: 'en', document: resume(),
+    })!;
+    rememberLanguageTwin('first', first);
+    rememberLanguageTwin('next', next);
+    expect(readLanguageTwin('first')).toBeNull();
+    expect(readLanguageTwin('next')?.target).toBe('vi');
+    const old = mount(LanguageTwinReview, {
+      props: { resumeId: 'first', title: first.title },
+    });
+    const current = mount(LanguageTwinReview, {
+      props: { resumeId: 'next', title: next.title },
+      global: { stubs: { NuxtLink: true } },
+    });
+    await flushPromises();
+    expect(old.find('[data-testid="language-twin-review"]').exists())
+      .toBe(false);
+    expect(current.find('[data-testid="language-twin-review"]').exists())
+      .toBe(true);
+    old.unmount();
+    current.unmount();
+  });
+
+  it('keeps Created after the accepted resume becomes published', async () => {
+    setSiteLocale('en');
+    setActivePinia(createPinia());
+    const store = useResumeStore();
+    const accepted = acceptedFixture();
+    const twin = languageTwin({
+      title: accepted.metadata.title, lng: 'en', document: resume(),
+    })!;
+    store.initialize(accepted);
+    rememberLanguageTwin(accepted.metadata.id, twin);
+    const wrapper = mount(defineComponent({
+      setup: () => () => {
+        const record = store.recordFor(accepted.metadata.id)!;
+        const metadata = record.accepted.metadata;
+        return h('div', [
+          h('span', metadata.live ? 'Published' : 'Draft'),
+          h(LanguageTwinReview, {
+            resumeId: metadata.id,
+            title: metadata.title,
+          }),
+        ]);
+      },
+    }), { global: { stubs: { NuxtLink: true } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Draft');
+    store.adoptCompleteRead(accepted.metadata.id, {
+      ...accepted,
+      metadata: { ...accepted.metadata, live: true, slug: 'backend' },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Published');
+    expect(wrapper.findAll('li').at(-1)?.text())
+      .toBe('This resume was created as an unpublished copy.');
+    wrapper.unmount();
+  });
+
   it.each([
     ['en', 'This resume was created as an unpublished copy.',
       'Add Zalo if you use it and want recruiters to contact you there.',

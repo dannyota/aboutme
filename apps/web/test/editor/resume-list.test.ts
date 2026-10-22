@@ -1700,8 +1700,6 @@ describe('resume list page language action', () => {
         await context.selectTwin();
         context.authState.value = 'loading';
         await flushPromises();
-        context.authState.value = 'authenticated';
-        await flushPromises();
         resolveCreate({
           kind: 'created',
           resume: acceptedFixture({
@@ -1709,8 +1707,105 @@ describe('resume list page language action', () => {
           }),
         });
         await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+        context.authState.value = 'error';
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        context.authState.value = 'authenticated';
+        await flushPromises();
         expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
         expect(readLanguageTwin('twin')?.target).toBe('vi');
+      } finally {
+        context.dispose();
+      }
+    });
+
+  it.each(['created', 'opaque-create', 'rejected'])(
+    'drops a %s completion that waits for another owner',
+    async (kind) => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValueOnce(new Promise(
+          (resolve) => { resolveCreate = resolve; },
+        ));
+        await context.selectTwin();
+        context.authState.value = 'loading';
+        await flushPromises();
+        resolveCreate(kind === 'created'
+          ? { kind, resume: acceptedFixture() }
+          : kind === 'opaque-create'
+            ? { kind, outcome: opaqueOutcome() }
+            : { kind, code: 'resume_cap_exceeded' });
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        context.ownerId.value = 'owner-2';
+        context.authState.value = 'authenticated';
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+        expect(document.body.textContent).not.toContain('Refresh list');
+        expect(document.body.textContent).not.toContain('Abandon');
+        expect(document.body.textContent).not.toContain(
+          'You have reached the resume limit.',
+        );
+        await context.selectTwin();
+        expect(context.coordinator.createResume).toHaveBeenCalledTimes(2);
+        expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
+      } finally {
+        context.dispose();
+      }
+    },
+  );
+
+  it('drops a completion waiting for auth when the list unmounts', async () => {
+    const context = await page();
+    try {
+      let resolveCreate!: (value: unknown) => void;
+      context.coordinator.createResume.mockReturnValueOnce(new Promise(
+        (resolve) => {
+          resolveCreate = resolve;
+        },
+      ));
+      await context.selectTwin();
+      context.authState.value = 'loading';
+      resolveCreate({
+        kind: 'created',
+        resume: acceptedFixture({
+          metadata: { ...context.accepted.metadata, id: 'twin' },
+        }),
+      });
+      await flushPromises();
+      context.unmount();
+      await flushPromises();
+      context.authState.value = 'authenticated';
+      await flushPromises();
+      expect(navigateTo).not.toHaveBeenCalled();
+      expect(readLanguageTwin('twin')).toBeNull();
+    } finally {
+      context.dispose();
+    }
+  });
+
+  it('retains uncertain completion during refresh until its owner returns',
+    async () => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValueOnce(new Promise(
+          (resolve) => { resolveCreate = resolve; },
+        ));
+        await context.selectTwin();
+        context.authState.value = 'loading';
+        resolveCreate({ kind: 'opaque-create', outcome: opaqueOutcome() });
+        await flushPromises();
+        expect(document.body.textContent).not.toContain('Refresh list');
+        context.authState.value = 'authenticated';
+        await flushPromises();
+        expect(document.body.textContent).toContain('Refresh list');
+        expect(document.body.textContent).toContain('Abandon');
+        expect(navigateTo).not.toHaveBeenCalled();
       } finally {
         context.dispose();
       }

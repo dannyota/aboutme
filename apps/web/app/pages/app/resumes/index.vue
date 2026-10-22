@@ -124,14 +124,16 @@ async function createOtherLanguage(item: ResumeSummary): Promise<void> {
   }
   const generation = twinGeneration;
   const isCurrent = (): boolean => !disposed
-    && generation === twinGeneration
-    && auth.user.value?.id === ownerId
-    && auth.authState.value === 'authenticated';
+    && generation === twinGeneration;
   begin(item.id);
   createNoticeCode.value = null;
   try {
     const read = await api.read(item.id);
-    if (!isCurrent()) return;
+    if (
+      !isCurrent()
+      || auth.user.value?.id !== ownerId
+      || auth.authState.value !== 'authenticated'
+    ) return;
     if (read.kind === 'session-lost') {
       createNoticeCode.value = 'session-lost';
       await navigateTo('/login');
