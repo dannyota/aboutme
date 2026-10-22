@@ -21,11 +21,15 @@ bash "$BG" start slow sleep 30
 
 bash "$BG" wait ok 30 >"$WORK/ok.out" 2>&1 || fail "a passing command failed its wait"
 grep -Fxq 'hello from ok' "$WORK/ok.out" || fail "wait did not print the command's output"
+grep -Eq 'ci-background: ok started=[^ ]+ finished=[^ ]+ elapsed=[0-9]+s status=0' "$WORK/ok.out" ||
+  fail 'wait did not print the execution times separately from log replay'
 
 status=0
 bash "$BG" wait bad 30 >"$WORK/bad.out" 2>&1 || status=$?
 [ "$status" -eq 7 ] || fail "wait exited $status for a command that exited 7"
 grep -Fxq 'about to fail' "$WORK/bad.out" || fail "wait hid a failing command's output"
+grep -Eq 'ci-background: bad started=[^ ]+ finished=[^ ]+ elapsed=[0-9]+s status=7' "$WORK/bad.out" ||
+  fail 'wait did not retain a failed command duration and status'
 
 status=0
 bash "$BG" wait slow 1 >"$WORK/slow.out" 2>&1 || status=$?
