@@ -60,6 +60,7 @@ set -Eeuo pipefail
 name=$1
 printf '%s\n' "$$" >>"$DEV_HTTPS_PID_AUDIT_FILE"
 printf 'start:%s\n' "$name" >>"$FAKE_MUTATIONS"
+printf 'fixture service=%s started=%(%FT%T%z)T pid=%s\n' "$name" -1 "$$"
 case $name in
 mock-oauth)
   printf 'service:%s host=%s port=%s origin=%s client=%s linkedin=%s db=%s\n' \
@@ -126,6 +127,7 @@ if [ "$name" = migrate ]; then
   fi
   printf 'migrate:db=%s\n' "$DATABASE_URL" >>"$FAKE_EFFECTS"
   printf 'migrate:operation=apply\n' >>"$FAKE_EFFECTS"
+  printf 'database=stub provisioned=yes migrated=yes\n' >"$DEV_HTTPS_DIAGNOSTICS_DIR/database"
   exit 0
 fi
 if [ "$name" = mail-capture ]; then
@@ -198,6 +200,18 @@ case " $* " in
 *' --max-time '*) ;;
 *) exit 65 ;;
 esac
+url=${!#}
+case $url in
+http://127.0.0.1:20441/healthz) service=server ;;
+http://127.0.0.1:20440/) service=web ;;
+http://127.0.0.1:20442/*) service=mock-oauth ;;
+https://localhost:20443/healthz) service=caddy ;;
+*) service= ;;
+esac
+if [ -n "$service" ]; then
+  printf '%s readiness: time=%(%FT%T%z)T url=%s exit=0 response=stubbed-success body=empty\n' \
+    "$service" -1 "$url" >"$DEV_HTTPS_DIAGNOSTICS_DIR/probe-$service"
+fi
 exit 0
 EOF
 
@@ -334,6 +348,7 @@ tools-check:
 	@printf 'tools-check\n' >>"$(FAKE_MUTATIONS)"
 test-db-up:
 	@printf 'test-db-up\n' >>"$(FAKE_MUTATIONS)"
+	@printf 'database=stub provisioned=yes migrated=no\n' >"$(DEV_HTTPS_DIAGNOSTICS_DIR)/database"
 EOF
   : >"$fixture/mutations"
   : >"$fixture/effects"
@@ -342,6 +357,8 @@ EOF
   : >"$fixture/foreign-ports"
   : >"$fixture/podman-ps"
   : >"$fixture/all-pids"
+  mkdir -p "$fixture/diagnostics"
+  printf 'database=stub provisioned=no migrated=no\n' >"$fixture/diagnostics/database"
   write_fake_tools "$fixture"
   printf '%s' "$fixture"
 }
@@ -356,6 +373,8 @@ fixture_env() {
   export FAKE_FOREIGN_PORTS=$fixture/foreign-ports
   export FAKE_PODMAN_PS=$fixture/podman-ps
   export DEV_HTTPS_PID_AUDIT_FILE=$fixture/all-pids
+  export DEV_HTTPS_DIAGNOSTICS_DIR=$fixture/diagnostics
+  export BASH_ENV=$SOURCE_ROOT/scripts/dev-https-test-diagnostics.sh
   export FAKE_GO_FAIL_MARKER=$fixture/go-fail-marker
   export FAKE_REGISTRY_SHA256=$(sha256sum "$fixture/repo/packages/publicroots/public-roots.v11.json" | awk '{print $1}')
   export FAKE_FRAGMENT_SHA256=$(sha256sum "$fixture/repo/deploy/caddy/public-roots.generated.caddy" | awk '{print $1}')
@@ -1242,6 +1261,12 @@ run_server_after_capture_rollback_check() (
     fail 'up accepted server failure after mail-capture start'
   fi
   assert_contains "$output" 'startup failed'
+  assert_contains "$output" 'startup failure status='
+  assert_contains "$output" 'step=start_server duration='
+  assert_contains "$output" 'server combined stdout and stderr'
+  assert_contains "$output" 'server readiness: not reached'
+  assert_contains "$output" 'database=stub provisioned=yes migrated=yes'
+  assert_contains "$output" 'process state'
   assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
   assert_log_line "$FAKE_MUTATIONS" 'start:server'
   for pidfile in .dev/native-https/run/*.pid; do
@@ -1555,6 +1580,7 @@ main() {
   [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
   compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
+  bash "$SOURCE_ROOT/scripts/test/dev-https-diagnostics-test.sh"
   check_checks_array_is_complete
   case ${DEV_HTTPS_TEST_CASE-} in
   browser-staging) run_browser_staging_checks; return ;;

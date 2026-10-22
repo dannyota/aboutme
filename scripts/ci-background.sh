@@ -38,7 +38,15 @@ start)
   : >"$log"
   # The status file appears only once CMD has exited, by rename, so a waiter
   # never reads a partial write.
-  nohup bash -c '"$@" >>"$0.log" 2>&1; echo $? >"$0.status.tmp"; mv "$0.status.tmp" "$0.status"' \
+  nohup bash -c '
+    started=$(date -u +%FT%TZ)
+    SECONDS=0
+    "$@" >>"$0.log" 2>&1
+    status=$?
+    printf "ci-background: %s started=%s finished=%s elapsed=%ss status=%s\n" \
+      "${0##*/}" "$started" "$(date -u +%FT%TZ)" "$SECONDS" "$status" >>"$0.log"
+    echo "$status" >"$0.status.tmp"
+    mv "$0.status.tmp" "$0.status"' \
     "$dir/$name" "$@" </dev/null >/dev/null 2>&1 &
   disown
   ;;

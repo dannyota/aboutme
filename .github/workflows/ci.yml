@@ -80,6 +80,8 @@ jobs:
       # Started before Node is set up, in the environment the suite was
       # written for.
       - name: Start the dev-https static suite shards
+        env:
+          DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR: ${{ runner.temp }}/dev-https-startup-diagnostics
         run: |
           for shard in 0 1; do
             bash scripts/ci-background.sh start "dev-https-static-$shard" \
@@ -184,6 +186,14 @@ jobs:
       - if: ${{ !cancelled() }}
         name: Wait for dev-https static suite shard 1
         run: bash scripts/ci-background.sh wait dev-https-static-1
+      - name: Upload dev-https startup diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-https-startup-diagnostics
+          path: ${{ runner.temp }}/dev-https-startup-diagnostics/*.txt
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
