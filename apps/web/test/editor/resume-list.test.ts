@@ -1,8 +1,17 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { computed, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime';
+
+import ResumesPage from '../../app/pages/app/resumes/index.vue';
+import * as listModule from '../../app/composables/useResumeList';
+import * as authModule from '../../app/composables/useAuth';
+import * as apiModule from '../../app/editor/resumeApi';
+import {
+  forgetLanguageTwin,
+  readLanguageTwin,
+} from '../../app/editor/languageTwin';
 
 // eslint-disable-next-line max-len -- dialog component import.
 import CreateResumeDialog from '../../app/components/editor/list/CreateResumeDialog.vue';
@@ -63,7 +72,6 @@ function opaqueOutcome(title = 'First'): OpaqueCreateOutcome {
     refreshedItems: [],
   };
 }
-
 describe('useResumeList', () => {
   it('waits for auth and preserves the server list order', async () => {
     const older = {
@@ -1580,3 +1588,194 @@ function submitDialog(
 ): void {
   form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 }
+
+describe('resume list page language action', () => {
+  async function page() {
+    setActivePinia(createPinia());
+    vi.mocked(navigateTo).mockReset();
+    forgetLanguageTwin();
+    const ownerId = ref('owner-1');
+    const authState = ref<'authenticated' | 'anonymous'>('authenticated');
+    const auth = {
+      user: computed(() => ({ id: ownerId.value })),
+      authState,
+    };
+    const accepted = acceptedFixture();
+    const item = summary();
+    const api = {
+      list: vi.fn().mockResolvedValue({ kind: 'ready', items: [item] }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+    };
+    const coordinator = {
+      createResume: vi.fn().mockResolvedValue({
+        kind: 'created', resume: acceptedFixture({
+          metadata: { ...accepted.metadata, id: 'twin' },
+        }),
+      }),
+      refreshOpaqueCreate: vi.fn(),
+      abandonOpaqueCreate: vi.fn(),
+    };
+    const originalList = listModule.useResumeList;
+    const listSpy = vi.spyOn(listModule, 'useResumeList')
+      .mockImplementation(() => originalList({
+        api: api as unknown as ResumeApi,
+        authState,
+        ownerId,
+        coordinator: coordinator as unknown as ResumeMutationCoordinator,
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'intent-twin',
+          delay: async () => {},
+        },
+      }));
+    const authSpy = vi.spyOn(authModule, 'useAuth')
+      .mockReturnValue(auth as never);
+    const apiSpy = vi.spyOn(apiModule, 'createResumeApi')
+      .mockReturnValue(api as unknown as ResumeApi);
+    const wrapper = await mountSuspended(ResumesPage, {
+      attachTo: document.body,
+      global: {
+        components: { EditorListResumeList: ResumeList },
+        stubs: { NuxtLink: true },
+      },
+    });
+    await flushPromises();
+    async function selectTwin() {
+      await wrapper.get('[data-resume-actions]').trigger('click');
+      const action = document.body.querySelector<HTMLElement>(
+        '[data-testid="create-other-language"]',
+      )!;
+      action.click();
+      await flushPromises();
+    }
+    let mounted = true;
+    function unmount() {
+      if (mounted) wrapper.unmount();
+      mounted = false;
+    }
+    function dispose() {
+      unmount();
+      listSpy.mockRestore();
+      authSpy.mockRestore();
+      apiSpy.mockRestore();
+      forgetLanguageTwin();
+    }
+    return {
+      wrapper, ownerId, authState, api, coordinator, accepted,
+      selectTwin, unmount, dispose,
+    };
+  }
+
+  it('creates and opens the twin selected from the item menu', async () => {
+    const context = await page();
+    try {
+      await context.selectTwin();
+      expect(context.coordinator.createResume).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerId: 'owner-1', lng: 'vi' }),
+      );
+      expect(readLanguageTwin('twin')?.target).toBe('vi');
+      expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
+    } finally {
+      context.dispose();
+    }
+  });
+
+  it('opens recovery after an uncertain twin and offers refresh and abandon',
+    async () => {
+      const context = await page();
+      try {
+        const outcome = opaqueOutcome('Fixture · Tiếng Việt');
+        context.coordinator.createResume.mockResolvedValue({
+          kind: 'opaque-create', outcome,
+        } as never);
+        context.coordinator.refreshOpaqueCreate.mockResolvedValue(outcome);
+        await context.selectTwin();
+        expect(context.coordinator.createResume).toHaveBeenCalledWith(
+          expect.objectContaining({ ownerId: 'owner-1', lng: 'vi' }),
+        );
+        expect(document.body.textContent).toContain('Refresh list');
+        const refresh = Array.from(document.body.querySelectorAll('button'))
+          .find((button) => button.textContent?.includes('Refresh list'))!;
+        refresh.click();
+        await flushPromises();
+        expect(context.coordinator.refreshOpaqueCreate)
+          .toHaveBeenCalledWith(outcome.intent.id);
+        const abandon = Array.from(document.body.querySelectorAll('button'))
+          .find((button) => button.textContent?.includes('Abandon'))!;
+        abandon.click();
+        await flushPromises();
+        expect(context.coordinator.abandonOpaqueCreate)
+          .toHaveBeenCalledWith(outcome.intent.id);
+      } finally {
+        context.dispose();
+      }
+    });
+
+  it.each(['owner-change', 'owner-round-trip', 'unmount'])(
+    'drops a source read after %s before any create',
+    async (change) => {
+      const context = await page();
+      try {
+        let resolveRead!: (value: unknown) => void;
+        context.api.read.mockReturnValue(new Promise((resolve) => {
+          resolveRead = resolve;
+        }));
+        await context.selectTwin();
+        expect(context.api.read).toHaveBeenCalledWith('resume-1');
+        if (change === 'unmount') context.unmount();
+        else {
+          context.ownerId.value = 'owner-2';
+          if (change === 'owner-round-trip') context.ownerId.value = 'owner-1';
+        }
+        resolveRead({ kind: 'complete', accepted: context.accepted });
+        await flushPromises();
+        expect(context.coordinator.createResume).not.toHaveBeenCalled();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+      } finally {
+        context.dispose();
+      }
+    },
+  );
+
+  it('sends an expired source-read session to login without creating',
+    async () => {
+      const context = await page();
+      try {
+        context.api.read.mockResolvedValue({ kind: 'session-lost' });
+        await context.selectTwin();
+        expect(navigateTo).toHaveBeenLastCalledWith('/login');
+        expect(context.coordinator.createResume).not.toHaveBeenCalled();
+      } finally {
+        context.dispose();
+      }
+    });
+
+  it.each(['owner-change', 'unmount'])(
+    'does not open a completed twin after %s',
+    async (change) => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValue(new Promise(
+          (resolve) => { resolveCreate = resolve; },
+        ));
+        await context.selectTwin();
+        expect(context.coordinator.createResume).toHaveBeenCalledTimes(1);
+        if (change === 'unmount') context.unmount();
+        else context.ownerId.value = 'owner-2';
+        resolveCreate({
+          kind: 'created',
+          resume: acceptedFixture({
+            metadata: { ...context.accepted.metadata, id: 'twin' },
+          }),
+        });
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+      } finally {
+        context.dispose();
+      }
+    },
+  );
+});

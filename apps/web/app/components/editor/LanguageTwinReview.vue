@@ -36,12 +36,10 @@ const lines = computed(() => {
   ];
   if (notes.has('photo-removed')) items.push(text.photoRemoved[target]);
   if (notes.has('birth-removed')) items.push(text.birthRemoved);
-  if (notes.has('zalo-added')) items.push(text.zaloAdded);
-  if (notes.has('zalo-full')) items.push(text.zaloFull);
+  if (notes.has('zalo-suggested')) items.push(text.zaloSuggested);
   if (notes.has('zalo-removed')) items.push(text.zaloRemoved);
-  if (notes.has('no-phone')) items.push(text.noPhone);
   if (notes.has('headings-left')) items.push(text.headingsLeft);
-  items.push(text.unpublished);
+  items.push(text.createdUnpublished);
   return items;
 });
 

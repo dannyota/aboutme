@@ -12,17 +12,14 @@ export type TwinLanguage = 'vi' | 'en';
 export type TwinNote
   = | 'photo-removed'
     | 'birth-removed'
-    | 'zalo-added'
-    | 'zalo-full'
+    | 'zalo-suggested'
     | 'zalo-removed'
-    | 'no-phone'
     | 'headings-left';
 
 export interface LanguageTwinInput {
   readonly title: string;
   readonly lng: string;
   readonly document: Resume;
-  readonly newId: () => string;
 }
 
 export interface LanguageTwin {
@@ -39,7 +36,6 @@ interface StoredLanguageTwin {
 }
 
 const TITLE_LIMIT = 160;
-const DETAIL_LIMIT = 16;
 /** In-tab handoff from create → editor; never browser storage. */
 let rememberedTwin: StoredLanguageTwin | null = null;
 const TITLE_SUFFIX: Readonly<Record<TwinLanguage, string>> = {
@@ -137,7 +133,7 @@ export function languageTwin(input: LanguageTwinInput): LanguageTwin | null {
   if (target === null) return null;
   const source = structuredClone(input.document);
   const notes: TwinNote[] = [];
-  const personalDetails = translateDetails(source, target, input.newId, notes);
+  const personalDetails = translateDetails(source, target, notes);
   let headingsLeft = false;
   const content: Resume['content'] = {};
   for (const [key, section] of Object.entries(source.content)) {
@@ -206,7 +202,6 @@ function retitle(title: string, target: TwinLanguage): string {
 function translateDetails(
   source: Resume,
   target: TwinLanguage,
-  newId: () => string,
   notes: TwinNote[],
 ): PersonalDetails {
   const personal = source.personalDetails;
@@ -216,7 +211,7 @@ function translateDetails(
   const original = personal.details ?? [];
   personalDetails.details = target === 'en'
     ? englishDetails(original, notes)
-    : vietnameseDetails(original, newId, notes);
+    : vietnameseDetails(original, notes);
   return personalDetails;
 }
 
@@ -233,32 +228,10 @@ function englishDetails(
 
 function vietnameseDetails(
   details: readonly PersonalDetail[],
-  newId: () => string,
   notes: TwinNote[],
 ): PersonalDetail[] {
-  if (details.some(isZalo)) return [...details];
-  const phoneIndex = details.findIndex(isPhone);
-  if (phoneIndex === -1) {
-    notes.push('no-phone');
-    return [...details];
-  }
-  if (details.length >= DETAIL_LIMIT) {
-    notes.push('zalo-full');
-    return [...details];
-  }
-  const zalo: PersonalDetail = {
-    id: newId(),
-    type: 'custom',
-    label: 'Zalo',
-    value: 'cùng số',
-    isHidden: false,
-  };
-  notes.push('zalo-added');
-  return [
-    ...details.slice(0, phoneIndex + 1),
-    zalo,
-    ...details.slice(phoneIndex + 1),
-  ];
+  notes.push('zalo-suggested');
+  return [...details];
 }
 
 function translateHeading(
@@ -294,10 +267,4 @@ function isBirth(detail: PersonalDetail): boolean {
 
 function isZalo(detail: PersonalDetail): boolean {
   return detail.type === 'custom' && fold(detail.label ?? '') === 'zalo';
-}
-
-function isPhone(detail: PersonalDetail): boolean {
-  return detail.type === 'phone'
-    && !detail.isHidden
-    && detail.value.trim() !== '';
 }

@@ -191,7 +191,7 @@ watch(
           gap-1 rounded-[var(--radius-sheet)] border-2 border-dashed
           border-border bg-card/50 p-6 text-sm text-muted-foreground"
       >
-        <!-- Create resume in the header is the one create control. -->
+        <!-- The header creates blank resumes; menus create language copies. -->
         <template v-if="items.length === 0 && n === 1">
           <span
             class="text-foreground"
