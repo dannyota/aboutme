@@ -105,7 +105,7 @@ build)
   [ -d "$context" ]
   [ "$context" != "$FAKE_SOURCE_CONTEXT" ]
   grep -Fqx "FROM $FAKE_EXPECTED_BASE" "$context/Dockerfile"
-  grep -Fq 'libnss3-tools=2:3.98-1ubuntu0.2' "$context/Dockerfile"
+  grep -Fq 'libnss3-tools=2:3.98-1ubuntu0.3' "$context/Dockerfile"
   grep -Fqx 'USER pwuser' "$context/Dockerfile"
   grep -Fqx 'ENTRYPOINT ["/opt/aboutme-auth/run.sh", "--inside"]' \
     "$context/Dockerfile"
@@ -114,7 +114,7 @@ build)
     "$context/Dockerfile"
   grep -Fq 'io.aboutme.dev-https-browser.playwright="1.64.0"' \
     "$context/Dockerfile"
-  grep -Fq 'io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.2"' \
+  grep -Fq 'io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.3"' \
     "$context/Dockerfile"
   grep -Fq '"@playwright/test": "1.64.0"' "$context/package.json"
   grep -Fq '"@playwright/test": "1.64.0"' "$context/package-lock.json"
@@ -141,7 +141,7 @@ image)
   contract=2
   base=$FAKE_EXPECTED_BASE
   playwright=1.64.0
-  nss='2:3.98-1ubuntu0.2'
+  nss='2:3.98-1ubuntu0.3'
   case ${FAKE_INSPECT_MODE:-good} in
   missing-label) contract='' ;;
   mismatched-label) playwright=1.62.0 ;;
