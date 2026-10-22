@@ -45,7 +45,10 @@ const TITLE_SUFFIX: Readonly<Record<TwinLanguage, string>> = {
 
 type Heading = Readonly<Record<TwinLanguage, string>>;
 
-const DEFAULT_HEADING: Readonly<Record<Section['sectionType'], Heading>> = {
+const DEFAULT_HEADING: Readonly<Record<
+  Exclude<Section['sectionType'], 'custom'>,
+  Heading
+>> = {
   profile: { vi: 'Giới thiệu', en: 'Summary' },
   work: { vi: 'Kinh nghiệm làm việc', en: 'Experience' },
   education: { vi: 'Học vấn', en: 'Education' },
@@ -53,7 +56,6 @@ const DEFAULT_HEADING: Readonly<Record<Section['sectionType'], Heading>> = {
   language: { vi: 'Ngoại ngữ', en: 'Languages' },
   certificate: { vi: 'Chứng chỉ', en: 'Certifications' },
   project: { vi: 'Dự án', en: 'Projects' },
-  custom: { vi: 'Phần tùy chỉnh', en: 'Custom section' },
 };
 
 const HEADING_ALIASES: readonly {
@@ -99,10 +101,6 @@ const HEADING_ALIASES: readonly {
   {
     names: ['Hoạt động', 'Activities'],
     heading: { vi: 'Hoạt động', en: 'Activities' },
-  },
-  {
-    names: ['Phần tùy chỉnh', 'Custom section'],
-    heading: DEFAULT_HEADING.custom,
   },
 ];
 
