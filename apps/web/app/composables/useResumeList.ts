@@ -1,4 +1,7 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import {
+  computed, getCurrentScope, onScopeDispose, ref, watch,
+  type ComputedRef, type Ref,
+} from 'vue';
 import type { Resume } from '@aboutme/schema';
 
 import type { CreateResumeIntent } from '../editor/commands';
@@ -37,6 +40,11 @@ export type CreateNotice
 
 export type ResumeListNotice = 'resume-changed' | null;
 
+export interface CreateOpenOptions {
+  readonly isCurrent?: () => boolean;
+  readonly beforeOpen?: (resumeId: string) => void;
+}
+
 export interface ResumeListController {
   readonly view: Ref<ResumeListView>;
   readonly items: ComputedRef<readonly ResumeSummary[]>;
@@ -48,6 +56,7 @@ export interface ResumeListController {
     title: string,
     lng: string | null | undefined,
     document?: Resume,
+    options?: CreateOpenOptions,
   ): Promise<CreateResumeResult>;
   refreshCreate(intentId: string): Promise<OpaqueCreateOutcome>;
   abandonCreate(intentId: string): void;
@@ -108,9 +117,33 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const removalFocusVersion = ref(0);
   const retainedCreate = ref<OpaqueCreateOutcome | null>(null);
   const deleting = new Set<string>();
-  let creating: Promise<CreateResumeResult> | null = null;
+  let creating: {
+    intent: CreateResumeIntent;
+    options: CreateOpenOptions | undefined;
+    promise: Promise<CreateResumeResult>;
+  } | null = null;
   let settling: Promise<void> = Promise.resolve();
   let wasAuthenticated = false;
+  const disposed = ref(false);
+  if (getCurrentScope() !== undefined) {
+    onScopeDispose(() => {
+      disposed.value = true;
+    });
+  }
+
+  const waitForAuth = async (): Promise<void> => {
+    if (
+      disposed.value
+      || (authState.value !== 'loading' && authState.value !== 'error')
+    ) return;
+    await new Promise<void>((resolve) => {
+      const stop = watch([authState, disposed], ([state, isDisposed]) => {
+        if (!isDisposed && (state === 'loading' || state === 'error')) return;
+        stop();
+        resolve();
+      }, { flush: 'sync' });
+    });
+  };
 
   const items = computed<readonly ResumeSummary[]>(() =>
     view.value.kind === 'ready' ? view.value.items : [],
@@ -176,8 +209,26 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     title: string,
     lng: string | null | undefined,
     document?: Resume,
+    options?: CreateOpenOptions,
   ): Promise<CreateResumeResult> => {
-    if (creating !== null) return creating;
+    if (options?.isCurrent?.() === false) {
+      return { kind: 'blocked', intentId: '', reason: 'session-lost' };
+    }
+    const currentOwner = ownerId.value;
+    if (authState.value !== 'authenticated' || currentOwner === null) {
+      return { kind: 'blocked', intentId: '', reason: 'session-lost' };
+    }
+    if (creating !== null) {
+      if (
+        creating.intent.ownerId === currentOwner
+        && creating.intent.title === title
+        && creating.intent.lng === lng
+        && creating.intent.document === document
+        && creating.options === options
+        && creating.options?.isCurrent?.() !== false
+      ) return creating.promise;
+      return { kind: 'blocked', intentId: '', reason: 'unknown' };
+    }
     actionNotice.value = null;
     if (retainedCreate.value !== null) {
       return {
@@ -185,10 +236,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
         intentId: retainedCreate.value.intent.id,
         reason: 'unknown',
       };
-    }
-    const currentOwner = ownerId.value;
-    if (authState.value !== 'authenticated' || currentOwner === null) {
-      return { kind: 'blocked', intentId: '', reason: 'session-lost' };
     }
     const intent: CreateResumeIntent = {
       kind: 'resumeCreate',
@@ -199,8 +246,23 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       ...(lng === undefined ? {} : { lng }),
       ...(document === undefined ? {} : { document }),
     };
-    creating = coordinator.createResume(intent).then(async (result) => {
+    const promise = coordinator.createResume(intent).then(async (result) => {
+      while (
+        !disposed.value
+        && (authState.value === 'loading' || authState.value === 'error')
+      ) {
+        await waitForAuth();
+      }
+      if (
+        disposed.value
+        || ownerId.value !== intent.ownerId
+        || authState.value !== 'authenticated'
+        || options?.isCurrent?.() === false
+      ) {
+        return { kind: 'blocked', intentId: '', reason: 'unknown' } as const;
+      }
       if (result.kind === 'created') {
+        options?.beforeOpen?.(result.resume.metadata.id);
         await navigateTo(
           `/app/resumes/${encodeURIComponent(result.resume.metadata.id)}`,
         );
@@ -211,7 +273,8 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     }).finally(() => {
       creating = null;
     });
-    return creating;
+    creating = { intent, options, promise };
+    return promise;
   };
 
   const refreshCreate = async (
