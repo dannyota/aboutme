@@ -16,7 +16,10 @@ Write one resume per language. Do not mix a Vietnamese and an English version on
 one page. aboutme stores one resume language per resume (`metadata.lng`), and
 the renderer uses it for the date words and public page labels. It never
 translates content. An account holds up to three resumes, so a Vietnamese and an
-English version use two of them.
+English version use two of them. The resume list's
+[language twin](ui/shell-and-editor.md#language-twin) applies this guide's
+heading and date rules, removes the photo, and leaves prose for the owner to
+rewrite.
 
 | Situation                                                      | Write                                                 |
 | -------------------------------------------------------------- | ----------------------------------------------------- |
