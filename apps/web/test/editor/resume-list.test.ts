@@ -1721,6 +1721,42 @@ describe('resume list page language action', () => {
       }
     });
 
+  it('opens the twin after auth restarts before completion resumes',
+    async () => {
+      const context = await page();
+      try {
+        let resolveCreate!: (value: unknown) => void;
+        context.coordinator.createResume.mockReturnValueOnce(new Promise(
+          (resolve) => {
+            resolveCreate = resolve;
+          },
+        ));
+        await context.selectTwin();
+        context.authState.value = 'loading';
+        resolveCreate({
+          kind: 'created',
+          resume: acceptedFixture({
+            metadata: { ...context.accepted.metadata, id: 'twin' },
+          }),
+        });
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+        context.authState.value = 'authenticated';
+        context.authState.value = 'loading';
+        await flushPromises();
+        expect(navigateTo).not.toHaveBeenCalled();
+        expect(readLanguageTwin('twin')).toBeNull();
+        context.authState.value = 'authenticated';
+        await flushPromises();
+        expect(navigateTo).toHaveBeenCalledTimes(1);
+        expect(navigateTo).toHaveBeenLastCalledWith('/app/resumes/twin');
+        expect(readLanguageTwin('twin')?.target).toBe('vi');
+      } finally {
+        context.dispose();
+      }
+    });
+
   it.each(['created', 'opaque-create', 'rejected'])(
     'drops a %s completion that waits for another owner',
     async (kind) => {
