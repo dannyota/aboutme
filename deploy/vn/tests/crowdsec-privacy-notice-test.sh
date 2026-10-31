@@ -234,11 +234,24 @@ restore_pass() {
   fi
   [[ ! -s $work/controller-err ]] || fail 'successful controller diagnostic'
 }
+notice_test_ms() {
+  local stamp
+  read -r stamp _ </proc/uptime
+  stamp=${stamp/./}
+  printf '%d\n' "$((10#$stamp * 10))"
+}
+refusal_count=0
+refusal_details() {
+  printf 'refusal=%d caller_lines=(%s) exit=%d elapsed_ms=%d stdout_bytes=%d stderr_bytes=%d' \
+    "$refusal_count" "$3" "$1" "$2" "$(wc -c <"$work/out")" "$(wc -c <"$work/err")"
+}
 refuse() {
-  local result=0
+  local result=0 started elapsed
+  refusal_count=$((refusal_count + 1)); started=$(notice_test_ms)
   "$@" >"$work/out" 2>"$work/err" || result=$?
-  [[ $result == 1 && ! -s $work/out ]] || fail 'refusal exit or stdout'; printf 'invalid_state\n' >"$work/expected"
-  cmp -s "$work/expected" "$work/err" || fail 'refusal stderr'
+  elapsed=$(( $(notice_test_ms) - started ))
+  [[ $result == 1 && ! -s $work/out ]] || fail "refusal exit or stdout $(refusal_details "$result" "$elapsed" "${BASH_LINENO[*]}")"; printf 'invalid_state\n' >"$work/expected"
+  cmp -s "$work/expected" "$work/err" || fail "refusal stderr $(refusal_details "$result" "$elapsed" "${BASH_LINENO[*]}")"
 }
 quiet() {
   "$@" >"$work/out" 2>"$work/err" || fail 'denial operation refused'
@@ -818,10 +831,19 @@ done
 mkfifo "$work/initial-continue"; exec {initial_continue_fd}<>"$work/initial-continue"
 NOTICE_INITIAL_HOLD=descendant initial_refuse
 rm -f "$work/initial-held-child"
+initial_started=$(notice_test_ms)
 NOTICE_INITIAL_HOLD=foreground bash "$wrapper" reconcile-initial >"$work/initial-death-out" 2>"$work/initial-death-err" &
 initial_pid=$!
 for ((attempt = 0; attempt < 100; attempt++)); do [[ ! -f $work/initial-held-child ]] || break; /usr/bin/sleep 0.02; done
-[[ -f $work/initial-held-child ]] || fail 'initial child never reached latch'
+[[ -f $work/initial-held-child ]] || {
+  initial_elapsed=$(( $(notice_test_ms) - initial_started )); initial_running=1; initial_result=-1
+  if ! kill -0 "$initial_pid" 2>/dev/null; then
+    initial_running=0; initial_result=0; wait "$initial_pid" 2>/dev/null || initial_result=$?
+  fi
+  printf -v initial_message 'initial child never reached latch polls=%d elapsed_ms=%d running=%d exit=%d stdout_bytes=%d stderr_bytes=%d' \
+    "$attempt" "$initial_elapsed" "$initial_running" "$initial_result" "$(wc -c <"$work/initial-death-out")" "$(wc -c <"$work/initial-death-err")"
+  fail "$initial_message"
+}
 kill -KILL "$initial_pid"; wait "$initial_pid" 2>/dev/null || true
 /usr/bin/flock -n /run/aboutme/workload.lock true && fail 'initial parent death lost inherited lock'
 jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'initial parent death lost owner'
