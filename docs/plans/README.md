@@ -14,30 +14,11 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 
 A multi-release goal gets one plan file; its task briefs go in a directory of the same name while work is open. Delete both when the work ships, after moving any still-open item to `backlog.md`.
 
-## Shipped
-
-Production runs on one GreenNode host in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Release verification follows the [production runbook](../runbooks/production.md).
-
-|Tag|Shipped|
-|-|-|
-|v0.4.0|Vietnamese resume list, creation, editor, publish, and PDF controls|
-|v0.4.1|Vietnamese settings and agent consent|
-|v0.4.2|Optional passkey second factor with recovery codes and the release fence|
-|v0.4.3|Public PDF download as a button|
-|v0.4.4|MCP owner workflow runner on the official Go SDK|
-|v0.4.5|MCP accepts the public host behind the reverse proxy|
-|v0.4.6|Editor phone fixes: contact field width, one sheet per preview page|
-|v0.4.7|Optional authenticator-app (TOTP) second factor; release fence 4007|
-|v0.5.0|Owner homepage sample|
-|v0.5.1|Homepage sample fits one A4 sheet|
-|v0.5.2|Editor PDF and Web preview modes; gallery sample PDF page images and their CI check|
-|v0.5.3|Preview-to-PDF gap check; zoomed preview re-pagination fix; homepage sample fit|
-|v0.5.4|List spacing kept across a split entry; preview-gap ceilings tightened; CI proofs in parallel shards|
-|v0.6.25|MCP connection guide in Vietnamese and English; guarded public-root checks before deployment|
+Shipped history lives in GitHub Releases and git history.
 
 ## Remaining
 
-- [v0.8-roadmap.md](v0.8-roadmap.md): agent access, editor and PDF parity, and Vietnam tech samples.
+- [v0.8-roadmap.md](v0.8-roadmap.md): agent access and editor/PDF parity.
 - [backlog.md](backlog.md): open follow-ups, Vietnam production work, acceptance evidence, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
 

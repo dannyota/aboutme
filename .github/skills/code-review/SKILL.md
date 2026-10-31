@@ -34,7 +34,9 @@ file, the line, and how the change fails; skip style the linters already check.
 - `deploy/observer/` and `apps/web/app/utils/deploymentDocument.ts`: the
   deployment document never claims `verified` without a signature check bound to
   the exact running digest.
-- Database migrations are append-only; schema and API changes keep released
-  versions readable.
+- Check migration, schema, and API compatibility against
+  [ADR 0004](../../../docs/adr/0004-resume-document-contract.md),
+  [ADR 0005](../../../docs/adr/0005-database-migrations.md), and the
+  [Go and database rules](../../../instructions/go.md).
 - Workflows: pinned action SHAs, least `permissions`, and no untrusted input
   interpolated into `run:` steps.
