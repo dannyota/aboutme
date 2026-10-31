@@ -60,10 +60,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Use Homebrew Bash and GNU coreutils
+      - name: Install and use Homebrew Bash and GNU coreutils
         run: |
-          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install bash coreutils
+          bash_bin=$(brew --prefix --installed bash)/bin
+          coreutils_bin=$(brew --prefix --installed coreutils)/libexec/gnubin
+          "$bash_bin/bash" -c '((BASH_VERSINFO[0] >= 4))'
+          printf '%s\n' "$bash_bin" "$coreutils_bin" >> "$GITHUB_PATH"
       - name: Watchdog process tests
         run: bash scripts/test/run-capped-test.sh
       - name: Static pre-push wrapper tests

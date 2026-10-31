@@ -49,8 +49,8 @@ be recalled.
   watchdog, nice level 10, and a time limit. See the
   [resource rules](../../instructions/resources.md) for enforcement and limits.
   Prefer a hosted rerun when hosted evidence can answer the question. Diagnose a
-  failed or out-of-memory command before any local rerun; never repeat it unchanged
-  to seek a pass.
+  failed or out-of-memory command before any local rerun; never repeat it
+  unchanged to seek a pass.
 - **Reuse evidence.** The manager and reviewer reuse check evidence from the
   exact commit under review and do not duplicate a check for role-specific
   evidence.

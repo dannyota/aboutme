@@ -259,12 +259,14 @@ test_native_status_checks_database_host_port() {
   local case_dir=$WORK/native-status
   local repo=$case_dir/repo
   local fake_bin=$case_dir/bin
-  local output status db_line failed=0 name ready pid sid attempt fixture_ready
+  local output status connected_output connected_status db_line failed=0 name ready pid sid attempt fixture_ready
   local -a sleepers=()
   local -a launchers=()
 
   mkdir -p "$repo/scripts" "$repo/.dev" "$fake_bin"
   cp "$ROOT/scripts/dev-native.sh" "$repo/scripts/dev-native.sh"
+  mkdir -p "$repo/scripts/lib"
+  cp "$ROOT/scripts/lib/platform.sh" "$repo/scripts/lib/"
 
   cat >"$fake_bin/podman" <<'EOF'
 #!/usr/bin/env bash
@@ -279,13 +281,13 @@ EOF
   cat >"$fake_bin/ss" <<'EOF'
 #!/usr/bin/env bash
 case " $* " in
-*":20432"*) exit 0 ;;
-*) printf '%s\n' 'LISTEN 0 128 127.0.0.1:fixture 0.0.0.0:*' ;;
+*":20432"*) [ "${NATIVE_TEST_DB_LISTENING:-0}" = 1 ] || exit 0 ;;
 esac
+printf '%s\n' 'LISTEN 0 128 127.0.0.1:fixture 0.0.0.0:*'
 EOF
   chmod +x "$fake_bin/ss"
 
-  for name in server web caddy; do
+  for name in mail-capture server web caddy; do
     ready=$case_dir/$name.ready
     /usr/bin/setsid /bin/bash -c '
       printf "%s\n" "$$" >"$1"
@@ -316,10 +318,15 @@ EOF
 
   if [ "$failed" -eq 0 ]; then
     output=$(
-      /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" \
+      /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=0 \
         /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
     )
     status=$?
+    connected_output=$(
+      /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=1 \
+        /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
+    )
+    connected_status=$?
   else
     output=
     status=125
@@ -336,7 +343,7 @@ EOF
     return "$failed"
   fi
 
-  for name in server web caddy; do
+  for name in mail-capture server web caddy; do
     if ! awk -v service="$name" \
       '$1 == service && $3 == "running" && $5 == "yes" { found = 1 } END { exit !found }' \
       <<<"$output"; then
@@ -345,17 +352,24 @@ EOF
   done
 
   db_line=$(awk '$1 == "db" { print; exit }' <<<"$output")
-  if [ "$status" -eq 0 ]; then
-    note_failure "native status exited 0 with no listener on host port 20432" || failed=1
+  if [ "$status" -ne 1 ]; then
+    note_failure "native status must exit 1 with no listener on host port 20432" || failed=1
   fi
   if ! awk '$1 == "db" && $3 == "running" && $4 == "20432" && $5 == "no" { found = 1 } END { exit !found }' \
     <<<"$output"; then
     note_failure "database status did not report LISTENING=no on port 20432" || failed=1
   fi
+  if [ "$connected_status" -ne 0 ] ||
+    ! awk '$1 == "db" && $3 == "running" && $4 == "20432" && $5 == "yes" { found = 1 } END { exit !found }' \
+      <<<"$connected_output"; then
+    note_failure "native status must pass when every service and the database listen" || failed=1
+  fi
 
   if [ "$failed" -ne 0 ]; then
     printf '    observed status: %s\n' "$status" >&2
     printf '    db: %s\n' "$db_line" >&2
+    printf '    observed output: %s\n' "${output//$'\n'/ | }" >&2
+    printf '    connected output: %s\n' "${connected_output//$'\n'/ | }" >&2
   fi
   return "$failed"
 }

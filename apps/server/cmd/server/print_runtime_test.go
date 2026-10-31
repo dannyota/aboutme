@@ -31,8 +31,8 @@ func TestPrintStartupDisablesUnsupportedPlatforms(t *testing.T) {
 			if err != nil || renderer != nil || queue == nil {
 				t.Fatalf("startup = %v, %v, %v", renderer, queue, err)
 			}
-			if err := queue.Ready(); !errors.Is(err, renderjob.ErrClosed) {
-				t.Fatalf("disabled queue readiness = %v", err)
+			if readyErr := queue.Ready(); !errors.Is(readyErr, renderjob.ErrClosed) {
+				t.Fatalf("disabled queue readiness = %v", readyErr)
 			}
 			_, err = queue.Render(t.Context(), renderjob.Request{Format: renderjob.PDF, Prepare: func(context.Context) (renderjob.Snapshot, error) {
 				t.Fatal("disabled queue prepared a render")
