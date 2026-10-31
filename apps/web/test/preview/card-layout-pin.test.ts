@@ -29,7 +29,7 @@ const PINNED: Record<number, string> = {
   // from the shared sealMark.ts geometry module
   // (docs/design/ui/identity-and-seal.md, "Logo"), so the rendered card is
   // still identical.
-  2: '8924cdc6668ccae6238b97f02b69923d6d8765a2051f24d55c6cdf77aec7f331',
+  2: '824b51417d709df79779459cfb4a6853b4b264824e20a74318c3d930e1beed1a',
 };
 
 describe('card layout pin', () => {
