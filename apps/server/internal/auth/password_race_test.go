@@ -1,8 +1,6 @@
 package auth_test
 
-// Deterministic password-service race proofs. Each race has two explicit
-// orderings (or one lock-ordered ordering) with a deterministic pause via a
-// test-only probe, never a sleep.
+// Password-service race proofs using test probes and database lock queues.
 
 import (
 	"context"
@@ -104,7 +102,9 @@ func assertPasswordStillBlocked(t *testing.T, done <-chan error, failure string)
 func rollbackPasswordHolder(t *testing.T, tx pgx.Tx) func() {
 	t.Helper()
 	return func() {
-		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 			t.Errorf("rollback holder: %v", err)
 		}
 	}
@@ -291,70 +291,165 @@ func TestPasswordReset_ChangeLockOrder(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_DuplicateToken proves the reset token is single-use under a
-// user-lock race.
-func TestPasswordReset_DuplicateToken(t *testing.T) {
-	e := newPasswordEnv(t)
-	userID := e.createUser(t)
-	e.setPassword(t, userID, testPassword)
-	token := e.createResetToken(t, userID)
+// runPasswordTokenRace queues both operations behind a held database lock.
+// Waiting for each backend in turn proves both preflight reads ran before
+// either operation can consume the token. PostgreSQL grants the lock in order.
+func runPasswordTokenRace(ctx context.Context, t *testing.T, pool *store.Pool, holder pgx.Tx, first, second func() error) {
+	t.Helper()
+	pid := holder.Conn().PgConn().PID()
+	results := [2]chan error{make(chan error, 1), make(chan error, 1)}
+	go func() { results[0] <- first() }()
+	waitPasswordTokenQueue(ctx, t, pool, pid, 1)
+	go func() { results[1] <- second() }()
+	waitPasswordTokenQueue(ctx, t, pool, pid, 2)
 
-	locked := make(chan struct{})
-	release := make(chan struct{})
-	auth.SetPasswordUserLockProbeForTest(e.svc, onceProbe(locked, release))
-
-	first := make(chan error, 1)
-	go func() {
-		first <- e.svc.ResetForTest(context.Background(), token.Raw, "a fresh password 123", raceIP)
-	}()
-	<-locked
-
-	second := make(chan error, 1)
-	go func() {
-		second <- e.svc.ResetForTest(context.Background(), token.Raw, "a second fresh password", raceIP)
-	}()
-
-	// Give the second reset a moment to reach its preflight and block on the
-	// user lock, then release the first.
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-
-	if err := <-first; err != nil {
-		t.Fatalf("first reset error = %v, want success", err)
+	if err := holder.Commit(ctx); err != nil {
+		t.Fatalf("release duplicate-token lock holder: %v", err)
 	}
-	if err := <-second; err == nil {
-		t.Fatal("second reset with the same token succeeded, want token-invalid")
+	for i, result := range results {
+		select {
+		case err := <-result:
+			if i == 0 && err != nil {
+				t.Fatalf("first token operation error = %v, want success", err)
+			}
+			if i == 1 && (err == nil || err.Error() != "auth: password token invalid") {
+				t.Fatalf("second token operation error = %v, want token-invalid", err)
+			}
+		case <-ctx.Done():
+			t.Fatalf("token operation %d never finished after lock release: %v", i+1, ctx.Err())
+		}
 	}
 }
 
-// TestPasswordVerify_DuplicateToken proves the verify token is single-use.
+func waitPasswordTokenQueue(ctx context.Context, t *testing.T, pool *store.Pool, holderPID uint32, want int) {
+	t.Helper()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var queued int
+		// A row-lock waiter may block on another waiter rather than the holder.
+		err := pool.QueryRow(ctx, `
+			WITH RECURSIVE queue(pid) AS (
+				SELECT $1::int
+				UNION
+				SELECT activity.pid
+				FROM pg_stat_activity AS activity
+				JOIN queue ON queue.pid = ANY(pg_blocking_pids(activity.pid))
+			)
+			SELECT count(*) - 1 FROM queue
+		`, holderPID).Scan(&queued)
+		if err != nil {
+			t.Fatalf("token operation %d never reached database lock contention: %v", want, err)
+		}
+		if queued == want {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("token operation %d never reached database lock contention (queued %d): %v", want, queued, ctx.Err())
+		}
+	}
+}
+
+// TestPasswordReset_DuplicateToken proves either candidate password can win
+// the user-lock race, with no writes from the rejected reset.
+func TestPasswordReset_DuplicateToken(t *testing.T) {
+	passwords := [2]string{"a fresh password 123", "a second fresh password"}
+	for _, winner := range []int{0, 1} {
+		t.Run(passwords[winner], func(t *testing.T) {
+			e := newPasswordEnv(t)
+			userID := e.createUser(t)
+			e.setPassword(t, userID, testPassword)
+			e.createSession(t, userID)
+			token := e.createResetToken(t, userID)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			holder, err := e.pool.Begin(ctx)
+			if err != nil {
+				t.Fatalf("begin reset lock holder: %v", err)
+			}
+			defer rollbackPasswordHolder(t, holder)()
+			if _, err = e.q.WithTx(holder).GetUserForUpdate(ctx, userID); err != nil {
+				t.Fatalf("hold reset user lock: %v", err)
+			}
+			runPasswordTokenRace(ctx, t, e.pool, holder, func() error {
+				return e.svc.ResetForTest(ctx, token.Raw, passwords[winner], raceIP)
+			}, func() error {
+				return e.svc.ResetForTest(ctx, token.Raw, passwords[1-winner], raceIP)
+			})
+
+			cred, err := e.q.GetPasswordCredential(ctx, userID)
+			if err != nil {
+				t.Fatalf("read reset credential: %v", err)
+			}
+			for i, candidate := range passwords {
+				verified, err := e.hasher.Verify(ctx, string(cred.EncodedHash), candidate)
+				if err != nil || verified.Match != (i == winner) {
+					t.Errorf("candidate %d matches reset credential = %v, err = %v", i+1, verified.Match, err)
+				}
+			}
+			if _, err := e.q.GetPasswordResetTokenByDigest(ctx, token.Digest[:]); !errors.Is(err, pgx.ErrNoRows) {
+				t.Errorf("reset token lookup error = %v, want consumed", err)
+			}
+			var jobs, liveSessions int
+			if err := e.pool.QueryRow(ctx, `
+				SELECT (SELECT count(*) FROM auth_email_jobs WHERE user_id = $1 AND kind = 'password_changed'),
+				       (SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL)
+			`, userID).Scan(&jobs, &liveSessions); err != nil {
+				t.Fatalf("read reset effects: %v", err)
+			}
+			if jobs != 1 || liveSessions != 0 {
+				t.Errorf("reset effects: notifications = %d, live sessions = %d, want 1, 0", jobs, liveSessions)
+			}
+		})
+	}
+}
+
+// TestPasswordVerify_DuplicateToken proves identical verify calls contend on
+// the email lock and create exactly one account with its pending credential.
 func TestPasswordVerify_DuplicateToken(t *testing.T) {
 	e := newPasswordEnv(t)
-	token, _ := e.createRegistration(t, newEmail(), "Ada", testPassword)
+	email := newEmail()
+	token, reg := e.createRegistration(t, email, "Ada", testPassword)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	locked := make(chan struct{})
-	release := make(chan struct{})
-	auth.SetPasswordVerifyRegistrationLockProbeForTest(e.svc, onceProbe(locked, release))
-
-	first := make(chan error, 1)
-	go func() {
-		first <- e.svc.VerifyForTest(context.Background(), token.Raw, raceIP)
-	}()
-	<-locked
-
-	second := make(chan error, 1)
-	go func() {
-		second <- e.svc.VerifyForTest(context.Background(), token.Raw, raceIP)
-	}()
-
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-
-	if err := <-first; err != nil {
-		t.Fatalf("first verify error = %v, want success", err)
+	holder, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin verify lock holder: %v", err)
 	}
-	if err := <-second; err == nil {
-		t.Fatal("second verify with the same token succeeded, want token-invalid")
+	defer rollbackPasswordHolder(t, holder)()
+	if err = e.q.WithTx(holder).LockCanonicalAccountEmail(ctx, email); err != nil {
+		t.Fatalf("hold verify email lock: %v", err)
+	}
+	verify := func() error { return e.svc.VerifyForTest(ctx, token.Raw, raceIP) }
+	runPasswordTokenRace(ctx, t, e.pool, holder, verify, verify)
+
+	user, err := e.q.GetUserByCanonicalEmail(ctx, email)
+	if err != nil {
+		t.Fatalf("read verified account: %v", err)
+	}
+	cred, err := e.q.GetPasswordCredential(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("read verified credential: %v", err)
+	}
+	if string(cred.EncodedHash) != string(reg.EncodedHash) {
+		t.Error("verified credential differs from pending credential")
+	}
+	if _, err := e.q.GetPasswordRegistrationByDigest(ctx, token.Digest[:]); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("registration lookup error = %v, want consumed", err)
+	}
+	var users, sessions int
+	if err := e.pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM users WHERE email = $1),
+		       (SELECT count(*) FROM sessions WHERE user_id = $2)
+	`, email, user.ID).Scan(&users, &sessions); err != nil {
+		t.Fatalf("read verify effects: %v", err)
+	}
+	if users != 1 || sessions != 0 {
+		t.Errorf("verify effects: users = %d, sessions = %d, want 1, 0", users, sessions)
 	}
 }
 
