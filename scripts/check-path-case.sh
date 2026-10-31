@@ -1,37 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export LC_ALL=C
+git ls-files -z | python3 -I -c '
+import sys
+import unicodedata
 
-PATHS=$(mktemp "${TMPDIR:-/tmp}/aboutme-path-case-index.XXXXXX")
-trap 'rm -f -- "$PATHS"' EXIT
-git ls-files -z >"$PATHS"
+groups = {}
+for raw in sys.stdin.buffer.read().split(b"\0"):
+    if not raw:
+        continue
+    path = raw.decode("utf-8", "surrogateescape")
+    prefix = path
+    # Include directory prefixes: Docs/x.md and docs/y.md also clash on macOS.
+    while prefix:
+        key = unicodedata.normalize("NFC", prefix).casefold()
+        groups.setdefault(key, {}).setdefault(prefix, set()).add(path)
+        prefix = prefix.rpartition("/")[0]
 
-# Include directory prefixes: Docs/x.md and docs/y.md also clash on macOS.
-# Shell quoting keeps tabs and newlines inside paths out of record separators.
-while IFS= read -r -d '' path; do
-  prefix=$path
-  while :; do
-    printf '%q\t%q\n' "$prefix" "$path"
-    [[ $prefix == */* ]] || break
-    prefix=${prefix%/*}
-  done
-done <"$PATHS" | awk -F '\t' '
-  {
-    key = tolower($1)
-    if (key in spelling && spelling[key] != $1) collision[key] = 1
-    spelling[key] = $1
-    member = key SUBSEP $2
-    if (!(member in seen)) {
-      seen[member] = 1
-      paths[key] = paths[key] "  " $2 "\n"
-    }
-  }
-  END {
-    status = 0
-    for (key in collision) {
-      printf "check-path-case: case-insensitive path collision (%s):\n%s", key, paths[key]
-      status = 1
-    }
-    exit status
-  }
+status = 0
+for key, spellings in sorted(groups.items()):
+    if len(spellings) < 2:
+        continue
+    print(f"check-path-case: case-insensitive path collision ({ascii(key)}):")
+    for path in sorted(set().union(*spellings.values())):
+        print(f"  {ascii(path)}")
+    status = 1
+sys.exit(status)
 '

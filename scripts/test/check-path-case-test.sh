@@ -25,12 +25,16 @@ assert_collision() {
   bash "$ROOT/scripts/check-path-case.sh" >"$WORK/output" 2>&1 || status=$?
   [[ $status == 1 ]] || fail "expected collision exit 1, got $status"
   for path in "$@"; do
-    printf -v quoted '%q' "$path"
+    quoted=$(printf '%s' "$path" | python3 -I -c '
+import sys
+print(ascii(sys.stdin.buffer.read().decode("utf-8", "surrogateescape")))
+')
     grep -Fqx -- "  $quoted" "$WORK/output" || fail "missing path: $quoted"
   done
 }
 
-index_paths a/Foo.ts a/bar.ts docs/x.md docs/y.md 'space dir/file.ts'
+index_paths a/Foo.ts a/bar.ts docs/x.md docs/y.md 'space dir/file.ts' \
+  $'\xc3\xa9.ts' $'\xc3\xb1.ts'
 bash "$ROOT/scripts/check-path-case.sh" >"$WORK/output" 2>&1
 [[ ! -s $WORK/output ]] || fail 'distinct paths produced output'
 
@@ -43,6 +47,10 @@ assert_collision Foo foo/bar.ts
 assert_collision 'a/Foo bar.ts' 'a/foo bar.ts'
 assert_collision $'a/Foo\tbar.ts' $'a/foo\tbar.ts'
 assert_collision $'a/Foo\nbar.ts' $'a/foo\nbar.ts'
+assert_collision $'\xc3\x89.ts' $'\xc3\xa9.ts'
+assert_collision $'\xc3\xa9.ts' $'e\xcc\x81.ts'
+assert_collision $'\xc3\x89/x.ts' $'\xc3\xa9/y.ts'
+assert_collision $'\xc3\xa9/x.ts' $'e\xcc\x81/y.ts'
 
 git read-tree --empty
 bash "$ROOT/scripts/check-path-case.sh" >"$WORK/output" 2>&1
