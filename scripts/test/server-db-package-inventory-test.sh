@@ -12,7 +12,7 @@ fail() {
 }
 
 recipe_patterns() {
-  local makefile=$1 recipe=$2 line word active=0 found=0 count=0
+  local makefile=$1 recipe=$2 line word command='' state active=0 found=0 count=0
   local words=()
   while IFS= read -r line; do
     if [[ $line == "$recipe:"* ]]; then
@@ -22,13 +22,41 @@ recipe_patterns() {
     fi
     [[ $active == 1 ]] || continue
     if [[ $line == $'\t'* ]]; then
-      read -r -a words <<<"$line"
+      command+=" ${line#$'\t'}"
+      if [[ $command == *\\ ]]; then
+        command=${command%\\}
+        continue
+      fi
+      # Ignore quoted text, then separate shell operators from arguments.
+      command=$(sed -E "s/'[^']*'/ quoted /g; s/\"([^\"\\\\]|\\\\.)*\"/ quoted /g" <<<"$command")
+      command=${command//;/ ; }
+      command=${command//&/ & }
+      command=${command//|/ | }
+      read -r -a words <<<"$command"
+      state=start
       for word in "${words[@]}"; do
-        if [[ $word == ./* ]]; then
-          printf '%s\n' "$word"
-          count=$((count + 1))
-        fi
+        word=${word#@}
+        case $word in
+          ';'|'&'|'|') state=start; continue ;;
+        esac
+        case $state in
+          start)
+            case $word in
+              *=*) continue ;;
+              go) state=go ;;
+              *) state=ignore ;;
+            esac ;;
+          go) if [[ $word == test ]]; then state=packages; else state=ignore; fi ;;
+          packages)
+            if [[ $word == ./* ]]; then
+              printf '%s\n' "$word"
+              count=$((count + 1))
+            else
+              state=ignore
+            fi ;;
+        esac
       done
+      command=''
     elif [[ -n $line && $line != \#* ]]; then
       active=0
     fi
@@ -47,12 +75,12 @@ check_inventory() {
     [[ -d $root/$base ]] || { fail "pattern matches no directory: $pattern"; return 1; }
   done
 
-  # Follow testutil.RequireTestDatabaseURL, RequireMigratedTestDatabaseURL,
-  # and NewMigratedTestDatabase, including unqualified calls in testutil.
-  # Package-local test helpers are included by scanning every _test.go file.
-  find "$root" -type f -name '*_test.go' >"$WORK/test-files" || return 1
+  # Match the environment key and RequireTestDatabaseURL,
+  # RequireMigratedTestDatabaseURL, and NewMigratedTestDatabase, also as values.
+  # internal/testutil is the test support package with non-test Go helpers.
+  find "$root" -type f \( -name '*_test.go' -o -path "$root/internal/testutil/*.go" \) >"$WORK/test-files" || return 1
   while IFS= read -r file; do
-    if grep -E '(RequireTestDatabaseURL|RequireMigratedTestDatabaseURL|NewMigratedTestDatabase)[[:space:]]*\(' "$file" >/dev/null; then
+    if grep -E '["`]TEST_DATABASE_URL["`]|RequireTestDatabaseURL|RequireMigratedTestDatabaseURL|NewMigratedTestDatabase' "$file" >/dev/null; then
       package=./${file#"$root/"}
       package=${package%/*}
       covered=0
@@ -93,6 +121,46 @@ if recipe_patterns "$WORK/Makefile" server-test-db >"$WORK/output" 2>&1; then
   exit 1
 fi
 grep -Fq 'missing Makefile recipe: server-test-db' "$WORK/output"
+
+for source in \
+  'func TestDirect(t *testing.T) { os.Getenv("TEST_DATABASE_URL") }' \
+  'func localDatabase() string { return os.Getenv("TEST_DATABASE_URL") }; func TestWrapped(t *testing.T) { localDatabase() }' \
+  'var localDatabase = testutil.RequireMigratedTestDatabaseURL; func TestWrapped(t *testing.T) { localDatabase(t) }'; do
+  printf '%s\n' "$source" >"$WORK/fixture/internal/covered-extra/db_test.go"
+  if check_inventory "$WORK/fixture" ./internal/covered/... >"$WORK/output" 2>&1; then
+    fail 'self-check accepted an uncovered environment reader, wrapper, or helper value'
+    exit 1
+  fi
+  grep -Fq 'uncovered live-database package: ./internal/covered-extra' "$WORK/output"
+done
+rm "$WORK/fixture/internal/covered-extra/db_test.go"
+mkdir -p "$WORK/fixture/internal/testutil"
+printf 'func localDatabase() string { return os.Getenv("TEST_DATABASE_URL") }\n' >"$WORK/fixture/internal/testutil/db.go"
+if check_inventory "$WORK/fixture" ./internal/covered/... >"$WORK/output" 2>&1; then
+  fail 'self-check accepted an uncovered test support package'
+  exit 1
+fi
+grep -Fq 'uncovered live-database package: ./internal/testutil' "$WORK/output"
+check_inventory "$WORK/fixture" ./internal/covered/... ./internal/testutil
+
+cat >"$WORK/Makefile" <<'EOF'
+server-test-db:
+	@printf '%s\n' 'skipped ./internal/printf/... here'
+	@printf '%s\n' 'pretend && go test ./internal/quoted/... end'
+	@other ./internal/unrelated/...
+	@go test ./internal/covered/... \
+	  ./internal/testutil -race -p=1 -count 1 -v -timeout 30m ./internal/flag-value ; other ./internal/after
+	@go test ./internal/second && other ./internal/operator
+EOF
+for flag in -race -p=1 '-count 1' -v '-timeout 30m'; do
+  printf '\t@go test ./internal/flags %s ./internal/flag-value\n' "$flag" >>"$WORK/Makefile"
+done
+recipe_patterns "$WORK/Makefile" server-test-db >"$WORK/actual"
+printf '%s\n' ./internal/covered/... ./internal/testutil ./internal/second >"$WORK/expected"
+for flag in -race -p=1 '-count 1' -v '-timeout 30m'; do
+  printf '%s\n' ./internal/flags >>"$WORK/expected"
+done
+cmp "$WORK/expected" "$WORK/actual"
 
 : >"$WORK/patterns"
 for recipe in "${RECIPES[@]}"; do
