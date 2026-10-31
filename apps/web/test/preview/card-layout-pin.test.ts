@@ -18,6 +18,7 @@ const LAYOUT_FILES = [
   'app/components/preview/preview-card.css',
   'app/components/preview/cardFit.ts',
   'app/components/app/AppLogo.vue',
+  'app/components/app/sealMark.ts',
 ];
 
 const PINNED: Record<number, string> = {
@@ -29,7 +30,8 @@ const PINNED: Record<number, string> = {
   // from the shared sealMark.ts geometry module
   // (docs/design/ui/identity-and-seal.md, "Logo"), so the rendered card is
   // still identical.
-  2: '824b51417d709df79779459cfb4a6853b4b264824e20a74318c3d930e1beed1a',
+  // Re-pinned without a version bump: the pin covers sealMark.ts geometry.
+  2: 'c514fd4f26c163997bdbaf2c33f2c01a1c03254caca69621ee77fe07b26a0890',
 };
 
 describe('card layout pin', () => {
