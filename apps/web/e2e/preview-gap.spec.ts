@@ -60,7 +60,8 @@ const ZOOM_VARIANTS = [
   ['phone', PHONE_ZOOM],
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
-type Engine = 'chromium-normal' | 'webkit';
+const ENGINES = ['chromium-normal', 'webkit'] as const;
+type Engine = (typeof ENGINES)[number];
 type Flow = 'header' | 'main' | 'sidebar';
 
 const FLOW_RANK: Readonly<Record<Flow, number>> = {
@@ -222,8 +223,11 @@ const METRIC_CHECKS: ReadonlyArray<
 function assertWithinExpectation(result: CaseResult): void {
   const key = caseKey(result.sample, result.lng, result.engine);
   const metrics = expectations.cases[key];
+  if (metrics === undefined) {
+    throw new Error(`preview-gap-expected.json is missing case ${key}`);
+  }
   for (const [countKey, limitKey] of METRIC_CHECKS) {
-    const limit = metrics?.[limitKey] ?? null;
+    const limit = metrics[limitKey];
     if (limit === null) continue;
     expect(
       result.counts[countKey],
@@ -1173,7 +1177,6 @@ interface ReportSummary {
   readonly casesWithDrift: number;
   readonly failedCases: number;
   readonly webkitCovered: boolean;
-  readonly webkitSkipReason: string | null;
 }
 
 interface ReportFile {
@@ -1209,8 +1212,6 @@ async function readExistingReport(
 async function appendReport(
   newCases: readonly CaseResult[],
   newFailures: readonly FailedCase[],
-  webkitCovered: boolean,
-  webkitSkipReason: string,
 ): Promise<void> {
   const target = reportPath();
   await mkdir(resolve(target, '..'), { recursive: true });
@@ -1227,8 +1228,7 @@ async function appendReport(
     totalCases: cases.length,
     casesWithDrift,
     failedCases: failures.length,
-    webkitCovered,
-    webkitSkipReason: webkitCovered ? null : webkitSkipReason,
+    webkitCovered: true,
   };
   const report: ReportFile = { summary, cases, failures };
   await writeFile(target, JSON.stringify(report, null, 2));
@@ -1236,8 +1236,7 @@ async function appendReport(
   console.log(
     `preview-gap: ${summary.totalCases} case(s), `
     + `${summary.casesWithDrift} with drift, `
-    + `${summary.failedCases} failed so far; webkit `
-    + `${webkitCovered ? 'covered' : `skipped (${webkitSkipReason})`}.`,
+    + `${summary.failedCases} failed so far; webkit covered.`,
   );
 }
 
@@ -1245,9 +1244,19 @@ async function appendReport(
 
 let normalChromium: Browser | undefined;
 let webkitBrowser: Browser | undefined;
-let webkitSkipReason = '';
 
 test.beforeAll(async () => {
+  const expectedKeys = new Set(SAMPLES.flatMap(({ templateId, lng }) =>
+    ENGINES.map((engine) => caseKey(templateId, lng, engine))));
+  const actualKeys = Object.keys(expectations.cases);
+  const missingKeys = [...expectedKeys].filter((key) =>
+    !Object.hasOwn(expectations.cases, key));
+  const staleKeys = actualKeys.filter((key) => !expectedKeys.has(key));
+  expect(
+    { missingKeys, staleKeys },
+    'preview-gap-expected.json must match every sample, locale, and engine',
+  ).toEqual({ missingKeys: [], staleKeys: [] });
+
   // @playwright/test's chromium/webkit exports default to the active
   // project's launchOptions (the harness surface's print flags), so a
   // "normal browser" launch must override args explicitly to stay empty;
@@ -1256,7 +1265,10 @@ test.beforeAll(async () => {
   try {
     webkitBrowser = await webkit.launch({ args: [] });
   } catch (error) {
-    webkitSkipReason = error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`preview-gap requires WebKit: launch failed: ${message}`, {
+      cause: error,
+    });
   }
 });
 
@@ -1272,17 +1284,16 @@ for (const { templateId, lng } of SAMPLES) {
     const pdfBytes = await producePdf(page, baseURL, templateId, lng);
     const pdfPages = await readPdfPages(pdfBytes);
 
-    const variants: Array<{ engine: Engine; browser: Browser }> = [
-      { engine: 'chromium-normal', browser: normalChromium! },
-    ];
-    if (webkitBrowser !== undefined) {
-      variants.push({ engine: 'webkit', browser: webkitBrowser });
-    }
+    const browsers: Record<Engine, Browser> = {
+      'chromium-normal': normalChromium!,
+      'webkit': webkitBrowser!,
+    };
 
     const caseResults: CaseResult[] = [];
     const caseFailures: FailedCase[] = [];
 
-    for (const { engine, browser } of variants) {
+    for (const engine of ENGINES) {
+      const browser = browsers[engine];
       let fullScale: CaseResult | undefined;
       for (const [zoomLabel, zoomValue] of ZOOM_VARIANTS) {
         const previewResult = await producePreview(
@@ -1385,12 +1396,7 @@ for (const { templateId, lng } of SAMPLES) {
       }
     }
 
-    await appendReport(
-      caseResults,
-      caseFailures,
-      webkitBrowser !== undefined,
-      webkitSkipReason,
-    );
+    await appendReport(caseResults, caseFailures);
     expect(
       caseFailures,
       'preview-gap cases failed; see preview-gap-report.json',
