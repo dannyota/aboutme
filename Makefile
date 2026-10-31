@@ -62,7 +62,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/security-scan-test.sh
 	bash -n scripts/test/native-http-capture-test.sh
 	bash scripts/test/native-http-capture-test.sh
-	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow_test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
+	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
 	bash scripts/test/check-path-case-test.sh
 	bash scripts/check-path-case.sh
 	bash scripts/test/render-topology-test.sh
@@ -90,8 +90,8 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	scripts/test/deployment-document-check-test.sh
 	scripts/test/npm-audit-test.sh
 	scripts/test/codex-agent-test.sh
-	scripts/generate-web-e2e-source-manifest.test.sh
-	scripts/web-e2e-source.test.sh
+	scripts/generate-web-e2e-source-manifest-test.sh
+	scripts/web-e2e-source-test.sh
 
 operational-test-dev-https: ## operational-test's dev-https static safety-test suite (DEV_HTTPS_TEST_SHARD=i/n runs one shard; unset runs all)
 	DEV_HTTPS_TEST_SHARD=$(DEV_HTTPS_TEST_SHARD) bash scripts/dev-https-test.sh --static
@@ -102,7 +102,7 @@ operational-test-deploy: ## operational-test's deploy-script static safety-test 
 
 operational-test-browser: ## operational-test's browser-image and MCP owner-workflow static safety tests
 	bash deploy/dev-https-browser/static-test.sh
-	bash scripts/mcp-owner-workflow_test.sh
+	bash scripts/mcp-owner-workflow-test.sh
 
 hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged content
 	git config core.hooksPath .githooks
