@@ -7,7 +7,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Build
+    - name: Build release image
+      id: build-release-image
       shell: bash
       run: |
         case "$NAME" in
@@ -21,7 +22,8 @@ runs:
             docker build --platform "linux/$ARCH" -f "$DOCKERFILE" -t "$IMAGE" .
             ;;
         esac
-    - name: Smoke
+    - name: Smoke-test release image
+      id: smoke-test-release-image
       shell: bash
       run: |
         [ "$(docker inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE")" = "linux/$ARCH" ]
@@ -62,6 +64,7 @@ runs:
             ;;
         esac
     - name: Probe host operation dispatch
+      id: probe-host-operation-dispatch
       if: env.NAME == 'server'
       shell: bash
       run: |
@@ -82,10 +85,12 @@ runs:
         probe 2 'usage: server media-deletion-status' media-deletion-status extra
         probe 1 'usage: server totp-key-reencrypt' totp-key-reencrypt extra
     - name: Install Trivy
+      id: install-trivy
       shell: bash
       run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
     # Reports cover public image packages only and expire after seven days.
     - name: Scan for fixable HIGH/CRITICAL vulnerabilities
+      id: scan-image
       shell: bash
       env:
         REPORT_NAME: ${{ inputs.report-name }}
@@ -94,6 +99,7 @@ runs:
           "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$REPORT_NAME.json"
         scripts/security-scan.sh report "trivy-$REPORT_NAME.json"
     - name: Upload Trivy report
+      id: upload-trivy-report
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:

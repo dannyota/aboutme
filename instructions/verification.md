@@ -2,6 +2,8 @@
 
 Common code rules, CI lifecycle, exact-commit evidence, and failure handling. Implementers, QA, reviewers, and the primary read this file.
 
+Follow the [naming conventions](../docs/standards/engineering.md#naming) for workflows, steps, matrices, and tests.
+
 - Pin the latest stable dependency at scaffold time; upgrades need review. Exact tool versions live in `.tool-versions`; `make tools-check` rejects drift. When an installed tool is newer than the pin, update `.tool-versions` and every mirror, then run the affected checks.
 - Never hand-edit generated files; change the source and regenerate. Migration rules live in [Go and database rules](go.md).
 - A contract change updates schema or OpenAPI sources, generated clients, tests, examples, design docs, and traceability in one change.

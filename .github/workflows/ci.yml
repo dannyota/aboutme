@@ -644,12 +644,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start setup timing
+        id: start-setup-timing
         run: |
           install -d -m 0700 .dev/proof-timing
           date +%s > .dev/proof-timing/setup-start
       - id: setup
         uses: ./.github/actions/browser-proof-setup
       - name: Record setup timing
+        id: record-setup-timing
         if: always()
         env:
           SETUP_RESULT: ${{ steps.setup.outcome }}
@@ -665,6 +667,7 @@ jobs:
           read -ra proofs <<<"$PROOFS"
           bash scripts/ci-browser-proofs.sh "${proofs[@]}"
       - name: Upload browser proof timings
+        id: upload-browser-proof-timings
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

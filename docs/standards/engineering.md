@@ -21,6 +21,45 @@ after every plan is gone. Do not use em dashes.
 Do not repeat a detailed contract in several places. State the rule once, then
 link to it from artifacts that need context.
 
+## Naming
+
+Apply these conventions to new files and files touched by substantive work. Keep
+stable workflow paths and job IDs. Use focused contract assertions rather than a
+general naming linter. Keep unrelated check names unique; use static text and
+allowlisted matrix identifiers. Keep private data out of names.
+
+| Workflow item      | Convention                                                                        |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Filename           | Lowercase kebab case, purpose-based, `.yml`                                       |
+| Workflow name      | Short sentence case; keep acronyms such as `CI`                                   |
+| Job ID             | Stable lowercase kebab case, unique within its workflow                           |
+| Job name           | Explicit, concise scope followed by purpose                                       |
+| Required aggregate | Exact ID and effective check name `ci`; no matrix or other producer               |
+| Matrix keys        | Describe dimensions, such as `arch`, `shard`, `group`; keep the image `name` key  |
+| Matrix values      | Stable lowercase identifiers, such as `amd64`, `preview-gap`                      |
+| Matrix job name    | Include only independent identifying dimensions, without runner or proof payloads |
+| Step name          | Capitalized verb plus object, sentence case                                       |
+| Referenced step ID | Stable lowercase kebab case; contracts and outputs select IDs                     |
+| Reusable workflow  | Same filename rule, directly in `.github/workflows`; use `workflow_call`          |
+| Composite action   | Lowercase capability directory, `action.yml`, imperative display name             |
+
+| Test item                      | Convention                                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Go file                        | `<subject>[_<scenario>]_test.go`, lowercase snake case; keep build and platform constraints     |
+| Go function                    | `TestSubject_Behavior`, meaningful subtests; keep `Benchmark`, `Fuzz`, `Example` forms          |
+| Vitest                         | `<subject>.test.ts`, kebab case; source-specific tests may mirror identifiers such as `useAuth` |
+| Vitest qualifier               | Use only for distinct suites or generated output, such as `.contract` or `.generated`           |
+| Playwright E2E and HTTPS proof | `<feature>[-<scenario>].spec.ts` in the existing test directory                                 |
+| Shell contract                 | `<subject>[-<scenario>]-test.sh`                                                                |
+| Node                           | `<subject>[-<scenario>].test.mjs`                                                               |
+| Python                         | `test_<subject>[_<scenario>].py`, valid Python identifiers; keep explicit runner commands       |
+| Helper                         | Name its role without a runnable-test suffix; keep established config and generator names       |
+| Test title                     | State behavior and condition, such as `rejects a stale revision`                                |
+
+Preserve discovery rules, explicit selections, Go `-run` and `-skip` consumers,
+and standalone harness arguments when renaming tests. Update callers together; a
+filename change must preserve selected test paths and execution coverage.
+
 ## Code comments
 
 A comment explains a constraint that the code cannot express clearly. Useful

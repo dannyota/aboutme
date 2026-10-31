@@ -109,11 +109,11 @@ test("release contracts reject authority, dependency, timeout, and signing drift
     ["app failure ignored", (_manual, release) => { release.jobs.build["continue-on-error"] = true; }, /must block/],
     ["push ignores scan failure", (_manual, release) => { release.jobs.build.steps.find((step) => step.id === "push").if = "always()"; }, /push success/],
     ["signing removed", (_manual, release) => { release.jobs.image.steps = release.jobs.image.steps.filter((step) => !step.uses?.startsWith("actions/attest-build-provenance@")); }, /signing identity/],
-    ["shared scan ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities")["continue-on-error"] = true; }, /must block/],
-    ["shared scan conditional", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities").if = "false"; }, /unconditional/],
-    ["shared scan omitted", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities").run = "true"; }, /scan command/],
-    ["shared command probe ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Probe host operation dispatch")["continue-on-error"] = true; }, /must block/],
-    ["shared command probe skipped", (_manual, _release, action) => { action.runs.steps.find((step) => step.name === "Probe host operation dispatch").if = "false"; }, /server-only check/],
+    ["shared scan ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "scan-image")["continue-on-error"] = true; }, /must block/],
+    ["shared scan conditional", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "scan-image").if = "false"; }, /unconditional/],
+    ["shared scan omitted", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "scan-image").run = "true"; }, /scan command/],
+    ["shared command probe ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "probe-host-operation-dispatch")["continue-on-error"] = true; }, /must block/],
+    ["shared command probe skipped", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "probe-host-operation-dispatch").if = "false"; }, /server-only check/],
     ["shared publication", (_manual, _release, action) => { action.runs.steps.push({ run: 'docker push "$IMAGE"' }); }, /build-only/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
@@ -307,17 +307,17 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(release.jobs.eligibility.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(release.jobs.release.permissions, { actions: "read", contents: "write" });
   assert.equal(action.runs.using, "composite");
-  assert.deepEqual(action.runs.steps.map((step) => step.name), ["Build", "Smoke", "Probe host operation dispatch", "Install Trivy", "Scan for fixable HIGH/CRITICAL vulnerabilities", "Upload Trivy report"], "shared build-only steps");
+  assert.deepEqual(action.runs.steps.map((step) => step.id), ["build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "scan-image", "upload-trivy-report"], "shared build-only steps");
   for (const step of action.runs.steps) {
     assert.equal(step["continue-on-error"], undefined, `${step.name}: must block on failure`);
-    if (step.name === "Probe host operation dispatch") {
+    if (step.id === "probe-host-operation-dispatch") {
       assert.equal(step.if, "env.NAME == 'server'", `${step.name}: server-only check`);
     } else {
-      assert.equal(step.if, step.name === "Upload Trivy report" ? "always()" : undefined, `${step.name}: unconditional check`);
+      assert.equal(step.if, step.id === "upload-trivy-report" ? "always()" : undefined, `${step.name}: unconditional check`);
     }
     if (step.run) assert.equal(step.shell, "bash");
   }
-  const scan = action.runs.steps.find((step) => step.name === "Scan for fixable HIGH/CRITICAL vulnerabilities");
+  const scan = action.runs.steps.find((step) => step.id === "scan-image");
   assert.equal(scan.env.REPORT_NAME, "${{ inputs.report-name }}");
   assert.equal(scan.run, [
     'scripts/security-scan.sh scan-image \\',
@@ -351,6 +351,50 @@ test("required gate rejects incomplete needs and independent VN triggers", () =>
     mutate(ci, vn);
     assert.throws(() => checkRequiredGate(ci, vn), diagnostic, name);
   }
+});
+
+test("required gate keeps the exact ci check name without a matrix", () => {
+  const ci = readWorkflow("ci");
+  ci.jobs.ci.name = "ci";
+  checkRequiredGate(ci, readWorkflow("vn-infra"));
+  const fixtures = [
+    ["renamed aggregate id", (ci) => { ci.jobs.gate = ci.jobs.ci; delete ci.jobs.ci; }, /aggregate job id/],
+    ["renamed aggregate", (ci) => { ci.jobs.ci.name = "CI"; }, /exact ci check name/],
+    ["dynamic aggregate", (ci) => { ci.jobs.ci.name = "${{ github.job }}"; }, /exact ci check name/],
+    ["null aggregate name", (ci) => { ci.jobs.ci.name = null; }, /exact ci check name/],
+    ["aggregate matrix", (ci) => { ci.jobs.ci.strategy = { matrix: { shard: ["one"] } }; }, /no matrix/],
+    ["dynamic aggregate matrix", (ci) => { ci.jobs.ci.strategy = { matrix: "${{ fromJSON(needs.preflight.outputs.matrix) }}" }; }, /no matrix/],
+    ["duplicate CI check", (ci) => { ci.jobs.contracts.name = "ci"; }, /sole ci check producer/],
+    ["dynamic CI check", (ci) => { ci.jobs.contracts.name = "${{ github.job }}"; }, /static check name/],
+  ];
+  for (const [name, mutate, diagnostic] of fixtures) {
+    const ci = readWorkflow("ci");
+    mutate(ci);
+    assert.throws(() => checkRequiredGate(ci, readWorkflow("vn-infra")), diagnostic, name);
+  }
+});
+
+test("required gate rejects competing and unprovable check names in every workflow", () => {
+  for (const path of workflowFiles.filter((path) => path !== ".github/workflows/ci.yml")) {
+    const fixtures = [
+      ["implicit ci", { ci: {} }, /sole ci check producer/],
+      ["explicit ci", { other: { name: "ci" } }, /sole ci check producer/],
+      ["dynamic name", { other: { name: "${{ matrix.name }}" } }, /static check name/],
+      ["non-string name", { other: { name: null } }, /static check name/],
+    ];
+    for (const [name, jobs, diagnostic] of fixtures) {
+      const workflows = Object.fromEntries(workflowFiles.map((path) => [path, parseYaml(read(path), path).toJS()]));
+      Object.assign(workflows[path].jobs, jobs);
+      assert.throws(
+        () => checkRequiredGate(workflows[".github/workflows/ci.yml"], workflows[".github/workflows/vn-infra.yml"], workflows),
+        diagnostic,
+        `${path}/${name}`,
+      );
+    }
+  }
+  const vn = readWorkflow("vn-infra");
+  vn.jobs.ci = { name: "Infrastructure checks" };
+  checkRequiredGate(readWorkflow("ci"), vn);
 });
 
 test("aggregate accepts only successful jobs and Semgrep skips outside main scans", () => {
@@ -390,15 +434,15 @@ test("browser coverage rejects omitted proofs and lost shards", () => {
 
 test("browser setup timings survive setup failure and reach an artifact", () => {
   const steps = readWorkflow("ci").jobs["dev-https-proofs"].steps;
-  const start = steps.findIndex((step) => step.name === "Start setup timing");
+  const start = steps.findIndex((step) => step.id === "start-setup-timing");
   const setup = steps.findIndex((step) => step.id === "setup");
-  const record = steps.findIndex((step) => step.name === "Record setup timing");
+  const record = steps.findIndex((step) => step.id === "record-setup-timing");
   assert.ok(start >= 0 && start < setup && setup < record, "setup timing brackets setup");
   assert.equal(steps[record].if, "always()");
   assert.match(steps[start].run, /date \+%s/);
   assert.match(steps[record].run, /date \+%s/);
   assert.equal(steps[record].env.SETUP_RESULT, "${{ steps.setup.outcome }}");
-  const upload = steps.find((step) => step.name === "Upload browser proof timings");
+  const upload = steps.find((step) => step.id === "upload-browser-proof-timings");
   assert.equal(upload.if, "always()");
   assert.equal(upload.with.path, ".dev/proof-timing/");
   assert.equal(upload.with["include-hidden-files"], true);
@@ -670,7 +714,24 @@ function aggregateStep(ci) {
   return step;
 }
 
-function checkRequiredGate(ci, vn) {
+function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
+  workflowFiles.map((path) => [path, parseYaml(read(path), path).toJS()]),
+)) {
+  assert.ok(ci.jobs.ci, "aggregate job id must be ci");
+  assert.equal(Object.hasOwn(ci.jobs.ci, "name") ? ci.jobs.ci.name : "ci", "ci", "exact ci check name");
+  assert.ok(!Object.hasOwn(ci.jobs.ci.strategy ?? {}, "matrix"), "ci must have no matrix");
+  for (const [path, workflow] of Object.entries({
+    ...workflows,
+    ".github/workflows/ci.yml": ci,
+    ".github/workflows/vn-infra.yml": vn,
+  })) {
+    for (const [id, job] of Object.entries(workflow.jobs)) {
+      const name = Object.hasOwn(job, "name") ? job.name : id;
+      assert.ok(typeof name === "string" && !name.includes("${{"), `${path}/${id}: static check name required to prove ci uniqueness`);
+      if (path === ".github/workflows/ci.yml" && id === "ci") continue;
+      assert.notEqual(name, "ci", `${path}/${id}: aggregate must be the sole ci check producer`);
+    }
+  }
   assert.deepEqual(Object.keys(vn.on).sort(), ["workflow_call", "workflow_dispatch"], "VN triggers");
   assert.deepEqual(vn.permissions, { contents: "read" });
   assert.equal(vn.concurrency, undefined, "VN workflow must not cancel callers");
