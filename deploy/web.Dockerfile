@@ -29,12 +29,10 @@ RUN npm --prefix apps/web ci
 
 RUN npm --prefix apps/web run build
 
-# .github/npm-audit-exceptions.json excepts the node-forge and braces
-# advisories only because neither ships: node-forge comes through listhen (dev
-# server), braces through globby, fast-glob, and micromatch (Nitro's build).
-# Fail the build if any of them appears in the output as a package path or in
-# file contents, or if the output is missing, so an exception cannot go stale
-# unnoticed. "braces" alone is too common a word for the content scan; its
+# Fail the build if node-forge, braces, or the build-only packages listhen,
+# globby, fast-glob, and micromatch appear in the shipped output, or if the
+# output is missing. Scan package paths and file contents for these packages.
+# "braces" alone is too common a word for the content scan; its
 # package path and its three parents cover it. Busybox grep has no --exclude,
 # so package manifests are filtered from the content scan afterward: other
 # packages list these names as dev dependencies, and a shipped copy would
