@@ -13,7 +13,7 @@ on:
 
 # Least-privilege default for every job: the workflow only reads the repo. No
 # job writes back to it, and semgrep ci authenticates to its own platform via
-# SEMGREP_APP_TOKEN rather than GITHUB_TOKEN.
+# SEMGREP_APP_TOKEN from the main-only semgrep environment.
 permissions:
   contents: read
 
@@ -719,14 +719,15 @@ jobs:
   # on any Code finding of severity ERROR, HIGH, or CRITICAL, and on any
   # reachable Supply Chain finding of those severities. A reviewed false
   # positive is suppressed in place with `nosemgrep: <rule-id>` and a reason.
-  # The scans authenticate with SEMGREP_APP_TOKEN, which
-  # GitHub withholds from FORK pull requests, so they run on pushes, manual
-  # runs, and same-repo PRs only. A fork PR would have no token and fail.
+  # The scans read SEMGREP_APP_TOKEN from the semgrep environment, whose
+  # deployment branch policy allows only main. Run them only on main pushes
+  # and main dispatches so pull requests never receive the token.
   semgrep-code:
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    environment: semgrep
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -753,7 +754,8 @@ jobs:
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    environment: semgrep
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -780,8 +782,8 @@ jobs:
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded. Only a fork pull request may skip the two Semgrep
-  # jobs because GitHub withholds SEMGREP_APP_TOKEN.
+  # job above succeeded. The two Semgrep jobs may skip only outside main
+  # pushes and main dispatches, where the semgrep environment is unavailable.
   ci:
     if: always()
     needs:
@@ -829,11 +831,11 @@ jobs:
             { echo "no TOTP shard evidence files were downloaded" >&2; exit 1; }
           node deploy/dev-https-browser/check-shard-coverage.mjs totp \
             "${evidence_files[@]}"
-      - name: Require every job to succeed (only fork PRs may skip Semgrep)
+      - name: Require every job to succeed (Semgrep required on main pushes and dispatches)
         if: always()
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          ALLOW_SEMGREP_SKIP: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          ALLOW_SEMGREP_SKIP: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
         run: |
           bad=$(echo "$NEEDS_JSON" | jq -r --arg allow_semgrep_skip "$ALLOW_SEMGREP_SKIP" '
             to_entries

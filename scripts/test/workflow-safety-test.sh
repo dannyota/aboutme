@@ -295,7 +295,7 @@ grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
 # jobs select Code and Supply Chain, fail closed, and leave secret scanning to
 # gitleaks. The gate requires each job and permits only these jobs to skip.
 semgrep_jobs=(semgrep-code semgrep-supply-chain)
-semgrep_if="    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository"
+semgrep_if="    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
 actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_ALL=C sort)
 [ "$actual_semgrep_jobs" = "$(printf '%s\n' "${semgrep_jobs[@]}" | LC_ALL=C sort)" ] ||
   fail "hosted Semgrep jobs are not exactly ${semgrep_jobs[*]}: $(tr '\n' ' ' <<<"$actual_semgrep_jobs")"
@@ -332,7 +332,9 @@ for job in "${semgrep_jobs[@]}"; do
   [ "$(grep -c -- '- run: semgrep ci ' <<<"$body")" -eq 1 ] ||
     fail "$job does not run exactly one semgrep ci scan"
   grep -Fxq "$semgrep_if" <<<"$body" ||
-    fail "$job is not skipped only when a fork pull request withholds the token"
+    fail "$job does not run only on main pushes and main dispatches"
+  grep -Fxq '    environment: semgrep' <<<"$body" ||
+    fail "$job does not use the semgrep environment"
   grep -Fxq '          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}' <<<"$body" ||
     fail "$job does not scan with the Semgrep platform token"
   ! grep -Fq 'continue-on-error' <<<"$body" ||
@@ -346,10 +348,45 @@ done
   fail "ci gate accepts a skipped result in more than one place"
 grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
   fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
-grep -Fq "ALLOW_SEMGREP_SKIP: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" <<<"$CI_JOB" ||
-  fail "ci gate does not bind Semgrep skips to fork pull requests"
+grep -Fq "ALLOW_SEMGREP_SKIP: \${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}" <<<"$CI_JOB" ||
+  fail "ci gate does not bind Semgrep skips to runs outside main pushes and main dispatches"
 grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
-  fail "ci gate accepts Semgrep skips outside fork pull requests"
+  fail "ci gate does not enforce the Semgrep skip condition"
+
+# Only the connected Semgrep jobs may read a stored secret. GITHUB_TOKEN is
+# GitHub's per-run token and remains available to release publication jobs.
+node --input-type=module - "$ROOT/.github/workflows" <<'NODE'
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+const directory = process.argv[2];
+const seen = new Set();
+for (const file of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+  if (!file.isFile()) continue;
+  const path = join(file.parentPath, file.name);
+  let job = "";
+  for (const [index, line] of readFileSync(path, "utf8").split("\n").entries()) {
+    if (/^\S/.test(line)) job = "";
+    const header = line.match(/^  ([\w-]+):$/);
+    if (header) job = header[1];
+    for (const match of line.matchAll(/\bsecrets\s*(?:\.\s*([A-Za-z_]\w*)|\[)/g)) {
+      if (match[1] === "GITHUB_TOKEN") continue;
+      if (path === join(directory, "ci.yml") &&
+          ["semgrep-code", "semgrep-supply-chain"].includes(job) &&
+          line === '          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}' &&
+          !seen.has(job)) {
+        seen.add(job);
+        continue;
+      }
+      console.error(`workflow-safety-test: ${path}:${index + 1}: ${job || "workflow"} references an unapproved secret`);
+      process.exit(1);
+    }
+  }
+}
+if (seen.size !== 2) {
+  console.error("workflow-safety-test: connected Semgrep jobs must each reference the token exactly once");
+  process.exit(1);
+}
+NODE
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
