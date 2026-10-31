@@ -26,6 +26,6 @@ Schema generation starts at `packages/schema/scripts/generate.mjs`; API client g
 
 Read [workflow](../instructions/workflow.md), [resource rules](../instructions/resources.md), [verification](../instructions/verification.md), [testing](../instructions/testing.md), and [documentation instructions](../instructions/documentation.md). Release scripts also follow [release rules](../instructions/releases.md).
 
-Root `Makefile` wires script tests into operational suites. `test/pre-push-test.sh` checks formatter selection and execution guards; `test/codex-agent-test.sh` checks launcher wiring and settings validation using fixture roles. `packages/publicroots/public-roots.test.mjs` and `generate-web-e2e-source-manifest.test.sh` protect generated maps; hosted CI owns execution.
+Root `Makefile` wires script tests into operational suites. `test/pre-push-test.sh` checks formatter selection and execution guards; `test/codex-agent-test.sh` checks launcher wiring and settings validation using fixture roles. `packages/publicroots/public-roots.test.mjs` and `generate-web-e2e-source-manifest-test.sh` protect generated maps; hosted CI owns execution.
 
 `check-path-case.sh` rejects case-folded index path collisions, including directory spelling clashes, in operational CI and static pre-push checks; `test/check-path-case-test.sh` covers index-only fixtures.
