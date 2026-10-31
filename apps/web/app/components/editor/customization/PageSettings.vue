@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * `PageSettings` — the page size and margins used for the PDF and for
+ * `PageSettings` controls the page size and margins used for the PDF and for
  * printing. Margins are presets over the stored millimetre pair; Custom
  * reveals the two axes. Letter pages show inches and store millimetres.
  */
@@ -31,7 +31,7 @@ import {
   PRINTABLE_EDGE_MM,
   toDisplay,
   unitFor,
-} from './pageSettings';
+} from '../../../editor/pageSettings';
 
 const props = defineProps<{
   readonly customization: Customization;

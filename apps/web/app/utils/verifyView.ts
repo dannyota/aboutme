@@ -5,7 +5,7 @@
 import {
   chainRelease,
   type ChainRelease,
-  type Component,
+  type DeploymentComponent,
   type ComponentName,
   componentNames,
   type DeploymentDocument,
@@ -141,7 +141,7 @@ export function buildRunId(link: string | null): string | null {
   return link?.match(/\/actions\/runs\/(\d+)\//u)?.[1] ?? null;
 }
 
-export interface ImageLine {
+interface ImageLine {
   readonly image: RunningImage;
   /** Set during a rollout of this component. */
   readonly age: 'older' | 'newest' | null;
@@ -161,7 +161,7 @@ export interface ComponentRow {
  * failure has a place to show.
  */
 export function componentRows(document: DeploymentDocument): ComponentRow[] {
-  const byName = new Map<ComponentName, Component>(
+  const byName = new Map<ComponentName, DeploymentComponent>(
     document.components.map((entry) => [entry.name, entry]));
   return componentNames.flatMap((name) => {
     const images = byName.get(name)?.runningImages ?? [];

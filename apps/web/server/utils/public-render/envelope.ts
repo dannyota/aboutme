@@ -26,7 +26,7 @@ export interface PublicRenderPreview {
 }
 
 /** The route the sign-in-to-view join invite links to (AC-VIEW-008). */
-export type PublicRenderJoinInvite = '/register' | '/login';
+type PublicRenderJoinInvite = '/register' | '/login';
 
 export interface PublicRenderResumeRequest {
   publicResume: PublicResume;
@@ -276,7 +276,7 @@ const validCardImageURL = (
     && /^[0-9a-f]{16}\.png$/u.test(value.slice(prefix.length));
 };
 
-export function isPublicResume(value: unknown): value is PublicResume {
+function isPublicResume(value: unknown): value is PublicResume {
   return validatePublicResume(value) === true;
 }
 

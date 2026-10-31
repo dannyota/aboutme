@@ -14,7 +14,7 @@ import {
   presetDeltas,
   presetLabel,
   toDisplay,
-} from '../../app/components/editor/customization/pageSettings';
+} from '../../app/editor/pageSettings';
 import PDFDownloadButton from
   '../../app/components/editor/PDFDownloadButton.vue';
 import type { PdfDownloadController } from '../../app/editor/pdfDownload';

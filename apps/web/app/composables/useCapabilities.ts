@@ -3,7 +3,7 @@ import type { components } from '../api/generated/openapi';
 
 export type Capabilities = components['schemas']['Capabilities'];
 
-export const loginProviderIds = ['google', 'github', 'linkedin'] as const;
+const loginProviderIds = ['google', 'github', 'linkedin'] as const;
 
 export type LoginProvider = (typeof loginProviderIds)[number];
 

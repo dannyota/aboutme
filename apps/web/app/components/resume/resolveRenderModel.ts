@@ -45,7 +45,7 @@ export class ResumeRenderError extends Error {
   }
 }
 
-export interface ResolvedSection {
+interface ResolvedSection {
   readonly key: string;
   readonly section: Section;
 }

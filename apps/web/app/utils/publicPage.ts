@@ -7,7 +7,7 @@ export const MAX_TITLE_GRAPHEMES = 70;
 const MAX_TITLE_CODE_POINTS = 560;
 const MAX_FAVICON_CODE_POINTS = 16;
 
-export type PublicPageIssue
+type PublicPageIssue
   = 'too_long' | 'invalid_characters' | 'invalid_emoji';
 
 export interface NormalizedPublicPageField {

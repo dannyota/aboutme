@@ -6,11 +6,11 @@
 // trusts the observer's summary; it recomputes it from the components.
 
 export const deploymentDocumentPath = '/.well-known/deployment.json';
-export const knownSchemaVersion = 1;
+const knownSchemaVersion = 1;
 /** The observer refuses to write more; the page refuses to read more. */
 export const maxDocumentBytes = 64 * 1024;
 /** Stale after this long whatever `stale_after` says (README, staleness). */
-export const maxDocumentAgeMs = 600_000;
+const maxDocumentAgeMs = 600_000;
 
 export const componentNames = [
   'server', 'web', 'caddy', 'maintenance',
@@ -21,7 +21,7 @@ export const servingComponents: readonly ComponentName[] = [
   'server', 'web', 'caddy',
 ];
 
-export const componentImages: Readonly<Record<ComponentName, string>> = {
+const componentImages: Readonly<Record<ComponentName, string>> = {
   server: 'ghcr.io/dannyota/aboutme-server',
   web: 'ghcr.io/dannyota/aboutme-web',
   caddy: 'ghcr.io/dannyota/aboutme-caddy',
@@ -33,7 +33,7 @@ export type CheckStatus
   = | 'verified' | 'not_found' | 'invalid' | 'unchecked' | 'unknown';
 export type Summary = 'verified' | 'rolling_out' | 'unverified' | 'mismatch';
 
-export interface ImageLinks {
+interface ImageLinks {
   readonly commit: string | null;
   readonly release: string | null;
   readonly build: string | null;
@@ -54,7 +54,7 @@ export interface RunningImage {
   readonly links: ImageLinks;
 }
 
-export interface Component {
+export interface DeploymentComponent {
   readonly name: ComponentName;
   readonly image: string;
   /** Oldest first, by `running_since`. */
@@ -76,7 +76,7 @@ export interface DeploymentDocument {
   /** The observer's value, kept raw so an unknown one counts as disagreeing. */
   readonly summary: string;
   readonly release: Release | null;
-  readonly components: readonly Component[];
+  readonly components: readonly DeploymentComponent[];
 }
 
 export type DecodeResult
@@ -192,7 +192,7 @@ function runningImage(value: unknown): RunningImage {
   };
 }
 
-function component(value: unknown): Component {
+function component(value: unknown): DeploymentComponent {
   const raw = record(value);
   const name = raw.name;
   if (!componentNames.includes(name as ComponentName)) refuse();
@@ -274,7 +274,7 @@ function imagesOf(document: DeploymentDocument): RunningImage[] {
 function servingComponent(
   document: DeploymentDocument,
   name: ComponentName,
-): Component | undefined {
+): DeploymentComponent | undefined {
   return document.components.find((entry) => entry.name === name);
 }
 
@@ -351,7 +351,7 @@ export function isStale(
     || now - Date.parse(document.observedAt) > maxDocumentAgeMs;
 }
 
-export type MismatchReason = 'not_found' | 'invalid' | 'missing' | 'summary';
+type MismatchReason = 'not_found' | 'invalid' | 'missing' | 'summary';
 
 export interface Failure {
   readonly component: ComponentName;

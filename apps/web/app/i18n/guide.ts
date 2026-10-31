@@ -22,10 +22,10 @@ export const addServerCommand
 export const loginCommand = 'claude mcp login aboutme';
 
 /** Anthropic's own help page for adding a custom connector. */
-export const claudeConnectorsHelpUrl = 'https://support.claude.com/en/'
+const claudeConnectorsHelpUrl = 'https://support.claude.com/en/'
   + 'articles/11175166-get-started-with-custom-connectors-using-remote-mcp';
 
-export const settingsSessionsPath = '/app/settings/sessions';
+const settingsSessionsPath = '/app/settings/sessions';
 
 /**
  * One run of inline text. A line mixing plain text with a UI name, inline
@@ -43,7 +43,7 @@ export type GuideInline
       readonly external: boolean;
     };
 
-export type GuideLine = readonly GuideInline[];
+type GuideLine = readonly GuideInline[];
 
 function t(text: string): GuideInline {
   return { kind: 'text', text };
@@ -62,7 +62,7 @@ function plain(text: string): GuideLine {
   return [t(text)];
 }
 
-export interface GuideCommandStep {
+interface GuideCommandStep {
   readonly line: GuideLine;
   readonly command: string;
   /** Accessible name for the scrolling command block. */

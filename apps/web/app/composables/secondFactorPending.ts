@@ -95,7 +95,7 @@ function retryAfterSeconds(error: unknown): number | undefined {
  * degrades to `unavailable`, matching the password composable's rule that a
  * drifting or hostile server body cannot leak into the UI.
  */
-export function mapSecondFactorPendingError(
+function mapSecondFactorPendingError(
   error: unknown,
 ): SecondFactorPendingFailure {
   const status = failureStatus(error);
@@ -143,7 +143,7 @@ function isPendingStatus(value: unknown): value is SecondFactorPendingStatus {
     && candidate.csrfToken !== '';
 }
 
-export interface SecondFactorAssertionOptions {
+interface SecondFactorAssertionOptions {
   ceremonyId: string;
   publicKey: WebAuthnAssertionPublicKey;
 }

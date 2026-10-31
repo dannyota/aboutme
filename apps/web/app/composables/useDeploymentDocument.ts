@@ -10,7 +10,7 @@ import {
 } from '@/utils/deploymentDocument';
 
 /** Refetch cadence while the tab is visible (page.md, behavior). */
-export const refreshIntervalMs = 60_000;
+const refreshIntervalMs = 60_000;
 /** How often ages and staleness are re-read between fetches. */
 const tickMs = 10_000;
 

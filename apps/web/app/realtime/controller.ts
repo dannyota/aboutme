@@ -1,4 +1,4 @@
-export type RealtimeRefetchMode = 'unconditional' | 'conditional';
+type RealtimeRefetchMode = 'unconditional' | 'conditional';
 
 export type RealtimeReadResult
   = | { readonly kind: 'updated' }

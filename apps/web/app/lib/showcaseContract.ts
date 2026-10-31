@@ -28,7 +28,7 @@ export const SHOWCASE_FILTER_LANGUAGES = ['vi', 'en'] as const;
 export type ShowcaseFilterLanguage = (typeof SHOWCASE_FILTER_LANGUAGES)[number];
 export type ShowcaseItemLanguage = ShowcaseFilterLanguage | 'other';
 
-export const SHOWCASE_PAGE_SIZE = 12;
+const SHOWCASE_PAGE_SIZE = 12;
 export const SHOWCASE_MAX_PAGE = 100;
 /** The template filter value for resumes that match no preset. */
 export const SHOWCASE_CUSTOM_TEMPLATE = 'custom';

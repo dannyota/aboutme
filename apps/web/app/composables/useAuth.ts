@@ -49,7 +49,7 @@ interface MeEnvelope {
   };
 }
 
-export interface MutateOptions {
+interface MutateOptions {
   method: 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   query?: Record<string, string>;
@@ -68,7 +68,7 @@ export interface UseAuthReturn {
 export type AuthState = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
 /** Headers for a CSRF-protected call, including JSON only with a body. */
-export function csrfHeaders(
+function csrfHeaders(
   csrfToken: string | null,
   hasJSONBody = false,
 ): HeadersInit {

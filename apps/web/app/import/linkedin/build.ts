@@ -70,12 +70,12 @@ export type CutField
     | 'description'
     | 'summary';
 
-export type EntryMark
+type EntryMark
   = | { kind: 'noDates' }
     | { kind: 'startOnly' }
     | { kind: 'cut'; field: CutField; max: number };
 
-export interface ReviewDetail {
+interface ReviewDetail {
   id: string;
   type: 'email' | 'phone' | 'location' | 'linkedin' | 'website';
   value: string;

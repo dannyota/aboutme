@@ -9,13 +9,13 @@ import type { TextItemLike } from './lines';
 import type { PdfjsModule, PdfWorkerHandle } from './pdfWorker';
 
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
-export const HEADER_WINDOW_BYTES = 1024;
-export const MAX_PAGES = 20;
-export const MAX_TEXT_CHARS = 100_000;
-export const MAX_TEXT_ITEMS = 20_000;
-export const TIME_LIMIT_MS = 15_000;
+const HEADER_WINDOW_BYTES = 1024;
+const MAX_PAGES = 20;
+const MAX_TEXT_CHARS = 100_000;
+const MAX_TEXT_ITEMS = 20_000;
+const TIME_LIMIT_MS = 15_000;
 /** Share of unreadable characters above which the text is unreadable. */
-export const MAX_UNREADABLE_SHARE = 0.01;
+const MAX_UNREADABLE_SHARE = 0.01;
 
 export type ReadFailure
   = | 'notPdf'

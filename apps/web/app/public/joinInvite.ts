@@ -3,11 +3,11 @@
 // Runs only on a `sign_in` resume's page and never touches viewer data.
 
 /** The invite never appears before this, however fast the reader scrolls. */
-export const JOIN_INVITE_MIN_DELAY_MS = 5_000;
+const JOIN_INVITE_MIN_DELAY_MS = 5_000;
 /** Or after this much visible time, whichever comes first. */
-export const JOIN_INVITE_VISIBLE_MS = 20_000;
+const JOIN_INVITE_VISIBLE_MS = 20_000;
 /** Or once the reader has scrolled this far down the page. */
-export const JOIN_INVITE_SCROLL_FRACTION = 0.6;
+const JOIN_INVITE_SCROLL_FRACTION = 0.6;
 
 export const JOIN_INVITE_STORAGE_KEY = 'aboutme.joinInvite.closedAt';
 const JOIN_INVITE_CLOSED_MS = 90 * 24 * 60 * 60 * 1000;
@@ -21,13 +21,13 @@ const CARD_MIN_RIGHT_MARGIN = 360;
  * itself (ResumeDocument.vue). The page root spans the viewport, so its own
  * right edge never leaves a margin.
  */
-export const JOIN_INVITE_MEASURE_SELECTOR = '.public-measure';
+const JOIN_INVITE_MEASURE_SELECTOR = '.public-measure';
 
 /**
  * The bar's 56 px content band plus the bottom safe area; the page adds
  * bottom padding of this same total while the bar shows.
  */
-export const JOIN_INVITE_BAR_BAND = '56px';
+const JOIN_INVITE_BAR_BAND = '56px';
 export const JOIN_INVITE_BAR_HEIGHT
   = `calc(${JOIN_INVITE_BAR_BAND} + env(safe-area-inset-bottom))`;
 
@@ -239,8 +239,6 @@ const DARK_PALETTE: JoinInvitePalette = {
   action: '#72A0FF',
   onAction: '#071126',
 };
-
-export const JOIN_INVITE_TEXT_COLOR = LIGHT_PALETTE.text;
 
 export const joinInvitePalette = (dark: boolean): JoinInvitePalette =>
   dark ? DARK_PALETTE : LIGHT_PALETTE;

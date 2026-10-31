@@ -10,7 +10,7 @@ import { computed, inject, reactive, type InjectionKey } from 'vue';
  * section switch or a collapsed card) restores its held value by key. Drafts
  * live in memory only: they can hold resume content.
  */
-export interface FieldDraft {
+interface FieldDraft {
   readonly value: unknown;
   /** Hands the held value to the store now, when that is possible. */
   readonly flush?: () => void;

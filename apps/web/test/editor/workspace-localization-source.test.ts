@@ -96,7 +96,7 @@ const vueSources = [
 ];
 const helperSources = [
   'components/editor/customization/labels.ts',
-  'components/editor/customization/pageSettings.ts',
+  'editor/pageSettings.ts',
   'components/editor/forms/entries/levels.ts',
   'components/editor/resumeLanguage.ts',
   'components/editor/sectionTypes.ts',
@@ -116,7 +116,7 @@ const approvedLiterals: Readonly<Record<string, readonly string[]>> = {
   'components/editor/templates/TemplatePartialDialog.vue': ['.'],
   'pages/app/new.vue': ['.'],
   'components/editor/resumeLanguage.ts': ['Tiếng Việt', 'English'],
-  'components/editor/customization/pageSettings.ts': [' · '],
+  'editor/pageSettings.ts': [' · '],
   'components/editor/forms/entries/levels.ts': [' · '],
   'components/editor/sectionTypes.ts': [
     'Summary',
@@ -371,7 +371,6 @@ describe('workspace localization source guard', () => {
       'components/public',
       'components/resume',
       'public',
-      '../server/plugins/public-render-worker.ts',
       '../server/routes/internal-render',
       '../server/routes/print',
       '../server/utils/print',

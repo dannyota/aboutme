@@ -20,8 +20,8 @@ export const EDITOR_PANEL_CSS_VAR = '--panel-width';
 export const EDITOR_PANEL_DEFAULT_REM = 22;
 export const EDITOR_PANEL_MIN_REM = 22;
 export const EDITOR_PANEL_MAX_REM = 48;
-export const EDITOR_PANEL_STEP_REM = 1;
-export const EDITOR_PANEL_LARGE_STEP_REM = 4;
+const EDITOR_PANEL_STEP_REM = 1;
+const EDITOR_PANEL_LARGE_STEP_REM = 4;
 /** A committed width snaps to this grid; keyboard steps already land on it. */
 const EDITOR_PANEL_SNAP_REM = 0.25;
 

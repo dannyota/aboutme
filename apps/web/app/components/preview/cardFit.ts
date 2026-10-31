@@ -7,11 +7,11 @@
  */
 
 /** Width of the body box and of each text line, in px. */
-export const CARD_LINE_WIDTH = 530;
+const CARD_LINE_WIDTH = 530;
 /** Width left for the footer link after the mark and the gap, in px. */
-export const CARD_FOOTER_LINK_WIDTH = 489;
-export const CARD_NAME_SIZES = [72, 64, 58, 52] as const;
-export const CARD_HEADLINE_SIZE = 32;
+const CARD_FOOTER_LINK_WIDTH = 489;
+const CARD_NAME_SIZES = [72, 64, 58, 52] as const;
+const CARD_HEADLINE_SIZE = 32;
 export const CARD_SITE = 'aboutme.vn';
 export const CARD_LINK_PREFIX = `${CARD_SITE}/`;
 
@@ -221,7 +221,7 @@ const linearChannel = (value: number): number => {
 };
 
 /** WCAG relative luminance of a #rrggbb color. */
-export function relativeLuminance(color: string): number {
+function relativeLuminance(color: string): number {
   const [r, g, b] = [1, 3, 5].map((start) =>
     linearChannel(Number.parseInt(color.slice(start, start + 2), 16)));
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;

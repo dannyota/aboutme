@@ -52,7 +52,7 @@ export function source(path: string): string {
   return readFileSync(join(appRoot, path), 'utf8');
 }
 
-export function literalTexts(node: ts.Node): readonly string[] {
+function literalTexts(node: ts.Node): readonly string[] {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
     return node.text === '' ? [] : [node.text];
   }
@@ -65,7 +65,7 @@ export function literalTexts(node: ts.Node): readonly string[] {
   return [];
 }
 
-export function propertyName(
+function propertyName(
   name: ts.PropertyName | ts.BindingName,
 ): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name)
@@ -73,7 +73,7 @@ export function propertyName(
     : undefined;
 }
 
-export function expressionLiterals(input: string): readonly string[] {
+function expressionLiterals(input: string): readonly string[] {
   const file = ts.createSourceFile(
     'template.ts',
     input,

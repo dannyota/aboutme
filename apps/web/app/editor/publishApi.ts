@@ -60,7 +60,7 @@ export type PublishResult
     | { readonly kind: 'failed'; readonly code: PublishFailureCode }
     | { readonly kind: 'unknown'; readonly reason: 'transport' | 'server' };
 
-export type PublishTransportResult
+type PublishTransportResult
   = PublishResult | { readonly kind: 'csrf-rejected' };
 
 export interface PublishApi {
@@ -88,7 +88,7 @@ export function freezePublishAttempt(
   return frozen;
 }
 
-export function publishRequest(
+function publishRequest(
   attempt: FrozenPublishAttempt,
   csrfToken: string,
 ): Request {

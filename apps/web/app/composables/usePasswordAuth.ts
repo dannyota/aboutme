@@ -48,7 +48,7 @@ export class PasswordAuthFailure extends Error {
 }
 
 /** `login`'s result: which of the two closed success outcomes occurred. */
-export interface PasswordLoginResult {
+interface PasswordLoginResult {
   /**
    * True when the account is enrolled in a second factor: no session was
    * issued, only the pending cookie. False is the existing unenrolled `204`
@@ -110,7 +110,7 @@ function failureIssue(error: unknown): unknown {
  * status/code pairs declared by the password endpoints match; everything else
  * degrades to `unavailable`.
  */
-export function mapPasswordAuthError(error: unknown): PasswordAuthFailure {
+function mapPasswordAuthError(error: unknown): PasswordAuthFailure {
   const status = failureStatus(error);
   const code = failureCode(error);
   const issue = failureIssue(error);

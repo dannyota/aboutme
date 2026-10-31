@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 export const VERIFY_BASE_URL = 'http://127.0.0.1:20092';
 const FIXTURES_DIR = resolve(import.meta.dirname, 'fixtures/deployment');
 
-export async function readFixtureText(name: string): Promise<string> {
+async function readFixtureText(name: string): Promise<string> {
   return readFile(resolve(FIXTURES_DIR, `${name}.json`), 'utf8');
 }
 

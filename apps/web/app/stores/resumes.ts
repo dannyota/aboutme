@@ -45,7 +45,7 @@ export type PhotoReadState
       readonly reason: 'read-failed' | 'binding-mismatch' | 'session-lost';
     };
 
-export type AttemptState
+type AttemptState
   = | {
     readonly kind: 'dispatching';
     readonly queueItem: EditorQueueItem;
@@ -79,14 +79,14 @@ export type AttemptState
       | 'second-stale';
   };
 
-export type OpaquePhotoOutcome = {
+type OpaquePhotoOutcome = {
   readonly kind: 'photo-cutoff';
   readonly command: Extract<AtomicEditorCommand, { kind: 'photoUpload' }>;
   readonly attempt: FrozenAttempt;
   readonly observed: 'unchanged' | 'changed' | 'unavailable';
 };
 
-export type CompletionAdoption
+type CompletionAdoption
   = | { readonly kind: 'adopted'; readonly accepted: AcceptedResume }
     | { readonly kind: 'older'; readonly winner: AcceptedResume };
 
@@ -104,11 +104,11 @@ export interface ResumeRecord {
   opaquePhotoOutcome: OpaquePhotoOutcome | null;
 }
 
-export interface ResumeStoreState {
+interface ResumeStoreState {
   records: Map<string, ResumeRecord>;
 }
 
-export interface ResumeStoreActions {
+interface ResumeStoreActions {
   initialize(accepted: AcceptedResume): void;
   enqueue(resumeId: string, item: EditorQueueItem): void;
   startAttempt(

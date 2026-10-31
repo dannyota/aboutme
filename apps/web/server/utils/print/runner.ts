@@ -8,7 +8,7 @@ import {
 
 export const PRINT_WORKER_DEADLINE_MS = 5_000;
 
-export interface PrintWorker {
+interface PrintWorker {
   terminate: () => Promise<number>;
   on: Worker['on'];
   once: Worker['once'];

@@ -48,14 +48,14 @@ export const browserEditorRuntime: EditorRuntime = {
   delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
-export type EditorActionResult
+type EditorActionResult
   = | { readonly kind: 'enqueued'; readonly command: AtomicEditorCommand }
     | {
       readonly kind: 'blocked';
       readonly reason: 'not-loaded' | 'session-lost' | 'owner-mismatch';
     };
 
-export type TemplateActionResult
+type TemplateActionResult
   = | { readonly kind: 'enqueued'; readonly group: TemplateGroupCommand }
     | { readonly kind: 'no-change' }
     | Extract<EditorActionResult, { kind: 'blocked' }>;

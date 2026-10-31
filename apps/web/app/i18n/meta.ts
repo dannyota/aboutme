@@ -15,7 +15,7 @@ export const ogImageUrl: Record<Locale, string> = {
   en: `${siteOrigin}/og-image-v6-en.jpg`,
 };
 
-export const indexablePaths: ReadonlySet<string> = new Set([
+const indexablePaths: ReadonlySet<string> = new Set([
   '/',
   '/privacy',
   '/terms',

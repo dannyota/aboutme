@@ -218,6 +218,6 @@ export function retryAfterMs(response: Response): number | null {
   return Number.isSafeInteger(seconds) ? seconds * 1000 : null;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

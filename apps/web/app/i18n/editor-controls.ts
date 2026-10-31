@@ -1,6 +1,4 @@
-import type {
-  PageFormat,
-} from '../components/editor/customization/pageSettings';
+import type { PageFormat } from '../editor/pageSettings';
 import type { CustomizationSetPath } from '../editor/commands';
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
@@ -27,7 +25,7 @@ type EditorControlsCopy = {
   readonly richText: Record<RichTextControlId, string>;
 };
 
-export type EditorControlId
+type EditorControlId
   = | 'addSection' | 'addSectionTitle' | 'apply' | 'chooseOption'
     | 'colorInvalid'
     | 'colorRemove' | 'colorSchemeHint' | 'cropHint' | 'cropInvalid'
@@ -114,7 +112,7 @@ type EditorControlCopy = Record<
 export type CustomizationGroupId
   = 'page' | 'type' | 'spacing' | 'headings' | 'layout' | 'colors';
 
-export type RichTextControlId
+type RichTextControlId
   = | 'toolbar'
     | 'editorLabel'
     | 'paragraph'

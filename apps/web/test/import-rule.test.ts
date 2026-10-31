@@ -162,10 +162,10 @@ test('allows renderer dependencies with deterministic inputs', async () => {
   const messages = await lint(`
 import type { ResumeDocument } from '@aboutme/schema';
 import { h } from 'vue';
-import DateRange from './primitives/DateRange.vue';
+import RichText from './primitives/RichText.vue';
 
 export function render(document: ResumeDocument) {
-  return h(DateRange, { document });
+  return h(RichText, { document });
 }
 `);
 

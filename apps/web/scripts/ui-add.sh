@@ -16,7 +16,7 @@ npx --yes --package shadcn-vue@2.8.2 -- \
 # The generator saves these registry dependencies with ranges. Restore the
 # frozen exact pins after every run.
 npm install --save-exact \
-  @lucide/vue@1.31.0 @vueuse/core@14.4.0 reka-ui@2.10.4
+  @lucide/vue@1.31.0 @vueuse/core@14.4.0 reka-ui@2.10.5
 # The generator imports lucide-vue-next; the repository ships @lucide/vue.
 while IFS= read -r file; do
   sed -i "s#from 'lucide-vue-next'#from '@lucide/vue'#g; s#from \"lucide-vue-next\"#from '@lucide/vue'#g" "$file"

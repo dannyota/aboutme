@@ -48,13 +48,13 @@ export type PublishPageCopy = {
   };
 };
 
-export type PublishPreviewCopy = {
+type PublishPreviewCopy = {
   readonly heading: string;
   readonly caption: string;
 };
 
 /** The community showcase block (docs/design/showcase.md, Copy). */
-export type PublishShowcaseCopy = {
+type PublishShowcaseCopy = {
   readonly label: string;
   readonly help: string;
   readonly needsPublic: string;

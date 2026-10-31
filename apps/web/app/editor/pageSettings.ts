@@ -1,8 +1,8 @@
 import type { Customization } from '@aboutme/schema';
-import type { Locale } from '../../../i18n/locale';
-import { editorControlsCopy } from '../../../i18n/editor-controls';
+import type { Locale } from '../i18n/locale';
+import { editorControlsCopy } from '../i18n/editor-controls';
 
-import type { CustomizationDelta } from '../../../editor/commands';
+import type { CustomizationDelta } from './commands';
 
 /**
  * Page size and margin choices for the PDF and print. The schema stores
@@ -16,7 +16,7 @@ export type PageMargin = NonNullable<Customization['spacing']['pageMargin']>;
 export type MarginChoice = 'narrow' | 'normal' | 'wide' | 'custom';
 export type MarginAxis = 'x' | 'y';
 
-export const DEFAULT_MARGIN_MM = 15;
+const DEFAULT_MARGIN_MM = 15;
 export const MAX_MARGIN_MM = 40;
 /** Consumer printers cannot print closer than this to the paper edge. */
 export const PRINTABLE_EDGE_MM = 5;

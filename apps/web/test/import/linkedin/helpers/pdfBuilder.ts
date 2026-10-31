@@ -72,7 +72,7 @@ export function stream(content: string, compress = false):
 }
 
 /** Escapes text for a PDF literal string. */
-export function pdfString(text: string): string {
+function pdfString(text: string): string {
   return `(${text.replace(/[\\()]/g, (c) => `\\${c}`)})`;
 }
 

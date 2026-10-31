@@ -25,7 +25,7 @@ import {
 } from './useResumeEditor';
 import { useAuth, type AuthState } from './useAuth';
 
-export type ResumeListView
+type ResumeListView
   = | { readonly kind: 'waiting-auth' }
     | { readonly kind: 'loading' }
     | { readonly kind: 'ready'; readonly items: readonly ResumeSummary[] }
@@ -38,9 +38,9 @@ export type CreateNotice
     | 'session-lost'
     | null;
 
-export type ResumeListNotice = 'resume-changed' | null;
+type ResumeListNotice = 'resume-changed' | null;
 
-export interface CreateOpenOptions {
+interface CreateOpenOptions {
   readonly isCurrent?: () => boolean;
   readonly beforeOpen?: (resumeId: string) => void;
 }
