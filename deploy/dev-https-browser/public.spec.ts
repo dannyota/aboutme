@@ -507,28 +507,34 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.ownerGated = true;
 
   stage('view-google');
+  // Pause before navigation so sign-in and network delays cannot consume
+  // the invite's client-clock floor.
+  await anon.clock.install({ time: 0 });
+  await anon.clock.pauseAt(Date.now());
   await anon.goto(`${ORIGIN}/${slug}`);
   await signInWithGoogle(anon, {
     activator: gateLink(anon, 'google'),
     returnPath: `/${slug}`,
   });
-  // The invite proof runs first: its 5 s floor counts from view start, so
-  // slower checks wait until it is done.
   stage('view-join-invite');
   // The invite never shows in the first 5 s after view start, then shows
   // for this pass holder once the scroll or dwell rule is met
   // (design "Join invite"; AC-VIEW-008). The window is scrolled to the
   // bottom at once, so only the 5 s floor holds it back.
   await expect.poll(() => startResponseAt).toBeGreaterThan(0);
-  const startedAt = startResponseAt;
+  // The separate Vue mount consumes the start response and arms the timer.
+  await expect(anon.locator('body > div[data-v-app]')).toHaveCount(1);
+  const startedAt = await anon.evaluate(() => Date.now());
   const invite = anon.getByRole('region', {
     name: /^(Create a free resume invite|Lời mời tạo CV miễn phí)$/u,
   });
   await expect(invite).toHaveCount(0);
-  expect(Date.now() - startedAt, 'invite-floor-window-missed').toBeLessThan(4_000);
   await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await expect(invite).toBeVisible({ timeout: 45_000 });
-  joinInviteMs = Date.now() - startedAt;
+  await anon.clock.fastForward(JOIN_INVITE_FLOOR_MS - 100);
+  await expect(invite).toHaveCount(0);
+  await anon.clock.fastForward(200);
+  await expect(invite).toBeVisible();
+  joinInviteMs = (await anon.evaluate(() => Date.now())) - startedAt;
   expect(joinInviteMs).toBeGreaterThanOrEqual(JOIN_INVITE_FLOOR_MS - 100);
   expect(await startBody).toMatchObject({
     data: { owner: false, signedIn: false },
@@ -548,11 +554,13 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   startResponseAt = 0;
   await anon.reload();
   await expect.poll(() => startResponseAt).toBeGreaterThan(0);
-  // Wait past the 5 s floor: a closed invite must not come back.
+  await expect(anon.locator('body > div[data-v-app]')).toHaveCount(1);
+  // Advance past the 5 s floor: a closed invite must not come back.
   await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await anon.waitForTimeout(JOIN_INVITE_FLOOR_MS + 1_000);
+  await anon.clock.fastForward(JOIN_INVITE_FLOOR_MS + 1_000);
   await expect(invite).toHaveCount(0);
   viewSteps.joinInviteClosed = true;
+  await anon.clock.resume();
 
   stage('view-google-pass');
   await expect(anon.locator('#public-resume')).toBeVisible();
