@@ -383,6 +383,7 @@ capped() {
   check_docs
   check_go
   run lengths "whole tree" bash scripts/check-lengths.sh
+  run path-case "index paths" bash scripts/check-path-case.sh
   check_shell
   report
   if ((FAILED)); then exit 1; fi
