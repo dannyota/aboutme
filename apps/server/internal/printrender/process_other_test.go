@@ -3,6 +3,7 @@
 package printrender
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"reflect"
@@ -20,7 +21,7 @@ func TestBrowserProcessAttributes(t *testing.T) {
 }
 
 func ownedProcessState(pid int) (byte, error) {
-	data, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=").Output()
+	data, err := exec.CommandContext(context.Background(), "ps", "-p", strconv.Itoa(pid), "-o", "stat=").Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(data) == 0 {

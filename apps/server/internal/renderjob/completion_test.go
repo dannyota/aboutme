@@ -497,8 +497,8 @@ func TestCloseWaitsForRendererJoin(t *testing.T) {
 	go func() { closeDone <- queue.Close() }()
 	<-rendererCanceled
 	select {
-	case <-closeDone:
-		t.Fatal("Close returned before renderer joined")
+	case closeErr := <-closeDone:
+		t.Fatalf("Close returned before renderer joined: %v", closeErr)
 	case <-time.After(20 * time.Millisecond):
 	}
 	close(allowRendererReturn)

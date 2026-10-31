@@ -34,7 +34,7 @@ log "gofmt $*"
 fails gofmt && printf "%s\n" "${@: -1}"
 exit 0'
 stub golangci-lint "$stub_lib"'
-if [[ $1 == version ]]; then echo "${STUB_GOLANGCI_VERSION:-2.14.0}"; exit 0; fi
+if [[ $1 == version ]]; then echo "${STUB_GOLANGCI_VERSION:-2.15.0}"; exit 0; fi
 log "golangci-lint $* (in ${PWD##*/}, GOWORK=${GOWORK:-unset})"
 ! fails golangci-lint'
 stub shellcheck "$stub_lib"'
@@ -85,7 +85,7 @@ shift 3
 exec "$@"
 STUB
 
-  printf 'golangci-lint 2.14.0\n' >"$repo/.tool-versions"
+  printf 'golangci-lint 2.15.0\n' >"$repo/.tool-versions"
   printf '{}\n' >"$repo/package.json"
   printf '{}\n' >"$repo/apps/web/package.json"
   lockfile "$repo/package-lock.json" "${root_packages[@]}"

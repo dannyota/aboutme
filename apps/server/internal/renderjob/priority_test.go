@@ -108,7 +108,9 @@ func TestLowPriorityIsRefusedBehindQueuedExports(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 	for range MaxConcurrentRenders + LowPriorityMaxWaiting + 1 {
-		<-done
+		if renderErr := <-done; !errors.Is(renderErr, ErrClosed) {
+			t.Fatalf("Render() error = %v, want ErrClosed", renderErr)
+		}
 	}
 	assertQueueEmpty(t, queue)
 }
