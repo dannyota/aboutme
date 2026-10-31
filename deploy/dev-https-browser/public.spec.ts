@@ -507,10 +507,14 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.ownerGated = true;
 
   stage('view-google');
-  // Pause before navigation so sign-in and network delays cannot consume
-  // the invite's client-clock floor.
-  await anon.clock.install({ time: 0 });
-  await anon.clock.pauseAt(Date.now());
+  // Let hydration finish before pausing timers. Hold the real start request
+  // so the invite cannot mount and arm its floor until the clock is paused.
+  await anon.route(`${ORIGIN}/api/v1/public/resumes/${slug}/views/start`, async (route) => {
+    await waitForHydration(anon, 'public-resume');
+    await anon.clock.install({ time: 0 });
+    await anon.clock.pauseAt(Date.now());
+    await route.fallback();
+  }, { times: 1 });
   await anon.goto(`${ORIGIN}/${slug}`);
   await signInWithGoogle(anon, {
     activator: gateLink(anon, 'google'),
@@ -552,7 +556,9 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
     JOIN_INVITE_CLOSED_KEY,
   )).toBe(true);
   startResponseAt = 0;
+  await anon.clock.resume();
   await anon.reload();
+  await waitForHydration(anon, 'public-resume');
   await expect.poll(() => startResponseAt).toBeGreaterThan(0);
   await expect(anon.locator('body > div[data-v-app]')).toHaveCount(1);
   // Advance past the 5 s floor: a closed invite must not come back.
@@ -560,7 +566,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   await anon.clock.fastForward(JOIN_INVITE_FLOOR_MS + 1_000);
   await expect(invite).toHaveCount(0);
   viewSteps.joinInviteClosed = true;
-  await anon.clock.resume();
 
   stage('view-google-pass');
   await expect(anon.locator('#public-resume')).toBeVisible();
