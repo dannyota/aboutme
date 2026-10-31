@@ -38,9 +38,9 @@ be recalled.
   confirm those invariants by name.
 - **GitHub CI is the full gate.** `ci.yml` runs checks per job, including
   builds, typechecks, tests, linters, browser proofs, VN infrastructure, and two
-  Semgrep jobs. The `contracts` job runs full-history gitleaks. The aggregate
-  `ci` job is the only required check on `main`. Hosted CI never calls
-  `make ci`. A red run is fixed forward at once.
+  Semgrep jobs on main pushes and main dispatches only. The `contracts` job runs
+  full-history gitleaks. The aggregate `ci` job is the only required check on
+  `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for green GitHub CI on that exact commit.
 - **No full local gate.** Full local `make ci` is prohibited, including while
@@ -71,9 +71,11 @@ This is delivery process only. It changes no product behavior, schema, API,
 stored data, migration, or client contract.
 
 Per-commit gitleaks is the boundary before a secret can enter public Git
-history. Hosted Semgrep and full-history gitleaks remain required on the exact
-release commit. Bounded local diagnostics limit the effect of hostile or faulty
-test inputs on the shared laptop.
+history. Hosted Semgrep runs on main pushes and main dispatches using the
+`semgrep` environment, whose deployment branch policy allows only `main`. Hosted
+Semgrep and full-history gitleaks remain required on the exact release commit.
+Bounded local diagnostics limit the effect of hostile or faulty test inputs on
+the shared laptop.
 
 ## Consequences
 
@@ -112,3 +114,6 @@ proportional to the change.
 - 2026-10-31: The owner approved Linux and macOS local tooling with a sampled
   total RAM minus 10 GiB process-tree budget and nice level 10. Hosted CI
   remains the full gate, and the primary alone runs local checks.
+- 2026-10-31: The owner limited connected Semgrep to main pushes and main
+  dispatches with a main-only environment secret to keep its token out of pull
+  request and branch runs. Exact-release Semgrep checks remain required.

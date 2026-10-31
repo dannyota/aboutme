@@ -29,7 +29,7 @@ const actionFixture = (reference, comment = "v1.2.3") =>
   `jobs:\n  check:\n    steps:\n      - uses: ${reference} # ${comment}\n`;
 const readWorkflow = (name) =>
   parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
-const forkCondition = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}";
+const semgrepSkipCondition = "${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}";
 
 const imageCheck = "./.github/actions/release-image-check";
 const readImageCheck = () => parseYaml(read(`${imageCheck.slice(2)}/action.yml`), imageCheck).toJS();
@@ -343,7 +343,7 @@ test("required gate rejects incomplete needs and independent VN triggers", () =>
     ["missing reusable call", (ci) => { delete ci.jobs["vn-infra"].uses; }, /VN workflow call/],
     ["conditional reusable call", (ci) => { ci.jobs["vn-infra"].if = "false"; }, /VN workflow must run/],
     ["conditional gate", (ci) => { delete ci.jobs.ci.if; }, /always/],
-    ["unrestricted fork skips", (ci) => { aggregateStep(ci).env.ALLOW_SEMGREP_SKIP = "true"; }, /fork condition/],
+    ["unrestricted Semgrep skips", (ci) => { aggregateStep(ci).env.ALLOW_SEMGREP_SKIP = "true"; }, /main condition/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
     const ci = readWorkflow("ci");
@@ -353,7 +353,7 @@ test("required gate rejects incomplete needs and independent VN triggers", () =>
   }
 });
 
-test("aggregate accepts only successful jobs and fork-only Semgrep skips", () => {
+test("aggregate accepts only successful jobs and Semgrep skips outside main scans", () => {
   checkAggregateResults(readWorkflow("ci"));
 });
 
@@ -684,7 +684,7 @@ function checkRequiredGate(ci, vn) {
   assert.equal(ci.jobs.ci.if, "always()", "ci must always run");
   const step = aggregateStep(ci);
   assert.equal(step.if, "always()", "aggregate must always run");
-  assert.equal(step.env.ALLOW_SEMGREP_SKIP, forkCondition, "Semgrep skip fork condition");
+  assert.equal(step.env.ALLOW_SEMGREP_SKIP, semgrepSkipCondition, "Semgrep skip main condition");
   assert.equal(step.env.NEEDS_JSON, "${{ toJSON(needs) }}");
 }
 
@@ -692,10 +692,13 @@ function checkAggregateResults(ci) {
   const step = aggregateStep(ci);
   const jobs = ci.jobs.ci.needs;
   const contexts = [
-    ["push", false],
-    ["workflow_dispatch", false],
-    ["same-repository pull_request", false],
+    ["main push", false],
+    ["main workflow_dispatch", false],
+    ["branch push", true],
+    ["branch workflow_dispatch", true],
+    ["same-repository pull_request", true],
     ["fork pull_request", true],
+    ["Dependabot pull_request", true],
   ];
   const run = (needs, allowSkip) => {
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step.run], {

@@ -295,7 +295,7 @@ grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
 # jobs select Code and Supply Chain, fail closed, and leave secret scanning to
 # gitleaks. The gate requires each job and permits only these jobs to skip.
 semgrep_jobs=(semgrep-code semgrep-supply-chain)
-semgrep_if="    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository"
+semgrep_if="    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
 actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_ALL=C sort)
 [ "$actual_semgrep_jobs" = "$(printf '%s\n' "${semgrep_jobs[@]}" | LC_ALL=C sort)" ] ||
   fail "hosted Semgrep jobs are not exactly ${semgrep_jobs[*]}: $(tr '\n' ' ' <<<"$actual_semgrep_jobs")"
@@ -332,7 +332,9 @@ for job in "${semgrep_jobs[@]}"; do
   [ "$(grep -c -- '- run: semgrep ci ' <<<"$body")" -eq 1 ] ||
     fail "$job does not run exactly one semgrep ci scan"
   grep -Fxq "$semgrep_if" <<<"$body" ||
-    fail "$job is not skipped only when a fork pull request withholds the token"
+    fail "$job does not run only on main pushes and main dispatches"
+  grep -Fxq '    environment: semgrep' <<<"$body" ||
+    fail "$job does not use the semgrep environment"
   grep -Fxq '          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}' <<<"$body" ||
     fail "$job does not scan with the Semgrep platform token"
   ! grep -Fq 'continue-on-error' <<<"$body" ||
@@ -346,10 +348,122 @@ done
   fail "ci gate accepts a skipped result in more than one place"
 grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
   fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
-grep -Fq "ALLOW_SEMGREP_SKIP: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" <<<"$CI_JOB" ||
-  fail "ci gate does not bind Semgrep skips to fork pull requests"
+grep -Fq "ALLOW_SEMGREP_SKIP: \${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}" <<<"$CI_JOB" ||
+  fail "ci gate does not bind Semgrep skips to runs outside main pushes and main dispatches"
 grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
-  fail "ci gate accepts Semgrep skips outside fork pull requests"
+  fail "ci gate does not enforce the Semgrep skip condition"
+
+# Only the connected Semgrep jobs may read a stored secret. GITHUB_TOKEN is
+# GitHub's per-run token and remains available to release publication jobs.
+assert_workflow_secrets() { # workflow-directory
+  node --input-type=module - "$1" "$ROOT" <<'NODE'
+import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+const require = createRequire(join(process.argv[3], "scripts/test/workflow-contract.test.mjs"));
+const { parseDocument } = require("yaml");
+const directory = process.argv[2];
+const seen = new Set();
+const yamlPath = (parts) => parts.reduce((path, part) =>
+  typeof part === "number" ? `${path}[${part}]` :
+    /^[\w-]+$/.test(part) ? `${path}${path ? "." : ""}${part}` :
+      `${path}[${JSON.stringify(part)}]`, "");
+function inspect(value, parts, file, key = false) {
+  if (typeof value !== "string") return;
+  for (const expression of value.matchAll(/\$\{\{((?:'(?:[^']|'')*'|[^'])+?)\}\}/g)) {
+    const tokens = expression[1].match(/'(?:[^']|'')*'|[A-Za-z_][\w-]*|[^\s]/g) || [];
+    for (const [index, token] of tokens.entries()) {
+      if (token.toLowerCase() !== "secrets" || tokens[index - 1] === ".") continue;
+      const property = tokens[index + 1] === "." ? tokens[index + 2] : undefined;
+      if (property === "GITHUB_TOKEN") continue;
+      const job = parts[1];
+      if (!key && file === join(directory, "ci.yml") &&
+          parts.length === 6 && parts[0] === "jobs" &&
+          ["semgrep-code", "semgrep-supply-chain"].includes(job) &&
+          parts[2] === "steps" && typeof parts[3] === "number" &&
+          parts[4] === "env" && parts[5] === "SEMGREP_APP_TOKEN" &&
+          value === "${{ secrets.SEMGREP_APP_TOKEN }}" && !seen.has(job)) {
+        seen.add(job);
+        continue;
+      }
+      console.error(`workflow-safety-test: ${file}:${yamlPath(parts)} references an unapproved secret`);
+      process.exit(1);
+    }
+  }
+}
+function walk(value, parts, file, ancestors = new Set(), key = false) {
+  inspect(value, parts, file, key);
+  if (value === null || typeof value !== "object") return;
+  if (ancestors.has(value)) throw new Error(`${file}:${yamlPath(parts)} contains a recursive YAML alias`);
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => walk(child, [...parts, index], file, ancestors, key));
+  } else if (value instanceof Map) {
+    for (const [key, child] of value) {
+      const childPath = [...parts, String(key)];
+      walk(key, childPath, file, ancestors, true);
+      walk(child, childPath, file, ancestors);
+    }
+  }
+  ancestors.delete(value);
+}
+for (const file of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+  if (!file.isFile() || !/\.ya?ml$/.test(file.name)) continue;
+  const path = join(file.parentPath, file.name);
+  const document = parseDocument(readFileSync(path, "utf8"));
+  if (document.errors.length) throw new Error(`${path}: ${document.errors.join("; ")}`);
+  walk(document.toJS({ mapAsMap: true }), [], path);
+}
+if (seen.size !== 2) {
+  console.error("workflow-safety-test: connected Semgrep jobs must each reference the token exactly once");
+  process.exit(1);
+}
+NODE
+}
+assert_workflow_secrets "$ROOT/.github/workflows"
+
+mkdir -p "$WORK/workflows"
+cp "$WORKFLOW" "$WORK/workflows/ci.yml"
+cat >"$WORK/workflows/ordinary.yml" <<'YAML'
+# secrets may appear in comments.
+jobs:
+  unrelated:
+    steps:
+      - name: secrets
+        env:
+          LITERAL: 'secrets'
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROPERTY: ${{ foo.secrets }}
+          IDENTIFIER: ${{ other_secrets }}
+          QUOTED: ${{ format('secrets and }}', 'secrets') }}
+YAML
+assert_workflow_secrets "$WORK/workflows"
+while IFS= read -r expression; do
+  printf 'jobs:\n  unrelated:\n    env:\n      ALL_SECRETS: %s\n' "$expression" \
+    >"$WORK/workflows/unapproved.yml"
+  expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
+    "$WORK/workflows/unapproved.yml:jobs.unrelated.env.ALL_SECRETS references an unapproved secret"
+done <<'CASES'
+${{ toJSON(secrets) }}
+${{ secrets }}
+${{ format('{0}', secrets) }}
+${{ secrets['X'] }}
+${{ secrets.OTHER }}
+${{ secrets.SEMGREP_APP_TOKEN }}
+"${{ toJSON(\u0073ecrets) }}"
+CASES
+cat >"$WORK/workflows/unapproved.yml" <<'YAML'
+jobs:
+  unrelated:
+    steps:
+      - env:
+          "${{ secrets.OTHER }}": value
+YAML
+expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
+  "$WORK/workflows/unapproved.yml:jobs.unrelated.steps[0].env[\"\${{ secrets.OTHER }}\"] references an unapproved secret"
+mkdir -p "$WORK/empty-workflows"
+expect_guard_drift assert_workflow_secrets "$WORK/empty-workflows" \
+  'connected Semgrep jobs must each reference the token exactly once'
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,

@@ -240,6 +240,38 @@ notice_test_ms() {
   stamp=${stamp/./}
   printf '%d\n' "$((10#$stamp * 10))"
 }
+# Join the child and its lock-holding parents before checking the shared lock.
+release_notice_child() {
+  python3 -I - "$1" "$2" <<'PYTHON'
+import os, select, sys, time
+try:
+    pid = int(sys.argv[1]); children = [os.pidfd_open(pid)]
+    while pid > 1:
+        try:
+            with open(f'/proc/{pid}/status') as status:
+                pid = next(int(line.split()[1]) for line in status if line.startswith('PPid:'))
+            descriptors = os.listdir(f'/proc/{pid}/fd')
+        except FileNotFoundError:
+            break
+        for fd in descriptors:
+            try:
+                if os.readlink(f'/proc/{pid}/fd/{fd}') == '/run/aboutme/workload.lock':
+                    children.append(os.pidfd_open(pid)); break
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+    with open(sys.argv[2], 'w') as latch:
+        latch.write('continue\n')
+    deadline = time.monotonic() + 30
+    while children:
+        ready, _, _ = select.select(children, [], [], max(0, deadline - time.monotonic()))
+        if not ready:
+            sys.exit(1)
+        for child in ready:
+            children.remove(child); os.close(child)
+except OSError:
+    sys.exit(1)
+PYTHON
+}
 refusal_count=0
 refusal_details() {
   printf 'refusal=%d caller_lines=(%s) exit=%d elapsed_ms=%d stdout_bytes=%d stderr_bytes=%d' \
@@ -361,7 +393,7 @@ if [[ ${NOTICE_DB_HOLD:-none} == "$stage" ]]; then
   /usr/bin/sleep 3
   printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/held-child"; printf '%s\n' "$PPID" >"$NOTICE_FIXTURE/held-controller"
   printf 'ready\n' >"$NOTICE_FIXTURE/ready-${NOTICE_LATCH_VICTIM:?}"
-  read -r -t 10 _ <"$NOTICE_FIXTURE/continue" || exit 1
+  read -r -t 30 _ <"$NOTICE_FIXTURE/continue" || exit 1
 fi
 [[ -z $answer ]] || printf '%s\n' "$answer"
 STUB
@@ -517,7 +549,7 @@ for victim in outer child; do
     printf 'exited\n' >"$work/ready-$victim"
   ) &
   fixture_pid=$!; latch_state=
-  if ! read -r -t 10 latch_state <&"$ready_fd" || [[ $latch_state != ready ]]; then fail 'restore descendant never reached latch'; fi
+  if ! read -r -t 30 latch_state <&"$ready_fd" || [[ $latch_state != ready ]]; then fail 'restore descendant never reached latch'; fi
   [[ -f $work/held-child ]] || fail 'restore descendant never reached latch'
   outer_pid=$(cat "$work/outer-controller")
   if [[ $victim == outer ]]; then kill -KILL "$outer_pid"
@@ -525,11 +557,9 @@ for victim in outer child; do
   if /usr/bin/flock -n /run/aboutme/workload.lock true; then fail 'controller death lost descendant workload ownership'; fi
   [[ -f $authority/restore-reconciliation ]] || fail 'controller death lost reconciliation'
   jq -e '.operation_kind=="notice_restore"' /var/lib/aboutme/fence.json >/dev/null || fail 'controller death released operation'
-  printf 'continue\n' >&"$continue_fd"; wait "$fixture_pid" 2>/dev/null || true; exec {ready_fd}>&-
-  for ((attempt = 0; attempt < 100; attempt++)); do
-    if /usr/bin/flock -n /run/aboutme/workload.lock true; then break; fi
-    /usr/bin/sleep 0.02
-  done
+  release_notice_child "$(cat "$work/held-child")" "$work/continue" || fail 'fixture left a surviving workload holder'
+  if ! read -r -t 30 latch_state <&"$ready_fd" || [[ $latch_state != exited ]]; then fail 'fixture left a surviving workload holder'; fi
+  wait "$fixture_pid" 2>/dev/null || true; exec {ready_fd}>&-
   /usr/bin/flock -n /run/aboutme/workload.lock true || fail 'fixture left a surviving workload holder'; denied; refuse "$controller" host-pass latest --resume
   reset_owner
 done
@@ -704,7 +734,8 @@ if [[ ${*: -1} == reconcile-initial ]]; then
   esac
   if [[ ${NOTICE_INITIAL_HOLD:-none} == foreground ]]; then
     printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/initial-held-child"
-    read -r -t 10 _ <"$NOTICE_FIXTURE/initial-continue" || exit 1
+    printf 'ready\n' >"$NOTICE_FIXTURE/initial-ready"
+    read -r -t 30 _ <"$NOTICE_FIXTURE/initial-continue" || exit 1
   elif [[ ${NOTICE_INITIAL_HOLD:-none} == descendant ]]; then
     (exec >/dev/null 2>&1; printf '%s\n' "$BASHPID" >"$NOTICE_FIXTURE/initial-held-child"
       read -r -t 10 _ <"$NOTICE_FIXTURE/initial-continue") &
@@ -831,27 +862,32 @@ done
 mkfifo "$work/initial-continue"; exec {initial_continue_fd}<>"$work/initial-continue"
 NOTICE_INITIAL_HOLD=descendant initial_refuse
 rm -f "$work/initial-held-child"
+mkfifo "$work/initial-ready"; exec {initial_ready_fd}<>"$work/initial-ready"
 initial_started=$(notice_test_ms)
-NOTICE_INITIAL_HOLD=foreground bash "$wrapper" reconcile-initial >"$work/initial-death-out" 2>"$work/initial-death-err" &
-initial_pid=$!
-for ((attempt = 0; attempt < 100; attempt++)); do [[ ! -f $work/initial-held-child ]] || break; /usr/bin/sleep 0.02; done
-[[ -f $work/initial-held-child ]] || {
+(
+  NOTICE_INITIAL_HOLD=foreground bash "$wrapper" reconcile-initial >"$work/initial-death-out" 2>"$work/initial-death-err" &
+  initial_pid=$!; printf '%s\n' "$initial_pid" >"$work/initial-parent"
+  initial_result=0; wait "$initial_pid" 2>/dev/null || initial_result=$?
+  printf '%s\n' "$initial_result" >"$work/initial-exit"
+  printf 'exited\n' >"$work/initial-ready"
+) &
+initial_fixture_pid=$!; initial_state=
+if ! read -r -t 30 initial_state <&"$initial_ready_fd" || [[ $initial_state != ready ]]; then
   initial_elapsed=$(( $(notice_test_ms) - initial_started )); initial_running=1; initial_result=-1
-  if ! kill -0 "$initial_pid" 2>/dev/null; then
-    initial_running=0; initial_result=0; wait "$initial_pid" 2>/dev/null || initial_result=$?
+  if [[ $initial_state == exited ]]; then
+    initial_running=0; initial_result=$(cat "$work/initial-exit")
   fi
-  printf -v initial_message 'initial child never reached latch polls=%d elapsed_ms=%d running=%d exit=%d stdout_bytes=%d stderr_bytes=%d' \
-    "$attempt" "$initial_elapsed" "$initial_running" "$initial_result" "$(wc -c <"$work/initial-death-out")" "$(wc -c <"$work/initial-death-err")"
+  printf -v initial_message 'initial child never reached latch state=%s elapsed_ms=%d running=%d exit=%d stdout_bytes=%d stderr_bytes=%d' \
+    "${initial_state:-timeout}" "$initial_elapsed" "$initial_running" "$initial_result" "$(wc -c <"$work/initial-death-out")" "$(wc -c <"$work/initial-death-err")"
   fail "$initial_message"
-}
-kill -KILL "$initial_pid"; wait "$initial_pid" 2>/dev/null || true
+fi
+initial_pid=$(cat "$work/initial-parent")
+kill -KILL "$initial_pid"
+if ! read -r -t 30 initial_state <&"$initial_ready_fd" || [[ $initial_state != exited ]]; then fail 'initial fixture left child alive'; fi
+wait "$initial_fixture_pid" 2>/dev/null || true; exec {initial_ready_fd}>&-
 /usr/bin/flock -n /run/aboutme/workload.lock true && fail 'initial parent death lost inherited lock'
 jq -e '.operation_kind=="cutover"' /var/lib/aboutme/fence.json >/dev/null || fail 'initial parent death lost owner'
-printf 'continue\n' >&"$initial_continue_fd"
-for ((attempt = 0; attempt < 100; attempt++)); do
-  if /usr/bin/flock -n /run/aboutme/workload.lock true; then break; fi
-  /usr/bin/sleep 0.02
-done
+release_notice_child "$(cat "$work/initial-held-child")" "$work/initial-continue" || fail 'initial fixture left child alive'
 /usr/bin/flock -n /run/aboutme/workload.lock true || fail 'initial fixture left child alive'
 [[ ! -s $work/initial-death-out ]] || fail 'initial parent death exposed success'
 refuse bash "$wrapper" reconcile-initial; initial_reset; exec {initial_continue_fd}>&-

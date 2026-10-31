@@ -74,7 +74,8 @@ new_repo() { # new_repo <dir>: a committed repository whose origin/main is HEAD
   mkdir -p "$repo/scripts" "$repo/apps/web/app" "$repo/apps/server/internal/foo" \
     "$repo/apps/server/internal/gone" "$repo/docs" \
     "$repo/deploy/observer/internal/foo" "$repo/packages/schema/gen/go/internal/bar"
-  cp "$ROOT/scripts/pre-push.sh" "$ROOT/scripts/check-lengths.sh" "$repo/scripts/"
+  cp "$ROOT/scripts/pre-push.sh" "$ROOT/scripts/check-lengths.sh" \
+    "$ROOT/scripts/check-path-case.sh" "$repo/scripts/"
   mkdir -p "$repo/scripts/lib"
   cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$repo/scripts/lib/"
   cat >"$repo/scripts/run-capped.sh" <<'STUB'
@@ -151,6 +152,7 @@ check "$REPO" 0
 has_call "run-capped --timeout 600 -- bash $REPO/scripts/pre-push.sh --capped report=1"
 has_line 'eslint +skip'
 has_line 'lengths +pass'
+has_line 'path-case +pass'
 no_call eslint
 
 # A watchdog refusal means nothing ran. Runtime failures are check failures.
