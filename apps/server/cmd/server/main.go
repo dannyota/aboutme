@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	platformruntime "runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -29,7 +30,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
 	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/printapi"
 	"github.com/dannyota/aboutme/apps/server/internal/printrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
@@ -39,7 +39,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/realtime"
 	"github.com/dannyota/aboutme/apps/server/internal/realtimeapi"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
@@ -170,15 +169,14 @@ func run() error {
 		return fmt.Errorf("create public cache: %w", err)
 	}
 	renderer := directrender.New(runtime.RenderOrigin, nil)
-	printRenderer, err := printrender.New(printrender.Config{
+	printRenderer, printQueue, err := newPrintRuntime(platformruntime.GOOS, printrender.Config{
 		BrowserExecutable: cfg.ChromiumPath, RenderOrigin: runtime.RenderOrigin, Logger: logger,
-	})
+	}, printrender.New)
 	if err != nil {
-		return fmt.Errorf("initialize private browser renderer: %w", err)
+		return err
 	}
-	printQueue, err := renderjob.New(renderjob.Config{Renderer: printRenderer})
-	if err != nil {
-		return errors.New("initialize print queue")
+	if printRenderer == nil {
+		logger.Info("print and PDF rendering is unavailable on this platform", "platform", platformruntime.GOOS)
 	}
 	closePrintQueue := func() {
 		if closeErr := printQueue.Close(); closeErr != nil {
@@ -186,7 +184,7 @@ func run() error {
 		}
 	}
 	defer closePrintQueue()
-	printHandler, err := printapi.NewRedeemHandler(printQueue)
+	printHandler, err := privatePrintHandler(printQueue, printRenderer != nil)
 	if err != nil {
 		return errors.New("initialize private print handler")
 	}
@@ -242,6 +240,9 @@ func run() error {
 	readiness := publicstate.NewReadiness(coordinator, publicstate.ReadinessDependencies{
 		PingDatabase: pool.Ping,
 		ProbeRenderer: func(probeCtx context.Context) error {
+			if printRenderer == nil {
+				return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
+			}
 			if queueErr := printQueue.Ready(); queueErr != nil {
 				return queueErr
 			}

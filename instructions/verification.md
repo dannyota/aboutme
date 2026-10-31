@@ -17,7 +17,7 @@ Dependabot opens one grouped GitHub Actions update PR each week. External action
 
 Dependabot pull requests receive Dependabot secrets, not Actions secrets, so the repository keeps a Dependabot secret named `SEMGREP_APP_TOKEN` for both Semgrep jobs, copied from the same token as the Actions secret. If a Dependabot PR fails both Semgrep jobs on authentication, refresh that copy by piping the value from its source into `gh secret set --app dependabot`; agents never print or read secret values. Keep the jobs' skip conditions unchanged.
 
-The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including Baselines for browser changes and manual `release-check.yml` builds for image changes. Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright and pip caches never reach main.
+The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [browser baseline checks](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright and pip caches never reach main.
 
 ### Runs and evidence
 
@@ -32,7 +32,7 @@ GitHub CI runs every build and test. `main` and other branches run it differentl
 |Caches|Saves Go and tool caches|Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main`|
 |Canceling|Each push has its own group and retains its result|A newer pull-request run cancels the older PR run; a newer dispatch cancels the older dispatch on that branch. Dispatch and push groups are separate|
 
-A dispatch run tests a branch only. It never satisfies the main ruleset's required `ci` check, so it cannot serve as a landing gate. A pull request needs no dispatch: its run tests the branch merged into `main` as `main` stood when the run started. A later push to `main` does not rerun it, so if `main` moved since the last run, merge `origin/main` into the branch and push before landing; CI and the Copilot review then cover the combination that lands. Before dispatching on a branch without a pull request:
+A dispatch run tests a branch only. It never satisfies the main ruleset's required `ci` check, so it cannot serve as a landing gate. A pull request needs no dispatch: its run tests the branch merged into `main` as `main` stood when the run started. A later push to `main` does not rerun it, so if `main` moved since the last run, merge `origin/main` into the branch and push before landing; CI must cover the new head, with independent Codex review under [workflow](workflow.md#reviews). Before dispatching on a branch without a pull request:
 
 1. Merge `origin/main` into the branch (never rewrite pushed commits) so branch testing includes current main.
 2. Fetch `origin/main` and pass `base_sha=$(git merge-base origin/main HEAD)`, a full 40-character SHA. Preflight fetches `main` independently and requires the supplied SHA to equal the unique merge base of that fetched main and the candidate. Malformed, non-commit, unrelated, stale, or candidate-selected bypass bases fail preflight before the large jobs start. If main advances and changes the merge base before dispatch runs, fetch and merge main again before dispatching.
@@ -45,9 +45,15 @@ Both web-e2e shards upload `browser-diagnostics-<shard>` even when comparison fa
 
 After merging to `main`, the `main` push run is the gate: wait for it before tagging.
 
+Pull-request Semgrep scans are diff-aware. Main push scans cover the full tree and may report advisories against unchanged pins, so a green pull request can still produce a red main run.
+
+Push preflight uses `github.event.before` as its comparison base. After an authorized history rewrite, that commit must remain fetchable. If it is unavailable, stop and resolve the comparison-base failure; do not substitute a candidate-selected base.
+
 ## When a check fails
 
 Find the cause before changing anything. Never rerun a failed job hoping for a pass, add retries or longer timeouts, or loosen a check without evidence that it is the cause.
+
+If the log proves a third-party service failed before the check ran, record the evidence and rerun only failed jobs on the same commit with `gh run rerun <run> --failed`. This exception does not cover findings, failing tests, or memory failures.
 
 1. Read the failing log and name the exact failing step. If the log hides the cause (for example the browser proofs withhold console output), add a diagnostic that records it (to a CI artifact, never secrets) on a debug branch that is never merged, and run that.
 2. Bisect when a failure starts at a known point: find the first bad commit by CI runs on earlier commits.

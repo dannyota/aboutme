@@ -19,6 +19,13 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/renderprocess"
 )
 
+func TestOwnedProcessStateCurrentProcess(t *testing.T) {
+	state, err := ownedProcessState(os.Getpid())
+	if err != nil || state == 0 || state == 'Z' {
+		t.Fatalf("current process state = %q, error = %v", state, err)
+	}
+}
+
 func TestRenderBrowserSupervisorHelper(t *testing.T) {
 	for index, arg := range os.Args {
 		if arg == "render-supervisor-helper" {
@@ -213,7 +220,7 @@ func TestCommandCancellationKillsAndJoinsProcessGroup(t *testing.T) {
 	cmd := exec.CommandContext(ctx, browserEnvironmentExecutable, "-c", `/bin/sleep 30 & printf '%s\n' "$!" >&3; wait`)
 	cmd.ExtraFiles = []*os.File{childPIDWriter}
 	configureTestBrowserCommand(t, "/bin/sh")(cmd)
-	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid || cmd.SysProcAttr.Pdeathsig != syscall.SIGKILL {
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
 		t.Fatalf("SysProcAttr = %#v", cmd.SysProcAttr)
 	}
 	if startErr := cmd.Start(); startErr != nil {
@@ -373,19 +380,4 @@ func TestMissingSupervisorProofNeverCompletesJoin(t *testing.T) {
 		t.Fatal("missing supervisor proof was treated as joined")
 	default:
 	}
-}
-
-func ownedProcessState(pid int) (byte, error) {
-	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if errors.Is(err, os.ErrNotExist) {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	closingParen := strings.LastIndexByte(string(stat), ')')
-	if closingParen < 0 || closingParen+2 >= len(stat) || stat[closingParen+1] != ' ' {
-		return 0, errors.New("malformed process stat for owned child")
-	}
-	return stat[closingParen+2], nil
 }

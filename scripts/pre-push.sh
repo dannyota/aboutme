@@ -6,9 +6,8 @@
 # scripts. It never runs tests, typechecks, builds, databases, stacks, or
 # browsers; GitHub CI runs those (instructions/resources.md).
 #
-# The run holds the shared local-check lock and executes in one user systemd
-# scope capped at 2 GiB with no swap and two CPUs, under a timeout. It refuses
-# to start below 8 GiB of available memory.
+# The run holds the shared local-check lock in a parent process and uses
+# run-capped.sh to enforce total RAM minus 10 GiB with a 10-minute timeout.
 #
 # A worktree has no node_modules, so the web and docs checks borrow the main
 # checkout's installs (and apps/web/.nuxt, which the ESLint config imports).
@@ -21,11 +20,13 @@ set -Eeuo pipefail
 
 readonly TIMEOUT_SECONDS=600
 readonly LOCK_WAIT_SECONDS=${PRE_PUSH_LOCK_WAIT:-300}
-readonly MIN_AVAILABLE_KIB=$((8 * 1024 * 1024))
-readonly MEMINFO=${PRE_PUSH_MEMINFO:-/proc/meminfo}
 readonly BASE_REF=origin/main
 
-SCRIPT=$(realpath "${BASH_SOURCE[0]}")
+SCRIPT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/pre-push.sh
+# shellcheck source=scripts/lib/platform.sh
+source "$(dirname "$SCRIPT")/lib/platform.sh"
+require_modern_bash || exit 2
+command -v python3 >/dev/null || { printf 'pre-push: python3 is required\n' >&2; exit 2; }
 ROOT=$(git rev-parse --show-toplevel)
 COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 LOCK=$COMMON/aboutme-local-check.lock
@@ -34,45 +35,38 @@ cd "$ROOT"
 
 say() { printf 'pre-push: %s\n' "$*"; }
 
-# Stage 1: take the shared lock, then re-enter the script while holding it.
-# flock -o keeps the lock out of child processes, so nothing the checks start
-# can hold it after the run ends.
+# The Python lock parent closes the descriptor in children on both systems.
 outer() {
-  local status=0
-  command -v flock >/dev/null || { say "flock is not installed"; exit 2; }
-  flock -o -E 75 -w "$LOCK_WAIT_SECONDS" "$LOCK" bash "$SCRIPT" --locked ||
-    status=$?
-  if ((status == 75)); then
-    say "another local check held $LOCK for ${LOCK_WAIT_SECONDS}s; try again later"
-    exit 2
-  fi
-  exit "$status"
+  local status=0 lock_pid= pending=
+  # A trap interrupts wait, so keep waiting until the lock parent has reaped
+  # the watchdog after its cleanup. Install traps before starting the parent.
+  trap 'pending=INT; [ -z "$lock_pid" ] || kill -INT "$lock_pid" 2>/dev/null || true' INT
+  trap 'pending=TERM; [ -z "$lock_pid" ] || kill -TERM "$lock_pid" 2>/dev/null || true' TERM
+  python3 "$ROOT/scripts/lib/local-check.py" "$LOCK" "$LOCK_WAIT_SECONDS" \
+    bash "$SCRIPT" --locked &
+  lock_pid=$!
+  [ -z "$pending" ] || kill -"$pending" "$lock_pid" 2>/dev/null || true
+  while true; do
+    status=0
+    wait "$lock_pid" || status=$?
+    kill -0 "$lock_pid" 2>/dev/null || break
+  done
+  trap - INT TERM
+  case $status in
+  0 | 1 | 2) exit "$status" ;;
+  75) say "another local check held $LOCK or the lock could not be acquired; try again later"; exit 2 ;;
+  125) say "refused: watchdog could not start"; exit 2 ;;
+  *) say "FAIL: watchdog stopped the check (exit $status)"; exit 1 ;;
+  esac
 }
 
-# Stage 2: under the lock, check memory and start the capped scope.
 locked() {
-  local available status=0
-  available=$(awk '$1 == "MemAvailable:" { print $2 }' "$MEMINFO")
-  if [[ -z $available ]] || ((available < MIN_AVAILABLE_KIB)); then
-    say "refused: ${available:-unknown} KiB available, need $MIN_AVAILABLE_KIB KiB (8 GiB)"
-    exit 2
-  fi
-  command -v systemd-run >/dev/null || {
-    say "refused: systemd-run is missing, so the memory cap cannot be enforced"
-    exit 2
-  }
-  systemd-run --user --scope --quiet -p MemoryMax=2G -p MemorySwapMax=0 \
-    -p CPUQuota=200% -- timeout --kill-after=10s "$TIMEOUT_SECONDS" \
-    bash "$SCRIPT" --capped || status=$?
-  if ((status == 124 || status == 137)); then
-    say "FAIL: the check passed its ${TIMEOUT_SECONDS}s bound or was killed"
-    exit 1
-  fi
-  exit "$status"
+  # The lock parent must wait on the watchdog itself, with no shell between.
+  exec env RUN_CAPPED_REPORT=1 bash "$ROOT/scripts/run-capped.sh" \
+    --timeout "$TIMEOUT_SECONDS" -- bash "$SCRIPT" --capped
 }
 
-# ---------------------------------------------------------------------------
-# Stage 3: the checks, inside the scope.
+# The static checks run inside the watchdog.
 
 declare -a SUMMARY=()
 FAILED=0
@@ -217,7 +211,7 @@ check_web() {
       record eslint REFUSED "no generated $MAIN/apps/web/.nuxt; CI runs ESLint"
       return 0
     }
-    cp -a -- "$MAIN/apps/web/.nuxt" "$web/.nuxt"
+    cp -R -p -P "$MAIN/apps/web/.nuxt" "$web/.nuxt"
     : >"$web/.nuxt/.pre-push-copy"
     CREATED+=("$web/.nuxt")
   fi
@@ -376,15 +370,10 @@ check_shell() {
 }
 
 report() {
-  local cgroup peak line
+  local line
   say "summary"
   for line in "${SUMMARY[@]}"; do say "  $line"; done
-  cgroup=$(cut -d: -f3 /proc/self/cgroup 2>/dev/null || true)
-  if peak=$(cat "/sys/fs/cgroup$cgroup/memory.peak" 2>/dev/null); then
-    say "peak memory $((peak / 1024 / 1024)) MiB, ${SECONDS}s"
-  else
-    say "${SECONDS}s"
-  fi
+  say "${SECONDS}s"
 }
 
 capped() {

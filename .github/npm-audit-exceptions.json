@@ -1,13 +1,5 @@
 [
   {
-    "id": "GHSA-vfj7-8cjw-p6xm",
-    "dirs": [
-      "apps/web"
-    ],
-    "expires": "2026-12-31",
-    "reason": "braces reaches only Nitro's build (nitropack, globby, fast-glob, micromatch); absent from the shipped .output; no fixed release; 3.0.3 is still the latest release as of 2026-10-31"
-  },
-  {
     "id": "GHSA-858h-whjf-mvg5",
     "dirs": [
       "apps/web"

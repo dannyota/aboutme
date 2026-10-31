@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
 # Tests scripts/pre-push.sh in temporary repositories with stub tools: change
-# detection, per-check file selection, refusals, the lock and memory guards,
-# the capped scope arguments, and worktree borrowing of node_modules.
+# detection, per-check file selection, refusals, the lock and watchdog refusals,
+# the watchdog arguments, and worktree borrowing of node_modules.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-pre-push.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
 
 BIN=$WORK/bin
 CALLS=$WORK/calls
-MEMINFO=$WORK/meminfo
 mkdir -p "$BIN"
 
 fail() {
@@ -29,20 +29,6 @@ stub() { # stub <name> <body>
 stub_lib='log() { printf "%s\n" "$*" >>"$CALL_LOG"; }
 fails() { [[ " ${STUB_FAIL:-} " == *" $1 "* ]]; }'
 
-stub flock "$stub_lib"'
-log "flock $*"
-[[ -n ${STUB_FLOCK_BUSY:-} ]] && exit 75
-shift 6
-exec "$@"'
-stub systemd-run "$stub_lib"'
-log "systemd-run $*"
-while [[ $1 != -- ]]; do shift; done
-shift
-exec "$@"'
-stub timeout "$stub_lib"'
-log "timeout $1 $2"
-shift 2
-exec "$@"'
 stub gofmt "$stub_lib"'
 log "gofmt $*"
 fails gofmt && printf "%s\n" "${@: -1}"
@@ -89,6 +75,16 @@ new_repo() { # new_repo <dir>: a committed repository whose origin/main is HEAD
     "$repo/apps/server/internal/gone" "$repo/docs" \
     "$repo/deploy/observer/internal/foo" "$repo/packages/schema/gen/go/internal/bar"
   cp "$ROOT/scripts/pre-push.sh" "$ROOT/scripts/check-lengths.sh" "$repo/scripts/"
+  mkdir -p "$repo/scripts/lib"
+  cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$repo/scripts/lib/"
+  cat >"$repo/scripts/run-capped.sh" <<'STUB'
+#!/usr/bin/env bash
+printf 'run-capped %s report=%s\n' "$*" "$RUN_CAPPED_REPORT" >>"$CALL_LOG"
+[ -z "${STUB_CAPPED_STATUS:-}" ] || exit "$STUB_CAPPED_STATUS"
+shift 3
+exec "$@"
+STUB
+
   printf 'golangci-lint 2.14.0\n' >"$repo/.tool-versions"
   printf '{}\n' >"$repo/package.json"
   printf '{}\n' >"$repo/apps/web/package.json"
@@ -136,7 +132,7 @@ check() {
   : >"$CALLS"
   (
     cd "$dir"
-    env PATH="$BIN:$PATH" CALL_LOG="$CALLS" PRE_PUSH_MEMINFO="$MEMINFO" \
+    env PATH="$BIN:$PATH" CALL_LOG="$CALLS" \
       PRE_PUSH_LOCK_WAIT=1 "$@" bash scripts/pre-push.sh
   ) >"$WORK/out" 2>&1 || status=$?
   ((status == want)) || fail "$dir: exit $status, want $want"
@@ -146,30 +142,44 @@ has_call() { grep -Fq -- "$1" "$CALLS" || fail "missing call: $1"; }
 no_call() { ! grep -Fq -- "$1" "$CALLS" || fail "unexpected call: $1"; }
 has_line() { grep -Eq -- "$1" "$WORK/out" || fail "missing output: $1"; }
 
-printf 'MemAvailable:   16777216 kB\n' >"$MEMINFO"
 REPO=$WORK/repo
 new_repo "$REPO"
 
 # No changes: every check skips, lengths runs, under the lock and the cap.
 check "$REPO" 0
-has_call "flock -o -E 75 -w 1 $REPO/.git/aboutme-local-check.lock bash"
-has_call "systemd-run --user --scope --quiet -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% --"
-has_call "timeout --kill-after=10s 600"
+
+has_call "run-capped --timeout 600 -- bash $REPO/scripts/pre-push.sh --capped report=1"
 has_line 'eslint +skip'
 has_line 'lengths +pass'
 no_call eslint
 
-# Low memory: refused before the scope starts.
-printf 'MemAvailable:   4194304 kB\n' >"$MEMINFO"
-check "$REPO" 2
-has_line 'refused: 4194304 KiB available'
-no_call systemd-run
-printf 'MemAvailable:   16777216 kB\n' >"$MEMINFO"
+# A watchdog refusal means nothing ran. Runtime failures are check failures.
+check "$REPO" 2 STUB_CAPPED_STATUS=125
+has_line 'refused: watchdog could not start'
+no_call gofmt
+for code in 123 124 126 127 130 137; do
+  check "$REPO" 1 STUB_CAPPED_STATUS=$code
+  has_line 'FAIL: watchdog stopped'
+done
 
-# Another local check holds the lock.
-check "$REPO" 2 STUB_FLOCK_BUSY=1
+# A real advisory lock held by another process refuses before the watchdog.
+python3 - "$REPO/.git/aboutme-local-check.lock" "$WORK/ready" <<'LOCK' &
+import fcntl, sys, time
+with open(sys.argv[1], "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    open(sys.argv[2], "w").close()
+    time.sleep(30)
+LOCK
+holder=$!
+for ((i=0; i<100; i++)); do
+  [ ! -f "$WORK/ready" ] || break
+  sleep 0.05
+done
+check "$REPO" 2
+kill "$holder"
+wait "$holder" || true
 has_line 'another local check held'
-no_call systemd-run
+no_call run-capped
 
 # Committed, uncommitted, and untracked web sources all reach ESLint; other
 # files under apps/web do not.
@@ -296,7 +306,7 @@ git -C "$REPO" worktree add -q -b topic "$TREE" HEAD
 printf 'export const a = 3;\n' >"$TREE/apps/web/app/a.ts"
 check "$TREE" 0
 has_call "eslint --no-warn-ignored -- app/a.ts (in web, modules $REPO/apps/web/node_modules)"
-has_call "flock -o -E 75 -w 1 $REPO/.git/aboutme-local-check.lock bash"
+
 [[ ! -e $TREE/apps/web/node_modules && ! -e $TREE/apps/web/.nuxt ]] ||
   fail "worktree kept the borrowed node_modules or .nuxt"
 [[ -d $REPO/apps/web/node_modules && ! -L $REPO/apps/web/node_modules ]] ||
@@ -311,9 +321,68 @@ check "$TREE" 0
   fail "worktree kept leftovers from a killed run"
 
 # A worktree branch that changed the web lockfile is refused.
-sed -i 's/"node_modules\/eslint":{"version":"1.0.0"}/"node_modules\/eslint":{"version":"1.1.0"}/' \
-  "$TREE/apps/web/package-lock.json"
+node -e 'const fs=require("fs"); const p=process.argv[1]; fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace("1.0.0", "1.1.0"));' "$TREE/apps/web/package-lock.json"
 check "$TREE" 2
 has_line 'eslint +REFUSED +the branch changed apps/web/package.json or its lockfile'
+
+# Interrupt the actual lock -> pre-push -> watchdog -> check chain.
+REAL=$WORK/real
+new_repo "$REAL"
+cp "$ROOT/scripts/run-capped.sh" "$REAL/scripts/"
+cp "$ROOT/scripts/lib/run-capped.py" "$REAL/scripts/lib/"
+cat >"$REAL/scripts/check-lengths.sh" <<'CHECK'
+#!/usr/bin/env bash
+exec python3 -c '
+import os, signal, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+open(os.environ["OWNED_PID"], "w").write(str(os.getpid()))
+time.sleep(25)'
+CHECK
+python3 - "$REAL" "$BIN" "$CALLS" "$WORK" <<'INTERRUPT'
+import fcntl
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+repo, binary, calls, work = sys.argv[1:]
+for number in (signal.SIGTERM, signal.SIGINT):
+    owned = Path(work) / "owned.pid"
+    owned.unlink(missing_ok=True)
+    environment = {**os.environ, "PATH": binary + os.pathsep + os.environ["PATH"],
+                   "CALL_LOG": calls, "OWNED_PID": str(owned),
+                   "RUN_CAPPED_TOTAL_KIB": "262144", "RUN_CAPPED_RESERVE_KIB": "0"}
+    with open(Path(work) / "out", "w") as output:
+        child = subprocess.Popen(["bash", "scripts/pre-push.sh"], cwd=repo,
+                                 env=environment, stdout=output, stderr=output,
+                                 start_new_session=True,
+                                 preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+        try:
+            deadline = time.monotonic() + 15
+            while not owned.exists() or not owned.stat().st_size:
+                assert child.poll() is None, "wrapper exited before check started"
+                assert time.monotonic() < deadline, "check never started"
+                time.sleep(0.05)
+            pid = owned.read_text()
+            child.send_signal(number)
+            with open(Path(repo) / ".git/aboutme-local-check.lock", "w") as lock:
+                deadline = time.monotonic() + 20
+                while True:
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        assert time.monotonic() < deadline, "lock never released"
+                        time.sleep(0.05)
+                result = subprocess.run(["ps", "-o", "rss=", "-p", pid], capture_output=True, text=True)
+                assert not result.stdout.strip() or int(result.stdout) == 0, "lock released before child ended"
+            assert child.wait(timeout=10) == 1, "interrupted pre-push did not report failure"
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+INTERRUPT
 
 printf 'pre-push tests passed\n'

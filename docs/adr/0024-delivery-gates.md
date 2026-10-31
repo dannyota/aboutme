@@ -45,10 +45,12 @@ be recalled.
   and deployment wait for green GitHub CI on that exact commit.
 - **No full local gate.** Full local `make ci` is prohibited, including while
   debugging a CI failure. The manager may scope one local diagnostic process
-  across all worktrees, with a memory limit of at most 2 GiB, no swap, at most
-  two CPUs, and a time limit. Prefer a hosted rerun when hosted evidence can
-  answer the question. Diagnose a failed or out-of-memory command before any
-  local rerun; never repeat it unchanged to seek a pass.
+  across all worktrees, using the shared lock, the total RAM minus 10 GiB
+  watchdog, nice level 10, and a time limit. See the
+  [resource rules](../../instructions/resources.md) for enforcement and limits.
+  Prefer a hosted rerun when hosted evidence can answer the question. Diagnose a
+  failed or out-of-memory command before any local rerun; never repeat it
+  unchanged to seek a pass.
 - **Reuse evidence.** The manager and reviewer reuse check evidence from the
   exact commit under review and do not duplicate a check for role-specific
   evidence.
@@ -107,3 +109,6 @@ proportional to the change.
   longer alternate by author model; `gpt-6-astra` writes designs only.
 - 2026-10-11: Corrected the hosted CI entry point to match `ci.yml`: checks run
   per job and aggregate under `ci`, rather than calling local `make ci`.
+- 2026-10-31: The owner approved Linux and macOS local tooling with a sampled
+  total RAM minus 10 GiB process-tree budget and nice level 10. Hosted CI
+  remains the full gate, and the primary alone runs local checks.

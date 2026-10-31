@@ -4,7 +4,7 @@
 # (docs/design/linkedin-import.md, "Tests"). The PDFs this writes are
 # generated once and committed; CI never regenerates them, and this script
 # refuses to run there. See README.md for the exact command this is meant to
-# be run under (a shared local-check lock and a hard memory cap), the pinned
+# be run under (the shared local-check lock and the local memory watchdog), the pinned
 # image digest, and the FOP and font checksums.
 set -euo pipefail
 

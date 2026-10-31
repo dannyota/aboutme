@@ -2,7 +2,7 @@
 
 Read this file for Podman, Caddy, container images, host access, or deployment work.
 
-- Use Podman and `podman compose`, never Docker.
+- Use Podman and `podman compose` locally. Hosted release-image workflows use Docker.
 - Caddy is the client-IP trust boundary. Go accepts the canonical header only from configured trusted proxies and never parses `X-Forwarded-For`.
 - `deploy/web.Dockerfile` copies named paths only. When the web app starts importing a new directory, add it there too; CI builds from the full checkout and cannot catch the gap, only the release image build does.
 - Avoid `podman ps | grep -q` under `pipefail`; capture output first.

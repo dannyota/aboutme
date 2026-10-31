@@ -643,6 +643,7 @@ function checkJobTimeouts(ci, vn) {
   const timeouts = {
     preflight: 5,
     contracts: 20,
+    "macos-tooling": 5,
     server: 20,
     "server-integration": 20,
     "server-resumeapi": 20,
@@ -894,3 +895,57 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
   };
   walk(parseYaml(source, path).toJS());
 }
+
+test("macOS tooling installs missing prerequisites before publishing paths", () => {
+  const job = readWorkflow("ci").jobs["macos-tooling"];
+  const setup = job.steps.find((step) => step.run?.includes("brew --prefix"));
+  assert.ok(setup, "macOS tooling needs prerequisite setup");
+  const directory = mkdtempSync(join(tmpdir(), "macos-tooling-contract-"));
+  const output = join(directory, "github-path");
+  const fixture = `
+    brew() {
+      case "$*" in
+        "install bash coreutils")
+          mkdir -p "$BREW_FIXTURE/bash/bin" "$BREW_FIXTURE/coreutils/libexec/gnubin"
+          ln -s "$BASH" "$BREW_FIXTURE/bash/bin/bash"
+          ;;
+        "--prefix bash" | "--prefix coreutils")
+          printf '%s/%s\\n' "$BREW_FIXTURE" "$2"
+          ;;
+        "--prefix --installed bash" | "--prefix --installed coreutils")
+          [ -d "$BREW_FIXTURE/$3" ] || return 1
+          printf '%s/%s\\n' "$BREW_FIXTURE" "$3"
+          ;;
+        *) return 64 ;;
+      esac
+    }
+    export -f brew
+  `;
+  try {
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", fixture + setup.run], {
+      cwd: root,
+      env: { ...process.env, BREW_FIXTURE: directory, GITHUB_PATH: output },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    const paths = readFileSync(output, "utf8").trim().split("\n");
+    assert.deepEqual(paths, [join(directory, "bash/bin"), join(directory, "coreutils/libexec/gnubin")]);
+    for (const path of paths) {
+      assert.doesNotThrow(() => readdirSync(path), "published tool directory must exist");
+    }
+    const version = spawnSync(join(paths[0], "bash"), ["-c", "((BASH_VERSINFO[0] >= 4))"]);
+    assert.equal(version.status, 0, "published Bash must support the wrapper");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("server cross-compiles every package for Darwin arm64", () => {
+  const step = readWorkflow("ci").jobs.server.steps.find((entry) =>
+    entry.run === "GOOS=darwin GOARCH=arm64 go build ./...");
+  assert.ok(step, "Darwin server build is required");
+  assert.equal(step["working-directory"], "apps/server");
+  assert.equal(step["continue-on-error"], undefined);
+});

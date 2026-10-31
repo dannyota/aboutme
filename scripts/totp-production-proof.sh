@@ -17,16 +17,20 @@
 # It takes the shared local-check lock itself without blocking and holds it
 # until it exits. Child processes never inherit the lock descriptor, so a
 # container helper cannot keep the lock after the run. It also checks the
-# memory floor and stack quiescence named in the runbook before it builds or
-# runs anything. Do not wrap it in another flock on the same lock.
+# stack quiescence and uses run-capped.sh for the whole command tree.
+# Do not wrap it in another lock on the same file.
 set -Eeuo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=scripts/lib/platform.sh
+source "$REPO/scripts/lib/platform.sh"
+require_modern_bash || exit 1
+require_gnu_tools stat realpath || exit 1
+
 CONTEXT=$REPO/deploy/dev-https-browser
 ACCOUNT_DIR=$REPO/.dev/v0.4.7/production-input
 ACCOUNT_FILE=$ACCOUNT_DIR/account.env
 EVIDENCE_DIR=$REPO/.dev/v0.4.7/production-evidence
-MEM_FLOOR_KIB=$((8 * 1024 * 1024))
 
 fail() {
   printf 'totp-production-proof: %s\n' "$*" >&2
@@ -57,15 +61,6 @@ UID_NOW=$(id -u)
   [ "$(stat -c %a "$ACCOUNT_FILE")" = 600 ] ||
   fail 'account.env ownership or mode mismatch; want 0600'
 
-# --- Memory floor ------------------------------------------------------------
-
-# ABOUTME_MEMINFO_PATH lets a static test point this at a fixture file
-# instead of the real kernel-provided /proc/meminfo; production never sets it.
-mem_available_kib=$(awk '/^MemAvailable:/{print $2}' "${ABOUTME_MEMINFO_PATH:-/proc/meminfo}")
-[[ $mem_available_kib =~ ^[0-9]+$ ]] || fail 'cannot read MemAvailable'
-[ "$mem_available_kib" -ge "$MEM_FLOOR_KIB" ] ||
-  fail 'fewer than 8 GiB MemAvailable; wait for headroom'
-
 # --- No active aboutme development stack ------------------------------------
 
 stack_pid_alive() {
@@ -82,26 +77,14 @@ for pidfile in "$REPO"/.dev/*.pid "$REPO"/.dev/native-https/run/*.pid; do
     fail 'an aboutme development stack is active; stop it first'
 done
 
-# --- Shared local-check lock -------------------------------------------------
-#
-# The manager's own flock wrapper is the primary guard; this repeats it so a
-# direct invocation fails fast with a clear message instead of blocking.
+# --- Shared lock and watchdog -----------------------------------------------
 
-# ABOUTME_LOCAL_CHECK_LOCK_PATH lets a static test point this at a scratch
-# file instead of the shared lock every worktree and session relies on, and
-# skips the Git lookup that path would otherwise need; production never sets
-# it.
-if [ -n "${ABOUTME_LOCAL_CHECK_LOCK_PATH:-}" ]; then
-  LOCK=$ABOUTME_LOCAL_CHECK_LOCK_PATH
-else
-  GIT_COMMON=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir) ||
-    fail 'cannot find the Git common directory'
-  LOCK=$GIT_COMMON/aboutme-local-check.lock
+if [ -z "${ABOUTME_TOTP_PROOF_CAPPED:-}" ]; then
+  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
+  exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
+    env ABOUTME_TOTP_PROOF_CAPPED=1 bash "$REPO/scripts/run-capped.sh" \
+    --timeout 4200 -- bash "$REPO/scripts/totp-production-proof.sh" "$MODE"
 fi
-[ ! -L "$LOCK" ] || fail 'the shared local-check lock is a symbolic link'
-exec {LOCK_FD}>>"$LOCK"
-flock -n "$LOCK_FD" ||
-  fail 'another local check holds the shared lock'
 
 # --- Staging and cleanup -----------------------------------------------------
 
@@ -127,9 +110,9 @@ stage_dev_https_browser_specs "$CONTEXT" "$staging" ||
 # --- Build the pinned image once, then run the staged proof -----------------
 
 iidfile=$(mktemp "$REPO/.dev/v0.4.7/totp-prod-iid.XXXXXX")
-if ! timeout --signal=TERM 10m \
-  podman build --memory=2g --memory-swap=2g \
-  --iidfile "$iidfile" "$CONTEXT" >&2 {LOCK_FD}>&-; then
+if ! bash "$REPO/scripts/run-capped.sh" --timeout 600 -- \
+  podman build \
+  --iidfile "$iidfile" "$CONTEXT" >&2; then
   rm -f -- "$iidfile"
   fail 'browser image build failed'
 fi
@@ -140,6 +123,5 @@ rm -f -- "$iidfile"
 
 printf 'totp-production-proof: image %s\n' "$image_id" >&2
 
-timeout --signal=TERM 60m \
-  "$CONTEXT/run.sh" "$image_id" "$ACCOUNT_DIR" "$staging" "$EVIDENCE_DIR" "$MODE" \
-  {LOCK_FD}>&-
+bash "$REPO/scripts/run-capped.sh" --timeout 3600 -- \
+  "$CONTEXT/run.sh" "$image_id" "$ACCOUNT_DIR" "$staging" "$EVIDENCE_DIR" "$MODE"

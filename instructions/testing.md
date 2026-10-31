@@ -2,14 +2,14 @@
 
 Read this file when writing tests, authoring browser proofs, or selecting verification gates.
 
-Tests inject clocks, randomness, and UUIDs and pin renderer inputs. Never retry a flaky test into a pass.
+Tests inject clocks, randomness, and UUIDs and pin renderer inputs. Tests that need Git history create temporary repositories; do not look up historical commits from this repository. Never retry a flaky test into a pass.
 
 The table names required verification, not commands every worker must run locally. Use GitHub CI for these gates. The primary runs formatting and the static [pre-push check](resources.md#pre-push-check) before every push; any other local test, build, linter, or browser execution must follow [resources](resources.md). Reuse completed evidence when code has not changed.
 
 |Change area|Command or evidence|
 |-|-|
 |Release candidate|Green GitHub CI on the pushed commit|
-|Markdown people read|`node_modules/.bin/prettier --check` and `npx markdownlint-cli2` on touched files, outside the [agent-only paths](documentation.md#agent-file-formatting)|
+|Markdown people read|Use the root `package.json` pins: `node_modules/.bin/prettier --write <files>`, then `node_modules/.bin/prettier --check <files>` and `node_modules/.bin/markdownlint-cli2 <files>`, outside the [agent-only paths](documentation.md#agent-file-formatting). Follow [tool setup](resources.md#pre-push-check) when the install is missing or stale.|
 |Resume schema or its types|`make schema-check`|
 |OpenAPI|`make api-check`|
 |Go server|`make server-build server-vet server-test` and `golangci-lint run ./...` over touched packages, tests included|
