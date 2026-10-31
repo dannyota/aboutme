@@ -3,6 +3,7 @@ package renderprocess
 import (
 	"context"
 	"errors"
+	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -202,5 +203,16 @@ func TestParseArgsPreservesCommandAndExtraFileCount(t *testing.T) {
 	n, proofFD, command, err := parseArgs([]string{"--extra-files", "2", "--proof-fd", "5", "--", "/usr/bin/env", "-i", "/bin/true"})
 	if err != nil || n != 2 || proofFD != 5 || len(command) != 3 || command[0] != "/usr/bin/env" {
 		t.Fatalf("parsed n=%d proof=%d command=%q err=%v", n, proofFD, command, err)
+	}
+}
+
+func TestRealProcessIdentityIsStable(t *testing.T) {
+	before, err := readIdentity(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := readIdentity(os.Getpid())
+	if err != nil || before != after || before.pid != os.Getpid() || before.startTime == 0 {
+		t.Fatalf("before=%+v after=%+v err=%v", before, after, err)
 	}
 }

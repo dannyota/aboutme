@@ -153,7 +153,7 @@ func newBrowserCommand(executable, supervisor string, prefix []string) (func(*ex
 		cmd.Args = append(cmd.Args, arguments...)
 		cmd.ExtraFiles = append(cmd.ExtraFiles, passedWriter)
 		cmd.Env = make([]string, 0)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+		cmd.SysProcAttr = browserProcessAttributes()
 		cmd.Cancel = func() error {
 			if cmd.Process == nil {
 				return os.ErrProcessDone
