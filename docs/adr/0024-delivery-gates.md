@@ -110,5 +110,5 @@ proportional to the change.
 - 2026-10-11: Corrected the hosted CI entry point to match `ci.yml`: checks run
   per job and aggregate under `ci`, rather than calling local `make ci`.
 - 2026-10-31: The owner approved Linux and macOS local tooling with a sampled
-  total RAM minus 10 GiB process-tree budget and nice level 10. Hosted CI remains
-  the full gate, and the primary alone runs local checks.
+  total RAM minus 10 GiB process-tree budget and nice level 10. Hosted CI
+  remains the full gate, and the primary alone runs local checks.
