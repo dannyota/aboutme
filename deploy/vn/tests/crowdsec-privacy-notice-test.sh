@@ -573,10 +573,10 @@ done
 rm -f "$authority/send.json"; chmod 0777 "$authority"; refuse restore_pass; chmod 0755 "$authority"
 reset_owner; refuse "$host" adopt extra; refuse "$host" adopt --force; refuse "$host" adopt
 [[ ! -e $work/forbidden ]] || fail 'host primitive called application dependency'
-# Synthetic adoption uses a copied reviewed program with literal substitutions. The real rollout needs the primary's verified legacy pins before shipping.
+# Synthetic adoption uses exact legacy script fixtures and a copied reviewed program with literal substitutions. The real rollout needs the primary's verified legacy pins before shipping.
 mkdir "$work/legacy" "$work/reviewed"
 for name in fence deploy-host deploy-safety; do
-  git -c safe.directory="$root" -C "$root" show "ae548c5bfbcc506bd12cd45305c1f21445882e9c:deploy/vn/scripts/$name.sh" >"$work/legacy/$name.sh"
+  cp "$root/deploy/vn/tests/fixtures/legacy-notice-adoption/$name.sh.txt" "$work/legacy/$name.sh"
   cp "$root/deploy/vn/scripts/$name.sh" "$work/reviewed/$name.sh"
 done
 cp "$root/deploy/vn/host/workload-lock.sh" "$work/reviewed/"; chmod 0755 "$work/legacy/"*.sh "$work/reviewed/"*.sh; legacy_tag=v0.7.9
