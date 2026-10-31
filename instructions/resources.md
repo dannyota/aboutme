@@ -30,11 +30,11 @@ Development ports are localhost `20000`–`21000`:
 
 Test DSN: `postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable`. Native DSN: `postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable`. Rootless port 443 needs `net.ipv4.ip_unprivileged_port_start <= 443`; only a host administrator changes that. Agents and scripts never use `sudo`.
 
-Codex sandboxes cannot run local checks. Local checks run only in the primary session; workers and reviewers read its output.
+Codex sandboxes cannot run local checks or write the Go build cache or npm cache. The primary prefetches dependencies and runs `go mod tidy` and npm lockfile updates with network access under this file's lock and cap rules; workers review the results. Local checks run only in the primary session; workers and reviewers read its output.
 
 ## Pre-push check
 
 `make pre-push` (`scripts/pre-push.sh`) is the one local check allowed without a manager brief, besides formatting. It is static only: ESLint on changed web sources, gofmt on every changed Go file, golangci-lint on changed packages in each Go module that carries its own `.golangci.yml` (found from `go.mod` files, not a fixed list), Prettier and markdownlint on changed Markdown people read, `scripts/check-lengths.sh`, and `bash -n` plus shellcheck on changed shell scripts. A module outside `go.work`'s `use` list lints with `GOWORK=off`. It never runs tests, typechecks, builds, databases, stacks, or browsers; all tests run in CI.
 - The primary runs it before every push and pushes only on exit 0, or on exit 2 after the summary with each refused check named in its report.
 - It holds the shared advisory lock in a Python parent and runs through `scripts/run-capped.sh --timeout 600` with peak RSS reporting. Bash 4+ and Python 3 are required; Bash 3.2 refuses with a setup message. Exit 1 means a check failed or the watchdog stopped it. Exit 2 before the summary (lock busy, missing tools, unreadable total RAM, or no positive memory limit) means nothing ran: resolve the refusal and run it again. Exit 2 after the summary means the checks it lists as `REFUSED` could not run locally (a changed manifest or lockfile, or stale tools), so CI alone covers them.
-- A worktree borrows the main checkout's `node_modules` and `apps/web/.nuxt` and removes them on exit. If the main checkout's installed lint tools differ from the lockfile, the check refuses; the manager refreshes the main checkout with `npm ci` under a brief.
+- A worktree borrows the main checkout's `node_modules` and `apps/web/.nuxt` and removes them on exit. If the main checkout's lint tools are missing or differ from the lockfile, the check refuses; the manager refreshes the main checkout with `npm ci` under a brief.

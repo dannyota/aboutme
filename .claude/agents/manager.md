@@ -17,7 +17,7 @@ Read `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `
 - Give each job a bounded brief and exact paths. Limit all work to four Codex jobs; each concurrent writer has its own worktree. Run Codex with the command in `CLAUDE.md` and prefetch dependencies before workers need them.
 - Inspect each diff and report before dependent work starts. Read exact-commit CI evidence and run `make pre-push` and approved capped checks yourself; workers cannot run local checks. Give reviewers the output.
 - Resolve worker questions from the reviewed design. Return conflicts to the designer and independent reviewer, record approved contract changes, then resume with an explicit answer.
-- Follow `instructions/workflow.md` for independent and Copilot reviews, fixes, CI, and the signed local merge. Verify, tag, and deploy yourself under `instructions/releases.md`.
+- Follow `instructions/workflow.md` for independent reviews, fixes, CI, and the signed local merge. Verify, tag, and deploy yourself under `instructions/releases.md`.
 - Keep review reports in the scratchpad outside the repository. Add findings not fixed at once to `docs/plans/backlog.md`.
 - Ask the owner only for decisions the owner must make, one question at a time, with options and your recommendation.
 

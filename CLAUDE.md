@@ -14,7 +14,7 @@
 ## Commands
 
 - Before every push: `make pre-push` (static checks only, capped).
-- Land: `gh pr create --draft --base main` while iterating (CI runs); `gh pr ready <n>` when complete starts the one Copilot review; after material fixes `gh pr edit <n> --add-reviewer @copilot`. Then land: for one up-to-date green pull request, a signed local `git merge -S --no-ff` and `git push`; for several, a train (signed merges in a worktree from `origin/main`, push to `train/landing`, `gh pr create --head train/landing`, and when its run is green fast-forward `main` to the train head). A `workflow_dispatch` run never satisfies the `main-required-ci` ruleset.
+- Land: `gh pr create --draft --base main` while iterating; `gh pr ready <n>` when complete. Follow [workflow](instructions/workflow.md#flow) for green exact-head CI, independent Codex review, and the signed local merge or train.
 - Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
 - Troubleshoot: save each failing job's whole log with `gh run view <run> --job <job> --log > <scratchpad>/run-<run>-<job>.log` and the run's artifacts with `gh run download <run> -D <scratchpad>/run-<run>`, then dispatch `troubleshooter` with those paths.
 - Pixel baselines: `gh workflow run baselines.yml --ref <branch>`, then download `candidate-baselines`.

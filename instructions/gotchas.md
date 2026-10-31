@@ -5,28 +5,12 @@ Read this file when running repository tools. Task-specific gotchas live in [Go]
 - `.env` is ignored and holds credentials. Never print, document, or stage values; add names with empty values to `.env.example`.
 - Run `make` at the repository root.
 - Use `npx @redocly/cli`, never `npx redocly`.
-- `make docs-lint` runs Prettier over every Markdown file, ignored ones too.
+- `make docs-lint` follows `package.json` and `.prettierignore`; [agent-only files](documentation.md#agent-file-formatting) are excluded.
 
 ## macOS local tooling
 
-Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3
-and the repository's pinned Go, Node, Caddy, and Podman tools. Put Homebrew
-Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin`
-before the system tools on PATH. `make pre-push` resolves `bash` from PATH
-and requires Bash 4+; native tooling checks GNU `realpath`, `stat`, `base64`,
-`sha256sum`, and `date` before using their options. Python 3 supplies the
-watchdog, shared advisory lock, and detach fallback; `ss` or `lsof` supplies
-port probes.
+Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3 and the repository's pinned Go, Node, Caddy, and Podman tools. Put Homebrew Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin` before the system tools on PATH. `make pre-push` resolves `bash` from PATH and requires Bash 4+; native tooling checks GNU `realpath`, `stat`, `base64`, `sha256sum`, and `date` before using their options. Python 3 supplies the watchdog, shared advisory lock, and detach fallback; `ss` or `lsof` supplies port probes.
 
-Start `podman machine` before `make test-db-up`. The shared
-`aboutme-test-db` container publishes `127.0.0.1:20432`; verify that the VM
-forwards that port to the Mac before starting native services. Use the same
-container for test and native databases, and leave it running while another
-session uses it. The watchdog measures host processes, so the VM's own memory
-setting and container limits remain separate.
+Start `podman machine` before `make test-db-up`. The shared `aboutme-test-db` container publishes `127.0.0.1:20432`; verify that the VM forwards that port to the Mac before starting native services. Use the same container for test and native databases, and leave it running while another session uses it. The watchdog measures host processes, so the VM's own memory setting and container limits remain separate.
 
-On non-Linux hosts the native server starts with print and PDF rendering
-disabled and logs that limitation once. Owner PDF, public PDF and share-image
-render requests return 503 through their existing error envelopes. The private
-print listener also returns 503. Linux still requires the browser sandbox check
-to pass at startup; no platform launches an unsandboxed browser.
+On non-Linux hosts the native server starts with print and PDF rendering disabled and logs that limitation once. Owner PDF, public PDF and share-image render requests return 503 through their existing error envelopes. The private print listener also returns 503. Linux still requires the browser sandbox check to pass at startup; no platform launches an unsandboxed browser.
