@@ -200,8 +200,8 @@ func TestAttemptProxyReportsUpstreamFailuresAfterHandlerJoin(t *testing.T) {
 			closeResult := make(chan error, 1)
 			go func() { closeResult <- proxy.close() }()
 			select {
-			case <-closeResult:
-				t.Fatal("proxy close returned before the admitted handler finished")
+			case closeErr := <-closeResult:
+				t.Fatalf("proxy close returned before the admitted handler finished: %v", closeErr)
 			case <-time.After(25 * time.Millisecond):
 			}
 			release()

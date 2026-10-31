@@ -257,7 +257,9 @@ func TestHashAdmissionFailure(t *testing.T) {
 	admission.Release()
 	admission.Release()
 	for range admissionWaiting {
-		<-results
+		if err := <-results; err != nil {
+			t.Errorf("waiter error = %v, want nil", err)
+		}
 	}
 }
 

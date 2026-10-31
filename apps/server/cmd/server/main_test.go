@@ -353,8 +353,8 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	// we release the handler, so a bug that aborts in-flight work would
 	// show up as serveDone firing before we release() below.
 	select {
-	case <-serveDone:
-		t.Fatal("serve() returned before the in-flight request completed — shutdown did not drain")
+	case err := <-serveDone:
+		t.Fatalf("serve() returned before the in-flight request completed; shutdown did not drain: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	if completed.Load() {
