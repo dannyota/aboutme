@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Black-box regression for Semgrep's effective dependency-input selection.
+# Black-box regression for Semgrep's dependency and handwritten Go selection.
 # Listing targets exercises .semgrepignore without running rules or contacting
 # Semgrep's service.
 set -Eeuo pipefail
@@ -29,8 +29,20 @@ dependency_inputs=(
 )
 ignored_control=packages/schema/gen/go/resume.go
 failures=0
+handwritten_inputs=()
 
-for path in "${dependency_inputs[@]}" "$ignored_control"; do
+while IFS= read -r -d '' path; do
+  if [[ "$path" = *.go ]] &&
+    ! grep -Eq '^// Code generated .* DO NOT EDIT\.$' "$ROOT/$path"; then
+    handwritten_inputs+=("$path")
+  fi
+done < <(git -C "$ROOT" ls-files -z -- packages/schema/gen/go/)
+
+if [ "${#handwritten_inputs[@]}" -eq 0 ]; then
+  fail 'no handwritten schema Go inputs were found'
+fi
+
+for path in "${dependency_inputs[@]}" "${handwritten_inputs[@]}" "$ignored_control"; do
   if ! git -C "$ROOT" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
     fail "required tracked path is missing: $path"
   fi
@@ -53,6 +65,12 @@ else
     fi
   done
 
+  for path in "${handwritten_inputs[@]}"; do
+    if ! grep -Fqx -- "$path" "$WORK/selected"; then
+      fail "handwritten schema Go input is excluded: $path"
+    fi
+  done
+
   if grep -Fqx -- "$ignored_control" "$WORK/selected"; then
     fail "ignore-policy control was unexpectedly selected: $ignored_control"
   fi
@@ -62,4 +80,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf 'ok - Semgrep selects every tracked npm and Go dependency input\n'
+printf 'ok - Semgrep selects dependency inputs and handwritten schema Go files\n'

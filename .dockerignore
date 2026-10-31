@@ -11,7 +11,6 @@
 !.env.example
 AGENTS.md
 CLAUDE.md
-PROGRESS.md
 
 # Dependency trees, caches, test artifacts, and local build outputs are not
 # Dockerfile inputs.

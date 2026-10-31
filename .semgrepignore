@@ -1,12 +1,32 @@
 # semgrep-specific excludes, layered on top of normal git-tracked scanning.
 #
-# packages/schema/gen/** is committed generated code (spec §7: "committed;
-# CI drift check") — it is derived mechanically from resume.schema.json, so
-# findings there would flag the generator's output rather than hand-written
-# logic. Faithfulness of the generator itself is covered by the schema
-# package's own conformance tests, not semgrep.
-packages/schema/gen/**/*.go
-packages/schema/gen/**/*.ts
+# Exclude only the outputs owned by packages/schema/scripts/generate.mjs.
+# Handwritten dispatch, validation, conformance, and tests remain scan targets.
+packages/schema/gen/go/rawschema.go
+packages/schema/gen/go/released.go
+packages/schema/gen/go/resume.go
+packages/schema/gen/go/sanitizer.go
+packages/schema/gen/go/v1/rawschema.go
+packages/schema/gen/go/v1/resume.go
+packages/schema/gen/go/v2/rawschema.go
+packages/schema/gen/go/v2/resume.go
+packages/schema/gen/go/v3/rawschema.go
+packages/schema/gen/go/v3/resume.go
+packages/schema/gen/go/v4/rawschema.go
+packages/schema/gen/go/v4/resume.go
+packages/schema/gen/go/v5/rawschema.go
+packages/schema/gen/go/v5/resume.go
+packages/schema/gen/ts/released.ts
+packages/schema/gen/ts/resume.ts
+packages/schema/gen/ts/samples.ts
+packages/schema/gen/ts/sanitizer-policy.ts
+packages/schema/gen/ts/sanitizer.ts
+packages/schema/gen/ts/templates.ts
+packages/schema/gen/ts/v1/resume.ts
+packages/schema/gen/ts/v2/resume.ts
+packages/schema/gen/ts/v3/resume.ts
+packages/schema/gen/ts/v4/resume.ts
+packages/schema/gen/ts/v5/resume.ts
 
 # Vendored / build output. These are already git-ignored (see .gitignore)
 # so default `semgrep` runs (git-tracked files only) never see them, but

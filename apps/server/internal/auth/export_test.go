@@ -226,10 +226,6 @@ func (s *PasswordService) LoginForTest(ctx context.Context, email, password, ua,
 	return s.login(ctx, email, password, ua, ip)
 }
 
-func (s *PasswordService) ForgotForTest(ctx context.Context, email, ip string) error {
-	return s.forgot(ctx, email, ip)
-}
-
 func (s *PasswordService) ResetForTest(ctx context.Context, token, password, ip string) error {
 	return s.reset(ctx, token, password, ip)
 }
