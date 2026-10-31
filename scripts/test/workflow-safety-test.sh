@@ -356,32 +356,63 @@ grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
 # Only the connected Semgrep jobs may read a stored secret. GITHUB_TOKEN is
 # GitHub's per-run token and remains available to release publication jobs.
 assert_workflow_secrets() { # workflow-directory
-  node --input-type=module - "$1" <<'NODE'
+  node --input-type=module - "$1" "$ROOT" <<'NODE'
 import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
+const require = createRequire(join(process.argv[3], "scripts/test/workflow-contract.test.mjs"));
+const { parseDocument } = require("yaml");
 const directory = process.argv[2];
 const seen = new Set();
-for (const file of readdirSync(directory, { recursive: true, withFileTypes: true })) {
-  if (!file.isFile()) continue;
-  const path = join(file.parentPath, file.name);
-  let job = "";
-  for (const [index, line] of readFileSync(path, "utf8").split("\n").entries()) {
-    if (/^\S/.test(line)) job = "";
-    const header = line.match(/^  ([\w-]+):$/);
-    if (header) job = header[1];
-    for (const match of line.matchAll(/\bsecrets\b(?:\s*\.\s*([A-Za-z_]\w*))?/gi)) {
-      if (match[1] === "GITHUB_TOKEN") continue;
-      if (path === join(directory, "ci.yml") &&
+const yamlPath = (parts) => parts.reduce((path, part) =>
+  typeof part === "number" ? `${path}[${part}]` :
+    /^[\w-]+$/.test(part) ? `${path}${path ? "." : ""}${part}` :
+      `${path}[${JSON.stringify(part)}]`, "");
+function inspect(value, parts, file, key = false) {
+  if (typeof value !== "string") return;
+  for (const expression of value.matchAll(/\$\{\{((?:'(?:[^']|'')*'|[^'])+?)\}\}/g)) {
+    const tokens = expression[1].match(/'(?:[^']|'')*'|[A-Za-z_][\w-]*|[^\s]/g) || [];
+    for (const [index, token] of tokens.entries()) {
+      if (token.toLowerCase() !== "secrets" || tokens[index - 1] === ".") continue;
+      const property = tokens[index + 1] === "." ? tokens[index + 2] : undefined;
+      if (property === "GITHUB_TOKEN") continue;
+      const job = parts[1];
+      if (!key && file === join(directory, "ci.yml") &&
+          parts.length === 6 && parts[0] === "jobs" &&
           ["semgrep-code", "semgrep-supply-chain"].includes(job) &&
-          line === '          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}' &&
-          !seen.has(job)) {
+          parts[2] === "steps" && typeof parts[3] === "number" &&
+          parts[4] === "env" && parts[5] === "SEMGREP_APP_TOKEN" &&
+          value === "${{ secrets.SEMGREP_APP_TOKEN }}" && !seen.has(job)) {
         seen.add(job);
         continue;
       }
-      console.error(`workflow-safety-test: ${path}:${index + 1}: ${job || "workflow"} references an unapproved secret`);
+      console.error(`workflow-safety-test: ${file}:${yamlPath(parts)} references an unapproved secret`);
       process.exit(1);
     }
   }
+}
+function walk(value, parts, file, ancestors = new Set(), key = false) {
+  inspect(value, parts, file, key);
+  if (value === null || typeof value !== "object") return;
+  if (ancestors.has(value)) throw new Error(`${file}:${yamlPath(parts)} contains a recursive YAML alias`);
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => walk(child, [...parts, index], file, ancestors, key));
+  } else if (value instanceof Map) {
+    for (const [key, child] of value) {
+      const childPath = [...parts, String(key)];
+      walk(key, childPath, file, ancestors, true);
+      walk(child, childPath, file, ancestors);
+    }
+  }
+  ancestors.delete(value);
+}
+for (const file of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+  if (!file.isFile() || !/\.ya?ml$/.test(file.name)) continue;
+  const path = join(file.parentPath, file.name);
+  const document = parseDocument(readFileSync(path, "utf8"));
+  if (document.errors.length) throw new Error(`${path}: ${document.errors.join("; ")}`);
+  walk(document.toJS({ mapAsMap: true }), [], path);
 }
 if (seen.size !== 2) {
   console.error("workflow-safety-test: connected Semgrep jobs must each reference the token exactly once");
@@ -393,16 +424,46 @@ assert_workflow_secrets "$ROOT/.github/workflows"
 
 mkdir -p "$WORK/workflows"
 cp "$WORKFLOW" "$WORK/workflows/ci.yml"
+cat >"$WORK/workflows/ordinary.yml" <<'YAML'
+# secrets may appear in comments.
+jobs:
+  unrelated:
+    steps:
+      - name: secrets
+        env:
+          LITERAL: 'secrets'
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROPERTY: ${{ foo.secrets }}
+          IDENTIFIER: ${{ other_secrets }}
+          QUOTED: ${{ format('secrets and }}', 'secrets') }}
+YAML
+assert_workflow_secrets "$WORK/workflows"
 while IFS= read -r expression; do
   printf 'jobs:\n  unrelated:\n    env:\n      ALL_SECRETS: %s\n' "$expression" \
     >"$WORK/workflows/unapproved.yml"
   expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
-    "$WORK/workflows/unapproved.yml:4: unrelated references an unapproved secret"
+    "$WORK/workflows/unapproved.yml:jobs.unrelated.env.ALL_SECRETS references an unapproved secret"
 done <<'CASES'
 ${{ toJSON(secrets) }}
 ${{ secrets }}
 ${{ format('{0}', secrets) }}
+${{ secrets['X'] }}
+${{ secrets.OTHER }}
+${{ secrets.SEMGREP_APP_TOKEN }}
+"${{ toJSON(\u0073ecrets) }}"
 CASES
+cat >"$WORK/workflows/unapproved.yml" <<'YAML'
+jobs:
+  unrelated:
+    steps:
+      - env:
+          "${{ secrets.OTHER }}": value
+YAML
+expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
+  "$WORK/workflows/unapproved.yml:jobs.unrelated.steps[0].env[\"\${{ secrets.OTHER }}\"] references an unapproved secret"
+mkdir -p "$WORK/empty-workflows"
+expect_guard_drift assert_workflow_secrets "$WORK/empty-workflows" \
+  'connected Semgrep jobs must each reference the token exactly once'
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
