@@ -3,9 +3,9 @@
 # through a relative `file:` reference, so the build needs both directories.
 
 # ---- build ----
-# Node 24.21.0: pinned exactly to apps/web/.nvmrc. Digest pins the
+# Node 24.22.2: pinned exactly to apps/web/.nvmrc. Digest pins the
 # multi-arch index so the same reference resolves on amd64 and arm64.
-FROM docker.io/library/node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS build
 
 WORKDIR /src
 
@@ -51,7 +51,7 @@ RUN set -e; out=apps/web/.output; test -f "$out/server/index.mjs"; \
 # ---- runtime ----
 # Nitro's node-server preset (Nuxt's default) bundles its own dependencies
 # into .output/, so the runtime stage needs no node_modules install.
-FROM docker.io/library/node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
+FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runtime
 
 WORKDIR /app
 
