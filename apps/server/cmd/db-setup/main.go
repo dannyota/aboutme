@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"strings"
@@ -150,7 +151,11 @@ func closeBy(db interface{ Close() error }, deadline time.Time) {
 	timer := time.NewTimer(remaining)
 	defer timer.Stop()
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			// Database errors may contain connection details, so log only the outcome.
+			slog.Warn("db-setup: database close failed")
+		}
 	case <-timer.C:
 	}
 }

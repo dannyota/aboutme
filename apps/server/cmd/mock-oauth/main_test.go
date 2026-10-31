@@ -107,8 +107,8 @@ func TestServeDrainsInFlightRequest(t *testing.T) {
 	}
 	cancel()
 	select {
-	case <-done:
-		t.Fatal("serve returned before request drained")
+	case err := <-done:
+		t.Fatalf("serve returned before request drained: %v", err)
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(release)

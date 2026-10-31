@@ -102,7 +102,8 @@ func Run(args []string) int {
 	if !canceled {
 		return exitCode(waitErr)
 	}
-	<-done
+	// Cancellation always reports failure, regardless of the browser's exit status.
+	ignoreError(<-done)
 	return fail("browser canceled")
 }
 

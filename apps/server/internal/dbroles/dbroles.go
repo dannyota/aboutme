@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -105,7 +106,12 @@ func rollbackBounded(tx interface{ Rollback() error }, timeout time.Duration) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case <-done:
+	case err := <-done:
+		// A finished transaction needs no rollback. Other errors may contain
+		// connection details, so log only the outcome.
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			slog.Warn("dbroles: rollback failed")
+		}
 	case <-timer.C:
 	}
 }

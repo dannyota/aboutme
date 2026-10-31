@@ -318,7 +318,10 @@ func TestCommandNaturalLeaderExitJoinsLiveDescendant(t *testing.T) {
 		ignoreProcessError(exitGateWriter.Close())
 		ignoreProcessError(cmd.Process.Signal(syscall.SIGTERM))
 		select {
-		case <-done:
+		case waitErr := <-done:
+			if waitErr != nil {
+				t.Logf("supervisor wait after cleanup signals: %v", waitErr)
+			}
 		case <-time.After(2 * time.Second):
 			t.Error("supervisor cleanup did not finish")
 		}

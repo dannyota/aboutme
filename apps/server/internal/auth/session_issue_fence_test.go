@@ -203,8 +203,8 @@ func TestIssue_WithPool_LocksUser(t *testing.T) {
 
 	select {
 	case <-locked:
-	case <-done:
-		t.Fatal("Issue() returned before the lock probe fired; the wrapper did not acquire the user lock first")
+	case err := <-done:
+		t.Fatalf("Issue() returned before the lock probe fired; the wrapper did not acquire the user lock first: %v", err)
 	}
 
 	// While Issue holds the user lock, a reset cannot acquire it.
