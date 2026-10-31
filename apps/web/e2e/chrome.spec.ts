@@ -181,28 +181,39 @@ async function expectCenteredSheet(page: Page, width: number) {
 }
 
 for (const engine of ['chromium', 'webkit'] as const) {
-  for (const theme of ['light', 'dark'] as const) {
-    for (const locale of ['vi', 'en'] as const) {
-      const title = `hero sheet centered on phones: ${engine} ${theme} `
-        + locale;
-      test(title, async ({ baseURL }) => {
-        const origin = baseURL ?? 'http://127.0.0.1:20092';
-        const launcher = engine === 'webkit' ? webkit : chromium;
-        const browser: Browser = await launcher.launch({ args: [] });
-        try {
-          const context = await browser.newContext({ baseURL: origin });
-          await context.addCookies([
-            { name: 'aboutme-locale', value: locale, url: origin },
-            { name: 'aboutme-theme', value: theme, url: origin },
-          ]);
-          const page = await context.newPage();
-          for (const width of PHONE_WIDTHS) {
-            await expectCenteredSheet(page, width);
-          }
-        } finally {
-          await browser.close();
+  test.describe(engine, () => {
+    let browser: Browser;
+
+    test.beforeAll(async () => {
+      const launcher = engine === 'webkit' ? webkit : chromium;
+      browser = await launcher.launch({ args: [] });
+    });
+
+    test.afterAll(async () => {
+      await browser?.close();
+    });
+
+    for (const theme of ['light', 'dark'] as const) {
+      for (const locale of ['vi', 'en'] as const) {
+        for (const width of PHONE_WIDTHS) {
+          const title = `hero sheet centered on phones: ${engine} ${theme} `
+            + `${locale} ${width}px`;
+          test(title, async ({ baseURL }) => {
+            const origin = baseURL ?? 'http://127.0.0.1:20092';
+            const context = await browser.newContext({ baseURL: origin });
+            try {
+              await context.addCookies([
+                { name: 'aboutme-locale', value: locale, url: origin },
+                { name: 'aboutme-theme', value: theme, url: origin },
+              ]);
+              const page = await context.newPage();
+              await expectCenteredSheet(page, width);
+            } finally {
+              await context.close();
+            }
+          });
         }
-      });
+      }
     }
-  }
+  });
 }
