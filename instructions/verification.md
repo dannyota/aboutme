@@ -17,7 +17,9 @@ Dependabot opens one grouped GitHub Actions update PR each week. External action
 
 `SEMGREP_APP_TOKEN` lives only in the `semgrep` GitHub environment, whose deployment branch policy allows only `main`. Pull request and Dependabot runs never receive it.
 
-The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [browser baseline checks](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright and pip caches never reach main.
+For rotation, pipe a fresh token from its source into `gh secret set SEMGREP_APP_TOKEN --env semgrep`, never print the value or store it elsewhere in GitHub, then revoke the old token in Semgrep. The cutover is complete only after the fresh token is in that environment, the old token is revoked, and outstanding untrusted runs are cancelled.
+
+The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [browser baseline checks](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go, tool, and Semgrep pip caches; branch Playwright caches never reach main.
 
 ### Runs and evidence
 
@@ -29,7 +31,7 @@ GitHub CI runs every build and test. `main` and other branches run it differentl
 |-|-|-|
 |Trigger|Every push runs `ci.yml`|A pull request against `main` runs `ci.yml` on the branch merged into `main`, again on every push; without one, dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>`|
 |Release gate|A green push run on the exact commit is required to tag and deploy|Never counts as a release gate|
-|Caches|Saves Go and tool caches|Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main`|
+|Caches|Saves Go, tool, and Semgrep pip caches|Restores Go caches but never saves them, so the first run can be slower; Playwright caches save per branch and never reach `main`; Semgrep pip caches save only on `main`|
 |Canceling|Each push has its own group and retains its result|A newer pull-request run cancels the older PR run; a newer dispatch cancels the older dispatch on that branch. Dispatch and push groups are separate|
 
 A dispatch run tests a branch only. It never satisfies the main ruleset's required `ci` check, so it cannot serve as a landing gate. A pull request needs no dispatch: its run tests the branch merged into `main` as `main` stood when the run started. A later push to `main` does not rerun it, so if `main` moved since the last run, merge `origin/main` into the branch and push before landing; CI must cover the new head, with independent Codex review under [workflow](workflow.md#reviews). Before dispatching on a branch without a pull request:

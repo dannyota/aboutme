@@ -355,7 +355,8 @@ grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
 
 # Only the connected Semgrep jobs may read a stored secret. GITHUB_TOKEN is
 # GitHub's per-run token and remains available to release publication jobs.
-node --input-type=module - "$ROOT/.github/workflows" <<'NODE'
+assert_workflow_secrets() { # workflow-directory
+  node --input-type=module - "$1" <<'NODE'
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 const directory = process.argv[2];
@@ -368,7 +369,7 @@ for (const file of readdirSync(directory, { recursive: true, withFileTypes: true
     if (/^\S/.test(line)) job = "";
     const header = line.match(/^  ([\w-]+):$/);
     if (header) job = header[1];
-    for (const match of line.matchAll(/\bsecrets\s*(?:\.\s*([A-Za-z_]\w*)|\[)/g)) {
+    for (const match of line.matchAll(/\bsecrets\b(?:\s*\.\s*([A-Za-z_]\w*))?/gi)) {
       if (match[1] === "GITHUB_TOKEN") continue;
       if (path === join(directory, "ci.yml") &&
           ["semgrep-code", "semgrep-supply-chain"].includes(job) &&
@@ -387,6 +388,21 @@ if (seen.size !== 2) {
   process.exit(1);
 }
 NODE
+}
+assert_workflow_secrets "$ROOT/.github/workflows"
+
+mkdir -p "$WORK/workflows"
+cp "$WORKFLOW" "$WORK/workflows/ci.yml"
+while IFS= read -r expression; do
+  printf 'jobs:\n  unrelated:\n    env:\n      ALL_SECRETS: %s\n' "$expression" \
+    >"$WORK/workflows/unapproved.yml"
+  expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
+    "$WORK/workflows/unapproved.yml:4: unrelated references an unapproved secret"
+done <<'CASES'
+${{ toJSON(secrets) }}
+${{ secrets }}
+${{ format('{0}', secrets) }}
+CASES
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
