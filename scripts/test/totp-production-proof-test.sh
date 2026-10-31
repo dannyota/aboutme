@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper refusal and staging tests. Podman is stubbed, so successful staging
 # reaches the real host runner without building an image or contacting a host.
-# The lock and memory fixtures keep these tests independent of local checks.
+# The lock and watchdog fixtures keep these tests independent of local checks.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
@@ -22,17 +22,21 @@ cp "$SCRIPT" "$REPO/scripts/totp-production-proof.sh" 2>/dev/null ||
   { mkdir -p "$REPO/scripts"; cp "$SCRIPT" "$REPO/scripts/totp-production-proof.sh"; }
 mkdir -p "$REPO/scripts/lib"
 cp "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$REPO/scripts/lib/"
+cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$REPO/scripts/lib/"
+cat >"$REPO/scripts/run-capped.sh" <<'STUB'
+#!/usr/bin/env bash
+[ "${RUN_CAPPED_TOTAL_KIB:-}" != invalid ] || { echo 'refused: cannot establish memory limit' >&2; exit 125; }
+printf '%s\n' "$*" >>"$WATCHDOG_LOG"
+shift 3
+exec "$@"
+STUB
+export WATCHDOG_LOG=$WORK/watchdog.log
+
 chmod 0700 "$REPO/.dev/v0.4.7/production-input"
 
 LOCK_PATH=$WORK/local-check.lock
-MEMINFO_HIGH=$WORK/meminfo-high
-MEMINFO_LOW=$WORK/meminfo-low
-printf 'MemTotal:       33554432 kB\nMemAvailable:   16000000 kB\n' >"$MEMINFO_HIGH"
-printf 'MemTotal:       33554432 kB\nMemAvailable:     100000 kB\n' >"$MEMINFO_LOW"
-
 run_wrapper() {
   ABOUTME_LOCAL_CHECK_LOCK_PATH=$LOCK_PATH \
-    ABOUTME_MEMINFO_PATH=$MEMINFO_HIGH \
     "$@" "$REPO/scripts/totp-production-proof.sh" totp-prod-flag-off
 }
 
@@ -78,15 +82,13 @@ grep -Fq 'production input directory ownership or mode mismatch' <<<"$output" ||
   fail 'wrong-mode production input directory returned the wrong diagnostic'
 chmod 0700 "$REPO/.dev/v0.4.7/production-input"
 
-# --- memory floor ----------------------------------------------------------
+# --- watchdog refusal --------------------------------------------------------
 
-if output=$(ABOUTME_LOCAL_CHECK_LOCK_PATH=$LOCK_PATH \
-  ABOUTME_MEMINFO_PATH=$MEMINFO_LOW \
-  "$REPO/scripts/totp-production-proof.sh" totp-prod-flag-off 2>&1); then
-  fail 'low MemAvailable was accepted'
+if output=$(RUN_CAPPED_TOTAL_KIB=invalid run_wrapper 2>&1); then
+  fail 'missing total memory was accepted'
 fi
-grep -Fq 'fewer than 8 GiB MemAvailable' <<<"$output" ||
-  fail 'low MemAvailable returned the wrong diagnostic'
+grep -Fq 'refused: cannot establish memory limit' <<<"$output" ||
+  fail 'missing memory returned the wrong diagnostic'
 
 # --- active stack ------------------------------------------------------------
 
@@ -100,15 +102,28 @@ rm -f -- "$REPO/.dev/native-https/run/server.pid"
 
 # --- shared lock --------------------------------------------------------
 
-exec {HELD_FD}>>"$LOCK_PATH"
-flock "$HELD_FD"
+python3 - "$LOCK_PATH" "$WORK/lock-ready" <<'LOCK' &
+import fcntl, sys, time
+with open(sys.argv[1], "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    open(sys.argv[2], "w").close()
+    time.sleep(30)
+LOCK
+holder=$!
+for ((i=0; i<200; i++)); do
+  [ ! -f "$WORK/lock-ready" ] || break
+  sleep 0.05
+done
+[ -f "$WORK/lock-ready" ] || fail 'lock holder never started'
 if output=$(run_wrapper 2>&1); then
+  kill "$holder"
+  wait "$holder" || true
   fail 'the wrapper ran while the shared lock was held'
 fi
+kill "$holder"
+wait "$holder" || true
 grep -Fq 'another local check holds the shared lock' <<<"$output" ||
   fail 'held shared lock returned the wrong diagnostic'
-flock -u "$HELD_FD"
-exec {HELD_FD}>&-
 
 # Exercise the wrapper's staging through the real runner's validation.
 copy_browser_sources() {
@@ -172,6 +187,8 @@ run)
 *) exit 1 ;;
 esac
 STUB
+export STUB_REAL_STAT
+STUB_REAL_STAT=$(command -v stat)
 cat >"$WORK/bin/stat" <<'STUB'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -179,13 +196,28 @@ case ${STAGING_TAMPER-}:${1-}:${2-}:${3-} in
 file-owner:-c:%u:*/totp-prod-spec.*/auth.spec.ts | directory-owner:-c:%u:*/totp-prod-spec.*)
   printf '0\n'; exit 0 ;;
 esac
-exec /usr/bin/stat "$@"
+exec "$STUB_REAL_STAT" "$@"
 STUB
+# Refuse GNU find formatting even when this test runs on Linux.
+export STUB_REAL_FIND
+STUB_REAL_FIND=$(command -v find)
+cat >"$WORK/bin/find" <<'STUB'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  [ "$argument" != -printf ] || { echo 'BSD find has no -printf' >&2; exit 1; }
+done
+exec "$STUB_REAL_FIND" "$@"
+STUB
+chmod 0700 "$WORK/bin/find"
 chmod 0700 "$WORK/bin/podman" "$WORK/bin/stat"
 if ! output=$(PATH="$WORK/bin:$PATH" STAGED_PATH="$WORK/staged-path" run_wrapper 2>&1); then
   fail "wrapper staging did not pass runner validation: $output"
 fi
 [ -s "$WORK/staged-path" ] || fail 'wrapper never reached the stubbed browser run'
+grep -Fq -- '--timeout 4200 -- bash ' "$WATCHDOG_LOG" || fail 'whole wrapper watchdog missing'
+grep -Fq -- '--timeout 600 -- podman build ' "$WATCHDOG_LOG" || fail 'build timeout missing'
+grep -Fq -- '--timeout 3600 -- ' "$WATCHDOG_LOG" || fail 'proof timeout missing'
+
 [ ! -e "$(cat "$WORK/staged-path")" ] || fail 'wrapper left its staging directory behind'
 
 for tamper in extra manifest missing file-symlink directory-symlink file-mode directory-mode file-owner directory-owner; do

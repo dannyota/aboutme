@@ -8,7 +8,7 @@ Read first: AGENTS.md, docs/standards/engineering.md, instructions/workflow.md, 
 
 Work only from the primary's brief. Start with git status --short; leave existing changes alone. Stay inside the brief's owned paths. Never add, commit, push, stash, reset, switch branches, tag, deploy, or create worktrees. Never read or print secret values or personal data. Use plain words and active voice, no em dashes, no plan, task, or phase IDs in code, comments, tests, or living docs. Keep Markdown at or under 450 lines and non-test code at or under 700. Temporary files and reports go to the scratchpad outside the repository.
 
-Codex sandboxes have no network or user systemd bus and cannot run capped local checks. The primary downloads CI logs and artifacts into the paths the brief names, prefetches dependencies, and runs make pre-push and approved capped checks. Ask the primary for any evidence you cannot reach, with the exact run, job, artifact, or command and why you need it. Do not dispatch other jobs. A separate Sol xhigh job independently reviews your fix.
+Codex sandboxes cannot run local checks. The primary downloads CI logs and artifacts into the paths the brief names, prefetches dependencies, and runs make pre-push and approved capped checks. Ask the primary for any evidence you cannot reach, with the exact run, job, artifact, or command and why you need it. Do not dispatch other jobs. A separate Sol xhigh job independently reviews your fix.
 
 Rules:
 - Find the cause before changing anything. Read the whole failing log and name the exact failing step. Bisect by CI runs when the failure starts at a known commit. Read the code on both sides and the tool's documentation and issues; cite sources.

@@ -643,6 +643,7 @@ function checkJobTimeouts(ci, vn) {
   const timeouts = {
     preflight: 5,
     contracts: 20,
+    "macos-tooling": 5,
     server: 20,
     "server-integration": 20,
     "server-resumeapi": 20,
@@ -894,3 +895,11 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
   };
   walk(parseYaml(source, path).toJS());
 }
+
+test("server cross-compiles every package for Darwin arm64", () => {
+  const step = readWorkflow("ci").jobs.server.steps.find((entry) =>
+    entry.run === "GOOS=darwin GOARCH=arm64 go build ./...");
+  assert.ok(step, "Darwin server build is required");
+  assert.equal(step["working-directory"], "apps/server");
+  assert.equal(step["continue-on-error"], undefined);
+});

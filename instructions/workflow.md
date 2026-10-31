@@ -53,7 +53,7 @@ Reviews stay read-only. Reviewers read the primary's check output and exact-comm
 
 At most four Codex jobs run at once across all work, counting design, implementation, troubleshooting, review, QA, and exploration. Each concurrent writer has its own worktree. The primary creates worktrees and verifies their base commits. Local check execution is globally serialized under [resources](resources.md).
 
-Codex sandboxes have no network or user systemd bus and cannot create capped scopes. The primary prefetches dependencies under the resource rules before a worker needs them, runs `make pre-push` and approved capped checks, and gives reviewers the output.
+Codex sandboxes cannot run local checks. The primary prefetches dependencies under the resource rules before a worker needs them, runs `make pre-push` and approved capped checks, and gives reviewers the output.
 
 When a worker stops with a question, a design conflict, overlapping ownership, or a missing decision, the primary answers from the reviewed design or returns the conflict to the designer and independent reviewer. Record an approved contract change in the design before resuming the worker with a new brief that states the answer. Never invent a contract.
 
@@ -66,7 +66,7 @@ Implementers read their own diff line by line, update tests, specs, snapshots, a
 - Backend: follow [Go and database rules](go.md) and the change-area gates in [testing](testing.md).
 - Frontend: follow [web rules](web.md) for source manifests, renderer boundaries, and baselines, and [resources](resources.md) for active browser proofs.
 - Devops: follow [deployment rules](deploy.md), the production runbook, and release authorities linked there.
-- Shared generated files: regenerate schema Go, sqlc output, OpenAPI clients, web source manifests, and public roots from their sources when affected. Never hand-edit generated output. The primary runs generators needing capped scopes. The source's assigned implementer reports each changed generated file and line. Serialize migrations and schema versions.
+- Shared generated files: regenerate schema Go, sqlc output, OpenAPI clients, web source manifests, and public roots from their sources when affected. Never hand-edit generated output. The primary runs generators through `scripts/run-capped.sh`. The source's assigned implementer reports each changed generated file and line. Serialize migrations and schema versions.
 
 ## QA and personas
 

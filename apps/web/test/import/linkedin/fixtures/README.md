@@ -61,14 +61,14 @@ sources with Apache FOP 2.3 in a pinned Podman container, and are committed
 alongside them. CI never regenerates them; `generate.sh` refuses to run when
 `CI` is set.
 
-Render (or re-render after editing a `*.fo` file) with at least 8 GiB of
-free memory, from the repository root, under the shared local-check lock:
+Render (or re-render after editing a `*.fo` file) from the repository root, under
+the shared lock and the
+[local memory watchdog](../../../../../../instructions/resources.md):
 
 ```bash
-flock -o -w 900 "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" \
-  timeout 1200 systemd-run --user --scope --quiet \
-  -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% \
-  -- bash apps/web/test/import/linkedin/fixtures/generate.sh
+python3 scripts/lib/local-check.py \
+  "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
+  bash scripts/run-capped.sh --timeout 1200 -- bash apps/web/test/import/linkedin/fixtures/generate.sh
 ```
 
 `generate.sh` builds the image, then runs FOP once per `*.fo` file with the
@@ -81,10 +81,9 @@ needs `apps/web/node_modules`, symlinked only for the duration of this one
 command):
 
 ```bash
-flock -o -w 900 "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" \
-  timeout 120 systemd-run --user --scope --quiet \
-  -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% \
-  -- bash -c 'ln -s "$PWD/apps/web/node_modules" apps/web/node_modules && \
+python3 scripts/lib/local-check.py \
+  "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
+  bash scripts/run-capped.sh --timeout 120 -- bash -c 'ln -s "$PWD/apps/web/node_modules" apps/web/node_modules && \
     node apps/web/scripts/linkedin-pdf-shape.mjs <path-to-pdf>; \
     rm -f apps/web/node_modules'
 ```

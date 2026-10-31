@@ -9,13 +9,17 @@
 #   scripts/dev-native.sh logs    per-process logs
 #   scripts/dev-native.sh seed    seed the development account and sample resume
 #
-# Open http://localhost:20080 — that is the only URL a browser should use;
+# Open http://localhost:20080: that is the only URL a browser should use;
 # it is PUBLIC_ORIGIN, so cookie scope, CSRF Origin checks, and OAuth
 # redirects match what the code expects.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$(pwd -P)
+# shellcheck source=scripts/lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+require_modern_bash || exit 1
+require_gnu_tools realpath stat base64 sha256sum date || exit 1
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'dev-native: %s\n' "$*" >&2; }
@@ -94,10 +98,7 @@ VIEW_PASS_KEY_B64=
 # --------------------------------------------------------------------------
 # process bookkeeping
 #
-# Every service is started through `setsid --fork`, so its pid is also its
-# session and process-group id. That is what makes `down` able to kill a
-# whole tree (npm -> nuxt -> forked child) and what lets us tell our own
-# process from an unrelated one that happens to have reused the pid.
+# Each saved PID belongs to a detached watchdog that owns service cleanup.
 # --------------------------------------------------------------------------
 
 pidfile() { printf '%s/%s.pid' "$DEV_DIR" "$1"; }
@@ -123,13 +124,13 @@ read_pid() {
   printf '%s' "$pid"
 }
 
-# is_ours reports whether pid is alive and is still the session leader we
+# is_ours reports whether pid is alive and is still the group leader we
 # started, rather than an unrelated process that inherited a recycled pid.
 is_ours() {
-  local pid=$1 sid
+  local pid=$1 pgid
   kill -0 "$pid" 2>/dev/null || return 1
-  sid=$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
-  [ "$sid" = "$pid" ]
+  pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
+  [ "$pgid" = "$pid" ]
 }
 
 service_pid() {
@@ -137,15 +138,6 @@ service_pid() {
   pid=$(read_pid "$1") || return 1
   is_ours "$pid" || return 1
   printf '%s' "$pid"
-}
-
-# Output is captured before it is matched: under `pipefail`, a `grep -q`
-# that exits on its first match can SIGPIPE the producer and turn a
-# successful match into a failed pipeline.
-port_listening() {
-  local listeners
-  listeners=$(ss -H -tln "sport = :$1" 2>/dev/null || true)
-  [ -n "$listeners" ]
 }
 
 db_container_running() {
@@ -211,12 +203,12 @@ start_service() {
   } >>"$lf"
   # The child records its own pid before exec, so the pid in the file is
   # the process itself (== its process-group id), not a wrapper's.
-  setsid --fork bash -c '
+  detach bash -c '
     echo $$ >"$1"
     cd "$2" || exit 127
     shift 2
     exec "$@"
-  ' dev-native "$pf" "$workdir" "$@" >>"$lf" 2>&1 </dev/null
+  ' dev-native "$pf" "$workdir" bash "$ROOT/scripts/run-capped.sh" -- "$@" >>"$lf" 2>&1 </dev/null
 
   local i
   for i in $(seq 1 50); do
@@ -236,17 +228,15 @@ stop_service() {
     rm -f "$(pidfile "$name")"
     return 0
   fi
-  kill -TERM -- "-$pid" 2>/dev/null || true
-  local i
-  for i in $(seq 1 100); do
-    kill -0 "$pid" 2>/dev/null || break
+  kill -TERM "$pid" 2>/dev/null || true
+  local deadline=$((SECONDS + 10))
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      warn "$name (pid $pid) did not stop before the 10s deadline; watchdog cleanup is still pending; keeping watchdog and pid file"
+      return 1
+    fi
     sleep 0.1
   done
-  if kill -0 "$pid" 2>/dev/null; then
-    warn "$name (pid $pid) ignored SIGTERM; sending SIGKILL"
-    kill -KILL -- "-$pid" 2>/dev/null || true
-    sleep 0.3
-  fi
   rm -f "$(pidfile "$name")"
   info "stopped $name (pid $pid)"
 }
@@ -296,7 +286,7 @@ wait_capture() {
 # Caddy config
 #
 # The dev route table is deploy/caddy/Caddyfile itself, with only its three
-# environment-specific tokens rewritten — the same three the route-table
+# environment-specific tokens rewritten: the same three the route-table
 # test rewrites in apps/server/internal/routetable/route_table_test.go
 # (adaptedCaddyfile): the site address and the two compose-service
 # upstreams. Every matcher, handle block, and directive is byte-for-byte
@@ -349,7 +339,7 @@ generate_caddyfile() {
     new=${news[$i]}
     n=$(count_occurrences "$content" "$old")
     if [ "$n" != "${counts[$i]}" ]; then
-      die "$CADDYFILE_SRC: found $n occurrence(s) of '$old', want exactly ${counts[$i]} — the real Caddyfile's shape changed; update this script's substitution (and route_table_test.go's) to match"
+      die "$CADDYFILE_SRC: found $n occurrence(s) of '$old', want exactly ${counts[$i]}: the real Caddyfile's shape changed; update this script's substitution (and route_table_test.go's) to match"
     fi
     content=${content//"$old"/"$new"}
   done
@@ -363,9 +353,10 @@ generate_caddyfile() {
 
 require_tools() {
   local t
-  for t in podman go npm node caddy curl ss setsid realpath sha256sum awk base64 tr head stat; do
+  for t in podman go npm node caddy curl python3 realpath sha256sum awk base64 tr head stat; do
     command -v "$t" >/dev/null 2>&1 || die "$t is not on PATH"
   done
+  command -v ss >/dev/null || command -v lsof >/dev/null || die "ss or lsof is required"
   make -C "$ROOT" --no-print-directory tools-check ARGS=dev
 }
 
@@ -546,7 +537,7 @@ cmd_up() {
   start_web
   start_caddy
   info ""
-  info "native dev stack is up — open $PUBLIC_ORIGIN"
+  info "native dev stack is up: open $PUBLIC_ORIGIN"
   cmd_status
 }
 
@@ -559,11 +550,12 @@ cmd_seed() {
 }
 
 cmd_down() {
-  local name
+  local name failed=0
   # Caddy first: stop accepting traffic before the upstreams disappear.
   for name in caddy web server mail-capture; do
-    stop_service "$name"
+    stop_service "$name" || failed=1
   done
+  [ "$failed" -eq 0 ] || return 1
   info "native dev stack is down (the shared $DB_CONTAINER container is left running)"
 }
 
@@ -605,7 +597,7 @@ cmd_status() {
 
   if [ "$failed" -ne 0 ]; then
     info ""
-    info "not everything is up — 'scripts/dev-native.sh logs <service>' shows why; CRASHED means the process died after up started it"
+    info "not everything is up: 'scripts/dev-native.sh logs <service>' shows why; CRASHED means the process died after up started it"
     return 1
   fi
   return 0

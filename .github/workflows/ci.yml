@@ -22,11 +22,9 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
-# Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
-# job past that limit waits in the queue, including behind other branches'
-# runs. After preflight, this workflow starts 20 jobs: 5 single jobs,
-# 2 VN infrastructure jobs, 2 Semgrep scans, 2 web-e2e shards, and 9 proof
-# groups, then the ci gate.
+# Job layout: macOS proves the local watchdog and static pre-push wrapper.
+# Other jobs run Linux contracts, application checks, infrastructure, scans,
+# browser shards, and proof groups, followed by the aggregate ci gate.
 # Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
 # work inside a job overlaps through scripts/ci-background.sh. Each check
@@ -55,6 +53,31 @@ jobs:
           bash scripts/check-migrations-append-only.sh --commits "$base" HEAD
           bash scripts/check-released-schemas.sh --commits "$base" HEAD
           echo "base_sha=$base" >> "$GITHUB_OUTPUT"
+
+  macos-tooling:
+    needs: [preflight]
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Use Homebrew Bash and GNU coreutils
+        run: |
+          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+      - name: Watchdog process tests
+        run: bash scripts/test/run-capped-test.sh
+      - name: Static pre-push wrapper tests
+        if: ${{ !cancelled() }}
+        run: bash scripts/test/pre-push-test.sh
+      - name: Production proof staging tests
+        if: ${{ !cancelled() }}
+        run: bash scripts/test/totp-production-proof-test.sh
+      - uses: ./.github/actions/setup-go
+        with:
+          light: "true"
+      - name: Native process supervision tests
+        working-directory: apps/server
+        run: go test ./internal/renderprocess
 
   vn-infra:
     needs: [preflight]
@@ -240,6 +263,10 @@ jobs:
         run: bash scripts/ci-background.sh start media-corpus make server-test-s3
       - if: ${{ !cancelled() }}
         run: make server-build
+      - if: ${{ !cancelled() }}
+        name: Cross-compile the server for Darwin arm64
+        working-directory: apps/server
+        run: GOOS=darwin GOARCH=arm64 go build ./...
       - if: ${{ !cancelled() }}
         run: make server-vet
       - if: ${{ !cancelled() }}
@@ -758,6 +785,7 @@ jobs:
       - preflight
       - vn-infra
       - contracts
+      - macos-tooling
       - server
       - server-integration
       - server-resumeapi

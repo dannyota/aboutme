@@ -248,12 +248,13 @@ only fixed outcomes. No screenshots or content artifacts are saved. The host
 publishes a `serving` challenge for this check after resolving deletion.
 
 Rotation uses the pinned production Playwright image and a named fictional
-account/resume supplied by the primary. The wrapper requires an 8 GiB memory
-floor, the shared local-check lock, no active local stack, 2 GiB/no-swap/two-CPU
-container limits, and a 60-minute timeout. It stages only allowlisted sources;
-no host dependency install. Modes are `hostops-prod-totp` and
-`hostops-prod-view-pass`. The origin is exactly `https://aboutme.vn`. These
-proofs are run by the primary, not a worker or public CI.
+account/resume supplied by the primary. The wrapper requires the
+[local memory watchdog](../../instructions/resources.md), the shared local-check
+lock, no active local stack, the browser container limits, and a 60-minute
+timeout. It stages only allowlisted sources; no host dependency install. Modes are
+`hostops-prod-totp` and `hostops-prod-view-pass`. The origin is exactly
+`https://aboutme.vn`. These proofs are run by the primary, not a worker or public
+CI.
 
 Owner-only 0600 `request.json` contains `requestId`, `action`, `digest`,
 `slugs`, and view-pass `witnessSlug`. Rotation `account.env` contains only the

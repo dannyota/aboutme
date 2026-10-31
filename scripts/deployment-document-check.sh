@@ -13,16 +13,12 @@
 #
 # The manager runs it after a deploy or an observer update. Evidence goes to
 # .dev/prod-checks/transparency/<UTC time>/ with a summary.txt of PASS and
-# FAIL lines; the exit status is 0 only when every check passed. It takes
-# the shared local-check lock without blocking, refuses below 8 GiB
-# available memory, and runs the whole check inside one capped systemd scope.
+# FAIL lines; the exit status is 0 only when every check passed. It holds
+# the shared local-check lock in a parent and runs through run-capped.sh.
 #
-# Test-only environment variables; production never sets them:
-#   ABOUTME_LOCAL_CHECK_LOCK_PATH  scratch file used instead of the shared lock
-#   ABOUTME_MEMINFO_PATH           fixture used instead of /proc/meminfo
-#   ABOUTME_DOCUMENT_CHECK_BIN     prebuilt document-check; skips the build
-# ABOUTME_DOCUMENT_CHECK_SCOPED marks the second pass inside the capped
-# scope; the script sets it itself.
+# Test overrides: ABOUTME_LOCAL_CHECK_LOCK_PATH selects a scratch lock;
+# ABOUTME_DOCUMENT_CHECK_BIN selects a prebuilt document-check binary.
+# ABOUTME_DOCUMENT_CHECK_SCOPED marks the watchdog pass.
 # shellcheck disable=SC2317 # helpers run through check
 set -Eeuo pipefail
 
@@ -32,7 +28,6 @@ URLS=(
   "www https://www.aboutme.vn/.well-known/deployment.json"
 )
 SIGNER=dannyota/aboutme/.github/workflows/release-images.yml
-MEM_FLOOR_KIB=$((8 * 1024 * 1024))
 
 fail() {
   printf 'deployment-document-check: %s\n' "$*" >&2
@@ -44,33 +39,15 @@ fail() {
 
 # --- Preflight and cap ------------------------------------------------------
 
-# The first pass checks memory, takes the shared lock, and re-runs this
-# script inside one capped scope, so the whole process tree runs under the
-# cap (instructions/resources.md). The scoped pass inherits the locked
-# descriptor, so the lock holds until the scope ends.
+# shellcheck source=scripts/lib/platform.sh
+source "$REPO/scripts/lib/platform.sh"
+require_modern_bash || exit 1
+require_gnu_tools date || exit 1
 if [ -z "${ABOUTME_DOCUMENT_CHECK_SCOPED:-}" ]; then
-  mem_available_kib=$(awk '/^MemAvailable:/{print $2}' "${ABOUTME_MEMINFO_PATH:-/proc/meminfo}")
-  [[ $mem_available_kib =~ ^[0-9]+$ ]] || fail 'cannot read MemAvailable'
-  [ "$mem_available_kib" -ge "$MEM_FLOOR_KIB" ] ||
-    fail 'fewer than 8 GiB MemAvailable; wait for headroom'
-
-  if [ -n "${ABOUTME_LOCAL_CHECK_LOCK_PATH:-}" ]; then
-    LOCK=$ABOUTME_LOCAL_CHECK_LOCK_PATH
-  else
-    GIT_COMMON=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir) ||
-      fail 'cannot find the Git common directory'
-    LOCK=$GIT_COMMON/aboutme-local-check.lock
-  fi
-  [ ! -L "$LOCK" ] || fail 'the shared local-check lock is a symbolic link'
-  exec {LOCK_FD}>>"$LOCK"
-  flock -n "$LOCK_FD" || fail 'another local check holds the shared lock'
-
-  for tool in systemd-run timeout; do
-    command -v "$tool" >/dev/null || fail "$tool is not installed; the memory cap cannot be enforced"
-  done
-  exec env ABOUTME_DOCUMENT_CHECK_SCOPED=1 timeout 900 systemd-run --user --scope --quiet \
-    -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% \
-    bash "$REPO/scripts/deployment-document-check.sh"
+  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
+  exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
+    env ABOUTME_DOCUMENT_CHECK_SCOPED=1 bash "$REPO/scripts/run-capped.sh" \
+    --timeout 900 -- bash "$REPO/scripts/deployment-document-check.sh"
 fi
 
 for tool in curl gh; do
@@ -119,7 +96,7 @@ else
   DOC_CHECK=$BUILD/document-check
   (
     cd "$REPO/deploy/observer"
-    GOWORK=off timeout 300 go build -o "$DOC_CHECK" ./cmd/document-check
+    GOWORK=off bash "$REPO/scripts/run-capped.sh" --timeout 300 -- go build -o "$DOC_CHECK" ./cmd/document-check
   ) >"$EVIDENCE/build.txt" 2>&1 || {
     record FAIL 'build document-check'
     finish
@@ -206,7 +183,7 @@ done
 verify() { # verify <outfile> <image> <digest> <version> [extra args]
   local out=$1 image=$2 digest=$3 version=$4
   shift 4
-  env -u GH_DEBUG timeout 120 gh attestation verify "oci://$image@$digest" \
+  env -u GH_DEBUG bash "$REPO/scripts/run-capped.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
     --repo dannyota/aboutme --signer-workflow "$SIGNER" \
     --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" \
     >"$out" 2>&1

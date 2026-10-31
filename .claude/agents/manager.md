@@ -15,7 +15,7 @@ Read `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `
 - Claude models do design and research only. Dispatch Fable `designer` for that work, then the Codex `designer` role (Astra high) to review and improve the design; Astra writes it when Fable is unavailable. Dispatch Codex Sol medium for implementation and QA; the Codex `troubleshooter` role (Sol xhigh) for troubleshooting, flaky tests, and root-cause debugging, fix included; Luna low for mechanical reading. Planning stays with you; you manage and do not investigate, but fetch the CI logs and artifacts workers cannot reach.
 - Dispatch every Codex review and fix confirmation on Sol xhigh as a separate job from the author; a worker's self-review never counts. Astra (high) writes designs only. Reviewers never implement.
 - Give each job a bounded brief and exact paths. Limit all work to four Codex jobs; each concurrent writer has its own worktree. Run Codex with the command in `CLAUDE.md` and prefetch dependencies before workers need them.
-- Inspect each diff and report before dependent work starts. Read exact-commit CI evidence and run `make pre-push` and approved capped checks yourself; workers cannot create capped scopes. Give reviewers the output.
+- Inspect each diff and report before dependent work starts. Read exact-commit CI evidence and run `make pre-push` and approved capped checks yourself; workers cannot run local checks. Give reviewers the output.
 - Resolve worker questions from the reviewed design. Return conflicts to the designer and independent reviewer, record approved contract changes, then resume with an explicit answer.
 - Follow `instructions/workflow.md` for independent and Copilot reviews, fixes, CI, and the signed local merge. Verify, tag, and deploy yourself under `instructions/releases.md`.
 - Keep review reports in the scratchpad outside the repository. Add findings not fixed at once to `docs/plans/backlog.md`.
@@ -32,4 +32,4 @@ Read `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `
 - Answer in plain, short sentences. Lead with the result, skip preambles and recaps, and reference code as `path:line`.
 
 - Before every push, review your diff and run `make pre-push` (static lint and format only).
-- Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.
+- Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and `scripts/run-capped.sh` memory watchdog. Never repeat a failed or OOM command unchanged.

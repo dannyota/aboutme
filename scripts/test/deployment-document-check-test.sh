@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Static, offline tests for scripts/deployment-document-check.sh. curl, gh,
-# systemd-run, and the document-check binary are stubs found through PATH and
-# the script's test-only environment variables. The shared local-check lock
-# and /proc/meminfo are overridden the same way, so this never touches the
-# real lock, the network, or a Go build (instructions/resources.md).
+# Offline wrapper tests with stub network tools and watchdog execution.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
@@ -22,20 +18,17 @@ STUB=$WORK/stub
 BIN=$WORK/bin
 mkdir -p "$REPO/scripts" "$STUB" "$BIN"
 cp "$SCRIPT" "$REPO/scripts/deployment-document-check.sh"
+mkdir -p "$REPO/scripts/lib"
+cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$REPO/scripts/lib/"
+
 FIXTURE=$ROOT/deploy/observer/testdata/examples/verified.json
 [ -f "$FIXTURE" ] || fail 'the verified.json fixture is missing'
 
-cat >"$BIN/systemd-run" <<'STUBEOF'
+cat >"$REPO/scripts/run-capped.sh" <<'STUBEOF'
 #!/usr/bin/env bash
-# Records its arguments, drops the options, and runs the command.
-printf '%s\n' "$*" >>"$STUB/systemd-run.log"
-while [ "$#" -gt 0 ]; do
-  case $1 in
-  -p) shift 2 ;;
-  -*) shift ;;
-  *) break ;;
-  esac
-done
+printf '%s\n' "$*" >>"$STUB/run-capped.log"
+[ "${RUN_CAPPED_TOTAL_KIB:-}" != invalid ] || { echo 'refused: cannot establish memory limit' >&2; exit 125; }
+shift 3
 exec "$@"
 STUBEOF
 cat >"$BIN/curl" <<'STUBEOF'
@@ -82,11 +75,6 @@ STUBEOF
 chmod 0755 "$BIN"/*
 
 LOCK_PATH=$WORK/local-check.lock
-MEMINFO_HIGH=$WORK/meminfo-high
-MEMINFO_LOW=$WORK/meminfo-low
-printf 'MemTotal:       33554432 kB\nMemAvailable:   16000000 kB\n' >"$MEMINFO_HIGH"
-printf 'MemTotal:       33554432 kB\nMemAvailable:     100000 kB\n' >"$MEMINFO_LOW"
-
 IMAGE=ghcr.io/dannyota/aboutme-server
 D1=sha256:9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c
 D2=sha256:a41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41b
@@ -117,7 +105,6 @@ run_check() {
   RC=0
   OUTPUT=$(STUB=$STUB PATH=$BIN:$PATH \
     ABOUTME_LOCAL_CHECK_LOCK_PATH=$LOCK_PATH \
-    ABOUTME_MEMINFO_PATH=${MEMINFO:-$MEMINFO_HIGH} \
     ABOUTME_DOCUMENT_CHECK_BIN=$BIN/document-check \
     "$REPO/scripts/deployment-document-check.sh" "$@" 2>&1) || RC=$?
 }
@@ -141,8 +128,8 @@ reset
 run_check extra
 expect_refusal 'an argument was accepted' 'usage: deployment-document-check.sh'
 
-MEMINFO=$MEMINFO_LOW run_check
-expect_refusal 'low MemAvailable was accepted' 'fewer than 8 GiB MemAvailable'
+RUN_CAPPED_TOTAL_KIB=invalid run_check
+expect_refusal 'missing total memory was accepted' 'refused: cannot establish memory limit'
 
 exec {HELD_FD}>>"$LOCK_PATH"
 flock "$HELD_FD"
@@ -163,8 +150,8 @@ run_check
 summary | grep -q . || fail 'summary.txt is empty'
 if summary | grep -v '^PASS ' | grep -q .; then fail 'happy path has a non-PASS line'; fi
 grep -Fq 'evidence: ' <<<"$OUTPUT" || fail 'the evidence path was not printed'
-grep -Fxq -- '--user --scope --quiet -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% bash '"$REPO"'/scripts/deployment-document-check.sh' "$STUB/systemd-run.log" ||
-  fail 'the check did not run inside the capped scope'
+grep -Fxq -- '--timeout 900 -- bash '"$REPO"'/scripts/deployment-document-check.sh' "$STUB/run-capped.log" ||
+  fail 'the check did not run inside the watchdog'
 [ "$(grep -c . "$STUB/dc.log")" -eq 2 ] || fail 'document-check did not run once per URL'
 grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||
   fail 'now is not the Date header plus Age'

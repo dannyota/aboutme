@@ -19,7 +19,7 @@ validate_spec_dir() {
   [ -d "$dir" ] && [ ! -L "$dir" ] || fail 'spec input is not a real directory'
   [ "$(stat -c %u "$dir")" = "$uid" ] || fail 'spec input owner mismatch'
   [ "$(stat -c %a "$dir")" = 700 ] || fail 'spec input mode must be 0700'
-  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
   expected=$(printf '%s\n' "${SPEC_SOURCES[@]}" | sort)
   [ "$entries" = "$expected" ] || fail 'spec input must contain exactly the spec sources'
   for path in "${SPEC_SOURCES[@]}"; do
@@ -304,7 +304,7 @@ inside_container() {
   fi
 
   if [ "$production_sdk" -ne 1 ]; then
-    input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
       fail "$(mode_input_diagnostic "$mode")"
     if mode_is_totp_production "$mode"; then
@@ -445,7 +445,7 @@ inside_container() {
   local shard dir
   if [ "$mode" = totp ] && [ -n "${ABOUTME_TOTP_SHARD-}" ]; then
     IFS=, read -ra shards <<<"$ABOUTME_TOTP_SHARD"
-    evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     [ "$evidence_entries" = "$(printf '%s\n' "${shards[@]}" | sort)" ] ||
       fail 'browser produced unexpected evidence'
   fi
@@ -453,7 +453,7 @@ inside_container() {
     dir=/evidence${shard:+/$shard}
     [ -d "$dir" ] && [ ! -L "$dir" ] && [ "$(stat -c %u "$dir")" = "$uid" ] &&
       [ "$(stat -c %a "$dir")" = 700 ] || fail 'invalid browser evidence directory'
-    evidence_entries=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    evidence_entries=$(find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     [ "$evidence_entries" = "$(printf '%s\n' "${expected_evidence[@]}" | sort)" ] ||
       fail 'browser produced unexpected evidence'
     validate_evidence_file "$dir/$evidence_name" "$uid" "$evidence_limit" 'browser evidence'
@@ -546,7 +546,7 @@ host_run() {
   fi
 
   if [ "$production_sdk" -ne 1 ]; then
-    input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
       fail "$(mode_input_diagnostic "$mode")"
     if mode_is_totp_production "$mode"; then
