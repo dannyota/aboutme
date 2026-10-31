@@ -18,7 +18,7 @@ export interface PublicRenderWorkerOptions {
   ) => PublicRenderWorker;
 }
 
-export interface PublicRenderWorker {
+interface PublicRenderWorker {
   terminate: () => Promise<number>;
   on: Worker['on'];
   once: Worker['once'];

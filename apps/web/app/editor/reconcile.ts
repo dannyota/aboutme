@@ -6,7 +6,7 @@ import type { AcceptedResume, Projection, ResumeSnapshot } from './types';
 import { projectTemplateTarget } from './templateGroup';
 import type { TemplateGroupCommand } from './templateGroup';
 
-export type { ConflictConfirmation, ConflictKind } from './conflicts';
+export type { ConflictConfirmation } from './conflicts';
 
 export type ConflictRecord
   = | AtomicConflictRecord

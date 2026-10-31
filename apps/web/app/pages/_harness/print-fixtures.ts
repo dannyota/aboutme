@@ -21,8 +21,8 @@ const modernSidebar = (() => {
   return preset;
 })();
 
-export const MAIN_ENTRIES = 9;
-export const SIDEBAR_ENTRIES = 13;
+const MAIN_ENTRIES = 9;
+const SIDEBAR_ENTRIES = 13;
 
 const uuid = (flow: 'main' | 'sidebar', index: number): string =>
   `00000000-0000-4000-${flow === 'main' ? '9' : '8'}000-`

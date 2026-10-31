@@ -18,7 +18,7 @@ export type OAuthConsentDecision
 export type OAuthConsentScope = components['schemas']['OAuthConsentScope'];
 export type OAuthConsentView
   = components['schemas']['OAuthConsentResponse']['data'];
-export type OAuthConsentDecisionResult
+type OAuthConsentDecisionResult
   = components['schemas']['OAuthConsentDecisionResponse']['data'];
 
 export type OAuthConsentError
@@ -52,7 +52,7 @@ function codeOf(error: unknown): unknown {
 }
 
 /** Map only exact status/code pairs to the closed consent failure union. */
-export function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
+function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
   const status = statusOf(error);
   const code = codeOf(error);
   if (status === 401 && code === 'session_required') {

@@ -4,7 +4,7 @@ import type { AuthProvider } from './useAuth';
 
 export const MAX_ACCOUNT_EXPORT_BYTES = 12_582_912;
 
-export type AccountExportState
+type AccountExportState
   = | { readonly kind: 'idle' }
     | { readonly kind: 'pending' }
     | { readonly kind: 'error'; readonly error: AccountExportErrorKind };

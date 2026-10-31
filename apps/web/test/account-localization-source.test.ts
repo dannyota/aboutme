@@ -176,7 +176,6 @@ describe('account localization source guard', () => {
         'pages/reset-password.vue',
         'pages/verify-email.vue',
         'pages/app/resumes',
-        '../server/plugins/public-render-worker.ts',
         '../server/routes/internal-render',
         '../server/routes/print',
         '../server/utils/print',

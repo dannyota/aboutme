@@ -93,7 +93,6 @@ apps/web/app/components/editor/customization/CustomizationPanel.vue
 apps/web/app/components/editor/customization/PageSettings.vue
 apps/web/app/components/editor/customization/fields.ts
 apps/web/app/components/editor/customization/labels.ts
-apps/web/app/components/editor/customization/pageSettings.ts
 apps/web/app/components/editor/forms/ContactList.vue
 apps/web/app/components/editor/forms/DateRangeField.vue
 apps/web/app/components/editor/forms/PersonalDetailsPanel.vue
@@ -169,7 +168,6 @@ apps/web/app/components/resume/measure.ts
 apps/web/app/components/resume/pageMetrics.ts
 apps/web/app/components/resume/paginate.ts
 apps/web/app/components/resume/primitives/ContactChip.vue
-apps/web/app/components/resume/primitives/DateRange.vue
 apps/web/app/components/resume/primitives/EntryHeader.vue
 apps/web/app/components/resume/primitives/Icon.vue
 apps/web/app/components/resume/primitives/LevelWidget.vue
@@ -361,6 +359,7 @@ apps/web/app/editor/documentValidator.generated.d.ts
 apps/web/app/editor/documentValidator.generated.mjs
 apps/web/app/editor/languageTwin.ts
 apps/web/app/editor/pageCountObserver.ts
+apps/web/app/editor/pageSettings.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
 apps/web/app/editor/photoCrop.ts
@@ -693,7 +692,6 @@ apps/web/public/templates/pages/one-page-tight-en-p1.png
 apps/web/public/templates/pages/one-page-tight-vi-p1.png
 apps/web/public/theme-bootstrap.js
 apps/web/server/plugins/csp-externalize.ts
-apps/web/server/plugins/public-render-worker.ts
 apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts
 apps/web/server/routes/print/[id].get.ts

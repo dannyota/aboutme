@@ -10,7 +10,7 @@ import {
 
 export const PRINT_REDEMPTION_DEADLINE_MS = 5_000;
 
-export interface PrintRedemptionRequest {
+interface PrintRedemptionRequest {
   resumeId: string;
   jobId: string;
   capability: string;

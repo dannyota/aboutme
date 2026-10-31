@@ -13,7 +13,7 @@ const MAX_PDF_FILENAME_LENGTH = 64 + '-Resume.pdf'.length;
 const PDF_FILENAME = /^(?:[\p{L}\p{M}\p{N}]+-)*Resume\.pdf$/u;
 const RFC5987_VALUE = /^(?:[A-Za-z0-9!#$&+.^_`|~-]|%[0-9A-Fa-f]{2})*$/;
 
-export type PdfDownloadState
+type PdfDownloadState
   = | { readonly kind: 'idle' }
     | { readonly kind: 'pending' }
     | {
@@ -21,7 +21,7 @@ export type PdfDownloadState
       readonly code: PdfDownloadError;
     };
 
-export type PdfDownloadError
+type PdfDownloadError
   = | 'save-required'
     | 'session-lost'
     | 'download-failed'
@@ -49,7 +49,7 @@ export interface PdfDownloadControllerDeps {
   readonly openTab?: () => PdfTab | null;
 }
 
-export interface PdfTab {
+interface PdfTab {
   navigate(url: string): void;
   close(): void;
 }

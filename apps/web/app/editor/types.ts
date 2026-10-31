@@ -47,12 +47,12 @@ export type TemplateCustomizationProjection = Omit<
   readonly layout: Omit<Resume['customization']['layout'], 'sections'>;
 };
 
-export interface TemplateTargetProjection {
+interface TemplateTargetProjection {
   readonly placement: PlacementProjection;
   readonly customization: TemplateCustomizationProjection;
 }
 
-export type ContentIdentityProjection = readonly {
+type ContentIdentityProjection = readonly {
   readonly key: string;
   readonly sectionType: Section['sectionType'];
 }[];

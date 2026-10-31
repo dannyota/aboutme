@@ -10,16 +10,15 @@
 export const CARD_LAYOUT_VERSION = 2;
 
 export const CARD_WIDTH = 1200;
-export const CARD_HEIGHT = 630;
 
-export interface PreviewCardCrop {
+interface PreviewCardCrop {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export interface PreviewCardPhoto {
+interface PreviewCardPhoto {
   /**
    * A data:image/jpeg or data:image/png URL in print; the editor's photo
    * URL in the publish dialog.

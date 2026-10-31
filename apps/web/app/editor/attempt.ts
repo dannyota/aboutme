@@ -9,7 +9,7 @@ import type {
   ResumeMetadata,
 } from './types';
 
-export type ResumeOperation
+type ResumeOperation
   = | 'createResume'
     | 'updateResumeMetadata'
     | 'upsertResumeEntry'
@@ -23,7 +23,7 @@ export type ResumeOperation
     | 'deleteResumePhoto'
     | 'deleteResume';
 
-export type AttemptPayload
+type AttemptPayload
   = | { readonly kind: 'json'; readonly utf8: string }
     | { readonly kind: 'empty' }
     | { readonly kind: 'photo'; readonly file: File };

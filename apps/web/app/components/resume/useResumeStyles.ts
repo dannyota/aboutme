@@ -14,7 +14,6 @@ import {
 } from './pageMetrics';
 
 export type ResumeStyleTokens = Customization;
-export type { ResolvedPageGeometry } from './pageMetrics';
 
 export interface ResumeStyles {
   root: Record<string, string>;

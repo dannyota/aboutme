@@ -85,7 +85,7 @@ export type CustomizationSetPath
     | 'dateFormat'
     | 'colorScheme';
 
-export type CustomizationUnsetPath
+type CustomizationUnsetPath
   = | 'font.textAlign'
     | 'colorScheme'
     | 'colors.accent'
@@ -214,7 +214,7 @@ export { applyIntent } from './reducer';
 export { coalescePending } from './coalesce';
 export { equalProjection, projectCommand, projectIntent } from './projections';
 
-export function targetKey(
+function targetKey(
   intent: AtomicCommandIntent,
   sequence: number,
   resumeId?: string,

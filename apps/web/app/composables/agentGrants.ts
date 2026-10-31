@@ -40,7 +40,7 @@ function codeOf(error: unknown): unknown {
 }
 
 /** Map only the exact session and stale-grant pairs to public failures. */
-export function mapAgentGrantsError(error: unknown): AgentGrantsFailure {
+function mapAgentGrantsError(error: unknown): AgentGrantsFailure {
   const status = statusOf(error);
   const code = codeOf(error);
   if (status === 401 && code === 'session_required') {

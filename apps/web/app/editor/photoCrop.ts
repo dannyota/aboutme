@@ -66,7 +66,7 @@ export function zoomOf(image: ImageSize, crop: PhotoCrop): number {
 }
 
 /** The crop's centre in 0–1 image coordinates. */
-export function centreOf(crop: PhotoCrop): { cx: number; cy: number } {
+function centreOf(crop: PhotoCrop): { cx: number; cy: number } {
   return { cx: crop.x + crop.width / 2, cy: crop.y + crop.height / 2 };
 }
 

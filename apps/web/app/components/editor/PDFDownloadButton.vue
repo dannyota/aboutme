@@ -8,7 +8,7 @@ import { pdfCopy } from '../../i18n/pdf';
 import {
   PAGE_SIZE_SHORT,
   type PageFormat,
-} from './customization/pageSettings';
+} from '../../editor/pageSettings';
 
 const props = defineProps<{
   readonly controller: PdfDownloadController;

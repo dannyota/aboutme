@@ -8,7 +8,7 @@ import {
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-export interface CspViolation {
+interface CspViolation {
   readonly blockedURI: string;
   readonly effectiveDirective: string;
   readonly sourceFile: string;
@@ -243,7 +243,7 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
  * diff image to `diffPath` when they differ. Baselines are pinned exactly
  * (DESIGN.md; ADR 0020): any difference fails the assertion below.
  */
-export async function compareRaster(
+async function compareRaster(
   actual: Buffer,
   expected: Buffer,
   diffPath: string,

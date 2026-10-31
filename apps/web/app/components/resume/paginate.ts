@@ -25,13 +25,13 @@ export interface MeasuredBlock extends BlockRef {
   gapBeforePx: number;
 }
 
-export interface PlacedBlock extends BlockRef {
+interface PlacedBlock extends BlockRef {
   heightPx: number;
   appliedGapBeforePx: number;
   overflow: boolean;
 }
 
-export interface PlacedHeader {
+interface PlacedHeader {
   heightPx: number;
   bodyGapPx: number;
 }

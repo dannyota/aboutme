@@ -4,7 +4,7 @@
 // section is why the page has no framework-rendered fallback of its own.
 import type { Locale } from './locale';
 
-export type ErrorPageContent = {
+type ErrorPageContent = {
   readonly title: string;
   readonly description: string;
 };

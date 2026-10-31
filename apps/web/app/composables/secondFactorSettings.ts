@@ -379,7 +379,7 @@ export async function createPasskeyCredential(
 
 // --- Recovery-code download -----------------------------------------------
 
-export const RECOVERY_CODES_FILENAME = 'aboutme-recovery-codes.txt';
+const RECOVERY_CODES_FILENAME = 'aboutme-recovery-codes.txt';
 
 /**
  * The exact downloaded byte contract: UTF-8, no byte-order mark, LF line
