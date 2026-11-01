@@ -4,16 +4,17 @@ This harmless workflow measures the
 [anonymous prerequisite](../design/production-pull-deploy/README.md#anonymous-verification-prerequisite).
 It has no production connection, checkout, actions, credentials, or request
 asset. Both jobs only echo fixed text and have empty token permissions. The
-environment name and enrolled ID stand in for the production gate. The
-synthetic `v0.0.0` comment authorizes nothing outside this measurement.
+environment name and enrolled ID stand in for the production gate. The synthetic
+`v0.0.0` comment authorizes nothing outside this measurement.
 
 ## Prepare
 
 The primary lands the independently reviewed workflow on `main`, then creates
-`approval-probe` under repository **Settings → Environments** before dispatching:
+`approval-probe` under repository **Settings → Environments** before
+dispatching:
 
-1. Add `dannyota` as a required reviewer. Leave **Prevent self-review** unchecked.
-   Disable administrator bypass. Add no secrets or variables.
+1. Add `dannyota` as a required reviewer. Leave **Prevent self-review**
+   unchecked. Disable administrator bypass. Add no secrets or variables.
 2. Choose **Selected branches and tags**. Add exactly one **Branch** rule named
    `main`, with no tag rule. Save and inspect the settings again.
 3. Fill [the pins](../../scripts/approval-probe.json) with positive numeric
@@ -33,10 +34,11 @@ GET /users/dannyota
 ```
 
 GitHub supports one required reviewer and optional self-review prevention.
-Configure these settings explicitly; the three probe endpoints do not attest
-the environment's protection settings. See
+Configure these settings explicitly; the three probe endpoints do not attest the
+environment's protection settings. See
 [environment protections](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
-and [environment management](https://docs.github.com/en/rest/deployments/environments).
+and
+[environment management](https://docs.github.com/en/rest/deployments/environments).
 
 Use a separately reviewed checkout to run the checker, with Bash, Python 3, and
 curl on `PATH`. The script discards inherited environment variables for curl,
@@ -72,14 +74,14 @@ bash scripts/approval-probe.sh "$run_id" "$head_sha" "$request_hash"
 Exit 0 means `accept`; exit 1 means `refuse`. Standard output is one JSON object
 with a fixed `reason`, `requests_used`, and the latest valid response's numeric
 rate limit, remaining count, and reset epoch. No response body, user identity,
-comment, URL, or curl error is printed. Counters start null until headers verify.
-Capture only this verdict and the public run URL in the evidence record.
+comment, URL, or curl error is printed. Counters start null until headers
+verify. Capture only this verdict and the public run URL in the evidence record.
 
 The checker applies the design table to the probe's enrolled identities. It
 requires both successful attempt-one jobs in dependency order. It reads every
 approval page, counts relevant reviews without deduplication, and never selects
-a newest approval: the documented review object has no review timestamp.
-Any relevant rejection or wrong comment refuses regardless of list order.
+a newest approval: the documented review object has no review timestamp. Any
+relevant rejection or wrong comment refuses regardless of list order.
 Self-approval by an enrolled human is accepted deliberately.
 
 ## Scenarios
@@ -87,16 +89,16 @@ Self-approval by an enrolled human is accepted deliberately.
 Run each case separately. Wait for a terminal result in the UI; avoid API
 polling while waiting. Set the expected SHA and hash before each new dispatch.
 
-| Case | Procedure | Expected result |
-| --- | --- | --- |
-| Approve | An enrolled maintainer dispatches; the owner approves with the exact comment; both jobs finish. | `ACCEPTED` |
-| Self-approve | The owner dispatches and approves with the exact comment. | `ACCEPTED` |
-| Reject | The owner rejects at the waiting gate. | `APPROVAL_REJECTED` |
-| Cancel | Cancel a fresh run while it waits for approval; wait for the run to settle. | `RUN_CANCELLED` |
-| Rerun | Rerun all jobs of a finished approved run; inspect the same run ID after the attempt changes. | `RUN_ATTEMPT` |
-| Wrong comment | Approve a fresh dispatch with harmless text that differs from the expected comment. | `APPROVAL_COMMENT` |
-| Missing approval | Inspect a fresh run still waiting, then cancel it. Fixtures separately cover missing history on a successful run. | `RUN_INCOMPLETE`; fixture: `APPROVAL_MISSING` |
-| Pagination | Use the procedure below and retain the actual observed response shape. | Acceptance only with exactly one relevant approval across all pages |
+| Case             | Procedure                                                                                                         | Expected result                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Approve          | An enrolled maintainer dispatches; the owner approves with the exact comment; both jobs finish.                   | `ACCEPTED`                                                          |
+| Self-approve     | The owner dispatches and approves with the exact comment.                                                         | `ACCEPTED`                                                          |
+| Reject           | The owner rejects at the waiting gate.                                                                            | `APPROVAL_REJECTED`                                                 |
+| Cancel           | Cancel a fresh run while it waits for approval; wait for the run to settle.                                       | `RUN_CANCELLED`                                                     |
+| Rerun            | Rerun all jobs of a finished approved run; inspect the same run ID after the attempt changes.                     | `RUN_ATTEMPT`                                                       |
+| Wrong comment    | Approve a fresh dispatch with harmless text that differs from the expected comment.                               | `APPROVAL_COMMENT`                                                  |
+| Missing approval | Inspect a fresh run still waiting, then cancel it. Fixtures separately cover missing history on a successful run. | `RUN_INCOMPLETE`; fixture: `APPROVAL_MISSING`                       |
+| Pagination       | Use the procedure below and retain the actual observed response shape.                                            | Acceptance only with exactly one relevant approval across all pages |
 
 For approval by someone other than the dispatcher, use another enrolled
 maintainer to dispatch. If none is available, mark that observation unverified;
@@ -124,10 +126,10 @@ unverified and return the prerequisite to the owner; do not claim the full
 anonymous prerequisite has passed or build deployment machinery on that basis.
 Do not add another environment or workflow shape silently to manufacture it.
 
-HTTP failures, malformed JSON, missing fields, unsafe or looping links, duplicate
-identities, and unexpected jobs refuse. The hosted fixtures cover these paths,
-403/429 rate exhaustion, and conflicting approvals in either order. Do not
-exhaust the shared public rate limit to test 403 manually.
+HTTP failures, malformed JSON, missing fields, unsafe or looping links,
+duplicate identities, and unexpected jobs refuse. The hosted fixtures cover
+these paths, 403/429 rate exhaustion, and conflicting approvals in either order.
+Do not exhaust the shared public rate limit to test 403 manually.
 
 ## Budget and evidence
 
@@ -135,39 +137,39 @@ GitHub's anonymous core limit is
 [60 requests per hour per originating IP](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 All anonymous clients sharing that IP consume the same allowance. Use response
 headers to measure it; never assume a fresh allowance. A successful probe uses
-`1 run + P approval pages + 1 jobs page = P + 2` requests, normally three.
-Each invocation permits at most 12 requests and preserves at least 12 remaining
+`1 run + P approval pages + 1 jobs page = P + 2` requests, normally three. Each
+invocation permits at most 12 requests and preserves at least 12 remaining
 requests. It makes no retries and stops on 403, 429, or insufficient budget.
 Each request has a 5-second connect and 15-second total timeout.
 
 A proposed hourly complete-cycle envelope is:
 
-| Work | Maximum requests |
-| --- | ---: |
-| Discover approval runs twice | 2 |
-| Verify selected approval run, including up to two history pages | 4 |
-| Coordinator and release CI run discovery and detail | 4 |
-| Publication run discovery, detail, and jobs | 3 |
-| Release metadata and digest asset | 2 |
-| Repeat mutable approval, main-ref, and CI evidence before admission | 7 |
-| Observer GitHub reads | 8 |
-| Other clients sharing the IP | 6 |
-| Total | 36 |
-| Remaining from 60 | 24 |
+| Work                                                                | Maximum requests |
+| ------------------------------------------------------------------- | ---------------: |
+| Discover approval runs twice                                        |                2 |
+| Verify selected approval run, including up to two history pages     |                4 |
+| Coordinator and release CI run discovery and detail                 |                4 |
+| Publication run discovery, detail, and jobs                         |                3 |
+| Release metadata and digest asset                                   |                2 |
+| Repeat mutable approval, main-ref, and CI evidence before admission |                7 |
+| Observer GitHub reads                                               |                8 |
+| Other clients sharing the IP                                        |                6 |
+| Total                                                               |               36 |
+| Remaining from 60                                                   |               24 |
 
 This is a budget hypothesis, not measured feasibility. The primary must count
-every actual request, redirects and pages included, for a complete cycle.
-Record observer use and other clients on the same IP, plus starting/ending
-remaining counters and reset epochs. A larger actual count replaces this
-estimate. Cache immutable bytes, bound discovery frequency, and stop before
-the reserve is consumed. The probe alone cannot prove the CI, publication, or
-observer allowance. Revalidation within 120 seconds remains the
+every actual request, redirects and pages included, for a complete cycle. Record
+observer use and other clients on the same IP, plus starting/ending remaining
+counters and reset epochs. A larger actual count replaces this estimate. Cache
+immutable bytes, bound discovery frequency, and stop before the reserve is
+consumed. The probe alone cannot prove the CI, publication, or observer
+allowance. Revalidation within 120 seconds remains the
 [host contract](../design/production-pull-deploy/evidence.md).
 
-Fill [docs/research/approval-probe.md](../research/approval-probe.md) with sanitized
-observations. Include exact tested commit, config commit reference, public run
-URLs, UI-observed protections, scenario results, fixed verdict JSON, request
-counts, rate counters, and unresolved mappings. Store no raw API bodies,
+Fill [docs/research/approval-probe.md](../research/approval-probe.md) with
+sanitized observations. Include exact tested commit, config commit reference,
+public run URLs, UI-observed protections, scenario results, fixed verdict JSON,
+request counts, rate counters, and unresolved mappings. Store no raw API bodies,
 headers, review comments, login/profile data, tokens, or local environment.
 Distinguish hosted fixture evidence from live GitHub observations. The evidence
 template starts empty and makes no claim of success.
