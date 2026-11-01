@@ -48,7 +48,9 @@ http=200
 case "$http" in 4??|5??|000) rc=22 ;; esac
 if "$write_out"; then printf '%s' "$http"; fi
 if [ "$rc" -ne 0 ]; then
-  printf '%s\n' 'fake-token hostile-secret https://private.invalid/issue' >&2
+  if [ -f "$state/curl-error" ]; then cat "$state/curl-error" >&2; else
+    printf '%s\n' 'fake-token hostile-secret https://private.invalid/issue' >&2
+  fi
   exit "$rc"
 fi
 if [ "$method" = PATCH ]; then
@@ -57,7 +59,10 @@ if [ "$method" = PATCH ]; then
   fi
   case "$data" in *open*) if [ -f "$state/interrupt-open" ]; then kill -TERM "$PPID"; exit 1; fi ;; esac
 fi
-if [ -f "$state/invalid-issue" ]; then printf '%s\n' 'invalid' > "$out"; else
+if [ -f "$state/issue-response" ]; then cat "$state/issue-response" > "$out"
+elif [ -f "$state/issue-body" ]; then
+  jq -cn --arg state "$(cat "$state/issue")" --rawfile body "$state/issue-body" '{state:$state,body:$body}' > "$out"
+elif [ -f "$state/invalid-issue" ]; then printf '%s\n' 'invalid' > "$out"; else
   printf '{"state":"%s"}\n' "$(cat "$state/issue")" > "$out"
 fi
 SH
@@ -81,6 +86,9 @@ esac
 cat "$state/$fixture"
 if [ -f "$state/$fixture-error" ]; then cat "$state/$fixture-error" >&2; else
   printf '%s\n' "$VNGCLOUD_CLIENT_ID $VNGCLOUD_CLIENT_SECRET $VNGCLOUD_PROJECT_ID hostile-secret" >&2
+fi
+if [ -f "$state/$fixture-invalid-exit" ]; then
+  (exit "$(cat "$state/$fixture-invalid-exit")") || :
 fi
 if [ "$fixture" = outcome ]; then exit "$(cat "$state/exit")"; fi
 [ ! -f "$state/$fixture-exit" ] || exit "$(cat "$state/$fixture-exit")"
@@ -140,6 +148,14 @@ assert_count() {
   local expected=$1 pattern=$2 count
   count=$(grep -c -- "$pattern" "$tmp/state/argv" 2>/dev/null || :)
   [ "$count" -eq "$expected" ] || { printf 'wrong count for %s: %s\n' "$pattern" "$count" >&2; exit 1; }
+}
+assert_hold_and_sends() {
+  local hold=$1 sends=$2 writes=$3 count
+  cmp -s "$tmp/expected-output" "$tmp/output" || { printf '%s\n' 'unexpected stdout' >&2; exit 1; }
+  [ "$(cat "$tmp/state/issue")" = "$hold" ]
+  assert_count "$sends" renew-synthetic-quota
+  count=$(grep -c -- '-X PATCH' "$tmp/state/curl-argv" || :)
+  [ "$count" -eq "$writes" ] || { printf '%s\n' 'unexpected issue write count' >&2; exit 1; }
 }
 reset_case
 run 0 renew
@@ -504,4 +520,88 @@ run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=other'
 reset_case
 echo 124 > "$tmp/state/exit"
 run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=124 code=other'
+# Structured codes cannot carry terminal controls or oversized text into diagnostics.
+for code in '"Forbidden\u001b[31m"' '("x" * 65536)'; do
+  for fixture in status outcome status-after; do
+    reset_case
+    if [ "$fixture" = outcome ]; then
+      change outcome ".Sent = \"no\" | .Stage = \"preflight\" | .Renewed = false | .Error = {Code:$code,Operation:\"monitor.RenewSyntheticQuota\",Status:0}"
+      echo 1 > "$tmp/state/exit"
+      run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=other'
+      assert_hold_and_sends open 1 1
+    else
+      change "$fixture" ".Complete = false | .Items[0].Status = \"unavailable\" | .Items[0].Error = {Code:$code,Operation:\"monitor.GetSyntheticQuota\",Status:403}"
+      echo 1 > "$tmp/state/$fixture-exit"
+      if [ "$fixture" = status ]; then
+        run 1 check 'Synthetic quota diagnostic: stage=status-read cli-exit=1 code=other'
+        assert_hold_and_sends closed 0 0
+      else
+        run 1 renew 'Synthetic quota diagnostic: stage=readback cli-exit=1 code=other'
+        assert_hold_and_sends closed 1 2
+      fi
+    fi
+  done
+done
+# Exercise shell-generated stderr with an explicit numeric CLI exit.
+for fixture in get status outcome status-after; do
+  reset_case
+  exit_file=$fixture-exit
+  [ "$fixture" != outcome ] || exit_file=exit
+  printf '%s\n' $'1\n::error::fake-secret' > "$tmp/state/$fixture-invalid-exit"
+  echo 2 > "$tmp/state/$exit_file"
+  case "$fixture" in
+    get)
+      run 1 check 'Synthetic quota diagnostic: stage=quota-read cli-exit=2 code=other'
+      assert_hold_and_sends closed 0 0 ;;
+    status)
+      run 1 check 'Synthetic quota diagnostic: stage=status-read cli-exit=2 code=other'
+      assert_hold_and_sends closed 0 0 ;;
+    outcome)
+      run 2 renew 'Synthetic quota diagnostic: stage=renew cli-exit=2 code=other'
+      assert_hold_and_sends open 1 1 ;;
+    status-after)
+      run 1 renew 'Synthetic quota diagnostic: stage=readback cli-exit=2 code=other'
+      assert_hold_and_sends closed 1 2 ;;
+  esac
+done
+hostile=$'\n::error::fake-secret\n\033[31mhostile-secret'
+for action in check renew; do
+  for field in state response body; do
+    reset_case
+    case "$field" in
+      state) jq -cn --arg state "closed$hostile" '{state:$state}' > "$tmp/state/issue-response" ;;
+      response) printf '%s\n' "$hostile" > "$tmp/state/issue-response" ;;
+      body) printf '%s\n' "$hostile" > "$tmp/state/issue-body" ;;
+    esac
+    if [ "$field" = body ]; then
+      run 0 "$action"
+      if [ "$action" = check ]; then assert_hold_and_sends closed 0 0; else assert_hold_and_sends closed 1 2; fi
+    else
+      run 1 "$action" 'Synthetic quota diagnostic: stage=issue-read http=2xx'
+      assert_hold_and_sends closed 0 0
+    fi
+  done
+done
+for method in GET PATCH; do
+  for stream in http error; do
+    reset_case
+    class=none
+    hold=closed
+    if [ "$stream" = http ]; then
+      printf '%s\n' "200$hostile" > "$tmp/state/http-$method"
+      [ "$method" != PATCH ] || hold=open
+    else
+      printf '%s\n' "$hostile" > "$tmp/state/curl-error"
+      : > "$tmp/state/curl-fail-$method"
+      class=5xx
+    fi
+    if [ "$method" = GET ]; then
+      run 1 renew "Synthetic quota diagnostic: stage=issue-read http=$class"
+      assert_hold_and_sends closed 0 0
+    else
+      run 1 renew "Synthetic quota diagnostic: stage=issue-write http=$class"
+      assert_hold_and_sends "$hold" 0 1
+    fi
+  done
+done
 printf '%s\n' 'vMonitor renewal tests passed' 
