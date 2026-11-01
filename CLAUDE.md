@@ -14,7 +14,8 @@
 ## Commands
 
 - Before every push: `make pre-push` (static checks only, capped).
-- Land: `gh pr create --draft --base main` while iterating; `gh pr ready <n>` when complete. Follow [workflow](instructions/workflow.md#flow) for green exact-head CI, independent Codex review, and the signed local merge or train.
+- Owner landing gate: `make ci-local` under the shared lock and memory cap; follow [workflow](instructions/workflow.md#flow).
+- Land: `gh pr create --draft --base main` while iterating; `gh pr ready <n>` when complete. Follow [workflow](instructions/workflow.md#flow) for the landing gates, independent Codex review, and the signed local merge or train.
 - Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
 - Troubleshoot: save each failing job's whole log with `gh run view <run> --job <job> --log > <scratchpad>/run-<run>-<job>.log` and the run's artifacts with `gh run download <run> -D <scratchpad>/run-<run>`, then dispatch `troubleshooter` with those paths.
 - For a finished job while its run is still in progress, get its log with `gh api --allow-escape-sequences repos/dannyota/aboutme/actions/jobs/<job-id>/logs` and strip ANSI codes; `gh run view --log` refuses until the run completes.

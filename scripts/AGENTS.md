@@ -6,7 +6,7 @@ The primary owns shared script entry points and manifests and assigns exact path
 
 |Family|Sources and tests|
 |-|-|
-|CI and scans|`ci.sh`, `ci-background.sh`, `ci-browser-proofs.sh`, `scan.sh`, `security-scan.sh`; corresponding `test/` suites|
+|CI and scans|`ci.sh`, `ci-local.sh`, `ci-background.sh`, `ci-browser-proofs.sh`, `scan.sh`, `security-scan.sh`; corresponding `test/` suites|
 |Static guards|`pre-push.sh`, `check-lengths.sh`, `check-tool-versions.sh`, `check-migrations-append-only.sh`, `check-released-schemas.sh`; regression suites under `test/`|
 |Documentation|`check-doc-links.mjs` and `test/check-doc-links.test.mjs`|
 |Local stacks and proofs|`dev-native.sh`, `dev-https.sh`, `lib/`, `dev-https-test.sh`, and browser staging helpers|

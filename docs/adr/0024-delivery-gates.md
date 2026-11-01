@@ -1,20 +1,7 @@
-# 0024: GitHub CI is the full delivery gate
+# 0024: Delivery gates
 
 Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
 2026-11-01), by the owner's repository policy.
-
-## Context
-
-Delivery once applied the same ceremony to every change: blind test authors,
-per-task reviewers, frozen acceptance catalogs, and five phase gates, and then a
-full local `make ci` as the gate of record. Most of the cost bought little for a
-pre-release codebase with one owner, and the laptop lost work to out-of-memory
-failures running full suites.
-
-A tag and deployment must refer to the exact commit that passed every required
-hosted check. A later commit cannot inherit an earlier commit's green result.
-The repository is public, so a secret in history is exposed on push and cannot
-be recalled.
 
 ## Decision
 
@@ -36,11 +23,11 @@ be recalled.
   beyond one line (authentication, sessions, CSRF, sanitizing, concurrency and
   CAS, idempotency, media privacy, publish revocation) needs the reviewer to
   confirm those invariants by name.
-- **GitHub CI is the full gate.** `ci.yml` runs checks per job, including
-  builds, typechecks, tests, linters, browser proofs, and VN infrastructure. The
-  `contracts` job runs full-history gitleaks. The aggregate `ci` job is the only
-  required check on `main`. Hosted CI never calls `make ci`. A red run is fixed
-  forward at once.
+- **GitHub CI is the main push and release gate.** `ci.yml` runs checks per job,
+  including builds, typechecks, tests, linters, browser proofs, and VN
+  infrastructure. The `contracts` job runs full-history gitleaks. The aggregate
+  `ci` job is the only required check on `main`. Hosted CI never calls
+  `make ci`. A red run is fixed forward at once.
 - **Narrow pull request selection.** Only pull requests whose entire change
   matches the [prose allowlist](../design/ci-path-selection.md#selection) may
   omit the named application and infrastructure jobs. Preflight, all contracts,
@@ -51,14 +38,19 @@ be recalled.
   failures, cancellations, missing outputs, and unexplained skips fail it.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for a green main push run on that exact commit.
-- **No full local gate.** Full local `make ci` is prohibited, including while
-  debugging a CI failure. The manager may scope one local diagnostic process
-  across all worktrees, using the shared lock, the total RAM minus 10 GiB
-  watchdog, nice level 10, and a time limit. See the
-  [resource rules](../../instructions/resources.md) for enforcement and limits.
-  Prefer a hosted rerun when hosted evidence can answer the question. Diagnose a
-  failed or out-of-memory command before any local rerun; never repeat it
-  unchanged to seek a pass.
+- **Owner local landing gate.** Accepted 2026-11-01: the owner may land after a
+  passing `make ci-local` on his Mac under the shared lock and the total RAM
+  minus 10 GiB watchdog, using an admin-only bypass on `main-required-ci`. Other
+  contributors need a pull request and green CI. This change implements the
+  local command; the primary applies the ruleset bypass after it lands. Browser,
+  pixel, and VN infrastructure suites run only in GitHub CI; failures on the
+  main push are fixed forward. The local gate does not authorize a tag or
+  deployment without green CI on the exact main push commit.
+- **Bounded local work.** The primary uses the shared lock, the watchdog, nice
+  level 10, and a time limit for local checks. See the
+  [resource rules](../../instructions/resources.md). Diagnose a failed or
+  out-of-memory command before rerunning it; never repeat it unchanged to seek a
+  pass.
 - **Reuse evidence.** The manager and reviewer reuse check evidence from the
   exact commit under review and do not duplicate a check for role-specific
   evidence.
@@ -71,7 +63,28 @@ be recalled.
   unsatisfiable, or tests the wrong thing is fixed when found, with the change
   noted.
 
+**Code scanning.** CodeQL uses `security-extended` for Go and
+JavaScript/TypeScript on main pushes, every Monday at 03:00 UTC, and manual
+dispatch. It is non-blocking and runs outside the required `ci` check; review
+alerts in GitHub's Security tab. CI references no stored secrets; GitHub's
+per-run `GITHUB_TOKEN` remains allowed.
+
+ESLint enforces the [sanitizer control](0008-ssr-sanitizer-authority.md).
+Forbidigo guards trusted HTML conversions. String-built pgx SQL has no blocking
+lint; queries come from sqlc static SQL files, and CodeQL runs SQL injection
+queries on main pushes and weekly. CodeQL covers insecure cookies. Full-history
+gitleaks, npm audit, and govulncheck retain their CI gates. `make scan` runs
+full-history gitleaks locally.
+
 `AGENTS.md` and `instructions/` carry the operational detail.
+
+## Context
+
+A tag and deployment must refer to the exact commit that passed every required
+hosted check. A later commit cannot inherit an earlier commit's green result.
+The repository is public, so a secret in history is exposed on push and cannot
+be recalled. A capped local gate gives the owner a faster landing path while
+full hosted checks remain the release authority.
 
 ## Compatibility, security, and size
 
@@ -95,30 +108,13 @@ the shared laptop.
   release. Application clients and stored data need no migration.
 - An independent acceptance pass returns only through a new ADR.
 
-## Amendment: One-line review exemption (2026-10-10)
-
-The owner decided that one-line changes skip the reviewer pass, including
-production DNS. The manager shows plan or diff evidence instead. Hosted CI and
-the exact green commit gate still apply. The exemption keeps review effort
-proportional to the change.
-
-## Amendment: Code scanning without stored secrets (2026-11-01)
-
-The owner removed Semgrep Code, Supply Chain, its token, and the custom rules.
-CodeQL uses `security-extended` for Go and JavaScript/TypeScript on main pushes,
-every Monday at 03:00 UTC, and manual dispatch. It is non-blocking code scanning
-outside the required `ci` check; review alerts in GitHub's Security tab. CI
-references no stored secrets; GitHub's per-run `GITHUB_TOKEN` remains allowed.
-
-ESLint enforces the [sanitizer control](0008-ssr-sanitizer-authority.md).
-Forbidigo guards trusted HTML conversions. String-built pgx SQL has no blocking
-lint; queries come from sqlc static SQL files, and CodeQL runs SQL injection
-queries on main pushes and weekly. The custom cookie flags and response writer
-`Unwrap` checks are dropped; CodeQL covers insecure cookies. Full-history
-gitleaks, npm audit, and govulncheck retain their existing CI gates. `make scan`
-runs full-history gitleaks locally.
-
 ## History
+
+### Amendment: One-line review exemption (2026-10-10)
+
+The owner exempted one-line changes, including production DNS, from the reviewer
+pass and required manager plan or diff evidence instead. The current review rule
+above retains this exemption.
 
 - Former ADR 0011 (2026-08-11): risk-tiered review, two phase gates, local
   `make ci` as the gate of record, per-commit gitleaks, phase-batched Semgrep,
@@ -151,3 +147,7 @@ runs full-history gitleaks locally.
 - 2026-11-01: The owner removed Semgrep and its token, selected non-blocking
   CodeQL on main pushes and weekly, and required CI to hold no stored secrets.
   ESLint and forbidigo carry the retained HTML controls.
+- 2026-11-01: The owner accepted the capped local landing gate and admin-only
+  bypass for his Mac, retaining full main push CI and the exact-commit release
+  gate. The command is implemented in this change; the primary applies the
+  bypass after landing.
