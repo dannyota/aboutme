@@ -14,7 +14,7 @@
 # The manager runs it after a deploy or an observer update. Evidence goes to
 # .dev/prod-checks/transparency/<UTC time>/ with a summary.txt of PASS and
 # FAIL lines; the exit status is 0 only when every check passed. It holds
-# the shared local-check lock in a parent and runs through run-capped.sh.
+# the shared local-check lock in a parent and runs through run-owned.sh.
 #
 # Test overrides: ABOUTME_LOCAL_CHECK_LOCK_PATH selects a scratch lock;
 # ABOUTME_DOCUMENT_CHECK_BIN selects a prebuilt document-check binary.
@@ -37,7 +37,7 @@ fail() {
 [ "$#" -eq 0 ] || fail 'usage: deployment-document-check.sh (no arguments)'
 [ "$(id -u)" -ne 0 ] || fail 'must not run as root'
 
-# --- Preflight and cap ------------------------------------------------------
+# --- Preflight and deadline ------------------------------------------------------
 
 # shellcheck source=scripts/lib/platform.sh
 source "$REPO/scripts/lib/platform.sh"
@@ -46,7 +46,7 @@ require_gnu_tools date || exit 1
 if [ -z "${ABOUTME_DOCUMENT_CHECK_SCOPED:-}" ]; then
   LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
   exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
-    env ABOUTME_DOCUMENT_CHECK_SCOPED=1 bash "$REPO/scripts/run-capped.sh" \
+    env ABOUTME_DOCUMENT_CHECK_SCOPED=1 bash "$REPO/scripts/run-owned.sh" \
     --timeout 900 -- bash "$REPO/scripts/deployment-document-check.sh"
 fi
 
@@ -96,7 +96,7 @@ else
   DOC_CHECK=$BUILD/document-check
   (
     cd "$REPO/deploy/observer"
-    GOWORK=off bash "$REPO/scripts/run-capped.sh" --timeout 300 -- go build -o "$DOC_CHECK" ./cmd/document-check
+    GOWORK=off bash "$REPO/scripts/run-owned.sh" --timeout 300 -- go build -o "$DOC_CHECK" ./cmd/document-check
   ) >"$EVIDENCE/build.txt" 2>&1 || {
     record FAIL 'build document-check'
     finish
@@ -183,7 +183,7 @@ done
 verify() { # verify <outfile> <image> <digest> <version> [extra args]
   local out=$1 image=$2 digest=$3 version=$4
   shift 4
-  env -u GH_DEBUG bash "$REPO/scripts/run-capped.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
+  env -u GH_DEBUG bash "$REPO/scripts/run-owned.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
     --repo dannyota/aboutme --signer-workflow "$SIGNER" \
     --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" \
     >"$out" 2>&1

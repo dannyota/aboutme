@@ -25,10 +25,10 @@ cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$REPO/scr
 FIXTURE=$ROOT/deploy/observer/testdata/examples/verified.json
 [ -f "$FIXTURE" ] || fail 'the verified.json fixture is missing'
 
-cat >"$REPO/scripts/run-capped.sh" <<'STUBEOF'
+cat >"$REPO/scripts/run-owned.sh" <<'STUBEOF'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >>"$STUB/run-capped.log"
-[ "${RUN_CAPPED_TOTAL_KIB:-}" != invalid ] || { echo 'refused: cannot establish memory limit' >&2; exit 125; }
+printf '%s\n' "$*" >>"$STUB/run-owned.log"
+[ "${STUB_OWNED_REFUSAL:-}" != invalid ] || { echo 'refused: cannot inspect process ownership' >&2; exit 125; }
 shift 3
 exec "$@"
 STUBEOF
@@ -129,15 +129,26 @@ reset
 run_check extra
 expect_refusal 'an argument was accepted' 'usage: deployment-document-check.sh'
 
-RUN_CAPPED_TOTAL_KIB=invalid run_check
-expect_refusal 'missing total memory was accepted' 'refused: cannot establish memory limit'
+STUB_OWNED_REFUSAL=invalid run_check
+expect_refusal 'missing process ownership was accepted' 'refused: cannot inspect process ownership'
 
-exec {HELD_FD}>>"$LOCK_PATH"
-flock "$HELD_FD"
+python3 -B - "$LOCK_PATH" "$WORK/lock-ready" <<'LOCK' &
+import fcntl, pathlib, sys, time
+with open(sys.argv[1], "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    pathlib.Path(sys.argv[2]).touch()
+    time.sleep(30)
+LOCK
+holder=$!
+for ((i=0; i<200; i++)); do
+  [ ! -f "$WORK/lock-ready" ] || break
+  sleep 0.05
+done
+[ -f "$WORK/lock-ready" ] || fail 'lock holder never started'
 run_check
+kill "$holder"
+wait "$holder" || true
 expect_refusal 'a held shared lock was accepted' 'another local check holds the shared lock'
-flock -u "$HELD_FD"
-exec {HELD_FD}>&-
 
 touch "$STUB/gh-auth-fail"
 run_check
@@ -151,7 +162,7 @@ run_check
 summary | grep -q . || fail 'summary.txt is empty'
 if summary | grep -v '^PASS ' | grep -q .; then fail 'happy path has a non-PASS line'; fi
 grep -Fq 'evidence: ' <<<"$OUTPUT" || fail 'the evidence path was not printed'
-grep -Fxq -- '--timeout 900 -- bash '"$REPO"'/scripts/deployment-document-check.sh' "$STUB/run-capped.log" ||
+grep -Fxq -- '--timeout 900 -- bash '"$REPO"'/scripts/deployment-document-check.sh' "$STUB/run-owned.log" ||
   fail 'the check did not run inside the watchdog'
 [ "$(grep -c . "$STUB/dc.log")" -eq 2 ] || fail 'document-check did not run once per URL'
 grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||

@@ -17,7 +17,7 @@
 # It takes the shared local-check lock itself without blocking and holds it
 # until it exits. Child processes never inherit the lock descriptor, so a
 # container helper cannot keep the lock after the run. It also checks the
-# stack quiescence and uses run-capped.sh for the whole command tree.
+# stack quiescence and uses run-owned.sh for the whole command tree.
 # Do not wrap it in another lock on the same file.
 set -Eeuo pipefail
 
@@ -77,12 +77,17 @@ for pidfile in "$REPO"/.dev/*.pid "$REPO"/.dev/native-https/run/*.pid; do
     fail 'an aboutme development stack is active; stop it first'
 done
 
+for record in "$REPO"/.dev/native-https/run/session*; do
+  [ ! -e "$record" ] && [ ! -L "$record" ] ||
+    fail 'development session state exists; stop the stack before a production proof'
+done
+
 # --- Shared lock and watchdog -----------------------------------------------
 
 if [ -z "${ABOUTME_TOTP_PROOF_CAPPED:-}" ]; then
   LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
   exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
-    env ABOUTME_TOTP_PROOF_CAPPED=1 bash "$REPO/scripts/run-capped.sh" \
+    env ABOUTME_TOTP_PROOF_CAPPED=1 bash "$REPO/scripts/run-owned.sh" \
     --timeout 4200 -- bash "$REPO/scripts/totp-production-proof.sh" "$MODE"
 fi
 
@@ -110,7 +115,7 @@ stage_dev_https_browser_specs "$CONTEXT" "$staging" ||
 # --- Build the pinned image once, then run the staged proof -----------------
 
 iidfile=$(mktemp "$REPO/.dev/v0.4.7/totp-prod-iid.XXXXXX")
-if ! bash "$REPO/scripts/run-capped.sh" --timeout 600 -- \
+if ! bash "$REPO/scripts/run-owned.sh" --timeout 600 -- \
   podman build \
   --iidfile "$iidfile" "$CONTEXT" >&2; then
   rm -f -- "$iidfile"
@@ -123,5 +128,5 @@ rm -f -- "$iidfile"
 
 printf 'totp-production-proof: image %s\n' "$image_id" >&2
 
-bash "$REPO/scripts/run-capped.sh" --timeout 3600 -- \
+bash "$REPO/scripts/run-owned.sh" --timeout 3600 -- \
   "$CONTEXT/run.sh" "$image_id" "$ACCOUNT_DIR" "$staging" "$EVIDENCE_DIR" "$MODE"
