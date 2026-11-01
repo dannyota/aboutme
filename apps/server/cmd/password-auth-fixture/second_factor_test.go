@@ -101,6 +101,10 @@ func TestSecondFactorCredentialsHaveClosedRolesAndReservedAccounts(t *testing.T)
 func privateFactorDirectory(t *testing.T) string {
 	t.Helper()
 	path := t.TempDir()
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if modeErr := os.Chmod(path, 0o700); modeErr != nil {
 		t.Fatal(modeErr)
 	}

@@ -6,6 +6,8 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-security-scan.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/bin"
+ln -s "$(command -v bash)" "$WORK/bin/bash"
+ln -s "$(command -v jq)" "$WORK/bin/jq"
 export FIXTURE_DIR="$WORK" CALL_LOG="$WORK/calls" API_LOG="$WORK/api"
 export PATH="$WORK/bin:/usr/bin:/bin"
 
@@ -172,9 +174,9 @@ printf 'ok - unpublished releases and missing or invalid assets fail closed\n'
 for mutation in missing duplicate malformed; do
   fixture
   case $mutation in
-  missing) sed -i '/aboutme-observer@.*linux\/arm64$/d' "$WORK/digests.txt" ;;
+  missing) sed '/aboutme-observer@.*linux\/arm64$/d' "$WORK/digests.txt" >"$WORK/changed-digests"; mv "$WORK/changed-digests" "$WORK/digests.txt" ;;
   duplicate) grep 'aboutme-observer@.*linux/arm64$' "$WORK/digests.txt" >>"$WORK/extra"; cat "$WORK/extra" >>"$WORK/digests.txt" ;;
-  malformed) sed -i 's/aboutme-observer@sha256:/aboutme-observer@invalid:/' "$WORK/digests.txt" ;;
+  malformed) sed 's/aboutme-observer@sha256:/aboutme-observer@invalid:/' "$WORK/digests.txt" >"$WORK/changed-digests"; mv "$WORK/changed-digests" "$WORK/digests.txt" ;;
   esac
   run_scan
   expect_status failure

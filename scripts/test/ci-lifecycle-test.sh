@@ -79,13 +79,14 @@ exit 0
 EOF
   chmod +x "$bin/make"
 
-  /usr/bin/setsid /usr/bin/env PATH="$bin:/usr/bin:/bin" \
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    /usr/bin/env PATH="$bin:/usr/bin:/bin" \
     CALL_LOG="$calls" READY_FILE="$ready" \
     /bin/bash "$repo/scripts/ci.sh" --fast >"$output" 2>&1 &
   pid=$!
 
   for i in $(seq 1 100); do
-    if [ -f "$ready" ] && [ "$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ')" = "$pid" ]; then
+    if [ -f "$ready" ] && [ "$(ps -o sess= -p "$pid" 2>/dev/null | tr -d ' ')" = "$pid" ]; then
       break
     fi
     sleep 0.02

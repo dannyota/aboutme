@@ -19,12 +19,17 @@ cat >"$BIN/podman" <<'EOF'
 #!/usr/bin/env bash
 printf 'podman %s\n' "$*" >>"$CALL_LOG"
 if [ "${1:-}" = ps ]; then
-  if [ "${PODMAN_PS_MODE:-fail}" = compose-db ]; then
-    printf '%s\n' 'aboutme-postgres-1|aboutme|postgres'
-    exit 0
-  fi
-  exit 17
+  case ${PODMAN_PS_MODE:-fail} in
+    compose-db) printf '%s\n' '[{"Names":["aboutme-postgres-1"],"Labels":{"com.docker.compose.project":"aboutme","com.docker.compose.service":"postgres"}}]' ;;
+    unrelated) printf '%s\n' '[{"Names":["radar-postgres"],"Labels":{"com.docker.compose.project":"radar","com.docker.compose.service":"postgres"}}]' ;;
+    malformed) printf '%s\n' 'not json' ;;
+    missing-labels) printf '%s\n' '[{"Names":["aboutme-postgres-1"]}]' ;;
+    invalid-labels) printf '%s\n' '[{"Names":["aboutme-postgres-1"],"Labels":[]}]' ;;
+    *) exit 17 ;;
+  esac
+  exit 0
 fi
+if [ "${1:-}" = run ]; then exit 19; fi
 exit 0
 EOF
 
@@ -329,6 +334,18 @@ if grep -Eq '^podman run([[:space:]]|$)' "$CALLS"; then
   printf 'makefile-safety-test: test-db-up started a second Postgres\n' >&2
   exit 1
 fi
+
+for mode in unrelated malformed missing-labels invalid-labels; do
+  : >"$CALLS"
+  (cd "$REPO" && PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" PODMAN_PS_MODE="$mode" \
+    /usr/bin/make --no-print-directory test-db-up) >"$WORK/$mode.out" 2>&1 || true
+  if [ "$mode" = unrelated ]; then
+    grep -q '^podman run ' "$CALLS" || { echo 'unrelated project blocked test database' >&2; exit 1; }
+  elif grep -q '^podman run ' "$CALLS"; then
+    echo 'malformed inspection allowed container mutation' >&2
+    exit 1
+  fi
+done
 
 printf 'Makefile container-discovery safety tests passed\n'
 

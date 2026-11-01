@@ -68,6 +68,10 @@ if [ "${1:-}" = ps ]; then
 fi
 exit 64
 EOF
+cat >"$BIN/uname" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${FIXTURE_PLATFORM:-Linux}"
+EOF
 chmod +x "$BIN"/*
 
 assert_ci_failure() {
@@ -94,6 +98,8 @@ assert_ci_failure 'go tidy middle command' 'go mod tidy' --fast \
   /usr/bin/env FAIL_GO_TIDY=1
 assert_ci_failure 'database first command' 'database suites' '' \
   /usr/bin/env FAIL_MAKE_TARGET=server-test-integration
+assert_ci_failure 'S3 startup command' 'S3 media and resume API suites' '' \
+  /usr/bin/env FAIL_MAKE_TARGET=test-s3-up
 assert_ci_failure 'web source manifest build' web '' \
   /usr/bin/env FAIL_MAKE_TARGET=web-source-build
 assert_ci_failure 'migration diff command' 'migrations append-only' --fast \
@@ -102,5 +108,13 @@ assert_ci_failure 'released schema diff command' 'released schemas append-only' 
   /usr/bin/env FAIL_GIT_DIFF_PATH=packages/schema/resume.v\*.schema.json
 assert_ci_failure 'upstream resolution command' 'migrations append-only' --fast \
   /usr/bin/env FAIL_GIT_REVPARSE=1
+
+: >"$CALLS"
+/usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" FIXTURE_PLATFORM=Darwin \
+  /bin/bash "$REPO/scripts/ci.sh" >"$WORK/darwin.out" 2>&1
+grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/darwin.out"
+grep -Fq 'Skipping S3 suites: their host-networked MinIO client needs Linux; CI covers them.' "$WORK/darwin.out"
+grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
+! grep -Fqx 'make test-s3-up' "$CALLS"
 
 printf 'CI failure-propagation tests passed\n'

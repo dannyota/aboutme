@@ -474,15 +474,15 @@ native-http-check: ## Run the deterministic native public HTTP capture and retai
 	bash scripts/native-http-capture.sh
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
-	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.service"}}')"; then \
+	@if ! container_json="$$(podman ps --format json)" || ! running_containers="$$(printf '%s' "$$container_json" | python3 -I -c 'import json, sys; rows = json.load(sys.stdin); assert isinstance(rows, list); assert all(isinstance(r, dict) and isinstance(r.get("Names"), list) and r["Names"] and all(isinstance(n, str) and n for n in r["Names"]) and "Labels" in r and (r["Labels"] is None or isinstance(r["Labels"], dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in r["Labels"].items())) for r in rows); print("\n".join("compose" for r in rows if any(n != "aboutme-test-db" for n in r["Names"]) and (r["Labels"] or {}).get("com.docker.compose.project") == "aboutme" and (r["Labels"] or {}).get("com.docker.compose.service") == "postgres")); print("\n".join("shared" for r in rows if "aboutme-test-db" in r["Names"]))')"; then \
 	  echo "test-db-up: cannot inspect running containers; refusing to start Postgres." >&2; \
 	  exit 1; \
 	fi; \
-	if awk -F '|' '$$1 != "aboutme-test-db" && $$2 == "aboutme" && $$3 == "postgres" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
+	if grep -qx compose <<<"$$running_containers"; then \
 	  echo "test-db-up: the Compose Postgres service is running; stop it before starting the shared database." >&2; \
 	  exit 1; \
 	fi; \
-	if awk -F '|' '$$1 == "aboutme-test-db" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
+	if grep -qx shared <<<"$$running_containers"; then \
 	  echo "aboutme-test-db already running; reusing it."; \
 	else \
 	  podman run -d --rm --name aboutme-test-db --memory 512m -p 127.0.0.1:20432:5432 \

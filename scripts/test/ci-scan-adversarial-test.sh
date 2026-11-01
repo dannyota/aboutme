@@ -264,6 +264,9 @@ test_native_status_checks_database_host_port() {
   local -a launchers=()
 
   mkdir -p "$repo/scripts" "$repo/.dev" "$fake_bin"
+  for name in realpath stat base64 sha256sum date; do
+    ln -s "$(command -v "$name")" "$fake_bin/$name"
+  done
   cp "$ROOT/scripts/dev-native.sh" "$repo/scripts/dev-native.sh"
   mkdir -p "$repo/scripts/lib"
   cp "$ROOT/scripts/lib/platform.sh" "$repo/scripts/lib/"
@@ -289,7 +292,7 @@ EOF
 
   for name in mail-capture server web caddy; do
     ready=$case_dir/$name.ready
-    /usr/bin/setsid /bin/bash -c '
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' /bin/bash -c '
       printf "%s\n" "$$" >"$1"
       exec /bin/sleep 30
     ' native-status-fixture "$ready" >/dev/null 2>&1 &
@@ -299,7 +302,7 @@ EOF
     for attempt in $(seq 1 100); do
       if [ -s "$ready" ]; then
         pid=$(<"$ready")
-        sid=$(/usr/bin/ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ')
+        sid=$(/usr/bin/ps -o sess= -p "$pid" 2>/dev/null | tr -d ' ')
         if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null &&
           [ "$sid" = "$pid" ]; then
           fixture_ready=1
@@ -319,12 +322,12 @@ EOF
   if [ "$failed" -eq 0 ]; then
     output=$(
       /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=0 \
-        /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
+        "$BASH" "$repo/scripts/dev-native.sh" status 2>&1
     )
     status=$?
     connected_output=$(
       /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=1 \
-        /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
+        "$BASH" "$repo/scripts/dev-native.sh" status 2>&1
     )
     connected_status=$?
   else
