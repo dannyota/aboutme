@@ -67,10 +67,8 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
 # code comes from clean, current main, even when rolling back to an older tag.
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
 
-work=$(mktemp -d)
-ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
-# One SSH connection for the whole run.
-ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m)
+work='' ssh_dir=''
+ssh_opts=()
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
 # Runs one host script as root. Arguments include tags, digests, operation
@@ -141,14 +139,20 @@ on_exit() {
     on_host fence.sh release "$op" >/dev/null ||
       { say "could not release the operation lock; fence.sh clear owns it"; status=1; }
   fi
-  ssh_close
-  rm -rf "$work" "$ssh_dir"
+  if [[ -n ${ssh_opts[*]:-} ]]; then ssh_close; fi
+  if [[ -n $work ]]; then rm -rf "$work"; fi
+  if [[ -n $ssh_dir ]]; then rm -rf "$ssh_dir"; fi
   exit "$status"
 }
 trap on_exit EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+work=$(mktemp -d)
+ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
+# One SSH connection for the whole run.
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m)
 
 # The deploy runs this checkout's host scripts, never the target release's:
 # the copies installed on the host must equal these files.
