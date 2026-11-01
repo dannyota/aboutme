@@ -64,7 +64,7 @@ test_signal_stops_before_later_groups() {
   local case_dir=$WORK/signal
   local repo=$case_dir/repo bin=$case_dir/bin calls=$case_dir/calls
   local ready=$case_dir/ready output=$case_dir/output
-  local pid status=0 i
+  local pid sid fixture_ready=0 status=0 i
   make_fixture "$repo" "$bin" "$calls"
 
   cat >"$bin/make" <<'EOF'
@@ -86,12 +86,15 @@ EOF
   pid=$!
 
   for i in $(seq 1 100); do
-    if [ -f "$ready" ] && [ "$(ps -o sess= -p "$pid" 2>/dev/null | tr -d ' ')" = "$pid" ]; then
+    if [ -f "$ready" ] &&
+      sid=$(python3 -I -c 'import os, sys; print(os.getsid(int(sys.argv[1])))' "$pid" 2>/dev/null) &&
+      [ "$sid" = "$pid" ]; then
+      fixture_ready=1
       break
     fi
     sleep 0.02
   done
-  [ -f "$ready" ] || {
+  [ "$fixture_ready" -eq 1 ] || {
     kill -KILL -- "-$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
     printf 'ci-lifecycle-test: signal fixture never reached its long group\n' >&2

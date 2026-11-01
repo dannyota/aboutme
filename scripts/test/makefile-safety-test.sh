@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-make-safety.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
 
 REPO=$WORK/repo
@@ -195,7 +196,7 @@ for fixture in ["mismatch", "symlink", "unknown-image", "raw-response", "malform
     assert sorted(images) == sorted(["card--no-name-expected.png", "card--no-name-diff.png"] +
                                    ([] if fixture in rejected else ["card--no-name-actual.png"]) +
                                    (["engineer-compact-en-p1-expected.png", "engineer-compact-en-p1-actual.png",
-                                     "engineer-compact-en-p1-diff.png"] if fixture == "template-page" else []))
+                                     "engineer-compact-en-p1-diff.png"] if fixture == "template-page" else [])), (fixture, images)
     assert (public / "normal/0/card--no-name-diff.png").is_file()
     assert (public / "normal/0/card--no-name-expected.png").is_file()
     summary = json.loads((public / "failure-summary.json").read_text())
@@ -258,7 +259,7 @@ for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e
     for status in [42, 0]:
         run_id = f"{target}-{shard}-{status}"
         result = subprocess.run(["/usr/bin/make", "--no-print-directory", target], cwd=repo, env={
-            **os.environ, "PATH": str(bin_dir) + ":/usr/bin:/bin",
+            **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
             "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
             "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
             "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
@@ -415,7 +416,7 @@ run_https_make() {
   set -- "${@:1:$#-1}"
   (
     cd "$HTTPS_REPO"
-    env PATH="$HTTPS_BIN:/usr/bin:/bin" HTTPS_CALL_LOG="$HTTPS_CALLS" \
+    env PATH="$HTTPS_BIN:$PATH" HTTPS_CALL_LOG="$HTTPS_CALLS" \
       FAKE_HTTPS_IMAGE_ID="$HTTPS_ID" FAKE_HTTPS_BASE="$HTTPS_BASE" "$@" \
       /usr/bin/make --no-print-directory "$target"
   )
