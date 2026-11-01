@@ -166,6 +166,22 @@ test("rejects malformed encoding and paths outside the repository", (t) => {
   assert.match(errors[2], /outside repository/);
 });
 
+test("selects affected indexes through a symlinked repository root", (t) => {
+  const root = fixture(t, {
+    "docs/page.md": "# Page\n",
+    "other/README.md": "[page](../docs/page.md#page)\n",
+  });
+  const alias = join(root, "alias");
+  symlinkSync(root, alias);
+  const selected = selectFiles(alias, ["docs/page.md"], ["docs/page.md", "other/README.md"]);
+  assert.deepEqual(selected, ["docs/page.md", "other/README.md"]);
+  assert.deepEqual(checkFiles(alias, selected), []);
+
+  const outside = fixture(t, { "README.md": "# Outside\n" });
+  symlinkSync(outside, join(root, "escape"));
+  assert.throws(() => selectFiles(alias, [], ["escape/README.md"]), /outside repository/);
+});
+
 test("checks changed Markdown and affected indexes without crawling history", (t) => {
   const files = {
     "docs/README.md": "[design](design/README.md) [research](research/README.md)\n",

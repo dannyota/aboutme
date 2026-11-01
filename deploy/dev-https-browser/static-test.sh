@@ -63,11 +63,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+CANONICAL_WORK=$(cd -- "$WORK" >/dev/null && pwd -P)
+readonly CANONICAL_WORK
+ln -s "$WORK" "$WORK/path-alias"
 readonly CONTEXT=$WORK/context
 readonly FAKE_BIN=$WORK/bin
 readonly CALL_LOG=$WORK/podman.calls
 readonly IMAGE_META=$WORK/image.meta
-readonly INPUT=$WORK/input
+readonly INPUT=$WORK/path-alias/input
 readonly MCP_INPUT=$WORK/mcp-input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$MCP_INPUT" "$EVIDENCE"
@@ -276,11 +279,11 @@ fi
 if grep -Fq -- '--cpus=' "$READABLE_LOG"; then
   fail 'auth mode runtime has an unexpected CPU cap'
 fi
-grep -Fxq -- "--mount=type=bind,src=$INPUT,dst=/uat-input,ro=true" "$READABLE_LOG" ||
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/input,dst=/uat-input,ro=true" "$READABLE_LOG" ||
   fail 'closed CA input mount is missing'
-grep -Fxq -- "--mount=type=bind,src=$SPEC_INPUT,dst=/uat-spec,ro=true" "$READABLE_LOG" ||
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/spec-input,dst=/uat-spec,ro=true" "$READABLE_LOG" ||
   fail 'closed read-only spec mount is missing'
-grep -Fxq -- "--mount=type=bind,src=$EVIDENCE,dst=/evidence,rw=true" "$READABLE_LOG" ||
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/evidence,dst=/evidence,rw=true" "$READABLE_LOG" ||
   fail 'closed evidence mount is missing'
 [ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 3 ] ||
   fail 'runtime has an extra bind mount'
@@ -325,7 +328,7 @@ grep -Fxq mcp "$READABLE_LOG" || fail 'mcp mode did not reach the image'
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp ] ||
   fail 'mcp mode was not passed after the verified image ID'
-grep -Fxq -- "--mount=type=bind,src=$MCP_INPUT,dst=/uat-input,ro=true" \
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/mcp-input,dst=/uat-input,ro=true" \
   "$READABLE_LOG" || fail 'closed MCP input mount is missing'
 
 readonly MCP_MISSING_INPUT_EVIDENCE=$WORK/mcp-missing-input-evidence
@@ -359,7 +362,7 @@ grep -Fxq mcp-ts-sdk "$READABLE_LOG" || fail 'mcp-ts-sdk mode did not reach the 
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp-ts-sdk ] ||
   fail 'mcp-ts-sdk mode was not passed after the verified image ID'
-grep -Fxq -- "--mount=type=bind,src=$MCP_INPUT,dst=/uat-input,ro=true" \
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/mcp-input,dst=/uat-input,ro=true" \
   "$READABLE_LOG" || fail 'closed MCP input mount is missing for mcp-ts-sdk mode'
 
 readonly MCP_SDK_CREDENTIAL=$WORK/mcp-sdk-credential.env
@@ -384,11 +387,11 @@ image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
   fail 'mcp-sdk workflow mode was not passed after the mode'
 grep -Fxq -- "--name=$MCP_SDK_NAME" "$READABLE_LOG" ||
   fail 'mcp-sdk container name is missing'
-grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_EVIDENCE,dst=/evidence,rw=true" "$READABLE_LOG" ||
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/mcp-sdk-evidence,dst=/evidence,rw=true" "$READABLE_LOG" ||
   fail 'closed evidence mount is missing for mcp-sdk mode'
-grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_CREDENTIAL,dst=/mcp-credentials/login.env,ro=true" \
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/mcp-sdk-credential.env,dst=/mcp-credentials/login.env,ro=true" \
   "$READABLE_LOG" || fail 'closed MCP credential mount is missing'
-grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_BROWSER,dst=/mcp-browser,rw=true" \
+grep -Fxq -- "--mount=type=bind,src=$CANONICAL_WORK/mcp-sdk-browser,dst=/mcp-browser,rw=true" \
   "$READABLE_LOG" || fail 'closed MCP browser mount is missing'
 [ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 5 ] ||
   fail 'mcp-sdk runtime has an unexpected bind mount count'
@@ -2210,7 +2213,8 @@ fi
 
 # Exercise the host entry point with only the build, database, and browser
 # boundaries replaced. Preparation and cleanup use the real shell flow.
-readonly HOST_REPO=$WORK/host-repo
+if [ "$(uname -s)" = Linux ]; then
+readonly HOST_REPO=$CANONICAL_WORK/host-repo
 readonly HOST_BIN=$WORK/host-bin
 readonly HOST_CONTROL=$WORK/host-control
 install -d -m 0700 "$HOST_REPO/scripts/lib" "$HOST_REPO/apps/server" \
@@ -2277,6 +2281,11 @@ FAKE_HOST_BROWSER
 chmod 0700 "$HOST_BIN/go" "$HOST_BIN/curl" "$HOST_CONTROL/fixture" \
   "$HOST_REPO/deploy/dev-https-browser/run.sh"
 
+host_fixture_fail() {
+  cat "$HOST_CONTROL/output" >&2
+  fail "$@"
+}
+
 run_host_fixture_case() {
   local mode=$1 scenario=$2 status=0 credential source_hash state=$HOST_REPO/.dev/native-https
   rm -rf -- "$HOST_REPO/.dev"
@@ -2302,20 +2311,20 @@ run_host_fixture_case() {
     ABOUTME_PASSKEY_SHARD=recovery-attempts ABOUTME_TOTP_SHARD=primary \
     bash "$HOST_REPO/scripts/dev-https-check.sh" "$mode" >"$HOST_CONTROL/output" 2>&1 || status=$?
   if [ "$scenario" = success ]; then
-    [ "$status" -eq 0 ] || fail 'guarded host fixture did not complete'
+    [ "$status" -eq 0 ] || host_fixture_fail 'guarded host fixture did not complete'
   else
-    [ "$status" -ne 0 ] || fail 'failed host fixture was accepted'
+    [ "$status" -ne 0 ] || host_fixture_fail 'failed host fixture was accepted'
   fi
-  [ -s "$HOST_CONTROL/credential-path" ] || fail 'host fixture never prepared private credentials'
+  [ -s "$HOST_CONTROL/credential-path" ] || host_fixture_fail 'host fixture never prepared private credentials'
   credential=$(<"$HOST_CONTROL/credential-path")
-  [ ! -e "$credential" ] && [ ! -L "$credential" ] || fail 'host fixture retained private credentials'
-  [ ! -e "$HOST_CONTROL/active-account" ] || fail 'host fixture retained an account after cleanup'
-  [ "$(grep -c '^second-factor-seed$' "$HOST_CONTROL/calls")" -eq 1 ] || fail 'host fixture seed count changed'
-  [ "$(grep -c '^second-factor-cleanup$' "$HOST_CONTROL/calls")" -eq 1 ] || fail 'host fixture cleanup did not run exactly once'
+  [ ! -e "$credential" ] && [ ! -L "$credential" ] || host_fixture_fail 'host fixture retained private credentials'
+  [ ! -e "$HOST_CONTROL/active-account" ] || host_fixture_fail 'host fixture retained an account after cleanup'
+  [ "$(grep -c '^second-factor-seed$' "$HOST_CONTROL/calls")" -eq 1 ] || host_fixture_fail 'host fixture seed count changed'
+  [ "$(grep -c '^second-factor-cleanup$' "$HOST_CONTROL/calls")" -eq 1 ] || host_fixture_fail 'host fixture cleanup did not run exactly once'
   if [ "$scenario" = seed-failure ]; then
-    ! grep -Fxq browser "$HOST_CONTROL/calls" || fail 'failed seed reached the browser'
+    ! grep -Fxq browser "$HOST_CONTROL/calls" || host_fixture_fail 'failed seed reached the browser'
   else
-    grep -Fxq browser "$HOST_CONTROL/calls" || fail 'prepared fixture never reached the browser'
+    grep -Fxq browser "$HOST_CONTROL/calls" || host_fixture_fail 'prepared fixture never reached the browser'
   fi
 }
 for mode in passkey totp; do
@@ -2323,6 +2332,9 @@ for mode in passkey totp; do
     run_host_fixture_case "$mode" "$scenario"
   done
 done
+else
+  printf '%s\n' 'Skipping Linux-specific guarded host fixture; CI covers it.'
+fi
 
 # CIMD proof evidence must name the real SDK flow, beyond the DCR proof.
 for step in cimdDiscovered cimdConsentApproved cimdTokenExchanged cimdToolsListed cimdRefreshed cimdGrantRevoked cimdRevokedRejected; do
