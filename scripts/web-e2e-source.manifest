@@ -592,6 +592,7 @@ apps/web/e2e/baselines/verify--verified--light--390.png
 apps/web/e2e/card.spec.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
+apps/web/e2e/display-assertions.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
 apps/web/e2e/fixtures/deployment/mismatch-missing.json
 apps/web/e2e/fixtures/deployment/mismatch-not-found.json
