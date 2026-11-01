@@ -7,7 +7,7 @@ changing a number requires a reviewed change with evidence.
 ## Operating budget
 
 Production uses the Vietnam host under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). The
 [host guide](../../deploy/vn/README.md#paid-resources-and-quotes) owns the dated
 resource quotes; they are not a measured monthly bill. Cloudflare DNS uses the
 Free plan. No AWS deployment or CloudFront edge is deployed. Spend alerts live

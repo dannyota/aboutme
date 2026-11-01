@@ -1,4 +1,4 @@
-# 0026: One serving replica now; a designed path to a second
+# 0025: One serving replica now; a designed path to a second
 
 Status: Accepted (2026-09-06, 2026-09-08, 2026-09-17).
 

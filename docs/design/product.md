@@ -130,7 +130,7 @@ Both are public, like the slug
 | Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                       |
 | Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                    |
 | Preview card             | Stored 1200 by 630 PNG with name, headline, and photo, never contact details; live only, independent of download and discovery; ADR 0014        |
-| Showcase on              | Listed on `/showcase` while live with sign in to view off, without review; never changes indexing; ADR 0029                                     |
+| Showcase on              | Listed on `/showcase` while live with sign in to view off, without review; never changes indexing; ADR 0028                                     |
 
 The sitemap lists `/`, `/privacy`, `/terms`, `/templates`, and each
 `/templates/{id}` page, then every discoverable resume. `llms.txt` follows the

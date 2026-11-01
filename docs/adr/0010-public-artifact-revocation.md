@@ -104,7 +104,7 @@ Open clients use SSE and an uncached refetch for prompt UI convergence; that is
 not the revocation authority.
 
 The fences and leases are process-local, which is correct while one replica
-serves (ADR 0026). A second replica needs the durable publication transitions of
+serves (ADR 0025). A second replica needs the durable publication transitions of
 the [scaling design](../design/scaling/transitions.md), which keep the distinct
 non-draining and revoking behavior.
 
@@ -131,7 +131,7 @@ its commit:
   which a fenced deletion would cancel.
 - An edge may store public bytes and answer a validated `304`, but it cannot
   absorb a request without revalidation. Production delivers directly through
-  Caddy without an edge cache (ADR 0027).
+  Caddy without an edge cache (ADR 0026).
 - Rendering and immutable media bytes can still use a bounded generation-keyed
   cache behind the gate.
 - Concurrency tests must cover a cached old response and a request admitted at

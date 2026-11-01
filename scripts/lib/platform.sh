@@ -38,3 +38,7 @@ detach() {
     python3 -c 'import os,sys; pid=os.fork(); pid and sys.exit(0); os.setsid(); os.execvp(sys.argv[1],sys.argv[1:])' "$@"
   fi
 }
+
+file_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
+}

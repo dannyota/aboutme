@@ -76,7 +76,7 @@ the only migrator; the advisory lock guarantees it if two ever run.
 - The hosted app connects as `aboutme_app` and can reach its tables, which a
   test proves.
 - A second serving replica needs its coordination runtime back as new migrations
-  with explicit grants (ADR 0026).
+  with explicit grants (ADR 0025).
 
 ## History
 

@@ -1,6 +1,6 @@
 # Vietnam operations evidence
 
-Read-only production metadata collected on 2026-10-13 supports the successful-run requirement in AC-INF-006. [ADR 0027](../../adr/0027-vietnam-hosted-production.md) and the [Vietnam scheduled-job design](../../design/vietnam-production.md#scheduled-jobs) define the four application jobs.
+Read-only production metadata collected on 2026-10-13 supports the successful-run requirement in AC-INF-006. [ADR 0026](../../adr/0026-vietnam-hosted-production.md) and the [Vietnam scheduled-job design](../../design/vietnam-production.md#scheduled-jobs) define the four application jobs.
 
 ## Successful application jobs
 

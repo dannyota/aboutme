@@ -2,7 +2,7 @@
 SET LOCAL lock_timeout = '5s';
 
 -- The community showcase has no review (docs/design/showcase.md "Data and
--- contract", ADR 0029). An opt-in is listed while the resume is live and sign
+-- contract", ADR 0028). An opt-in is listed while the resume is live and sign
 -- in to view is off. The review columns stay, unused, so the previous release
 -- keeps running on this schema; a later migration drops them.
 --

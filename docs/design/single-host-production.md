@@ -1,9 +1,9 @@
 # Single-host production
 
 This page describes the undeployed AWS single-host reference architecture under
-[ADR 0025](../adr/0025-single-host-production.md). Production uses the
-[Vietnam host](vietnam-production.md) under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). Follow the
+[historical AWS production decision](../adr/history/aws-production.md).
+Production uses the [Vietnam host](vietnam-production.md) under
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). Follow the
 [production runbook](../runbooks/production.md) for live operations. The AWS
 commands below apply only after rebuilding and reviewing that path.
 
@@ -123,7 +123,7 @@ blocks bridge containers while host-mode containers still get a token.
 
 Memory fits in 2 GiB: roughly 300 MiB for Bottlerocket and the agent, the
 existing 512 MiB Go and Chromium cap, and about 300 MiB for Nuxt and Caddy. A
-larger instance is the first growth step, per ADR 0026.
+larger instance is the first growth step, per ADR 0025.
 
 ## Database
 

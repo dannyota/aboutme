@@ -20,6 +20,6 @@ Root reporter input flows through platform aggregation, signature verification, 
 
 ## Authorities and checks
 
-Read [observer README](README.md), [document design](../../docs/design/deployment-transparency/document.md), [host design](../../docs/design/deployment-transparency/host.md), [verification design](../../docs/design/deployment-transparency/verification.md), [ADR 0028](../../docs/adr/0028-deployment-transparency-observer.md), and [observer runbook](../../docs/runbooks/observer.md).
+Read [observer README](README.md), [document design](../../docs/design/deployment-transparency/document.md), [host design](../../docs/design/deployment-transparency/host.md), [verification design](../../docs/design/deployment-transparency/verification.md), [ADR 0027](../../docs/adr/0027-deployment-transparency-observer.md), and [observer runbook](../../docs/runbooks/observer.md).
 
 [Go rules](../../instructions/go.md) and [verification](../../instructions/verification.md) govern checks. The `server` job in `.github/workflows/ci.yml` builds, vets, tests, lints, checks module drift, and scans vulnerabilities for the observer with `GOWORK=off`. Package tests protect report leakage, strict Podman input, freshness, atomic publication, and byte-exact examples; [release rules](../../instructions/releases.md) own image checks.

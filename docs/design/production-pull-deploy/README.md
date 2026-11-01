@@ -1,6 +1,6 @@
 # Production pull deployment
 
-Status: Proposed 2026-11-01; ADR 0027 amendment pending owner acceptance after
+Status: Proposed 2026-11-01; ADR 0026 amendment pending owner acceptance after
 the approval API proof
 
 The production host verifies an explicitly approved request, then runs
@@ -10,8 +10,8 @@ credential or administrative network access.
 
 The first version retains attended laptop proofs, manual vMonitor quota renewal,
 and an empty automatic rollback allowlist. It adds no monitoring VM. ADRs 0024
-and 0026 remain unchanged;
-[ADR 0027](../../adr/0027-vietnam-hosted-production.md) needs the proposed
+and 0025 remain unchanged;
+[ADR 0026](../../adr/0026-vietnam-hosted-production.md) needs the proposed
 amendment. Pull removes CI’s administrative access at the cost of host
 verification, polling delay, and durable recovery state. Laptop deployment
 shares the same controls. A push service or unattended proof service requires a

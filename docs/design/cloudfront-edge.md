@@ -1,10 +1,10 @@
 # CloudFront edge
 
 This page describes the undeployed AWS reference edge under
-[ADR 0025](../adr/0025-single-host-production.md): CloudFront in front of one
-EC2 host, with no load balancer, and Route 53 DNS. Production uses the
-[Vietnam host](vietnam-production.md) and Cloudflare DNS-only under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). Follow the
+[historical AWS production decision](../adr/history/aws-production.md):
+CloudFront in front of one EC2 host, with no load balancer, and Route 53 DNS.
+Production uses the [Vietnam host](vietnam-production.md) and Cloudflare
+DNS-only under [ADR 0026](../adr/0026-vietnam-hosted-production.md). Follow the
 [production runbook](../runbooks/production.md) for live operations. Reusing
 this AWS edge requires a new reviewed infrastructure and data-transfer decision.
 

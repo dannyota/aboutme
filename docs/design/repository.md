@@ -21,7 +21,7 @@ describes the running system. The component source maps live in the
 | `deploy/`                     | Application images, local/self-host tools, Vietnam host and OpenTofu sources, Caddy, observer, and retained AWS reference |
 
 Production infrastructure lives in `deploy/vn/` under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). `deploy/caddy/` owns edge
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). `deploy/caddy/` owns edge
 configuration, and `deploy/observer/` owns operational observation.
 `deploy/aws/` keeps the AWS reference. State, account identifiers, and
 environment values stay out of Git. Public infrastructure checks need no cloud

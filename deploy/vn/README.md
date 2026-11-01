@@ -1,7 +1,7 @@
 # Vietnam production
 
 Code for production at `https://aboutme.vn` on one GreenNode vServer in Ho Chi
-Minh City, under [ADR 0027](../../docs/adr/0027-vietnam-hosted-production.md)
+Minh City, under [ADR 0026](../../docs/adr/0026-vietnam-hosted-production.md)
 and the [Vietnam production design](../../docs/design/vietnam-production.md).
 `deploy/aws/` stays undeployed for a possible AWS ECS or Kubernetes path.
 

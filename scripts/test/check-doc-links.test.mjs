@@ -235,6 +235,6 @@ test("repository indexes resolve and ADR guidance names the topic record", () =>
     assert.match(text, /History/);
   }
   const decisions = readFileSync(join(root, "docs/design/decisions.md"), "utf8");
-  assert.match(decisions, /\[ADR 0027\]\([^\n]+\) is the production approval/);
+  assert.match(decisions, /\[ADR 0026\]\([^\n]+\) is the production approval/);
   assert.doesNotMatch(decisions, /AWS becomes test only/);
 });

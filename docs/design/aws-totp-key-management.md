@@ -1,7 +1,7 @@
 # AWS authenticator-app key management reference
 
 Status: **undeployed reference**. Production runs on the Vietnam host under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). These ECS procedures do
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). These ECS procedures do
 not authorize host operations. Vietnam key rotation remains an
 [open host procedure](../runbooks/totp-keys.md#key-rotation).
 

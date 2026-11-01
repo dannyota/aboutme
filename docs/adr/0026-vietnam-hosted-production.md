@@ -1,4 +1,4 @@
-# 0027: Vietnam-hosted production
+# 0026: Vietnam-hosted production
 
 Status: Accepted (2026-09-24) for the provider choice, by the human owner's
 direction; the design choices in the
@@ -64,7 +64,7 @@ no cloud credentials other than the vMonitor quota-renewal service account
 accepted on 2026-10-14 (see History). Cost reductions must not silently weaken
 authentication, private media, revocation, backup, or recovery requirements.
 
-One serving replica and deploy-step migrations follow ADRs 0026 and 0005. The
+One serving replica and deploy-step migrations follow ADRs 0025 and 0005. The
 second-factor fence rules (ADR 0017) use a host store, and the live-state gate
 (ADR 0010) applies without an edge cache. Public HTTP, SSE, and MCP contracts
 and private media authorization remain in force. The CrowdSec amendment
@@ -74,8 +74,9 @@ retention policy; other privacy deadlines remain in force.
 ## Context
 
 At the provider decision, production ran on one AWS host in Singapore
-([ADR 0025](0025-single-host-production.md)), with RDS, S3, SES, and a Google
-Workspace mailbox. Account, resume, photo, and sign-in data were stored abroad.
+([historical AWS production decision](history/aws-production.md)), with RDS, S3,
+SES, and a Google Workspace mailbox. Account, resume, photo, and sign-in data
+were stored abroad.
 
 Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
 transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),

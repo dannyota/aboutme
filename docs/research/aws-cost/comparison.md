@@ -10,7 +10,7 @@ topology.
 The historical fixed-host ECS-on-EC2 and RDS baseline was the lowest gross-cost
 option in every expected and stress campaign case. The owner then selected the
 scheduled UAT and autoscaled production target in
-[ADR 0026](../../adr/0026-replica-scaling.md). The target still depends on UAT
+[ADR 0026](../../adr/0025-replica-scaling.md). The target still depends on UAT
 proving ARM64 Chromium, concurrent job headroom, render latency, replica safety,
 server-sent event (SSE) behavior, and the private print path.
 

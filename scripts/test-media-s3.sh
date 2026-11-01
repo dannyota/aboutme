@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Manage the one disposable MinIO instance used by the native S3 conformance
-# gate. Credentials stay in the ignored .dev directory and are never printed.
+# Manage disposable MinIO, the local stand-in for production vStorage (S3),
+# for media conformance tests. Credentials stay in the ignored .dev directory.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$PWD
+# shellcheck source=scripts/lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
 
-readonly CONTAINER=aboutme-test-s3
+readonly CONTAINER=aboutme-test-media-s3
+readonly NETWORK=aboutme-test-media-s3
 readonly ENV_FILE=$ROOT/.dev/test-s3.env
 readonly ENDPOINT=http://127.0.0.1:20091
-# MinIO stopped publishing the community edition to Docker Hub and quay.io
-# (both now answer unauthorized for every tag, including :latest); these are
-# Chainguard's images, built from the same upstream MinIO/mc source, so the
-# S3 API — including If-None-Match conditional writes and ListObjectsV2
-# paging — matches unchanged. Pinned by digest for both amd64 and arm64.
+# Chainguard builds these images from MinIO and mc source. Pin both images
+# by digest for amd64 and arm64, including their S3 conditional write support.
 readonly MINIO_IMAGE=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
 readonly MC_IMAGE=cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
 
 die() {
-  printf 'test-s3: %s\n' "$*" >&2
+  printf 'test-media-s3: %s\n' "$*" >&2
   exit 1
 }
 
@@ -69,22 +69,45 @@ ensure_env_ignored() {
   ensure_path_ignored .dev/test-s3.env
 }
 
+network_exists() {
+  local status=0
+  podman network exists "$NETWORK" || status=$?
+  case $status in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die "cannot inspect $NETWORK network" ;;
+  esac
+}
+
+verify_network() {
+  local owner
+  owner=$(podman network inspect "$NETWORK" --format '{{index .Labels "aboutme.test.owner"}}') ||
+    die "cannot inspect $NETWORK network"
+  [ "$owner" = "$CONTAINER" ] || die "$NETWORK network is not owned by this test"
+}
+
 verify_container_contract() {
-  local image ports
+  local image ports aliases
+  network_exists || die "$NETWORK network is missing"
+  verify_network
   image=$(podman inspect "$CONTAINER" --format '{{.Config.Image}}') ||
     die "cannot inspect $CONTAINER image"
   [ "$image" = "$MINIO_IMAGE" ] ||
-    die "$CONTAINER uses $image, want pinned $MINIO_IMAGE; after active tests finish, run 'make test-s3-down'"
+    die "$CONTAINER uses $image, want pinned $MINIO_IMAGE; after active tests finish, run 'make test-media-s3-down'"
   ports=$(podman port "$CONTAINER" 9000/tcp) ||
     die "cannot inspect $CONTAINER port mapping"
   [ "$ports" = 127.0.0.1:20091 ] ||
     die "$CONTAINER maps port 9000 as $ports, want 127.0.0.1:20091"
+  aliases=$(podman inspect "$CONTAINER" --format '{{range (index .NetworkSettings.Networks "aboutme-test-media-s3").Aliases}}{{println .}}{{end}}') ||
+    die "cannot inspect $CONTAINER network aliases"
+  grep -Fxq minio <<<"$aliases" || die "$CONTAINER is missing the minio network alias"
 }
 
 load_env_file() {
-  [ -f "$ENV_FILE" ] || die "$ENV_FILE is missing; run 'make test-s3-up'"
+  [ ! -L "$ENV_FILE" ] || die "$ENV_FILE must not be a symlink"
+  [ -f "$ENV_FILE" ] || die "$ENV_FILE is missing; run 'make test-media-s3-up'"
   local mode
-  mode=$(stat -c '%a' "$ENV_FILE") || die "cannot inspect $ENV_FILE"
+  mode=$(file_mode "$ENV_FILE") || die "cannot inspect $ENV_FILE"
   [ "$mode" = 600 ] || die "$ENV_FILE must have mode 0600 (found $mode)"
 
   local line name value
@@ -147,15 +170,15 @@ wait_ready() {
 
 ensure_bucket() {
   local MC_HOST_test
-  MC_HOST_test="http://${TEST_S3_ACCESS_KEY_ID}:${TEST_S3_SECRET_ACCESS_KEY}@127.0.0.1:20091"
+  MC_HOST_test="http://${TEST_S3_ACCESS_KEY_ID}:${TEST_S3_SECRET_ACCESS_KEY}@minio:9000"
   export MC_HOST_test
   # MC_CONFIG_DIR: the image runs as a fixed non-root UID with no home
   # directory entry, so mc's default $HOME/.mc config path cannot be
   # resolved; /tmp is writable regardless of UID.
-  podman run --rm --network host -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
+  podman run --rm --network "$NETWORK" -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
     mb --ignore-existing test/aboutme-test >/dev/null ||
     die "could not create the private test bucket"
-  podman run --rm --network host -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
+  podman run --rm --network "$NETWORK" -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
     anonymous set none test/aboutme-test >/dev/null ||
     die "could not enforce the private test bucket policy"
 }
@@ -166,7 +189,7 @@ up() {
   local state
   state=$(container_state)
   if [ "$state" != absent ] && [ ! -f "$ENV_FILE" ]; then
-    die "$CONTAINER exists but $ENV_FILE is missing; after active tests finish, run 'make test-s3-down'"
+    die "$CONTAINER exists but $ENV_FILE is missing; after active tests finish, run 'make test-media-s3-down'"
   fi
   [ -f "$ENV_FILE" ] || write_env_file
   load_env_file
@@ -178,11 +201,18 @@ up() {
     if [ "$state" != absent ]; then
       podman rm "$CONTAINER" >/dev/null || die "could not remove stopped $CONTAINER"
     fi
+    if network_exists; then
+      verify_network
+    else
+      podman network create --label "aboutme.test.owner=$CONTAINER" "$NETWORK" >/dev/null ||
+        die "could not create $NETWORK network"
+    fi
     local MINIO_ROOT_USER MINIO_ROOT_PASSWORD
     MINIO_ROOT_USER=$TEST_S3_ACCESS_KEY_ID
     MINIO_ROOT_PASSWORD=$TEST_S3_SECRET_ACCESS_KEY
     export MINIO_ROOT_USER MINIO_ROOT_PASSWORD
     podman run -d --rm --name "$CONTAINER" --memory 512m \
+      --network "$NETWORK" --network-alias minio \
       -p 127.0.0.1:20091:9000 \
       -e MINIO_ROOT_USER \
       -e MINIO_ROOT_PASSWORD \
@@ -199,7 +229,7 @@ run_with_env() {
   ensure_env_ignored
   local state
   state=$(container_state)
-  [ "$state" = running ] || die "$CONTAINER is not running; run 'make test-s3-up'"
+  [ "$state" = running ] || die "$CONTAINER is not running; run 'make test-media-s3-up'"
   verify_container_contract
   load_env_file
   curl --fail --silent --show-error "$ENDPOINT/minio/health/ready" >/dev/null ||
@@ -216,6 +246,10 @@ down() {
   if [ "$state" != absent ]; then
     podman rm -f "$CONTAINER" >/dev/null || die "could not remove $CONTAINER"
   fi
+  if network_exists; then
+    verify_network
+    podman network rm "$NETWORK" >/dev/null || die "could not remove $NETWORK network"
+  fi
   if [ -e "$ENV_FILE" ]; then
     rm -f -- "$ENV_FILE"
   fi
@@ -229,5 +263,5 @@ run)
   shift
   run_with_env "$@"
   ;;
-*) die "usage: scripts/test-s3.sh {up|down|run command...}" ;;
+*) die "usage: scripts/test-media-s3.sh {up|down|run command...}" ;;
 esac

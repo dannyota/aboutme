@@ -37,19 +37,20 @@ database. Its disposable pinned Playwright image imports the invocation's Caddy
 root into an isolated NSS database and writes only bounded local verdicts. It
 does not change the host trust store or use a certificate bypass.
 
-The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. A one-shot
-`db-setup` command creates the fixed database roles and grants, a one-shot
-`migrate` command then applies migrations, and a media initializer sets up
-private storage. PostgreSQL is not published to the host. Caddy is the only
-published service. The current Compose Caddyfile serves HTTP; this is suitable
-for deployment smoke checks.
+The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. MinIO stores
+media for self-hosters and stands in for production vStorage (S3) in local
+deployments and media storage tests. A one-shot `db-setup` command creates the
+fixed database roles and grants, a one-shot `migrate` command then applies
+migrations, and a media initializer sets up private storage. PostgreSQL is not
+published to the host. Caddy is the only published service. The current Compose
+Caddyfile serves HTTP; this is suitable for deployment smoke checks.
 
 Production runs on one GreenNode vServer in Ho Chi Minh City, with Caddy,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage, per
-[ADR 0027](adr/0027-vietnam-hosted-production.md) and the
+[ADR 0026](adr/0026-vietnam-hosted-production.md) and the
 [Vietnam production design](design/vietnam-production.md). Cloudflare provides
 DNS-only records; clients connect directly to the host. It runs one replica
-under [ADR 0026](adr/0026-replica-scaling.md). Revocation leases, print jobs,
+under [ADR 0025](adr/0025-replica-scaling.md). Revocation leases, print jobs,
 event subscribers, and limiters hold process-local state, which is correct only
 with one replica. The [scaling contract](design/scaling/README.md) records which
 parts of a multi-replica runtime are deferred.

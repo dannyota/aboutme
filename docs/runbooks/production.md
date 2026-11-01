@@ -1,7 +1,7 @@
 # Production
 
 Production serves `https://aboutme.vn` on one GreenNode host in Vietnam under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). The
 [Vietnam production design](../design/vietnam-production.md) owns the topology.
 Cutover completed on 2026-10-11 with release v0.7.3. The AWS production stack
 and its state bootstrap were destroyed that day. Nothing from `deploy/aws/` is

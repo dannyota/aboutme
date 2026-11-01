@@ -7,7 +7,7 @@ the application asks the platform which digests run and checks each against the
 signed GitHub build record. Both publish the result at
 `https://aboutme.vn/.well-known/deployment.json`. The page `/verify` shows the
 same document to people and tells them how to check it themselves.
-[ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
+[ADR 0027](../../adr/0027-deployment-transparency-observer.md) records the
 choice.
 
 Status: accepted; the owner approved A1 to A5 on 2026-09-27. **Owner approval**
@@ -103,7 +103,7 @@ bucket name; none of them reaches the document.
 ### Kubernetes
 
 This section holds for a GreenNode VKS cluster. The Podman vServer in
-[ADR 0027](../../adr/0027-vietnam-hosted-production.md) uses the separate
+[ADR 0026](../../adr/0026-vietnam-hosted-production.md) uses the separate
 [host source](host.md); it has no read-only platform API.
 
 On Kubernetes the same image runs as a Deployment with one replica that polls
@@ -261,7 +261,8 @@ same freshness and staleness thresholds.
 
 **Owner approval:** CloudFront serves `/.well-known/deployment.json` from the S3
 bucket and caches it for 30 seconds. This amends the rule that CloudFront caches
-only `/_nuxt/*` ([ADR 0025](../../adr/0025-single-host-production.md)). The
+only `/_nuxt/*`
+([historical AWS production decision](../../adr/history/aws-production.md)). The
 document holds no personal data and no publication state, so ADR 0010 does not
 apply.
 

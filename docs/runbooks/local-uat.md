@@ -2,7 +2,7 @@
 
 Status: **available for feature verification**. Native authenticated checks run
 at `https://localhost:20443`. Complete product checks run in production, per
-[ADR 0025](../adr/0025-single-host-production.md). No host sysctl change is
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). No host sysctl change is
 needed.
 
 Keep Secure cookies, normal TLS verification, and the local network allowlist.

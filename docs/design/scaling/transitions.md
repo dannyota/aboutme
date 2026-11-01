@@ -1,6 +1,6 @@
 # Durable public transitions
 
-Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md). Not built.
+Status: Accepted under [ADR 0025](../../adr/0025-replica-scaling.md). Not built.
 The [scaling index](README.md) holds the shared rules.
 
 A publication mutation must close every replica's local fence for its targets
