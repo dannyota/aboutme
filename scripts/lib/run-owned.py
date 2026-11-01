@@ -197,6 +197,9 @@ def main(observe=None):
             if group_open or known:
                 time.sleep(0.1)
         status = child.wait()
+    # Cancellation can arrive after command success while descendants drain.
+    if pending:
+        return 128 + pending[0]
     return reason if reason is not None else (128 - status if status < 0 else status)
 
 

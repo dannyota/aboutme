@@ -64,6 +64,9 @@ def driver(path, case, directory):
     launched = None
     first_poll = True
     group_signaled = False
+    draining = False
+    cleanup_signal = {"cleanup-interrupt": signal.SIGINT,
+                      "cleanup-terminate": signal.SIGTERM}.get(case)
     original_killpg = os.killpg
 
     def launch(*args, **kwargs):
@@ -75,12 +78,14 @@ def driver(path, case, directory):
         original_poll = launched.poll
 
         def poll():
-            nonlocal first_poll
-            if first_poll and case in ("replacement", "parent-exits", "escaped"):
+            nonlocal first_poll, draining
+            if first_poll and (case in ("replacement", "parent-exits", "escaped") or cleanup_signal):
                 first_poll = False
                 (directory / "release").touch()
-                launched.wait(timeout=30)
+                assert launched.wait(timeout=30) == 0, "command did not exit successfully"
                 (directory / "reaped").touch()
+            if cleanup_signal and group_signaled:
+                draining = True
             return original_poll()
 
         launched.poll = poll
@@ -108,20 +113,29 @@ def driver(path, case, directory):
                                     for pid, _, _, _, state in original_snapshot()),
                      "original descendant exit")
         rows = original_snapshot()
+        if draining and not (directory / "cleanup-signal").exists():
+            assert launched.returncode == 0, "cleanup preceded successful command exit"
+            descendant = int((directory / "pid").read_text())
+            assert any(pid == descendant and not state.startswith("Z")
+                       for pid, _, _, _, state in rows), "descendant exited before cancellation"
+            (directory / "cleanup-signal").touch()
+            os.kill(os.getpid(), cleanup_signal)
         if samples == 2:
             (directory / "sampled").touch()
         return rows
 
     sys.argv = [path, "--", sys.executable, "-B", __file__, "command", case, str(directory)]
     # The hook changes observation only. Launch, group signaling and teardown
-    # use real OS processes. Popen's poll hook reaps the leader before replacement.
+    # use real OS processes. The poll hook reaps the leader before replacement
+    # or cleanup cancellation; the next drain sample delivers the real signal.
     with patch.object(watchdog.subprocess, "Popen", side_effect=launch), \
             patch.object(watchdog.os, "killpg", side_effect=signal_group):
         return watchdog.main(observe=observe)
 
 
 def run_cases(path):
-    for case in ("replacement", "sampling-failure", "escalation", "interrupt", "parent-exits", "escaped"):
+    for case in ("replacement", "sampling-failure", "escalation", "interrupt", "parent-exits", "escaped",
+                 "cleanup-interrupt", "cleanup-terminate"):
         with tempfile.TemporaryDirectory(prefix=f"run-owned-{case}-") as temporary:
             directory = Path(temporary)
             environment = os.environ.copy()
@@ -135,10 +149,13 @@ def run_cases(path):
                     (directory / "release").touch()
                     runner.send_signal(signal.SIGINT if case == "interrupt" else signal.SIGTERM)
                 output, errors = runner.communicate(timeout=60)
-                expected = {"sampling-failure": 126, "escalation": 143, "interrupt": 130}.get(case, 0)
+                expected = {"sampling-failure": 126, "escalation": 143, "interrupt": 130,
+                            "cleanup-interrupt": 130, "cleanup-terminate": 143}.get(case, 0)
                 assert runner.returncode == expected, (case, runner.returncode, output, errors)
-                if case in ("escalation", "interrupt"):
+                if case in ("escalation", "interrupt", "cleanup-interrupt", "cleanup-terminate"):
                     assert "KILL escalation" in errors, errors
+                if case in ("cleanup-interrupt", "cleanup-terminate"):
+                    assert (directory / "cleanup-signal").exists(), "cleanup cancellation was never exercised"
                 if case == "replacement":
                     assert (directory / "replacement").exists(), "replacement was never exercised"
                 rows = load(path).snapshot()
