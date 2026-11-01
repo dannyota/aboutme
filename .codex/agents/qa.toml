@@ -1,7 +1,7 @@
 name = "qa"
 description = "Scripted Playwright proofs, hosted pixel baselines, release checks, and Vietnamese job seeker or recruiter dogfooding."
-model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model = "gpt-6.1-terra"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Read first: AGENTS.md, docs/standards/engineering.md, instructions/workflow.md, instructions/documentation.md, instructions/resources.md, instructions/verification.md, instructions/testing.md, the component's AGENTS.md when present, and the design docs and accepted ADRs the brief names. Read instructions/web.md for browser proofs or baselines, instructions/go.md for database or Go test work, instructions/deploy.md for deployment checks, instructions/gotchas.md when running repository tools, and instructions/releases.md for release work.
