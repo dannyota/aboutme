@@ -337,6 +337,16 @@ paths. This tests binaries, not release images.
 | Health         | Check owned containers/processes throughout; Nuxt `/` 200 and PostgreSQL `pg_isready` at preparation end and each sample. Capture counters before removal. Any OOM/oom_kill increase, early exit, failed sample, missing limits or forced shutdown fails.                                                                                                                                                                                            |
 | Cleanup/upload | Always attempt cleanup within 30 seconds and upload within one minute; failures fail the job. Cancellation/hard timeout may prevent upload and never passes. Remove only this run's containers/network/volumes.                                                                                                                                                                                                                                      |
 
+Artifact interface (primary decision, 2026-11-01):
+`scripts/server-runtime-smoke.sh manifest DIR` prints a GNU `sha256sum` manifest
+of every regular file under `DIR/server/` and `DIR/web/.output/`, sorted by
+relative path, refusing links and special files.
+`scripts/server-runtime-smoke.sh run --artifacts DIR --manifest FILE --server-base REF --web-base REF`
+verifies that manifest byte for byte before use, refuses any base reference
+without an `@sha256:` digest, and records the manifest's SHA-256 and the commit
+in evidence. The `server` and `web` jobs create their halves of the manifest;
+integration owns that wiring.
+
 Upload `server-runtime-smoke/evidence.json` as `server-runtime-smoke`, retained
 14 days, at most 16 KiB. Allow only commit/artifact hashes, fixed phase/results,
 configured/observed limits, service peaks/OOM counters, sample counts, exit
