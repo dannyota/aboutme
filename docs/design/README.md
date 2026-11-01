@@ -39,6 +39,7 @@ Current behavior lives in code, deployment configuration, and
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                  |
+| Other   | [CI path selection](ci-path-selection.md)                              | Pull request prose allowlist and required gate behavior                    |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                 |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks                |
 | 9a      | [Vietnam host operations](vietnam-host-operations.md)                  | Account deletion, key rotation, recovery, and verification                 |
