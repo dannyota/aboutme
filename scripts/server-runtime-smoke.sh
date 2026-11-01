@@ -88,7 +88,7 @@ case ${1-} in
     ;;
   run)
     shift
-    artifacts= manifest_file= server_base= web_base=
+    artifacts='' manifest_file='' server_base='' web_base=''
     while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { printf '%s\n' 'invalid run arguments' >&2; exit 2; }
       case $1 in
@@ -144,12 +144,12 @@ def require(condition, reason):
         raise Refused(reason)
 
 
-def command(args, timeout=10, check=True):
+def command(args, timeout=10, check=True, env=None):
     remaining = min(timeout, deadline - time.monotonic())
     require(remaining > 0, 'deadline_exceeded')
     with tempfile.TemporaryFile() as output:
         try:
-            result = subprocess.run(args, stdout=output, stderr=subprocess.DEVNULL, timeout=remaining)
+            result = subprocess.run(args, stdout=output, stderr=subprocess.DEVNULL, timeout=remaining, env=env)
         except subprocess.TimeoutExpired:
             if not check:
                 return 124, ''
@@ -162,7 +162,20 @@ def command(args, timeout=10, check=True):
 
 
 def docker(*args, **kwargs):
-    return command(['docker', *args], **kwargs)
+    return command(['docker', '--host', engine_host, *args], env=engine_env, **kwargs)
+
+
+def local_engine():
+    context = os.environ.get('DOCKER_CONTEXT')
+    host = os.environ.get('DOCKER_HOST') if not context else None
+    env = {key: value for key, value in os.environ.items() if key not in ('DOCKER_HOST', 'DOCKER_CONTEXT')}
+    if not host:
+        _, raw = command(['docker', 'context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}',
+                          *([context] if context else [])], env=env)
+        host = json.loads(raw)
+    require(isinstance(host, str) and host.startswith('unix:///') and len(host) > len('unix:///'),
+            'local_engine_required')
+    return host, env
 
 
 def private_directory(path):
@@ -210,6 +223,7 @@ def snapshot(source, target, parent=None):
     fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
     try:
         target.mkdir(mode=0o755)
+        target.chmod(0o755)
         for name in os.listdir(fd):
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
             if stat.S_ISDIR(info.st_mode):
@@ -332,7 +346,8 @@ def pause(seconds=1):
 
 
 def db_ready():
-    code, _ = docker('exec', containers['postgres'], 'pg_isready', '-U', 'smoke', '-d', 'smoke', '-t', '1',
+    code, _ = docker('exec', containers['postgres'], 'pg_isready', '-h', '127.0.0.1',
+                     '-U', 'smoke', '-d', 'smoke', '-t', '1',
                      timeout=2, check=False)
     return code == 0
 
@@ -493,6 +508,7 @@ try:
     for component, base in (('server', server_base), ('web', web_base)):
         pins = re.findall(r'^FROM (\S+) AS runtime$', (repo / ('deploy/' + component + '.Dockerfile')).read_text(), re.M)
         require(pins == [base], 'base_pin_mismatch')
+    engine_host, engine_env = local_engine()
     # The checked copy is the only tree mounted into containers.
     work = Path(tempfile.mkdtemp(prefix='aboutme-runtime-'))
     snapshot(Path(artifacts) / 'server', work / 'server')
