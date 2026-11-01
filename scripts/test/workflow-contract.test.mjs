@@ -156,7 +156,7 @@ test("selector checks deletions, modifications, rename sides, and mixed changes"
   });
 });
 
-test("selector rejects unsafe modes, invalid names, missing refs, and empty diffs", () => {
+test("selector rejects unsafe modes, invalid names, missing refs, and empty diffs", (t) => {
   for (const kind of ["symlink", "new symlink", "executable", "mode change", "invalid UTF-8", "submodule"]) {
     withRepository(({ directory, git, put, commit }) => {
       const name = "docs/plans/entry.md";
@@ -165,7 +165,15 @@ test("selector rejects unsafe modes, invalid names, missing refs, and empty diff
       const base = ["executable", "new symlink"].includes(kind) ? git("rev-parse", "HEAD") : commit();
       if (["symlink", "new symlink"].includes(kind)) { rmSync(join(directory, name)); symlinkSync("../../../seed", join(directory, name)); }
       if (kind === "mode change") chmodSync(join(directory, name), 0o755);
-      if (kind === "invalid UTF-8") writeFileSync(Buffer.concat([Buffer.from(directory + "/docs/plans/"), Buffer.from([0xff]), Buffer.from(".md")]), "prose");
+      if (kind === "invalid UTF-8") {
+        try {
+          writeFileSync(Buffer.concat([Buffer.from(directory + "/docs/plans/"), Buffer.from([0xff]), Buffer.from(".md")]), "prose");
+        } catch (error) {
+          if (process.platform !== "darwin" || error.code !== "EILSEQ") throw error;
+          t.diagnostic("filesystem rejects non-UTF-8 filenames; the fixture runs on Linux");
+          return;
+        }
+      }
       if (kind === "submodule") { git("update-index", "--add", "--cacheinfo", `160000,${base},docs/plans/module.md`); git("commit", "-qm", "Gitlink"); }
       else commit();
       assert.equal(selector(directory, base), "full", kind);
@@ -198,6 +206,17 @@ for data in bad_records:
         return original(arguments, deadline)
     m.git = malformed
     assert m.select("pull_request", sys.argv[2]) == "full"
+for name, expected in [(b"docs/plans/a.md", "prose"), (b"docs/plans/\\xff.md", "full")]:
+    def simulated_name(arguments, deadline):
+        if arguments[0] == "diff":
+            return b"M\\0" + name + b"\\0"
+        if arguments[0] == "ls-tree":
+            return b"100644 blob " + b"0" * 40 + b"\\t" + name + b"\\0"
+        return original(arguments, deadline)
+    m.git = simulated_name
+    for commit in (sys.argv[2], "HEAD"):
+        assert m.tree(commit, 0) == {name: (b"100644", b"blob")}
+    assert m.select("pull_request", sys.argv[2]) == expected
 for score in range(101):
     assert m.parse_changes(("R%d\\0docs/plans/a.md\\0docs/plans/b.md\\0" % score).encode())
 assert m.parse_changes(b"R050\\0docs/plans/a.md\\0docs/plans/b.md\\0")

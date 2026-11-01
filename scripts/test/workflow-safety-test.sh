@@ -9,6 +9,7 @@ RELEASE_WORKFLOW=$ROOT/.github/workflows/release-images.yml
 IMAGE_CHECK=$ROOT/.github/actions/release-image-check/action.yml
 SECURITY_WORKFLOW=$ROOT/.github/workflows/security-scan.yml
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-workflow-safety.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
 
 fail() {

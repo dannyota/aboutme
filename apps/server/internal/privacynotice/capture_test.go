@@ -13,7 +13,7 @@ import (
 
 func noticeTestService(t *testing.T) (context.Context, *Service) {
 	t.Helper()
-	dsn, _ := testutil.NewMigratedTestDatabase(t)
+	dsn, db := testutil.NewMigratedTestDatabase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	t.Cleanup(cancel)
 	pool, err := store.NewPool(ctx, dsn)
@@ -25,7 +25,13 @@ func noticeTestService(t *testing.T) (context.Context, *Service) {
 		defer cancelCleanup()
 		pool.Close(cleanup)
 	})
-	return ctx, &Service{pool: pool, now: func() time.Time { return time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC) }}
+	return ctx, &Service{pool: pool, now: func() time.Time {
+		var now time.Time
+		if err := db.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			t.Error("test database clock failed")
+		}
+		return now
+	}}
 }
 
 func TestPrepareCapturesExactCohortAndResumes(t *testing.T) {

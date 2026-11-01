@@ -9,6 +9,8 @@ fail() { printf 'check-path-case-test: %s\n' "$*" >&2; exit 1; }
 
 git init -q "$WORK/repo"
 cd "$WORK/repo"
+git config core.ignorecase false
+git config core.precomposeunicode false
 BLOB=$(git hash-object -w --stdin </dev/null)
 
 index_paths() {

@@ -27,6 +27,7 @@ export FIXTURE_GOLANGCI=${expected[golangci-lint]} FIXTURE_GOVULNCHECK=${expecte
 
 BIN=$WORK/bin
 mkdir -p "$BIN"
+cp "$BASH" "$BIN/bash"
 
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
@@ -67,6 +68,9 @@ for name in golangci-lint govulncheck gitleaks; do
 #!/usr/bin/env bash
 exit 0
 EOF
+done
+for fixture in "$BIN"/*; do
+  [ ! -L "$fixture" ] || fail "fixture executable must not be a symlink: $fixture"
 done
 chmod +x "$BIN"/*
 
@@ -137,8 +141,9 @@ grep -Fq "node: .github/workflows/ci.yml has 99.0.0, want $FIXTURE_NODE" \
 
 # A drifted pin in a composite action the workflow uses is drift too.
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
-sed -i 's/go-version:.*/go-version: "1.99.0"/' \
-  "$CONTRACT/.github/actions/setup-go/action.yml"
+sed 's/go-version:.*/go-version: "1.99.0"/' \
+  "$CONTRACT/.github/actions/setup-go/action.yml" >"$WORK/action.yml"
+mv "$WORK/action.yml" "$CONTRACT/.github/actions/setup-go/action.yml"
 if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
   >"$WORK/action-drift.out" 2>&1; then
   fail "repository contract accepted a drifted Go pin in a composite action"

@@ -9,7 +9,9 @@ Read this file when running repository tools. Task-specific gotchas live in [Go]
 
 ## macOS local tooling
 
-Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3 and the repository's pinned Go, Node, Caddy, and Podman tools. Put Homebrew Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin` before the system tools on PATH. `make pre-push` resolves `bash` from PATH and requires Bash 4+; native tooling checks GNU `realpath`, `stat`, `base64`, `sha256sum`, and `date` before using their options. Python 3 supplies the watchdog, shared advisory lock, and detach fallback; `ss` or `lsof` supplies port probes.
+Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3 and the repository's pinned Go, Node, Caddy, and Podman tools. Put Homebrew Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin` before the system tools on PATH. Make recipes resolve `bash` from PATH; `make pre-push` and `make dev-https-browser-image` require Bash 4+. Native tooling checks GNU `realpath`, `stat`, `base64`, `sha256sum`, and `date` before using their options. Python 3 supplies the watchdog, shared advisory lock, and detach fallback; `ss` or `lsof` supplies port probes.
+
+Install Caddy 2.11.4 from its official macOS ARM64 release archive at `https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_mac_arm64.tar.gz` and put its `caddy` binary on PATH; CI uses the matching pinned release binary.
 
 Start `podman machine` before `make test-db-up`. The shared `aboutme-test-db` container publishes `127.0.0.1:20432`; verify that the VM forwards that port to the Mac before starting native services. Use the same container for test and native databases, and leave it running while another session uses it. The watchdog measures host processes, so the VM's own memory setting and container limits remain separate.
 

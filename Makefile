@@ -2,7 +2,7 @@
 # bash, not sh: test-db-up's host-side port probe uses /dev/tcp, a bash
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
-SHELL := /bin/bash
+SHELL := $(shell command -v bash)
 .PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
@@ -369,6 +369,7 @@ mail-capture-static-check: ## Run the local authentication-mail-capture lifecycl
 
 dev-https-browser-image: dev-https-status ## Build and record the pinned trusted-browser image by immutable ID
 	@set -Eeuo pipefail; \
+	(( BASH_VERSINFO[0] >= 4 )) || { echo 'dev-https-browser-image requires Bash 4 or newer; install Bash and put it first on PATH' >&2; exit 1; }; \
 	repo=$$(pwd -P); \
 	state="$$repo/.dev/native-https"; \
 	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
@@ -472,15 +473,15 @@ native-http-check: ## Run the deterministic native public HTTP capture and retai
 	bash scripts/native-http-capture.sh
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
-	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.service"}}')"; then \
+	@if ! container_json="$$(podman ps --format json)" || ! running_containers="$$(printf '%s' "$$container_json" | python3 -I -c 'import json, sys; rows = json.load(sys.stdin); assert isinstance(rows, list); assert all(isinstance(r, dict) and isinstance(r.get("Names"), list) and r["Names"] and all(isinstance(n, str) and n for n in r["Names"]) and "Labels" in r and (r["Labels"] is None or isinstance(r["Labels"], dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in r["Labels"].items())) for r in rows); print("\n".join("compose" for r in rows if any(n != "aboutme-test-db" for n in r["Names"]) and (r["Labels"] or {}).get("com.docker.compose.project") == "aboutme" and (r["Labels"] or {}).get("com.docker.compose.service") == "postgres")); print("\n".join("shared" for r in rows if "aboutme-test-db" in r["Names"]))')"; then \
 	  echo "test-db-up: cannot inspect running containers; refusing to start Postgres." >&2; \
 	  exit 1; \
 	fi; \
-	if awk -F '|' '$$1 != "aboutme-test-db" && $$2 == "aboutme" && $$3 == "postgres" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
+	if grep -qx compose <<<"$$running_containers"; then \
 	  echo "test-db-up: the Compose Postgres service is running; stop it before starting the shared database." >&2; \
 	  exit 1; \
 	fi; \
-	if awk -F '|' '$$1 == "aboutme-test-db" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
+	if grep -qx shared <<<"$$running_containers"; then \
 	  echo "aboutme-test-db already running; reusing it."; \
 	else \
 	  podman run -d --rm --name aboutme-test-db --memory 512m -p 127.0.0.1:20432:5432 \
