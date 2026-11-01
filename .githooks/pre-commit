@@ -2,8 +2,8 @@
 # Block secrets from ever reaching a commit. This repository is public, so a
 # secret that lands in history is exposed the moment it is pushed and cannot be
 # recalled -- rotating the key is the only real remedy. gitleaks takes about a
-# second on staged content, which is why this runs per commit while the heavier
-# Semgrep scan runs in `make scan`. The hook also runs the file-length check.
+# second on staged content, so it runs per commit. The hook also runs the
+# file-length check.
 #
 # Install with: make hooks-install
 set -Eeuo pipefail

@@ -11,9 +11,7 @@ on:
         required: true
         type: string
 
-# Least-privilege default for every job: the workflow only reads the repo. No
-# job writes back to it, and semgrep ci authenticates to its own platform via
-# SEMGREP_APP_TOKEN from the main-only semgrep environment.
+# Every job reads the repository without stored secrets.
 permissions:
   contents: read
 
@@ -745,84 +743,12 @@ jobs:
           cache-key: ${{ steps.setup.outputs.go-cache-key }}
           toolchain-hit: ${{ steps.setup.outputs.go-toolchain-hit }}
 
-  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis) and Supply
-  # Chain (SCA for Go + npm). gitleaks owns secret scanning.
-  # Each product set runs as its own `semgrep ci` scan in its own job, so the
-  # two scans overlap instead of adding up. Every scan uploads to the same
-  # Semgrep project and ref. The platform policy decides what fails `semgrep
-  # ci` itself; a gate step after each scan blocks in the repository, whatever
-  # that policy says. scripts/semgrep-gate.sh reads the scan's JSON and fails
-  # on any Code finding of severity ERROR, HIGH, or CRITICAL, and on any
-  # reachable Supply Chain finding of those severities. A reviewed false
-  # positive is suppressed in place with `nosemgrep: <rule-id>` and a reason.
-  # The scans read SEMGREP_APP_TOKEN from the semgrep environment, whose
-  # deployment branch policy allows only main. Run them only on main pushes
-  # and main dispatches so pull requests never receive the token.
-  semgrep-code:
-    name: Semgrep code
-    needs: [preflight]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: semgrep
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # semgrep ci is diff-aware; give it history
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-      # Keyed on the pinned version alone: a version bump gets a fresh cache
-      # instead of growing the old one forever.
-      - name: Restore pip cache for Semgrep 1.183.0
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/pip
-          key: pip-semgrep-1.183.0-${{ runner.os }}
-      - run: pip install semgrep==1.183.0
-      - run: scripts/test/semgrep-gate-test.sh
-      - run: semgrep ci --code --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-      - name: Block on ERROR, HIGH, and CRITICAL Code findings
-        run: scripts/semgrep-gate.sh code "$RUNNER_TEMP/semgrep.json"
-
-  semgrep-supply-chain:
-    name: Semgrep supply chain
-    needs: [preflight]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: semgrep
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # semgrep ci is diff-aware; give it history
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-      # The code job saves this cache; this job only restores it.
-      - name: Restore pip cache for Semgrep 1.183.0
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/pip
-          key: pip-semgrep-1.183.0-${{ runner.os }}
-      - run: pip install semgrep==1.183.0
-      - run: scripts/test/semgrep-sca-inputs-test.sh
-      - run: semgrep ci --supply-chain --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-      - name: Block on reachable ERROR, HIGH, and CRITICAL Supply Chain findings
-        run: scripts/semgrep-gate.sh supply-chain "$RUNNER_TEMP/semgrep.json"
-
   # Aggregate gate: the branch protection target. Each proof shard's own
   # evidence passed the closed-list check in verify-evidence.mjs when its
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded or has an explicit prose omission. The two Semgrep
-  # jobs may skip only outside main pushes and main dispatches, where the
-  # semgrep environment is unavailable.
+  # job above succeeded or has an explicit prose omission.
   ci:
     name: ci
     if: always()
@@ -837,8 +763,6 @@ jobs:
       - web
       - web-e2e
       - dev-https-proofs
-      - semgrep-code
-      - semgrep-supply-chain
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -875,23 +799,19 @@ jobs:
         if: always()
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          ALLOW_SEMGREP_SKIP: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
         run: |
           if ! printf '%s\n' "$NEEDS_JSON" | jq -e \
-            --arg event "$GITHUB_EVENT_NAME" \
-            --arg allow_semgrep_skip "$ALLOW_SEMGREP_SKIP" '
+            --arg event "$GITHUB_EVENT_NAME" '
               keys == (["preflight", "contracts", "macos-tooling", "vn-infra",
                 "server", "server-integration", "server-resumeapi", "web",
-                "web-e2e", "dev-https-proofs", "semgrep-code", "semgrep-supply-chain"] | sort)
+                "web-e2e", "dev-https-proofs"] | sort)
               and .preflight.result == "success"
               and (.preflight.outputs.selection as $selection
                 | ($selection == "full" or ($selection == "prose" and $event == "pull_request"))
                 and (to_entries | all(
                   .value.result == "success" or
                   (.value.result == "skipped" and (
-                    ($allow_semgrep_skip == "true"
-                      and (.key | IN("semgrep-code", "semgrep-supply-chain")))
-                    or ($selection == "prose" and $event == "pull_request"
+                    ($selection == "prose" and $event == "pull_request"
                       and (.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs")))
                   )))))
             ' >/dev/null; then

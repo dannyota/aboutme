@@ -21,7 +21,7 @@ while read -r name version; do
   expected[$name]=$version
 done <"$ROOT/.tool-versions"
 export FIXTURE_NODE=${expected[nodejs]} FIXTURE_GO=${expected[golang]}
-export FIXTURE_SQLC=${expected[sqlc]} FIXTURE_SEMGREP=${expected[semgrep]}
+export FIXTURE_SQLC=${expected[sqlc]}
 export FIXTURE_CADDY=${expected[caddy]} FIXTURE_GITLEAKS=${expected[gitleaks]}
 export FIXTURE_GOLANGCI=${expected[golangci-lint]} FIXTURE_GOVULNCHECK=${expected[govulncheck]}
 
@@ -55,11 +55,6 @@ EOF
 cat >"$BIN/sqlc" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "v$FIXTURE_SQLC"
-EOF
-
-cat >"$BIN/semgrep" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$FIXTURE_SEMGREP"
 EOF
 
 cat >"$BIN/caddy" <<'EOF'

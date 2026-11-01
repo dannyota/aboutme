@@ -127,7 +127,7 @@ func (b *boundedInitializationOutput) Write(value []byte) (int, error) {
 
 func probeBrowserVersion(ctx context.Context, executable string, supervisor supervisorCommand) (string, error) {
 	started := time.Now()
-	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- executable is the configured absolute browser path that New checked and never request data
+	// executable is the configured absolute browser path that New checked and never request data
 	cmd := exec.CommandContext(ctx, executable, "--version")
 	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
 	configure(cmd)
