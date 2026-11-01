@@ -841,11 +841,21 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
       },
       {
         "package-ecosystem": "gomod",
-        directories: ["/apps/server", "/packages/schema/gen/go", "/deploy/observer", "/deploy/caddy/production/build"],
+        directories: ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"],
         schedule: { interval: "weekly" },
         "open-pull-requests-limit": 2,
         groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
-        ignore: [{ "dependency-name": "github.com/caddyserver/caddy/v2" }],
+      },
+      {
+        "package-ecosystem": "gomod",
+        directories: ["/deploy/caddy/production/build"],
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+        ignore: [
+          { "dependency-name": "github.com/caddyserver/caddy/v2" },
+          { "dependency-name": "github.com/google/cel-go", versions: [">= 0.29.0"] },
+        ],
       },
       {
         "package-ecosystem": "npm",
@@ -865,6 +875,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
           { "dependency-name": "playwright" },
           { "dependency-name": "playwright-core" },
           { "dependency-name": "typescript" },
+          { "dependency-name": "pdfjs-dist" },
         ],
       },
       {
@@ -920,10 +931,11 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         (entry) => { entry.ignore.splice(ignoreIndex, 1); },
         (entry) => { entry.ignore[ignoreIndex]["update-types"] = ["version-update:semver-major"]; },
         (entry) => { entry.ignore[ignoreIndex].versions = ["1.0.0"]; },
+        ...(update.ignore[ignoreIndex].versions ? [(entry) => { delete entry.ignore[ignoreIndex].versions; }] : []),
       ]) {
         const config = structuredClone(valid);
         mutate(config.updates[index]);
-        assert.throws(() => checkDependabot(config));
+        assert.throws(() => checkDependabot(config), update.ignore[ignoreIndex]["dependency-name"]);
       }
     }
   }
@@ -987,13 +999,18 @@ function checkActionPins(source, path) {
 }
 
 function checkDependabot(config) {
-  const browserPackages = ["@playwright/test", "playwright", "playwright-core"];
+  const browserPackages = ["@playwright/test", "playwright", "playwright-core"]
+    .map((name) => ({ "dependency-name": name }));
   const scopes = [
     ["github-actions", ["/"], []],
-    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer", "/deploy/caddy/production/build"], ["github.com/caddyserver/caddy/v2"]],
+    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"], []],
+    ["gomod", ["/deploy/caddy/production/build"], [
+      { "dependency-name": "github.com/caddyserver/caddy/v2" },
+      { "dependency-name": "github.com/google/cel-go", versions: [">= 0.29.0"] },
+    ]],
     ["npm", ["/", "/packages/schema"], []],
-    ["npm", ["/apps/web"], [...browserPackages, "typescript"]],
-    ["npm", ["/deploy/dev-https-browser"], [...browserPackages, "@axe-core/playwright"]],
+    ["npm", ["/apps/web"], [...browserPackages, { "dependency-name": "typescript" }, { "dependency-name": "pdfjs-dist" }]],
+    ["npm", ["/deploy/dev-https-browser"], [...browserPackages, { "dependency-name": "@axe-core/playwright" }]],
   ];
   const updates = scopes.map(([ecosystem, directories, ignores]) => ({
     "package-ecosystem": ecosystem,
@@ -1006,7 +1023,7 @@ function checkDependabot(config) {
         ...(ecosystem === "github-actions" ? {} : { "update-types": ["minor", "patch"] }),
       },
     },
-    ...(ignores.length ? { ignore: ignores.map((name) => ({ "dependency-name": name })) } : {}),
+    ...(ignores.length ? { ignore: ignores } : {}),
   }));
   assert.deepEqual(config, { version: 2, updates }, "Dependabot must keep weekly coverage, bounded groups, and manual pins");
 }

@@ -14,6 +14,18 @@ updates:
       - /apps/server
       - /packages/schema/gen/go
       - /deploy/observer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: gomod
+    directories:
       - /deploy/caddy/production/build
     schedule:
       interval: weekly
@@ -29,6 +41,9 @@ updates:
       # Caddy mirrors .tool-versions and deploy/compose.yml, checked by
       # scripts/check-tool-versions.sh; production build/main.go mirrors it too.
       - dependency-name: github.com/caddyserver/caddy/v2
+      # Caddy 2.11.4 cannot build with cel-go >= 0.29; see ci.yml's server job.
+      - dependency-name: github.com/google/cel-go
+        versions: [">= 0.29.0"]
   - package-ecosystem: npm
     directories:
       - "/"
@@ -63,6 +78,9 @@ updates:
       - dependency-name: playwright-core
       # instructions/web.md pins TypeScript until vue-tsc supports TS 7.
       - dependency-name: typescript
+      # ADR 0023 pins pdf.js; apps/web/test/import/linkedin/read.test.ts
+      # checks the exact version and scans the pinned files for script calls.
+      - dependency-name: pdfjs-dist
   - package-ecosystem: npm
     directories:
       - /deploy/dev-https-browser
