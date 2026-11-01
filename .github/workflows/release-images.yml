@@ -1,4 +1,4 @@
-name: release-images
+name: Release images
 
 # Builds, smoke-tests and publishes the production images for a version tag.
 # It holds no cloud credential and never deploys; see
@@ -26,6 +26,7 @@ jobs:
   # the check from trusted main before other work, including on partial reruns.
   # Candidate checkouts supply build inputs only.
   eligibility:
+    name: Release eligibility
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -50,6 +51,7 @@ jobs:
   # App images fail fast together. Observer outcomes never gate app builds.
   # Each platform builds on a native runner.
   build:
+    name: Release images (${{ matrix.name }}, ${{ matrix.arch }})
     needs: eligibility
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
@@ -161,6 +163,7 @@ jobs:
   # provenance. A deploy pins one platform digest, never the index:
   # deploy/aws/scripts/deploy.sh picks linux/arm64.
   image:
+    name: Release index (${{ matrix.name }})
     needs: build
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
@@ -241,6 +244,7 @@ jobs:
   # (docs/design/deployment-transparency/README.md) builds a single-platform
   # arm64 manifest for Lambda. Its failures never block the app release.
   observer-image:
+    name: Release observer (arm64)
     needs: eligibility
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -332,6 +336,7 @@ jobs:
   # Its job stays independent so a Trivy finding cannot block the app images
   # or their release.
   observer-image-amd64:
+    name: Release observer (amd64)
     needs: eligibility
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -425,6 +430,7 @@ jobs:
   # artifacts. !cancelled() keeps GitHub from skipping this job when either
   # observer job fails. The explicit app image result is the release gate.
   release:
+    name: Publish release
     needs: [image, observer-image, observer-image-amd64]
     if: ${{ !cancelled() && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04

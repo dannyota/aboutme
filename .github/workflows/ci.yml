@@ -32,6 +32,7 @@ concurrency:
 # does not hide another.
 jobs:
   preflight:
+    name: CI preflight
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -55,6 +56,7 @@ jobs:
           echo "base_sha=$base" >> "$GITHUB_OUTPUT"
 
   macos-tooling:
+    name: macOS tooling
     needs: [preflight]
     runs-on: macos-latest
     timeout-minutes: 5
@@ -83,6 +85,7 @@ jobs:
         run: go test ./internal/renderprocess
 
   vn-infra:
+    name: VN infrastructure
     needs: [preflight]
     uses: ./.github/workflows/vn-infra.yml
 
@@ -96,6 +99,7 @@ jobs:
   # (scripts/npm-audit.sh); --omit=dev drops devDependencies, which never
   # ship.
   contracts:
+    name: Repository contracts
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -247,6 +251,7 @@ jobs:
   # suppressed. Revisit by 2026-12-31: check for a Caddy release that builds
   # with cel-go >= 0.30, and for x/crypto dropping openpgp.
   server:
+    name: Server checks
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -399,6 +404,7 @@ jobs:
   # other suites in this job or with server-resumeapi. The production Caddy
   # image test joins this job last: it needs only Podman.
   server-integration:
+    name: Server integration
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -473,6 +479,7 @@ jobs:
   # database service, so they run at the same time as server-integration's
   # suites rather than one after the other.
   server-resumeapi:
+    name: Resume API integration
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -528,6 +535,7 @@ jobs:
   # imports is listed) is proven by the web-e2e shards, which build both Nuxt
   # surfaces from exactly the manifest's files.
   web:
+    name: Web checks
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -557,6 +565,7 @@ jobs:
   # every spec once (Makefile WEB_E2E_SHARD). Each shard builds the Nuxt
   # surfaces it tests from the source manifest inside the pinned image.
   web-e2e:
+    name: Web E2E (${{ matrix.shard }})
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -610,6 +619,7 @@ jobs:
   # mid-test failure facts (exports.spec.ts); every other proof uploads
   # nothing.
   dev-https-proofs:
+    name: HTTPS proofs (${{ matrix.group }})
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -726,6 +736,7 @@ jobs:
   # deployment branch policy allows only main. Run them only on main pushes
   # and main dispatches so pull requests never receive the token.
   semgrep-code:
+    name: Semgrep code
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -754,6 +765,7 @@ jobs:
         run: scripts/semgrep-gate.sh code "$RUNNER_TEMP/semgrep.json"
 
   semgrep-supply-chain:
+    name: Semgrep supply chain
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -788,6 +800,7 @@ jobs:
   # job above succeeded. The two Semgrep jobs may skip only outside main
   # pushes and main dispatches, where the semgrep environment is unavailable.
   ci:
+    name: ci
     if: always()
     needs:
       - preflight

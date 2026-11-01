@@ -380,6 +380,8 @@ test("required gate rejects competing and unprovable check names in every workfl
       ["implicit ci", { ci: {} }, /sole ci check producer/],
       ["explicit ci", { other: { name: "ci" } }, /sole ci check producer/],
       ["dynamic name", { other: { name: "${{ matrix.name }}" } }, /static check name/],
+      ["partial ci prefix", { other: { name: "c${{ matrix.x }}" } }, /static check name/],
+      ["complete ci prefix", { other: { name: "ci${{ matrix.x }}" } }, /static check name/],
       ["non-string name", { other: { name: null } }, /static check name/],
     ];
     for (const [name, jobs, diagnostic] of fixtures) {
@@ -395,6 +397,26 @@ test("required gate rejects competing and unprovable check names in every workfl
   const vn = readWorkflow("vn-infra");
   vn.jobs.ci = { name: "Infrastructure checks" };
   checkRequiredGate(readWorkflow("ci"), vn);
+});
+
+test("required gate rejects YAML labels without a distinct visible prefix", () => {
+  for (const [name, scalar] of [
+    ["leading space", '" ${{ x }}"'],
+    ["uppercase ci", '"CI ${{ x }}"'],
+    ["mixed case ci", '"Ci${{ x }}"'],
+    ["folded empty prefix", ">-\n\n  ${{ x }}\n"],
+    ["quoted empty prefix", '"\\t${{ x }}"'],
+  ]) {
+    const ci = readWorkflow("ci");
+    ci.jobs.contracts.name = parseYaml(`name: ${scalar}\n`, name).toJS().name;
+    assert.throws(() => checkRequiredGate(ci, readWorkflow("vn-infra")), /static check name/, name);
+  }
+});
+
+test("required gate accepts matrix labels with a distinct static prefix", () => {
+  const ci = readWorkflow("ci");
+  ci.jobs["web-e2e"].name = parseYaml('name: "Web E2E (${{ matrix.shard }})"\n', "fixture").toJS().name;
+  checkRequiredGate(ci, readWorkflow("vn-infra"));
 });
 
 test("aggregate accepts only successful jobs and Semgrep skips outside main scans", () => {
@@ -727,7 +749,11 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
   })) {
     for (const [id, job] of Object.entries(workflow.jobs)) {
       const name = Object.hasOwn(job, "name") ? job.name : id;
-      assert.ok(typeof name === "string" && !name.includes("${{"), `${path}/${id}: static check name required to prove ci uniqueness`);
+      const prefix = typeof name === "string" ? name.split("${{", 1)[0].trim().toLowerCase() : "";
+      assert.ok(
+        typeof name === "string" && (!name.includes("${{") || (prefix.length > 0 && !"ci".startsWith(prefix))),
+        `${path}/${id}: static check name prefix required to prove ci uniqueness`,
+      );
       if (path === ".github/workflows/ci.yml" && id === "ci") continue;
       assert.notEqual(name, "ci", `${path}/${id}: aggregate must be the sole ci check producer`);
     }
