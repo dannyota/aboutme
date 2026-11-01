@@ -68,8 +68,9 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
 
 work=$(mktemp -d)
+ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
 # One SSH connection for the whole run.
-ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m)
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
 # Runs one host script as root. Arguments include tags, digests, operation
@@ -141,7 +142,7 @@ on_exit() {
       { say "could not release the operation lock; fence.sh clear owns it"; status=1; }
   fi
   ssh_close
-  rm -rf "$work"
+  rm -rf "$work" "$ssh_dir"
   exit "$status"
 }
 trap on_exit EXIT

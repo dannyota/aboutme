@@ -5,6 +5,19 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
+
+# macOS limits Unix socket paths to 104 bytes, even with a long TMPDIR.
+control_path='ControlPath=\$ssh_dir/(ssh-%C|prod\.sock|drill\.sock)("| )'
+for script in deploy.sh restore-drill.sh; do
+  path=$root/deploy/vn/scripts/$script
+  grep -qxF 'ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)' "$path" ||
+    fail "$script: SSH socket directory must use a short private /tmp path"
+  while IFS= read -r line; do
+    [[ $line =~ $control_path ]] ||
+      fail "$script: ControlPath must use a short name in the SSH socket directory"
+  done < <(grep 'ControlPath=' "$path")
+done
+
 expect_mcp_flag() {
   local expected=$1 context=$2 actual
   actual=$(cimd_effective_mcp_flag) || fail "$context: cannot determine MCP_ENABLED"
