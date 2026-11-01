@@ -393,10 +393,19 @@ test('chrome measurements detect layout and content mutations', async ({
     (element as HTMLElement).style.gridTemplateColumns = '1fr';
   });
   expect((await measureChromeGrid(grid)).columns).toBe(1);
-  await grid.locator(':scope > li').nth(1).evaluate((element) => {
-    (element as HTMLElement).style.marginTop = '-36px';
+  await grid.evaluate((element) => {
+    const first = element.children[0]!.getBoundingClientRect();
+    const second = element.children[1] as HTMLElement;
+    const top = second.getBoundingClientRect().top;
+    second.style.transform = `translateY(${first.bottom - top + 4}px)`;
   });
-  expect((await measureChromeGrid(grid)).separated).toBe(false);
+  await expect.poll(() => grid.evaluate((element) => {
+    const first = element.children[0]!.getBoundingClientRect();
+    const second = element.children[1]!.getBoundingClientRect();
+    return first.bottom - second.top;
+  })).toBeCloseTo(4, 0);
+  await expect.poll(async () => (await measureChromeGrid(grid)).separated)
+    .toBe(false);
 
   const title = page.getByTestId('landing-title');
   await expect.poll(() => measureTextContainment(title))
