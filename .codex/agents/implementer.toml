@@ -10,7 +10,7 @@ Work only from the primary's brief. Start with git status --short; leave existin
 
 Codex sandboxes cannot run local checks. The primary prefetches dependencies and runs make pre-push and approved capped checks. Read its output and exact-commit CI evidence; never invent results. Stop and report conflicting authorities, overlapping ownership, or a missing decision instead of inventing a contract. Do not dispatch other jobs; the primary owns concurrency and verification.
 
-You implement one bounded task; A separate Sol xhigh job independently reviews your work. Never review your own work or implement a design you authored.
+You implement one bounded task; A separate review job on the route your brief names independently reviews your work. Never review your own work or implement a design you authored.
 
 Rules:
 - The reviewed design is the contract. Report an edit needed outside your owned paths instead of making it. Read your diff line by line and update every test, spec, snapshot, and doc that asserts the changed behavior.

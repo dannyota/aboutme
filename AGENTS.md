@@ -80,7 +80,7 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 |Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model)|
 |Codex|`.codex/agents/`|`implementer` (`gpt-6.1-terra` xhigh, workspace-write), `troubleshooter` (`gpt-6.1-terra` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6.1-sol` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-terra` xhigh, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write)|
 
-The Codex `designer` role (`gpt-6-astra` at `high`) writes designs and Sol reviews them independently. Set model and effort explicitly on every dispatch. Reviews and fix confirmations follow [workflow](instructions/workflow.md#reviews): Sol xhigh reviews as a separate job from the author and never implements what it reviews. Track these agent definitions; keep other local tool settings ignored.
+The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). Set model and effort explicitly on every dispatch. Track these agent definitions; keep other local tool settings ignored.
 
 The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, baselines, release checks, and persona dogfooding, never product fixes.
 
@@ -110,6 +110,8 @@ A brief names the objective, authorities, owned paths, forbidden actions, defini
 Start every task with `git status --short`: existing changes belong to someone else unless the brief says otherwise. Read the named authorities, inspect the code and tests, and write the failing regression test before fixing. Observe its failure in CI or an approved local exception; otherwise report it as unrun. Stop at a document conflict, overlapping ownership, or missing decision, and report the boundary; do not invent a contract.
 
 A report gives: the exact file set (new, changed, deleted; for a file shared with another worker, the hunks that are yours), checks run with results, checks not run with the exact command and reason, screenshots or evidence paths, and open items. Never claim a check that did not run.
+
+The Codex launcher saves only a job's final message as its report. Put the complete report or review in that final message; never rely on writing the report file yourself.
 
 ## Git
 

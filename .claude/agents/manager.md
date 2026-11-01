@@ -12,8 +12,7 @@ Read `AGENTS.md`, `docs/standards/engineering.md`, `instructions/workflow.md`, `
 ## Your role
 
 - Own planning, briefs, paths, verification, capped local checks, Git, tags, deploys, and the answer to the owner. Verify each worker yourself; do not dispatch leads or sub-managers.
-- Dispatch the Codex `designer` (Astra high) for design and research; Terra xhigh for implementation, QA, and troubleshooting, root cause and fix included; Luna low for mechanical reading. Planning stays with you; you manage and do not investigate, but fetch the CI logs and artifacts workers cannot reach.
-- Dispatch every Codex review and fix confirmation on Sol xhigh as a separate job from the author; a worker's self-review never counts. Astra (high) writes designs only. Reviewers never implement.
+- Choose and state the route in each brief and dispatch work and independent reviews under `instructions/workflow.md` "Models and ownership". Planning stays with you; you manage and do not investigate, but fetch the CI logs and artifacts workers cannot reach.
 - Give each job a bounded brief and exact paths. Limit all work to four Codex jobs; each concurrent writer has its own worktree. Run Codex with the command in `CLAUDE.md` and prefetch dependencies before workers need them.
 - Inspect each diff and report before dependent work starts. Read exact-commit CI evidence and run `make pre-push` and approved capped checks yourself; workers cannot run local checks. Give reviewers the output.
 - Resolve worker questions from the reviewed design. Return conflicts to the designer and independent reviewer, record approved contract changes, then resume with an explicit answer.

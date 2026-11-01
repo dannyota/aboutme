@@ -16,3 +16,13 @@ Install Caddy 2.11.4 from its official macOS ARM64 release archive at `https://g
 Start `podman machine` before `make test-db-up`. The shared `aboutme-test-db` container publishes `127.0.0.1:20432`; verify that the VM forwards that port to the Mac before starting native services. Use the same container for test and native databases, and leave it running while another session uses it. The watchdog measures host processes, so the VM's own memory setting and container limits remain separate.
 
 On non-Linux hosts the native server starts with print and PDF rendering disabled and logs that limitation once. Owner PDF, public PDF and share-image render requests return 503 through their existing error envelopes. The private print listener also returns 503. Linux still requires the browser sandbox check to pass at startup; no platform launches an unsandboxed browser.
+
+## Portable scripts and tests
+
+- macOS temp paths resolve `/var` to `/private/var`; compare canonical paths (`pwd -P`) wherever a tool canonicalizes.
+- macOS has no `/proc`; `[ /dev/fd/N -ef FILE ]` stats the devfs node, so match descriptors with Python `os.fstat` (`st_dev`, `st_ino`).
+- Homebrew `flock` (discoteq) reopens `/dev/fd/N`; lock an inherited descriptor with `fcntl.flock` on the descriptor itself.
+- `python3 -I` ignores `PYTHONDONTWRITEBYTECODE`; tests that spawn Python pass `-B`.
+- Darwin rejects read deadlines on FIFOs; use a pipe or a polled file in Go test handshakes.
+- Podman on macOS runs in a VM: `--network=host` reaches the VM, not the Mac; use a Podman network or published loopback ports.
+- GNU `sort` fails in some macOS locales; use `LC_ALL=C` where order matters.
