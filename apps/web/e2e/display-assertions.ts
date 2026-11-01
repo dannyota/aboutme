@@ -66,3 +66,24 @@ export async function measureVerticalFlow(items: Locator): Promise<boolean> {
       && (index === 0 || box.top >= boxes[index - 1]!.bottom - 1));
   });
 }
+
+// --- verify and card ---
+
+/** Measure crop geometry in viewport coordinates. */
+export async function measureCardCrop(image: Locator): Promise<{
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}> {
+  return image.evaluate((element) => {
+    const imageBox = element.getBoundingClientRect();
+    const frame = element.parentElement!.getBoundingClientRect();
+    return {
+      height: imageBox.height / frame.height,
+      left: (imageBox.left - frame.left) / frame.width,
+      top: (imageBox.top - frame.top) / frame.height,
+      width: imageBox.width / frame.width,
+    };
+  });
+}
