@@ -298,7 +298,7 @@ drop addresses, URIs, and request headers. Its RAM-only feed and logs follow
 both mail the support mailbox through Bizfly SMTP with `msmtp`, at most one
 message per condition per UTC day, from the sender the app uses. GreenNode
 vMonitor is the external readiness alarm: it checks `/readyz` every minute from
-two public locations and mails the owner. The GitHub
+two public locations and alerts the owner on Telegram. The GitHub
 [uptime workflow](../../.github/workflows/uptime.yml) is a slower backstop. The
 [production runbook](../runbooks/production.md#alarms) owns check settings,
 notification delivery, and monthly quota renewal.
@@ -310,7 +310,7 @@ exception to GitHub holding no cloud credentials (owner, 2026-10-14).
 
 | Signal   | Mechanism                                                        |
 | -------- | ---------------------------------------------------------------- |
-| App down | vMonitor on `/readyz`, email; GitHub uptime backstop             |
+| App down | vMonitor on `/readyz`, Telegram; GitHub uptime backstop          |
 | Units    | `OnFailure=` mail; `watch.sh` lists failed units                 |
 | Host     | `watch.sh`: root and data volume above 70%                       |
 | Database | `watch.sh`: archive failure, newest backup at least 26 hours old |

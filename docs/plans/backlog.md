@@ -20,7 +20,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
-- Renew the free vMonitor Synthetic Test and email quotas each month, and automate renewal once the `vngcloud` CLI supports it; current expiries are Synthetic 2026-10-25 21:43 UTC and email 2026-11-13 03:10 UTC. Evidence: [external readiness monitoring](./traceability/vietnam-operations.md#external-readiness-monitoring).
+- Renew the free vMonitor Basic Synthetic Test quota each month and automate renewal once the `vngcloud` CLI supports it. The current quota is active from 2026-11-01T06:54:54Z to 2026-12-01T06:54:54Z; the next renewal window is 2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z. The email quota was deleted. Evidence: [production runbook](../runbooks/production.md#alarms).
+- Investigate recurring responses of about 5 seconds from HCM01. Evidence: vMonitor results for `aboutme-readyz` on 2026-11-01.
 
 ## Vietnam production
 
