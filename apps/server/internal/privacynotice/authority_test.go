@@ -21,7 +21,6 @@ func authorizeNoticeFixture(t *testing.T, s *Service) {
 	if err != nil || campaign.SealedAt == nil {
 		t.Fatal("authority fixture campaign unavailable")
 	}
-	s.now = time.Now
 	epoch := uuid.NewString()
 	data, marshalErr := json.Marshal(map[string]any{"schema_version": 1, "campaign_id": authmail.PrivacyNoticeID, "content_sha256": hex.EncodeToString(contentDigest()), "epoch": epoch, "cutoff_at": formatTime(campaign.CutoffAt), "expected_count": campaign.ExpectedCount, "issued_at": formatTime(*campaign.SealedAt)})
 	if marshalErr != nil {
@@ -134,6 +133,24 @@ func TestHostAuthorityRevocationAndEpochFence(t *testing.T) {
 	}
 	if report, err := s.Status(t.Context()); err != nil || report.Code != 2 {
 		t.Fatal("receipt-free authorization read rejected")
+	}
+}
+
+func TestSendAuthorityRejectsFutureSeal(t *testing.T) {
+	s, _ := prepareEnqueueFixture(t, 1)
+	q := store.New(s.pool)
+	campaign, err := q.GetPrivacyNoticeCampaign(t.Context())
+	if err != nil || campaign.SealedAt == nil {
+		t.Fatal("sealed campaign unavailable")
+	}
+	clock := s.now
+	s.now = func() time.Time { return campaign.SealedAt.Add(-time.Microsecond) }
+	if s.AuthorizeSend(t.Context(), q) {
+		t.Fatal("future seal authorized sending")
+	}
+	s.now = clock
+	if !s.AuthorizeSend(t.Context(), q) {
+		t.Fatal("valid seal rejected")
 	}
 }
 

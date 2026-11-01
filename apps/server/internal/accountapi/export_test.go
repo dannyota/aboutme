@@ -763,9 +763,9 @@ func TestExportRouteIncludesTheShowcaseState(t *testing.T) {
 	seed(noRole.ID, nil)
 
 	type exportedShowcase struct {
-		State       string  `json:"state"`
-		Role        *string `json:"role"`
-		RequestedAt string  `json:"requestedAt"`
+		State       string     `json:"state"`
+		Role        *string    `json:"role"`
+		RequestedAt *time.Time `json:"requestedAt"`
 	}
 	export := func() (map[uuid.UUID]*exportedShowcase, []byte) {
 		t.Helper()
@@ -792,10 +792,10 @@ func TestExportRouteIncludesTheShowcaseState(t *testing.T) {
 	}
 
 	byID, body := export()
-	if got := byID[listed.ID]; got == nil || got.State != "listed" || got.Role == nil || *got.Role != "backend" || got.RequestedAt != "2026-09-28T09:30:00Z" {
+	if got := byID[listed.ID]; got == nil || got.State != "listed" || got.Role == nil || *got.Role != "backend" || got.RequestedAt == nil || !got.RequestedAt.Equal(requested) {
 		t.Errorf("listed resume showcase = %+v, want listed backend requested 2026-09-28T09:30:00Z", got)
 	}
-	if got := byID[noRole.ID]; got == nil || got.State != "listed" || got.Role != nil || got.RequestedAt != "2026-09-28T09:30:00Z" {
+	if got := byID[noRole.ID]; got == nil || got.State != "listed" || got.Role != nil || got.RequestedAt == nil || !got.RequestedAt.Equal(requested) {
 		t.Errorf("resume showcase without a role = %+v, want listed with no role", got)
 	}
 	if got, present := byID[plain.ID]; !present || got != nil {
