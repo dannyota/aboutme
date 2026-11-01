@@ -84,6 +84,14 @@ a newest approval: the documented review object has no review timestamp. Any
 relevant rejection or wrong comment refuses regardless of list order.
 Self-approval by an enrolled human is accepted deliberately.
 
+The workflow path must be `.github/workflows/approval-probe.yml` or exactly
+`.github/workflows/approval-probe.yml@main`. GitHub's
+[REST run example](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run)
+uses the branch-qualified form. Both forms require the pinned workflow ID,
+`main` branch, and independently selected SHA. After reading approvals and jobs,
+the checker re-fetches the run and requires the same identity and actors,
+attempt one, and completed success.
+
 ## Scenarios
 
 Run each case separately. Wait for a terminal result in the UI; avoid API
@@ -116,9 +124,11 @@ before it settles, but GitHub may refuse a second review. If multiple relevant
 reviews are visible, the expected result is `APPROVAL_COUNT`, or a conflicting
 comment/rejection refusal. Never treat that run as accepted.
 
-The fake-curl fixture exercises an unrelated review on page one and the sole
-relevant approval on page two, including `Link` traversal. Its execution awaits
-hosted checks. GitHub's
+The fake-curl fixtures exercise an unrelated review on page one and the sole
+relevant approval on page two, including `Link` traversal and a third page.
+The checker retains advertised `last` bounds and refuses missing `next` before
+that page, missing `prev` after page one, changed bounds, empty advertised pages,
+or any relation beyond `last`. Fixture execution awaits hosted checks. GitHub's
 [review-history reference](https://docs.github.com/en/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run)
 does not document `per_page` or `page` for this endpoint. A single live page
 does **not** prove pagination support. Record unavailable live pagination as
@@ -137,25 +147,26 @@ GitHub's anonymous core limit is
 [60 requests per hour per originating IP](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 All anonymous clients sharing that IP consume the same allowance. Use response
 headers to measure it; never assume a fresh allowance. A successful probe uses
-`1 run + P approval pages + 1 jobs page = P + 2` requests, normally three. Each
-invocation permits at most 12 requests and preserves at least 12 remaining
-requests. It makes no retries and stops on 403, 429, or insufficient budget.
-Each request has a 5-second connect and 15-second total timeout.
+`1 run + P approval pages + 1 jobs page + 1 run recheck = P + 3` requests,
+normally four. Each invocation permits at most 12 requests, including the final
+run recheck, and preserves at least 12 remaining requests. It makes no retries
+and stops on 403, 429, or insufficient budget. Each request has a 5-second
+connect and 15-second total timeout.
 
 A proposed hourly complete-cycle envelope is:
 
 | Work                                                                | Maximum requests |
 | ------------------------------------------------------------------- | ---------------: |
 | Discover approval runs twice                                        |                2 |
-| Verify selected approval run, including up to two history pages     |                4 |
+| Verify selected approval run, two history pages, and final recheck  |                5 |
 | Coordinator and release CI run discovery and detail                 |                4 |
 | Publication run discovery, detail, and jobs                         |                3 |
 | Release metadata and digest asset                                   |                2 |
 | Repeat mutable approval, main-ref, and CI evidence before admission |                7 |
 | Observer GitHub reads                                               |                8 |
 | Other clients sharing the IP                                        |                6 |
-| Total                                                               |               36 |
-| Remaining from 60                                                   |               24 |
+| Total                                                               |               37 |
+| Remaining from 60                                                   |               23 |
 
 This is a budget hypothesis, not measured feasibility. The primary must count
 every actual request, redirects and pages included, for a complete cycle. Record

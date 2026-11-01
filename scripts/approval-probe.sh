@@ -101,9 +101,10 @@ def fetch(url):
         require(body_path.stat().st_size <= MAX_BYTES, "RESPONSE_SIZE")
         return decode(body_path.read_bytes()), headers.get("link")
 
-def next_page(link, endpoint, page, per_page):
+def next_page(link, endpoint, page, per_page, last):
     if link is None:
-        return None
+        require(page == 1 and last is None, "PAGINATION")
+        return None, last
     require(bool(link), "PAGINATION")
     links = {}
     for entry in link.split(","):
@@ -129,13 +130,21 @@ def next_page(link, endpoint, page, per_page):
         else:
             require(number >= page, "PAGINATION")
         links[relation] = number
-    require("last" not in links or links["last"] <= page or "next" in links, "PAGINATION")
-    return links.get("next")
+    require(page == 1 or "prev" in links, "PAGINATION")
+    if "last" in links:
+        require(last is None or last == links["last"], "PAGINATION")
+        last = links["last"]
+    following = links.get("next")
+    if last is not None:
+        require(page <= last and all(number <= last for number in links.values()) and
+                (following is not None) == (page < last), "PAGINATION")
+    return following, last
 
 def collect(endpoint, per_page, jobs=False):
     items = []
     page = 1
     total = None
+    last = None
     while True:
         body, link = fetch(f"{endpoint}?per_page={per_page}&page={page}")
         if jobs:
@@ -145,9 +154,9 @@ def collect(endpoint, per_page, jobs=False):
             total = body["total_count"]
             body = body["jobs"]
         require(isinstance(body, list), "MISSING_FIELDS")
-        require(len(body) <= per_page, "PAGINATION")
+        require(len(body) <= per_page and (page == 1 or bool(body)), "PAGINATION")
         items.extend(body)
-        following = next_page(link, endpoint, page, per_page)
+        following, last = next_page(link, endpoint, page, per_page, last)
         if following is None:
             require(not jobs or len(items) == total, "JOBS_COUNT")
             return items
@@ -163,7 +172,8 @@ def inspect_run(run, run_id, sha, pins):
     require(run["id"] == run_id and run["repository"]["id"] == pins["repository_id"] and
             run["repository"]["full_name"] == "dannyota/aboutme" and
             run["workflow_id"] == pins["workflow_id"] and
-            run["path"] == ".github/workflows/approval-probe.yml" and
+            run["path"] in (".github/workflows/approval-probe.yml",
+                            ".github/workflows/approval-probe.yml@main") and
             run["event"] == "workflow_dispatch" and run["head_branch"] == "main" and
             run["head_sha"] == sha, "RUN_IDENTITY")
     require(run["run_attempt"] == 1, "RUN_ATTEMPT")
@@ -253,6 +263,12 @@ try:
     inspect_approvals(collect(endpoint + "/approvals", per_page), pins, comment)
     inspect_jobs(collect(endpoint + "/attempts/1/jobs", 100, jobs=True), run_id, sha)
     require(run["conclusion"] == "success", "RUN_UNSUCCESSFUL")
+    current, link = fetch(endpoint)
+    require(link is None, "PAGINATION")
+    inspect_run(current, run_id, sha, pins)
+    require(all(current[key]["id"] == run[key]["id"] for key in
+                ["actor", "triggering_actor"]), "RUN_ACTOR")
+    require(current["conclusion"] == "success", "RUN_UNSUCCESSFUL")
 except Refusal as error:
     reason = str(error)
 except (OSError, ValueError, TypeError, KeyError, RecursionError):

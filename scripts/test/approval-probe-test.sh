@@ -58,6 +58,9 @@ with log.open("a") as output:
     output.write(url + "\n")
 responses = json.loads((directory / "responses.json").read_text())
 entry = responses[url]
+if isinstance(entry, list):
+    occurrence = log.read_text().splitlines().count(url)
+    entry = entry[occurrence - 1]
 Path(args[args.index("--dump-header") + 1]).write_text(entry["headers"])
 Path(args[args.index("--output") + 1]).write_text(entry["body"])
 sys.stdout.write(str(entry["status"]))
@@ -79,12 +82,18 @@ def fixture():
             base + "/attempts/1/jobs?per_page=100&page=1": response(copy.deepcopy(jobs), 57)}
 
 count = 0
-def check(name, reason="ACCEPTED", mutate=None, expected_requests=3, remaining="default",
-          config=None, args=None, rate_known=True):
+def check(name, reason="ACCEPTED", mutate=None, expected_requests=None, remaining="default",
+          config=None, args=None, rate_known=True, expected_urls=None):
     global count
+    if expected_requests is None:
+        expected_requests = 4 if reason == "ACCEPTED" else 3
     data = fixture()
     if mutate:
         mutate(data)
+    if isinstance(data[base], dict):
+        final = copy.deepcopy(data[base])
+        final["headers"] = response(None, 60 - expected_requests)["headers"]
+        data[base] = [data[base], final]
     if remaining == "default":
         remaining = 60 - expected_requests if expected_requests else None
     with tempfile.TemporaryDirectory(prefix="aboutme-approval-test-") as temporary:
@@ -120,6 +129,8 @@ def check(name, reason="ACCEPTED", mutate=None, expected_requests=3, remaining="
         actual_requests = (directory / "requests").read_text().splitlines() if expected_requests else []
         assert len(actual_requests) == expected_requests, name
         assert all(url.startswith(base) for url in actual_requests), name
+        if expected_urls is not None:
+            assert actual_requests == expected_urls, name
     count += 1
 
 def change(path, field, value):
@@ -132,9 +143,32 @@ def change(path, field, value):
         data[path]["body"] = json.dumps(body)
     return mutate
 
+def final_run(field, value):
+    def mutate(data):
+        body = copy.deepcopy(run)
+        target = body
+        for key in field[:-1]:
+            target = target[key]
+        target[field[-1]] = value
+        data[base] = [data[base], response(body, 56)]
+    return mutate
+
 approvals_url = base + "/approvals?per_page=100&page=1"
 jobs_url = base + "/attempts/1/jobs?per_page=100&page=1"
-check("approved")
+check("approved", expected_urls=[base, approvals_url, jobs_url, base])
+for path in [".github/workflows/approval-probe.yml", ".github/workflows/approval-probe.yml@main"]:
+    check("documented workflow path", mutate=change(base, ["path"], path))
+for path in [".github/workflows/approval-probe.yml@other",
+             ".github/workflows/approval-probe.yml@refs/heads/main",
+             ".github/workflows/../workflows/approval-probe.yml@main",
+             ".github/workflows/approval-probe.yml@main/../other",
+             ".github/workflows/approval-probe.yml@main@other"]:
+    check("untrusted workflow path", "RUN_IDENTITY", change(base, ["path"], path), 1)
+for field, value in [(["workflow_id"], 99), (["head_branch"], "topic"), (["head_sha"], "c" * 40)]:
+    def qualified_mismatch(data, field=field, value=value):
+        change(base, ["path"], ".github/workflows/approval-probe.yml@main")(data)
+        change(base, field, value)(data)
+    check("qualified path still binds identity", "RUN_IDENTITY", qualified_mismatch, 1)
 check("self approval allowed", mutate=change(approvals_url, [0, "user", "id"], owner))
 check("other enrolled dispatcher", mutate=change(base, ["triggering_actor", "id"], reviewer))
 check("job array order does not define execution order", mutate=change(
@@ -159,6 +193,38 @@ for field, value, reason in [
 ]:
     check(str(field), reason, change(base, field, value), 1)
 check("failed run", "RUN_UNSUCCESSFUL", change(base, ["conclusion"], "failure"))
+for field, value, reason in [
+    (["id"], run_id + 1, "RUN_IDENTITY"),
+    (["repository", "id"], 99, "RUN_IDENTITY"),
+    (["repository", "full_name"], "other/aboutme", "RUN_IDENTITY"),
+    (["workflow_id"], 99, "RUN_IDENTITY"),
+    (["path"], ".github/workflows/approval-probe.yml@other", "RUN_IDENTITY"),
+    (["event"], "push", "RUN_IDENTITY"),
+    (["head_branch"], "topic", "RUN_IDENTITY"),
+    (["head_sha"], "c" * 40, "RUN_IDENTITY"),
+    (["run_attempt"], 2, "RUN_ATTEMPT"),
+    (["actor", "id"], reviewer, "RUN_ACTOR"),
+    (["triggering_actor", "id"], reviewer, "RUN_ACTOR"),
+    (["actor", "type"], "Bot", "RUN_ACTOR"),
+    (["triggering_actor", "type"], "Bot", "RUN_ACTOR"),
+    (["status"], "in_progress", "RUN_INCOMPLETE"),
+    (["conclusion"], "cancelled", "RUN_CANCELLED"),
+    (["conclusion"], "failure", "RUN_UNSUCCESSFUL"),
+]:
+    check("final run changed " + str(field), reason, final_run(field, value), 4,
+          expected_urls=[base, approvals_url, jobs_url, base])
+
+def interleaved_rerun(data):
+    body = dict(run, run_attempt=2, status="in_progress", conclusion=None)
+    data[base] = [data[base], response(body, 56)]
+check("rerun starts while reading evidence", "RUN_ATTEMPT", interleaved_rerun, 4,
+      expected_urls=[base, approvals_url, jobs_url, base])
+check("final read preserves reserve", "BUDGET", lambda data: data.update(
+      {base: [data[base], response(run, 11)]}), 4, 11)
+check("final read can leave exact reserve", mutate=lambda data: data.update(
+      {base: [data[base], response(run, 12)]}), remaining=12)
+check("reserve cannot fund final read", "BUDGET", lambda data: data.update(
+      {jobs_url: response(jobs, 12)}), 3, 12)
 for field, value, reason in [
     ([0, "state"], "rejected", "APPROVAL_REJECTED"),
     ([0, "state"], "unknown", "APPROVAL_FIELDS"),
@@ -191,7 +257,7 @@ def paginated(data):
     data[first_url] = response([unrelated], 58, link=f'<{next_url}>; rel="next", <{next_url}>; rel="last"')
     data[next_url] = response([approval], 57, link=f'<{first_url}>; rel="prev"')
     data[jobs_url] = response(jobs, 56)
-check("approval on page two", mutate=paginated, expected_requests=4,
+check("approval on page two", mutate=paginated, expected_requests=5,
       args=[str(run_id), sha, request_hash, "1"])
 for second, reason in [(approval, "APPROVAL_COUNT"), (rejection, "APPROVAL_REJECTED"),
                        (conflict, "APPROVAL_COMMENT")]:
@@ -203,16 +269,95 @@ for second, reason in [(approval, "APPROVAL_COUNT"), (rejection, "APPROVAL_REJEC
     check("conflict across pages", reason, across_pages, 3,
           args=[str(run_id), sha, request_hash, "1"])
 
-def excessive_pages(data):
+page_one = base + "/approvals?per_page=1&page=1"
+page_two = base + "/approvals?per_page=1&page=2"
+page_three = base + "/approvals?per_page=1&page=3"
+page_four = base + "/approvals?per_page=1&page=4"
+def three_pages(data):
+    paginated(data)
+    data[page_one]["headers"] = response([], 58, link=(
+        f'<{page_two}>; rel="next", <{page_three}>; rel="last"'))["headers"]
+    data[page_two]["headers"] = response([], 57, link=(
+        f'<{page_one}>; rel="prev", <{page_three}>; rel="next"'))["headers"]
+    unrelated = dict(approval, environments=[{"id": 99, "name": "other"}])
+    data[page_three] = response([unrelated], 56, link=f'<{page_two}>; rel="prev"')
+    data[jobs_url] = response(jobs, 55)
+check("retains last when later headers omit it", mutate=three_pages, expected_requests=6,
+      args=[str(run_id), sha, request_hash, "1"],
+      expected_urls=[base, page_one, page_two, page_three, jobs_url, base])
+
+def final_rejection(data):
+    three_pages(data)
+    data[page_three]["body"] = json.dumps([rejection])
+check("rejection on advertised last page", "APPROVAL_REJECTED", final_rejection, 4,
+      args=[str(run_id), sha, request_hash, "1"],
+      expected_urls=[base, page_one, page_two, page_three])
+for link in [None, f'<{page_one}>; rel="prev"']:
+    def premature_end(data, link=link):
+        final_rejection(data)
+        data[page_two]["headers"] = response([], 57, link=link)["headers"]
+    check("refuses lost next before advertised last", "PAGINATION", premature_end, 3,
+          args=[str(run_id), sha, request_hash, "1"], expected_urls=[base, page_one, page_two])
+for link in [
+    f'<{page_one}>; rel="prev", <{page_three}>; rel="next", <{page_two}>; rel="last"',
+    f'<{page_one}>; rel="prev", <{page_three}>; rel="next", <{page_four}>; rel="last"',
+    f'<{page_one}>; rel="prev", <{page_one}>; rel="last"',
+    f'<{page_two}>; rel="prev", <{page_three}>; rel="next"',
+    f'<{page_three}>; rel="next"',
+    f'<{page_one}>; rel="prev", <{page_four}>; rel="next"',
+    f'<{page_one}>; rel="prev", <{page_one}>; rel="next"',
+    f'<{page_one}>; rel="prev", <{page_three}>; rel="next", <{page_three}>; rel="next"',
+]:
+    def contradictory_links(data, link=link):
+        three_pages(data)
+        data[page_two]["headers"] = response([], 57, link=link)["headers"]
+    check("contradictory pagination", "PAGINATION", contradictory_links, 3,
+          args=[str(run_id), sha, request_hash, "1"], expected_urls=[base, page_one, page_two])
+
+def beyond_last(data):
+    paginated(data)
+    data[page_two]["headers"] = response([], 57, link=(
+        f'<{page_one}>; rel="prev", <{page_three}>; rel="next"'))["headers"]
+    data[page_three] = response([rejection], 56, link=f'<{page_two}>; rel="prev"')
+check("never fetches beyond advertised last", "PAGINATION", beyond_last, 3,
+      args=[str(run_id), sha, request_hash, "1"], expected_urls=[base, page_one, page_two])
+def contradictory_first_page(data):
+    paginated(data)
+    data[page_one]["headers"] = response([], 58, link=(
+        f'<{page_two}>; rel="next", <{page_one}>; rel="last"'))["headers"]
+check("next contradicts last on first page", "PAGINATION", contradictory_first_page, 2,
+      args=[str(run_id), sha, request_hash, "1"], expected_urls=[base, page_one])
+def missing_previous(data):
+    paginated(data)
+    data[page_two]["headers"] = response([], 57)["headers"]
+check("refuses missing previous on last page", "PAGINATION", missing_previous, 3,
+      args=[str(run_id), sha, request_hash, "1"])
+for page, requests in [(page_two, 3), (page_three, 4)]:
+    def empty_page(data, page=page):
+        three_pages(data)
+        data[page]["body"] = "[]"
+    check("refuses empty advertised page", "PAGINATION", empty_page, requests,
+          args=[str(run_id), sha, request_hash, "1"])
+
+def excessive_pages(data, pages=11):
     del data[approvals_url]
     unrelated = dict(approval, environments=[{"id": 99, "name": "other"}])
-    for page in range(1, 12):
+    for page in range(1, pages + 1):
         url = base + f"/approvals?per_page=1&page={page}"
         following = base + f"/approvals?per_page=1&page={page + 1}"
-        data[url] = response([approval if page == 11 else unrelated], 59 - page,
-                             link=None if page == 11 else f'<{following}>; rel="next"')
+        links = [] if page == pages else [f'<{following}>; rel="next"']
+        if page > 1:
+            previous = base + f"/approvals?per_page=1&page={page - 1}"
+            links.append(f'<{previous}>; rel="prev"')
+        data[url] = response([approval if page == pages else unrelated], 59 - page,
+                             link=", ".join(links))
+    data[jobs_url] = response(jobs, 58 - pages)
 check("bounded requests", "REQUEST_BUDGET", excessive_pages, 12,
       args=[str(run_id), sha, request_hash, "1"])
+check("final read counts against request cap", "REQUEST_BUDGET",
+      lambda data: excessive_pages(data, 10), 12, args=[str(run_id), sha, request_hash, "1"])
+check("final read fits exact request cap", mutate=lambda data: excessive_pages(data, 9),
+      expected_requests=12, args=[str(run_id), sha, request_hash, "1"])
 for link in [f'<{approvals_url}>; rel="next"', '<https://example.com/>; rel="next"',
              f'<{base}/approvals?per_page=100&page=3>; rel="next"',
              f'<{base}/approvals?per_page=1&page=2>; rel="next"', "invalid"]:
