@@ -27,7 +27,7 @@ export FIXTURE_GOLANGCI=${expected[golangci-lint]} FIXTURE_GOVULNCHECK=${expecte
 
 BIN=$WORK/bin
 mkdir -p "$BIN"
-ln -s "$(command -v bash)" "$BIN/bash"
+cp "$BASH" "$BIN/bash"
 
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
@@ -68,6 +68,9 @@ for name in golangci-lint govulncheck gitleaks; do
 #!/usr/bin/env bash
 exit 0
 EOF
+done
+for fixture in "$BIN"/*; do
+  [ ! -L "$fixture" ] || fail "fixture executable must not be a symlink: $fixture"
 done
 chmod +x "$BIN"/*
 
