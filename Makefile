@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := $(shell command -v bash)
-.PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci ci-local check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
@@ -35,6 +35,9 @@ help: ## List targets
 
 ci: ## Local build, test, lint, and drift reproduction without hosted browser proofs; prohibited by ADR 0024
 	bash scripts/ci.sh
+
+ci-local: ## Owner local landing gate under the shared lock and memory cap
+	bash scripts/ci-local.sh
 
 check: ## Fast local subset; skips web checks, database-backed suites, media storage suites, and route-table tests
 	bash scripts/ci.sh --fast
@@ -84,6 +87,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/run-capped-test.sh
 	python3 scripts/test/dev-native-stop-test.py
 	scripts/test/pre-push-test.sh
+	bash scripts/test/ci-local-test.sh
 	scripts/test/ci-browser-proofs-test.sh
 	scripts/test/ci-background-test.sh
 	scripts/test/deployment-document-check-test.sh

@@ -188,6 +188,7 @@ test("selector rejects unsafe modes, invalid names, missing refs, and empty diff
 test("selector rejects malformed records, unsupported statuses, and bounded Git failures", () => {
   const script = `
 import importlib.util, subprocess, sys
+assert sys.dont_write_bytecode
 spec = importlib.util.spec_from_file_location("selection", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
@@ -228,7 +229,7 @@ for error in [OSError(), ValueError(), subprocess.TimeoutExpired("git", 30)]:
 `;
   withRepository(({ directory, git, put, commit }) => {
     const base = git("rev-parse", "HEAD"); put("docs/plans/a.md"); commit();
-    const result = spawnSync("python3", ["-I", "-c", script, join(root, "scripts/ci-path-selection.py"), base], { cwd: directory, encoding: "utf8", timeout: 5000 });
+    const result = spawnSync("python3", ["-I", "-B", "-c", script, join(root, "scripts/ci-path-selection.py"), base], { cwd: directory, encoding: "utf8", timeout: 5000 });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr);
   });
@@ -257,6 +258,7 @@ test("selector enforces output and time limits and falls back on diff and tree e
     const base = git("rev-parse", "HEAD"); put("docs/plans/a.md"); commit();
     const script = `
 import importlib.util, sys, time
+assert sys.dont_write_bytecode
 spec = importlib.util.spec_from_file_location("selection", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
@@ -305,7 +307,7 @@ for command in ["diff", "ls-tree"]:
     assert m.select("pull_request", sys.argv[2]) == "full"
     assert seen == [command]
 `;
-    const result = spawnSync("python3", ["-I", "-c", script, join(root, "scripts/ci-path-selection.py"), base], {
+    const result = spawnSync("python3", ["-I", "-B", "-c", script, join(root, "scripts/ci-path-selection.py"), base], {
       cwd: directory, encoding: "utf8", timeout: 5000,
     });
     assert.ifError(result.error);

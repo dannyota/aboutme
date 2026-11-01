@@ -111,14 +111,44 @@ take_lock() {
 # of reserved-prefix accounts and captured mail never overlaps the password
 # proof (instructions/resources.md). An inherited descriptor for it is reused.
 take_local_check_lock() {
-  local lock=$GIT_COMMON/aboutme-local-check.lock fd target
+  local lock=$GIT_COMMON/aboutme-local-check.lock lock_trace lock_status line
   [ ! -L "$lock" ] || fail 'the shared local-check lock is a symbolic link'
-  for fd in /proc/$$/fd/*; do
-    target=$(readlink -- "$fd") || continue
-    if [ "$target" = "$lock" ] && flock -n "${fd##*/}"; then
-      return 0
-    fi
-  done
+  if lock_trace=$(python3 -I -B -c '
+import fcntl, os, sys
+error_class = "none"
+try:
+    lock = os.stat(sys.argv[1])
+    descriptors = sorted(int(name) for name in os.listdir("/dev/fd") if name.isdigit())
+except OSError as error:
+    print("error_class=" + type(error).__name__)
+    sys.exit(1)
+for fd in descriptors:
+    try:
+        info = os.fstat(fd)
+    except OSError:
+        continue
+    matched = (info.st_dev, info.st_ino) == (lock.st_dev, lock.st_ino)
+    print(f"candidate={fd} matched={int(matched)}")
+    if matched:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            error_class = type(error).__name__
+        else:
+            print("error_class=none")
+            sys.exit(0)
+print("error_class=" + error_class)
+sys.exit(1)
+' "$lock"); then
+    lock_status=0
+  else
+    lock_status=$?
+  fi
+  while IFS= read -r line; do
+    : "$line"
+  done <<<"$lock_trace"
+  : "helper_status=$lock_status"
+  [ "$lock_status" -ne 0 ] || return 0
   exec {CHECK_FD}>>"$lock"
   flock -n "$CHECK_FD" || fail 'another local check holds the shared lock'
 }
