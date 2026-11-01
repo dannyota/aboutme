@@ -290,7 +290,9 @@ exit; runner disposal covers interruption. GitHub masking is only a backstop
 emit a fixed `::error::`; catchable termination writes the failure summary.
 Timeout/setup failures remain failed jobs. Keep Actions failure notifications
 enabled for schedule and dispatch actors, separate from Telegram-only vMonitor
-alarms.
+alarms. Each failure adds one fixed diagnostic line to logs and the summary with
+an allowlisted stage, CLI exit (0-255) and documented code or `other` for CLI
+stages, or issue HTTP class (`2xx`, `4xx`, `5xx`, `none`).
 
 `aboutme-vmonitor-renew` has no console login. Allow only these `vmonitor`
 actions on resource `*`: `GetSyntheticQuota`, `GetSyntheticTestQuotaDetail`,

@@ -20,25 +20,41 @@ state=$(dirname "$0")/../state
 printf '%s\n' "$*" >> "$state/curl-argv"
 method=GET
 out=
+write_out=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -X) method=$2; shift 2 ;;
     -o) out=$2; shift 2 ;;
     --data) data=$2; shift 2 ;;
+    --write-out) write_out=true; shift 2 ;;
     *) shift ;;
   esac
 done
-[ ! -f "$state/curl-fail-$method" ] || exit 22
+rc=0
+[ ! -f "$state/curl-fail-$method" ] || rc=22
 if [ "$method" = GET ]; then
   count=0
   [ ! -f "$state/get-count" ] || count=$(cat "$state/get-count")
   count=$((count + 1))
   echo "$count" > "$state/get-count"
-  [ ! -f "$state/fail-get-$count" ] || exit 22
+  [ ! -f "$state/fail-get-$count" ] || rc=22
 fi
 if [ "$method" = PATCH ]; then
-  case "$data" in *closed*) [ ! -f "$state/fail-close" ] || exit 22 ;; esac
-  case "$data" in *open*) echo open > "$state/issue" ;; *closed*) echo closed > "$state/issue" ;; *) exit 1 ;; esac
+  case "$data" in *closed*) [ ! -f "$state/fail-close" ] || rc=22 ;; esac
+fi
+http=200
+[ "$rc" -eq 0 ] || http=500
+[ ! -f "$state/http-$method" ] || http=$(cat "$state/http-$method")
+case "$http" in 4??|5??|000) rc=22 ;; esac
+if "$write_out"; then printf '%s' "$http"; fi
+if [ "$rc" -ne 0 ]; then
+  printf '%s\n' 'fake-token hostile-secret https://private.invalid/issue' >&2
+  exit "$rc"
+fi
+if [ "$method" = PATCH ]; then
+  if [ ! -f "$state/ignore-patch" ]; then
+    case "$data" in *open*) echo open > "$state/issue" ;; *closed*) echo closed > "$state/issue" ;; *) exit 1 ;; esac
+  fi
   case "$data" in *open*) if [ -f "$state/interrupt-open" ]; then kill -TERM "$PPID"; exit 1; fi ;; esac
 fi
 if [ -f "$state/invalid-issue" ]; then printf '%s\n' 'invalid' > "$out"; else
@@ -50,20 +66,24 @@ cat > "$tmp/bin/vngcloud" <<'SH'
 state=$(dirname "$0")/../state
 printf '%s\n' "$*" >> "$state/argv"
 env | sort > "$state/cli-env"
-printf '%s\n' "$VNGCLOUD_CLIENT_ID $VNGCLOUD_CLIENT_SECRET $VNGCLOUD_PROJECT_ID hostile-secret" >&2
 [ ! -e "$HOME/.vngcloud/config" ] || exit 98
 case "$*" in
-  *get-synthetic-quota*) cat "$state/get" ;;
+  *get-synthetic-quota*) fixture=get ;;
   *quota-status*)
-    if [ -f "$state/after-send" ] && [ -f "$state/status-after" ]; then cat "$state/status-after"; else cat "$state/status"; fi ;;
+    if [ -f "$state/after-send" ] && [ -f "$state/status-after" ]; then fixture=status-after; else fixture=status; fi ;;
   *renew-synthetic-quota*)
     [ "$(cat "$state/issue")" = open ] && [ "$(cat "$state/get-count")" -ge 2 ] || exit 99
     : > "$state/after-send"
     if [ -f "$state/interrupt" ]; then kill -TERM "$PPID"; exit 1; fi
-    cat "$state/outcome"
-    exit "$(cat "$state/exit")" ;;
+    fixture=outcome ;;
   *) exit 99 ;;
 esac
+cat "$state/$fixture"
+if [ -f "$state/$fixture-error" ]; then cat "$state/$fixture-error" >&2; else
+  printf '%s\n' "$VNGCLOUD_CLIENT_ID $VNGCLOUD_CLIENT_SECRET $VNGCLOUD_PROJECT_ID hostile-secret" >&2
+fi
+if [ "$fixture" = outcome ]; then exit "$(cat "$state/exit")"; fi
+[ ! -f "$state/$fixture-exit" ] || exit "$(cat "$state/$fixture-exit")"
 SH
 chmod +x "$tmp/bin/"*
 export PATH="$tmp/bin:$PATH" VNGCLOUD_CLIENT_ID=fake-client VNGCLOUD_CLIENT_SECRET=fake-secret
@@ -93,18 +113,28 @@ JSON
 JSON
 }
 run() {
-  local expected=$1 action=$2 rc=0
+  local expected=$1 action=$2 wanted=${3:-} rc=0 diagnostic
   : > "$GITHUB_STEP_SUMMARY"
-  bash "$root/scripts/vmonitor-renew.sh" "$action" > "$tmp/output" 2>&1 || rc=$?
+  bash "$root/scripts/vmonitor-renew.sh" "$action" > "$tmp/output" 2> "$tmp/stderr" || rc=$?
   if [ "$rc" -ne "$expected" ]; then printf 'expected %s, got %s\n' "$expected" "$rc" >&2; exit 1; fi
-  if grep -Ev '^($|Synthetic quota: healthy|Synthetic quota: hold open|Synthetic quota: failed|::error::Synthetic quota renewal failed)$' "$tmp/output"; then exit 1; fi
+  [ ! -s "$tmp/stderr" ] || { printf '%s\n' 'unexpected stderr' >&2; exit 1; }
   if [ "$expected" -eq 0 ]; then
     printf '%s\n' 'Synthetic quota: healthy' > "$tmp/expected-summary"
+    cp "$tmp/expected-summary" "$tmp/expected-output"
   else
-    printf '%s\n' 'Synthetic quota: failed' > "$tmp/expected-summary"
+    [ "$(grep -c '^Synthetic quota diagnostic:' "$tmp/output")" -eq 1 ]
+    diagnostic=$(grep '^Synthetic quota diagnostic:' "$tmp/output")
+    [[ "$diagnostic" =~ ^Synthetic\ quota\ diagnostic:\ stage=(environment|hold|parse|threshold)$ ||
+       "$diagnostic" =~ ^Synthetic\ quota\ diagnostic:\ stage=(issue-read|issue-write)\ http=(2xx|4xx|5xx|none)$ ||
+       "$diagnostic" =~ ^Synthetic\ quota\ diagnostic:\ stage=(quota-read|status-read|renew|readback)\ cli-exit=([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\ code=[A-Za-z]+$ ]]
+    [ -z "$wanted" ] || [ "$diagnostic" = "$wanted" ] || { printf '%s\n' 'unexpected diagnostic' >&2; exit 1; }
+    printf '%s\n' 'Synthetic quota: failed' "$diagnostic" > "$tmp/expected-summary"
+    printf '%s\n' '::error::Synthetic quota renewal failed' 'Synthetic quota: failed' "$diagnostic" > "$tmp/expected-output"
   fi
+  sed '/^Synthetic quota: hold open$/d' "$tmp/output" > "$tmp/filtered-output"
+  cmp -s "$tmp/expected-output" "$tmp/filtered-output" || { printf '%s\n' 'unexpected stdout' >&2; exit 1; }
   cmp -s "$tmp/expected-summary" "$GITHUB_STEP_SUMMARY" || { printf '%s\n' 'unexpected step summary' >&2; exit 1; }
-  ! grep -Eq 'fake-client|fake-secret|fake-project|fake-token|hostile-secret|quota-syn-1|package-1' "$GITHUB_STEP_SUMMARY"
+  ! grep -Eq 'fake-client|fake-secret|fake-project|fake-token|hostile-secret|quota-syn-1|package-1|https://' "$tmp/output" "$tmp/stderr" "$GITHUB_STEP_SUMMARY"
 }
 assert_count() {
   local expected=$1 pattern=$2 count
@@ -221,6 +251,8 @@ assert_count 0 renew-synthetic-quota
 # All recognized output combinations either close or retain the durable hold.
 outcome_case() {
   local sent=$1 stage=$2 code=$3 status=$4 cli_exit=$5 expected_hold=$6 expected_exit=$7 pending=${8:-false} renewed=false error=null
+  local diagnostic_code=$code
+  [ "$code" != null ] || diagnostic_code=other
   [ "$stage" != confirmed ] || renewed=true
   renewed=${9:-$renewed}
   if [ "$code" != null ]; then
@@ -230,7 +262,7 @@ outcome_case() {
   jq -cn --arg sent "$sent" --arg stage "$stage" --argjson error "$error" --argjson renewed "$renewed" --argjson pending "$pending" \
     '{Sent:$sent,Stage:$stage,Error:$error,PreviousEndTime:null,Quota:null,OrderID:"",PaymentPending:$pending,Renewed:$renewed}' > "$tmp/state/outcome"
   echo "$cli_exit" > "$tmp/state/exit"
-  run "$expected_exit" renew
+  run "$expected_exit" renew "Synthetic quota diagnostic: stage=renew cli-exit=$cli_exit code=$diagnostic_code"
   [ "$(cat "$tmp/state/issue")" = "$expected_hold" ]
   assert_count 1 renew-synthetic-quota
 }
@@ -347,12 +379,12 @@ run 1 renew
 [ "$(cat "$tmp/state/issue")" = open ]
 reset_case
 : > "$tmp/state/interrupt-open"
-run 143 renew
+run 143 renew 'Synthetic quota diagnostic: stage=environment'
 [ "$(cat "$tmp/state/issue")" = open ]
 assert_count 0 renew-synthetic-quota
 reset_case
 : > "$tmp/state/interrupt"
-run 143 renew
+run 143 renew 'Synthetic quota diagnostic: stage=environment'
 [ "$(cat "$tmp/state/issue")" = open ]
 rm "$tmp/state/interrupt"
 cp "$tmp/state/status-after" "$tmp/state/status"
@@ -363,4 +395,113 @@ assert_count 1 renew-synthetic-quota
 echo closed > "$tmp/state/issue"
 run 0 renew
 assert_count 1 renew-synthetic-quota
+# Diagnostics identify the boundary without exposing either captured stream.
+reset_case
+run 1 invalid 'Synthetic quota diagnostic: stage=environment'
+reset_case
+echo open > "$tmp/state/issue"
+run 1 renew 'Synthetic quota diagnostic: stage=hold'
+reset_case
+printf '%s\n' 'not JSON fake-secret hostile-secret' > "$tmp/state/get"
+run 1 check 'Synthetic quota diagnostic: stage=parse'
+reset_case
+set_end 2026-01-03T00:00:00Z
+run 1 check 'Synthetic quota diagnostic: stage=threshold'
+reset_case
+set_end 2026-01-01T00:00:00Z
+run 1 check 'Synthetic quota diagnostic: stage=threshold'
+reset_case
+echo 3 > "$tmp/state/get-exit"
+printf '%s\n' '{"error":{"code":"ServiceAccountLoginFailed","message":"fake-secret https://private.invalid/login","status":401}}' > "$tmp/state/get-error"
+run 1 check 'Synthetic quota diagnostic: stage=quota-read cli-exit=3 code=ServiceAccountLoginFailed'
+reset_case
+echo 1 > "$tmp/state/status-exit"
+change status '.Complete = false | .Items[0].Status = "unavailable" | .Items[0].Error = {Code:"Forbidden",Operation:"monitor.GetSyntheticQuota",Status:403}'
+run 1 check 'Synthetic quota diagnostic: stage=status-read cli-exit=1 code=Forbidden'
+reset_case
+echo 1 > "$tmp/state/status-exit"
+change status '.Complete = false | .Items[0].Status = "unavailable" | .Items[0].Error = {Code:"fake-secret",Operation:"monitor.GetSyntheticQuota",Status:403}'
+run 1 check 'Synthetic quota diagnostic: stage=status-read cli-exit=1 code=other'
+reset_case
+echo 1 > "$tmp/state/status-exit"
+printf '%s\n' '{"error":{"code":"QuotaStatusIncomplete","message":"fake-secret","operation":"monitor.GetQuotaStatus"}}' > "$tmp/state/status-error"
+run 1 check 'Synthetic quota diagnostic: stage=status-read cli-exit=1 code=QuotaStatusIncomplete'
+reset_case
+change outcome '.Sent = "unknown" | .Stage = "unconfirmed" | .Renewed = false | .Error = {Code:"NotSettled",Operation:"monitor.RenewSyntheticQuota",Status:0}'
+echo 1 > "$tmp/state/exit"
+run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=NotSettled'
+[ "$(cat "$tmp/state/issue")" = open ]
+reset_case
+echo 4 > "$tmp/state/status-after-exit"
+printf '%s\n' '{"error":{"code":"NotFound","message":"fake-project quota-syn-1","status":404}}' > "$tmp/state/status-after-error"
+run 1 renew 'Synthetic quota diagnostic: stage=readback cli-exit=4 code=NotFound'
+[ "$(cat "$tmp/state/issue")" = closed ]
+reset_case
+cp "$tmp/state/status" "$tmp/state/status-after"
+run 1 renew 'Synthetic quota diagnostic: stage=readback cli-exit=0 code=other'
+for method in GET PATCH; do
+  for entry in '200 2xx' '403 4xx' '503 5xx' '000 none' '302 none' 'hostile-secret none'; do
+    reset_case
+    read -r http class <<< "$entry"
+    echo "$http" > "$tmp/state/http-$method"
+    if [ "$method" = GET ]; then
+      : > "$tmp/state/invalid-issue"
+      run 1 check "Synthetic quota diagnostic: stage=issue-read http=$class"
+    else
+      : > "$tmp/state/ignore-patch"
+      run 1 renew "Synthetic quota diagnostic: stage=issue-write http=$class"
+      assert_count 0 renew-synthetic-quota
+    fi
+  done
+done
+reset_case
+: > "$tmp/state/fail-get-2"
+run 1 renew 'Synthetic quota diagnostic: stage=issue-read http=5xx'
+reset_case
+change outcome '.Sent = "no" | .Stage = "preflight" | .Renewed = false | .Error = {Code:"NoCredentials",Operation:"monitor.RenewSyntheticQuota",Status:0}'
+echo 3 > "$tmp/state/exit"
+: > "$tmp/state/fail-close"
+run 3 renew 'Synthetic quota diagnostic: stage=issue-write http=5xx'
+[ "$(cat "$tmp/state/issue")" = open ]
+# Each documented code is accepted only as one complete structured value.
+for code in PriceAboveMax Unpriced QuotaChanged NotSettled Conflict BadRequest Forbidden Throttled Unauthorized NotFound RequestFailed InvalidUsage ReadOnly InvalidConfig NoCredentials ServiceAccountLoginFailed TokenCacheFailed UnexpectedStatus ServerError ClientError InvalidResponse ResponseTooLarge QuotaStatusIncomplete; do
+  reset_case
+  echo 1 > "$tmp/state/get-exit"
+  jq -cn --arg code "$code" '{error:{code:$code,message:"fake-secret hostile-secret",status:500,operation:"monitor.GetSyntheticQuota"}}' > "$tmp/state/get-error"
+  run 1 check "Synthetic quota diagnostic: stage=quota-read cli-exit=1 code=$code"
+done
+for payload in \
+  '{"error":{"code":"fake-secret","message":"hostile-secret"}}' \
+  '{"error":{"code":"Forbidden fake-secret","message":"hostile-secret"}}' \
+  '{"error":{"code":"forbidden","message":"hostile-secret"}}' \
+  '{"error":{"code":"Forbidden\n","message":"hostile-secret"}}' \
+  '{"error":{"code":"Forbidden\u0000","message":"hostile-secret"}}' \
+  '{"error":{"code":"Forbidden\n::error::fake-secret","message":"hostile-secret"}}' \
+  '{"error":{"code":401,"message":"hostile-secret"}}' \
+  '{"error":{"code":["Forbidden"],"message":"hostile-secret"}}' \
+  '{"error":{"code":"Forbidden","code":"Unauthorized","message":"fake-secret"}}' \
+  '{"error":{"code":"Forbidden","message":"fake-secret","extra":"hostile-secret"}}' \
+  '{"nested":{"error":{"code":"Forbidden","message":"fake-secret"}}}' \
+  '{"error":{"code":"Forbidden","message":"fake-secret"}} {"error":{"code":"Unauthorized","message":"fake-secret"}}' \
+  'hostile-secret {"error":{"code":"Forbidden","message":"fake-secret"}}'; do
+  reset_case
+  echo 255 > "$tmp/state/get-exit"
+  printf '%s\n' "$payload" > "$tmp/state/get-error"
+  printf '%s\n' 'fake-client fake-secret fake-project fake-token hostile-secret https://private.invalid/quota' > "$tmp/state/get"
+  run 1 check 'Synthetic quota diagnostic: stage=quota-read cli-exit=255 code=other'
+done
+for code in fake-secret 'Forbidden fake-secret' 'Forbidden\n::error::fake-secret' 'Forbidden\n' 'Forbidden\u0000'; do
+  reset_case
+  change outcome ".Sent = \"no\" | .Stage = \"preflight\" | .Renewed = false | .Error = {Code:\"$code\",Operation:\"monitor.RenewSyntheticQuota\",Status:0}"
+  echo 1 > "$tmp/state/exit"
+  run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=other'
+  [ "$(cat "$tmp/state/issue")" = open ]
+done
+reset_case
+printf '%s\n' '{"Error":{"Code":"Forbidden","Code":"Unauthorized","Operation":"monitor.RenewSyntheticQuota","Status":403}}' > "$tmp/state/outcome"
+echo 1 > "$tmp/state/exit"
+run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=other'
+reset_case
+echo 124 > "$tmp/state/exit"
+run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=124 code=other'
 printf '%s\n' 'vMonitor renewal tests passed' 
