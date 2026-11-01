@@ -204,6 +204,7 @@ export function checkFiles(root, files) {
 }
 
 export function selectFiles(root, changed, available) {
+  root = realpathSync(root);
   const present = new Set(available.filter((file) => existsSync(resolve(root, file))));
   const selected = new Set(indexes.filter((file) => present.has(file)));
   const changedPaths = new Set(changed.map((file) => resolve(root, file)));
