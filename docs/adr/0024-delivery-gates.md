@@ -40,12 +40,13 @@ Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
   and deployment wait for a green main push run on that exact commit.
 - **Owner local landing gate.** Accepted 2026-11-01: the owner may land after a
   passing `make ci-local` on his Mac under the shared lock and the total RAM
-  minus 10 GiB watchdog, using an admin-only bypass on `main-required-ci`. Other
-  contributors need a pull request and green CI. This change implements the
-  local command; the primary applies the ruleset bypass after it lands. Browser,
-  pixel, and VN infrastructure suites run only in GitHub CI; failures on the
-  main push are fixed forward. The local gate does not authorize a tag or
-  deployment without green CI on the exact main push commit.
+  minus 10 GiB watchdog, using the always-on repository admin bypass on
+  `main-required-ci`. The separate `main-history` ruleset blocks force pushes
+  and deletion of `main` without a bypass. Other contributors need a pull
+  request and green CI. Browser, pixel, and VN infrastructure suites run only in
+  GitHub CI; failures on the main push are fixed forward. The local gate does
+  not authorize a tag or deployment without green CI on the exact main push
+  commit.
 - **Bounded local work.** The primary uses the shared lock, the watchdog, nice
   level 10, and a time limit for local checks. See the
   [resource rules](../../instructions/resources.md). Diagnose a failed or
@@ -149,5 +150,5 @@ above retains this exemption.
   ESLint and forbidigo carry the retained HTML controls.
 - 2026-11-01: The owner accepted the capped local landing gate and admin-only
   bypass for his Mac, retaining full main push CI and the exact-commit release
-  gate. The command is implemented in this change; the primary applies the
-  bypass after landing.
+  gate. The `main-required-ci` ruleset has an always-on repository admin bypass;
+  `main-history` blocks force pushes and deletion without a bypass.
