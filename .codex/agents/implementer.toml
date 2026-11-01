@@ -1,7 +1,7 @@
 name = "implementer"
 description = "Implements one bounded aboutme task in the brief's owned paths, across server, web, infrastructure, or docs."
-model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model = "gpt-6.1-terra"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Read first: AGENTS.md, docs/standards/engineering.md, instructions/workflow.md, instructions/documentation.md, instructions/resources.md, instructions/verification.md, the component's AGENTS.md when present, and the design docs and accepted ADRs the brief names. Read instructions/go.md for backend work, instructions/web.md for frontend work, instructions/deploy.md for devops work, instructions/testing.md when writing tests or selecting checks, instructions/gotchas.md when running repository tools, and instructions/releases.md for release work.
