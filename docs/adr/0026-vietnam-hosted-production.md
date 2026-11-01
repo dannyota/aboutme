@@ -141,22 +141,22 @@ only, with no tag rule. No repository or organization secret duplicates are
 allowed. GitHub receives no host, database, storage, deployment, or general
 cloud administration credentials.
 
-The account may read the quota and quote and renew only the free Basic
-Synthetic Test quota. It has no console login, notification-quota permissions,
-Buy, Recover, or other writes. The
-[renewal design](../design/vmonitor-quota-renewal.md) owns the exact IAM actions,
-zero-price checks, pinned CLI identity, environment-only authentication,
-persistent issue hold, custody, revocation, and redacted logging contract.
-Credentials never reach application containers, build jobs, artifacts, or logs.
-The owner accepts trusted-main and runner custody and the issue hold's stated
-limits; the CLI price check cannot contain a stolen cloud key.
+The account may read the quota and quote and renew only the free Basic Synthetic
+Test quota. It has no console login, notification-quota permissions, Buy,
+Recover, or other writes. The
+[renewal design](../design/vmonitor-quota-renewal.md) owns the exact IAM
+actions, zero-price checks, pinned CLI identity, environment-only
+authentication, persistent issue hold, custody, revocation, and redacted logging
+contract. Credentials never reach application containers, build jobs, artifacts,
+or logs. The owner accepts trusted-main and runner custody and the issue hold's
+stated limits; the CLI price check cannot contain a stolen cloud key.
 
 Only `.github/workflows/vmonitor-renew.yml`, running trusted-main code on
 GitHub-hosted runners, may use the environment. Start with `workflow_dispatch`;
 enable a schedule only after reviewed implementation, green CI, a read-only
 credentialed check, and a successful due dispatch confirmed by read-back. Keep
-uncertain writes behind the durable hold and require human reconciliation.
-Do not grant `actions: write` or make this workflow a dependency of `ci.yml`.
+uncertain writes behind the durable hold and require human reconciliation. Do
+not grant `actions: write` or make this workflow a dependency of `ci.yml`.
 
 This amendment narrows the 2026-10-14 exception to Synthetic because Telegram
 needs no notification quota. It supersedes the manual-only renewal sentence in
@@ -167,9 +167,9 @@ no-stored-secrets wording in
 Build, test, release, and code-scanning workflows remain without stored secrets;
 GitHub's per-run token remains allowed under their existing permissions.
 
-The benefit is unattended renewal without exposing the key to host compromise
-or depending on laptop uptime. The cost is a narrowly scoped static cloud key
-in GitHub and trusted issue writers. A missed schedule can still let the quota
+The benefit is unattended renewal without exposing the key to host compromise or
+depending on laptop uptime. The cost is a narrowly scoped static cloud key in
+GitHub and trusted issue writers. A missed schedule can still let the quota
 lapse. Rollback disables automation and returns to coordinated manual renewal
 after settling any retained hold. No app contract or stored-data migration is
 required. Provider renewal rules and first-party evidence are cited in the
