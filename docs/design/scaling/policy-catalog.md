@@ -8,7 +8,7 @@ current columns describe built behavior. The fleet column is accepted design;
 
 P22 states the approved
 [stored grant identity amendment](../mcp-cimd-authorization.md#failed-grant-admission)
-for CIMD and DCR, pending implementation. Its fleet digest uses the
+for CIMD and DCR. Its fleet digest uses the
 [typed encoder](admission.md#key-identity).
 
 ## Current rules
