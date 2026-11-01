@@ -61,10 +61,13 @@ sanitizer.
   only to restore markup captured from the same element before mutation.
 - The CSP backstop is unaffected. The renderer-surface baseline CSP stays as the
   [rich-text design](../design/web.md#rich-text) defines it.
-- Server-side DOMPurify needs a new ADR that justifies `jsdom` against the
-  no-outbound-network posture.
+- Server-side DOMPurify needs an owner-approved amendment to this decision that
+  justifies `jsdom` against the no-outbound-network posture.
 
 ## History
 
 Former ADR 0012 (2026-08-11), unchanged in substance. It corrected the design
 text in place at the time.
+
+2026-11-01: Corrected the change process to use an approved same-topic amendment
+while keeping the security justification.

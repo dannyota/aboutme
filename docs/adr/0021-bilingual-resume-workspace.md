@@ -23,7 +23,10 @@ must not turn an interface toggle into a resume write or content translation.
    menu support Vietnamese and English.
 2. Interface language is the `vi` or `en` value in the `aboutme-locale` browser
    cookie. Vietnamese is the default. Settings, account destination pages,
-   connected-agent controls, and agent consent stay outside this decision.
+   connected-agent controls, and agent consent were outside the original
+   workspace scope, not prohibited from later localization. The
+   [localization design](../design/localization.md#two-language-domains) lists
+   the current routes; a new settings route needs an explicit change.
 3. Resume language is the canonical BCP 47 metadata value. An interface toggle
    never changes resume language, authored content, materialized defaults,
    public settings, unsaved drafts, pending commands, conflicts, or revision
@@ -63,3 +66,5 @@ boundaries do not change.
 ## History
 
 Former ADR 0047, unchanged in substance.
+
+2026-11-01: Clarified the original scope and linked the current route list.

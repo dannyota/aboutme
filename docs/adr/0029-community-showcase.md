@@ -1,10 +1,10 @@
 # 0029: Community showcase of opted-in resumes
 
-Status: Accepted (2026-09-27; amended 2026-10-01). The owner approved the
-choices marked **Owner approval** in the
-[showcase design](../design/showcase.md). The owner decisions of 2026-10-01
-settled N1 to N4; the release waits for N5, the privacy text for operator
-deletion.
+Status: Accepted (2026-09-27; amended 2026-10-01). The
+[showcase design](../design/showcase.md) records the approvals. The owner
+approved the operator-deletion privacy text on 2026-10-02. Release steps and
+proof gaps remain in the
+[showcase traceability record](../plans/traceability/ac-showcase.md).
 
 ## Context
 
@@ -79,7 +79,8 @@ document stores no template identity.
 - Removing review keeps the schema expand-only: the release before it still
   runs, lists nothing, and never lists a resume the new rules would not.
 - The privacy notice and terms carry the text in the design, with no review
-  claim; the next regular impact-assessment update notes the showcase.
+  claim. Assessment decisions follow
+  [ADR 0027](0027-vietnam-hosted-production.md).
 
 ## History
 
@@ -90,3 +91,6 @@ document stores no template identity.
   Terms, and the out-of-band review command is removed.
 - Amended (2026-10-01): owner decision 2026-10-01: oldest opt-in first; abuse
   handled by account deletion.
+- 2026-10-02: The owner approved the operator-deletion privacy text.
+- 2026-11-01: Corrected the approval and assessment wording; release evidence
+  gaps remain in the traceability record.

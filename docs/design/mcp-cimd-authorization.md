@@ -1,8 +1,8 @@
 # MCP CIMD authorization
 
-Status: approved design; implementation is next.
-[MCP Client ID Metadata Documents](mcp-cimd.md) holds the motivation, sources,
-release order, and the approval record.
+Status: implemented and enabled in production. Owner proof and outstanding
+verification: [ADR 0018](../adr/0018-mcp-agent-access.md). Motivation, sources,
+release order, and approval record: [MCP CIMD](mcp-cimd.md).
 
 Discovery, consent, stored clients, errors, privacy, and compatibility belong to
 this boundary. See [fetch](mcp-cimd-fetch.md) and

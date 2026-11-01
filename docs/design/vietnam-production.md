@@ -234,9 +234,10 @@ a successful restore drill is not recorded here. See the
 
 ## Client metadata authorization
 
-`deploy/vn/host/env/server.env` defaults `OAUTH_CIMD_ENABLED=false`. The owner
-may override it in `/etc/aboutme/flags.env` after the
-[CIMD production proof](mcp-cimd-verification.md#production-enablement-proof).
+`deploy/vn/host/env/server.env` defaults `OAUTH_CIMD_ENABLED=false`; the owner
+may override it in `/etc/aboutme/flags.env`. CIMD is enabled in production, and
+the owner completed the
+[Claude Code proof](mcp-cimd-verification.md#production-enablement-proof).
 Production refuses `OAUTH_CIMD_DEV_STUB_ADDR`, even with the feature disabled.
 
 Apply the additive URL-client migration before serving the CIMD binary. Normal
