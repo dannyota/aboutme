@@ -1,6 +1,7 @@
 # 0018: MCP agent access
 
-Status: Accepted (2026-09-01).
+Status: Accepted (2026-09-01; extended 2026-10-13 and 2026-10-14). The CIMD
+extension is approved; implementation and production activation are pending.
 
 ## Context
 
@@ -34,6 +35,12 @@ token issue, rotation and revocation, and the RFC 8414 and RFC 9728 discovery
 documents. Authorization is code with PKCE (S256 required, `plain` rejected)
 with rotating refresh tokens, for public clients only. An unmodified agent can
 discover and connect without a bespoke handshake.
+
+**Client ID Metadata Documents (CIMD).** An MCP client may identify itself with
+an HTTPS metadata URL under the approved [CIMD design](../design/mcp-cimd.md).
+Dynamic client registration remains available. The extension keeps public
+clients, PKCE, account-wide scopes, and the publish boundary. Its implementation
+and production activation follow the release and proof steps in that design.
 
 **Editor parity minus publish.** Fifteen tools cover resume lifecycle, content,
 and photo operations, and each dispatches into the same validation, sanitizer,
@@ -89,3 +96,8 @@ offered.
 ## History
 
 Former ADR 0026, unchanged in substance.
+
+- 2026-10-13: The owner approved the CIMD extension and its consent copy.
+- 2026-10-14: The owner approved the loopback-hostname addition.
+- 2026-11-01: Recorded the approved extension and distinguished it from
+  implementation and production activation.

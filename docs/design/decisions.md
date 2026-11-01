@@ -1,8 +1,9 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-history; these pages state the resulting design. ADRs 0001 to 0029 are accepted.
-The [ADR index](../adr/README.md) maps every former ADR number to its current
+history; these pages state the resulting design. Each record states its status
+and distinguishes proposed amendments from accepted decisions. The
+[ADR index](../adr/README.md) maps every former ADR number to its current
 record.
 
 | ADR                                                             | Status   | Outcome                                                                                                                             | Design                                                                                                                      |
@@ -24,7 +25,7 @@ record.
 | [0015](../adr/0015-accounts-passwords-and-sessions.md)          | Accepted | Password beside providers; email is never an identity key; bounded session rotation                                                 | [Security](security.md)                                                                                                     |
 | [0016](../adr/0016-sign-in-providers.md)                        | Accepted | POST for privileged starts; per-provider enablement; LinkedIn without PKCE or a returned nonce, risk accepted                       | [Security](security.md), [LinkedIn sign-in](linkedin-sign-in.md)                                                            |
 | [0017](../adr/0017-second-factor-authentication.md)             | Accepted | Optional passkeys and TOTP, recovery codes, authentication epoch, release fence                                                     | [Second factor](second-factor-authentication.md), [release fence](passkey-release-fence.md)                                 |
-| [0018](../adr/0018-mcp-agent-access.md)                         | Accepted | Remote MCP endpoint and first-party OAuth 2.1 server; editor parity minus publish                                                   | [Security](security.md), [MCP workflow](mcp-owner-workflow.md)                                                              |
+| [0018](../adr/0018-mcp-agent-access.md)                         | Accepted | Remote MCP and first-party OAuth; CIMD approved, implementation pending                                                             | [Security](security.md), [MCP workflow](mcp-owner-workflow.md), [CIMD](mcp-cimd.md)                                         |
 | [0019](../adr/0019-application-ui-toolkit.md)                   | Accepted | Tailwind v4 and shadcn-vue without Preflight; renderer isolated; guarded token edits                                                | [Web](web.md), [UI tokens](ui/typography-and-tokens.md)                                                                     |
 | [0020](../adr/0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, burnt-orange destructive, resume ground colors                                       | [UI identity](ui/identity-and-seal.md), [UI tokens](ui/typography-and-tokens.md), [public page theme](public-page-theme.md) |
 | [0021](../adr/0021-bilingual-resume-workspace.md)               | Accepted | Vietnamese and English workspace; interface toggles never change resume data                                                        | [Localization](localization.md)                                                                                             |

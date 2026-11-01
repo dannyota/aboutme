@@ -33,7 +33,7 @@ record may change until accepted.
 | [0015](0015-accounts-passwords-and-sessions.md)          | Accepted | Passwords beside providers; email is not an identity key; session rotation       |
 | [0016](0016-sign-in-providers.md)                        | Accepted | OAuth start methods, per-provider enablement, the LinkedIn flow and its risk     |
 | [0017](0017-second-factor-authentication.md)             | Accepted | Optional passkeys and TOTP, recovery codes, the epoch, the release fence         |
-| [0018](0018-mcp-agent-access.md)                         | Accepted | Remote MCP endpoint and first-party OAuth 2.1; editor parity minus publish       |
+| [0018](0018-mcp-agent-access.md)                         | Accepted | Remote MCP and first-party OAuth; CIMD approved, implementation pending          |
 | [0019](0019-application-ui-toolkit.md)                   | Accepted | Tailwind and shadcn-vue chrome, renderer isolation, guarded token edits          |
 | [0020](0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, type scale, resume ground colors  |
 | [0021](0021-bilingual-resume-workspace.md)               | Accepted | Vietnamese and English workspace, separate from resume language                  |
