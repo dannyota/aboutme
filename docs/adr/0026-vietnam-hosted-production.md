@@ -127,6 +127,60 @@ One serving replica, deployment downtime, privacy gates, backup custody, and
 explicit data-loss rules remain unchanged. vMonitor quota renewal remains
 manual; no renewal automation or monitoring host is introduced.
 
+## Amendment: Synthetic quota renewal in GitHub Actions (2026-11-01)
+
+Status: Accepted (2026-11-01), under the owner's standing approval for reviewed
+solutions and request to renew the free Synthetic quota through GitHub Actions.
+Implementation and live renewal verification remain pending.
+
+The renew-only GreenNode service account `aboutme-vmonitor-renew` is the one
+approved cloud-credential exception in CI. Its client ID and client secret live
+only in environment `vmonitor-renew`, as secrets `VNGCLOUD_CLIENT_ID` and
+`VNGCLOUD_CLIENT_SECRET`. The environment admits the selected branch `main`
+only, with no tag rule. No repository or organization secret duplicates are
+allowed. GitHub receives no host, database, storage, deployment, or general
+cloud administration credentials.
+
+The account may read the quota and quote and renew only the free Basic Synthetic
+Test quota. It has no console login, notification-quota permissions, Buy,
+Recover, or other writes. The
+[renewal design](../design/vmonitor-quota-renewal.md) owns the exact IAM
+actions, zero-price checks, pinned CLI identity, environment-only
+authentication, persistent issue hold, custody, revocation, and redacted logging
+contract. Credentials never reach application containers, build jobs, artifacts,
+or logs. The owner accepts trusted-main and runner custody and the issue hold's
+stated limits; the CLI price check cannot contain a stolen cloud key.
+
+Only `.github/workflows/vmonitor-renew.yml`, running trusted-main code on
+GitHub-hosted runners, may use the environment. Start with `workflow_dispatch`;
+enable a schedule only after reviewed implementation, green CI, a read-only
+credentialed check, and a successful due dispatch confirmed by read-back. Keep
+uncertain writes behind the durable hold and require human reconciliation. Do
+not grant `actions: write` or make this workflow a dependency of `ci.yml`.
+
+This amendment narrows the 2026-10-14 exception to Synthetic because Telegram
+needs no notification quota. It supersedes the manual-only renewal sentence in
+the proposed deployment amendment above, without accepting that deployment
+proposal. It also makes this named workflow the sole exception to the blanket
+no-stored-secrets wording in
+[ADR 0024](0024-delivery-gates.md#amendment-code-scanning-without-stored-secrets-2026-11-01).
+Build, test, release, and code-scanning workflows remain without stored secrets;
+GitHub's per-run token remains allowed under their existing permissions.
+
+The benefit is unattended renewal without exposing the key to host compromise or
+depending on laptop uptime. The cost is a narrowly scoped static cloud key in
+GitHub and trusted issue writers. A missed schedule can still let the quota
+lapse. Rollback disables automation and returns to coordinated manual renewal
+after settling any retained hold. No app contract or stored-data migration is
+required. Provider renewal rules and first-party evidence are cited in the
+renewal design; live term arithmetic remains unverified.
+
+### Amendment history
+
+2026-11-01: Named and narrowed the accepted cloud-credential exception to
+Synthetic renewal, with a main-only environment and a dispatch-first rollout,
+because Basic cannot auto-renew and Telegram removed the notification quota.
+
 ## History
 
 Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC, on

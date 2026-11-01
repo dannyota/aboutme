@@ -266,12 +266,15 @@ each send increments the synthetic usage counter's Telegram count.
 | -------------------- | --------- | -------------------------------- |
 | Synthetic Test Basic | 10 checks | 2026-12-01T06:54:54Z             |
 
-Renew the synthetic quota each month in its last seven days. The next window is
-2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z:
+The approved [renewal design](../design/vmonitor-quota-renewal.md) starts with
+manual dispatch before enabling scheduled Synthetic renewal. Implementation is
+pending. Until rollout completes, renew each month in the last seven days; the
+next window is 2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z. Follow the design's
+hold procedure before manual renewal once the workflow exists:
 
 1. Open the vMonitor console, then **Quota & Usage**.
-2. Select **Synthetic test** and renew the free Basic quota. Once released, the
-   `vngcloud` CLI renew command may also be used.
+2. Select **Synthetic test** and renew the free Basic quota. The pinned
+   `vngcloud` CLI in the renewal design is also available.
 3. Confirm the quota is active and record its new expiry date.
 
 A lapsed synthetic quota stops checks. If it lapses, recover Basic from trash at
