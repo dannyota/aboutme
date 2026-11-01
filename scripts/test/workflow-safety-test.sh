@@ -321,10 +321,11 @@ expect_guard_drift assert_vn_selection "$(sed '/^    if:/d' <<<"$VN_JOB")" \
 expect_guard_drift assert_vn_selection "$(sed '/^    needs:/d' <<<"$VN_JOB")" \
   'VN caller does not require preflight'
 
-# No workflow may reference a secret except GitHub's per-run GITHUB_TOKEN.
+# Only the trusted renewal workflow may also receive its environment credentials.
 assert_workflow_secrets() { # workflow-directory
   node --input-type=module - "$1" "$ROOT" <<'NODE'
 import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 const require = createRequire(join(process.argv[3], "scripts/test/workflow-contract.test.mjs"));
@@ -334,7 +335,7 @@ const yamlPath = (parts) => parts.reduce((path, part) =>
   typeof part === "number" ? `${path}[${part}]` :
     /^[\w-]+$/.test(part) ? `${path}${path ? "." : ""}${part}` :
       `${path}[${JSON.stringify(part)}]`, "");
-function inspect(value, parts, file) {
+function inspect(value, parts, file, trusted, isKey) {
   if (typeof value !== "string") return;
   for (const expression of value.matchAll(/\$\{\{((?:'(?:[^']|'')*'|[^'])+?)\}\}/g)) {
     const tokens = expression[1].match(/'(?:[^']|'')*'|[A-Za-z_][\w-]*|[^\s]/g) || [];
@@ -342,23 +343,28 @@ function inspect(value, parts, file) {
       if (token.toLowerCase() !== "secrets" || tokens[index - 1] === ".") continue;
       const property = tokens[index + 1] === "." ? tokens[index + 2] : undefined;
       if (property === "GITHUB_TOKEN") continue;
+      const allowed = ["VNGCLOUD_CLIENT_ID", "VNGCLOUD_CLIENT_SECRET"].includes(property) &&
+        trusted && !isKey && parts.length === 6 && parts[0] === "jobs" && parts[1] === "renew" &&
+        parts[2] === "steps" && parts[3] === 4 && parts[4] === "env" && parts[5] === property &&
+        value === "${{ secrets." + property + " }}";
+      if (allowed) continue;
       console.error(`workflow-safety-test: ${file}:${yamlPath(parts)} references an unapproved secret`);
       process.exit(1);
     }
   }
 }
-function walk(value, parts, file, ancestors = new Set()) {
-  inspect(value, parts, file);
+function walk(value, parts, file, trusted, ancestors = new Set(), isKey = false) {
+  inspect(value, parts, file, trusted, isKey);
   if (value === null || typeof value !== "object") return;
   if (ancestors.has(value)) throw new Error(`${file}:${yamlPath(parts)} contains a recursive YAML alias`);
   ancestors.add(value);
   if (Array.isArray(value)) {
-    value.forEach((child, index) => walk(child, [...parts, index], file, ancestors));
+    value.forEach((child, index) => walk(child, [...parts, index], file, trusted, ancestors));
   } else if (value instanceof Map) {
     for (const [key, child] of value) {
       const childPath = [...parts, String(key)];
-      walk(key, childPath, file, ancestors);
-      walk(child, childPath, file, ancestors);
+      walk(key, childPath, file, trusted, ancestors, true);
+      walk(child, childPath, file, trusted, ancestors);
     }
   }
   ancestors.delete(value);
@@ -366,9 +372,13 @@ function walk(value, parts, file, ancestors = new Set()) {
 for (const file of readdirSync(directory, { recursive: true, withFileTypes: true })) {
   if (!file.isFile() || !/\.ya?ml$/.test(file.name)) continue;
   const path = join(file.parentPath, file.name);
-  const document = parseDocument(readFileSync(path, "utf8"));
+  const source = readFileSync(path, "utf8");
+  const document = parseDocument(source);
   if (document.errors.length) throw new Error(`${path}: ${document.errors.join("; ")}`);
-  walk(document.toJS({ mapAsMap: true }), [], path);
+  // Bind the exception to the whole workflow contract, including its execution steps.
+  const trusted = path === join(directory, "vmonitor-renew.yml") &&
+    createHash("sha256").update(source).digest("hex") === "f4c73cd32c4ba7ba42b0f7e5ce749429720bdbd92a8ac9b3c56ddc39c78be435";
+  walk(document.toJS({ mapAsMap: true }), [], path, trusted);
 }
 NODE
 }
@@ -412,6 +422,45 @@ jobs:
 YAML
 expect_guard_drift assert_workflow_secrets "$WORK/workflows" \
   "$WORK/workflows/unapproved.yml:jobs.unrelated.steps[0].env[\"\${{ secrets.OTHER }}\"] references an unapproved secret"
+
+rm "$WORK/workflows/unapproved.yml"
+cp "$ROOT/.github/workflows/vmonitor-renew.yml" "$WORK/workflows/vmonitor-renew.yml"
+assert_workflow_secrets "$WORK/workflows"
+for drift in \
+  's/^  renew:$/  other:/' \
+  's/id: renew/id: other/' \
+  's/environment: vmonitor-renew/environment: other/' \
+  's/VNGCLOUD_CLIENT_ID: /OTHER: /' \
+  's/secrets.VNGCLOUD_CLIENT_ID/secrets["VNGCLOUD_CLIENT_ID"]/' \
+  's/persist-credentials: false/persist-credentials: true/' \
+  's/run: bash scripts\/vmonitor-renew.sh "\$ACTION"/run: echo "\${{ secrets.VNGCLOUD_CLIENT_ID }}"/'; do
+  sed "$drift" "$ROOT/.github/workflows/vmonitor-renew.yml" >"$WORK/workflows/vmonitor-renew.yml"
+  status=0
+  ( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
+  [ "$status" -eq 1 ] || fail "renewal secret drift did not fail: $drift"
+  grep -Fq 'references an unapproved secret' "$WORK/renewal-secret-drift" ||
+    fail "renewal secret drift lacks the expected diagnostic: $drift"
+done
+cp "$ROOT/.github/workflows/vmonitor-renew.yml" "$WORK/workflows/other.yml"
+rm "$WORK/workflows/vmonitor-renew.yml"
+status=0
+( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
+[ "$status" -eq 1 ] || fail 'renewal credentials in another file did not fail'
+rm "$WORK/workflows/other.yml"
+for fixture in job step key aggregate; do
+  case "$fixture" in
+    job) printf 'jobs:\n  renew:\n    env:\n      VNGCLOUD_CLIENT_ID: ${{ secrets.VNGCLOUD_CLIENT_ID }}\n' ;;
+    step) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          VNGCLOUD_CLIENT_SECRET: ${{ secrets.VNGCLOUD_CLIENT_SECRET }}\n' ;;
+    key) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          "${{ secrets.VNGCLOUD_CLIENT_ID }}": value\n' ;;
+    aggregate) printf 'jobs:\n  renew:\n    env:\n      ALL: ${{ toJSON(secrets) }}\n' ;;
+  esac >"$WORK/workflows/vmonitor-renew.yml"
+  status=0
+  ( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
+  [ "$status" -eq 1 ] || fail "renewal credential fixture did not fail: $fixture"
+  grep -Fq 'references an unapproved secret' "$WORK/renewal-secret-drift" ||
+    fail "renewal credential fixture lacks the expected diagnostic: $fixture"
+done
+rm "$WORK/workflows/vmonitor-renew.yml"
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,

@@ -1522,3 +1522,83 @@ test("CodeQL scans main and weekly without joining the required gate", () => {
     assert.ok(config["paths-ignore"].includes(path), `exclude ${path}`);
   }
 });
+
+const renewalInstall = `set -euo pipefail
+work=$(mktemp -d "$RUNNER_TEMP/vmonitor.XXXXXX")
+chmod 700 "$work"
+export GOBIN="$work/bin" GOPATH="$work/gopath" GOMODCACHE="$work/mod" GOCACHE="$work/cache"
+export GOTOOLCHAIN=local GOSUMDB=sum.golang.org GOPRIVATE= GONOSUMDB= GOINSECURE=
+mkdir -p "$GOBIN" "$GOPATH" "$GOMODCACHE" "$GOCACHE"
+go install danny.vn/vngcloud/cmd/vngcloud@v0.89.0
+identity=$(go version -m "$GOBIN/vngcloud" | awk '$1 == "mod" { print $2, $3, $4 }')
+[ "$identity" = 'danny.vn/vngcloud v0.89.0 h1:o9YirnefFhEqpEJtalX41uHci6PR6P4AcotwPrWiqkA=' ]
+printf '%s\\n' "$GOBIN" >> "$GITHUB_PATH"
+`;
+
+function checkRenewalWorkflow(workflow) {
+  assert.deepEqual(workflow, {
+    name: "Renew vMonitor quota",
+    on: { workflow_dispatch: { inputs: { action: {
+      description: "Check or renew the Synthetic quota", type: "choice", required: true,
+      default: "renew", options: ["renew", "check"],
+    } } } },
+    permissions: {},
+    concurrency: { group: "vmonitor-renew", "cancel-in-progress": false },
+    jobs: { renew: {
+      name: "Renew Synthetic quota",
+      if: "github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'",
+      "runs-on": "ubuntu-24.04", "timeout-minutes": 10,
+      environment: "vmonitor-renew", permissions: { issues: "write" },
+      steps: [
+        { name: "Check out trusted main", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          with: { repository: "dannyota/aboutme", ref: "refs/heads/main", "persist-credentials": false } },
+        { name: "Log checkout commit", run: "git rev-parse HEAD" },
+        { name: "Set up Go", uses: "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          with: { "go-version": pins.golang, cache: false } },
+        { name: "Install verified CLI", run: renewalInstall },
+        { name: "Process quota", id: "renew", env: {
+          ACTION: "${{ inputs.action }}", VNGCLOUD_CLIENT_ID: "${{ secrets.VNGCLOUD_CLIENT_ID }}",
+          VNGCLOUD_CLIENT_SECRET: "${{ secrets.VNGCLOUD_CLIENT_SECRET }}",
+          VNGCLOUD_REGION: "${{ vars.VNGCLOUD_REGION }}", VNGCLOUD_PROJECT_ID: "${{ vars.VNGCLOUD_PROJECT_ID }}",
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
+        }, run: 'bash scripts/vmonitor-renew.sh "$ACTION"' },
+      ],
+    } },
+  }, "renewal workflow must preserve the trusted execution contract");
+}
+
+test("renewal workflow keeps its trusted dispatch and credential boundary", () => {
+  checkRenewalWorkflow(readWorkflow("vmonitor-renew"));
+  const mutations = [
+    (w) => { w.on.schedule = [{ cron: "37 5,17 * * *" }]; },
+    (w) => { w.on.workflow_dispatch.inputs.action.options.push("other"); },
+    (w) => { w.jobs.renew.if = "always()"; },
+    (w) => { w.permissions.contents = "write"; },
+    (w) => { w.jobs.renew.permissions.actions = "write"; },
+    (w) => { w.jobs.renew.environment = "other"; },
+    (w) => { w.concurrency["cancel-in-progress"] = true; },
+    (w) => { w.jobs.renew["timeout-minutes"] = 20; },
+    (w) => { w.jobs.other = {}; },
+    (w) => { w.jobs.renew.steps[0].with.ref = "${{ github.sha }}"; },
+    (w) => { w.jobs.renew.steps[0].with["persist-credentials"] = true; },
+    (w) => { w.jobs.renew.steps[0].uses = "./local-action"; },
+    (w) => { w.jobs.renew.steps[2].with["go-version"] = "0.0.0"; },
+    (w) => { w.jobs.renew.steps[2].with.cache = true; },
+    (w) => { w.jobs.renew.steps[3].run = w.jobs.renew.steps[3].run.replace("go install", "vngcloud; go install"); },
+    (w) => { w.jobs.renew.steps[3].run = w.jobs.renew.steps[3].run.replace('[ "$identity" =', 'true || [ "$identity" ='); },
+    (w) => { w.jobs.renew.steps[3].run = w.jobs.renew.steps[3].run.replace("GOSUMDB=sum.golang.org", "GOSUMDB=off"); },
+    (w) => { w.jobs.renew.steps[3].env = { VNGCLOUD_CLIENT_ID: "${{ secrets.VNGCLOUD_CLIENT_ID }}" }; },
+    (w) => { w.jobs.renew.steps[4].env.VNGCLOUD_PROFILE = "default"; },
+    (w) => { w.jobs.renew.steps[4].env.VNGCLOUD_CLIENT_ID = "${{ secrets.OTHER }}"; },
+    (w) => { w.jobs.renew.steps[4].run = 'echo "${{ secrets.VNGCLOUD_CLIENT_SECRET }}"'; },
+    (w) => { w.jobs.renew.steps[4]["continue-on-error"] = true; },
+    (w) => { w.jobs.renew.steps[4].run += " --debug"; },
+    (w) => { w.jobs.renew.steps.push({ uses: "actions/upload-artifact@" + sha }); },
+  ];
+  for (const mutate of mutations) {
+    const workflow = readWorkflow("vmonitor-renew");
+    mutate(workflow);
+    assert.throws(() => checkRenewalWorkflow(workflow));
+  }
+  assert.ok(!JSON.stringify(readWorkflow("ci")).includes("vmonitor-renew"));
+});

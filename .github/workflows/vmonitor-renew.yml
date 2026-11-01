@@ -1,0 +1,62 @@
+name: Renew vMonitor quota
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Check or renew the Synthetic quota
+        type: choice
+        required: true
+        default: renew
+        options: [renew, check]
+
+permissions: {}
+concurrency:
+  group: vmonitor-renew
+  cancel-in-progress: false
+
+jobs:
+  renew:
+    name: Renew Synthetic quota
+    if: github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: vmonitor-renew
+    permissions:
+      issues: write
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dannyota/aboutme
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Log checkout commit
+        run: git rev-parse HEAD
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3"
+          cache: false
+      - name: Install verified CLI
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d "$RUNNER_TEMP/vmonitor.XXXXXX")
+          chmod 700 "$work"
+          export GOBIN="$work/bin" GOPATH="$work/gopath" GOMODCACHE="$work/mod" GOCACHE="$work/cache"
+          export GOTOOLCHAIN=local GOSUMDB=sum.golang.org GOPRIVATE= GONOSUMDB= GOINSECURE=
+          mkdir -p "$GOBIN" "$GOPATH" "$GOMODCACHE" "$GOCACHE"
+          go install danny.vn/vngcloud/cmd/vngcloud@v0.89.0
+          identity=$(go version -m "$GOBIN/vngcloud" | awk '$1 == "mod" { print $2, $3, $4 }')
+          [ "$identity" = 'danny.vn/vngcloud v0.89.0 h1:o9YirnefFhEqpEJtalX41uHci6PR6P4AcotwPrWiqkA=' ]
+          printf '%s\n' "$GOBIN" >> "$GITHUB_PATH"
+      - name: Process quota
+        id: renew
+        env:
+          ACTION: ${{ inputs.action }}
+          VNGCLOUD_CLIENT_ID: ${{ secrets.VNGCLOUD_CLIENT_ID }}
+          VNGCLOUD_CLIENT_SECRET: ${{ secrets.VNGCLOUD_CLIENT_SECRET }}
+          VNGCLOUD_REGION: ${{ vars.VNGCLOUD_REGION }}
+          VNGCLOUD_PROJECT_ID: ${{ vars.VNGCLOUD_PROJECT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/vmonitor-renew.sh "$ACTION"
