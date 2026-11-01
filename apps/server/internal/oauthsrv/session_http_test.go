@@ -131,6 +131,123 @@ func TestSessionConsentHTTPHandler_RequiresSessionAndRevalidatesQuery(t *testing
 	}
 }
 
+func TestSessionConsentHTTPHandler_StaleAuthenticationRequiresReauthWithoutEndingSession(t *testing.T) {
+	for _, proof := range []string{"primary", "second factor"} {
+		t.Run(proof, func(t *testing.T) {
+			h := newOAuthSessionHTTPHarness(t)
+			ctx := context.Background()
+			now := h.service.clock()
+			primary := now.Add(-15*time.Minute - time.Second)
+			var factor *time.Time
+			if proof == "second factor" {
+				enrollTestSecondFactor(t, h.queries, h.user.ID, now)
+				stale := primary
+				factor = &stale
+				primary = now
+			}
+			if _, err := h.service.pool.Exec(ctx, "UPDATE sessions SET reauthenticated_at = $1, second_factor_verified_at = $2 WHERE id = $3", primary, factor, h.session.ID); err != nil {
+				t.Fatalf("set stale proof: %v", err)
+			}
+			handler := h.service.ConsentHTTPHandler(h.sessions)
+			view := httptest.NewRecorder()
+			handler.ServeHTTP(view, h.request(http.MethodGet, consentAPIURL(h.client.ID), "", true, false))
+			if view.Code != http.StatusOK {
+				t.Fatalf("live session consent read = %d %q", view.Code, view.Body.String())
+			}
+
+			body := consentDecisionBody(h.client.ID, "approve")
+			noCSRF := httptest.NewRecorder()
+			handler.ServeHTTP(noCSRF, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", body, true, false))
+			if noCSRF.Code != http.StatusForbidden || responseErrorCode(t, noCSRF) != "csrf_rejected" {
+				t.Fatalf("CSRF must precede reauth = %d %q", noCSRF.Code, noCSRF.Body.String())
+			}
+			approve := httptest.NewRecorder()
+			handler.ServeHTTP(approve, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", body, true, true))
+			if approve.Code != http.StatusForbidden || responseErrorCode(t, approve) != "reauth_required" || strings.Contains(approve.Body.String(), "redirectTo") {
+				t.Fatalf("stale approval = %d %q", approve.Code, approve.Body.String())
+			}
+			if _, err := h.queries.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: h.user.ID, ClientID: h.client.ID}); !errors.Is(err, pgx.ErrNoRows) {
+				t.Fatalf("stale approval created a grant: %v", err)
+			}
+			var codes int
+			if err := h.service.pool.QueryRow(ctx, "SELECT count(*) FROM oauth_authorization_codes WHERE user_id = $1", h.user.ID).Scan(&codes); err != nil || codes != 0 {
+				t.Fatalf("stale approval code count = %d, error = %v", codes, err)
+			}
+
+			deny := httptest.NewRecorder()
+			handler.ServeHTTP(deny, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(h.client.ID, "deny"), true, true))
+			if deny.Code != http.StatusOK || !strings.Contains(deny.Body.String(), "access_denied") {
+				t.Fatalf("stale denial = %d %q", deny.Code, deny.Body.String())
+			}
+
+			// Model completed authentication without changing the session's CSRF,
+			// epoch, liveness, or the original stateless authorization request.
+			if factor != nil {
+				factor = &now
+			}
+			if _, err := h.service.pool.Exec(ctx, "UPDATE sessions SET reauthenticated_at = $1, second_factor_verified_at = $2 WHERE id = $3", now, factor, h.session.ID); err != nil {
+				t.Fatalf("set completed authentication: %v", err)
+			}
+			resumed := httptest.NewRecorder()
+			handler.ServeHTTP(resumed, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", body, true, true))
+			if resumed.Code != http.StatusOK || !strings.Contains(resumed.Body.String(), "code=") || !strings.Contains(resumed.Body.String(), "state=opaque") {
+				t.Fatalf("resumed approval = %d %q", resumed.Code, resumed.Body.String())
+			}
+		})
+	}
+}
+
+func TestSessionConsentHTTPHandler_ClientRemovedDuringReauthRequiresRestart(t *testing.T) {
+	h := newOAuthSessionHTTPHarness(t)
+	ctx := context.Background()
+	handler := h.service.ConsentHTTPHandler(h.sessions)
+	view := httptest.NewRecorder()
+	handler.ServeHTTP(view, h.request(http.MethodGet, consentAPIURL(h.client.ID), "", true, false))
+	if view.Code != http.StatusOK {
+		t.Fatalf("initial consent read = %d %q", view.Code, view.Body.String())
+	}
+	// Idle DCR registration collection removes the client, not a pending
+	// authorization row. Consent must revalidate it after authentication.
+	if _, err := h.queries.DeleteOAuthClient(ctx, h.client.ID); err != nil {
+		t.Fatalf("remove authorization client: %v", err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		target, body := consentAPIURL(h.client.ID), ""
+		if method == http.MethodPost {
+			target = "https://aboutme.example/api/v1/oauth/consent"
+			body = consentDecisionBody(h.client.ID, "approve")
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, h.request(method, target, body, true, method == http.MethodPost))
+		if response.Code != http.StatusNotFound || responseErrorCode(t, response) != "not_found" || strings.Contains(response.Body.String(), "redirectTo") {
+			t.Fatalf("%s removed client = %d %q", method, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestConsentSessionError_DistinguishesReauthInvalidAndUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"stale proof", auth.ErrReauthRequired, http.StatusForbidden, "reauth_required"},
+		{"dead session", auth.ErrSessionInvalid, http.StatusUnauthorized, "session_required"},
+		{"removed client", ErrConsentNotFound, http.StatusNotFound, "not_found"},
+		{"invalid request", ErrConsentInvalid, http.StatusBadRequest, "request_invalid"},
+		{"store unavailable", errors.New("private store details"), http.StatusInternalServerError, "internal_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			writeConsentSessionError(response, tc.err)
+			if response.Code != tc.status || responseErrorCode(t, response) != tc.code || strings.Contains(response.Body.String(), "private store details") {
+				t.Fatalf("response = %d %q", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestSessionConsentHTTPHandler_EnforcesCSRFMediaTypeAndStrictBody(t *testing.T) {
 	h := newOAuthSessionHTTPHarness(t)
 	handler := h.service.ConsentHTTPHandler(h.sessions)

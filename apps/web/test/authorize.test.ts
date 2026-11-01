@@ -39,7 +39,7 @@ const query = {
   response_type: 'code',
   scope: 'resumes:read resumes:write',
   state: 'opaque-state',
-  code_challenge: 'abcdefghijklmnopqrstuvwxyz1234567890123456789',
+  code_challenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
   code_challenge_method: 'S256',
 };
 
@@ -68,6 +68,48 @@ beforeEach(() => {
 
 describe('/authorize', () => {
   for (const language of ['vi', 'en'] as const) {
+    it(`signs in without an oversized next in ${language}`, async () => {
+      setSiteLocale(language);
+      consentMocks.decide.mockRejectedValue(
+        new OAuthConsentFailure('reauth-required'),
+      );
+      const wrapper = await mountSuspended(AuthorizePage, {
+        route: `/authorize?${new URLSearchParams({
+          ...query,
+          redirect_uri: `https://agent.example/${'a'.repeat(450)}`,
+          state: '&'.repeat(512),
+        })}`,
+      });
+      await flushPromises();
+      expect(new TextEncoder().encode(useRoute().fullPath).byteLength)
+        .toBeGreaterThan(2048);
+      expect(consentMocks.get).toHaveBeenCalledWith({
+        ...query,
+        redirect_uri: `https://agent.example/${'a'.repeat(450)}`,
+        state: '&'.repeat(512),
+      });
+      await wrapper.get('[data-testid="consent-form"]').trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="consent-error"]').text()).toBe(
+        language === 'vi'
+          ? 'Hãy đăng nhập lại, sau đó bắt đầu lại yêu cầu cấp quyền '
+          + 'từ ứng dụng của bạn.'
+          : 'Sign in again, then start authorization again from your app.',
+      );
+      expect(wrapper.find('[data-testid="consent-form"]').exists())
+        .toBe(false);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      const action = wrapper.get('[data-testid="consent-sign-in-again"]');
+      expect(action.text()).toBe(language === 'vi'
+        ? 'Đăng nhập lại'
+        : 'Sign in again');
+      await action.trigger('click');
+      await flushPromises();
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+      expect(consentMocks.decide).toHaveBeenCalledTimes(1);
+    });
+
     it(`isolates the CIMD host and name in ${language}`, async () => {
       setSiteLocale(language);
       const host = `${'long'.repeat(12)}.example`;
@@ -279,6 +321,84 @@ describe('/authorize', () => {
     },
   );
 
+  for (const language of ['vi', 'en'] as const) {
+    it.each(['load', 'approve'] as const)(
+      `offers sign-in after stale authentication on %s in ${language}`,
+      async (operation) => {
+        setSiteLocale(language);
+        const failure = new OAuthConsentFailure('reauth-required');
+        if (operation === 'load') consentMocks.get.mockRejectedValue(failure);
+        else consentMocks.decide.mockRejectedValue(failure);
+        const wrapper = await mountSuspended(AuthorizePage, {
+          route: route('/authorize?x=1'),
+        });
+        await flushPromises();
+        if (operation === 'approve') {
+          await wrapper.get('[data-testid="consent-form"]').trigger('submit');
+          await flushPromises();
+        }
+
+        const banner = wrapper.get('[data-testid="consent-error"]');
+        expect(banner.attributes('role')).toBe('alert');
+        expect(banner.text()).toBe(language === 'vi'
+          ? 'Để cấp quyền truy cập, bạn cần đăng nhập lại. '
+          + 'Sau đó, bạn sẽ quay lại yêu cầu này.'
+          : 'Sign in again to allow access. '
+            + 'You will return to this request afterward.');
+        expect(wrapper.find('[data-testid="consent-form"]').exists())
+          .toBe(false);
+        expect(wrapper.findAll('button')).toHaveLength(1);
+        expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+        const action = wrapper.get('[data-testid="consent-sign-in-again"]');
+        expect(action.text()).toBe(language === 'vi'
+          ? 'Đăng nhập lại'
+          : 'Sign in again');
+        const currentPath = useRoute().fullPath;
+        await action.trigger('click');
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          `/login?next=${encodeURIComponent(currentPath)}`,
+        );
+        expect(consentMocks.decide).toHaveBeenCalledTimes(
+          operation === 'approve' ? 1 : 0,
+        );
+      },
+    );
+
+    it(`separates invalid requests from outages in ${language}`, async () => {
+      setSiteLocale(language);
+      consentMocks.get.mockRejectedValue(
+        new OAuthConsentFailure('invalid-request'),
+      );
+      const invalid = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      expect(invalid.get('[data-testid="consent-error"]').text()).toBe(
+        language === 'vi'
+          ? 'Yêu cầu cấp quyền này đã hết hạn hoặc không hợp lệ. '
+          + 'Hãy bắt đầu lại từ ứng dụng của bạn.'
+          : 'This authorization request has expired or is invalid. '
+            + 'Start again from your app.',
+      );
+      expect(invalid.find('[data-testid="consent-sign-in-again"]').exists())
+        .toBe(false);
+      invalid.unmount();
+
+      consentMocks.get.mockRejectedValue(
+        new OAuthConsentFailure('unavailable'),
+      );
+      const unavailable = await mountSuspended(AuthorizePage, {
+        route: route(),
+      });
+      await flushPromises();
+      expect(unavailable.get('[data-testid="consent-error"]').text()).toBe(
+        language === 'vi'
+          ? 'Không thể tải yêu cầu cấp quyền. Hãy thử lại.'
+          : 'Unable to load authorization. Please try again.',
+      );
+      expect(unavailable.find('[data-testid="consent-sign-in-again"]').exists())
+        .toBe(false);
+    });
+  }
+
   it.each([
     ['approve', 'approve'],
     ['approve', 'deny'],
@@ -465,6 +585,70 @@ function descendantNames(root: Element): string[] {
 }
 
 describe('login next preservation', () => {
+  it.each([false, true])(
+    'resumes stale-auth consent after login, with expired client %s',
+    async (expired) => {
+      consentMocks.decide.mockRejectedValue(
+        new OAuthConsentFailure('reauth-required'),
+      );
+      const consent = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      const originalPath = useRoute().fullPath;
+      await consent.get('[data-testid="consent-form"]').trigger('submit');
+      await flushPromises();
+      await consent.get('[data-testid="consent-sign-in-again"]')
+        .trigger('click');
+      const loginTarget = vi.mocked(navigateTo).mock.calls[0]?.[0] as string;
+      consent.unmount();
+
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
+      const login = await mountSuspended(LoginPage, { route: loginTarget });
+      await login.get('[autocomplete="email"]').setValue('ada@example.com');
+      await login.get('[autocomplete="current-password"]')
+        .setValue('correct horse battery staple');
+      await login.get('[data-testid="login-form"]').trigger('submit');
+      await flushPromises();
+      expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(originalPath);
+      login.unmount();
+
+      if (expired) {
+        consentMocks.get.mockRejectedValue(
+          new OAuthConsentFailure('invalid-request'),
+        );
+      } else {
+        consentMocks.decide.mockResolvedValue({
+          redirectTo: 'https://agent.example/callback?code=fresh',
+        });
+      }
+      const resumed = await mountSuspended(AuthorizePage, {
+        route: originalPath,
+      });
+      await flushPromises();
+      expect(consentMocks.get).toHaveBeenLastCalledWith(query);
+      expect(consentMocks.decide).toHaveBeenCalledTimes(1);
+      if (expired) {
+        expect(resumed.get('[data-testid="consent-error"]').text()).toContain(
+          'Start again from your app.',
+        );
+        expect(resumed.find('[data-testid="consent-form"]').exists())
+          .toBe(false);
+      } else {
+        await resumed.get('[data-testid="consent-form"]').trigger('submit');
+        await flushPromises();
+        expect(consentMocks.decide).toHaveBeenLastCalledWith(query, 'approve');
+        expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(
+          'https://agent.example/callback?code=fresh', { external: true },
+        );
+      }
+    },
+  );
+
   it('keeps provider links bare when next is absent or invalid', async () => {
     const invalid = [
       '//evil',

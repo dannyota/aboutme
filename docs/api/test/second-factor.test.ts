@@ -200,13 +200,21 @@ describe("second-factor contract (passkeys, recovery, TOTP)", () => {
     expect(description).toMatch(/purpose=login.*purpose=reauth/s);
   });
 
-  it("requires reauth_required on POST /oauth/consent for an enrolled approval, not denial", () => {
+  it("requires recent primary proof for approval and factor proof when enrolled, never for denial", () => {
     const forbidden = doc.paths["/oauth/consent"].post.responses["403"];
     const examples = forbidden.content["application/json"].examples;
     expect(examples.reauth_required.value.error.code).toBe("reauth_required");
     expect(examples.csrf_rejected.value.error.code).toBe("csrf_rejected");
-    expect(forbidden.description).toMatch(/approve/);
-    expect(forbidden.description).toMatch(/deny.*never/is);
+    expect(forbidden.description).toMatch(
+      /Approval requires\s+primary proof within 15 minutes on every account/i,
+    );
+    expect(forbidden.description).toMatch(
+      /second-factor\s+proof within 15 minutes on an enrolled account/i,
+    );
+    expect(forbidden.description).toMatch(/CSRF check\s+always runs first/i);
+    expect(forbidden.description).toMatch(
+      /Denial needs only a live current-epoch session\s+and CSRF, without recent proof/i,
+    );
   });
 
   it("pins passkey registration options' and completion's 409 passkey_limit_reached", () => {

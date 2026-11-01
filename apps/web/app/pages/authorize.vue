@@ -11,6 +11,7 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { consentCopy } from '@/i18n/consent';
 import { workspaceTitles } from '@/i18n/meta';
+import { validateReturnPath } from '@/utils/returnPath';
 
 const { locale } = useLocale();
 const copy = computed(() => consentCopy[locale.value]);
@@ -21,7 +22,8 @@ const route = useRoute();
 const consent = useOAuthConsent();
 
 type PageState
-  = 'loading' | 'ready' | 'invalid' | 'unavailable' | 'agent-limit';
+  = 'loading' | 'ready' | 'invalid' | 'unavailable' | 'agent-limit'
+    | 'reauth' | 'restart';
 
 const state = ref<PageState>('loading');
 const view = ref<OAuthConsentView | null>(null);
@@ -105,9 +107,15 @@ function parseQuery(): OAuthConsentRequest | null {
 }
 
 const authorizeQuery = parseQuery();
+const loginReturnPath = validateReturnPath(route.fullPath);
 
 function loginForSession(): void {
-  void navigateTo(`/login?next=${encodeURIComponent(route.fullPath)}`);
+  if (loginReturnPath === null) {
+    state.value = 'restart';
+    void focusError();
+    return;
+  }
+  void navigateTo(`/login?next=${encodeURIComponent(loginReturnPath)}`);
 }
 
 async function focusError(): Promise<void> {
@@ -132,22 +140,19 @@ async function load(): Promise<void> {
       loginForSession();
       return;
     }
-    state.value
-      = failure instanceof OAuthConsentFailure
-        && failure.kind === 'invalid-request'
-        ? 'invalid'
-        : 'unavailable';
+    state.value = failure instanceof OAuthConsentFailure
+      ? failureState(failure.kind)
+      : 'unavailable';
     await focusError();
   }
 }
 
-/**
- * Rule 7: the ten-grant limit gets its own state; every other kind is
- * unavailable.
- */
 function failureState(kind: OAuthConsentFailure['kind']): PageState {
   if (kind === 'invalid-request') return 'invalid';
   if (kind === 'agent-limit') return 'agent-limit';
+  if (kind === 'reauth-required') {
+    return loginReturnPath === null ? 'restart' : 'reauth';
+  }
   return 'unavailable';
 }
 
@@ -240,7 +245,8 @@ onMounted(() => {
     <StatusBanner
       v-else-if="
         state === 'invalid' || state === 'unavailable'
-          || state === 'agent-limit'
+          || state === 'agent-limit' || state === 'reauth'
+          || state === 'restart'
       "
       ref="errorSummary"
       :focus-on-mount="true"
@@ -250,6 +256,12 @@ onMounted(() => {
     >
       <template v-if="state === 'invalid'">
         {{ copy.invalid }}
+      </template>
+      <template v-else-if="state === 'reauth'">
+        {{ copy.reauthRequired }}
+      </template>
+      <template v-else-if="state === 'restart'">
+        {{ copy.restartRequired }}
       </template>
       <template v-else-if="state === 'agent-limit'">
         {{ copy.agentLimit.before
@@ -310,5 +322,14 @@ onMounted(() => {
         </Button>
       </div>
     </form>
+    <Button
+      v-if="state === 'reauth' || state === 'restart'"
+      class="mt-6 h-9"
+      data-testid="consent-sign-in-again"
+      type="button"
+      @click="state === 'restart' ? navigateTo('/login') : loginForSession()"
+    >
+      {{ copy.signInAgain }}
+    </Button>
   </main>
 </template>
