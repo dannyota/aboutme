@@ -28,7 +28,11 @@ import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
 import { withWrappingBody } from './justify-fixture';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
-import { PRINT_FIXTURES, type PrintFixtureId } from './print-fixtures';
+import {
+  ENGLISH_PRINT_FIXTURES,
+  PRINT_FIXTURES,
+  type PrintFixtureId,
+} from './print-fixtures';
 import { loadSampleFixture } from './sample-fixtures';
 
 type RenderMode = 'continuous' | 'paged' | 'public';
@@ -120,7 +124,7 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'invite', 'mode', 'paper', 'print',
+        'align', 'fixture', 'font', 'invite', 'lng', 'mode', 'paper', 'print',
         'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
@@ -170,7 +174,14 @@ if (isCorpus) {
     inviteHref = requestedInvite === 'register' ? '/register' : '/login';
   }
 
-  const printRecord = PRINT_FIXTURES[fixture as PrintFixtureId];
+  const requestedLanguage = singleton('lng');
+  if (requestedLanguage !== undefined) {
+    if (requestedLanguage !== 'en' && requestedLanguage !== 'vi') badQuery();
+    if (PRINT_FIXTURES[fixture as PrintFixtureId] === undefined) badQuery();
+  }
+  const printRecord = requestedLanguage === 'en'
+    ? ENGLISH_PRINT_FIXTURES[fixture as PrintFixtureId]
+    : PRINT_FIXTURES[fixture as PrintFixtureId];
   if (printRecord !== undefined) {
     if (
       templateId !== 'modern-sidebar'
@@ -180,6 +191,7 @@ if (isCorpus) {
     }
     resumeDocument = structuredClone(printRecord.document);
     printFixture = true;
+    sampleLanguage = requestedLanguage === 'en' ? 'en' : 'vi';
   } else if (fixture === 'full') {
     resumeDocument = structuredClone(fullSource) as Resume;
   } else if (fixture === 'vn-full') {
