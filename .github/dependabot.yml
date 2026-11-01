@@ -4,7 +4,82 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
     groups:
       github-actions:
         patterns:
           - "*"
+  - package-ecosystem: gomod
+    directories:
+      - /apps/server
+      - /packages/schema/gen/go
+      - /deploy/observer
+      - /deploy/caddy/production/build
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Caddy mirrors .tool-versions and deploy/compose.yml, checked by
+      # scripts/check-tool-versions.sh; production build/main.go mirrors it too.
+      - dependency-name: github.com/caddyserver/caddy/v2
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - /packages/schema
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: npm
+    directories:
+      - /apps/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Playwright must match the Makefile browser image and E2E baseline.
+      - dependency-name: "@playwright/test"
+      - dependency-name: playwright
+      - dependency-name: playwright-core
+      # instructions/web.md pins TypeScript until vue-tsc supports TS 7.
+      - dependency-name: typescript
+  - package-ecosystem: npm
+    directories:
+      - /deploy/dev-https-browser
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # static-test.sh pins Playwright with the Dockerfile browser image.
+      - dependency-name: "@playwright/test"
+      - dependency-name: playwright
+      - dependency-name: playwright-core
+      # static-test.sh also checks the exact axe package in both manifests.
+      - dependency-name: "@axe-core/playwright"

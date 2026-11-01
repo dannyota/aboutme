@@ -15,7 +15,7 @@ Required change-area gates and browser automation rules live in [testing](testin
 
 ### Pin maintenance
 
-Dependabot opens one grouped GitHub Actions update PR each week. External actions and reusable workflows keep full commit SHA pins with version comments. `scripts/test/workflow-contract.test.mjs`, called by `scripts/test/toolchain-contract-test.sh` in `make operational-test-fast`, checks those pins, the Dependabot configuration, and every hosted tool-version mirror against `.tool-versions`.
+Dependabot checks GitHub Actions, all four Go modules, and all four npm lockfile roots weekly. Actions share one group; Go and npm minor and patch updates share a group per ecosystem and directory set, while major updates arrive separately. Each entry allows two open version-update PRs. Mirrored Caddy and Playwright pins, the HTTPS harness's axe pin, and the web TypeScript pin stay manual through documented ignores. Toolchains and their mirrors, container image digests, and other custom pins also stay manual. External actions and reusable workflows keep full commit SHA pins with version comments. `scripts/test/workflow-contract.test.mjs`, called by `scripts/test/toolchain-contract-test.sh` in `make operational-test-fast`, checks those pins, the Dependabot configuration, and every hosted tool-version mirror against `.tool-versions`.
 
 `SEMGREP_APP_TOKEN` lives only in the `semgrep` GitHub environment, whose deployment branch policy allows only `main`. Pull request and Dependabot runs never receive it.
 

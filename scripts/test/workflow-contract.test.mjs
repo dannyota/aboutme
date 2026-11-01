@@ -824,31 +824,108 @@ test("action pin checks accept local references and quoted SHA pins", () => {
   checkActionPins(`jobs:\n  check:\n    uses: owner/repo/.github/workflows/check.yml@${sha} # v1.2.3\n`, "fixture");
 });
 
-test("Dependabot groups weekly GitHub Actions updates only", () => {
+test("Dependabot covers weekly Actions, Go modules, and npm lockfile roots", () => {
   checkDependabot(parseYaml(read(".github/dependabot.yml"), ".github/dependabot.yml").toJS());
 });
 
 test("Dependabot contract rejects missing grouping and changed scope or cadence", () => {
   const valid = {
     version: 2,
-    updates: [{
-      "package-ecosystem": "github-actions",
-      directory: "/",
-      schedule: { interval: "weekly" },
-      groups: { actions: { patterns: ["*"] } },
-    }],
+    updates: [
+      {
+        "package-ecosystem": "github-actions",
+        directory: "/",
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { "github-actions": { patterns: ["*"] } },
+      },
+      {
+        "package-ecosystem": "gomod",
+        directories: ["/apps/server", "/packages/schema/gen/go", "/deploy/observer", "/deploy/caddy/production/build"],
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+        ignore: [{ "dependency-name": "github.com/caddyserver/caddy/v2" }],
+      },
+      {
+        "package-ecosystem": "npm",
+        directories: ["/", "/packages/schema"],
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+      },
+      {
+        "package-ecosystem": "npm",
+        directories: ["/apps/web"],
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+        ignore: [
+          { "dependency-name": "@playwright/test" },
+          { "dependency-name": "playwright" },
+          { "dependency-name": "playwright-core" },
+          { "dependency-name": "typescript" },
+        ],
+      },
+      {
+        "package-ecosystem": "npm",
+        directories: ["/deploy/dev-https-browser"],
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 2,
+        groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+        ignore: [
+          { "dependency-name": "@playwright/test" },
+          { "dependency-name": "playwright" },
+          { "dependency-name": "playwright-core" },
+          { "dependency-name": "@axe-core/playwright" },
+        ],
+      },
+    ],
   };
   checkDependabot(valid);
   for (const mutate of [
-    (config) => { config.updates[0].groups = {}; },
-    (config) => { config.updates[0].groups.actions.patterns = ["actions/*"]; },
-    (config) => { config.updates[0].schedule.interval = "daily"; },
-    (config) => { config.updates[0]["package-ecosystem"] = "npm"; },
-    (config) => { config.updates.push({ "package-ecosystem": "npm" }); },
+    (config) => { config.version = 1; },
+    (config) => { config.registries = {}; },
+    (config) => { config.updates.pop(); },
+    (config) => { config.updates.push({ "package-ecosystem": "docker" }); },
+    (config) => { config.updates.push(structuredClone(config.updates[1])); },
   ]) {
     const config = structuredClone(valid);
     mutate(config);
     assert.throws(() => checkDependabot(config));
+  }
+  for (const [index, update] of valid.updates.entries()) {
+    for (const mutate of [
+      (entry) => { entry.groups = {}; },
+      (entry) => { Object.values(entry.groups)[0].patterns = ["limited/*"]; },
+      (entry) => { Object.values(entry.groups)[0]["exclude-patterns"] = ["*"]; },
+      (entry) => { Object.values(entry.groups)[0]["update-types"] = ["major", "minor", "patch"]; },
+      ...(index === 0 ? [] : [(entry) => { delete Object.values(entry.groups)[0]["update-types"]; }]),
+      (entry) => { entry.schedule.interval = "daily"; },
+      (entry) => { entry.schedule.day = "monday"; },
+      (entry) => { entry["package-ecosystem"] = "docker"; },
+      (entry) => { entry["open-pull-requests-limit"] = 10; },
+      (entry) => { delete entry["open-pull-requests-limit"]; },
+      (entry) => { if (entry.directories) entry.directories.pop(); else entry.directory = "/apps/web"; },
+      (entry) => { entry.directories = ["/**"]; },
+      (entry) => { entry.allow = [{ "dependency-type": "production" }]; },
+      (entry) => { entry.ignore = [{ "dependency-name": "*" }]; },
+    ]) {
+      const config = structuredClone(valid);
+      mutate(config.updates[index]);
+      assert.throws(() => checkDependabot(config), `${update["package-ecosystem"]}/${index}`);
+    }
+    for (const [ignoreIndex] of (update.ignore ?? []).entries()) {
+      for (const mutate of [
+        (entry) => { entry.ignore.splice(ignoreIndex, 1); },
+        (entry) => { entry.ignore[ignoreIndex]["update-types"] = ["version-update:semver-major"]; },
+        (entry) => { entry.ignore[ignoreIndex].versions = ["1.0.0"]; },
+      ]) {
+        const config = structuredClone(valid);
+        mutate(config.updates[index]);
+        assert.throws(() => checkDependabot(config));
+      }
+    }
   }
 });
 
@@ -910,17 +987,28 @@ function checkActionPins(source, path) {
 }
 
 function checkDependabot(config) {
-  assert.equal(config.version, 2);
-  assert.equal(config.updates?.length, 1, "only GitHub Actions updates are allowed");
-  const update = config.updates[0];
-  assert.equal(update["package-ecosystem"], "github-actions");
-  assert.equal(update.directory, "/");
-  assert.equal(update.schedule?.interval, "weekly");
-  const groups = Object.values(update.groups ?? {});
-  assert.equal(groups.length, 1, "one group must cover every action");
-  assert.deepEqual(groups[0].patterns, ["*"]);
-  assert.equal(groups[0]["exclude-patterns"], undefined);
-  assert.equal(groups[0]["update-types"], undefined);
+  const browserPackages = ["@playwright/test", "playwright", "playwright-core"];
+  const scopes = [
+    ["github-actions", ["/"], []],
+    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer", "/deploy/caddy/production/build"], ["github.com/caddyserver/caddy/v2"]],
+    ["npm", ["/", "/packages/schema"], []],
+    ["npm", ["/apps/web"], [...browserPackages, "typescript"]],
+    ["npm", ["/deploy/dev-https-browser"], [...browserPackages, "@axe-core/playwright"]],
+  ];
+  const updates = scopes.map(([ecosystem, directories, ignores]) => ({
+    "package-ecosystem": ecosystem,
+    ...(ecosystem === "github-actions" ? { directory: "/" } : { directories }),
+    schedule: { interval: "weekly" },
+    "open-pull-requests-limit": 2,
+    groups: {
+      [ecosystem]: {
+        patterns: ["*"],
+        ...(ecosystem === "github-actions" ? {} : { "update-types": ["minor", "patch"] }),
+      },
+    },
+    ...(ignores.length ? { ignore: ignores.map((name) => ({ "dependency-name": name })) } : {}),
+  }));
+  assert.deepEqual(config, { version: 2, updates }, "Dependabot must keep weekly coverage, bounded groups, and manual pins");
 }
 
 function checkToolMirrors(source, path, expected, seen = new Set()) {
