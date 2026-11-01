@@ -12,6 +12,7 @@ dist/
 .output/
 .nuxt/
 coverage/
+__pycache__/
 
 # Local state
 *.log

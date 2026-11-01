@@ -521,6 +521,7 @@ run_workflow() {
   shift
   rm -rf -- "$REPO/.dev/proof-evidence"
   rm -f -- "$CTL"/runner.* "$CTL"/container.args "$CTL"/container.pid "$CTL/synthetic.copy"
+  rm -f -- "$CTL/trace"
   echo "${RUNNER_BEHAVIOR:-ok}" >"$CTL/runner.behavior"
   echo "${CONTAINER_BEHAVIOR:-ok}" >"$CTL/container.behavior"
   echo "${CURL_BEHAVIOR:-ok}" >"$CTL/curl.behavior"
@@ -550,6 +551,52 @@ no_secret_in() {
   if [ -s "$CTL/synthetic.copy" ]; then
     value=$(sed -n 's/^ABOUTME_TEST_PASSWORD=//p' "$CTL/synthetic.copy")
     [ -n "$value" ] && lacks "$value" "$file" || return 1
+  fi
+}
+
+check_workflow() {
+  local label=$1
+  shift
+  if "$@"; then
+    pass "$label"
+  else
+    bad "$label"
+    printf 'workflow exit status: %s\n' "$STATUS" >&2
+    if no_secret_in "$CTL/out"; then
+      printf 'workflow output:\n' >&2
+      cat "$CTL/out" >&2
+    else
+      printf 'workflow output withheld: contains synthetic secret\n' >&2
+    fi
+    if [ -f "$CTL/trace" ]; then
+      awk '
+        /^\+* take_local_check_lock$/ { inside = 1; reached = 1; next }
+        inside && /: .*candidate=[0-9]+ matched=[01]/ {
+          line = $0
+          sub(/^.*candidate=/, "", line)
+          split(line, fields, /[ '\''=]+/)
+          printf "shared lock candidate: fd=%s matched=%s\n", fields[1], fields[3]
+        }
+        inside && /: .*error_class=/ {
+          line = $0
+          sub(/^.*error_class=/, "", line)
+          split(line, fields, /[ '\''=]+/)
+          error = fields[1]
+          if (error !~ /^[A-Za-z]+$/) error = "unavailable"
+          printf "shared lock helper: error_class=%s\n", error
+        }
+        inside && /: .*helper_status=[0-9]+/ {
+          line = $0
+          sub(/^.*helper_status=/, "", line)
+          split(line, fields, /[ '\''=]+/)
+          printf "shared lock helper: status=%s\n", fields[1]
+        }
+        inside && /^\+* (exec|return|fail) / { inside = 0 }
+        END { printf "shared lock trace: reached=%d\n", reached }
+      ' "$CTL/trace" >&2
+    else
+      printf 'shared lock trace: workflow did not start\n' >&2
+    fi
   fi
 }
 
@@ -1150,13 +1197,43 @@ run_workflow local
 check 'another local check holding the shared lock refuses the proof' \
   has 'another local check holds the shared lock' "$CTL/out"
 check 'a held shared lock runs no fixture or build' [ ! -s "$CTL/calls" ]
+run_workflow local python3 -I -B -c '
+import fcntl, os, sys
+fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+os.set_inheritable(fd, True)
+os.execvp(sys.argv[2], sys.argv[2:])
+' "$T/unrelated.lock"
+check 'an inherited unrelated lock cannot bypass the shared lock' \
+  has 'another local check holds the shared lock' "$CTL/out"
+check 'an inherited unrelated lock starts no fixture or build' [ ! -s "$CTL/calls" ]
 kill "$holder" 2>/dev/null || true
 wait "$holder" 2>/dev/null || true
 rm -f -- "$CTL/lock.held"
 
-run_workflow local flock "$shared_lock"
-check 'a caller holding the shared lock runs the proof' [ "$STATUS" -eq 0 ]
-check 'the inherited shared lock is reused' has 'stage completed' "$CTL/out"
+run_workflow local python3 "$ROOT/scripts/lib/local-check.py" "$T/outer.lock" 0 \
+  python3 -I -B -c '
+import fcntl, os, sys
+fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+os.set_inheritable(fd, True)
+os.execvp(sys.argv[2], sys.argv[2:])
+' \
+  "$shared_lock"
+check_workflow 'a caller holding the shared lock runs the proof' [ "$STATUS" -eq 0 ]
+check_workflow 'the inherited shared lock is reused' has 'stage completed' "$CTL/out"
+check_workflow 'the fixture holder descriptor reaches the lock helper' \
+  has 'matched=1' "$CTL/trace"
+
+run_workflow local bash -c '
+  exec 8>>"$1"
+  flock -n 8 || exit 1
+  shift
+  exec "$@"
+' _ "$shared_lock"
+check_workflow 'a shell holding the shared lock runs the proof' [ "$STATUS" -eq 0 ]
+check_workflow 'the shell lock descriptor reaches the lock helper' \
+  has 'matched=1' "$CTL/trace"
 
 # 10. The browser-source digest covers content, mode, and membership.
 digest_dir=$T/digest
