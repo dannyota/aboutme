@@ -1,5 +1,10 @@
 # Local Linux runner for native HTTPS contracts
 
+Withdrawn by the owner's decision of 2026-11-01. Keep the dev-https static
+contracts in Linux CI, or run them on a ThinkPad when needed; macOS skips them.
+Do not implement this runner. See the
+[tooling proposal](local-tooling-simplification.md).
+
 Status: proposed. Extend the landed [`ci-local.sh`](../../scripts/ci-local.sh)
 with Linux native HTTPS contracts on Darwin. [ADR 0024][delivery] permits the
 owner's capped local landing gate on reviewed commits; hosted CI gates main
