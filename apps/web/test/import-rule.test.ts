@@ -259,12 +259,12 @@ describe('HTML injection boundary', () => {
   test.each([
     ['innerHTML', 'el.innerHTML = value'],
     ['outerHTML', 'el.outerHTML = value'],
-    ['computed innerHTML', "el['innerHTML'] += value"],
-    ['computed outerHTML', "el['outerHTML'] = value"],
-    ['insertAdjacentHTML', "el.insertAdjacentHTML('beforeend', value)"],
+    ['computed innerHTML', 'el[\'innerHTML\'] += value'],
+    ['computed outerHTML', 'el[\'outerHTML\'] = value'],
+    ['insertAdjacentHTML', 'el.insertAdjacentHTML(\'beforeend\', value)'],
     [
       'computed insertAdjacentHTML',
-      "el['insertAdjacentHTML']('beforeend', value)",
+      'el[\'insertAdjacentHTML\'](\'beforeend\', value)',
     ],
   ])('rejects %s in scripts and templates', async (_name, expression) => {
     const script = await lint(`${expression};`, 'app/__lint__/fixture.ts');
@@ -279,12 +279,18 @@ describe('HTML injection boundary', () => {
 
     expect(script).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ ruleId: 'no-restricted-syntax', severity: 2 }),
+        expect.objectContaining({
+          ruleId: 'no-restricted-syntax',
+          severity: 2,
+        }),
       ]),
     );
     expect(vueScript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ ruleId: 'no-restricted-syntax', severity: 2 }),
+        expect.objectContaining({
+          ruleId: 'no-restricted-syntax',
+          severity: 2,
+        }),
       ]),
     );
     expect(template).toEqual(
@@ -300,7 +306,8 @@ describe('HTML injection boundary', () => {
     expect(template.filter(({ fatal }) => fatal)).toEqual([]);
   });
 
-  test('allows text assignment and the sanitized RichText binding', async () => {
+  test('allows text assignment and the '
+    + 'sanitized RichText binding', async () => {
     const text = await lint(
       '<template><button @click="el.textContent = value" /></template>',
       'app/__lint__/fixture.vue',
@@ -319,10 +326,14 @@ describe('HTML injection boundary', () => {
     );
 
     expect(
-      text.filter(({ ruleId, fatal }) => fatal || ruleId === 'vue/no-restricted-syntax'),
+      text.filter(
+        ({ ruleId, fatal }) => fatal || ruleId === 'vue/no-restricted-syntax',
+      ),
     ).toEqual([]);
     expect(
-      richText.filter(({ ruleId, fatal }) => fatal || ruleId === 'vue/no-v-html'),
+      richText.filter(
+        ({ ruleId, fatal }) => fatal || ruleId === 'vue/no-v-html',
+      ),
     ).toEqual([]);
     expect(ordinary).toEqual(
       expect.arrayContaining([
