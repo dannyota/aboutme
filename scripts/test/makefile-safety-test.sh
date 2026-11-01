@@ -467,9 +467,47 @@ fi
   exit 1
 }
 
+if /bin/bash -c '(( BASH_VERSINFO[0] < 4 ))'; then
+  : >"$HTTPS_CALLS"
+  if (
+    cd "$HTTPS_REPO"
+    env PATH="$HTTPS_BIN:$PATH" HTTPS_CALL_LOG="$HTTPS_CALLS" \
+      FAKE_HTTPS_IMAGE_ID="$HTTPS_ID" FAKE_HTTPS_BASE="$HTTPS_BASE" \
+      /usr/bin/make --no-print-directory SHELL=/bin/bash dev-https-browser-image
+  ) >"$WORK/https-image-old-bash.out" 2>&1; then
+    printf 'makefile-safety-test: browser image accepted Bash below 4\n' >&2
+    exit 1
+  fi
+  grep -Fq 'dev-https-browser-image requires Bash 4 or newer' \
+    "$WORK/https-image-old-bash.out" || {
+    printf 'makefile-safety-test: browser image lacked Bash setup message\n' >&2
+    exit 1
+  }
+  if read_https_calls | grep -Fxq podman; then
+    printf 'makefile-safety-test: old Bash reached the image build\n' >&2
+    exit 1
+  fi
+fi
+
+mkdir "$WORK/shell-bin"
+cat >"$WORK/shell-bin/bash" <<'EOF'
+#!/bin/sh
+case ${2-} in
+  *'podman build --tag'*) printf 'browser image\n' >>"$SHELL_CALL_LOG" ;;
+esac
+exec "$FIXTURE_BASH" "$@"
+EOF
+chmod +x "$WORK/shell-bin/bash"
+: >"$WORK/shell.calls"
 : >"$HTTPS_CALLS"
-run_https_make dev-https-browser-image >"$WORK/https-image.out" 2>&1 || {
+run_https_make PATH="$WORK/shell-bin:$HTTPS_BIN:$PATH" \
+  FIXTURE_BASH="$BASH" SHELL_CALL_LOG="$WORK/shell.calls" \
+  dev-https-browser-image >"$WORK/https-image.out" 2>&1 || {
   printf 'makefile-safety-test: browser image target failed\n' >&2
+  exit 1
+}
+grep -Fxq 'browser image' "$WORK/shell.calls" || {
+  printf 'makefile-safety-test: browser image did not use Bash from PATH\n' >&2
   exit 1
 }
 HTTPS_MANIFEST=$HTTPS_REPO/.dev/native-https/browser-image.manifest
