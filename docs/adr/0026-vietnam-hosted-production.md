@@ -149,7 +149,9 @@ amendment below or its credential exception.
 
 Status: Accepted (2026-11-01), under the owner's standing approval for reviewed
 solutions and request to renew the free Synthetic quota through GitHub Actions.
-Implementation and live renewal verification remain pending.
+The dispatch workflow is live: `check` passed on 2026-11-01 and hold issue
+[#146](https://github.com/dannyota/aboutme/issues/146) is closed. First due
+`renew` verification remains pending after 2026-11-28.
 
 The renew-only GreenNode service account `aboutme-vmonitor-renew` is the one
 approved cloud-credential exception in CI. Its client ID, client secret, and
@@ -179,12 +181,14 @@ uncertain writes behind the durable hold and require human reconciliation. Do
 not grant `actions: write` or make this workflow a dependency of `ci.yml`.
 
 This amendment narrows the 2026-10-14 exception to Synthetic because Telegram
-needs no notification quota. It supersedes the manual-only renewal sentence in
-the proposed deployment amendment above, without accepting that deployment
-proposal. It also makes this named workflow the sole exception to the blanket
-no-stored-secrets wording in [ADR 0024](0024-delivery-gates.md#decision). Build,
-test, release, and code-scanning workflows remain without stored secrets;
-GitHub's per-run token remains allowed under their existing permissions.
+needs no notification quota. When accepted, it superseded the manual-only
+renewal sentence in the then-proposed deployment amendment without accepting
+that proposal at that time. The deployment amendment was accepted separately
+with conditions. This renewal amendment also makes its named workflow the sole
+exception to the blanket no-stored-secrets wording in
+[ADR 0024](0024-delivery-gates.md#decision). Build, test, release, and
+code-scanning workflows remain without stored secrets; GitHub's per-run token
+remains allowed under their existing permissions.
 
 The benefit is unattended renewal without exposing the key to host compromise or
 depending on laptop uptime. The cost is a narrowly scoped static cloud key in

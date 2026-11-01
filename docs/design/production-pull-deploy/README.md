@@ -42,8 +42,9 @@ The owner accepted the measured approval path with the
 [cache wait, single-page history, and single-review conditions](evidence.md#anonymous-approval-and-freshness).
 The host must apply those conditions and the mapping below. Live multi-page
 history and approval by a second maintainer remain unverified; the restricted
-contract permits implementation without claiming either was proved. Solo owner
-approval is an accepted supplied requirement.
+contract permits implementation without claiming either was proved. Keep
+[approval enrollment](#approval-enrollment) owner-only until distinct-maintainer
+approval is verified. Solo owner approval is an accepted supplied requirement.
 
 | Response            | Host acceptance rule                                                                                                                                         |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -60,12 +61,14 @@ approval files never substitute for review history. The runbook owns fixture
 capture and API inspection procedures; sanitized observations belong in research
 evidence.
 
-Before enabling pull, prove a complete cycle within the anonymous 60-request
-hourly budget per IP, including discovery, post-cache revalidation, and observer
-use. Missing fields, ambiguous history, or insufficient budget stop admission.
-The [evidence contract](evidence.md#anonymous-approval-and-freshness) owns
-timing and deferral; keep attended laptop deployment available without silently
-adding a credential or weaker verification.
+Before enabling pull, record live or controlled proof that review history with
+more than one page or more than one relevant review refuses admission. Also
+prove a complete cycle within the anonymous 60-request hourly budget per IP,
+including discovery, post-cache revalidation, and observer use. Missing fields,
+ambiguous history, or insufficient budget stop admission. The
+[evidence contract](evidence.md#anonymous-approval-and-freshness) owns timing
+and deferral; keep attended laptop deployment available without silently adding
+a credential or weaker verification.
 
 ## Approval API proof
 
@@ -95,7 +98,7 @@ and cache trust boundaries.
 | Main         | [ADR 0024](../../adr/0024-delivery-gates.md#decision): required `ci`, signed commits, pull requests, owner local-gate admin bypass only; no force push or deletion; zero mandatory human PR approvals |
 | Release tags | Admin-only `v*` creation; updates and deletion prohibited                                                                                                                                             |
 | Environment  | `production`, enrolled numeric ID; selected branch `main` only, no tag rule; no secrets                                                                                                               |
-| Reviewers    | `dannyota`, `minhmq`; one suffices; self-review allowed; administrator bypass disabled                                                                                                                |
+| Reviewers    | `dannyota` only until the [enrollment gate](#approval-enrollment) passes; self-review allowed; administrator bypass disabled                                                                          |
 | Concurrency  | `production-approval`, `cancel-in-progress: false`; no FIFO assumption                                                                                                                                |
 | Reruns       | Refused; use a new dispatch                                                                                                                                                                           |
 
@@ -118,6 +121,15 @@ hash.
 The continuous deployment runbook will own checker installation, API fixture
 procedures, enrollment steps, operational commands, and the supporting reference
 catalog. Deployment and quota documents link to their owning contracts.
+
+### Approval enrollment
+
+Initially enroll only `dannyota` in the production environment's reviewer list
+and the host's maintainer-ID allowlist. Before adding `minhmq` to either list,
+verify live approval by a maintainer distinct from the dispatcher in a separate
+proof, including numeric actor and reviewer IDs against the host acceptance
+rules. Record that evidence before expanding production enrollment. Either
+maintainer may approve after that gate passes; one approval suffices.
 
 ## Release order and owner decisions
 
@@ -165,21 +177,21 @@ this order, with independent review and exact-commit CI for each release:
    `scripts/test/workflow-safety-test.sh`, `deploy/vn/pull/`,
    `deploy/vn/host/etc/systemd/system/`, `deploy/vn/tests/`, and
    `docs/runbooks/continuous-deployment/`. Prove the full anonymous cycle and
-   failure/deferral paths; keep production polling disabled.
+   failure/deferral paths, including live or controlled refusal evidence for
+   multi-page history and more than one relevant review. Keep production polling
+   disabled until those proofs pass.
 8. **Attended enrollment and first pull.** Own
    `docs/runbooks/continuous-deployment/` and private host enrollment state;
    separately reviewed ingress changes own `deploy/vn/prod/` and
-   `deploy/vn/host/`. Prove remote/console access, enroll controls, keys and
-   actual `F`, then enable polling and perform the first approved pull with
-   attended proofs. Preserve parallel laptop deployment.
+   `deploy/vn/host/`. Require the preceding full-cycle and refusal evidence,
+   prove remote/console access, and enroll controls, keys and actual `F`. Apply
+   the [owner-only enrollment gate](#approval-enrollment), then enable polling
+   and perform the first approved pull with attended proofs. Preserve parallel
+   laptop deployment.
 9. **Transfer further configuration separately.** Each responsibility owns its
    exact files in `deploy/vn/ansible/`, `deploy/vn/host/`, and
    `deploy/vn/tests/`. Remove its former writer together with
    unchanged-convergence proof.
-
-Before implementation, reconcile the manual-only renewal paragraph in
-`status-and-threats.md` with the accepted Synthetic quota-renewal amendment.
-That paragraph cannot authorize revoking the separately accepted credential.
 
 Hosted CI must cover schema rejection, approval substitution,
 publication/evidence profiles, reruns, replay, downgrade refusal, challenge
