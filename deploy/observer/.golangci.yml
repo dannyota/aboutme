@@ -43,6 +43,7 @@ linters:
     # Security: SQL string-building, missing HTTP server timeouts,
     # credentials, weak crypto, etc.
     - gosec
+    - forbidigo
 
     # Style, tuned toward Google Go style below (settings.revive).
     - revive
@@ -70,6 +71,14 @@ linters:
     # which the revive rules below already enforce with Google-style
     # messaging. Re-enabling them here would just double-report the same
     # line under two linters.
+
+    forbidigo:
+      analyze-types: true
+      exclude-godoc-examples: false
+      forbid:
+        - pattern: '^template\.HTML$'
+          pkg: '^html/template$'
+          msg: Trusted HTML conversions require sanitizer review.
 
     gosec:
       excludes:
@@ -142,9 +151,3 @@ formatters:
       local-prefixes:
         - github.com/dannyota/aboutme/deploy/observer
 
-# Linters from the task's candidate list that are deliberately NOT enabled:
-#   (none — errcheck, govet, staticcheck, ineffassign, unused, revive, gosec,
-#   bodyclose, rowserrcheck, sqlclosecheck, contextcheck, errorlint, noctx,
-#   misspell, unconvert, wastedassign, nilerr, and godot are all enabled
-#   above.) No linters outside that list were added, to keep the set
-#   curated rather than exhaustive-by-default.

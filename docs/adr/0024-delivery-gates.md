@@ -111,11 +111,12 @@ outside the required `ci` check; review alerts in GitHub's Security tab. CI
 references no stored secrets; GitHub's per-run `GITHUB_TOKEN` remains allowed.
 
 ESLint enforces the [sanitizer control](0008-ssr-sanitizer-authority.md).
-Existing gosec checks G203, G201, and G202 cover trusted HTML conversions and
-SQL string building. The custom cookie flags and response writer `Unwrap` checks
-are dropped; CodeQL covers insecure cookies. Full-history gitleaks, npm audit,
-and govulncheck retain their existing CI gates. `make scan` runs full-history
-gitleaks locally.
+Forbidigo guards trusted HTML conversions. String-built pgx SQL has no blocking
+lint; queries come from sqlc static SQL files, and CodeQL runs SQL injection
+queries on main pushes and weekly. The custom cookie flags and response writer
+`Unwrap` checks are dropped; CodeQL covers insecure cookies. Full-history
+gitleaks, npm audit, and govulncheck retain their existing CI gates. `make scan`
+runs full-history gitleaks locally.
 
 ## History
 
@@ -149,4 +150,4 @@ gitleaks locally.
   design and this amendment require independent review before implementation.
 - 2026-11-01: The owner removed Semgrep and its token, selected non-blocking
   CodeQL on main pushes and weekly, and required CI to hold no stored secrets.
-  ESLint and existing gosec checks carry the retained custom controls.
+  ESLint and forbidigo carry the retained HTML controls.

@@ -254,3 +254,88 @@ test.each([
     ]),
   );
 });
+
+describe('HTML injection boundary', () => {
+  test.each([
+    ['innerHTML', 'el.innerHTML = value'],
+    ['outerHTML', 'el.outerHTML = value'],
+    ['computed innerHTML', "el['innerHTML'] += value"],
+    ['computed outerHTML', "el['outerHTML'] = value"],
+    ['insertAdjacentHTML', "el.insertAdjacentHTML('beforeend', value)"],
+    [
+      'computed insertAdjacentHTML',
+      "el['insertAdjacentHTML']('beforeend', value)",
+    ],
+  ])('rejects %s in scripts and templates', async (_name, expression) => {
+    const script = await lint(`${expression};`, 'app/__lint__/fixture.ts');
+    const vueScript = await lint(
+      `<script setup>${expression};</script>`,
+      'app/__lint__/fixture.vue',
+    );
+    const template = await lint(
+      `<template><button @click="${expression}" /></template>`,
+      'app/__lint__/fixture.vue',
+    );
+
+    expect(script).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ruleId: 'no-restricted-syntax', severity: 2 }),
+      ]),
+    );
+    expect(vueScript).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ruleId: 'no-restricted-syntax', severity: 2 }),
+      ]),
+    );
+    expect(template).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'vue/no-restricted-syntax',
+          severity: 2,
+        }),
+      ]),
+    );
+    expect(script.filter(({ fatal }) => fatal)).toEqual([]);
+    expect(vueScript.filter(({ fatal }) => fatal)).toEqual([]);
+    expect(template.filter(({ fatal }) => fatal)).toEqual([]);
+  });
+
+  test('allows text assignment and the sanitized RichText binding', async () => {
+    const text = await lint(
+      '<template><button @click="el.textContent = value" /></template>',
+      'app/__lint__/fixture.vue',
+    );
+    const richText = await lint(
+      '<template><div v-html="safeHtml" /></template>',
+      'app/components/resume/primitives/RichText.vue',
+    );
+    const ordinary = await lint(
+      '<template><div v-html="value" /></template>',
+      'app/__lint__/fixture.vue',
+    );
+    const richTextAssignment = await lint(
+      '<template><button @click="el.innerHTML = value" /></template>',
+      'app/components/resume/primitives/RichText.vue',
+    );
+
+    expect(
+      text.filter(({ ruleId, fatal }) => fatal || ruleId === 'vue/no-restricted-syntax'),
+    ).toEqual([]);
+    expect(
+      richText.filter(({ ruleId, fatal }) => fatal || ruleId === 'vue/no-v-html'),
+    ).toEqual([]);
+    expect(ordinary).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ruleId: 'vue/no-v-html', severity: 2 }),
+      ]),
+    );
+    expect(richTextAssignment).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'vue/no-restricted-syntax',
+          severity: 2,
+        }),
+      ]),
+    );
+  });
+});
