@@ -1,6 +1,6 @@
 # Static checks for deploy/vn. This workflow runs without cloud credentials
 # (docs/design/vietnam-production.md, "Infrastructure code and state"). ci.yml
-# calls this workflow on every gate run, including shellcheck for host scripts.
+# calls this workflow on full gate runs, including shellcheck for host scripts.
 name: VN infrastructure
 
 on:

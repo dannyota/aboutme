@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -30,6 +30,301 @@ const actionFixture = (reference, comment = "v1.2.3") =>
 const readWorkflow = (name) =>
   parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
 const semgrepSkipCondition = "${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}";
+
+const proseJobs = ["macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"];
+const selectionCondition = "github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'";
+
+function checkSelection(ci) {
+  const preflight = ci.jobs.preflight;
+  assert.equal(preflight.outputs.selection, "${{ steps.selection.outputs.selection }}");
+  const index = preflight.steps.findIndex((step) => step.id === "selection");
+  const comparison = preflight.steps.findIndex((step) => step.id === "comparison");
+  assert.ok(comparison >= 0 && index > comparison, "guards precede selection");
+  const step = preflight.steps[index];
+  assert.equal(step.if, undefined, "selection requires successful guards");
+  assert.equal(step.env.BASE_SHA, "${{ steps.comparison.outputs.base_sha }}");
+  assert.match(step.run, /python3 -I scripts\/ci-path-selection.py/);
+  for (const name of proseJobs) {
+    assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
+    assert.equal(ci.jobs[name].if, selectionCondition, `${name}: exact selection condition`);
+  }
+  assert.equal(ci.jobs.contracts.if, undefined, "all contracts always run");
+  const expression = selectionCondition.replace("needs.preflight.outputs.selection", "selection");
+  for (const event of ["pull_request", "push", "workflow_dispatch"]) {
+    for (const selection of ["prose", "full", "", undefined, "unknown"]) {
+      assert.equal(Function("github", "selection", `return ${expression}`)({ event_name: event }, selection),
+        event !== "pull_request" || selection !== "prose");
+    }
+  }
+}
+
+test("selection retains guards, all contracts, and explicit PR omissions", () => {
+  checkSelection(readWorkflow("ci"));
+  for (const mutate of [
+    (steps) => { steps.reverse(); },
+    (steps) => { steps.find((step) => step.id === "selection").if = "always()"; },
+  ]) {
+    const ci = readWorkflow("ci"); mutate(ci.jobs.preflight.steps);
+    assert.throws(() => checkSelection(ci), /guards precede selection|successful guards/);
+  }
+  for (const name of proseJobs) {
+    for (const mutate of [
+      (job) => { job.if = "needs.preflight.outputs.selection != 'prose'"; },
+      (job) => { job.if = "github.event_name != 'pull_request'"; },
+      (job) => { delete job.needs; },
+    ]) {
+      const ci = readWorkflow("ci");
+      mutate(ci.jobs[name]);
+      assert.throws(() => checkSelection(ci), /selection condition|required preflight/);
+    }
+  }
+});
+
+function selector(directory, base, event = "pull_request") {
+  const result = spawnSync("python3", ["-I", join(root, "scripts/ci-path-selection.py"), event, base], {
+    cwd: directory, encoding: "utf8", timeout: 5000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "", "paths and errors stay out of logs");
+  assert.match(result.stdout, /^(full|prose)\n$/);
+  return result.stdout.trim();
+}
+
+function withRepository(run) {
+  const directory = mkdtempSync(join(tmpdir(), "ci-selection-"));
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: directory, encoding: "utf8",
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const put = (name, content = "prose\n") => {
+    mkdirSync(join(directory, name, ".."), { recursive: true });
+    writeFileSync(join(directory, name), content);
+  };
+  const commit = () => { git("add", "--all"); git("commit", "-qm", "Fixture"); return git("rev-parse", "HEAD"); };
+  try {
+    git("init", "-q"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.invalid");
+    git("config", "core.filemode", "true");
+    put("seed", "seed\n"); commit();
+    run({ directory, git, put, commit });
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+
+test("selector classifies real Git paths and every event conservatively", () => {
+  for (const [name, expected] of [
+    ["docs/adr/1234-choice.md", "prose"], ["docs/plans/root.md", "prose"], ["docs/plans/.md", "prose"],
+    ["docs/plans/nested/deep/entry.md", "prose"], ["docs/plans/Unicode tiếng Việt.md", "prose"],
+    ["docs/plans/traceability/entry.md", "full"], ["docs/plans/AGENTS.md", "full"],
+    ["docs/plans/nested/CLAUDE.md", "full"], ["docs/adr/README.md", "full"],
+    ["docs/adr/1234-dir/entry.md", "full"], ["docs/adr/123-choice.md", "full"],
+    ["docs/design/entry.md", "full"], ["docs/api/entry.md", "full"],
+    ["docs/brand/entry.md", "full"], ["docs/other.md", "full"],
+    ["docs/plans/line\nbreak.md", "full"], ["docs/plans/tab\tname.md", "full"],
+    ["Docs/plans/entry.md", "full"], ["docs/plans/entry.MD", "full"],
+    [".github/workflows/ci.yml", "full"], ["scripts/entry.py", "full"],
+    ["Makefile", "full"], [".tool-versions", "full"], ["package-lock.json", "full"],
+    ["apps/web/generated.ts", "full"], ["unknown", "full"],
+  ]) {
+    withRepository(({ directory, git, put, commit }) => {
+      const base = git("rev-parse", "HEAD"); put(name); commit();
+      for (const event of ["pull_request", "push", "workflow_dispatch", "unknown"]) {
+        assert.equal(selector(directory, base, event), event === "pull_request" ? expected : "full", `${event}/${name}`);
+      }
+    });
+  }
+});
+
+test("selector checks deletions, modifications, rename sides, and mixed changes", () => {
+  for (const [before, after, expected] of [
+    ["docs/plans/old.md", "docs/adr/1234-new.md", "prose"],
+    ["docs/plans/old.md", "outside.md", "full"],
+    ["outside.md", "docs/plans/new.md", "full"],
+    ["docs/plans/old.md", null, "prose"], ["outside.md", null, "full"],
+  ]) {
+    withRepository(({ directory, git, put, commit }) => {
+      put(before); const base = commit();
+      if (after) { put(after); git("rm", before); } else git("rm", before);
+      commit(); assert.equal(selector(directory, base), expected, `${before}/${after}`);
+    });
+  }
+  withRepository(({ directory, put, commit }) => {
+    put("docs/plans/entry.md"); const base = commit();
+    put("docs/plans/entry.md", "changed\n"); commit();
+    assert.equal(selector(directory, base), "prose");
+    put("unknown"); commit(); assert.equal(selector(directory, base), "full");
+  });
+});
+
+test("selector rejects unsafe modes, invalid names, missing refs, and empty diffs", () => {
+  for (const kind of ["symlink", "new symlink", "executable", "mode change", "invalid UTF-8", "submodule"]) {
+    withRepository(({ directory, git, put, commit }) => {
+      const name = "docs/plans/entry.md";
+      put(name);
+      if (kind === "executable") chmodSync(join(directory, name), 0o755);
+      const base = ["executable", "new symlink"].includes(kind) ? git("rev-parse", "HEAD") : commit();
+      if (["symlink", "new symlink"].includes(kind)) { rmSync(join(directory, name)); symlinkSync("../../../seed", join(directory, name)); }
+      if (kind === "mode change") chmodSync(join(directory, name), 0o755);
+      if (kind === "invalid UTF-8") writeFileSync(Buffer.concat([Buffer.from(directory + "/docs/plans/"), Buffer.from([0xff]), Buffer.from(".md")]), "prose");
+      if (kind === "submodule") { git("update-index", "--add", "--cacheinfo", `160000,${base},docs/plans/module.md`); git("commit", "-qm", "Gitlink"); }
+      else commit();
+      assert.equal(selector(directory, base), "full", kind);
+    });
+  }
+  withRepository(({ directory, git }) => {
+    assert.equal(selector(directory, git("rev-parse", "HEAD")), "full");
+    assert.equal(selector(directory, "unavailable"), "full");
+  });
+});
+
+test("selector rejects malformed records, unsupported statuses, and bounded Git failures", () => {
+  const script = `
+import importlib.util, subprocess, sys
+spec = importlib.util.spec_from_file_location("selection", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+bad_records = [b"", b"M\\0", b"M\\0docs/plans/a.md", b"R100\\0docs/plans/a.md\\0", b"C100\\0a\\0b\\0", b"T\\0a\\0", b"R101\\0a\\0b\\0", b"R-1\\0a\\0b\\0", b"M\\0\\0"]
+original = m.git
+for data in bad_records:
+    try:
+        m.parse_changes(data)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(repr(data))
+    def malformed(arguments, deadline):
+        if arguments[0] == "diff":
+            return data
+        return original(arguments, deadline)
+    m.git = malformed
+    assert m.select("pull_request", sys.argv[2]) == "full"
+for score in range(101):
+    assert m.parse_changes(("R%d\\0docs/plans/a.md\\0docs/plans/b.md\\0" % score).encode())
+assert m.parse_changes(b"R050\\0docs/plans/a.md\\0docs/plans/b.md\\0")
+for error in [OSError(), ValueError(), subprocess.TimeoutExpired("git", 30)]:
+    def broken(*args, **kwargs):
+        raise error
+    m.git = broken
+    assert m.select("pull_request", "HEAD") == "full"
+`;
+  withRepository(({ directory, git, put, commit }) => {
+    const base = git("rev-parse", "HEAD"); put("docs/plans/a.md"); commit();
+    const result = spawnSync("python3", ["-I", "-c", script, join(root, "scripts/ci-path-selection.py"), base], { cwd: directory, encoding: "utf8", timeout: 5000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+  });
+  withRepository(({ directory, git }) => {
+    for (const [command, expected] of [
+      ["printf prose; exit 1", "full"], ["printf unknown", "full"], ["exit 0", "full"],
+      ["printf 'prose\\nextra=value'", "full"], ["printf prose", "prose"], ["printf full", "full"],
+    ]) {
+      const step = readWorkflow("ci").jobs.preflight.steps.find((step) => step.id === "selection");
+      const output = join(directory, "output"); const summary = join(directory, "summary");
+      writeFileSync(output, ""); writeFileSync(summary, "");
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", `python3() { ${command}; }\n${step.run}`], {
+        cwd: directory, env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: git("rev-parse", "HEAD"), GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary }, encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\n`);
+      assert.equal(readFileSync(summary, "utf8"), `selection=${expected}\n`);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
+    }
+  });
+});
+
+test("selector enforces output and time limits and falls back on diff and tree errors", () => {
+  withRepository(({ directory, git, put, commit }) => {
+    const base = git("rev-parse", "HEAD"); put("docs/plans/a.md"); commit();
+    const script = `
+import importlib.util, sys, time
+spec = importlib.util.spec_from_file_location("selection", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+assert m.MAX_OUTPUT == 16 * 1024 * 1024
+assert m.TIME_LIMIT == 30
+assert m.select("pull_request", sys.argv[2]) == "prose"
+m.MAX_OUTPUT = 1
+try:
+    m.git(["rev-parse", "HEAD"], time.monotonic() + 5)
+except ValueError:
+    pass
+else:
+    raise AssertionError("oversized output accepted")
+assert m.select("pull_request", sys.argv[2]) == "full"
+m.MAX_OUTPUT = 16 * 1024 * 1024
+popen = m.subprocess.Popen
+def delayed(*args, **kwargs):
+    return popen([sys.executable, "-I", "-c", "import time; time.sleep(2)"], **kwargs)
+m.subprocess.Popen = delayed
+try:
+    m.git(["rev-parse", "HEAD"], time.monotonic() + 0.01)
+except TimeoutError:
+    pass
+else:
+    raise AssertionError("running command exceeded deadline")
+finally:
+    m.subprocess.Popen = popen
+try:
+    m.git(["rev-parse", "HEAD"], time.monotonic() - 1)
+except TimeoutError:
+    pass
+else:
+    raise AssertionError("expired deadline accepted")
+m.TIME_LIMIT = 0
+assert m.select("pull_request", sys.argv[2]) == "full"
+m.TIME_LIMIT = 30
+original = m.git
+for command in ["diff", "ls-tree"]:
+    seen = []
+    def broken(arguments, deadline):
+        if arguments[0] == command:
+            seen.append(command)
+            raise OSError()
+        return original(arguments, deadline)
+    m.git = broken
+    assert m.select("pull_request", sys.argv[2]) == "full"
+    assert seen == [command]
+`;
+    const result = spawnSync("python3", ["-I", "-c", script, join(root, "scripts/ci-path-selection.py"), base], {
+      cwd: directory, encoding: "utf8", timeout: 5000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+  });
+});
+
+test("selector compares the candidate trees directly for merges and nonancestor bases", () => {
+  withRepository(({ directory, git, put, commit }) => {
+    const base = git("rev-parse", "HEAD");
+    git("checkout", "-qb", "first"); put("docs/plans/first.md"); const first = commit();
+    git("checkout", "-qb", "second", base); put("docs/plans/second.md"); const second = commit();
+    assert.equal(selector(directory, first), "prose", "nonancestor comparison");
+    git("merge", "--no-ff", "-qm", "Combined prose", first);
+    assert.equal(selector(directory, base), "prose", "train merge candidate");
+    git("checkout", "-qb", "mixed", second); put("unknown"); const mixed = commit();
+    git("checkout", "first"); git("merge", "--no-ff", "-qm", "Mixed candidate", mixed);
+    assert.equal(selector(directory, base), "full", "combined change includes unknown paths");
+  });
+});
+
+test("selector checks old modes on deletions and renames", () => {
+  for (const kind of ["symlink", "executable"]) {
+    for (const rename of [false, true]) {
+      withRepository(({ directory, git, put, commit }) => {
+        const name = "docs/plans/old.md";
+        put(name);
+        if (["symlink", "new symlink"].includes(kind)) { rmSync(join(directory, name)); symlinkSync("../../../seed", join(directory, name)); }
+        else chmodSync(join(directory, name), 0o755);
+        const base = commit();
+        if (rename) git("mv", name, "docs/plans/new.md");
+        else git("rm", name);
+        commit(); assert.equal(selector(directory, base), "full", `${kind}/${rename}`);
+      });
+    }
+  }
+});
 
 const imageCheck = "./.github/actions/release-image-check";
 const readImageCheck = () => parseYaml(read(`${imageCheck.slice(2)}/action.yml`), imageCheck).toJS();
@@ -397,18 +692,22 @@ test("required gate rejects competing and unprovable check names in every workfl
   checkRequiredGate(readWorkflow("ci"), vn);
 });
 
-test("aggregate accepts only successful jobs and Semgrep skips outside main scans", () => {
+test("aggregate accepts success and only explicit prose or Semgrep skips", () => {
   checkAggregateResults(readWorkflow("ci"));
 });
 
 test("aggregate rejects unrestricted job and event skips", () => {
   for (const condition of [
-    'or (.key | IN("semgrep-code", "semgrep-supply-chain") | not)',
-    'or $allow_semgrep_skip != "true"',
+    '(.key | IN("semgrep-code", "semgrep-supply-chain"))',
+    '$allow_semgrep_skip == "true"',
+    '$event == "pull_request"',
+    '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))',
   ]) {
     const ci = readWorkflow("ci");
-    aggregateStep(ci).run = aggregateStep(ci).run.replace(condition, "or false");
-    assert.throws(() => checkAggregateResults(ci), /skipped/);
+    const step = aggregateStep(ci);
+    assert.ok(step.run.includes(condition), `mutation target: ${condition}`);
+    step.run = step.run.replace(condition, "true");
+    assert.throws(() => checkAggregateResults(ci));
   }
 });
 
@@ -461,8 +760,13 @@ function checkProofCoverage(ci) {
   assert.equal(ci.on.push["paths-ignore"], undefined, "full main coverage");
   assert.equal(ci.on.pull_request?.paths, undefined, "full PR coverage");
   assert.equal(ci.on.pull_request?.["paths-ignore"], undefined, "full PR coverage");
+  const evidenceSteps = ci.jobs.ci.steps.filter((step) =>
+    step.uses?.startsWith("actions/checkout@") || step.uses?.startsWith("actions/download-artifact@"));
+  assert.equal(evidenceSteps.length, 2, "shard evidence checkout and download");
+  for (const step of evidenceSteps) assert.equal(step.if, "${{ needs.dev-https-proofs.result == 'success' }}");
+  assert.equal(evidenceSteps[1].with.pattern, "shard-evidence-*");
   const job = ci.jobs["dev-https-proofs"];
-  assert.equal(job.if, undefined, "browser groups run on every trigger");
+  assert.equal(job.if, selectionCondition, "browser groups use explicit selection");
   assert.equal(job.strategy["fail-fast"], false, "all groups finish");
   const groups = job.strategy.matrix.include;
   assert.equal(groups.length, 9, "existing browser group count");
@@ -736,7 +1040,7 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
   assert.deepEqual(vn.permissions, { contents: "read" });
   assert.equal(vn.concurrency, undefined, "VN workflow must not cancel callers");
   assert.equal(ci.jobs["vn-infra"]?.uses, "./.github/workflows/vn-infra.yml", "VN workflow call");
-  assert.equal(ci.jobs["vn-infra"].if, undefined, "VN workflow must run on every trigger");
+  assert.equal(ci.jobs["vn-infra"].if, selectionCondition, "VN workflow must run under exact selection condition");
   assert.deepEqual(
     [...ci.jobs.ci.needs].sort(),
     Object.keys(ci.jobs).filter((job) => job !== "ci").sort(),
@@ -747,46 +1051,54 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
   assert.equal(step.if, "always()", "aggregate must always run");
   assert.equal(step.env.ALLOW_SEMGREP_SKIP, semgrepSkipCondition, "Semgrep skip main condition");
   assert.equal(step.env.NEEDS_JSON, "${{ toJSON(needs) }}");
+  for (const job of Object.values(vn.jobs)) assert.equal(job.if, undefined, "VN internal jobs always run when called");
 }
 
 function checkAggregateResults(ci) {
   const step = aggregateStep(ci);
   const jobs = ci.jobs.ci.needs;
-  const contexts = [
-    ["main push", false],
-    ["main workflow_dispatch", false],
-    ["branch push", true],
-    ["branch workflow_dispatch", true],
-    ["same-repository pull_request", true],
-    ["fork pull_request", true],
-    ["Dependabot pull_request", true],
-  ];
-  const run = (needs, allowSkip) => {
+  const run = (needs, event, allowSkip) => {
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step.run], {
-      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), ALLOW_SEMGREP_SKIP: String(allowSkip) },
-      encoding: "utf8",
-      timeout: 5000,
+      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), GITHUB_EVENT_NAME: event, ALLOW_SEMGREP_SKIP: String(allowSkip) },
+      encoding: "utf8", timeout: 5000,
     });
     assert.ifError(result.error);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
     return result.status;
   };
-  for (const [context, allowSkip] of contexts) {
-    const successful = Object.fromEntries(jobs.map((job) => [job, { result: "success" }]));
-    assert.equal(run(successful, allowSkip), 0, `${context}: all jobs succeeded`);
-    const bothSkipped = {
-      ...successful,
-      "semgrep-code": { result: "skipped" },
-      "semgrep-supply-chain": { result: "skipped" },
-    };
-    assert.equal(run(bothSkipped, allowSkip), allowSkip ? 0 : 1, `${context}: both Semgrep jobs skipped`);
-    for (const job of jobs) {
-      for (const result of ["skipped", "cancelled", "failure", undefined]) {
-        const needs = { ...successful, [job]: { result } };
-        const allowed = allowSkip && result === "skipped" &&
-          ["semgrep-code", "semgrep-supply-chain"].includes(job);
-        assert.equal(run(needs, allowSkip), allowed ? 0 : 1, `${context}: ${job}=${result}`);
+  for (const [context, event, allowSkip] of [
+    ["main push", "push", false], ["main dispatch", "workflow_dispatch", false],
+    ["branch push", "push", true], ["branch dispatch", "workflow_dispatch", true],
+    ["unknown event", "unknown", true],
+    ...["same repository", "fork", "Dependabot", "train"].map((name) => [name, "pull_request", true]),
+  ]) {
+    for (const selection of ["full", "prose", "unknown", "", undefined]) {
+      const successful = Object.fromEntries(jobs.map((job) => [job, { result: "success" }]));
+      successful.preflight.outputs = { selection };
+      const valid = selection === "full" || (selection === "prose" && event === "pull_request");
+      assert.equal(run(successful, event, allowSkip), valid ? 0 : 1, `${context}/${selection}: all success`);
+      if (!valid) continue;
+      const omitted = structuredClone(successful);
+      for (const job of proseJobs) omitted[job].result = "skipped";
+      assert.equal(run(omitted, event, allowSkip), selection === "prose" ? 0 : 1, `${context}: prose omissions`);
+      for (const job of jobs) {
+        for (const result of ["success", "skipped", "cancelled", "failure", "unknown", null, undefined]) {
+          const needs = structuredClone(successful); needs[job].result = result;
+          const allowed = result === "success" || (result === "skipped" && (
+            (allowSkip && ["semgrep-code", "semgrep-supply-chain"].includes(job)) ||
+            (selection === "prose" && proseJobs.includes(job))));
+          assert.equal(run(needs, event, allowSkip), allowed ? 0 : 1, `${context}/${selection}: ${job}=${result}`);
+        }
+        const missing = structuredClone(successful); delete missing[job];
+        assert.equal(run(missing, event, allowSkip), 1, `${context}: missing ${job}`);
       }
+      for (const value of [null, {}, { result: "success" }, { result: "success", outputs: null }, { result: "success", outputs: { selection: false } }]) {
+        assert.equal(run({ ...successful, preflight: value }, event, allowSkip), 1, "missing output");
+      }
+      assert.equal(run({ ...successful, extra: { result: "success" } }, event, allowSkip), 1, "unknown job");
+      const semgrep = structuredClone(successful);
+      for (const job of ["semgrep-code", "semgrep-supply-chain"]) semgrep[job].result = "skipped";
+      assert.equal(run(semgrep, event, allowSkip), allowSkip ? 0 : 1, `${context}: Semgrep skips`);
     }
   }
 }

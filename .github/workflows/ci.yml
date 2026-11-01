@@ -25,6 +25,8 @@ concurrency:
 # Job layout: macOS proves the local watchdog and static pre-push wrapper.
 # Other jobs run Linux contracts, application checks, infrastructure, scans,
 # browser shards, and proof groups, followed by the aggregate ci gate.
+# Allowlisted prose pull requests retain preflight, all contracts, and ci.
+# See docs/design/ci-path-selection.md for the selection contract.
 # Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
 # work inside a job overlaps through scripts/ci-background.sh. Each check
@@ -36,6 +38,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       base_sha: ${{ steps.comparison.outputs.base_sha }}
+      selection: ${{ steps.selection.outputs.selection }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,9 +56,22 @@ jobs:
           bash scripts/check-migrations-append-only.sh --commits "$base" HEAD
           bash scripts/check-released-schemas.sh --commits "$base" HEAD
           echo "base_sha=$base" >> "$GITHUB_OUTPUT"
+      - name: Select CI jobs
+        id: selection
+        env:
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+        run: |
+          selection=$(python3 -I scripts/ci-path-selection.py "$GITHUB_EVENT_NAME" "$BASE_SHA" 2>/dev/null) || selection=full
+          case "$selection" in
+            full|prose) ;;
+            *) selection=full ;;
+          esac
+          printf 'selection=%s\n' "$selection" >> "$GITHUB_OUTPUT"
+          printf 'selection=%s\n' "$selection" >> "$GITHUB_STEP_SUMMARY"
 
   macos-tooling:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: macos-latest
     timeout-minutes: 5
     steps:
@@ -84,6 +100,7 @@ jobs:
 
   vn-infra:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     uses: ./.github/workflows/vn-infra.yml
 
   # Checks needing no database, browser, or Go test run: gitleaks,
@@ -248,6 +265,7 @@ jobs:
   # with cel-go >= 0.30, and for x/crypto dropping openpgp.
   server:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -400,6 +418,7 @@ jobs:
   # image test joins this job last: it needs only Podman.
   server-integration:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -474,6 +493,7 @@ jobs:
   # suites rather than one after the other.
   server-resumeapi:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -529,6 +549,7 @@ jobs:
   # surfaces from exactly the manifest's files.
   web:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -558,6 +579,7 @@ jobs:
   # surfaces it tests from the source manifest inside the pinned image.
   web-e2e:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -611,6 +633,7 @@ jobs:
   # nothing.
   dev-https-proofs:
     needs: [preflight]
+    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -785,8 +808,9 @@ jobs:
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded. The two Semgrep jobs may skip only outside main
-  # pushes and main dispatches, where the semgrep environment is unavailable.
+  # job above succeeded or has an explicit prose omission. The two Semgrep
+  # jobs may skip only outside main pushes and main dispatches, where the
+  # semgrep environment is unavailable.
   ci:
     if: always()
     needs:
@@ -834,24 +858,31 @@ jobs:
             { echo "no TOTP shard evidence files were downloaded" >&2; exit 1; }
           node deploy/dev-https-browser/check-shard-coverage.mjs totp \
             "${evidence_files[@]}"
-      - name: Require every job to succeed (Semgrep required on main pushes and dispatches)
+      - name: Require valid selection and job results
         if: always()
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
           ALLOW_SEMGREP_SKIP: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
         run: |
-          bad=$(echo "$NEEDS_JSON" | jq -r --arg allow_semgrep_skip "$ALLOW_SEMGREP_SKIP" '
-            to_entries
-            | map(select(.value.result != "success"))
-            | map(select(.value.result != "skipped"
-                or $allow_semgrep_skip != "true"
-                or (.key | IN("semgrep-code", "semgrep-supply-chain") | not)))
-            | .[]
-            | "\(.key)=\(.value.result)"
-          ')
-          if [ -n "$bad" ]; then
-            echo "ci: required job(s) not successful:" >&2
-            echo "$bad" >&2
+          if ! printf '%s\n' "$NEEDS_JSON" | jq -e \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg allow_semgrep_skip "$ALLOW_SEMGREP_SKIP" '
+              keys == (["preflight", "contracts", "macos-tooling", "vn-infra",
+                "server", "server-integration", "server-resumeapi", "web",
+                "web-e2e", "dev-https-proofs", "semgrep-code", "semgrep-supply-chain"] | sort)
+              and .preflight.result == "success"
+              and (.preflight.outputs.selection as $selection
+                | ($selection == "full" or ($selection == "prose" and $event == "pull_request"))
+                and (to_entries | all(
+                  .value.result == "success" or
+                  (.value.result == "skipped" and (
+                    ($allow_semgrep_skip == "true"
+                      and (.key | IN("semgrep-code", "semgrep-supply-chain")))
+                    or ($selection == "prose" and $event == "pull_request"
+                      and (.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs")))
+                  )))))
+            ' >/dev/null; then
+            echo "ci: invalid selection or required job results" >&2
             exit 1
           fi
-          echo "ci: all required jobs succeeded"
+          echo "ci: all required jobs succeeded or were explicitly omitted"
