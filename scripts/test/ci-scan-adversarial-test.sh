@@ -218,21 +218,17 @@ test_help_describes_compose_as_smoke_only() {
   return "$failed"
 }
 
-test_native_status_checks_database_host_port() {
-  local case_dir=$WORK/native-status
-  local repo=$case_dir/repo
-  local fake_bin=$case_dir/bin
-  local output status connected_output connected_status db_line failed=0 name ready pid sid attempt fixture_ready
-  local -a sleepers=()
-  local -a launchers=()
-
+setup_native_fixture() {
+  local repo=$1 fake_bin=$2 name
   mkdir -p "$repo/scripts" "$repo/.dev" "$fake_bin"
   for name in realpath stat base64 sha256sum date; do
     ln -s "$(command -v "$name")" "$fake_bin/$name"
   done
   cp "$ROOT/scripts/dev-native.sh" "$repo/scripts/dev-native.sh"
+  sed '$d' "$repo/scripts/dev-native.sh" >"$repo/scripts/dev-native-fixture.sh"
   mkdir -p "$repo/scripts/lib"
-  cp "$ROOT/scripts/lib/platform.sh" "$repo/scripts/lib/"
+  cp "$ROOT/scripts/run-owned.sh" "$repo/scripts/"
+  cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/run-owned.py" "$repo/scripts/lib/"
 
   cat >"$fake_bin/podman" <<'EOF'
 #!/usr/bin/env bash
@@ -252,35 +248,21 @@ esac
 printf '%s\n' 'LISTEN 0 128 127.0.0.1:fixture 0.0.0.0:*'
 EOF
   chmod +x "$fake_bin/ss"
+}
 
-  for name in mail-capture server web caddy; do
-    ready=$case_dir/$name.ready
-    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' /bin/bash -c '
-      printf "%s\n" "$$" >"$1"
-      exec /bin/sleep 30
-    ' native-status-fixture "$ready" >/dev/null 2>&1 &
-    launchers+=("$!")
+test_native_status_checks_database_host_port() {
+  local case_dir=$WORK/native-status
+  local repo=$case_dir/repo
+  local fake_bin=$case_dir/bin
+  local output status connected_output= connected_status=125 db_line failed=0 name
 
-    fixture_ready=0
-    for attempt in $(seq 1 100); do
-      if [ -s "$ready" ]; then
-        pid=$(<"$ready")
-        if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null &&
-          sid=$(python3 -I -c 'import os, sys; print(os.getsid(int(sys.argv[1])))' "$pid" 2>/dev/null) &&
-          [ "$sid" = "$pid" ]; then
-          fixture_ready=1
-          break
-        fi
-      fi
-      /bin/sleep 0.01
-    done
-    if [ "$fixture_ready" -ne 1 ]; then
-      note_failure "could not establish a session-leader fixture for $name" || failed=1
-      break
-    fi
-    sleepers+=("$pid")
-    printf '%s\n' "$pid" >"$repo/.dev/$name.pid"
-  done
+  setup_native_fixture "$repo" "$fake_bin"
+  if ! /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" \
+    "$BASH" -c 'source "$1"; for name in "${SERVICES[@]}"; do
+      start_service "$name" "$ROOT" /bin/sleep 60
+    done' native-status-fixture "$repo/scripts/dev-native-fixture.sh"; then
+    note_failure "could not establish owned HTTP fixtures" || failed=1
+  fi
 
   if [ "$failed" -eq 0 ]; then
     output=$(
@@ -298,12 +280,10 @@ EOF
     status=125
   fi
 
-  for pid in "${sleepers[@]}"; do
-    kill "$pid" >/dev/null 2>&1 || true
-  done
-  for pid in "${launchers[@]}"; do
-    wait "$pid" 2>/dev/null || true
-  done
+  if ! /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" \
+    "$BASH" "$repo/scripts/dev-native.sh" down; then
+    note_failure "owned HTTP fixture cleanup failed" || failed=1
+  fi
 
   if [ "$failed" -ne 0 ]; then
     return "$failed"
@@ -337,6 +317,46 @@ EOF
     printf '    observed output: %s\n' "${output//$'\n'/ | }" >&2
     printf '    connected output: %s\n' "${connected_output//$'\n'/ | }" >&2
   fi
+  return "$failed"
+}
+
+test_native_status_rejects_pid_only_state() {
+  local case_dir=$WORK/native-foreign
+  local repo=$case_dir/repo
+  local fake_bin=$case_dir/bin
+  local pid output status stopped attempt failed=0
+
+  setup_native_fixture "$repo" "$fake_bin"
+  python3 -I -B -c 'import os, pathlib, sys
+os.setsid()
+pathlib.Path(sys.argv[1]).touch()
+os.execv("/bin/sleep", ["sleep", "60"])' "$case_dir/ready" &
+  pid=$!
+  for attempt in $(seq 1 100); do
+    [ ! -e "$case_dir/ready" ] || break
+    sleep 0.01
+  done
+  if [ ! -e "$case_dir/ready" ]; then
+    note_failure "could not establish a foreign session-leader fixture" || failed=1
+  fi
+  printf '%s\n' "$pid" >"$repo/.dev/caddy.pid"
+  chmod 600 "$repo/.dev/caddy.pid"
+  output=$(/usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=1 \
+    "$BASH" "$repo/scripts/dev-native.sh" status 2>&1)
+  status=$?
+  if [ "$status" -ne 1 ] ||
+    ! awk '$1 == "caddy" && $3 == "CRASHED" { found = 1 } END { exit !found }' <<<"$output"; then
+    note_failure "native status accepted a bare PID-file process" || failed=1
+  fi
+  /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" \
+    "$BASH" "$repo/scripts/dev-native.sh" down >/dev/null 2>&1
+  stopped=$?
+  if [ "$stopped" -ne 1 ] || ! kill -0 "$pid" 2>/dev/null ||
+    [ "$(cat "$repo/.dev/caddy.pid")" != "$pid" ]; then
+    note_failure "native stop must refuse and preserve a bare PID-file process" || failed=1
+  fi
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
   return "$failed"
 }
 
@@ -381,6 +401,8 @@ run_test "Makefile help distinguishes Compose smoke from native development" \
   test_help_describes_compose_as_smoke_only
 run_test "native status verifies the database host listener" \
   test_native_status_checks_database_host_port
+run_test "native status and stop reject bare PID-file processes" \
+  test_native_status_rejects_pid_only_state
 run_test "operational gate includes render topology and HTTPS parity" \
   test_operational_gate_includes_render_topology
 run_test "live DB gate includes dev-seed" \

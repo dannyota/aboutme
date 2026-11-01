@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run local CI under the shared lock and memory watchdog.
+# Run local CI under the shared lock and owned-child deadline.
 set -Eeuo pipefail
 
 readonly TIMEOUT_SECONDS=3600
@@ -38,7 +38,7 @@ outer() {
 }
 
 locked() {
-  exec env RUN_CAPPED_REPORT=1 PYTHONDONTWRITEBYTECODE=1 bash "$ROOT/scripts/run-capped.sh" \
+  exec env PYTHONDONTWRITEBYTECODE=1 bash "$ROOT/scripts/run-owned.sh" \
     --timeout "$TIMEOUT_SECONDS" -- bash "$SCRIPT" --capped
 }
 
@@ -60,13 +60,10 @@ capped() {
   trap finish EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  local dir path tree_status
-  for path in apps/web/.nuxt apps/web/node_modules node_modules; do
-    if [[ -L $ROOT/$path ]]; then
-      say "refused: $path is a symlink; remove the link before running local CI"
-      exit 2
-    fi
-  done
+  local dir tree_status
+  bash "$ROOT/scripts/pre-push.sh" --check-dependencies \
+    node_modules apps/web/node_modules apps/web/.nuxt apps/web/.output \
+    packages/schema/node_modules deploy/dev-https-browser/node_modules || exit 2
   if ! tree_status=$(git status --porcelain --untracked-files=all); then
     say 'refused: could not check worktree status; CI did not run'
     exit 2
@@ -75,7 +72,7 @@ capped() {
     say 'refused: worktree and index must be clean before running local CI'
     exit 2
   fi
-  for dir in . apps/web deploy/dev-https-browser; do
+  for dir in . apps/web packages/schema deploy/dev-https-browser; do
     if ! (cd "$ROOT/$dir" && npm ci --prefer-offline --no-audit --no-fund); then
       say "refused: dependency installation failed in $dir; CI did not run"
       exit 2

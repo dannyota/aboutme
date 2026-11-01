@@ -6,13 +6,9 @@
 # scripts. It never runs tests, typechecks, builds, databases, stacks, or
 # browsers; GitHub CI runs those (instructions/resources.md).
 #
-# The run holds the shared local-check lock in a parent process and uses
-# run-capped.sh to enforce total RAM minus 10 GiB with a 10-minute timeout.
-#
-# A worktree has no node_modules, so the web and docs checks borrow the main
-# checkout's installs (and apps/web/.nuxt, which the ESLint config imports).
-# They refuse when the branch changed a package manifest or lockfile, or when
-# an installed lint tool's version differs from the branch lockfile.
+# The parent holds the shared local-check lock through owned-child cleanup and
+# a 10-minute deadline. Selected lint tools and generated config must belong to
+# this checkout and match its lockfile. Dependency preparation runs separately.
 #
 # Exit status: 0 every check that applies passed; 1 a check failed; 2 a check
 # or the whole run could not run locally, so CI alone covers it.
@@ -30,7 +26,6 @@ command -v python3 >/dev/null || { printf 'pre-push: python3 is required\n' >&2;
 ROOT=$(git rev-parse --show-toplevel)
 COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 LOCK=$COMMON/aboutme-local-check.lock
-MAIN=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 cd "$ROOT"
 
 say() { printf 'pre-push: %s\n' "$*"; }
@@ -62,7 +57,7 @@ outer() {
 
 locked() {
   # The lock parent must wait on the watchdog itself, with no shell between.
-  exec env RUN_CAPPED_REPORT=1 bash "$ROOT/scripts/run-capped.sh" \
+  exec bash "$ROOT/scripts/run-owned.sh" \
     --timeout "$TIMEOUT_SECONDS" -- bash "$SCRIPT" --capped
 }
 
@@ -91,7 +86,7 @@ filter() { # filter <extended regex> < list
   grep -E -- "$1" || true
 }
 
-declare -a CHANGED=() TOUCHED=() CREATED=()
+declare -a CHANGED=() TOUCHED=()
 
 collect_changes() {
   local base
@@ -123,9 +118,89 @@ touched() { # touched <path>: true when the branch changed or deleted <path>
   return 1
 }
 
-cleanup() {
-  local path
-  for path in "${CREATED[@]}"; do rm -rf -- "$path"; done
+# Reject dependency links and active checkouts before linting or installation.
+# ci-local uses the same guard before npm lifecycle hooks can write outputs.
+dependency_paths() {
+  python3 -B - "$ROOT" "$@" <<'GUARD'
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+
+root = Path(sys.argv[1])
+
+def refuse(message):
+    print(f"refused: {message}; CI installs and checks dependencies", file=sys.stderr)
+    sys.exit(2)
+
+def ancestors(path):
+    if not path.is_relative_to(root):
+        refuse("dependency path leaves the checkout")
+    for item in (path, *path.parents):
+        if item.is_symlink():
+            refuse(f"symlink at {item.relative_to(root) if item.is_relative_to(root) else item}")
+        if item == root:
+            break
+
+def local_schema_link(item, modules):
+    if modules != root / "apps/web/node_modules" or item != modules / "@aboutme/schema":
+        return False
+    target = root / "packages/schema"
+    ancestors(target)
+    manifest = json.loads((modules.parent / "package.json").read_text())
+    lock = json.loads((modules.parent / "package-lock.json").read_text())
+    # The declared source link must stay in this checkout with real ancestors.
+    return (manifest.get("dependencies", {}).get("@aboutme/schema") == "file:../../packages/schema"
+            and lock.get("packages", {}).get("node_modules/@aboutme/schema") == {
+                "resolved": "../../packages/schema", "link": True}
+            and item.resolve(strict=True) == target and target.is_dir())
+
+try:
+    for name in sys.argv[2:]:
+        path = root / name
+        ancestors(path)
+        if not path.exists():
+            continue
+        if not path.is_dir():
+            refuse(f"{name} must be a directory")
+        for directory, dirs, files in os.walk(path, onerror=lambda error: refuse("cannot inspect dependency paths")):
+            for entry in dirs + files:
+                item = Path(directory) / entry
+                if item.is_symlink():
+                    # npm's executable links stay inside this real install.
+                    if (item.parent.name == ".bin" and path.name == "node_modules"
+                            and item.resolve().is_relative_to(path) and item.is_file()):
+                        continue
+                    if local_schema_link(item, path):
+                        continue
+                    refuse(f"symlink at {item.relative_to(root)}")
+    states = [root / ".dev", root / ".dev/native-https/run"]
+    if os.environ.get("ABOUTME_DEV_STATE_DIR"):
+        states.append(root / os.environ["ABOUTME_DEV_STATE_DIR"])
+    for directory in states:
+        ancestors(directory)
+        if not directory.exists():
+            continue
+        for item in directory.iterdir():
+            if item.name.startswith("session"):
+                refuse("development session state exists; stop the active development stack first")
+            if item.suffix != ".pid":
+                continue
+            meta = item.lstat()
+            if not stat.S_ISREG(meta.st_mode) or meta.st_size > 32:
+                refuse("cannot validate development stack PID state")
+            value = item.read_text().strip()
+            if not value.isdecimal() or int(value) <= 1:
+                refuse("cannot validate development stack PID state")
+            try:
+                os.kill(int(value), 0)
+            except ProcessLookupError:
+                continue
+            refuse("active development stack in this checkout; stop it first")
+except (OSError, ValueError, TypeError, AttributeError, OverflowError):
+    refuse("cannot inspect dependency paths or development stack state")
+GUARD
 }
 
 # tool_drift <dir with package-lock.json> <node_modules> <package...>: prints
@@ -161,18 +236,22 @@ node_modules_for() {
     return 1
   fi
   modules=$ROOT/$dir/node_modules
-  if [[ ! -d $modules ]]; then
-    modules=$MAIN/$dir/node_modules
-    [[ -d $modules ]] || {
-      record "$label" REFUSED "no node_modules in $ROOT/$dir or $MAIN/$dir"
-      return 1
-    }
+  if ! dependency_paths "${prefix}node_modules"; then
+    record "$label" REFUSED "unsafe dependency paths or active development stack; CI covers it"
+    return 1
   fi
+  [[ -d $modules ]] || {
+    record "$label" REFUSED "no checkout-local node_modules in $ROOT/$dir; prepare dependencies separately; CI covers it"
+    return 1
+  }
   command -v node >/dev/null || {
     record "$label" REFUSED "node is not installed"
     return 1
   }
-  drift=$(tool_drift "$ROOT/$dir" "$modules" "$@")
+  if ! drift=$(tool_drift "$ROOT/$dir" "$modules" "$@"); then
+    record "$label" REFUSED "cannot inspect selected tools against $dir/package-lock.json; CI covers it"
+    return 1
+  fi
   if [[ -n $drift ]]; then
     say "$modules does not match $dir/package-lock.json:"
     sed 's/^/  /' <<<"$drift"
@@ -194,27 +273,18 @@ check_web() {
   node_modules_for apps/web eslint eslint @nuxt/eslint \
     @nuxt/eslint-config @typescript-eslint/parser eslint-plugin-vue \
     vue-eslint-parser @stylistic/eslint-plugin || return 0
-  # A worktree borrows the main checkout's install through a symlink and a
-  # private copy of its generated .nuxt, both removed on exit. The copy keeps
-  # ESLint's generated typings out of the main checkout. A killed run leaves
-  # them behind; the next run reclaims them by the link target and marker.
-  if [[ -L $web/node_modules &&
-    $(readlink "$web/node_modules") == "$MAIN/apps/web/node_modules" ]]; then
-    CREATED+=("$web/node_modules")
-  elif [[ ! -e $web/node_modules ]]; then
-    ln -s -- "$MODULES" "$web/node_modules"
-    CREATED+=("$web/node_modules")
+  if ! dependency_paths apps/web/.nuxt apps/web/.output; then
+    record eslint REFUSED "unsafe generated paths or active development stack; CI covers it"
+    return 0
   fi
-  [[ -f $web/.nuxt/.pre-push-copy ]] && rm -rf -- "$web/.nuxt"
-  if [[ ! -e $web/.nuxt ]]; then
-    [[ -f $MAIN/apps/web/.nuxt/eslint.config.mjs ]] || {
-      record eslint REFUSED "no generated $MAIN/apps/web/.nuxt; CI runs ESLint"
-      return 0
-    }
-    cp -R -p -P "$MAIN/apps/web/.nuxt" "$web/.nuxt"
-    : >"$web/.nuxt/.pre-push-copy"
-    CREATED+=("$web/.nuxt")
-  fi
+  [[ -f $web/.nuxt/eslint.config.mjs ]] || {
+    record eslint REFUSED "no generated checkout-local apps/web/.nuxt; prepare dependencies separately; CI runs ESLint"
+    return 0
+  }
+  [[ -x $MODULES/.bin/eslint ]] || {
+    record eslint REFUSED "checkout-local eslint is missing; CI runs ESLint"
+    return 0
+  }
   files=("${files[@]#apps/web/}")
   run eslint "${#files[@]} file(s)" bash -c 'cd apps/web &&
     NODE_OPTIONS=--max-old-space-size=1536 node_modules/.bin/eslint \
@@ -238,6 +308,11 @@ check_docs() {
     record markdownlint REFUSED "see the prettier line"
     return 0
   }
+  if [[ ! -x $MODULES/.bin/prettier || ! -x $MODULES/.bin/markdownlint-cli2 ]]; then
+    record prettier REFUSED "checkout-local formatting tools are missing; CI covers them"
+    record markdownlint REFUSED "see the prettier line"
+    return 0
+  fi
   run prettier "${#files[@]} file(s)" "$MODULES/.bin/prettier" --check -- \
     "${files[@]}"
   run markdownlint "${#files[@]} file(s)" "$MODULES/.bin/markdownlint-cli2" \
@@ -377,7 +452,6 @@ report() {
 }
 
 capped() {
-  trap cleanup EXIT
   collect_changes
   check_web
   check_docs
@@ -397,6 +471,7 @@ case ${1:-} in
 "") outer ;;
 --locked) locked ;;
 --capped) capped ;;
+--check-dependencies) shift; dependency_paths "$@" ;;
 *)
   say "usage: scripts/pre-push.sh"
   exit 2

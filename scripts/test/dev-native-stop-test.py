@@ -3,6 +3,9 @@
 import os
 from pathlib import Path
 import shutil
+import json
+import secrets
+import shlex
 import signal
 import subprocess
 import sys
@@ -40,13 +43,38 @@ def watchdog(directory):
             child.wait(timeout=10)
 
 
-def run_case(root, blocked):
+def prepare(root, repository):
+    scripts = repository / "scripts"
+    (scripts / "lib").mkdir(parents=True)
+    source = (root / "scripts/dev-native.sh").read_text()
+    (scripts / "dev-native.sh").write_text(source.rsplit('main "$@"', 1)[0])
+    shutil.copyfile(root / "scripts/lib/platform.sh", scripts / "lib/platform.sh")
+    (scripts / "lib/run-owned.py").write_text(
+        "import runpy, sys\n"
+        f"module = runpy.run_path({str(Path(__file__).resolve())!r})\n"
+        "module['watchdog'](module['Path'](sys.argv[-1]))\n")
+    return scripts
+
+
+def invoke(repository, command, *args, **kwargs):
+    return subprocess.run(["bash", "-c", 'source "$1"; shift; "$@"', "native-test",
+                           str(repository / "scripts/dev-native.sh"), command, *map(str, args)],
+                          cwd=repository, capture_output=True, text=True, timeout=30, **kwargs)
+
+
+def run_case(root, blocked, wrapped=False):
     with tempfile.TemporaryDirectory(prefix="dev-native-stop-") as temporary:
-        repository = Path(temporary)
-        scripts = repository / "scripts"
-        (scripts / "lib").mkdir(parents=True)
-        shutil.copyfile(root / "scripts/dev-native.sh", scripts / "dev-native.sh")
-        shutil.copyfile(root / "scripts/lib/platform.sh", scripts / "lib/platform.sh")
+        repository = Path(temporary).resolve()
+        scripts = prepare(root, repository)
+        environment = os.environ.copy()
+        if wrapped:
+            # Model a framework launcher that replaces its executable spelling.
+            binary = repository / "bin"
+            binary.mkdir()
+            launcher = binary / "python3"
+            launcher.write_text(f'#!/bin/sh\nexec {shlex.quote(shutil.which("python3"))} "$@"\n')
+            launcher.chmod(0o700)
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
         state = repository / ".dev"
         state.mkdir()
         services = {}
@@ -57,18 +85,35 @@ def run_case(root, blocked):
             for name in ("caddy", "web"):
                 directory = state / name
                 directory.mkdir()
-                process = subprocess.Popen([sys.executable, __file__, "watchdog", str(directory)],
-                                           start_new_session=True)
+                token = secrets.token_hex(16)
+                process = subprocess.Popen([shutil.which("python3", path=environment["PATH"]), "-B", str(scripts / "lib/run-owned.py"),
+                                            "--owner", token, "--", str(directory)],
+                                           start_new_session=True, env=environment)
                 services[name] = (process, directory)
                 reaper = threading.Thread(target=process.wait)
                 reaper.start()
                 reapers.append(reaper)
                 wait_for(lambda: (directory / "ready").exists(), f"{name} readiness")
                 (state / f"{name}.pid").write_text(str(process.pid))
-            down = subprocess.Popen(["bash", str(scripts / "dev-native.sh"), "down"],
+                (state / f"{name}.pid").chmod(0o600)
+                recorded = invoke(repository, "native_identity", "write", name, process.pid, token,
+                                  env=environment)
+                assert recorded.returncode == 0, recorded.stderr
+            identity = state / "caddy.identity"
+            original = identity.read_text()
+            for field in ("root", "name", "pid", "token", "started", "command_sha256"):
+                record = json.loads(original)
+                record[field] = 1 if field == "pid" else "invalid"
+                identity.write_text(json.dumps(record))
+                result = invoke(repository, "stop_service", "caddy", env=environment)
+                assert result.returncode != 0 and identity.exists(), field
+                assert not (state / "caddy/term").exists(), field
+                identity.write_text(original)
+            assert invoke(repository, "service_pid", "caddy", env=environment).returncode == 0
+            down = subprocess.Popen(["bash", "-c", 'source "$1"; cmd_down', "native-test", str(scripts / "dev-native.sh")],
                                     cwd=repository, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, text=True,
-                                    env={**os.environ, "ABOUTME_DEV_STATE_DIR": ".dev",
+                                    env={**environment, "ABOUTME_DEV_STATE_DIR": ".dev",
                                          "ABOUTME_DEV_MEDIA_DIR": ".dev/media",
                                          "ABOUTME_DEV_AUTO_SEED": "0"})
             caddy, directory = services["caddy"]
@@ -117,11 +162,74 @@ def run_case(root, blocked):
                 down.communicate(timeout=10)
 
 
+def foreign_cases(root):
+    with tempfile.TemporaryDirectory(prefix="dev-native-foreign-") as temporary:
+        repository = Path(temporary).resolve()
+        scripts = prepare(root, repository)
+        state = repository / ".dev"
+        state.mkdir()
+        foreign = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                                   start_new_session=True)
+        try:
+            pidfile = state / "caddy.pid"
+            pidfile.write_text(str(foreign.pid))
+            pidfile.chmod(0o600)
+            for mode in ("missing", "forged", "symlink", "mode"):
+                identity = state / "caddy.identity"
+                if mode != "missing":
+                    identity.write_text(json.dumps({"version": 1, "root": str(repository),
+                                                  "name": "caddy", "pid": foreign.pid,
+                                                  "token": secrets.token_hex(16)}))
+                    identity.chmod(0o600)
+                if mode == "symlink":
+                    target = state / "foreign-record"
+                    identity.rename(target)
+                    identity.symlink_to(target)
+                elif mode == "mode":
+                    identity.chmod(0o644)
+                result = invoke(repository, "cmd_down")
+                assert result.returncode != 0, (mode, result.stdout, result.stderr)
+                assert foreign.poll() is None, f"foreign group leader killed: {mode}"
+                assert pidfile.exists(), f"rejected state deleted: {mode}"
+                identity.unlink(missing_ok=True)
+            # A command carrying the marker as data cannot register ownership.
+            token = secrets.token_hex(16)
+            impersonator = subprocess.Popen(
+                [shutil.which("python3"), "-c", "import time; time.sleep(60)",
+                 str(scripts / "lib/run-owned.py"), "--owner", token, "--", "foreign"],
+                start_new_session=True)
+            try:
+                pidfile.write_text(str(impersonator.pid))
+                result = invoke(repository, "native_identity", "write", "caddy", impersonator.pid, token)
+                assert result.returncode != 0, "argv marker accepted outside the owner command"
+                assert impersonator.poll() is None
+            finally:
+                impersonator.terminate()
+                impersonator.wait(timeout=10)
+            # Malformed PIDs and linked PID files also preserve state.
+            for value in ("0", "1", "-1", "garbage"):
+                pidfile.write_text(value)
+                result = invoke(repository, "cmd_down")
+                assert result.returncode != 0 and pidfile.exists(), value
+                assert foreign.poll() is None
+            pidfile.write_text(str(foreign.pid))
+            pidfile.rename(state / "saved.pid")
+            pidfile.symlink_to(state / "saved.pid")
+            result = invoke(repository, "cmd_down")
+            assert result.returncode != 0 and pidfile.is_symlink()
+            assert foreign.poll() is None
+        finally:
+            foreign.terminate()
+            foreign.wait(timeout=10)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "watchdog":
         watchdog(Path(sys.argv[2]))
     else:
         source = Path(__file__).resolve().parents[2]
+        foreign_cases(source)
         run_case(source, blocked=True)
         run_case(source, blocked=False)
+        run_case(source, blocked=False, wrapped=True)
         print("dev-native stop tests passed")
