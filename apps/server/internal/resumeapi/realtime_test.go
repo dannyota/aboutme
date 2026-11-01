@@ -139,7 +139,7 @@ func newRealtimePublicServer(t *testing.T, h *resumeAPITestHarness) *httptest.Se
 	if err != nil {
 		t.Fatal(err)
 	}
-	hub, err := realtime.NewHub(realtime.Config{})
+	hub, err := realtime.NewHub(realtime.Config{AdmitFD: func() bool { return true }})
 	if err != nil {
 		t.Fatal(err)
 	}
