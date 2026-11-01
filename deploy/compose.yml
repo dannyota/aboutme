@@ -133,6 +133,8 @@ services:
       - db
 
   media:
+    # MinIO stores media for self-hosters and stands in for production
+    # vStorage (S3) in local deployments.
     # MinIO stopped publishing the community edition to Docker Hub and
     # quay.io (both now answer unauthorized for every tag, including
     # :latest); these are Chainguard's images, built from the same upstream
@@ -146,7 +148,7 @@ services:
     # freshly created named volume: Podman's per-mount ":U" ownership fix-up
     # is not reliably applied when it comes from a Compose file (podman/podman
     # issue #16477, podman-compose issue #376), and unlike the ephemeral test
-    # container in scripts/test-s3.sh, this service always has media-data
+    # container in scripts/test-media-s3.sh, this service always has media-data
     # mounted over /data, which shadows the image's own pre-created
     # world-writable data directory. Running as root is the same fix a prior
     # MinIO-to-Chainguard migration used for this exact case.

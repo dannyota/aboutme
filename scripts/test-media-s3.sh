@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
-# Manage the one disposable MinIO instance used by the native S3 conformance
-# gate. Credentials stay in the ignored .dev directory and are never printed.
+# Manage disposable MinIO, the local stand-in for production vStorage (S3),
+# for media conformance tests. Credentials stay in the ignored .dev directory.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$PWD
 
-readonly CONTAINER=aboutme-test-s3
+readonly CONTAINER=aboutme-test-media-s3
 readonly ENV_FILE=$ROOT/.dev/test-s3.env
 readonly ENDPOINT=http://127.0.0.1:20091
-# MinIO stopped publishing the community edition to Docker Hub and quay.io
-# (both now answer unauthorized for every tag, including :latest); these are
-# Chainguard's images, built from the same upstream MinIO/mc source, so the
-# S3 API — including If-None-Match conditional writes and ListObjectsV2
-# paging — matches unchanged. Pinned by digest for both amd64 and arm64.
+# Chainguard builds these images from MinIO and mc source. Pin both images
+# by digest for amd64 and arm64, including their S3 conditional write support.
 readonly MINIO_IMAGE=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
 readonly MC_IMAGE=cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
 
 die() {
-  printf 'test-s3: %s\n' "$*" >&2
+  printf 'test-media-s3: %s\n' "$*" >&2
   exit 1
 }
 
@@ -74,7 +71,7 @@ verify_container_contract() {
   image=$(podman inspect "$CONTAINER" --format '{{.Config.Image}}') ||
     die "cannot inspect $CONTAINER image"
   [ "$image" = "$MINIO_IMAGE" ] ||
-    die "$CONTAINER uses $image, want pinned $MINIO_IMAGE; after active tests finish, run 'make test-s3-down'"
+    die "$CONTAINER uses $image, want pinned $MINIO_IMAGE; after active tests finish, run 'make test-media-s3-down'"
   ports=$(podman port "$CONTAINER" 9000/tcp) ||
     die "cannot inspect $CONTAINER port mapping"
   [ "$ports" = 127.0.0.1:20091 ] ||
@@ -82,7 +79,7 @@ verify_container_contract() {
 }
 
 load_env_file() {
-  [ -f "$ENV_FILE" ] || die "$ENV_FILE is missing; run 'make test-s3-up'"
+  [ -f "$ENV_FILE" ] || die "$ENV_FILE is missing; run 'make test-media-s3-up'"
   local mode
   mode=$(stat -c '%a' "$ENV_FILE") || die "cannot inspect $ENV_FILE"
   [ "$mode" = 600 ] || die "$ENV_FILE must have mode 0600 (found $mode)"
@@ -166,7 +163,7 @@ up() {
   local state
   state=$(container_state)
   if [ "$state" != absent ] && [ ! -f "$ENV_FILE" ]; then
-    die "$CONTAINER exists but $ENV_FILE is missing; after active tests finish, run 'make test-s3-down'"
+    die "$CONTAINER exists but $ENV_FILE is missing; after active tests finish, run 'make test-media-s3-down'"
   fi
   [ -f "$ENV_FILE" ] || write_env_file
   load_env_file
@@ -199,7 +196,7 @@ run_with_env() {
   ensure_env_ignored
   local state
   state=$(container_state)
-  [ "$state" = running ] || die "$CONTAINER is not running; run 'make test-s3-up'"
+  [ "$state" = running ] || die "$CONTAINER is not running; run 'make test-media-s3-up'"
   verify_container_contract
   load_env_file
   curl --fail --silent --show-error "$ENDPOINT/minio/health/ready" >/dev/null ||
@@ -229,5 +226,5 @@ run)
   shift
   run_with_env "$@"
   ;;
-*) die "usage: scripts/test-s3.sh {up|down|run command...}" ;;
+*) die "usage: scripts/test-media-s3.sh {up|down|run command...}" ;;
 esac

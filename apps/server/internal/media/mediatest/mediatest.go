@@ -12,10 +12,9 @@ import (
 )
 
 // RequireTestS3 returns the media.S3Config described by the TEST_S3_*
-// variables that `make test-s3-up` writes to .dev/test-s3.env. It skips the
-// calling test when TEST_S3_ENDPOINT is unset — UNLESS REQUIRE_TEST_S3=1 is
-// set, in which case a missing TEST_S3_ENDPOINT is a hard Fatal instead, so
-// a gate run can never pass vacuously with every S3-backed test silently
+// variables that `make test-media-s3-up` writes to .dev/test-s3.env. It skips the
+// calling test when TEST_S3_ENDPOINT is unset. With REQUIRE_TEST_S3=1, a
+// missing endpoint fails the test so a gate cannot pass with all S3 tests
 // skipped. Tests never fall back to deployment MEDIA_* credentials.
 func RequireTestS3(t testing.TB) media.S3Config {
 	t.Helper()
@@ -32,7 +31,7 @@ func requireTestS3(t testing.TB, getenv func(string) string) media.S3Config {
 	endpoint := getenv("TEST_S3_ENDPOINT")
 	if endpoint == "" {
 		if getenv("REQUIRE_TEST_S3") == "1" {
-			t.Fatal("REQUIRE_TEST_S3=1 is set but TEST_S3_ENDPOINT is unset; refusing to silently skip this live test-S3 test (run 'make test-s3-up' and use 'make server-test-s3')")
+			t.Fatal("REQUIRE_TEST_S3=1 is set but TEST_S3_ENDPOINT is unset; refusing to silently skip this live test-S3 test (run 'make test-media-s3-up' and use 'make server-test-media-s3')")
 			return media.S3Config{}
 		}
 		t.Skip("TEST_S3_ENDPOINT not set; skipping live test-S3 conformance test")
@@ -54,7 +53,7 @@ func requireTestS3(t testing.TB, getenv func(string) string) media.S3Config {
 		if *v.field == "" {
 			// Names only, never values: a partially configured harness is
 			// broken, and it must fail rather than skip.
-			t.Fatalf("mediatest: TEST_S3_ENDPOINT is set but %s is missing; run 'make test-s3-up' and load .dev/test-s3.env", v.name)
+			t.Fatalf("mediatest: TEST_S3_ENDPOINT is set but %s is missing; run 'make test-media-s3-up' and load .dev/test-s3.env", v.name)
 			return media.S3Config{}
 		}
 	}

@@ -105,8 +105,8 @@ assert_ci_failure 'go tidy middle command' 'go mod tidy' 'go mod tidy' --fast \
   /usr/bin/env FAIL_GO_TIDY=1
 assert_ci_failure 'database first command' 'database suites' 'make server-test-integration' '' \
   /usr/bin/env FAIL_MAKE_TARGET=server-test-integration
-assert_ci_failure 'S3 startup command' 'S3 media and resume API suites' 'make test-s3-up' '' \
-  /usr/bin/env FAIL_MAKE_TARGET=test-s3-up
+assert_ci_failure 'S3 startup command' 'media storage suites (MinIO as vStorage)' 'make test-media-s3-up' '' \
+  /usr/bin/env FAIL_MAKE_TARGET=test-media-s3-up
 assert_ci_failure 'web source manifest build' web 'make web-lint web-typecheck web-test web-build web-source-build' '' \
   /usr/bin/env FAIL_MAKE_TARGET=web-source-build
 assert_ci_failure 'migration diff command' 'migrations append-only' 'git diff failed apps/server/migrations' --fast \
@@ -120,8 +120,8 @@ assert_ci_failure 'upstream resolution command' 'migrations append-only released
 /usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" FIXTURE_PLATFORM=Darwin \
   "$BASH" "$REPO/scripts/ci.sh" >"$WORK/darwin.out" 2>&1
 grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/darwin.out"
-grep -Fq 'Skipping S3 suites: their host-networked MinIO client needs Linux; CI covers them.' "$WORK/darwin.out"
+grep -Fq 'Skipping media storage suites: MinIO, the local stand-in for production vStorage (S3), needs Linux host networking; CI covers them.' "$WORK/darwin.out"
 grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
-! grep -Fqx 'make test-s3-up' "$CALLS"
+! grep -Fqx 'make test-media-s3-up' "$CALLS"
 
 printf 'CI failure-propagation tests passed\n'
