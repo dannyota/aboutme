@@ -1,7 +1,7 @@
 # 0024: GitHub CI is the full delivery gate
 
-Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10),
-by the owner's repository policy.
+Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
+2026-11-01), by the owner's repository policy.
 
 ## Context
 
@@ -41,8 +41,17 @@ be recalled.
   Semgrep jobs on main pushes and main dispatches only. The `contracts` job runs
   full-history gitleaks. The aggregate `ci` job is the only required check on
   `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once.
+- **Narrow pull request selection.** Only pull requests whose entire change
+  matches the [prose allowlist](../design/ci-path-selection.md#selection) may
+  omit the named application and infrastructure jobs. Preflight, all contracts,
+  and `ci` still run. Unknown paths and path-selection failures select the full
+  gate; invalid comparison bases still fail preflight. Main pushes and every
+  manual dispatch keep the full gate, subject to the existing Semgrep event
+  rule. Workflow triggers have no path filter. `ci` accepts an omitted job only
+  with valid, explicit pull request selection; failures, cancellations, missing
+  outputs, and unexplained skips fail it.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
-  and deployment wait for green GitHub CI on that exact commit.
+  and deployment wait for a green main push run on that exact commit.
 - **No full local gate.** Full local `make ci` is prohibited, including while
   debugging a CI failure. The manager may scope one local diagnostic process
   across all worktrees, using the shared lock, the total RAM minus 10 GiB
@@ -82,6 +91,10 @@ the shared laptop.
 - A defect that a second independent test author would have caught can reach the
   review instead. That is the accepted trade.
 - Environment-specific defects surface in hosted CI rather than on the laptop.
+- Allowlisted prose pull requests use fewer runners. Keeping all contracts
+  limits the savings but preserves documentation and secret checks. Omitted
+  checks first run on main; a green reduced pull request never authorizes a
+  release. Application clients and stored data need no migration.
 - An independent acceptance pass returns only through a new ADR.
 
 ## Amendment: One-line review exemption (2026-10-10)
@@ -117,3 +130,7 @@ proportional to the change.
 - 2026-10-31: The owner limited connected Semgrep to main pushes and main
   dispatches with a main-only environment secret to keep its token out of pull
   request and branch runs. Exact-release Semgrep checks remain required.
+- 2026-11-01: The owner chose a narrow prose allowlist for pull requests to
+  reduce runner queues, with unknown paths falling back to the full gate. Main
+  pushes remain full, and `ci` remains the single required check. The selection
+  design and this amendment require independent review before implementation.
