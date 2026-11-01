@@ -1,6 +1,8 @@
 # MCP Client ID Metadata Documents
 
-Status: approved design; implementation is next.
+Status: implemented and enabled in production. The owner proof passed with
+Claude Code on 2026-10-14; hosted Claude's CIMD connection remains unverified.
+CI, independent review, and hosted HTTPS proof execution remain outstanding.
 
 C1 to C9 approved by the owner on 2026-10-13; C10 and C11 decided as recommended
 on the owner's instruction the same day. The [decision record](#owner-decisions)
@@ -129,37 +131,22 @@ See [Older clients and loss](mcp-cimd-authorization.md#older-clients-and-loss).
 
 ## Release order
 
-One release, backend and frontend together, with the flag `OAUTH_CIMD_ENABLED`
-off in production:
-
-1. Backend: migration, URL rules, fetcher and guard, cache, limits, document and
-   redirect rules, row lookup at the token endpoints, metadata gated by the
-   flag, and OpenAPI for a client host and kind on the consent and grant-list
-   responses.
-2. Frontend: the consent lines and loopback warning, and the host in Connected
-   agents.
-3. CI proof with the flag on, then the owner turns it on in production and runs
-   the [owner proof](mcp-cimd-verification.md#acceptance-checks). The
-   [MCP guide](mcp-guide.md) changes after that proof.
-
-**Design text to update in the build:** [Data](data.md) for `oauth_clients`,
-[Security](security.md#agent-authorization-and-the-bearer-world),
-[API](api.md#agent-access-and-the-bearer-world), the OAuth server contract in
-[MCP owner workflow](mcp-owner-workflow.md#oauth-server-contract), and
-[Vietnam production](vietnam-production.md) for the flag. New `AC-MCP-*` rows in
-the traceability matrix accompany implementation.
+The backend and frontend are released together. CIMD is enabled in production,
+and the owner completed the [Claude Code proof](mcp-guide.md#other-clients). CI,
+independent review, and hosted HTTPS proof execution remain outstanding; see
+[ADR 0018](../adr/0018-mcp-agent-access.md).
 
 ## Implementation boundaries
 
-These are code navigation points, not claims that CIMD is implemented. Paths
-below are relative to `apps/server/` unless another root is named.
+These code navigation points describe implementation boundaries. Paths below are
+relative to `apps/server/` unless another root is named.
 
-| File and existing entry point                                                                                                                                                  | Required change                                                                                                                                       |
+| File and existing entry point                                                                                                                                                  | Responsibility                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `internal/config/config.go`: `Load`; `internal/config/agent_access.go`: `AgentAccessConfig`, `loadAgentAccessConfig`, `ValidateAgentAccess`                                    | Load and validate the CIMD flag, stub restriction, and complete fetch budgets                                                                         |
 | `cmd/server/main.go`: `newAgentAccessRoutes`                                                                                                                                   | Construct one process-wide fetcher/cache and pass it to OAuth service; keep the parent MCP gate                                                       |
 | `internal/oauthsrv/clients.go`: `ServiceDependencies`, `Service`, `NewService`                                                                                                 | Accept the configured CIMD resolver; keep `HandleRegister` and DCR validation behavior                                                                |
-| New `internal/oauthsrv/cimd*.go`                                                                                                                                               | Own URL parsing, immutable validated metadata, pinned fetch, cache, rate admission, and public-ID resolution                                          |
+| `internal/oauthsrv/cimd*.go`                                                                                                                                                   | Own URL parsing, immutable validated metadata, pinned fetch, cache, rate admission, and public-ID resolution                                          |
 | `internal/oauthsrv/redirect.go`: `ValidateRedirectURI`, `ValidateClientName`; `rate.go`: `registerAddressKey`, `NewRatePolicies`                                               | Reuse DCR grammar and canonical-address policy; apply CIMD matching and fetch budgets separately so DCR does not widen                                |
 | `internal/oauthsrv/metadata.go`: `HandleMetadata`                                                                                                                              | Advertise the startup flag; keep protected-resource metadata unchanged                                                                                |
 | `internal/oauthsrv/authorize.go`: `authorizeRequest`, `consentQueryFromValues`, `HandleAuthorize`, `redirectIssuedCode`                                                        | Preserve public string identity, validate current metadata, suppress silent loopback issue, and use the validated redirect snapshot at the final sink |
@@ -167,26 +154,25 @@ below are relative to `apps/server/` unless another root is named.
 | `internal/oauthsrv/session_http.go`: view types, `decodeConsentDecision`, `handleConsentContext`, `handleAgentGrants`, `writeConsentSessionError`                              | Decode URL IDs; emit client kind/host and the closed fetch failures                                                                                   |
 | `internal/oauthsrv/token_endpoint.go`: `grantRateClientID`, `exchangeAuthorizationCode`, `rotateRefreshToken`, `missingRefreshTokenError`                                      | Resolve stored public identity without fetching; reject internal UUID aliases and preserve limiter and token binding                                  |
 | `sql/queries.sql`: client lookups and `ListLiveOAuthGrantsForUser`; `internal/store/oauth_contract.go`: `OAuthQueries`                                                         | Add exact URL lookup/upsert, expose metadata URL to owner views, and preserve lock order                                                              |
-| `migrations/`: next forward migration                                                                                                                                          | Add nullable URL, constraint, and unique index under the authorization contract                                                                       |
+| `migrations/`: URL-client migration                                                                                                                                            | Add nullable URL, constraint, and unique index under the authorization contract                                                                       |
 | Generated `internal/store/models.go`, `queries.sql.go`, `querier.go`                                                                                                           | Regenerate with sqlc from migration/query sources                                                                                                     |
 | `internal/oauthsrv/revoke.go`: `HandleRevoke`, `revokeToken`; `clients_gc.go`: `CollectIdleClients`                                                                            | Preserve token-based revocation and existing sweep predicate; add URL-client regression coverage                                                      |
 | `internal/mcpapi/bearer.go`: `Authenticate`; `server.go`: `NewServer`                                                                                                          | Preserve token, epoch, scope, and tool boundaries; prove URL-client tokens through the existing chain                                                 |
 
-Frontend owners update `apps/web/app/pages/authorize.vue` (`load`, `submit`,
-`returnToLine`, and template), `app/i18n/consent.ts`,
+Frontend boundaries include `apps/web/app/pages/authorize.vue` (`load`,
+`submit`, `returnToLine`, and template), `app/i18n/consent.ts`,
 `app/composables/useOAuthConsent.ts` (`isConsentView` and error mapping),
 `app/composables/agentGrants.ts` (`isGrant`), and
 `app/components/settings/ConnectedAgents.vue`. Coordinate
 `docs/api/openapi.yaml` and generated `apps/web/app/api/generated/openapi.ts`
 with the backend contract owner. Deployment flag plumbing belongs in the devops
-lane and ships with the feature, defaulted off.
+lane and defaults off.
 
 The production setting lives in `deploy/vn/host/env/server.env`; document it in
 `.env.example`. The HTTPS harness entry points are `scripts/dev-https.sh`,
 `deploy/dev-https-browser/run.sh`, and
-`deploy/dev-https-browser/mcp-ts-sdk.spec.ts`. The primary assigns those shared
-paths explicitly to devops and QA; the Go SDK runner stays on DCR. Devops also
-enforces the
+`deploy/dev-https-browser/mcp-ts-sdk.spec.ts`. The Go SDK runner stays on DCR.
+Deployment helpers enforce the
 [binary rollback boundary](mcp-cimd-authorization.md#older-clients-and-loss) in
 `deploy/vn/scripts/deploy-host.sh`: `step_render`, `step_restore_previous`, and
 the final `step_app_up` check cover explicit rollback and failed-deploy

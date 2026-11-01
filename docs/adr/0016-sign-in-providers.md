@@ -62,10 +62,10 @@ order `google`, `github`, `linkedin`. The web renders a provider control only
 for a name in that list and never mirrors the flag into Nuxt runtime config.
 
 Production may set `provider_login_enabled` to `""`, `"google"`, or
-`"google,linkedin"`. Each enabled provider's client ID and secret come from SSM
-SecureString parameters that the task references only while that provider is on.
-Enabling a provider is a separate step after the release that supports it is
-live, never part of that release.
+`"google,linkedin"`. Each enabled provider's client ID and secret come from
+host-managed Podman secrets, injected only while that provider is on. Enabling a
+provider is a separate step after the release that supports it is live, never
+part of that release.
 
 ### LinkedIn flow
 
@@ -78,9 +78,12 @@ live, never part of that release.
   the check applies at once if LinkedIn starts to return it.
 - Google keeps the strict rule: its ID token must carry the transaction's nonce.
 - Both LinkedIn cancel errors and `access_denied` give the cancelled result.
-- Account linking follows the Google rules: identity is the subject, an owned
-  email gives the generic collision result with no write, and linking starts
-  only from a signed-in account.
+- Account linking follows [ADR 0015](0015-accounts-passwords-and-sessions.md):
+  it resolves only `(provider, subject)` for a signed-in caller. An identity
+  already attached to the caller succeeds idempotently; one attached to another
+  account returns the generic collision result without attaching it. An
+  unclaimed identity attaches to the caller. Provider email is not compared.
+  New-account login has a separate email-collision rule.
 - The mock LinkedIn provider leaves the nonce claim out, as LinkedIn does, so
   browser proofs exercise the production shape.
 
@@ -113,8 +116,12 @@ stop that attack. What limits it:
   and also stop the victim's browser from delivering it.
 - Only the confidential client can redeem the code.
 - The callback redirects at once, and API responses send
-  `Referrer-Policy: no-referrer`. The Go request log records the path without
-  the query, and production Caddy writes no request log.
+  `Referrer-Policy: no-referrer`. Go logs the path without the query. Caddy
+  supplies a bounded CrowdSec security feed containing source IP and coarse
+  request fields. It excludes queries, headers, bodies, and user or resume
+  fields. Auth routes never produce target-path samples. The
+  [CrowdSec privacy contract](../design/crowdsec-http-privacy.md) owns
+  retention.
 
 The residual exposure is a code taken from the victim's device or network path
 before delivery, for example by a malicious browser extension, which can often
@@ -174,6 +181,8 @@ take the resulting session cookie as well.
   check applies only when present, and the owner accepted the remaining risk.
 - 2026-09-27: `GET` also starts the unauthenticated `view` purpose, for sign in
   to view; an unrecognized `purpose` still starts login.
+- 2026-11-01: Corrected the linking, credential custody, and request-recording
+  descriptions. The provider decisions and accepted LinkedIn risk are unchanged.
 
 ## Sources
 

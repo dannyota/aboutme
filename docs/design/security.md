@@ -20,11 +20,11 @@ token never reaches a cookie route.
 | LinkedIn | OIDC                  | `sub`; registration requires an explicitly verified email                  |
 | GitHub   | OAuth 2.0             | Numeric user ID; registration uses the verified primary email from its API |
 
-Provider subject, not email, is identity. A verified email already owned by a
-different provider causes a generic `email_already_registered` result and no
-database write. The response never names the existing provider. Linking a second
-provider starts only from an authenticated account. There is no
-account-email-change endpoint.
+Provider subject, not email, is identity. During new-account login, a verified
+email already owned by another account causes a generic
+`email_already_registered` result and no database write. The response never
+names the existing provider. Linking starts only from an authenticated account
+and does not compare provider email. There is no account-email-change endpoint.
 
 `DELETE /me/identities/{identityId}` unlinks one of the caller's identities. It
 is a cookie-authenticated mutation with the full CSRF rule set below, requires

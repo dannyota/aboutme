@@ -1,6 +1,8 @@
 # MCP CIMD verification
 
-Status: approved design; implementation is next.
+Status: implemented and enabled in production. The owner proof passed with
+Claude Code on 2026-10-14; hosted Claude's CIMD connection remains unverified.
+CI, independent review, and hosted HTTPS proof execution remain outstanding.
 [MCP Client ID Metadata Documents](mcp-cimd.md) holds the motivation, sources,
 release order, and the approval record.
 
@@ -272,20 +274,20 @@ fixtures between cases. Use synthetic credentials only in test evidence.
 
 ## Production enablement proof
 
-Deploy the first 0.8 CIMD release with the flag off after independent review and
-exact-commit green CI. Verify that metadata omits CIMD and existing DCR access
-works. Apply the additive migration before serving the new binary and deploy
-backend and frontend together. No local test, fixture, or stub address enters
-production configuration.
+The owner completed the Claude Code proof on 2026-10-14. CI, independent review,
+and hosted HTTPS proof execution remain outstanding.
 
-The owner then enables `OAUTH_CIMD_ENABLED=true` through the deployment
-configuration and restarts the service. Verify the metadata field and allow for
-client discovery caching before testing. Use the designated owner test account
-to connect Claude Code by CIMD, approve, list/read, reconnect, and prove one
-live grant for that URL. Reconnect must show consent for loopback. Exercise
-refresh, revoke from Settings, then require the next MCP request to fail and
-refresh to reject the revoked authority. Record outcomes only, never tokens,
-request URLs, or resume content.
+For deployments, require independent review and exact-commit green CI. For a
+production enablement proof, verify that metadata omits CIMD with the flag off
+and that existing DCR access works. Apply the additive migration before serving
+the binary and deploy backend and frontend together. No local test, fixture, or
+stub address enters production configuration. With `OAUTH_CIMD_ENABLED=true`,
+verify the metadata field and allow for client discovery caching before testing.
+Use the designated owner test account to connect Claude Code by CIMD, approve,
+list/read, reconnect, and prove one live grant for that URL. Reconnect must show
+consent for loopback. Exercise refresh, revoke from Settings, then require the
+next MCP request to fail and refresh to reject the revoked authority. Record
+outcomes only, never tokens, request URLs, or resume content.
 
 Hosted Claude's document URL remains unverified until its own connection is
 observed through redacted server outcomes. A Claude Code proof alone cannot

@@ -231,9 +231,9 @@ Notes on rows whose reason is not obvious:
 
 ## CIMD
 
-Approved limits for [Client ID Metadata Documents](mcp-cimd.md), awaiting
-implementation. The [fetch contract](mcp-cimd-fetch.md) owns admission, caching,
-and failure semantics.
+[Client ID Metadata Documents](mcp-cimd.md) are implemented and enabled in
+production. The [fetch contract](mcp-cimd-fetch.md) owns admission, caching, and
+failure semantics.
 
 | Budget                               | Value                                                       |
 | ------------------------------------ | ----------------------------------------------------------- |
