@@ -37,13 +37,13 @@ database. Its disposable pinned Playwright image imports the invocation's Caddy
 root into an isolated NSS database and writes only bounded local verdicts. It
 does not change the host trust store or use a certificate bypass.
 
-The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. MinIO
-stores media for self-hosters and stands in for production vStorage (S3) in
-local deployments and media storage tests. A one-shot `db-setup` command
-creates the fixed database roles and grants, a one-shot `migrate` command then
-applies migrations, and a media initializer sets up private storage. PostgreSQL
-is not published to the host. Caddy is the only published service. The current
-Compose Caddyfile serves HTTP; this is suitable for deployment smoke checks.
+The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. MinIO stores
+media for self-hosters and stands in for production vStorage (S3) in local
+deployments and media storage tests. A one-shot `db-setup` command creates the
+fixed database roles and grants, a one-shot `migrate` command then applies
+migrations, and a media initializer sets up private storage. PostgreSQL is not
+published to the host. Caddy is the only published service. The current Compose
+Caddyfile serves HTTP; this is suitable for deployment smoke checks.
 
 Production runs on one GreenNode vServer in Ho Chi Minh City, with Caddy,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage, per
