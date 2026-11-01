@@ -72,9 +72,17 @@ state, or treat anonymous answers younger than that window as provisional.
 - Unverified fields, ordering, or pagination: live pagination (the review
   history endpoint does not document `per_page` or `page`), and distinct
   dispatcher and approver identities.
-- Owner transport decision: pending.
+- Owner transport decision (2026-11-01): accept with conditions, recorded in
+  [ADR 0026](../adr/0026-vietnam-hosted-production.md#amendment-anonymous-approval-pull-deployment-2026-11-01).
+  Anonymous approval reads and Ansible pull may proceed under its cache wait and
+  single-page, single-review conditions. Solo owner approval is accepted; laptop
+  deployment stays available in parallel. This decision does not turn unverified
+  pagination, second-maintainer approval, or the full-cycle budget into verified
+  evidence.
 - Evidence supporting that decision: this record and the hosted fixtures.
-- Probe workflow and environment removal: pending the owner decision.
+- Probe workflow and environment removal: planned in the
+  [design release order](../design/production-pull-deploy/README.md#release-order-and-owner-decisions),
+  including removal of the checker and its supporting files after review.
 
 ## Sources
 

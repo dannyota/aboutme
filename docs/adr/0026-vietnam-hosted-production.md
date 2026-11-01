@@ -109,23 +109,41 @@ no data protection impact assessment (DPIA) or cross-border dossier
   writes would be a new transfer abroad, so recovery after that is forward only.
 - No AWS test environment remains deployed.
 
-## Proposed amendment (not accepted)
+## Amendment: Anonymous-approval pull deployment (2026-11-01)
+
+Status: Accepted with conditions (2026-11-01), by the owner after the
+[live approval probe](../research/approval-probe.md). Implementation remains
+pending in the
+[design's release order](../design/production-pull-deploy/README.md#release-order-and-owner-decisions).
 
 Production supports host-initiated deployment through `ansible-pull` at an exact
 signed coordinator commit, using a request explicitly approved by either
-maintainer. Environment self-review preserves solo operation. The host
-independently verifies approval, exact-main CI, publication evidence, image
-identity, release ordering, and compatibility.
+maintainer. Anonymous GitHub reads supply approval evidence; the host holds no
+GitHub credential. Solo approval by the owner is an accepted supplied
+requirement, so environment self-review remains allowed. The host independently
+verifies approval, exact-main CI, publication evidence, image identity, release
+ordering, and compatibility.
 
-GitHub holds no production credentials and has no administrative network route
-to production. Laptop deployment shares the durable host protocol. External
-deployment proofs remain attended initially. Ownership survives interruption;
-uncertain operations require attended recovery. Local configuration changes
-invalidate pending requests before deployment resumes.
+Acceptance requires a wait of at least 60 seconds after observing a terminal run
+state before trusting anonymous reads, because the probe observed
+`cache-control: public, max-age=60`. Refuse a run whose review history spans
+more than one page or contains more than one relevant review. The
+[host evidence contract](../design/production-pull-deploy/evidence.md#anonymous-approval-and-freshness)
+owns revalidation and the combined cache/freshness bound. Multi-page history and
+approval by a second maintainer remain unverified; neither is required to start
+implementation under these conditions.
+
+GitHub holds no deployment credentials and has no administrative network route
+to production. Laptop deployment remains available in parallel and shares the
+durable host protocol. External deployment proofs remain attended initially.
+Ownership survives interruption; uncertain operations require attended recovery.
+Local configuration changes invalidate pending requests before deployment
+resumes.
 
 One serving replica, deployment downtime, privacy gates, backup custody, and
-explicit data-loss rules remain unchanged. vMonitor quota renewal remains
-manual; no renewal automation or monitoring host is introduced.
+explicit data-loss rules remain unchanged. This acceptance introduces no
+monitoring host and does not change the separate Synthetic quota-renewal
+amendment below or its credential exception.
 
 ## Amendment: Synthetic quota renewal in GitHub Actions (2026-11-01)
 
@@ -243,3 +261,8 @@ dates. The `aboutme-readyz` alarm moved to the Telegram channel `aboutme-alerts`
 for In-alarm, Up, and Undetermined notifications. It fires when one of two
 locations fails three consecutive one-minute tests. The email notification quota
 was deleted.
+
+2026-11-01: Accepted anonymous approval reads and Ansible pull with a cache wait
+and single-page, single-review limits after the live probe. Retained solo owner
+approval and parallel laptop deployment; implementation follows the design's
+release order.

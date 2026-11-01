@@ -2,6 +2,60 @@
 
 See the [design overview](README.md) and [protocol](protocol.md).
 
+## Anonymous approval and freshness
+
+The owner accepted anonymous reads with conditions on 2026-11-01 in
+[ADR 0026](../../adr/0026-vietnam-hosted-production.md#amendment-anonymous-approval-pull-deployment-2026-11-01),
+based on the [live probe](../../research/approval-probe.md). The approval rules
+in the [overview](README.md#anonymous-verification-prerequisite) still apply.
+Exactly one relevant review must be an approval. A relevant review names the
+enrolled production environment ID; count review objects without deduplication.
+Any relevant rejection, conflicting comment, duplicate, or second relevant
+review refuses the run, regardless of ordering. Missing or ambiguous environment
+identity also refuses it. Solo owner approval is explicitly permitted.
+
+Read the review-history endpoint's first page only. Refuse any indication of a
+second page, including a `next` link or a `last` link beyond page one, even if
+only one review on page one is relevant. Malformed or contradictory pagination
+metadata, truncation, or an indeterminate page boundary refuses admission. Never
+follow another page or choose the newest review. Absence of a pagination link on
+the complete response is the accepted single-page case; undocumented `per_page`
+or `page` parameters are not proof of completeness.
+
+The probe observed `cache-control: public, max-age=60, s-maxage=60`. On first
+observing the approval run in a terminal state, record the run ID, attempt, head
+SHA, conclusion, and host observation time. Wait at least 60 seconds from that
+observation before fetching evidence for acceptance. A server timestamp does not
+shorten the wait. Only completed success on attempt one is eligible; failure or
+cancellation never becomes eligible through waiting. Loss of the observation
+resets the wait; any changed binding or rerun refuses the run.
+
+After the wait, fetch the run, review history, and attempt-one jobs again, then
+recheck the run's identity, actors, attempt, and completed-success result.
+Pre-wait responses cannot authorize admission. Apply these checks during final
+revalidation with mutable main-ref and CI evidence. Admission must occur within
+120 seconds of the earliest request in that final round, including lock waits;
+otherwise repeat the round within budget or defer without mutation. A repeated
+round for the same unchanged terminal observation needs no new 60-second wait.
+
+The combined evidence-age bound at admission is 180 seconds: at most 60 seconds
+of anonymous cache age plus at most 120 seconds from revalidation to admission.
+Require response freshness metadata to establish cache age at receipt of at most
+60 seconds; missing, contradictory, longer-lived, or stale evidence defers
+admission. Do not reuse a local response or a `304` to reset its age. This is an
+admission freshness bound, not a deployment completion deadline or instant
+revocation guarantee. A later rerun or review can remain unseen within that
+bound. Host pause and trust revocation remain attended controls; admitted
+execution follows the existing interruption and recovery rules.
+
+Defer the wait across discovery invocations so the
+[120-second discovery timeout and hourly budgets](execution.md#discovery-admission-and-execution)
+remain intact. Count terminal observation, post-wait fetches, final rechecks,
+and any repeated rounds. The live probe measured only approval reads; prove the
+complete cycle, including CI, publication, and observer use, before enabling
+pull. Budget exhaustion or unknown response shape defers without production
+mutation; never add a GitHub credential or weaken checks as a fallback.
+
 ## Trust, release modes, and historical evidence
 
 Enroll an immutable, versioned, root-owned control package containing verifier,
@@ -109,8 +163,8 @@ successful job, release digest entry, and SBOM. Registry errors or invalid
 evidence refuse admission. Activation keeps the observer without reinstalling
 it.
 
-Revalidate mutable run, approval, main-ref, and CI evidence within 120 seconds
-before admission. Reverify cached immutable bytes under current policy and
+Apply the [freshness contract](#anonymous-approval-and-freshness) before
+admission. Reverify cached immutable bytes under current policy and
 commit/workflow/digest denial lists. No tag-signature requirement is added.
 Release assets and observer display caches never replace cryptographic evidence.
 
