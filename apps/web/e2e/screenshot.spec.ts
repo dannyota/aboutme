@@ -2,6 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
+  measureTextContainment,
+  measureVerticalFlow,
+} from './display-assertions';
+
+import {
   CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -163,9 +168,47 @@ test.describe('renderer screenshot subset', () => {
       }
       expect(await photoCropGeometry(page))
         .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+      const documents = page.locator(
+        '.resume-document:not(.pagination-measurement)',
+      );
+      const name = cell.fixture === 'vn-full'
+        ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace';
+      const job = cell.fixture === 'vn-full'
+        ? 'Kỹ sư trưởng' : 'Principal Engineer';
+      await expect(documents.getByText(name, { exact: true })).toHaveCount(1);
+      await expect(documents.getByText(name, { exact: true })).toBeVisible();
+      await expect(documents.getByText(job, { exact: true })).toHaveCount(1);
+      await expect(documents.getByText(job, { exact: true })).toBeVisible();
+      const paragraphs = documents.locator('.entry-body p');
+      expect(await paragraphs.count()).toBeGreaterThan(0);
+      for (const paragraph of await paragraphs.all()) {
+        await expect.poll(() => measureTextContainment(paragraph)).toEqual({
+          visible: true,
+          contained: true,
+        });
+      }
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
+});
+
+test('renderer text containment detects clipping', async ({ page }) => {
+  const response = await page.goto(
+    '/_harness/render?fixture=vn-full&template=modern-sidebar&mode=continuous',
+  );
+  expect(response?.ok()).toBe(true);
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const paragraph = page.locator('.resume-document .entry-body p').first();
+  await expect.poll(() => measureTextContainment(paragraph)).toEqual({
+    visible: true,
+    contained: true,
+  });
+  await page.addStyleTag({
+    content: '.entry-body p { height: 1px !important; '
+      + 'overflow: hidden !important; }',
+  });
+  await expect.poll(async () =>
+    (await measureTextContainment(paragraph)).contained).toBe(false);
 });
 
 interface PublicCell {
@@ -323,6 +366,25 @@ test.describe('public page measure', () => {
       await page.emulateMedia({ media: 'print' });
       await expect(page.locator('.public-toolbar')).toBeHidden();
       await page.emulateMedia({ media: 'screen' });
+      const dark = cell.scheme === 'dark'
+        || (cell.scheme === 'system' && cell.colorPreference === 'dark');
+      await expect(page.locator('.public-toolbar')).toHaveCSS(
+        'background-color',
+        dark ? 'rgb(12, 16, 32)' : 'rgb(249, 248, 245)',
+      );
+      await expect(page.locator('.public-credit'))
+        .toHaveText('Tạo bằng aboutme.vn');
+      await expect(page.locator('.public-download')).toHaveText('Tải PDF');
+      await expect(page.locator('.resume-name'))
+        .toHaveText('Nguyễn Thị Minh Châu');
+      const paragraphs = page.locator('.resume-document .entry-body p');
+      expect(await paragraphs.count()).toBeGreaterThan(0);
+      for (const paragraph of await paragraphs.all()) {
+        await expect.poll(() => measureTextContainment(paragraph)).toEqual({
+          visible: true,
+          contained: true,
+        });
+      }
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
@@ -577,6 +639,37 @@ test.describe('guide page pixel baselines', () => {
       await page.evaluate(() => document.fonts.ready);
       await waitForImages(page);
 
+      const guide = page.getByTestId('guide-mcp-page');
+      const title = cell.locale === 'vi'
+        ? 'Kết nối trợ lý AI với aboutme.vn'
+        : 'Connect your AI assistant to aboutme.vn';
+      const headings = cell.locale === 'vi'
+        ? [
+            'Trợ lý AI làm được gì', 'Kết nối Claude', 'Thử một yêu cầu',
+            'Quyền riêng tư và quyền kiểm soát', 'Ứng dụng khác',
+            'Khắc phục sự cố',
+          ]
+        : [
+            'What your assistant can do', 'Connect Claude', 'Try a request',
+            'Privacy and control', 'Other apps', 'Troubleshooting',
+          ];
+      await expect(guide.getByRole('heading', { level: 1 }))
+        .toHaveText(title);
+      await expect(page.getByTestId('guide-header')).toMatchAriaSnapshot(
+        `- heading "${title}" [level=1]`,
+      );
+      await expect(guide.getByRole('heading', { level: 2 }))
+        .toHaveText(headings);
+      await expect(page.getByTestId('guide-can').locator('li')).toHaveCount(5);
+      await expect(page.getByTestId('guide-cannot').locator('li'))
+        .toHaveCount(5);
+      await expect(page.getByTestId('guide-claude-web-disk')).toHaveCount(6);
+      await expect(page.getByTestId('guide-troubleshooting').locator('dt'))
+        .toHaveCount(6);
+      await expect.poll(() => measureVerticalFlow(
+        guide.locator(':scope > header, :scope > section'),
+      )).toBe(true);
+
       const settledHeight = await page.evaluate(
         () => document.documentElement.scrollHeight);
       await page.setViewportSize({ width: cell.width, height: settledHeight });
@@ -595,6 +688,22 @@ test.describe('guide page pixel baselines', () => {
       );
     });
   }
+});
+
+test('guide flow detects overlapping sections', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await mockSignedOutSession(page);
+  const response = await page.goto('/guide/mcp');
+  expect(response?.status()).toBe(200);
+  await page.evaluate(() => document.fonts.ready);
+  const sections = page.getByTestId('guide-mcp-page')
+    .locator(':scope > header, :scope > section');
+  await expect.poll(() => measureVerticalFlow(sections)).toBe(true);
+  await page.addStyleTag({
+    content: '[data-testid="guide-can-cannot"] '
+      + '{ margin-top: -36px !important; }',
+  });
+  await expect.poll(() => measureVerticalFlow(sections)).toBe(false);
 });
 
 /**
