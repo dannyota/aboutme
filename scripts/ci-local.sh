@@ -67,7 +67,7 @@ capped() {
       exit 2
     fi
   done
-  if ! tree_status=$(git status --porcelain); then
+  if ! tree_status=$(git status --porcelain --untracked-files=all); then
     say 'refused: could not check worktree status; CI did not run'
     exit 2
   fi
