@@ -14,37 +14,37 @@ record may change until accepted.
 
 ## Records
 
-| ADR                                                      | Status   | Decides                                                                          |
-| -------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
-| [0001](0001-agpl-3.0-license.md)                         | Accepted | AGPL-3.0-only license                                                            |
-| [0002](0002-system-architecture.md)                      | Accepted | Go API, one Vue renderer, HTTP autosave, SSE refresh, root health routes         |
-| [0003](0003-public-namespace-and-no-operator-surface.md) | Accepted | Globally unique resume slugs; no operator surface in the public app              |
-| [0004](0004-resume-document-contract.md)                 | Accepted | Draft-permissive documents, schema codegen, section order, versions and losses   |
-| [0005](0005-database-migrations.md)                      | Accepted | Goose migrations, one baseline, explicit grants, deploy-step migrator            |
-| [0006](0006-transactional-idempotency.md)                | Accepted | Idempotency records commit with the mutation                                     |
-| [0007](0007-bounded-rate-limiter.md)                     | Accepted | Bounded rate-limit state with overflow and expiry                                |
-| [0008](0008-ssr-sanitizer-authority.md)                  | Accepted | Go sanitizes for SSR; DOMPurify is client-only                                   |
-| [0009](0009-private-media-delivery.md)                   | Accepted | Private media behind live-gated reads, with durable deletion                     |
-| [0010](0010-public-artifact-revocation.md)               | Accepted | Live-state gate before every public reuse; revocation fences                     |
-| [0011](0011-print-capability-and-pdf-output.md)          | Accepted | One-use print capability; PDF file name, title, and dates                        |
-| [0012](0012-template-placement.md)                       | Accepted | Template presets carry a placement rule with one total order                     |
-| [0013](0013-resume-header-and-contacts.md)               | Accepted | Contact order, labels, and links; header photo; project subtitle; justified text |
-| [0014](0014-public-page-head-and-link-preview.md)        | Accepted | Public page title and favicon; stored, versioned link-preview card               |
-| [0015](0015-accounts-passwords-and-sessions.md)          | Accepted | Passwords beside providers; email is not an identity key; session rotation       |
-| [0016](0016-sign-in-providers.md)                        | Accepted | OAuth start methods, per-provider enablement, the LinkedIn flow and its risk     |
-| [0017](0017-second-factor-authentication.md)             | Accepted | Optional passkeys and TOTP, recovery codes, the epoch, the release fence         |
-| [0018](0018-mcp-agent-access.md)                         | Accepted | Remote MCP and OAuth; CIMD implemented and enabled in production                 |
-| [0019](0019-application-ui-toolkit.md)                   | Accepted | Tailwind and shadcn-vue chrome, renderer isolation, guarded token edits          |
-| [0020](0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, type scale, resume ground colors  |
-| [0021](0021-bilingual-resume-workspace.md)               | Accepted | Vietnamese and English workspace, separate from resume language                  |
-| [0022](0022-viewer-privacy-and-counting.md)              | Accepted | Anonymous layered view counts; sign in to view with nothing stored               |
-| [0023](0023-linkedin-import.md)                          | Accepted | LinkedIn import from the English Save to PDF, parsed in the browser              |
-| [0024](0024-delivery-gates.md)                           | Accepted | GitHub CI is the full gate; one author pass and one fresh review                 |
-| [0025](0025-single-host-production.md)                   | Accepted | One AWS host, no hosted UAT, CloudFront edge, Route 53 DNS                       |
-| [0026](0026-replica-scaling.md)                          | Accepted | One serving replica; the designed path to a second                               |
-| [0027](0027-vietnam-hosted-production.md)                | Accepted | Move production to Vietnam-hosted providers                                      |
-| [0028](0028-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                      |
-| [0029](0029-community-showcase.md)                       | Accepted | Opt-in, uncached, never-indexed showcase of published resumes                    |
+| ADR                                                      | Status     | Decides                                                                          |
+| -------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| [0001](0001-agpl-3.0-license.md)                         | Accepted   | AGPL-3.0-only license                                                            |
+| [0002](0002-system-architecture.md)                      | Accepted   | Go API, one Vue renderer, HTTP autosave, SSE refresh, root health routes         |
+| [0003](0003-public-namespace-and-no-operator-surface.md) | Accepted   | Globally unique resume slugs; no operator surface in the public app              |
+| [0004](0004-resume-document-contract.md)                 | Accepted   | Draft-permissive documents, schema codegen, section order, versions and losses   |
+| [0005](0005-database-migrations.md)                      | Accepted   | Goose migrations, one baseline, explicit grants, deploy-step migrator            |
+| [0006](0006-transactional-idempotency.md)                | Accepted   | Idempotency records commit with the mutation                                     |
+| [0007](0007-bounded-rate-limiter.md)                     | Accepted   | Bounded rate-limit state with overflow and expiry                                |
+| [0008](0008-ssr-sanitizer-authority.md)                  | Accepted   | Go sanitizes for SSR; DOMPurify is client-only                                   |
+| [0009](0009-private-media-delivery.md)                   | Accepted   | Private media behind live-gated reads, with durable deletion                     |
+| [0010](0010-public-artifact-revocation.md)               | Accepted   | Live-state gate before every public reuse; revocation fences                     |
+| [0011](0011-print-capability-and-pdf-output.md)          | Accepted   | One-use print capability; PDF file name, title, and dates                        |
+| [0012](0012-template-placement.md)                       | Accepted   | Template presets carry a placement rule with one total order                     |
+| [0013](0013-resume-header-and-contacts.md)               | Accepted   | Contact order, labels, and links; header photo; project subtitle; justified text |
+| [0014](0014-public-page-head-and-link-preview.md)        | Accepted   | Public page title and favicon; stored, versioned link-preview card               |
+| [0015](0015-accounts-passwords-and-sessions.md)          | Accepted   | Passwords beside providers; email is not an identity key; session rotation       |
+| [0016](0016-sign-in-providers.md)                        | Accepted   | OAuth start methods, per-provider enablement, the LinkedIn flow and its risk     |
+| [0017](0017-second-factor-authentication.md)             | Accepted   | Optional passkeys and TOTP, recovery codes, the epoch, the release fence         |
+| [0018](0018-mcp-agent-access.md)                         | Accepted   | Remote MCP and OAuth; CIMD implemented and enabled in production                 |
+| [0019](0019-application-ui-toolkit.md)                   | Accepted   | Tailwind and shadcn-vue chrome, renderer isolation, guarded token edits          |
+| [0020](0020-application-visual-identity.md)              | Accepted   | Seal logo and stamp, aurora canvas, two blues, type scale, resume ground colors  |
+| [0021](0021-bilingual-resume-workspace.md)               | Accepted   | Vietnamese and English workspace, separate from resume language                  |
+| [0022](0022-viewer-privacy-and-counting.md)              | Accepted   | Anonymous layered view counts; sign in to view with nothing stored               |
+| [0023](0023-linkedin-import.md)                          | Accepted   | LinkedIn import from the English Save to PDF, parsed in the browser              |
+| [0024](0024-delivery-gates.md)                           | Accepted   | GitHub CI is the full gate; one author pass and one fresh review                 |
+| [0025](0025-single-host-production.md)                   | Historical | AWS hosting history; ADR 0027 governs production                                 |
+| [0026](0026-replica-scaling.md)                          | Accepted   | One serving replica; the designed path to a second                               |
+| [0027](0027-vietnam-hosted-production.md)                | Accepted   | Move production to Vietnam-hosted providers                                      |
+| [0028](0028-deployment-transparency-observer.md)         | Accepted   | An independent observer publishes the running image digests                      |
+| [0029](0029-community-showcase.md)                       | Accepted   | Opt-in, uncached, never-indexed showcase of published resumes                    |
 
 ## Former numbers
 
