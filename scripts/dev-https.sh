@@ -12,6 +12,11 @@ case ${BASH_SOURCE[0]} in
 *) SCRIPT_DIR=. ;;
 esac
 readonly SCRIPT_DIR
+# shellcheck source=lib/platform.sh
+source "$SCRIPT_DIR/lib/platform.sh"
+require_modern_bash || exit 1
+# shellcheck source=lib/dev-https-session.sh
+source "$SCRIPT_DIR/lib/dev-https-session.sh"
 # shellcheck source=lib/dev-https-state.sh
 source "$SCRIPT_DIR/lib/dev-https-state.sh"
 # shellcheck source=lib/dev-https-identity.sh
@@ -24,7 +29,7 @@ source "$SCRIPT_DIR/lib/dev-https-preflight.sh"
 source "$SCRIPT_DIR/lib/dev-https-lifecycle.sh"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-readonly ROOT=$PWD
+readonly ROOT=$(pwd -P)
 
 readonly WEB_PORT=20440
 readonly SERVER_PORT=20441
@@ -65,25 +70,15 @@ readonly EXPORTED_ROOT=$INPUT_DIR/caddy-root.crt
 readonly EFFECTIVE_CONFIG=$STATE_DIR/effective-config
 readonly DB_CONTAINER=aboutme-test-db
 readonly SERVICES=(mock-oauth mail-capture server web caddy)
-readonly STOP_ORDER=(caddy web server mail-capture mock-oauth)
 readonly NORMAL_NATIVE_PORTS=(20030 20080 20081)
 readonly STOP_TERM_ATTEMPTS=${DEV_HTTPS_STOP_TERM_ATTEMPTS:-100}
 readonly STOP_KILL_ATTEMPTS=${DEV_HTTPS_STOP_KILL_ATTEMPTS:-50}
-readonly BASH_BIN=$(readlink -f "$(command -v bash)")
-readonly SUPERVISOR_CODE='set -Eeuo pipefail
-umask 077
-printf "%s\n" "$$" >"$1"
-cd "$2" || exit 127
-set -a
-source "$3"
-set +a
-shift 3
-"$@" &
-child=$!
-wait "$child"'
-
+BASH_BIN=
 STARTUP_ARMED=0
-declare -a STARTED_SERVICES=()
+STARTED_SESSION_TOKEN=
+declare -A SESSION_LISTENERS_SEEN=()
+SESSION_PID=
+SESSION_TOKEN=
 CURRENT_SERVICE=
 APP_BUILD_DIGEST=
 PUBLIC_RENDERER_BUILD_DIGEST=
@@ -106,17 +101,21 @@ start_stack() {
   make -C "$ROOT" --no-print-directory test-db-up
   build_and_migrate
   ensure_secrets
+  start_session
   start_mock
   start_mail_capture
   start_server
   start_web
   start_caddy
+  session_health
   write_effective_config
+  printf '%s\n' "$SESSION_TOKEN" >"$RUN_DIR/session.ready"
 }
 
 cmd_up() {
   [ -z "${ABOUTME_DEV_DATABASE_URL+x}" ] || die "ABOUTME_DEV_DATABASE_URL is not permitted; the HTTPS harness uses only 127.0.0.1:20432/aboutme_dev"
   require_tools
+  BASH_BIN=$(platform_realpath "$(command -v bash)")
   load_source_digests
   validate_state_path_integrity
   reject_http_stack
@@ -135,31 +134,13 @@ cmd_up() {
   cmd_status
 }
 
-validate_down_targets() {
-  local name file identity launch pid
-  for name in "${STOP_ORDER[@]}"; do
-    file=$(pidfile "$name")
-    [ -e "$file" ] || continue
-    pid=$(read_pid "$name") || die "$name has an invalid PID file; no process was signalled"
-    identity=$(identity_file "$name")
-    launch=$(launch_file "$name")
-    if validate_service_identity "$name" 1 \
-      || validate_absent_process_record "$name" "$identity" \
-      || validate_absent_process_record "$name" "$launch"; then
-      continue
-    fi
-    die "$name pid $pid does not match its exact owned process identity; no process was signalled and ownership evidence was preserved"
-  done
-  return 0
-}
-
 cmd_down() {
-  local name
+  BASH_BIN=$(platform_realpath "$(command -v bash)")
   validate_state_path_integrity
-  validate_down_targets
-  for name in "${STOP_ORDER[@]}"; do
-    stop_owned_service "$name"
-  done
+  if any_pidfile; then
+    validate_session_record || die 'HTTPS session ownership is unproved; manual recovery required; no process was signalled'
+    stop_session || die 'HTTPS session did not drain safely; manual recovery required; state preserved'
+  fi
   info "native HTTPS harness is down (the shared $DB_CONTAINER container is left running)"
 }
 
@@ -169,9 +150,11 @@ probe_https() {
 }
 
 cmd_status() {
+  BASH_BIN=$(platform_realpath "$(command -v bash)")
   local name pid port state listening probe_status failed=0 mode generated
   load_source_digests
   validate_state_path_integrity
+  session_health && session_ready || failed=1
   printf '%-12s %-8s %-10s %-6s %s\n' SERVICE PID STATE PORT LISTENING
   for name in "${SERVICES[@]}"; do
     port=$(port_of "$name")
@@ -185,7 +168,7 @@ cmd_status() {
       state=stopped
       failed=1
     fi
-    if port_listening "$port"; then
+    if validate_service_listeners "$name"; then
       listening=yes
     else
       probe_status=$?
@@ -200,7 +183,13 @@ cmd_status() {
     printf '%-12s %-8s %-10s %-6s %s\n' "$name" "$pid" "$state" "$port" "$listening"
   done
   mode=$(stat -c '%a' "$EXPORTED_ROOT" 2>/dev/null || true)
-  if [ "$mode" = 600 ] && probe_https; then
+  local tls_status=1
+  if [ "$mode" = 600 ] && session_health && session_ready; then
+    tls_status=0
+    probe_https || tls_status=$?
+    session_health || tls_status=1
+  fi
+  if [ "$tls_status" = 0 ]; then
     info "TLS          trusted by exported project CA; public readiness=yes"
   else
     info "TLS          exported CA/readiness check failed"
@@ -213,13 +202,13 @@ cmd_status() {
     failed=1
   fi
   if validate_effective_config; then
-    info "MANIFEST     effective config, source, binaries, and process identities match"
+    info "MANIFEST     effective config, source, binaries, and session ownership match"
   else
-    info "MANIFEST     effective config, source, binary, route, or process identity mismatch"
+    info "MANIFEST     effective config, source, binary, route, or session ownership mismatch"
     failed=1
   fi
   [ "$failed" -eq 0 ] || {
-    info "recovery: inspect 'scripts/dev-https.sh logs'; use down only when every PID is proved owned"
+    info "recovery: inspect 'scripts/dev-https.sh logs'; use down only with a validated session anchor"
     return 1
   }
 }
@@ -274,7 +263,7 @@ usage() {
 usage: scripts/dev-https.sh <up|down|status|logs> [args]
 
   up      start or verify the native HTTPS harness at $PUBLIC_ORIGIN
-  down    stop caddy, web, server, mail-capture, then mock-oauth when ownership is proved
+  down    drain the validated HTTPS service group
   status  show bounded liveness, listener, CA, and public readiness checks
   logs    [-f] [mock-oauth|mail-capture|server|web|caddy]  show only harness-owned logs
 EOF
@@ -290,6 +279,12 @@ main() {
   down) cmd_down "$@" ;;
   status) cmd_status "$@" ;;
   logs) cmd_logs "$@" ;;
+  guard) cmd_guard "$@" ;;
+  proof-health)
+    BASH_BIN=$(platform_realpath "$(command -v bash)")
+    load_source_digests
+    proof_health "$@"
+    ;;
   help | -h | --help | '') usage ;;
   *) usage >&2; die "unknown command '$command'" ;;
   esac

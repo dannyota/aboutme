@@ -5,9 +5,12 @@ set -Eeuo pipefail
 umask 077
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-readonly SOURCE_ROOT=$PWD
+readonly SOURCE_ROOT=$(pwd -P)
 readonly SOURCE_SCRIPT=$SOURCE_ROOT/scripts/dev-https.sh
 readonly SOURCE_LIB_DIR=$SOURCE_ROOT/scripts/lib
+source "$SOURCE_LIB_DIR/platform.sh"
+readonly FIXTURE_PATH=$PATH
+readonly FIXTURE_BASH=$(command -v bash)
 
 fail() {
   printf 'dev-https-test: %s\n' "$*" >&2
@@ -30,14 +33,15 @@ assert_log_line() {
 }
 
 cleanup_fixture() {
-  local fixture=$1 file pid pgid
-  for file in "$fixture"/repo/.dev/native-https/run/*.pid; do
-    [ -s "$file" ] || continue
-    pid=$(<"$file")
-    [[ $pid =~ ^[0-9]+$ ]] || continue
-    kill -TERM -- "-$pid" 2>/dev/null || true
-    kill -KILL -- "-$pid" 2>/dev/null || true
-  done
+  local fixture=$1 pid pgid
+  if [ -n "${guard_pid:-}" ]; then
+    kill -TERM "$guard_pid" 2>/dev/null || true
+    wait "$guard_pid" 2>/dev/null || true
+  fi
+  if [ -s "$fixture/repo/.dev/native-https/run/session" ]; then
+    pid=$(sed -n 's/^pgid=//p' "$fixture/repo/.dev/native-https/run/session")
+    [[ $pid =~ ^[1-9][0-9]*$ ]] && [ "$pid" -gt 1 ] && kill -KILL -- "-$pid" 2>/dev/null || true
+  fi
   if [ -f "$fixture/all-pids" ]; then
     while IFS= read -r pid; do
       [[ $pid =~ ^[0-9]+$ ]] || continue
@@ -86,6 +90,11 @@ if [ "${FAKE_EXIT_BEFORE_COMPLETION-}" = "$name" ]; then
   exit 7
 fi
 trap 'printf "stop:%s\n" "$name" >>"$FAKE_STOP_LOG"; exit 0' TERM INT
+if [ "${FAKE_LISTENER_CHILD:-}" = "$name" ]; then
+  /bin/sleep 300 &
+  printf '%s\n' "$!" >"${FAKE_FOREIGN_PORTS%/*}/listener-child"
+  printf '%s\n' "$!" >>"$DEV_HTTPS_PID_AUDIT_FILE"
+fi
 if [ "${FAKE_LEADER_EXITS_CHILD_IGNORES-}" = "$name" ]; then
   bash -c 'trap "" TERM; while :; do sleep 1; done' &
   printf '%s\n' "$!" >>"$DEV_HTTPS_PID_AUDIT_FILE"
@@ -212,88 +221,50 @@ if [ -n "$service" ]; then
   printf '%s readiness: time=%(%FT%T%z)T url=%s exit=0 response=stubbed-success body=empty\n' \
     "$service" -1 "$url" >"$DEV_HTTPS_DIAGNOSTICS_DIR/probe-$service"
 fi
+if [ "${FAKE_FOREIGN_AFTER_PROBE:-0}" = 1 ]; then
+  printf '20441\n' >"$FAKE_FOREIGN_PORTS"
+fi
 exit 0
 EOF
 
-  cat >"$fakebin/ss" <<'EOF'
+  cat >"$fakebin/lsof" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-case ${FAKE_SS_MODE-} in
-nonzero)
-  printf '%s\n' 'injected ss failure' >&2
-  exit 9
-  ;;
-malformed)
-  printf '%s\n' 'this is not an ss listener record'
-  exit 0
-  ;;
+mode=${FAKE_SS_MODE-}
+[ ! -f "${FAKE_FOREIGN_PORTS%/*}/listener-mode" ] || mode=$(<"${FAKE_FOREIGN_PORTS%/*}/listener-mode")
+case $mode in
+nonzero) printf 'injected inspection failure\n' >&2; exit 9 ;;
+malformed) printf 'malformed listener\n'; exit 0 ;;
 esac
-port=${*##*:}
-port=${port//[^0-9]/}
+port=
+for arg in "$@"; do [[ $arg != -iTCP:* ]] || port=${arg#-iTCP:}; done
 if grep -Fqx -- "$port" "$FAKE_FOREIGN_PORTS" 2>/dev/null; then
-  printf 'LISTEN 0 1 127.0.0.1:%s 0.0.0.0:*\n' "$port"
+  printf 'p%s\nn127.0.0.1:%s\n' "$PPID" "$port"
   exit 0
 fi
 case $port in
 20440) name=web ;;
-20441) name=server ;;
+20441 | 20445) name=server ;;
 20442) name=mock-oauth ;;
 20443) name=caddy ;;
 20444) name=mail-capture ;;
-*) exit 0 ;;
+*) exit 1 ;;
 esac
-pidfile="$PWD/.dev/native-https/run/$name.pid"
-if [ -s "$pidfile" ]; then
-  pid=$(<"$pidfile")
+file="$PWD/.dev/native-https/run/$name.pid"
+if [ -s "$file" ]; then
+  pid=$(<"$file")
+  if [ "$name" = web ] && [ -s "${FAKE_FOREIGN_PORTS%/*}/listener-child" ]; then
+    pid=$(<"${FAKE_FOREIGN_PORTS%/*}/listener-child")
+  fi
+  if [ "$name" = web ] && [ -f "${FAKE_FOREIGN_PORTS%/*}/sibling-listener" ]; then
+    pid=$(<"$PWD/.dev/native-https/run/server.pid")
+  fi
   if kill -0 "$pid" 2>/dev/null; then
-    printf 'LISTEN 0 1 127.0.0.1:%s 0.0.0.0:*\n' "$port"
+    printf 'p%s\nn127.0.0.1:%s\n' "$pid" "$port"
+    exit 0
   fi
 fi
-EOF
-
-  cat >"$fakebin/ps" <<'EOF'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-if [ -n "${FAKE_EXIT_RACE_PID-}" ]; then
-  case "$*" in
-  '-eo pid=,pgid=,sid=')
-    /usr/bin/ps "$@"
-    calls=0
-    [ ! -f "$FAKE_EXIT_RACE_GROUP_CALLS" ] || calls=$(<"$FAKE_EXIT_RACE_GROUP_CALLS")
-    calls=$((calls + 1))
-    printf '%s\n' "$calls" >"$FAKE_EXIT_RACE_GROUP_CALLS"
-    if [ "$calls" -eq 2 ]; then
-      printf '%s %s %s\n' "$FAKE_EXIT_RACE_PID" "$FAKE_EXIT_RACE_PGID" "$FAKE_EXIT_RACE_PGID"
-    fi
-    exit 0
-    ;;
-  "-o pgid=,sid=,stat= -p $FAKE_EXIT_RACE_PID")
-    calls=0
-    [ ! -f "$FAKE_EXIT_RACE_STATE_CALLS" ] || calls=$(<"$FAKE_EXIT_RACE_STATE_CALLS")
-    calls=$((calls + 1))
-    printf '%s\n' "$calls" >"$FAKE_EXIT_RACE_STATE_CALLS"
-    state=S
-    [ "$calls" -eq 1 ] || state=Z
-    printf '%s %s %s\n' "$FAKE_EXIT_RACE_PGID" "$FAKE_EXIT_RACE_PGID" "$state"
-    exit 0
-    ;;
-  esac
-fi
-exec /usr/bin/ps "$@"
-EOF
-
-  cat >"$fakebin/chmod" <<'EOF'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-target=${!#}
-if [ "${FAKE_FAIL_IDENTITY_WRITE-}" = server ] && [[ $target == */server.identity ]]; then
-  printf '%s\n' 'injected-invalid-identity' >"$target"
-  exit 77
-fi
-if [ "${FAKE_FAIL_LAUNCH_COMPLETE-}" = server ] && [[ $target == */server.launch.tmp.* ]]; then
-  exit 78
-fi
-exec /usr/bin/chmod "$@"
+exit 1
 EOF
 
   cat >"$fakebin/podman" <<'EOF'
@@ -305,13 +276,6 @@ if [ "${1-}" = ps ]; then
 fi
 printf 'podman:%s\n' "$*" >>"$FAKE_FORBIDDEN"
 exit 66
-EOF
-
-  cat >"$fakebin/setsid" <<'EOF'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-printf 'setsid\n' >>"$FAKE_MUTATIONS"
-exec /usr/bin/setsid "$@"
 EOF
 
   cat >"$fakebin/sudo" <<'EOF'
@@ -332,11 +296,12 @@ EOF
 new_fixture() {
   local fixture
   fixture=$(mktemp -d)
+  fixture=$(cd "$fixture" && pwd -P)
   mkdir -p "$fixture/repo/scripts/lib" "$fixture/repo/deploy/caddy" \
     "$fixture/repo/packages/publicroots" \
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
-  cp "$SOURCE_LIB_DIR"/dev-https-*.sh "$fixture/repo/scripts/lib/"
+  cp "$SOURCE_LIB_DIR"/dev-https-*.sh "$SOURCE_LIB_DIR/platform.sh" "$fixture/repo/scripts/lib/"
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
   cp "$SOURCE_ROOT/scripts/chromium-path.mjs" "$fixture/repo/scripts/chromium-path.mjs"
   cp "$SOURCE_ROOT/deploy/caddy/Caddyfile" "$fixture/repo/deploy/caddy/Caddyfile"
@@ -365,7 +330,7 @@ EOF
 
 fixture_env() {
   local fixture=$1
-  export PATH="$fixture/fakebin:/usr/bin:/bin"
+  export PATH="$fixture/fakebin:$FIXTURE_PATH"
   export FAKE_MUTATIONS=$fixture/mutations
   export FAKE_EFFECTS=$fixture/effects
   export FAKE_STOP_LOG=$fixture/stops
@@ -471,18 +436,14 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'generated_fragment_sha256='
   assert_contains "$manifest" 'effective_caddyfile_sha256='
   assert_contains "$manifest" 'generated_route_sha256='
-  assert_contains "$manifest" 'server_expected_executable='
-  assert_contains "$manifest" 'server_expected_cmdline_sha256='
+  assert_contains "$manifest" 'session_checkout='
+  assert_contains "$manifest" 'session_launch_token='
   assert_contains "$manifest" 'mail_capture_port=20444'
   assert_contains "$manifest" 'mail_capture_binary_sha256='
   assert_contains "$manifest" 'mail_secrets_sha256='
   assert_not_contains "$manifest" 'not-a-secret-local-google'
   assert_not_contains "$manifest" 'not-a-secret-local-linkedin'
   for service in mock-oauth mail-capture server web caddy; do
-    mode=$(stat -c '%a' ".dev/native-https/run/$service.identity")
-    [ "$mode" = 600 ] || fail "$service identity mode is $mode, want 600"
-    mode=$(stat -c '%a' ".dev/native-https/run/$service.launch")
-    [ "$mode" = 600 ] || fail "$service launch evidence mode is $mode, want 600"
     mode=$(stat -c '%a' ".dev/native-https/run/$service.env")
     [ "$mode" = 600 ] || fail "$service environment mode is $mode, want 600"
   done
@@ -596,9 +557,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$output" '[REDACTED]'
 
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down failed: $output"
-  mapfile -t stops <"$FAKE_STOP_LOG"
-  [ "${stops[*]}" = 'stop:caddy stop:web stop:server stop:mail-capture stop:mock-oauth' ] || \
-    fail "stop order was: ${stops[*]}"
+  [ "$(LC_ALL=C sort "$FAKE_STOP_LOG")" = "$(printf 'stop:%s\n' mock-oauth mail-capture server web caddy | LC_ALL=C sort)" ] || fail 'stop did not drain every service'
   before=$(wc -l <"$FAKE_STOP_LOG")
   bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "absent-state down was not idempotent"
   after=$(wc -l <"$FAKE_STOP_LOG")
@@ -686,7 +645,7 @@ run_active_http_stack_checks() (
 
   : >"$FAKE_PODMAN_PS"
   mkdir -p .dev
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' active-http .dev/server.pid
+  detach bash -c 'echo $$ >"$1"; exec sleep 300' active-http .dev/server.pid
   for _ in $(seq 1 50); do [ -s .dev/server.pid ] && break; sleep 0.02; done
   native_pid=$(<.dev/server.pid)
   printf '%s\n' "$native_pid" >>"$fixture/all-pids"
@@ -739,201 +698,6 @@ run_missing_fragment_check() (
   [ ! -s "$FAKE_MUTATIONS" ] || fail "missing-fragment rejection performed a mutation"
 )
 
-run_foreign_ownership_down_check() (
-  local fixture output foreign_pid
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  cd "$fixture/repo"
-  install -d -m 0755 .dev
-  install -d -m 0700 .dev/native-https .dev/native-https/run
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign .dev/native-https/run/server.pid
-  for _ in $(seq 1 50); do [ -s .dev/native-https/run/server.pid ] && break; sleep 0.02; done
-  foreign_pid=$(<.dev/native-https/run/server.pid)
-  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
-  printf '%s\n' 'foreign-identity-evidence' >.dev/native-https/run/server.identity
-  if output=$(bash scripts/dev-https.sh down 2>&1); then
-    fail "down accepted a PID it could not prove it owned"
-  fi
-  assert_contains "$output" 'does not match its exact owned process identity'
-  kill -0 "$foreign_pid" 2>/dev/null || fail "down killed a foreign process"
-  [ -f .dev/native-https/run/server.pid ] || fail "down removed foreign ownership evidence"
-  assert_log_line .dev/native-https/run/server.identity 'foreign-identity-evidence'
-)
-
-run_process_group_drain_check() (
-  local fixture output pid member
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  export FAKE_LEADER_EXITS_CHILD_IGNORES=server
-  cd "$fixture/repo"
-  output=$(bash scripts/dev-https.sh up 2>&1) || fail "group-drain setup failed: $output"
-  pid=$(<.dev/native-https/run/server.pid)
-  output=$(bash scripts/dev-https.sh down 2>&1) || fail "group-drain down failed: $output"
-  while IFS= read -r member; do
-    [ -n "$member" ] || continue
-    fail "down left process $member in owned process group $pid"
-  done < <(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
-  [ ! -e .dev/native-https/run/server.pid ] || fail "down retained server PID after group drained"
-  [ ! -e .dev/native-https/run/server.identity ] || fail "down retained server identity after group drained"
-)
-
-run_group_member_exit_race_check() (
-  local fixture output foreign_pid web_pid
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  cd "$fixture/repo"
-  output=$(bash scripts/dev-https.sh up 2>&1) || fail "group-member exit-race setup failed: $output"
-  web_pid=$(<.dev/native-https/run/web.pid)
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
-  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
-  foreign_pid=$(<"$fixture/foreign-pid")
-  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
-  export FAKE_EXIT_RACE_PID=$foreign_pid
-  export FAKE_EXIT_RACE_PGID=$web_pid
-  export FAKE_EXIT_RACE_GROUP_CALLS=$fixture/exit-race-group-calls
-  export FAKE_EXIT_RACE_STATE_CALLS=$fixture/exit-race-state-calls
-  output=$(bash scripts/dev-https.sh down 2>&1) || fail "down rejected a group member that exited during identity validation: $output"
-  kill -0 "$foreign_pid" 2>/dev/null || fail 'down signalled the simulated exiting process'
-)
-
-run_group_member_identity_race_checks() (
-  local work scenario output expected calls
-  work=$(mktemp -d)
-  trap 'rm -rf -- "$work"' EXIT
-  # shellcheck source=lib/dev-https-identity.sh
-  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
-  ps() {
-    [ "$*" = '-o pgid=,sid=,stat= -p 123' ] || fail 'unexpected member state probe'
-    calls=$(<"$work/state-calls")
-    calls=$((calls + 1))
-    printf '%s\n' "$calls" >"$work/state-calls"
-    case $scenario:$calls in
-    absent-before:1 | absent-after:2) return 1 ;;
-    foreign-group-before:1 | foreign-group-after:2) printf '789 456 S\n' ;;
-    foreign-session-before:1 | foreign-session-after:2) printf '456 789 S\n' ;;
-    zombie-before:1 | zombie-after:2) printf '456 456 Z\n' ;;
-    dead-before:1 | dead-after:2) printf '456 456 X\n' ;;
-    malformed-before:1) printf 'invalid state\n' ;;
-    *) printf '456 456 S\n' ;;
-    esac
-  }
-  member_has_token() {
-    [ "$1" = 123 ] && [ "$2" = fixture-token ] || fail 'member token probe changed its target'
-    printf 'token\n' >>"$work/token-calls"
-    [ "$scenario" = marked ]
-  }
-  proc_member_state() {
-    [ "$1" = 123 ] || fail 'exit flag probe changed its target'
-    case $scenario in
-    absent-after) return 0 ;;
-    foreign-group-after) printf '789 456 S 0\n' ;;
-    foreign-session-after) printf '456 789 S 0\n' ;;
-    zombie-after) printf '456 456 Z 0\n' ;;
-    dead-after) printf '456 456 X 0\n' ;;
-    exiting-before-zombie) printf '456 456 S 4\n' ;;
-    state-unreadable) return 1 ;;
-    *) printf '456 456 S 0\n' ;;
-    esac
-  }
-  for scenario in absent-before foreign-group-before foreign-session-before \
-    absent-after foreign-group-after foreign-session-after zombie-before \
-    zombie-after dead-before dead-after exiting-before-zombie marked unmarked unreadable \
-    state-unreadable malformed-before; do
-    printf '0\n' >"$work/state-calls"
-    : >"$work/token-calls"
-    expected=0
-    case $scenario in unmarked | unreadable | state-unreadable | malformed-before) expected=1 ;; esac
-    if output=$(validate_group_member 123 456 456 fixture-token 2>&1); then
-      [ "$expected" = 0 ] || fail "accepted a live $scenario group member"
-    else
-      [ "$expected" = 1 ] || fail "rejected the $scenario identity race: $output"
-    fi
-    [ -z "$output" ] || fail "member validation printed process data: $scenario"
-    case $scenario in
-    *-before)
-      [ ! -s "$work/token-calls" ] || fail "read a stale member's environment: $scenario"
-      ;;
-    *) [ -s "$work/token-calls" ] || fail "skipped the live member token proof: $scenario" ;;
-    esac
-  done
-)
-
-run_member_token_open_race_check() (
-  local work output
-  work=$(mktemp -d)
-  trap 'rm -rf -- "$work"' EXIT
-  # shellcheck source=lib/dev-https-identity.sh
-  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
-  printf 'ABOUTME_DEV_HTTPS_IDENTITY=fixture-token\0' >"$work/environ"
-  # Make the readability probe succeed before the open sees a vanished PID.
-  proc_member_environ_path() {
-    [ "$1" = 2147483647 ] || fail 'environment path probe changed its target'
-    [ -r "$work/environ" ] || fail 'fixture environment was not readable'
-    rm -- "$work/environ"
-    : >"$work/path-probed"
-    printf '%s' "$work/environ"
-  }
-  if output=$(member_has_token 2147483647 fixture-token 2>&1); then
-    fail 'accepted the token of a vanished process'
-  fi
-  [ -z "$output" ] || fail 'a raced environment open leaked a shell diagnostic'
-  [ -f "$work/path-probed" ] || fail 'skipped the raced environment path probe'
-)
-
-run_process_member_state_check() (
-  local flags output
-  # shellcheck source=lib/dev-https-identity.sh
-  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
-  cat() {
-    [ "$*" = /proc/123/stat ] || fail 'unexpected process stat read'
-    # comm can contain spaces and closing parentheses. flags is field 9.
-    printf '123 (fixture ) child) S 1 456 456 0 -1 %s 0 0 0\n' "$flags"
-  }
-  for flags in 0 4194304 4 4194308; do
-    output=$(proc_member_state 123) || fail "rejected process state with flags $flags"
-    [ "$output" = "456 456 S $flags" ] || fail "parsed process state incorrectly: $output"
-  done
-  flags=invalid
-  if proc_member_state 123 >/dev/null; then fail 'accepted malformed process flags'; fi
-  cat() { return 1; }
-  output=$(proc_member_state 2147483647) || fail 'rejected a vanished process state'
-  [ -z "$output" ] || fail 'a vanished process still had state'
-  proc_member_exists() {
-    [ "$1" = 2147483647 ] || fail 'process directory probe changed its target'
-    return 0
-  }
-  if proc_member_state 2147483647 >/dev/null; then fail 'a failed stat read proved process exit'; fi
-)
-
-run_identity_field_tamper_check() (
-  local fixture output identity original pid mutation
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  cd "$fixture/repo"
-  output=$(bash scripts/dev-https.sh up 2>&1) || fail "identity-tamper setup failed: $output"
-  identity=.dev/native-https/run/server.identity
-  original=$(<"$identity")
-  pid=$(<.dev/native-https/run/server.pid)
-  for mutation in \
-    's/^starttime=.*/starttime=1/' \
-    's#^expected_executable=.*#expected_executable=/bin/false#' \
-    's/^expected_cmdline_sha256=.*/expected_cmdline_sha256=0000000000000000000000000000000000000000000000000000000000000000/'; do
-    sed -i "$mutation" "$identity"
-    if output=$(bash scripts/dev-https.sh down 2>&1); then
-      fail "down accepted tampered service identity"
-    fi
-    assert_contains "$output" 'does not match its exact owned process identity'
-    kill -0 "$pid" 2>/dev/null || fail "identity rejection signalled the owned server"
-    [ ! -s "$FAKE_STOP_LOG" ] || fail "identity rejection signalled a prevalidated service"
-    printf '%s\n' "$original" >"$identity"
-  done
-  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "restored identity did not permit safe down"
-)
-
 run_binary_drift_check() (
   local fixture output binary
   fixture=$(new_fixture)
@@ -957,7 +721,7 @@ run_lifecycle_command_drift_down_check() (
   fixture_env "$fixture"
   cd "$fixture/repo"
   output=$(bash scripts/dev-https.sh up 2>&1) || fail "lifecycle-drift setup failed: $output"
-  sed -i 's/child=\$!/child=\$! # desired-source-drift/' scripts/dev-https.sh
+  printf '\n# source drift\n' >>scripts/lib/dev-https-session.sh
   if output=$(bash scripts/dev-https.sh status 2>&1); then
     fail 'status accepted desired lifecycle command drift'
   fi
@@ -986,120 +750,6 @@ run_partial_startup_rollback_check() (
   [ ! -s "$FAKE_FORBIDDEN" ] || fail "rollback invoked a forbidden command"
 )
 
-run_identity_write_rollback_check() (
-  local fixture output foreign_pid service member
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  export FAKE_FAIL_IDENTITY_WRITE=server
-  cd "$fixture/repo"
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
-  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
-  foreign_pid=$(<"$fixture/foreign-pid")
-  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
-  if output=$(bash scripts/dev-https.sh up 2>&1); then
-    fail 'up accepted injected identity persistence failure'
-  fi
-  assert_contains "$output" 'startup failed'
-  kill -0 "$foreign_pid" 2>/dev/null || fail 'rollback signalled an unrelated process group'
-  while IFS= read -r member; do
-    [ -n "$member" ] || continue
-    [ "$member" = "$foreign_pid" ] && continue
-    ! kill -0 "$member" 2>/dev/null || fail "identity-write rollback left owned process alive: $member"
-  done <"$fixture/all-pids"
-  for service in mock-oauth server web caddy; do
-    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "rollback retained $service PID"
-    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "rollback retained $service identity"
-    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "rollback retained $service launch evidence"
-    [ ! -e ".dev/native-https/run/$service.env" ] || fail "rollback retained $service environment"
-  done
-)
-
-run_launch_completion_failure_rollback_check() (
-  local fixture output foreign_pid service member
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  export FAKE_FAIL_LAUNCH_COMPLETE=server
-  cd "$fixture/repo"
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
-  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
-  foreign_pid=$(<"$fixture/foreign-pid")
-  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
-  if output=$(bash scripts/dev-https.sh up 2>&1); then
-    fail 'up accepted injected launch-record completion failure'
-  fi
-  assert_contains "$output" 'startup failed'
-  assert_log_line "$FAKE_MUTATIONS" 'start:server'
-  kill -0 "$foreign_pid" 2>/dev/null || fail 'prepared-launch rollback signalled an unrelated process group'
-  while IFS= read -r member; do
-    [ -n "$member" ] || continue
-    [ "$member" = "$foreign_pid" ] && continue
-    ! kill -0 "$member" 2>/dev/null || fail "prepared-launch rollback left owned process alive: $member"
-  done <"$fixture/all-pids"
-  for service in mock-oauth server web caddy; do
-    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "prepared-launch rollback retained $service PID"
-    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "prepared-launch rollback retained $service identity"
-    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "prepared-launch rollback retained $service launch evidence"
-    [ ! -e ".dev/native-https/run/$service.env" ] || fail "prepared-launch rollback retained $service environment"
-  done
-)
-
-run_immediate_precompletion_exit_rollback_check() (
-  local fixture output foreign_pid service member
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  export FAKE_EXIT_BEFORE_COMPLETION=mock-oauth
-  cd "$fixture/repo"
-  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
-  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
-  foreign_pid=$(<"$fixture/foreign-pid")
-  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
-  if output=$(bash scripts/dev-https.sh up 2>&1); then
-    fail 'up accepted a service that exited before launch identity completion'
-  fi
-  assert_contains "$output" 'startup failed'
-  assert_log_line "$FAKE_MUTATIONS" 'start:mock-oauth'
-  kill -0 "$foreign_pid" 2>/dev/null || fail 'immediate-exit rollback signalled an unrelated process group'
-  while IFS= read -r member; do
-    [ -n "$member" ] || continue
-    [ "$member" = "$foreign_pid" ] && continue
-    ! kill -0 "$member" 2>/dev/null || fail "immediate-exit rollback left owned process alive: $member"
-  done <"$fixture/all-pids"
-  for service in mock-oauth server web caddy; do
-    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "immediate-exit rollback retained $service PID"
-    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "immediate-exit rollback retained $service identity"
-    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "immediate-exit rollback retained $service launch evidence"
-    [ ! -e ".dev/native-https/run/$service.env" ] || fail "immediate-exit rollback retained $service environment"
-  done
-)
-
-run_absent_completed_launch_cleanup_check() (
-  local fixture output pid service
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  cd "$fixture/repo"
-  output=$(bash scripts/dev-https.sh up 2>&1) || fail "setup up failed: $output"
-  pid=$(<.dev/native-https/run/caddy.pid)
-  kill -TERM -- "-$pid"
-  for _ in $(seq 1 100); do
-    ! kill -0 "$pid" 2>/dev/null && break
-    sleep 0.02
-  done
-  ! kill -0 "$pid" 2>/dev/null || fail 'completed-launch fixture did not exit'
-  rm -- .dev/native-https/run/caddy.identity
-  output=$(bash scripts/dev-https.sh down 2>&1) || \
-    fail "down could not clean an absent completed launch: $output"
-  for service in mock-oauth server web caddy; do
-    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "absent launch cleanup retained $service PID"
-    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "absent launch cleanup retained $service identity"
-    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "absent launch cleanup retained $service launch evidence"
-    [ ! -e ".dev/native-https/run/$service.env" ] || fail "absent launch cleanup retained $service environment"
-  done
-)
-
 run_state_path_integrity_checks() (
   local fixture output sentinel outside
 
@@ -1117,7 +767,7 @@ run_state_path_integrity_checks() (
   fi
   assert_contains "$output" 'state path'
   [ "$(<"$outside/sentinel")" = untouched ] || fail 'redirected state root changed outside data'
-  [ "$(find "$outside" -mindepth 1 -maxdepth 1 -printf '%f\n')" = sentinel ] || \
+  [ "$(find "$outside" -mindepth 1 -maxdepth 1 -exec basename {} \;)" = sentinel ] || \
     fail 'redirected state root wrote outside state'
   [ ! -s "$FAKE_MUTATIONS" ] || fail 'redirected state root performed a mutation'
   cleanup_fixture "$fixture"
@@ -1262,7 +912,7 @@ run_server_after_capture_rollback_check() (
   fi
   assert_contains "$output" 'startup failed'
   assert_contains "$output" 'startup failure status='
-  assert_contains "$output" 'step=start_server duration='
+  assert_contains "$output" 'startup timeline'
   assert_contains "$output" 'server combined stdout and stderr'
   assert_contains "$output" 'server readiness: not reached'
   assert_contains "$output" 'database=stub provisioned=yes migrated=yes'
@@ -1305,24 +955,6 @@ run_mail_capture_foreign_listener_check() (
   fi
   assert_contains "$output" '20444'
   [ ! -s "$FAKE_MUTATIONS" ] || fail 'mail-capture foreign-listener rejection performed a mutation'
-)
-
-run_mail_capture_group_drain_check() (
-  local fixture output pid member
-  fixture=$(new_fixture)
-  trap 'cleanup_fixture "$fixture"' EXIT
-  fixture_env "$fixture"
-  export FAKE_LEADER_EXITS_CHILD_IGNORES=mail-capture
-  cd "$fixture/repo"
-  output=$(bash scripts/dev-https.sh up 2>&1) || fail "mail-capture group-drain setup failed: $output"
-  pid=$(<.dev/native-https/run/mail-capture.pid)
-  output=$(bash scripts/dev-https.sh down 2>&1) || fail "mail-capture group-drain down failed: $output"
-  while IFS= read -r member; do
-    [ -n "$member" ] || continue
-    fail "down left process $member in mail-capture process group $pid"
-  done < <(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
-  [ ! -e .dev/native-https/run/mail-capture.pid ] || fail 'down retained mail-capture PID after group drained'
-  [ ! -e .dev/native-https/run/mail-capture.identity ] || fail 'down retained mail-capture identity after group drained'
 )
 
 run_secret_reuse_check() (
@@ -1413,7 +1045,7 @@ run_missing_tool_check() (
   fixture_env "$fixture"
   cd "$fixture/repo"
   rm "$fixture/fakebin/caddy"
-  if output=$(PATH="$fixture/fakebin" /bin/bash scripts/dev-https.sh up 2>&1); then
+  if output=$(PATH="$fixture/fakebin" "$FIXTURE_BASH" scripts/dev-https.sh up 2>&1); then
     fail "up accepted a missing tool"
   fi
   assert_contains "$output" 'caddy is not on PATH'
@@ -1434,7 +1066,7 @@ run_browser_staging_checks() (
   source "$SOURCE_LIB_DIR/dev-https-browser-stage.sh"
   stage_dev_https_browser_specs "$work/context" "$work/staged"
   [ "$(stat -c %a "$work/staged")" = 700 ] || fail 'staging directory is not private'
-  [ "$(find "$work/staged" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)" = \
+  [ "$(find "$work/staged" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" = \
     "$(sort "$work/context/spec-sources.txt")" ] || fail 'staging differs from the source list'
   for path in "$work/staged/"*; do
     [ "$(stat -c '%u %a' "$path")" = "$(id -u) 600" ] || fail 'staged source owner or mode differs'
@@ -1499,10 +1131,370 @@ run_browser_staging_checks() (
   done
 )
 
+# All five service exits must remain failures even when probes return success.
+run_session_monitor_checks() (
+  local fixture service pid output guard_pid
+  for service in mock-oauth mail-capture server web caddy; do
+    fixture=$(new_fixture)
+    trap 'cleanup_fixture "$fixture"' EXIT
+    fixture_env "$fixture"
+    cd "$fixture/repo"
+    bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "monitor setup: $(cat "$fixture/up")"
+    pid=$(<".dev/native-https/run/$service.pid")
+    # A running proof must abort while its command is still sleeping.
+    bash scripts/dev-https.sh guard -- bash -c 'echo started >"$1"; sleep 120; echo unsafe >"$2"' proof "$fixture/proof-started" "$fixture/proof-completed" >"$fixture/guard" 2>&1 &
+    guard_pid=$!
+    for _ in $(seq 1 100); do [ -e "$fixture/proof-started" ] && break; sleep 0.1; done
+    [ -e "$fixture/proof-started" ] || fail 'guard did not admit healthy proof'
+    kill -TERM "$pid"
+    for _ in $(seq 1 60); do
+      [ -s .dev/native-https/run/session.failed ] && break
+      sleep 0.1
+    done
+    [ -s .dev/native-https/run/session.failed ] || fail "$service exit was not latched"
+    for _ in $(seq 1 100); do ! kill -0 "$guard_pid" 2>/dev/null && break; sleep 0.1; done
+    ! kill -0 "$guard_pid" 2>/dev/null || fail 'proof did not abort after service exit'
+    if wait "$guard_pid"; then fail 'aborted proof passed'; fi
+    guard_pid=
+    [ ! -e "$fixture/proof-completed" ] || fail 'unhealthy proof reached completion'
+    if output=$(bash scripts/dev-https.sh status 2>&1); then fail "$service exit admitted status"; fi
+    if output=$(bash scripts/dev-https.sh up 2>&1); then fail "$service exit admitted reuse"; fi
+    output=$(bash scripts/dev-https.sh down 2>&1) || fail "$service exit prevented group cleanup: $output"
+    [ ! -e .dev/native-https/run/session ] || fail "$service exit retained the drained session record"
+    cleanup_fixture "$fixture"
+    trap - EXIT
+  done
+)
+
+run_session_anchor_checks() (
+  local fixture record original output pid mutation foreign_pid phase tampered
+  fixture=$(new_fixture)
+  mv "$fixture" "$fixture with spaces"
+  fixture+=" with spaces"
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_SIGNAL_LOG=$fixture/signals FAKE_LATCH_LOG=$fixture/latch-attempts
+  export FAKE_ANCHOR_EXIT=$fixture/anchor-exited FAKE_DIAGNOSTICS_ENV=$BASH_ENV
+  export BASH_ENV=$fixture/signal-audit.sh
+  : >"$FAKE_SIGNAL_LOG"
+  : >"$FAKE_LATCH_LOG"
+  cat >"$BASH_ENV" <<'EOF'
+source "$FAKE_DIAGNOSTICS_ENV"
+kill() {
+  if [ "${1:-}" != -0 ]; then printf '%s\n' "$*" >>"$FAKE_SIGNAL_LOG"; fi
+  builtin kill "$@"
+}
+if [[ ${0##*/} = dev-https-session.sh ]]; then
+  trap 'printf "exited\n" >"$FAKE_ANCHOR_EXIT"' EXIT
+fi
+EOF
+  # Audit the real latch result so tampering spans monitor iterations on both
+  # hosts. A quick down alone can finish before the supervisor inspects it.
+  sed -n '/^latch_session_failure() {$/,/^}$/p' "$SOURCE_LIB_DIR/dev-https-identity.sh" |
+    sed '1s/latch_session_failure/fixture_latch_session_failure/' >>"$fixture/repo/scripts/lib/dev-https-identity.sh"
+  cat >>"$fixture/repo/scripts/lib/dev-https-identity.sh" <<'EOF'
+latch_session_failure() {
+  local status=0
+  fixture_latch_session_failure "$@" || status=$?
+  printf 'status=%s\n' "$status" >>"$FAKE_LATCH_LOG"
+  return "$status"
+}
+EOF
+  cd "$fixture/repo"
+  bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "anchor setup: $(cat "$fixture/up")"
+  detach bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
+  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
+  foreign_pid=$(<"$fixture/foreign-pid")
+  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  record=.dev/native-https/run/session
+  original=$(<"$record")
+  pid=$(sed -n 's/^pid=//p' "$record")
+  for phase in before-stop during-health; do
+    for mutation in 's/^launch_token=.*/launch_token=00000000000000000000000000000000/' \
+      's#^checkout=.*#checkout=/foreign checkout#' 's/^pgid=.*/pgid=1/' \
+      "s/^pid=.*/pid=$foreign_pid/;s/^pgid=.*/pgid=$foreign_pid/"; do
+      : >"$FAKE_LATCH_LOG"
+      if [ "$phase" = before-stop ]; then
+        sed "$mutation" <<<"$original" >"$record"
+        if output=$(bash scripts/dev-https.sh down 2>&1); then fail 'tampered anchor permitted stop'; fi
+      else
+        # Change the record after initial anchor validation, while stop checks
+        # health. Keep the real group and final signal helper in this path.
+        if output=$(FAKE_ANCHOR_MUTATION="$mutation" bash -c '
+          source scripts/dev-https.sh help >/dev/null
+          BASH_BIN=$(platform_realpath "$(command -v bash)")
+          session_health() {
+            local record
+            record=$(session_record)
+            sed "$FAKE_ANCHOR_MUTATION" "$record" >"$record.changed"
+            cat "$record.changed" >"$record"
+            rm "$record.changed"
+            return 1
+          }
+          stop_session
+        ' 2>&1); then fail 'anchor tampered during health permitted stop'; fi
+      fi
+      tampered=$(sed "$mutation" <<<"$original")
+      [ ! -s "$FAKE_SIGNAL_LOG" ] || fail 'tampered anchor reached a signal call'
+      [ "$(<"$record")" = "$tampered" ] || fail 'refused stop changed tampered evidence'
+      for _ in $(seq 1 100); do
+        [ ! -e "$FAKE_ANCHOR_EXIT" ] || fail 'supervisor exited after refusing a tampered record'
+        [ ! -s .dev/native-https/run/session.failed ] || break
+        [ "$(wc -l <"$FAKE_LATCH_LOG")" -ge 2 ] && break
+        sleep 0.1
+      done
+      [ -s .dev/native-https/run/session.failed ] || [ "$(wc -l <"$FAKE_LATCH_LOG")" -ge 2 ] ||
+        fail 'monitor did not retain or persist the observed failure'
+      kill -0 "$pid" || fail 'tampered anchor signalled the stack'
+      [ ! -s "$FAKE_SIGNAL_LOG" ] || fail 'tampered anchor reached a signal call'
+      [ ! -s "$FAKE_STOP_LOG" ] || fail 'tampered anchor signalled services'
+      printf '%s\n' "$original" >"$record"
+    done
+  done
+  for _ in $(seq 1 100); do [ -s .dev/native-https/run/session.failed ] && break; sleep 0.1; done
+  [ -s .dev/native-https/run/session.failed ] || fail 'restoring the record cleared the observed failure'
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'restored anchor prevented safe group stop'
+  assert_log_line "$FAKE_SIGNAL_LOG" "-TERM -- -$pid"
+  assert_log_line "$FAKE_SIGNAL_LOG" "-KILL -- -$pid"
+  bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "service identity setup: $(cat "$fixture/up")"
+  pid=$(sed -n 's/^pid=//p' "$record")
+  # A service PID must be a direct child of the anchor in the same group.
+  printf '%s\n' "$pid" >.dev/native-https/run/server.pid
+  if bash scripts/dev-https.sh status >/dev/null 2>&1; then fail 'anchor substituted for service admitted'; fi
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'service record tampering prevented safe group stop'
+  assert_log_line "$FAKE_SIGNAL_LOG" "-TERM -- -$pid"
+  assert_log_line "$FAKE_SIGNAL_LOG" "-KILL -- -$pid"
+  kill -0 "$foreign_pid" || fail 'owned stop signalled foreign group'
+  printf '123\n' >.dev/native-https/run/server.pid
+  if bash scripts/dev-https.sh up >/dev/null 2>&1; then fail 'legacy PID state admitted'; fi
+  [ -s .dev/native-https/run/server.pid ] || fail 'legacy evidence removed'
+)
+
+run_session_listener_checks() (
+  local fixture output phase
+  for phase in descendant before after inspection sibling completion; do
+    fixture=$(new_fixture)
+    trap 'cleanup_fixture "$fixture"' EXIT
+    fixture_env "$fixture"
+    cd "$fixture/repo"
+    [ "$phase" != descendant ] || export FAKE_LISTENER_CHILD=web
+    bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "listener setup: $(cat "$fixture/up")"
+    if [ "$phase" = descendant ]; then
+      bash scripts/dev-https.sh status >/dev/null 2>&1 || fail 'live descendant listener was rejected'
+      bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'descendant listener prevented stop'
+      unset FAKE_LISTENER_CHILD
+      cleanup_fixture "$fixture"
+      trap - EXIT
+      continue
+    fi
+    case $phase in
+    completion)
+      if bash scripts/dev-https.sh guard -- bash -c 'printf "20441\n" >"$1"' proof "$FAKE_FOREIGN_PORTS" >"$fixture/completion" 2>&1; then
+        fail 'successful command bypassed completion health check'
+      fi
+      ;;
+    sibling) : >"$fixture/sibling-listener" ;;
+    before) printf '20441\n' >"$FAKE_FOREIGN_PORTS" ;;
+    after) export FAKE_FOREIGN_AFTER_PROBE=1 ;;
+    inspection) printf 'malformed\n' >"$fixture/listener-mode" ;;
+    esac
+    if output=$(bash scripts/dev-https.sh status 2>&1); then fail "$phase listener loss admitted HTTP success"; fi
+    for _ in $(seq 1 60); do [ -s .dev/native-https/run/session.failed ] && break; sleep 0.1; done
+    [ -s .dev/native-https/run/session.failed ] || fail "$phase listener loss not latched"
+    : >"$FAKE_FOREIGN_PORTS"
+    rm -f "$fixture/listener-mode" "$fixture/sibling-listener"
+    unset FAKE_FOREIGN_AFTER_PROBE
+    if bash scripts/dev-https.sh status >/dev/null 2>&1; then fail 'readiness cleared listener latch'; fi
+    bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'listener latch prevented safe stop'
+    cleanup_fixture "$fixture"
+    trap - EXIT
+  done
+)
+
+run_session_recovery_checks() (
+  local fixture pid output record status
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_LEADER_EXITS_CHILD_IGNORES=server
+  cd "$fixture/repo"
+  bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "drain setup: $(cat "$fixture/up")"
+  status=0
+  bash scripts/dev-https.sh guard -- bash -c 'exit 7' >"$fixture/proof-exit" 2>&1 || status=$?
+  [ "$status" = 7 ] || fail 'guard lost command failure status'
+  pid=$(sed -n 's/^pid=//p' .dev/native-https/run/session)
+  kill -TERM "$pid"
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'TERM-resistant descendant prevented group drain'
+  ! ps -axo pgid= | awk -v g="$pid" '$1 == g { found=1 } END { exit !found }' || fail 'stop left group members'
+  [ ! -e .dev/native-https/run/session ] || fail 'drained record retained'
+  bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "recovery setup: $(cat "$fixture/up")"
+  record=$(<.dev/native-https/run/session)
+  pid=$(sed -n 's/^pid=//p' <<<"$record")
+  kill -KILL "$pid"
+  sleep 0.2
+  if output=$(bash scripts/dev-https.sh down 2>&1); then fail 'anchor loss allowed automatic signaling'; fi
+  [ "$(<.dev/native-https/run/session)" = "$record" ] || fail 'anchor loss discarded evidence'
+  grep -Fq 'manual recovery' <<<"$output" || fail 'anchor loss omitted recovery guidance'
+  kill -KILL -- "-$pid" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    if bash scripts/dev-https.sh down >/dev/null 2>&1; then break; fi
+    sleep 0.1
+  done
+  [ ! -e .dev/native-https/run/session ] || fail 'absent group record not cleaned'
+  unset FAKE_LEADER_EXITS_CHILD_IGNORES
+  bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "cycle setup: $(cat "$fixture/up")"
+  bash scripts/dev-https.sh guard --allow-stop -- bash -ec 'bash scripts/dev-https.sh down; bash scripts/dev-https.sh up; bash scripts/dev-https.sh down' >"$fixture/cycle" 2>&1 || fail "intentional stop/start failed: $(cat "$fixture/cycle")"
+  [ ! -e .dev/native-https/run/session ] || fail 'guarded cycle retained session'
+  [ ! -s "$FAKE_FORBIDDEN" ] || fail 'cleanup touched shared database'
+)
+
+# Force stop boundaries inside health inspection without launching a stack.
+run_proof_transition_checks() (
+  local fixture marker scenario allow_stop output token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa old=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  fixture=$(mktemp -d)
+  trap 'rm -rf -- "$fixture"' EXIT
+  ROOT=$fixture RUN_DIR=$fixture
+  marker=$RUN_DIR/proof.abcdefghij
+  # shellcheck disable=SC2034 # The sourced health helper reads the service list.
+  SERVICES=(server)
+  # shellcheck source=lib/dev-https-session.sh
+  source "$SOURCE_LIB_DIR/dev-https-session.sh"
+  # shellcheck source=lib/dev-https-identity.sh
+  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
+  validate_state_path_integrity() { :; }
+  validate_session_anchor() { validate_session_record; }
+  validate_service_listeners() {
+    case $scenario in
+    health | published-stop | forbidden-stop)
+      notify_proofs stopped || return 1
+      rm -f -- "$RUN_DIR/session.ready"
+      return 1
+      ;;
+    failed-stop) notify_proofs failed; return 1 ;;
+    unexpected-exit | stale-stop) return 1 ;;
+    esac
+  }
+  validate_effective_config() {
+    notify_proofs stopped || return 1
+    rm -f -- "$RUN_DIR/session.ready"
+    return 1
+  }
+  for scenario in health config published-stop forbidden-stop failed-stop unexpected-exit stale-stop; do
+    rm -f -- "$marker.stopped" "$marker.failed" "$RUN_DIR/session.failed" "$RUN_DIR/session.failed-service"
+    : >"$marker"
+    printf 'version=2\ncheckout=%s\npid=2\npgid=2\nlaunch_token=%s\n' "$ROOT" "$token" >"$RUN_DIR/session"
+    printf '%s\n' "$token" >"$RUN_DIR/session.ready"
+    # shellcheck disable=SC2034 # The sourced notifier reads the launch token.
+    SESSION_TOKEN=$token
+    case $scenario in
+    published-stop) notify_proofs stopped ;;
+    stale-stop) printf '%s\n' "$old" >"$marker.stopped" ;;
+    esac
+    allow_stop=1
+    [ "$scenario" != forbidden-stop ] || allow_stop=0
+    output=1
+    proof_health "$marker" "$allow_stop" && output=0
+    case $scenario in
+    health | config | published-stop)
+      [ "$output" = 0 ] || fail "$scenario rejected an intentional stop during inspection"
+      [ ! -e "$marker.failed" ] && [ ! -e "$RUN_DIR/session.failed" ] || fail 'intentional drain latched a service failure'
+      ;;
+    *)
+      [ "$output" = 1 ] || fail "$scenario admitted an unhealthy proof"
+      [ -e "$marker.failed" ] && [ -e "$RUN_DIR/session.failed" ] || fail "$scenario lost the failure latch"
+      ;;
+    esac
+  done
+)
+
+# A rejected proof must retain its anchor until TERM-resistant children die.
+run_proof_guard_checks() (
+  local fixture status group row pid state
+  fixture=$(mktemp -d)
+  trap 'if [ -s "$fixture/command-group" ]; then group=$(<"$fixture/command-group"); kill -KILL -- "-$group" 2>/dev/null || true; fi; rm -rf -- "$fixture"' EXIT
+  ROOT=$fixture RUN_DIR=$fixture/run
+  mkdir -p "$ROOT/scripts" "$RUN_DIR"
+  export PROOF_FIXTURE=$fixture
+  # shellcheck source=lib/dev-https-session.sh
+  source "$SOURCE_LIB_DIR/dev-https-session.sh"
+  cmd_status() { :; }
+  proof_health() { [ ! -e "$fixture/unhealthy" ]; }
+  cat >"$ROOT/scripts/dev-https.sh" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = proof-health ] && [ ! -e "$PROOF_FIXTURE/unhealthy" ]
+EOF
+  status=0
+  cmd_guard -- bash -c 'exit 7' >"$fixture/output" 2>&1 || status=$?
+  [ "$status" = 7 ] || fail 'guard lost the command failure status without a stack'
+  cat >"$fixture/command.py" <<'PY'
+import os, pathlib, signal, subprocess, sys, time
+root = pathlib.Path(sys.argv[1])
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+(root / "command-group").write_text(str(os.getpgrp()))
+child = subprocess.Popen([sys.executable, "-I", "-c", '''import pathlib, signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pathlib.Path(sys.argv[1]).touch()
+while True:
+    time.sleep(1)
+''', str(root / "child-ready")])
+(root / "child-pid").write_text(str(child.pid))
+deadline = time.monotonic() + 5
+while not (root / "child-ready").exists():
+    if time.monotonic() >= deadline:
+        sys.exit(2)
+    time.sleep(0.01)
+(root / "unhealthy").touch()
+while True:
+    time.sleep(1)
+PY
+  status=0
+  cmd_guard -- python3 -I "$fixture/command.py" "$fixture" >"$fixture/output" 2>&1 || status=$?
+  [ "$status" = 1 ] || fail 'unhealthy proof command passed'
+  [ -s "$fixture/child-pid" ] && [ -e "$fixture/child-ready" ] || fail 'guard cancellation did not reach the child handshake'
+  assert_not_contains "$(cat "$fixture/output")" BrokenPipeError
+  pid=$(<"$fixture/child-pid")
+  for _ in $(seq 1 50); do
+    row=$(platform_process_snapshot "$pid") || break
+    read -r _ _ _ _ _ state _ <<<"$row"
+    [[ $state != [ZX]* ]] || break
+    sleep 0.02
+  done
+  [ -z "$row" ] || [[ $state == [ZX]* ]] || fail 'proof cleanup left a live TERM-resistant descendant'
+)
+
+run_session_record_failure_checks() (
+  local fixture
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0700 .dev/native-https/run/session
+  if bash scripts/dev-https.sh up >"$fixture/up" 2>&1; then fail 'invalid session record permitted launch'; fi
+  [ ! -s "$fixture/all-pids" ] || fail 'record failure launched a service'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'record failure changed the stack'
+  rmdir .dev/native-https/run/session
+  export FIXTURE_PYTHON=$(command -v python3)
+  cat >"$fixture/fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ ${3:-} == */run/session ]]; then exit 88; fi
+exec "$FIXTURE_PYTHON" "$@"
+EOF
+  chmod 0700 "$fixture/fakebin/python3"
+  if bash scripts/dev-https.sh up >"$fixture/up" 2>&1; then fail 'failed publication admitted launch'; fi
+  [ ! -s "$fixture/all-pids" ] || fail 'publication failure started a service'
+)
+
 # Every check function in this file, in the order an unsharded run uses.
 # DEV_HTTPS_TEST_SHARD=<i>/<n> runs only the checks whose index in this array
 # (0-based) is congruent to i mod n; unset runs every one, in this order.
 readonly CHECKS=(
+  run_session_monitor_checks
+  run_session_anchor_checks
+  run_session_listener_checks
+  run_session_recovery_checks
+  run_session_record_failure_checks
+  run_proof_transition_checks
+  run_proof_guard_checks
   run_happy_path_and_lifecycle_checks
   run_foreign_listener_check
   run_listener_probe_failure_checks
@@ -1512,27 +1504,15 @@ readonly CHECKS=(
   run_route_drift_check
   run_missing_fragment_check
   run_fragment_drift_check
-  run_foreign_ownership_down_check
-  run_identity_field_tamper_check
-  run_process_group_drain_check
-  run_group_member_exit_race_check
-  run_group_member_identity_race_checks
-  run_member_token_open_race_check
-  run_process_member_state_check
   run_binary_drift_check
   run_lifecycle_command_drift_down_check
   run_partial_startup_rollback_check
-  run_identity_write_rollback_check
-  run_launch_completion_failure_rollback_check
-  run_immediate_precompletion_exit_rollback_check
-  run_absent_completed_launch_cleanup_check
   run_state_path_integrity_checks
   run_failed_build_retry_check
   run_mail_capture_failure_rollback_check
   run_server_after_capture_rollback_check
   run_mail_capture_binary_drift_check
   run_mail_capture_foreign_listener_check
-  run_mail_capture_group_drain_check
   run_secret_reuse_check
   run_secret_mode_check
   run_passkey_enrollment_flag_check
@@ -1583,30 +1563,37 @@ main() {
   bash "$SOURCE_ROOT/scripts/test/dev-https-diagnostics-test.sh"
   check_checks_array_is_complete
   case ${DEV_HTTPS_TEST_CASE-} in
+  session-anchor) run_session_anchor_checks; return ;;
+  session-monitor) run_session_monitor_checks; return ;;
+  session-listeners) run_session_listener_checks; return ;;
+  session-recovery) run_session_recovery_checks; return ;;
+  session-record) run_session_record_failure_checks; return ;;
+  proof-transitions) run_proof_transition_checks; return ;;
+  proof-guard) run_proof_guard_checks; return ;;
   browser-staging) run_browser_staging_checks; return ;;
   manifest) run_happy_path_and_lifecycle_checks; return ;;
   listener-probe) run_listener_probe_failure_checks; return ;;
   native-ports) run_normal_native_listener_without_pid_check; return ;;
   database) run_database_override_check; return ;;
-  identity) run_foreign_ownership_down_check; return ;;
-  identity-tamper) run_identity_field_tamper_check; return ;;
-  group-drain) run_process_group_drain_check; return ;;
-  member-exit-race) run_group_member_exit_race_check; return ;;
-  member-identity-races) run_group_member_identity_race_checks; run_member_token_open_race_check; run_process_member_state_check; return ;;
+  identity) run_session_anchor_checks; return ;;
+  identity-tamper) run_session_anchor_checks; return ;;
+  group-drain) run_session_recovery_checks; return ;;
+  member-exit-race) run_session_anchor_checks; return ;;
+  member-identity-races) run_session_anchor_checks; return ;;
   binary-drift) run_binary_drift_check; return ;;
   lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
   rollback) run_partial_startup_rollback_check; return ;;
-  identity-write-rollback) run_identity_write_rollback_check; return ;;
-  launch-completion-rollback) run_launch_completion_failure_rollback_check; return ;;
-  immediate-exit-rollback) run_immediate_precompletion_exit_rollback_check; return ;;
-  absent-completed-launch) run_absent_completed_launch_cleanup_check; return ;;
+  identity-write-rollback) run_session_record_failure_checks; return ;;
+  launch-completion-rollback) run_session_record_failure_checks; return ;;
+  immediate-exit-rollback) run_partial_startup_rollback_check; return ;;
+  absent-completed-launch) run_session_recovery_checks; return ;;
   path-integrity) run_state_path_integrity_checks; return ;;
   build-retry) run_failed_build_retry_check; return ;;
   mail-capture-rollback) run_mail_capture_failure_rollback_check; return ;;
   server-after-capture) run_server_after_capture_rollback_check; return ;;
   mail-capture-drift) run_mail_capture_binary_drift_check; return ;;
   mail-capture-foreign) run_mail_capture_foreign_listener_check; return ;;
-  mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;
+  mail-capture-group-drain) run_session_recovery_checks; return ;;
   secret-reuse) run_secret_reuse_check; return ;;
   secret-mode) run_secret_mode_check; return ;;
   passkey-flag) run_passkey_enrollment_flag_check; return ;;

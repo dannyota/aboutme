@@ -4,23 +4,11 @@
 # Sourced by scripts/dev-https.sh; defines functions and constants only.
 
 port_listening() {
-  local port=$1 listeners status
-  if listeners=$(ss -H -tln "sport = :$port" 2>/dev/null); then
-    :
-  else
-    status=$?
-    warn "listener probe for port $port failed because ss exited $status"
-    return 2
-  fi
-  [ -n "$listeners" ] || return 1
-  if ! awk -v port="$port" '
-    NF < 5 || $1 != "LISTEN" || $4 !~ (":" port "$") { bad=1 }
-    END { exit bad }
-  ' <<<"$listeners"; then
-    warn "listener probe for port $port returned malformed ss output"
-    return 2
-  fi
-  return 0
+  local status
+  platform_listener_pids "$1" >/dev/null && return 0
+  status=$?
+  [ "$status" = 1 ] || warn "listener probe for port $1 failed; ownership is unproved"
+  return "$status"
 }
 
 require_port_absent() {
@@ -97,7 +85,7 @@ CIMD
 }
 
 render_effective_config() {
-  local generated_route name file environment environment_mode caddy_bin npm_bin persisted_executable persisted_cmdline
+  local generated_route name environment environment_mode caddy_bin npm_bin
   generated_route=$(generate_caddyfile) || return 1
   caddy_bin=$(command -v caddy) || return 1
   npm_bin=$(command -v npm) || return 1
@@ -119,7 +107,7 @@ render_effective_config() {
   # Covers the entry point and every sourced library file, so editing any
   # of them while the harness is running is still detected as source drift.
   printf 'lifecycle_source_sha256=%s\n' \
-    "$(sha256sum "$ROOT/scripts/dev-https.sh" "$ROOT"/scripts/lib/dev-https-*.sh | sha256sum | awk '{print $1}')"
+    "$(sha256sum "$ROOT/scripts/dev-https.sh" "$ROOT"/scripts/lib/dev-https-*.sh "$ROOT/scripts/lib/platform.sh" | sha256sum | awk '{print $1}')"
   printf 'deployed_route_source_sha256=%s\n' "$(sha256_file "$CADDYFILE_SRC")"
   printf 'registry_source_sha256=%s\n' "$(sha256_file "$PUBLIC_ROOTS_REGISTRY")"
   printf 'generated_fragment_sha256=%s\n' "$(sha256_file "$PUBLIC_ROOTS_FRAGMENT")"
@@ -134,24 +122,14 @@ render_effective_config() {
   printf 'browser_supervisor_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/render-browser-supervisor")"
   printf 'caddy_tool_sha256=%s\n' "$(sha256_file "$caddy_bin")"
   printf 'npm_tool_sha256=%s\n' "$(sha256_file "$npm_bin")"
+  validate_session_record || return 1
+  printf 'session_checkout=%s\nsession_pid=%s\nsession_pgid=%s\nsession_launch_token=%s\n' "$ROOT" "$SESSION_PID" "$SESSION_PID" "$SESSION_TOKEN"
   for name in "${SERVICES[@]}"; do
-    file=$(identity_file "$name")
     environment=$(service_env_file "$name")
     environment_mode=$(stat -c '%a' "$environment" 2>/dev/null || true)
     [ "$environment_mode" = 600 ] || return 1
-    validate_identity_record "$name" || return 1
-    persisted_executable=$(identity_field "$file" expected_executable) || return 1
-    persisted_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
-    [ "$persisted_executable" = "$BASH_BIN" ] || return 1
-    [ "$persisted_cmdline" = "$(expected_service_cmdline_hash "$name")" ] || return 1
     printf '%s_environment_sha256=%s\n' "$name" "$(sha256_file "$environment")"
-    printf '%s_pid=%s\n' "$name" "$(identity_field "$file" pid)"
-    printf '%s_starttime=%s\n' "$name" "$(identity_field "$file" starttime)"
-    printf '%s_sid=%s\n' "$name" "$(identity_field "$file" sid)"
-    printf '%s_pgid=%s\n' "$name" "$(identity_field "$file" pgid)"
-    printf '%s_expected_executable=%s\n' "$name" "$persisted_executable"
-    printf '%s_expected_cmdline_sha256=%s\n' "$name" "$persisted_cmdline"
-    printf '%s_identity_token=%s\n' "$name" "$(identity_field "$file" identity_token)"
+    printf '%s_pid=%s\n' "$name" "$(read_pid "$name")"
   done
 }
 
