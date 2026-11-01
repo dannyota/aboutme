@@ -109,11 +109,48 @@ and a not-due result at 30 days left with nothing sent. A live successful renewa
 and its term arithmetic remain unverified; the response body alone is not proof
 of success.
 
-The [pinned wiki][wiki] owns the full JSON types, status/class literals, override
-names, and reference script. **Verify against the pinned wiki** before writing
-parsers or enabling credentialed use; those details were not supplied and were
-not fetched for this design. This is a contract-detail check, not a reopening of
-the satisfied release-evidence gate. Do not infer undocumented aliases.
+These contract sources and JSON goldens are pinned to v0.89.0. Wiki section
+names locate the matching guidance.
+
+- **Quota status snapshot:** [monitor/quotas_status.go][status-source], lines
+  16–34, defines `AsOf`, `Items`, `Complete`, and row keys `Kind`, `ClassName`,
+  `PackageName`, `Status`, `Quota`, `Price`, `StartTime`, `EndTime`,
+  `TimeLeftSeconds`, `AutoRenew`, `RenewWindowOpen`, `NextSafeCommand`, `Error`.
+  Fields from `Quota` through `RenewWindowOpen` and `Error` are nullable.
+  `Error` has `Code`, `Operation`, and integer `Status`. `TimeLeftSeconds` is a
+  signed integer or null ([status golden][status-golden], lines 5–32: `-1`, null).
+  Source lines 169–180 truncate seconds at `AsOf` toward zero.
+- **Quota status snapshot:** that source, lines 40–74, 90–131, and 155–165,
+  gives `Kind: "Synthetic"`, `ClassName: "Basic"`, and empty `PackageName`.
+  Present rows preserve raw status; [monitor/quotas.go][quota-source], lines
+  24–28, defines `ACTIVE` and `IN-TRASH`. Absence gives `none`, null data, and
+  exit 0; component failure gives `unavailable`, `Complete: false`, and exit 1
+  (`QuotaStatusIncomplete`), even for 401/404. See [Quota status snapshot][wiki-status]
+  and [internal/cli/errors.go][cli-errors], lines 203–207 and 570–573.
+  The window is known only for Basic, price 0, 10 API tests, one location; true
+  needs active, future expiry within seven days. It grants no write permission.
+  `NextSafeCommand` is a read hint.
+- **Quota reads:** JSON uses `.Quota.EndTime` and `.Quota.Status`, with status
+  `ACTIVE` in the [get golden][get-golden], lines 2–16. The output type is in
+  [monitor/quotas.go][quota-source], lines 128–131.
+  [internal/cli/svc_monitor.go][cli-render], lines 395–407 and 621–656, passes
+  SDK values to JSON rendering. `Class`, `PriceVND`, `StartUTC`, `EndUTC`, and
+  `TimeLeft` are table labels, never JSON aliases. See [Quota reads][wiki-reads].
+- **Unattended CI:** [monitor/quotas_renew.go][renew-source], lines 17–32,
+  defines renewal input and output; [monitor/quotas_outcome.go][outcome-source],
+  lines 13–72, defines `Sent`, `Stage`, and nullable `Error`; keys and combinations
+  are below. `PreviousEndTime` is an RFC 3339 timestamp
+  or null; `Quota` is an object or null; `OrderID` is a possibly empty string;
+  `PaymentPending` and `Renewed` are booleans; only confirmation sets `Renewed`
+  true. `Error.Operation` is `monitor.RenewSyntheticQuota`,
+  including pre-SDK failures ([internal/cli/main.go][cli-main], lines 46–115).
+  `Error.Status` is an integer, with 0 when absent; `NotSettled` can retain 200,
+  as the [renew golden][renew-golden], lines 1–14, shows. The [Unattended CI][wiki]
+  table, lines 308–323, and [internal/cli/errors.go][cli-errors], lines 570–670,
+  own exit mappings. **Synthetic recovery and renewal**, lines 248–275, covers
+  flags, eligibility, quote, and send-once rules; [internal/cli/main.go][cli-main],
+  lines 117–154, enforces price consent and refuses `--query`. **Unattended CI**,
+  lines 279–284 and 333–354, covers credentials and guard closure.
 
 ## Script and CLI contract
 
@@ -133,13 +170,17 @@ vngcloud --read-only monitor quota-status --kind synthetic --output json
 ```
 
 The raw expiry is `.Quota.EndTime`; preserve its exact string as `expiry`.
-`quota-status` reports `Status`, `Class`, `PriceVND`, `StartUTC`, `EndUTC`,
-`TimeLeft`, `AutoRenew`, `RenewWindowOpen`, and `NextSafeCommand`. JSON is the
-contract; never parse the table. Treat `NextSafeCommand` as data, never execute
-it. Require valid JSON, known active status, Basic class, a zero price, parseable
-UTC times, and agreement between the two expiry instants. Missing quota,
-unknown status/class, expired quota, or malformed/mismatched reads fail closed.
-Compute seconds left locally, not from display text `TimeLeft`.
+Require `.Quota.Status == "ACTIVE"`. For `quota-status --kind synthetic`, require
+`Complete == true` and exactly one item, identified by `Kind == "Synthetic"`.
+Require its `Error == null`, `Status == "ACTIVE"`, `ClassName == "Basic"`, numeric
+`Price == 0`, and non-null parseable `StartTime` and `EndTime`. Require agreement
+between both expiry instants. Validate the pinned types without replacing null
+with zero, false, or an empty string. Missing quota, unknown status/class, expired
+quota, or malformed/mismatched reads fail closed. Never parse table labels or
+execute `NextSafeCommand`. Compute both thresholds from the parsed `EndTime`
+minus current UTC time, preserving fractional seconds and accepting equivalent
+RFC 3339 offsets. `TimeLeftSeconds` may be null or negative and reflects `AsOf`,
+not the decision time; never use it for thresholds or require it to be positive.
 
 In `renew` mode, only a due quota with `RenewWindowOpen` true may invoke:
 
@@ -157,30 +198,41 @@ overlap a run. No Recover, Buy, or notification command is permitted.
 
 Renew stdout has exactly these top-level fields: `Sent`, `Stage`, `Error`,
 `PreviousEndTime`, `Quota`, `OrderID`, `PaymentPending`, `Renewed`.
-`Error` carries `Code`, `Operation`, and `Status` when populated. `--query` is
-refused. Validate one JSON object, its exact keys, types and allowed values
+`Error` is null or has exactly `Code`, `Operation`, and `Status`. Validate one
+JSON object, its exact keys, types and allowed combinations in the table
 against the pinned contract; never search arbitrary output for a safe field.
 Missing, invalid, contradictory, or unknown output retains an opened guard.
 Capture exit status separately; a nonzero exit does not imply no send.
 
-| Outcome                    | `Sent`        | `Stage`     | Error                            | CLI exit | Guard         |
-| -------------------------- | ------------- | ----------- | -------------------------------- | -------- | ------------- |
-| Not due                    | no            | not-due     | none                             | 0        | Close         |
-| Confirmed, `Renewed: true` | yes           | confirmed   | none                             | 0        | Close         |
-| Price refused              | no            | preflight   | PriceAboveMax / Unpriced         | 1        | Close         |
-| Stale expected end         | no            | preflight   | QuotaChanged                     | 1        | Close         |
-| Definite refusal           | yes           | refused     | Conflict 409; also 400, 403, 429 | 1        | Close         |
-| Uncertain                  | yes / unknown | unconfirmed | NotSettled                       | 1        | Keep          |
-| Proven not sent            | no            | preflight   | RequestFailed                    | 1        | Close         |
-| Unauthorized               | unspecified   | unspecified | 401                              | 3        | Classify JSON |
-| Not found                  | unspecified   | unspecified | 404                              | 4        | Classify JSON |
-| Usage, read-only, config   | unspecified   | unspecified | unspecified                      | 2        | Classify JSON |
-| Missing credentials, login | unspecified   | unspecified | unspecified                      | 3        | Classify JSON |
+This table allows the pinned wiki's **Unattended CI** combinations. Other SDK
+outputs remain unclassified and retain the hold under this workflow's policy.
+
+| Outcome | `Sent` | `Stage` | `Error.Code` (`Error.Status`) | CLI exit | Guard |
+| --- | --- | --- | --- | --- | --- |
+| Outside positive MaxDaysLeft | no | not-due | null `Error` | 0 | Close |
+| Confirmed, `Renewed: true` | yes or retained unknown | confirmed | null `Error` | 0 | Close |
+| Price refused | no | preflight | PriceAboveMax or Unpriced (0) | 1 | Close |
+| Stale guard or changed final terms | no | preflight | QuotaChanged (0) | 1 | Close |
+| Mismatched unresolved prior attempt | retained yes or unknown | unconfirmed | NotSettled (retained status or 0) | 1 | Keep |
+| Definite mutation refusal | yes | refused | Conflict (409), BadRequest (400), Forbidden (403), Throttled (429) | 1 | Close |
+| Mutation auth or missing quota refusal | yes | refused | Unauthorized (401), NotFound (404) | 3, 4 respectively | Close |
+| Accepted NoWait | yes | accepted | null `Error` | 0 | Keep; fail run |
+| Response seen, settlement unconfirmed | yes | unconfirmed | NotSettled (mutation status, else cause status or 0) | 1 | Keep |
+| Possible send without a response | unknown | unconfirmed | NotSettled (0) | 1 | Keep |
+| Proven not sent | no | preflight | RequestFailed (0) | 1 | Close |
+| Input, consent, read-only, config refusal | no | preflight | InvalidUsage, ReadOnly, InvalidConfig (0) | 2 | Close |
+| Missing credentials or token exchange failure | no | preflight | NoCredentials or ServiceAccountLoginFailed (status or 0) | 3; canceled exchange 1 | Close |
+| Other pre-send failure | no | preflight | TokenCacheFailed, RequestFailed, UnexpectedStatus (0); NotFound (404); BadRequest, Unauthorized, Forbidden, Conflict, Throttled, ServerError, ClientError, InvalidResponse, ResponseTooLarge (source status) | 1; auth 3, NotFound 4 | Close |
+
+`Sent` strings are `no`, `yes`, `unknown`; retained describes prior evidence.
+Only `confirmed` has `Renewed == true`. `accepted` cannot pass this workflow,
+which never sets `NoWait`. Preflight failures emit the full object. The
+lowercase stderr `error` envelope is separate from the stdout outcome.
 
 The only closure predicate for valid output is `Sent == "no"` with stage
 `not-due` or `preflight`, or stage `refused`, or stage `confirmed` with
 `Renewed == true`. Anything else keeps the hold. HTTP status and CLI exit alone
-never authorize closure; in particular, 401/404 or exit 2/3 may lack usable JSON.
+never authorize closure; interrupted or broken output may lack usable JSON.
 A definite refusal proves the request was rejected, not that it was unsent.
 
 Only valid not-due or confirmed output with CLI exit 0 can proceed toward
@@ -317,6 +369,12 @@ ADR 0026; it does not grant secrets to `ci.yml` or its reusable jobs.
 Add `scripts/test/vmonitor-renew-test.sh`, with fake CLI, issue API, and clock.
 Cover 72/48-hour boundaries, delayed runs, invalid action/read/status/class/time,
 expiry, mismatched reads, check-only behavior, and every outcome/exit above.
+Use pinned golden JSON and types. Reject table aliases, wrong casing, missing or
+duplicate Synthetic rows, incomplete snapshots, `none`, and `unavailable`.
+Cover null fields, `TimeLeftSeconds` null/-1/0, stale `AsOf`/counter values,
+fractional seconds, and equivalent offsets; thresholds must use `EndTime` and
+current time. Cover retained `unknown` confirmation, `accepted`, preflight
+auth/config failures, canceled login, error operations, and `NotSettled` 200.
 Assert exact argv, preserved expected-end string, at most one renewal invocation
 and zero resends, no writes before verified guard creation, and strictly later
 read-back for success. Test confirmed output followed by failed health read:
@@ -336,8 +394,8 @@ must never become a credential-bearing dependency of `ci.yml`.
 Release order:
 
 1. Land the accepted ADR amendment and this reviewed design. The pinned CLI
-   release-evidence gate is satisfied; verify remaining wiki details and IAM
-   reads/quote dependencies. Inspect environment metadata and narrowed grants.
+   release-evidence gate is satisfied and JSON details are pinned above; verify
+   IAM reads/quote dependencies, environment metadata, and narrowed grants.
 2. Create the initially open hold issue. Merge the workflow, script, and tests
    with **no schedule trigger**, independent adversarial review, and green CI.
 3. Run `action=check` on main with credentials. It may pass healthy reads while
@@ -355,8 +413,8 @@ Release order:
 No additional product choice needs owner approval. The owner controls initial
 arming and hold recovery. Pin changes, permission widening, paid renewal,
 recovery automation, or a wider credential exception require a new reviewed
-decision. Wiki details, revocation timing, provider limits, and live term
-arithmetic remain explicit verification items.
+decision. Revocation timing, provider limits, and live term arithmetic remain
+explicit verification items.
 
 [Synthetic]:
   https://docs.greennode.ai/vmonitor/dashboards/synthetics/lam-viec-voi-synthetic-test-quota
@@ -376,3 +434,15 @@ arithmetic remain explicit verification items.
 [cli-ci]: https://github.com/dannyota/vngcloud/actions/runs/41290218076
 [wiki]:
   https://github.com/dannyota/vngcloud/blob/v0.89.0/docs/wiki/Monitor-Quotas.md#unattended-ci
+[wiki-status]: https://github.com/dannyota/vngcloud/blob/v0.89.0/docs/wiki/Monitor-Quotas.md#quota-status-snapshot
+[wiki-reads]: https://github.com/dannyota/vngcloud/blob/v0.89.0/docs/wiki/Monitor-Quotas.md#quota-reads
+[status-source]: https://github.com/dannyota/vngcloud/blob/v0.89.0/monitor/quotas_status.go
+[quota-source]: https://github.com/dannyota/vngcloud/blob/v0.89.0/monitor/quotas.go
+[renew-source]: https://github.com/dannyota/vngcloud/blob/v0.89.0/monitor/quotas_renew.go
+[outcome-source]: https://github.com/dannyota/vngcloud/blob/v0.89.0/monitor/quotas_outcome.go
+[cli-render]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/svc_monitor.go
+[cli-main]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/main.go
+[cli-errors]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/errors.go
+[status-golden]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/testdata/golden/monitor-quota-status.json.golden
+[get-golden]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/testdata/golden/monitor-get-synthetic-quota.json.golden
+[renew-golden]: https://github.com/dannyota/vngcloud/blob/v0.89.0/internal/cli/testdata/golden/monitor-renew-synthetic-quota.json.golden
