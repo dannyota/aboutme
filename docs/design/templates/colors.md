@@ -123,20 +123,18 @@ because their execution costs differ:
 - **SSR string goldens: every preset, both pagination modes.** They are cheap,
   deterministic, and byte-diffable, and they are what pins the per-surface
   resolution above for the presets that tint.
-- **Screenshot baselines: a named representative subset, roughly six presets,
-  plus the continuous-mode case.** The subset is named explicitly in the golden
-  and Playwright suites, not derived at run time, and is chosen against
-  `contract.md` §8 so that it covers at minimum one one-column preset, one
-  two-column preset, one tinted sidebar (`fixtures/full.json`,
-  `surfaceTarget: "sidebar"`), one tinted header (`surfaceTarget: "header"`),
-  one Letter page, and one dense/small-type preset. Every preset prints on A4,
-  so the Letter cell comes from a harness-only override:
-  `consulting-formal--vn-full--letter--paged` requests `paper=letter` on
-  `/_harness/render`, which forces `customization.pageFormat` after the preset
-  applies. A preset outside the subset is still covered by string goldens; what
-  it loses is pixel-level regression detection.
-- Browser acceptance tests exercise **the same named subset**, not all twenty
-  presets, so the three coverage surfaces cannot drift apart.
+- **Display assertions: the named representative subset.**
+  [Display assertions](../display-assertions.md) owns the exact screen/PDF
+  inventory and cross-platform proof. It includes one- and two-column layouts,
+  tinted sidebar/header, Letter, dense type, and continuous mode. Independent
+  computed colors and PDF paint checks replace pixel equality only after
+  acceptance; existing comparisons stay required until cutover. A preset outside
+  the subset keeps string goldens, not full browser display coverage. Every
+  preset prints on A4; the Letter cell uses the harness-only
+  `consulting-formal--vn-full--letter--paged` override with `paper=letter` on
+  `/_harness/render`, setting `customization.pageFormat` after the preset.
+- Browser acceptance uses the same named subset. Keep its inventory aligned with
+  the display contract rather than deriving coverage at runtime.
 
 ## 5. Accessibility floor
 

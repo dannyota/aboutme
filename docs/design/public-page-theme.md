@@ -387,21 +387,14 @@ cases:
 The ATS text is the same in both schemes: the scheme changes only colors, never
 the DOM order, text, or hidden state.
 
-## Baselines and tests
+## Display checks and tests
 
-| Artifact                                      | Page bar  | Color scheme                        |
-| --------------------------------------------- | --------- | ----------------------------------- |
-| `public--classic-serif--2560.png`             | Changes   | Unchanged (light)                   |
-| `public--modern-sidebar--2560.png`            | Changes   | Unchanged (light)                   |
-| `public--modern-sidebar--390.png`             | Changes   | Unchanged (light)                   |
-| New `public--modern-sidebar--dark--390.png`   | n/a       | New                                 |
-| New `public--creative-accent--dark--1440.png` | n/a       | New                                 |
-| New `public--executive-band--dark--1440.png`  | n/a       | New                                 |
-| New `public--classic-serif--system--1440.png` | n/a       | New, with emulated dark preference  |
-| Every `*--paged.png` and `*--continuous.png`  | Unchanged | Unchanged                           |
-| `print-baselines/`, `chrome--*`, `template-*` | Unchanged | Unchanged                           |
-| Golden HTML for every preset                  | Unchanged | Unchanged; no fixture sets a scheme |
-| Public render assertions in `render.test.ts`  | Change    | New dark and system cases           |
+[Display assertions](display-assertions.md) owns the accepted screen/PDF
+inventory, owner-scheme/viewer-preference matrix, and independent expected
+colors. It replaces public page PNG comparisons only after Linux/macOS
+acceptance. Until cutover, keep the existing light, dark, and system comparisons
+and golden HTML. Paged, print, template, card, gate, and landing surfaces remain
+light; the assertion change does not alter visual values or schema behavior.
 
 Tests to add or change:
 

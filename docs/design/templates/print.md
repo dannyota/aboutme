@@ -145,7 +145,7 @@ grid containers across print pages is its least reliable behavior. The golden
 set must therefore include a two-column fixture whose sidebar alone overflows
 one page, and one whose `main` alone does. If Chromium's behavior diverges from
 the rules above, preserve the failing output as review evidence and block the
-release. Do not replace the accepted baseline with the divergent output. The
+release. Do not replace accepted expectations with divergent output. The
 correction is a shared print layout or a reviewed design change, never a
 per-template workaround.
 
@@ -191,13 +191,16 @@ general outbound network access. Everything the page needs must arrive with it.
 
 ## 7. Determinism
 
-Golden HTML snapshots and Playwright screenshot diffs ([web design](../web.md))
-are only meaningful if the same document renders to the same bytes. Every input
-that can vary is pinned.
+Golden HTML and same-environment output determinism remain required. The
+accepted [display assertions](../display-assertions.md) replace pixel
+comparisons after Linux/macOS acceptance, using semantic PDF text, page
+membership, geometry, and narrow paint checks. Existing comparisons remain until
+cutover. Pin every varying input; cross-platform assertions do not promise
+byte-identical PDFs across operating systems.
 
 | Input              | Pin                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Chromium           | image digest, per the [engineering standard](../../standards/engineering.md); a browser upgrade is a reviewed snapshot change  |
+| Chromium           | image digest, per the [engineering standard](../../standards/engineering.md); a browser upgrade needs reviewed output evidence |
 | Fonts              | self-hosted catalog; 400/700 requested with synthesis disabled and a bundled fallback for missing faces (`tokens.md` §3.2)     |
 | Text layer         | common ligatures off, so `ff` and `fi` extract as two letters and a keyword search matches                                     |
 | Font loading       | `await document.fonts.ready` before print                                                                                      |

@@ -16,15 +16,13 @@ non-pixel checks. No product layout, copy, API, schema, or runtime browser
 change is proposed. Older clients and saved resumes need no migration or
 fallback.
 
-[ADR 0019](../adr/0019-application-ui-toolkit.md) requires unchanged renderer
-screenshot suites for chrome changes;
-[ADR 0020](../adr/0020-application-visual-identity.md) also names baselines.
-[ADR 0024](../adr/0024-delivery-gates.md), `instructions/workflow.md` and
-`instructions/resources.md` restrict local browser execution. The combined
-authority job amends all three ADRs with History entries and updates those
-instructions before activation. Preserve renderer isolation, visual values and
-exact-commit hosted release CI. These proposals do not themselves change the
-accepted records or authorize execution.
+[ADR 0019](../adr/0019-application-ui-toolkit.md),
+[ADR 0020](../adr/0020-application-visual-identity.md), and
+[ADR 0024](../adr/0024-delivery-gates.md) record the owner-approved amendments
+with History entries dated 2026-11-01. Preserve renderer isolation, visual
+values, and exact-commit hosted release CI. Implementation remains pending;
+existing comparisons stay required until the replacement passes acceptance and
+cutover lands. The authority update authorizes no execution.
 
 Keep [template contracts](templates/contract.md), [tokens](templates/tokens.md),
 [colors](templates/colors.md), [print rules](templates/print.md),
@@ -111,7 +109,7 @@ geometry, not fixed sleeps or test retries. Playwright documents
 [retrying assertions](https://playwright.dev/docs/test-assertions) and
 [viewport-relative bounding boxes](https://playwright.dev/docs/api/class-locator#locator-bounding-box).
 
-| Property          | Required assertion and proposed tolerance                                                                                                                                                                                                                                                                                                        |
+| Property          | Required assertion and accepted tolerance                                                                                                                                                                                                                                                                                                        |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Geometry          | Positive visible boxes; edges, widths, fixed spacing and alignment within 1 CSS px; centering within 2 px. Measure transformed thumbnails in viewport coordinates and convert back by their explicit scale for paper checks. No whole-page coordinate snapshot.                                                                                  |
 | Overflow/clipping | Root and named content containers: `scrollWidth <= clientWidth + 1`; constrained vertical boxes: `scrollHeight <= clientHeight + 1`. Text `Range.getClientRects()` must remain inside the nearest content/clip rectangle within 1 px. Assert visible display, opacity and nonzero text bounds too. Root overflow alone misses `overflow:hidden`. |
@@ -188,7 +186,8 @@ path. Both native runners follow
 [native admission and account](local-tooling-simplification.md#native-admission-and-account):
 owner-written/reviewed commits, disposable builds/profiles, explicit environment
 and test credentials. Contributor heads use hosted CI. Resource changes follow
-the combined authority job; until activation, existing lock/cap rules apply.
+the accepted tooling amendment; existing callers retain their lock/cap behavior
+until wrapper integration lands.
 [Playwright supports macOS and Linux](https://playwright.dev/docs/intro#system-requirements);
 the repository's native run and these tolerances are not yet proven.
 
@@ -212,11 +211,11 @@ paint is wrong. Narrow paint checks reduce that gap but cannot eliminate it.
 [Playwright warns that screenshots vary with the environment](https://playwright.dev/docs/test-snapshots).
 Non-pixel checks remove that source of comparison noise, not all layout drift.
 
-Recommend eight optional, non-blocking manual-review images per run: Vietnamese
-public modern-sidebar dark 390; English public executive-band light 1440;
-Vietnamese home light 390; English showcase dark 1440; English Library filter
-sheet light 390; Vietnamese sign-in error 390; page two of each overflow PDF.
-Store only sanitized artifacts for 14 days, no committed diagnostic PNGs or
+The owner accepted eight optional, non-blocking manual-review images per run:
+Vietnamese public modern-sidebar dark 390; English public executive-band light
+1440; Vietnamese home light 390; English showcase dark 1440; English Library
+filter sheet light 390; Vietnamese sign-in error 390; page two of each overflow
+PDF. Store only sanitized artifacts for 14 days, no committed diagnostic PNGs or
 expected/actual/diff triplets. Failure capture is limited to failed cases and
 uses the existing collector bounds; raw traces/HTML/console/PDF stay unuploaded.
 Capture failure cannot turn a failed assertion green. Optional capture failure
@@ -228,34 +227,34 @@ identity in sanitized metadata. Do not upload arbitrary attachments by glob.
 
 ## Migration
 
-First approve authority changes, then add replacement assertions alongside the
-old gate. Prove every inventory cell and mutation below; validate native and
-Linux runs. Split product image generation before removing `web-e2e-update`.
+Authority amendments are accepted. Add replacement assertions alongside the
+existing gate. Prove every inventory cell and mutation below; validate native
+and Linux runs. Split product image generation before removing `web-e2e-update`.
 Then delete test baselines, comparison helpers and Baselines workflow together;
 retain `web-e2e` and `web-e2e-fast` names and both shard selections. No baseline
 update mode remains in either test target. Release only after exact-commit CI.
 
 Product PNGs in `public/templates/pages/` are served by Library and PDF tabs.
-Recommend keeping those 26 committed assets, outside baseline testing, with a
-separate explicit generator. Record renderer/sample/font/browser source hashes
-in the manifest and fail stale inputs without comparing pixels. Generation uses
-pinned Linux for consistent delivery and requires manual inspection. Keep the
-manifest's array shape and existing fields; add source and output SHA-256 fields
-per entry. Hash sorted paths and bytes for the generator, renderer, render
-utilities, schema/template/sample inputs, bundled fonts, Nuxt configuration and
-lockfile, plus browser image digest and PDF flags. Exclude output PNGs and the
-manifest from the source hash. Validate each output file's hash, dimensions and
-page order without regenerating images in test mode. `make web-template-pages`
-builds the harness from the clean source archive in the pinned Linux image, then
-runs `node scripts/generate-template-pages.mts` from `apps/web`. Output goes
-only to an explicit candidate directory. `template-pages.yml` is
-manual-dispatch, read-only, with no commit/push step. On success it uploads only
-the validated 26 PNGs, manifest and source metadata for 14 days. Inspect that
-exact-commit artifact, copy only product assets and manifest into their owned
-paths, then rerun CI; failed generation uploads none. Existing URLs and manifest
-consumers remain compatible. Eliminating these PNGs from Git too requires a
-separate asset delivery decision; never delete them with the test fixtures.
-Showcase test card images become ephemeral fixtures.
+Keep those 26 committed assets, outside baseline testing, with a separate
+explicit generator, as accepted by the owner. Record renderer, sample, font, and
+browser source hashes in the manifest and fail stale inputs without comparing
+pixels. Generation uses pinned Linux for consistent delivery and requires manual
+inspection. Keep the manifest's array shape and existing fields; add source and
+output SHA-256 fields per entry. Hash sorted paths and bytes for the generator,
+renderer, render utilities, schema/template/sample inputs, bundled fonts, Nuxt
+configuration and lockfile, plus browser image digest and PDF flags. Exclude
+output PNGs and the manifest from the source hash. Validate each output file's
+hash, dimensions and page order without regenerating images in test mode.
+`make web-template-pages` builds the harness from the clean source archive in
+the pinned Linux image, then runs `node scripts/generate-template-pages.mts`
+from `apps/web`. Output goes only to an explicit candidate directory.
+`template-pages.yml` is manual-dispatch, read-only, with no commit/push step. On
+success it uploads only the validated 26 PNGs, manifest and source metadata for
+14 days. Inspect that exact-commit artifact, copy only product assets and
+manifest into their owned paths, then rerun CI; failed generation uploads none.
+Existing URLs and manifest consumers remain compatible. Eliminating these PNGs
+from Git too requires a separate asset delivery decision; never delete them with
+the test fixtures. Showcase test card images become ephemeral fixtures.
 
 ## Proof and cost
 

@@ -24,17 +24,12 @@ Vietnamese as the default. These surfaces reuse the `aboutme-locale` cookie.
 Interface language does not change resume content or resume language. See
 [localization](../design/localization.md).
 
-The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
-(`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature
-blue-black actions (`#1F2A44` in light mode and `#D7DEEE` in dark mode). Dark
-mode uses a lamp-lit desk (`#121614`) and panels (`#1A1F1C`); the renderer keeps
-its own document background. `Be Vietnam Pro`, then Inter and system fallbacks,
-is the chrome font. `AppSeal` is the only public-state red mark (`#C8102E`): its
-round SVG seal carries the public link, while `StateMark` uses the seal for
-public resumes and a pencil tick or text for saved, saving, failed, and draft
-states. Publish and destructive actions keep their distinct controls. The
-landing page renders a compiled-in Ada Lovelace sample through the pure renderer
-at server render and shows the seal without a data fetch.
+[ADR 0020](../adr/0020-application-visual-identity.md) owns the chrome palette,
+typeface, seal, and state marks; the
+[UI specs](../design/ui/identity-and-seal.md) define their presentation. The
+renderer keeps its own document background. Publish and destructive actions keep
+distinct controls. The landing page renders a compiled-in sample through the
+pure renderer at server render and shows the seal without a data fetch.
 
 The chrome follows an 8 px module and keeps the preview sheet whole. At narrow
 widths the editor collapses its tool rail and outline, switches between Edit and
@@ -147,3 +142,9 @@ tolerance, all bundled fonts offline, the hostile corpus in a live DOM, and the
 renderer CSP against both harness and normal Nuxt output. Its reviewed manifest
 builds an immutable source archive from the exact commit and excludes the
 worktree, Git metadata, local state, and secret-like paths.
+
+[Display assertions](../design/display-assertions.md) is the accepted
+replacement for these pixel comparisons. Implementation and Linux/macOS
+acceptance remain pending; the existing gate above remains required until
+cutover. Golden HTML, renderer isolation, and production determinism stay.
+Product page images remain served assets with a separate generator planned.

@@ -4,6 +4,12 @@ Each owning component enforces its rows. Production measurements repeat latency
 and resource checks on the real host. A hard-budget breach fails the gate;
 changing a number requires a reviewed change with evidence.
 
+Laptop RSS/nice removal under [local tooling](local-tooling-simplification.md)
+does not change these runtime, container, media, queue, or host limits. The
+accepted `server-runtime-smoke` CI addition remains pending implementation; its
+[startup/idle contract](local-tooling-simplification.md#production-runtime-coverage)
+adds bounded evidence, not a throughput or combined-host capacity proof.
+
 ## Operating budget
 
 Production uses the Vietnam host under

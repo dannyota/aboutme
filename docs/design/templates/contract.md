@@ -376,13 +376,16 @@ Rules the above encodes:
 
 ## 8. Conformance — what a preset must ship
 
-| Artifact                              | Requirement                                                                               |
-| ------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `packages/schema/templates/<id>.json` | validates against the preset schema; all eight customization keys plus `layout.placement` |
-| golden HTML snapshots                 | populated one- and two-column starting states of `full` × both modes × this preset        |
-| browser screenshot diff               | build-only renderer harness, for the named representative subset in `colors.md` §4.2      |
-| focused renderer tests                | draft emptiness, optional fields, one and two columns, and empty-sidebar behavior         |
-| contrast check                        | the preset's own colors satisfy `colors.md` §5 before clamping                            |
+| Artifact                              | Requirement                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `packages/schema/templates/<id>.json` | validates against the preset schema; all eight customization keys plus `layout.placement`        |
+| golden HTML snapshots                 | populated one- and two-column starting states of `full` × both modes × this preset               |
+| browser display assertions            | build-only harness; named subset and migration in [display assertions](../display-assertions.md) |
+| focused renderer tests                | draft emptiness, optional fields, one and two columns, and empty-sidebar behavior                |
+| contrast check                        | the preset's own colors satisfy `colors.md` §5 before clamping                                   |
+
+Existing screenshot comparisons remain required until replacement acceptance and
+cutover. Golden HTML and the presentation contract remain unchanged.
 
 A preset that needs a renderer change is not a preset. Raise it as a contract
 change, not as a template.

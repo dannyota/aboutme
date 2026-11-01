@@ -1,22 +1,26 @@
 # Local HTTPS checks
 
-Status: **available for feature verification**. Native authenticated checks run
-at `https://localhost:20443`. Complete product checks run in production, per
+Status: **Linux container browser checks available for feature verification**.
+The native service stack uses `https://localhost:20443`; a native macOS browser
+runner is accepted but pending integration and runtime acceptance. Complete
+product checks run in production, per
 [ADR 0026](../adr/0026-vietnam-hosted-production.md). No host sysctl change is
 needed.
 
 Keep Secure cookies, normal TLS verification, and the local network allowlist.
 The HTTP Compose smoke does not prove authenticated browser behavior.
 
-## Native HTTPS feature checks
+## HTTPS feature checks
 
 The available native harness proves real Secure-cookie authentication and
 user-authorized MCP agent access at `https://localhost:20443`. It uses the one
 shared `aboutme-test-db` container and only its `aboutme_dev` database. It
 starts or reuses that container and leaves it running after teardown.
 
-Run the exact sequence from the repository root while no other native stack or
-heavy browser/build worker is active:
+The commands below describe the existing Linux container path. Agent execution
+needs a bounded primary brief under
+[resources](../../instructions/resources.md). Run from the repository root while
+no other native stack or conflicting browser/build worker is active:
 
 ```sh
 make dev-native-down
@@ -94,7 +98,7 @@ diagnostics.
 
 The image bakes only the pinned browser, dependencies, and `run.sh`; spec
 sources are staged and mounted read-only per run by
-`scripts/dev-https-check.sh`. Editing a spec therefore needs no image rebuild —
+`scripts/dev-https-check.sh`. Editing a spec therefore needs no image rebuild;
 rerun the check directly. Rebuild the image (`make dev-https-browser-image`)
 only when `Dockerfile`, `run.sh`, or the package manifests change; the check
 fails closed with "browser image sources changed" when a rebuild is required.
@@ -125,15 +129,45 @@ removes its synthetic accounts through the API and its reserved OAuth client
 through the fixture cleanup. `privacy-proof.json` is mode 0600, at most 8,192
 bytes, and contains only fixed step booleans and error counters.
 
-For renderer specs, `make web-e2e-fast` iterates in the pinned browser against
-the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,
-`PLAYWRIGHT_WORKERS=4` parallelizes files, `PLAYWRIGHT_SKIP_BUILD=1` reuses the
-last Nuxt build for spec-only edits). It is a development loop, not a gate; the
-hermetic `make web-e2e` remains the gate.
+Until display integration, `make web-e2e-fast` iterates in the pinned Linux
+browser against the working tree without the hermetic tar.
+`ARGS="print.spec.ts"` selects specs, `PLAYWRIGHT_WORKERS=4` parallelizes files,
+and `PLAYWRIGHT_SKIP_BUILD=1` reuses the last Nuxt build for spec-only edits. It
+is a development loop, not a gate; hermetic `make web-e2e` remains the gate.
 
 This check supports authenticated feature development. Complete product and
 operational acceptance happen in production; see the
 [handoff below](#handoff-to-production).
+
+## Accepted native macOS path, pending
+
+After session ownership, native runner, and integration changes land and pass
+acceptance, `make dev-https` and `dev-https-*-check` select native execution on
+Darwin. The pending `make dev-https-browser-install` prepares the locked
+Chromium/WebKit builds in a private checkout-local path before startup. Do not
+substitute a system browser or fall back after failure.
+
+Follow the
+[native admission and account contract](../design/local-tooling-simplification.md#native-admission-and-account):
+clean owner-written/reviewed commits, disposable builds/profiles, explicit
+test-only environments, and no production credentials. Contributor heads use
+hosted CI. Attended Chromium profile-only CA import must pass strict TLS probes;
+never change host trust or bypass certificate checks.
+
+The
+[server-rendering exclusions](../design/local-tooling-simplification.md#server-rendering)
+skip the whole exports and privacy journeys and two coupled public journeys.
+Native HTTPS WebKit also skips. Native results report `PARTIAL` and never
+satisfy Linux aggregate completeness; portable steps inside excluded journeys
+are not locally proved. Production proof commands remain on their existing
+container path.
+
+The accepted [display contract](../design/display-assertions.md) keeps `web-e2e`
+and `web-e2e-fast`, with native Chromium harness PDFs on Mac. Retain existing
+comparisons until Linux/macOS inventory and mutation acceptance passes. Stop old
+stacks with old helpers before session migration; preserve shared DB, keys, and
+media. Ambiguous ownership needs manual recovery, never name-based kills. This
+runbook update authorizes no local run.
 
 ## Current Compose smoke check
 
@@ -168,9 +202,9 @@ this handoff or stops the shared database.
 ## Handoff to production
 
 These checks remain local and use only the shared development database. Never
-point their seed, reset, or cleanup commands at AWS.
+point their seed, reset, or cleanup commands at any production service.
 
-The migration baseline marker is committed before the first production
-migration. The [single-host design](../design/single-host-production.md) owns
-the deploy and launch checks. Use the [email runbook](email.md) for the existing
-SES setup; native feature checks never contact SES.
+The [Vietnam production design](../design/vietnam-production.md) and
+[production runbook](production.md) own deploy and launch checks under ADR 0026.
+The [email runbook](email.md) owns Bizfly production mail; native feature checks
+use only loopback mail capture.

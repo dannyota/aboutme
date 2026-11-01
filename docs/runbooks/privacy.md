@@ -105,10 +105,11 @@ point as a non-root, read-only container with no added capabilities.
 `make native-http-check` removes its isolated fixture database and leaves the
 shared development database running.
 
-`make dev-https-privacy-check` passed all 11 steps with zero certificate,
-console, page, or external-request errors. The 355-byte verdict is retained
-locally at `.dev/native-https/evidence/privacy.cUOMot/privacy-proof.json` with
-mode 0600. Its staged-source aggregate SHA-256 is
+The retained Linux container-browser evidence for `make dev-https-privacy-check`
+passed all 11 steps with zero certificate, console, page, or external-request
+errors. The 355-byte verdict is retained locally at
+`.dev/native-https/evidence/privacy.cUOMot/privacy-proof.json` with mode 0600.
+Its staged-source aggregate SHA-256 is
 `a50fd2ad860c416cbb76897cb1b5f7a0fc823eacf6fc3eab9c18678524a2d761`. The
 individual `privacy.spec.ts` SHA-256 is
 `dabc77b3cd837edcb1f4e03e97677764f2b81bbc0f52ecaca7f0b510eaa477e8`. The check
@@ -116,10 +117,17 @@ uses one forced `reauth_required` response before real provider reauthentication
 and a fresh confirmed deletion. The live database API suite proves refusal of an
 actually stale session.
 
-The same build passed all ten native HTTPS modes: auth, transport, editor, MCP,
-entry, public, publish, password, exports, and privacy. The editor proof
-includes template partial recovery and the photo lifecycle after realtime
+The same build passed all ten HTTPS container-browser modes: auth, transport,
+editor, MCP, entry, public, publish, password, exports, and privacy. The editor
+proof includes template partial recovery and the photo lifecycle after realtime
 adoption.
+
+The accepted
+[native macOS exclusions](../design/local-tooling-simplification.md#server-rendering)
+skip the whole privacy journey because it includes server PDF/PNG success. After
+runner integration, a native skip is partial evidence and proves none of that
+journey locally. Full Linux CI retains the journey; the historical result above
+is not native macOS acceptance.
 
 Four systemd job timers run in production. The host journal retains 30 days,
 capped at 2 GB. The [production runbook](production.md#alarms) owns host and

@@ -61,32 +61,37 @@ sources with Apache FOP 2.3 in a pinned Podman container, and are committed
 alongside them. CI never regenerates them; `generate.sh` refuses to run when
 `CI` is set.
 
-Render (or re-render after editing a `*.fo` file) from the repository root, under
-the shared lock and the
-[local memory watchdog](../../../../../../instructions/resources.md):
+Prepare checkout-local root and web dependencies in an inactive checkout under
+[resource rules](../../../../../../instructions/resources.md). Never link or
+borrow `node_modules` or `.nuxt`. Rendering remains a bounded primary-session
+command. Until wrapper integration, use the existing lock and timeout path:
 
 ```bash
 python3 scripts/lib/local-check.py \
   "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
-  bash scripts/run-capped.sh --timeout 1200 -- bash apps/web/test/import/linkedin/fixtures/generate.sh
+  bash scripts/run-capped.sh --timeout 1200 -- \
+  bash apps/web/test/import/linkedin/fixtures/generate.sh
 ```
 
 `generate.sh` builds the image, then runs FOP once per `*.fo` file with the
-network disabled, a 2 GiB memory cap, and this directory mounted read-only
-as its source and read-write as its output.
+network disabled, a 2 GiB container memory cap, and this directory mounted as
+its source and output. Laptop RSS/nice removal does not change that cap.
 
-Verify a rendered PDF's shape against the design's table with the existing
-shape report, from the repository root, under the same lock (the report
-needs `apps/web/node_modules`, symlinked only for the duration of this one
-command):
+Verify a rendered PDF's shape against the design's table using checkout-local
+web dependencies, without creating or removing dependency links:
 
 ```bash
 python3 scripts/lib/local-check.py \
   "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
-  bash scripts/run-capped.sh --timeout 120 -- bash -c 'ln -s "$PWD/apps/web/node_modules" apps/web/node_modules && \
-    node apps/web/scripts/linkedin-pdf-shape.mjs <path-to-pdf>; \
-    rm -f apps/web/node_modules'
+  bash scripts/run-capped.sh --timeout 120 -- \
+  node apps/web/scripts/linkedin-pdf-shape.mjs <path-to-pdf>
 ```
+
+After the [wrapper change](../../../../../../docs/design/local-tooling-simplification.md#ordinary-tooling-and-dependencies)
+lands, ordinary fixture commands need no mandatory lock or wrapper. The optional
+`bash scripts/run-owned.sh --timeout <seconds> -- <command>` retains the named
+timeouts without RSS/nice enforcement. Dependency preparation keeps its managed
+lock. This documentation update authorizes no local execution.
 
 ## Pinned versions and checksums
 

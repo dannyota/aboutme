@@ -16,12 +16,12 @@ authorized.
 
 ## Authority and evidence
 
-[ADR 0024](../adr/0024-delivery-gates.md) requires the shared lock, RAM reserve,
-nice level and bounded exceptions. The owner approved changing those rules on
-2026-11-01; amend that topic record and its History before implementation. Also
-replace its hosted-only browser restriction. Retain trusted commits, independent
-review, secret scans, full main CI and exact-commit release gates.
-[ADR 0026](../adr/0026-vietnam-hosted-production.md) and
+[ADR 0024](../adr/0024-delivery-gates.md#amendment-tooling-and-display-checks-2026-11-01)
+records the owner-approved tooling and native-proof changes. The amendments to
+ADRs 0019 and 0020 adopt display assertions. Implementation remains pending;
+existing commands and gates remain until their replacements land. Retain trusted
+commits, independent review, secret scans, full main CI, and exact-commit
+release gates. [ADR 0026](../adr/0026-vietnam-hosted-production.md) and
 [host budgets](vietnam-host-memory.md) remain unchanged.
 
 ## HTTPS options and local scope
@@ -93,10 +93,11 @@ state tampering is not contained. Stop before switching checkouts.
 
 ## Native macOS browser runner
 
-The recommendations below need the owner choices recorded later. Keep
-`make dev-https` and `dev-https-*-check`; Darwin selects native execution, Linux
-containers. Never fall back after failure. Before startup, add
-`make dev-https-browser-install` under the managed lock: run
+The owner accepted the contract below on 2026-11-01; implementation and runtime
+acceptance remain pending. Keep `make dev-https` and `dev-https-*-check`; after
+integration, Darwin selects native execution and Linux keeps containers. Never
+fall back after failure. Before startup, add `make dev-https-browser-install`
+under the managed lock: run
 `npm --prefix deploy/dev-https-browser ci --ignore-scripts`, then its local
 `node_modules/.bin/playwright install chromium webkit`. Use a private
 checkout-local `PLAYWRIGHT_BROWSERS_PATH`. Match package-lock's Playwright
@@ -111,13 +112,13 @@ root through the validated local path. No system/login-keychain trust changes,
 inherited profiles or blanket bypass. Node uses explicit `ca` or child-only
 `NODE_EXTRA_CA_CERTS`, retaining hostname verification.
 
-| Candidate                          | Finding and disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chromium profile certificate store | **Recommend full bundled Chromium with a fresh profile.** The pinned [factory](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/net/server_certificate_database_service_factory.cc) stores certificates under the profile; [import UI](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/ui/webui/certificate_manager/user_cert_sources.cc) and [verifier wiring](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/net/profile_network_context_service.cc) add real trust anchors. Use `channel: 'chromium'`, not the default headless shell.                                                                                                                               |
-| Chromium NSS or policy             | [macOS trust](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/net/cert/internal/system_trust_store.cc) uses Apple trust integration, not Linux's NSS database. [`CACertificatesWithConstraints`](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/components/policy/resources/templates/policy_definitions/CertificateManagement/CACertificatesWithConstraints.yaml) supports desktop profiles, but policy delivery is management configuration, not a Playwright context option. Do not change host/user policies or hand-edit internal databases.                                                                                                                                                                                    |
-| Chromium SPKI exception            | [`--ignore-certificate-errors-spki-list`](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/services/network/ignore_errors_cert_verifier.cc) takes base64 SHA-256 SPKI hashes and requires a user-data directory. It returns success before verification if any presented certificate matches. A leaf list is narrower than a CA list, but either public pinned certificate can be appended to an unrelated chain; this is not cryptographic peer pinning. Both skip hostname, expiry and chain checks. Reject both for TLS proofs; only explicitly approved functional checks could use this weaker mode.                                                                                                                                               |
-| Playwright context bypass          | [`ignoreHTTPSErrors`](https://playwright.dev/docs/api/class-browser#browser-new-context-option-ignore-https-errors) defaults false. One context limits lifetime/state, not trusted hosts or keys: all its HTTPS errors are ignored. An origin filter does not authenticate the peer. Weaker than a leaf pin; not selected.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Native WebKit                      | [Cocoa networking](https://raw.githubusercontent.com/WebKit/WebKit/main/Source/WebKit/NetworkProcess/cocoa/NetworkSessionCocoa.mm) uses Apple server-trust challenges; Playwright exposes [context-wide ignore](https://raw.githubusercontent.com/microsoft/playwright/v1.64.0/packages/playwright-core/src/server/webkit/wkBrowser.ts), not a custom CA API. [Apple custom anchors](https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/OverridingSSLChainValidationCorrectly.html) apply to a caller's trust object, not another browser process. No supported per-run CA injection was found for the pinned build. Recommend an explicit native WebKit skip and retain Linux WebKit CI; no TLS bypass. |
+| Candidate                          | Finding and disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chromium profile certificate store | **Accepted: full bundled Chromium with a fresh profile.** The pinned [factory](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/net/server_certificate_database_service_factory.cc) stores certificates under the profile; [import UI](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/ui/webui/certificate_manager/user_cert_sources.cc) and [verifier wiring](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/chrome/browser/net/profile_network_context_service.cc) add real trust anchors. Use `channel: 'chromium'`, not the default headless shell.                                                                                                                                   |
+| Chromium NSS or policy             | [macOS trust](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/net/cert/internal/system_trust_store.cc) uses Apple trust integration, not Linux's NSS database. [`CACertificatesWithConstraints`](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/components/policy/resources/templates/policy_definitions/CertificateManagement/CACertificatesWithConstraints.yaml) supports desktop profiles, but policy delivery is management configuration, not a Playwright context option. Do not change host/user policies or hand-edit internal databases.                                                                                                                                                                                        |
+| Chromium SPKI exception            | [`--ignore-certificate-errors-spki-list`](https://raw.githubusercontent.com/chromium/chromium/156.0.8078.4/services/network/ignore_errors_cert_verifier.cc) takes base64 SHA-256 SPKI hashes and requires a user-data directory. It returns success before verification if any presented certificate matches. A leaf list is narrower than a CA list, but either public pinned certificate can be appended to an unrelated chain; this is not cryptographic peer pinning. Both skip hostname, expiry and chain checks. Reject both for TLS proofs; only explicitly approved functional checks could use this weaker mode.                                                                                                                                                   |
+| Playwright context bypass          | [`ignoreHTTPSErrors`](https://playwright.dev/docs/api/class-browser#browser-new-context-option-ignore-https-errors) defaults false. One context limits lifetime/state, not trusted hosts or keys: all its HTTPS errors are ignored. An origin filter does not authenticate the peer. Weaker than a leaf pin; not selected.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Native WebKit                      | [Cocoa networking](https://raw.githubusercontent.com/WebKit/WebKit/main/Source/WebKit/NetworkProcess/cocoa/NetworkSessionCocoa.mm) uses Apple server-trust challenges; Playwright exposes [context-wide ignore](https://raw.githubusercontent.com/microsoft/playwright/v1.64.0/packages/playwright-core/src/server/webkit/wkBrowser.ts), not a custom CA API. [Apple custom anchors](https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/OverridingSSLChainValidationCorrectly.html) apply to a caller's trust object, not another browser process. No supported per-run CA injection was found for the pinned build. Use the accepted explicit native WebKit skip and retain Linux WebKit CI; no TLS bypass. |
 
 **Attended bootstrap per run:** import only the exported root through custom
 trusted certificates in `chrome://certificate-manager` in a fresh private
@@ -163,11 +164,12 @@ Container browsers remain the Linux alternative; no Mac VM tunnel is proposed.
 
 ### Server rendering
 
-**Recommend explicit Mac skips**, with full Linux CI coverage. In
-`apps/server/cmd/server/print_runtime.go`, Darwin closes the render queue;
-`printrender/renderer.go` requires nonroot Linux user namespaces. Keep these
-guards. Skip whole mixed journeys, with no split in this change. Paths below are
-relative to `deploy/dev-https-browser/`; lines identify the reviewed source.
+**Accepted: explicit Mac skips**, with full Linux CI coverage after native
+runner integration. In `apps/server/cmd/server/print_runtime.go`, Darwin closes
+the render queue; `printrender/renderer.go` requires nonroot Linux user
+namespaces. Keep these guards. Skip whole mixed journeys, with no split in this
+change. Paths below are relative to `deploy/dev-https-browser/`; lines identify
+the reviewed source.
 
 | Mac disposition | Exact test and lost local coverage                                                                                                                                                                                                                       |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -222,8 +224,9 @@ fixture cleanup, factor phases, timeouts and stack health checks.
 
 ## Proof portability
 
-Recommended coverage after owner approval and native acceptance. Specs live in
-`deploy/dev-https-browser/`; the rendering/trust sections define exact skips.
+Accepted coverage is available only after integration and native acceptance.
+Specs live in `deploy/dev-https-browser/`; the rendering/trust sections define
+exact skips.
 
 | Proofs                                                                                                                               | macOS native                                                                                             | Linux and hosted amd64                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -376,19 +379,20 @@ cleanup after anchor loss. Keep Mac tooling and production-supervisor CI tests.
 
 ## Owner choices and combined jobs
 
-This is the only choice and path-ownership list for both proposals. Earlier
-approval of session A, RSS/nice and numeric-ceiling removal, managed locks,
-checkout-local installs and runtime smoke stands. No local run is authorized.
+This is the only choice and path-ownership list for both proposals. The owner
+accepted every choice on 2026-11-01, including session A, RSS/nice and
+numeric-ceiling removal, managed locks, checkout-local installs, and runtime
+smoke. No local run is authorized.
 
-| Choice                              | Recommendation and status                                                                                                | Reason or cost                                                                                                                                               |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Owner-account native trust          | **Yes; directed in this brief.** Apply the `ci-local` trusted-commit boundary to both native runners.                    | Keeps the existing Podman machine and shared database usable; admission and residual risk are defined above.                                                 |
-| Profile CA and HTTPS engines        | **Yes; approval pending.** Attended disposable Chromium profile import; skip native HTTPS WebKit, retain Linux WebKit.   | Strict TLS without host trust changes; bootstrap is manual and must be proved. No SPKI/context bypass.                                                       |
-| Server-rendering exclusions         | **Yes; approval pending.** Skip the exact whole HTTPS journeys listed above, with partial evidence and full CI coverage. | Loses their portable steps locally too; avoids splitting coupled journeys or changing the production render boundary. Display harness PDFs still run on Mac. |
-| Display replacement and authorities | **Yes; direction accepted, contract/amendments pending.** Adopt display assertions and amend ADRs 0019, 0020, 0024.      | Removes pixel gates while retaining layout, paint, PDF, security and release checks; subtle optical defects remain a manual-review limit.                    |
-| Product images                      | **Yes; approval pending.** Keep 26 product PNGs and a separate explicit generator.                                       | Preserves Library/PDF-tab assets and URLs without test baselines.                                                                                            |
-| Review artifacts                    | **Yes; approval pending.** Allow the eight optional sanitized display images for 14 days.                                | Gives manual evidence without a comparison gate; capture failure is non-blocking.                                                                            |
-| Git history                         | **Yes to keeping history; approval pending.** Delete test baselines only after proof; no purge.                          | Avoids rewriting tags, hashes and evidence; old objects retain their size.                                                                                   |
+| Choice                              | Accepted decision and status                                                                                            | Reason or cost                                                                                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner-account native trust          | **Accepted, 2026-11-01.** Apply the `ci-local` trusted-commit boundary to both native runners.                          | Keeps the existing Podman machine and shared database usable; admission and residual risk are defined above.                                                 |
+| Profile CA and HTTPS engines        | **Accepted, 2026-11-01.** Attended disposable Chromium profile import; skip native HTTPS WebKit, retain Linux WebKit.   | Strict TLS without host trust changes; bootstrap is manual and must be proved. No SPKI/context bypass.                                                       |
+| Server-rendering exclusions         | **Accepted, 2026-11-01.** Skip the exact whole HTTPS journeys listed above, with partial evidence and full CI coverage. | Loses their portable steps locally too; avoids splitting coupled journeys or changing the production render boundary. Display harness PDFs still run on Mac. |
+| Display replacement and authorities | **Accepted, 2026-11-01.** Display assertions; ADRs 0019, 0020, 0024 amended; implementation pending.                    | Removes pixel gates while retaining layout, paint, PDF, security and release checks; subtle optical defects remain a manual-review limit.                    |
+| Product images                      | **Accepted, 2026-11-01.** Keep 26 product PNGs and a separate explicit generator.                                       | Preserves Library/PDF-tab assets and URLs without test baselines.                                                                                            |
+| Review artifacts                    | **Accepted, 2026-11-01.** Allow the eight optional sanitized display images for 14 days.                                | Gives manual evidence without a comparison gate; capture failure is non-blocking.                                                                            |
+| Git history                         | **Accepted, 2026-11-01: keep history.** Delete test baselines only after proof; no purge.                               | Avoids rewriting tags, hashes and evidence; old objects retain their size.                                                                                   |
 
 Execute the following jobs in order. Brace lists expand to exact paths; PNG
 globs mean only the existing inventory in the display proposal. Each path has

@@ -1,7 +1,7 @@
 # 0020: Application visual identity: the seal, the aurora canvas, and the resume ground
 
-Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28). The owner
-chose each direction, including the public page color scheme below.
+Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01).
+The owner chose each direction, including the public page color scheme below.
 
 ## Context
 
@@ -150,16 +150,25 @@ otherwise for the public page on screen.
 - The production maintenance page (`deploy/caddy/production/maintenance.html`)
   carries its own copy of the tokens and an inline logo, and follows them; its
   CSP hashes are recomputed from the page at build.
-- Chrome screenshot baselines change with these values. The renderer, its
-  tokens, fonts, golden HTML, and document screenshot baselines do not.
-- The public page baselines change with the page bar, and the dark scheme adds
-  its own public page baselines. Paged, print, and template baselines do not
-  change.
+- [Display assertions](../design/display-assertions.md) independently check
+  these visual values, public schemes, and light-only output surfaces. Chrome
+  changes leave renderer tokens, fonts, golden HTML, and expected document
+  presentation unchanged. Existing pixel comparisons stay required until the
+  replacement passes acceptance and cutover lands.
 - `PRODUCT.md` and the [UI design pages](../design/ui/identity-and-seal.md) hold
   the built detail; the [public page spec](../design/public-page-theme.md) holds
   the page bar, the scheme, and the dark palette rule.
 
 ## History
+
+### Amendment: Display assertions (2026-11-01)
+
+Accepted by the owner: replace screenshot baselines with explicit display
+assertions without changing visual identity or renderer isolation. Keep the 26
+product page images with a separate generator and eight optional sanitized
+review images retained for 14 days. Review images are non-blocking; subtle
+optical defects remain a manual-review limit. Keep Git history. The display
+design owns coverage, proof-before-deletion, and artifact boundaries.
 
 - Former ADR 0030 (2026-09-04): stamped-document identity: seal red only for
   public, signature-ink blue-black actions, desk neutrals, marks not hues, Be

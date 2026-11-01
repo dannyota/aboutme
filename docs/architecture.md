@@ -35,7 +35,11 @@ serves only `https://localhost:20443`, runs deterministic local Google and
 LinkedIn OpenID Connect mocks on 20442, and still uses the shared `aboutme_dev`
 database. Its disposable pinned Playwright image imports the invocation's Caddy
 root into an isolated NSS database and writes only bounded local verdicts. It
-does not change the host trust store or use a certificate bypass.
+does not change the host trust store or use a certificate bypass. Native macOS
+browser execution and session ownership are accepted but pending under
+[local tooling](design/local-tooling-simplification.md); this description covers
+the existing container path. The pending runtime-smoke CI job is not evidence of
+an executed startup check.
 
 The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. MinIO stores
 media for self-hosters and stands in for production vStorage (S3) in local

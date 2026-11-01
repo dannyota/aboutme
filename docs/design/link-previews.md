@@ -335,9 +335,10 @@ fixture set, as ADR 0014 does for the public title.
   decoder rejects any extra key.
 - Contact data: a fixture with every contact type carrying a sentinel; the card
   envelope Go sends and the card page text contain none of them.
-- Pixels: card baselines for Vietnamese with photo, English without photo,
-  longest name and headline, and a light and a dark accent. A geometry check
-  proves the photo, name, and headline boxes sit inside the safe square.
+- Display: [assertions](display-assertions.md) cover Vietnamese with photo,
+  English without photo, longest name/headline, and light/dark accents. Check
+  image identity, crop, type, colors, and containment in the safe square. Keep
+  existing card pixel comparisons until replacement acceptance and cutover.
 - Size: the noisiest photo fixture stays under 524,288 bytes.
 
 Live checks after each deploy, on a fictional published resume, with drafts that

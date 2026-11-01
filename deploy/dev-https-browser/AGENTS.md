@@ -2,7 +2,7 @@
 
 ## Ownership and source map
 
-QA owns proof specs and evidence. Devops owns `Dockerfile` and `run.sh`, the browser image and container runner. Keep a brief within the assigned ownership. QA fixes defects in the assigned proof specs; product defects found by proofs go to the product owner.
+QA owns proof specs and evidence. Devops owns `Dockerfile` and `run.sh`, the browser image and container runner. The accepted native runner remains pending; its implementation follows the exact owned paths in the [tooling design](../../docs/design/local-tooling-simplification.md#owner-choices-and-combined-jobs). Keep a brief within the assigned ownership. QA fixes defects in the assigned proof specs; product defects found by proofs go to the product owner.
 
 |Path|Role|
 |-|-|
@@ -20,6 +20,8 @@ QA owns proof specs and evidence. Devops owns `Dockerfile` and `run.sh`, the bro
 `scripts/lib/dev-https-browser-stage.sh` stages the allowlisted proof sources from `spec-sources.txt` for read-only mounting. `run.sh` verifies image identity and input mounts, starts the disposable browser, validates bounded evidence, and removes temporary container state. Specs must clean up their exact disposable accounts and resumes, including failure paths.
 
 Evidence contains only the closed fields accepted by `verify-evidence.mjs`; never retain credentials, cookies, resume content, or unrestricted browser logs. `proof-shards.mjs` feeds specs and coverage validators. QA reports evidence paths; the primary owns stack teardown.
+
+The accepted [native admission contract](../../docs/design/local-tooling-simplification.md#native-admission-and-account) uses the owner account only for clean owner-written/reviewed commits, disposable builds/profiles, and explicit test-only environments. After session and native integration, Mac HTTPS uses profile-only CA trust, excludes WebKit and the exact whole server-rendering journeys, and records partial native evidence. Contributor heads use hosted CI. Preserve full Linux shard coverage and production proof custody; native partial evidence never enters the Linux aggregate. No native proof is available or authorized by this guide update.
 
 ## Authorities and checks
 

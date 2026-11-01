@@ -2,7 +2,11 @@
 
 Use the native stack for daily work. It runs Go, Nuxt, and Caddy as local
 processes against two logical databases in the one capped `aboutme-test-db`
-container.
+container. Agent execution follows
+[resource rules](../../instructions/resources.md): start a stack only for a
+named interaction check. The accepted
+[tooling transition](../design/local-tooling-simplification.md) remains pending;
+use existing commands until each replacement lands.
 
 ## Ports and state
 
@@ -22,14 +26,30 @@ ignored `.dev/` directory.
 
 ## Prerequisites
 
-Install the versions in [`.tool-versions`](../../.tool-versions), plus Podman,
-`curl`, `ss`, and `setsid`. Verify the native stack's tools and install web
-dependencies and the pinned Chromium once:
+Install the versions in [`.tool-versions`](../../.tool-versions), plus Podman
+and `curl`. Current Linux helpers require `ss` and `setsid`; portable
+session/listener helpers remain pending. Follow the
+[Mac setup](../../instructions/gotchas.md#macos-local-tooling) for installed
+tools. In an inactive checkout, the primary prepares dependencies under the
+managed lock and current wrapper in
+[resources](../../instructions/resources.md). The underlying setup commands are:
 
 ```sh
 make tools-check ARGS=dev
-(cd apps/web && npm ci && npx playwright install chromium)
+npm ci
+npm --prefix apps/web ci
 ```
+
+On Linux, retain the existing host Chromium setup for native server rendering:
+
+```sh
+(cd apps/web && node_modules/.bin/playwright install chromium)
+```
+
+Use checkout-local dependencies; never create dependency or `.nuxt` links. The
+accepted native browser installer remains pending. Linux container browser setup
+is in [local HTTPS checks](local-uat.md). On macOS the server render queue
+remains disabled; installing a host browser does not enable it.
 
 Provider credentials are optional in development. Export them before startup if
 an OAuth path is under test; the script does not read `.env` automatically.
@@ -124,6 +144,14 @@ only when their surface changes. The password proof additionally seeds and
 cleans three deterministic accounts and reads authentication mail from the
 loopback capture server.
 
+The current HTTPS browser runner is the Linux container path. Native macOS
+functional proofs become available only after runner integration and acceptance
+under the
+[native admission contract](../design/local-tooling-simplification.md#native-admission-and-account).
+Use clean owner-written/reviewed commits, disposable profiles, and explicit
+test-only environments. HTTPS exclusions produce partial evidence; native
+display harness PDFs still run. No local execution is authorized by this update.
+
 ## Inspect logs
 
 ```sh
@@ -152,7 +180,8 @@ the shared database while another test suite is active.
 - If the database container is healthy but host connections are refused, run
   `make test-db-up`. Its host-side probe detects a failed Podman port forward.
   Recreate the database container only in an announced idle window.
-- If Nuxt startup says dependencies are missing, run `npm ci` in `apps/web`.
+- If Nuxt dependencies are missing, stop the stack before the primary runs
+  checkout-local preparation under the managed lock; never borrow dependencies.
 - Use `.dev/server.log`, `.dev/web.log`, and `.dev/caddy.log` for full startup
   errors. Do not commit `.dev/`.
 

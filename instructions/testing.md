@@ -17,10 +17,13 @@ The table names required verification, not commands every worker must run locall
 |Go server|`make server-build server-vet server-test` and `golangci-lint run ./...` over touched packages, tests included|
 |Store or migrations|Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`|
 |Nuxt/Vue|`make web-lint web-typecheck web-test web-build`; after adding a web file, `make web-source-manifest-update`|
-|Renderer or public page|Nuxt gate plus `make web-e2e`; baselines as in [web rules](web.md) and [Releases](releases.md#releases)|
+|Renderer or public page|Nuxt gate plus `make web-e2e`; display assertions and interim comparisons as in [web rules](web.md) and [Releases](releases.md#releases)|
+|Production runtime startup|After smoke integration, `server-runtime-smoke` in full hosted CI; see [runtime contract](../docs/design/local-tooling-simplification.md#production-runtime-coverage)|
 |Authenticated UI|`make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check`|
 |Public surface|`make native-http-check` and `make dev-https-public-check`|
 |Security-sensitive or release|CI's gitleaks and dependency checks; review CodeQL alerts in GitHub's Security tab|
+
+Native macOS functional proofs remain pending runner integration and acceptance under [resources](resources.md). Native HTTPS skips only the exact journeys and WebKit exclusion in the tooling design; display harness PDFs still run. Local partial evidence never substitutes for full Linux CI.
 
 Reusable browser automation is scripted headless Playwright. To author it, use the Playwright MCP server in `.codex/config.toml` to inspect real selectors, requests, and state, then write what you observed as `@playwright/test` specs. MCP never runs the recorded automation. Report missing configuration or access to the primary.
 

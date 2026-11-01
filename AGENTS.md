@@ -66,14 +66,14 @@ This file holds the rules every agent needs on every task. Topic files in `instr
 |[`instructions/releases.md`](instructions/releases.md)|Reviewing, committing, tagging, or deploying|
 |[`instructions/gotchas.md`](instructions/gotchas.md)|Running repository tools|
 |[`instructions/go.md`](instructions/go.md)|Go, store, schema Go, or migrations|
-|[`instructions/web.md`](instructions/web.md)|TypeScript, Nuxt, renderer, source manifests, or baselines|
+|[`instructions/web.md`](instructions/web.md)|TypeScript, Nuxt, renderer, source manifests, or display checks|
 |[`instructions/deploy.md`](instructions/deploy.md)|Podman, Caddy, container images, host access, or deployment|
 |[`instructions/testing.md`](instructions/testing.md)|Writing tests, browser proofs, or selecting change-area gates|
 |[`instructions/documentation.md`](instructions/documentation.md)|Selecting docs, writing agent files, or handling plans and evidence|
 
 ## AI agent definitions
 
-The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It manages and does not investigate: troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Claude runs only the primary session; Codex does all design, research, implementation, troubleshooting, QA, and review.
+The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs bounded local checks, and owns Git, tags, deploys, and the answer to the owner. It manages and does not investigate: troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Claude runs only the primary session; Codex does all design, research, implementation, troubleshooting, QA, and review.
 
 |Tool|Where|Agents with model and effort|
 |-|-|-|
@@ -82,12 +82,12 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 
 The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). Set model and effort explicitly on every dispatch. Track these agent definitions; keep other local tool settings ignored.
 
-The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, baselines, release checks, and persona dogfooding, never product fixes.
+The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, display evidence, release checks, and persona dogfooding, never product fixes.
 
 |Lane|Owned paths|Never|
 |-|-|-|
 |backend|`apps/server/`, `packages/schema/` sources and Go output, `docs/api/`, migrations, MCP|Edits web UI files or production infrastructure|
-|frontend|`apps/web/`: pages, editor, renderer, i18n, render workers, web tests and baselines|Edits Go, migrations, or production infrastructure|
+|frontend|`apps/web/`: pages, editor, renderer, i18n, render workers, web tests and display fixtures|Edits Go, migrations, or production infrastructure|
 |devops|`deploy/` (`vn/` host, `caddy/`, `observer/`, and the kept `aws/` reference), `.github/workflows/`, OpenTofu, Cloudflare, release scripts|Reads secret values or applies infrastructure unreviewed|
 
 A path outside these lanes belongs to the primary, which assigns it in a brief. Renderer ownership details live in [web rules](instructions/web.md).
@@ -96,11 +96,12 @@ A path outside these lanes belongs to the primary, which assigns it in a brief. 
 
 - **Pre-1.0 compatibility.** Before application `v1.0.0`, API contracts, migration history, released document schemas and their manifest, and older-client support may change without backwards compatibility. Do not require fallback machinery solely for older v0 releases. Application SemVer and resume document schema versions are separate. The first `v1.0.0` candidate records supported contracts and adds root `.v1-baseline`; trusted comparison bases containing it freeze existing migrations and released schemas. See [ADR 0004](docs/adr/0004-resume-document-contract.md), [ADR 0005](docs/adr/0005-database-migrations.md), and [release rules](instructions/releases.md).
 - **Small releases.** One feature per patch release (`v0.x.y`). Ship a feature as soon as it is done and green; do not batch features.
-- **GitHub CI is the release gate.** Each commit runs the pre-commit secret and file-length checks; full builds and test suites run in GitHub CI. The owner may land after a passing capped `make ci-local` using the admin bypass; other contributors need a pull request and green CI. `ci.yml` runs checks per job, including browser proofs; `contracts` runs full-history gitleaks. Only allowlisted prose pull requests may omit the jobs named in the [selection design](docs/design/ci-path-selection.md). The aggregate `ci` job is the only required check on `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once. A tag and a deploy need green CI on that exact commit.
+- **GitHub CI is the release gate.** Each commit runs the pre-commit secret and file-length checks; full builds and test suites run in GitHub CI. The owner may land after a passing `make ci-local` under the resource rules using the admin bypass; other contributors need a pull request and green CI. `ci.yml` runs checks per job, including browser proofs; `contracts` runs full-history gitleaks. Only allowlisted prose pull requests may omit the jobs named in the [selection design](docs/design/ci-path-selection.md). The aggregate `ci` job is the only required check on `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once. A tag and a deploy need green CI on that exact commit.
 - Branch CI and `main` CI differ; follow [GitHub CI](instructions/verification.md#github-ci) when running CI on a branch.
 - **Merge locally.** Keep pull requests draft while iterating and mark them ready when complete. Landing needs independent Codex review and either green pull request CI or the owner local gate. Follow [workflow](instructions/workflow.md#flow) for rulesets, signed local merges, trains, and branch cleanup.
-- **Bounded parallel work:** at most four Codex jobs across all work, each concurrent writer in its own worktree. Reading and editing may overlap; local check execution is globally serialized under [resource rules](instructions/resources.md). Do not spawn workers just to repeat verification.
-- **Build and verify.** Review the diff and run the static `make pre-push` check before pushing. The owner may also run `make ci-local` as the landing gate under [resource rules](instructions/resources.md); GitHub CI runs the full gate on every main push. There is no hosted UAT until about 500 users; use an approved bounded local browser proof only for behavior CI cannot cover. The owner tests in production.
+- **Coordinated parallel work:** no numeric agent-job ceiling. Each concurrent writer has its own worktree; coordinate shared fixture writes. Managed local checks remain serialized under [resource rules](instructions/resources.md). Do not spawn workers just to repeat verification.
+- **Build and verify.** Review the diff and run the static `make pre-push` check before pushing. The owner may also run `make ci-local` as the landing gate under [resource rules](instructions/resources.md); GitHub CI runs the full gate on every main push. There is no hosted UAT until about 500 users. Local browser proofs follow [resource rules](instructions/resources.md), including the pending opt-in native proof path; other exceptions need behavior CI cannot cover. The owner tests in production.
+- **Accepted tooling transition.** [Local tooling](docs/design/local-tooling-simplification.md) and [display assertions](docs/design/display-assertions.md) govern the pending replacements for RSS/nice enforcement, dependency borrowing, native browser execution, pixel comparisons, and the added `server-runtime-smoke` CI job. Preserve existing commands and gates until their replacements land; remove pixel comparisons only after acceptance. Exact-commit release CI is unchanged.
 - Match review and checks to risk. Do not invent extra gates.
 
 ## Briefs and reports

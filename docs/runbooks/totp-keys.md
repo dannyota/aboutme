@@ -99,14 +99,16 @@ Run each mode with the wrapper, directly and without another lock around it:
 scripts/totp-production-proof.sh totp-prod-enabled
 ```
 
-The wrapper uses the [local memory watchdog](../../instructions/resources.md)
-and refuses while another local check holds the shared lock or a development
-stack is active. It takes the lock without blocking and holds it until it exits,
-and no child process inherits the lock. It requires the account file with mode
-0600 and never reads it. It builds the pinned image once, stages the exact
-production spec files into an owner-only temporary directory, runs
-`deploy/dev-https-browser/run.sh` under a 60-minute timeout, and removes the
-staging directory on every exit. Evidence goes to
+Until wrapper integration, the command retains the existing RSS/nice watchdog.
+The accepted [tooling change](../design/local-tooling-simplification.md) removes
+that laptop enforcement while preserving the production-proof lock, timeout,
+custody, and container limits. The wrapper refuses while another local check
+holds the shared lock or a development stack is active. It takes the lock
+without blocking and holds it until it exits; no child inherits the lock. It
+requires the account file with mode 0600 and never reads it. It builds the
+pinned image once, stages the exact production spec files into an owner-only
+temporary directory, runs `deploy/dev-https-browser/run.sh` under a 60-minute
+timeout, and removes the staging directory on every exit. Evidence goes to
 `.dev/v0.4.7/production-evidence`, which must start empty.
 
 The container runs with a 2 GiB hard memory limit, no swap, and two CPUs
@@ -115,9 +117,10 @@ container tmpfs, and no local product stack. On success, failure, a blocker, or
 browser exit, the `finally` path removes only that account's proof factors,
 recovery plaintext, and proof sessions, deletes the tmpfs output directory, then
 logs out. If cleanup cannot finish, the next action is the same command with
-mode `totp-prod-cleanup`. Missing watchdog, lock, container limit, image, or
-account file blocks the proof. Never install a host runner, use an uncapped
-browser, or use the owner's own account.
+mode `totp-prod-cleanup`. A missing wrapper, lock, container limit, image, or
+account file blocks the proof. Never install a host production runner, use a
+browser without container limits, or use the owner's own account. The pending
+native local runner refuses production modes and does not change this procedure.
 
 ## Forward fix
 

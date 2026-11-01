@@ -82,6 +82,14 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [UI: shell and editor](ui/shell-and-editor.md)                         | App shell, account pages, resume list, editor, and settings                |
 | Other   | [UI: responsive and accessibility](ui/responsive-and-accessibility.md) | Narrow editor layouts, motion, and accessibility                           |
 
+## Accepted tooling transition
+
+[Local tooling](local-tooling-simplification.md) and
+[display assertions](display-assertions.md) were accepted on 2026-11-01. Their
+ADR amendments are recorded; implementation and runtime acceptance remain
+pending. Existing commands and pixel gates remain until their replacements land.
+The designs own delivery order, native trust, and proof-before-deletion.
+
 ## System summary
 
 ```mermaid

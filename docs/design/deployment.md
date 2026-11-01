@@ -34,15 +34,22 @@ and API work. Auth feature checks run at the native HTTPS origin. Complete
 product acceptance runs in production, per
 [ADR 0026](../adr/0026-vietnam-hosted-production.md).
 
+The accepted [local tooling change](local-tooling-simplification.md) adds native
+macOS functional proofs under the owner-account trusted-commit boundary after
+runner integration and acceptance. Linux keeps full container proof coverage;
+native HTTPS exclusions produce partial evidence. Production rendering remains
+Linux-only.
+
 ## Production topology
 
 A version tag builds ARM64 and AMD64 server, web, and Caddy images on
 GitHub-hosted runners, smoke-tests them, and publishes them with build
-provenance to public GitHub Container Registry packages. The AMD64 Playwright
-baseline job is the pixel authority. The Vietnam host requires AMD64. OpenTofu
-lives in `deploy/vn/prod`; state and environment values stay out of Git. GitHub
-holds no cloud credentials. The owner applies infrastructure and deploys from
-the laptop by image digest.
+provenance to public GitHub Container Registry packages. The Vietnam host
+requires AMD64. Display gates follow the accepted
+[assertion migration](display-assertions.md); existing AMD64 comparisons remain
+until cutover. OpenTofu lives in `deploy/vn/prod`; state and environment values
+stay out of Git. GitHub holds no cloud credentials. The owner applies
+infrastructure and deploys from the laptop by image digest.
 
 Production runs on one GreenNode host in Vietnam with Caddy, Go, Nuxt,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage
@@ -55,6 +62,13 @@ One serving replica runs under [ADR 0025](../adr/0025-replica-scaling.md). Grow
 the host first. Raising the replica count alone is unsafe: publication fences,
 render jobs and capabilities, and SSE state are process-local until the
 [scaling contract](scaling/README.md) is implemented.
+
+After smoke integration, `server-runtime-smoke` adds capped startup/idle checks
+of same-run production build artifacts to full CI. It does not replace release
+image checks or [host memory observation](vietnam-host-memory.md#memory-gate).
+The
+[runtime contract](local-tooling-simplification.md#production-runtime-coverage)
+owns its limits and evidence; exact-commit release CI remains required.
 
 ## Client-IP boundary
 

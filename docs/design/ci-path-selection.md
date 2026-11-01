@@ -59,13 +59,22 @@ Publish only the final enum, never raw paths, to outputs and the step summary.
 
 ## Jobs and aggregate
 
-`prose` runs `preflight`, the entire `contracts` job, and `ci`. It omits exactly
-`macos-tooling`, `vn-infra`, `server`, `server-integration`, `server-resumeapi`,
-`web`, `web-e2e`, and `dev-https-proofs`. Each retains `needs: [preflight]` and
-runs unless event is `pull_request` and selection is `prose`; ordinary success
-dependency handling stays. No web/server job is needed: contracts already runs
-docs lint, link tests/checks using `base_sha`, lengths, full-history gitleaks,
-schema/API checks, operational tests, and npm audits. Keep all those steps.
+Until runtime-smoke integration, `prose` runs `preflight`, the entire
+`contracts` job, and `ci`. It omits exactly `macos-tooling`, `vn-infra`,
+`server`, `server-integration`, `server-resumeapi`, `web`, `web-e2e`, and
+`dev-https-proofs`. Each retains `needs: [preflight]` and runs unless event is
+`pull_request` and selection is `prose`; ordinary success dependency handling
+stays. No web/server job is needed: contracts already runs docs lint, link
+tests/checks using `base_sha`, lengths, full-history gitleaks, schema/API
+checks, operational tests, and npm audits. Keep all those steps.
+
+The accepted
+[runtime-smoke addition](local-tooling-simplification.md#production-runtime-coverage)
+adds `server-runtime-smoke` after `web`, with `needs: [preflight, server, web]`
+and the same full/prose condition. At that integration, add it to `ci.needs`,
+the expected job-key set, and the permitted prose skip set together, making nine
+omissions. Until then, preserve the eight existing omissions. A smoke failure,
+missing evidence, cancellation, or unexplained skip fails full CI.
 
 Keep `ci` as the sole check with that name, `if: always()`, and `needs` equal to
 every other job. Validate the complete expected job-key set and every result,

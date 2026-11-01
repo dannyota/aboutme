@@ -340,11 +340,11 @@ compromise, database writers, and leaked backups gain no new interface through
 this change. Existing session, transport, and renderer boundaries remain in
 force. Failed navigation retains committed state as above.
 
-## Proofs and baselines
+## Display proofs
 
-Run in hosted CI under [web rules](../../../instructions/web.md); no local
-browser or test exception is required. Tests prove DOM updates and focus, not
-that every screen reader speaks identical wording.
+Use hosted CI under [web rules](../../../instructions/web.md). Native proofs
+remain pending integration and acceptance under the trusted-commit boundary.
+Tests prove DOM updates and focus, not identical screen-reader wording.
 
 - `apps/web/test/templates/gallery-chrome.test.ts`: both semantics, encoded
   hrefs preserving the other group, invalid/repeated values, clear/no-op,
@@ -381,33 +381,15 @@ that every screen reader speaks identical wording.
   Record nonzero safe-area behavior as unverified unless hosted browser evidence
   supplies an actual nonzero inset; do not claim it from a zero-inset baseline.
 
-Hosted Baselines regenerates only the four Library images in
-`apps/web/e2e/chrome.spec.ts`:
-`chrome--templates--{light,dark}--{390,1440}.png`. Add
-`apps/web/e2e/gallery-baselines.spec.ts` with these five files under
-`apps/web/e2e/baselines/`:
+[Display assertions](../display-assertions.md) owns the accepted Library
+inventory and migration: four chrome Library cells and five sheet/filter/row
+cells. Keep those comparisons until replacement assertions pass Linux/macOS
+acceptance and mutation proofs. After cutover, geometry, visible bilingual
+content, focus/state, colors, image readiness, and containment replace PNG
+comparisons. Preserve shared showcase controls, unrelated surfaces, both shard
+selections, and source-manifest coverage. Product template page images remain
+separate assets.
 
-| File                                     | State                                    |
-| ---------------------------------------- | ---------------------------------------- |
-| `gallery--sheet--vi--dark--390.png`      | `/templates`, sheet open                 |
-| `gallery--sheet--en--light--390.png`     | `/templates`, sheet open                 |
-| `gallery--filtered--vi--dark--390.png`   | `?role=backend&filter=technical`, closed |
-| `gallery--filtered--en--light--1440.png` | Same filtered URL, desktop rows          |
-| `gallery--rows--vi--light--1024.png`     | `/templates`, rows and four columns      |
-
-Register the new spec and its files before running hosted CI or Baselines:
-
-- Add `gallery-baselines.spec.ts` to the normal-surface `testMatch` list in
-  `apps/web/e2e/playwright.config.ts` and `WEB_E2E_NORMAL_SPECS` in the root
-  `Makefile`, so comparison and update runs execute all five cases.
-- Add all five filenames above, each prefixed with `baselines/`, to the
-  expected-baseline file list in the root `Makefile`'s `web-e2e-update` recipe.
-  Its exact-file comparison must accept the new images before Baselines can
-  upload the candidate artifact.
-- Have the primary run `scripts/generate-web-e2e-source-manifest.sh --update`
-  after files move or are added, including the new spec and baseline images, and
-  include the regenerated `scripts/web-e2e-source.manifest`.
-
-Use the existing Gallery font/image/thumbnail waits for closed full-page
-captures; sheet captures use a fixed 900 px viewport height. Keep showcase,
-landing, template detail, renderer, and print baselines unchanged.
+Use existing font/image/thumbnail waits. Sheet fixtures keep a fixed 900 px
+viewport height. Optional review captures follow the display design and do not
+gate success; never infer nonzero safe-area coverage from a zero-inset fixture.

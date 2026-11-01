@@ -94,6 +94,13 @@ commit. A branch or manual run never counts. A newer pending, cancelled, or
 failed matching run blocks an older success. Missing evidence or a fetch/API
 error also blocks.
 
+The accepted
+[tooling and display changes](../design/local-tooling-simplification.md) leave
+this exact-commit release rule unchanged. After integration, full CI also
+requires `server-runtime-smoke` startup/idle evidence. It does not replace
+release image checks, production smoke checks, or host memory observation.
+Native macOS partial proofs cannot authorize tagging or deployment.
+
 The image workflow runs the helper from a separate checkout of
 `dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's
 event commit. A read-only job checks eligibility before publishing jobs start.

@@ -95,20 +95,18 @@ ProseMirror content root, which are custom widgets by nature.
 Tailwind loads without Preflight: only the theme and utilities layers. The
 chrome reset lives in the base layer, applies only under `html[data-ui="app"]`,
 and excludes `.resume-document`, `.paged-resume`, and their descendants. The
-render harness never sets `data-ui`, so the renderer golden HTML and screenshot
-suites are the proof that the chrome cannot change the preview. Design tokens
+render harness never sets `data-ui`. Renderer golden HTML and
+[display assertions](display-assertions.md) prove chrome isolation; existing
+screenshot comparisons remain required until assertion cutover. Design tokens
 are defined on the document root and switched by the `data-theme` attribute that
 the theme cookie already controls, so teleported dialogs and menus inherit them.
 
-The chrome is a colorful Aurora canvas and the resume is calm white paper. Blue
-leads actions, links, and focus. Seal red marks only the public state: a round
-seal on the sheet means "public at this link", pressed by a person and never by
-an agent. Draft or saved states are pencil marks, and the chrome typeface is Be
-Vietnam Pro. No chrome token, gradient, or shadow reaches the renderer; the
-preview sheet keeps its own document background in both themes and is never
-cropped. [ADR 0020](../adr/0020-application-visual-identity.md) owns the
-identity. Copy is sentence case, buttons name the action they perform, an empty
-state says what to do next, and an error says what happened and how to fix it.
+[ADR 0020](../adr/0020-application-visual-identity.md) owns visual identity; the
+[UI specs](ui/identity-and-seal.md) define the chrome and seal. No chrome token,
+gradient, or shadow reaches the renderer. The preview sheet keeps its own
+document background in both themes and is never cropped. Copy is sentence case;
+buttons name their action, empty states give the next step, and errors explain
+what happened and how to fix it.
 
 Text fields commit on blur or Enter. A non-empty changed value is set, an empty
 value removes the field, an unchanged value sends nothing, and Escape reverts to
@@ -298,8 +296,11 @@ accepted residual risk.
 Golden HTML covers every preset and both display modes against two in-memory
 starting states of the `full` fixture: populated one-column and populated two-
 column layouts, as ADR 0012 requires. Focused tests cover draft emptiness and
-optional fields. A pinned browser, fonts, timezone, locale, and representative
-screenshot subset cover visual output, including Vietnamese text.
+optional fields. [Display assertions](display-assertions.md) owns the accepted
+layout, style, content, accessibility, and PDF coverage, with pinned browsers,
+fonts, timezone, and locale, including Vietnamese text. Existing screenshot
+comparisons remain until replacement acceptance; no cross-platform pixel
+equality is required after cutover.
 
 ## Freshness
 

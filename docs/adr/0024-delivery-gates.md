@@ -39,31 +39,33 @@ Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for a green main push run on that exact commit.
 - **Owner local landing gate.** Accepted 2026-11-01: the owner may land after a
-  passing `make ci-local` on his Mac under the shared lock and the total RAM
-  minus 10 GiB watchdog, using the always-on repository admin bypass on
-  `main-required-ci`. The separate `main-history` ruleset blocks force pushes
-  and deletion of `main` without a bypass. Other contributors need a pull
-  request and green CI. Browser, pixel, and VN infrastructure suites run only in
-  GitHub CI; failures on the main push are fixed forward. The local gate does
-  not authorize a tag or deployment without green CI on the exact main push
-  commit. Run `make ci-local` only on commits the owner wrote or has reviewed,
-  because it executes the checkout's scripts and npm lifecycle hooks with the
-  owner's privileges. Review changes to the gate script, Makefile, workflows, or
-  dependency manifests before a local run; send contributor heads through hosted
-  CI.
-- **Bounded local work.** The primary uses the shared lock, the watchdog, nice
-  level 10, and a time limit for local checks. See the
-  [resource rules](../../instructions/resources.md). Diagnose a failed or
+  passing `make ci-local` on his Mac under the managed lock and timeout, using
+  the always-on repository admin bypass on `main-required-ci`. The separate
+  `main-history` ruleset blocks force pushes and deletion of `main` without a
+  bypass. Other contributors need a pull request and green CI. Opt-in native
+  proofs follow the amendment below; VN infrastructure checks remain hosted.
+  Main push failures are fixed forward. The local gate does not authorize a tag
+  or deployment without green CI on the exact main push commit. Run
+  `make ci-local` only on commits the owner wrote or has reviewed, because it
+  executes scripts and npm lifecycle hooks with the owner's privileges. Review
+  gate script, Makefile, workflow, and dependency changes before a local run;
+  send contributor heads through hosted CI.
+- **Bounded local work.** Remove laptop RSS and nice enforcement and the numeric
+  agent-job ceiling. Keep memory hints, managed locks, deadlines, owned-child
+  cleanup, and separate writer worktrees under the
+  [resource rules](../../instructions/resources.md). Ordinary commands need no
+  mandatory wrapper or lock after the tooling change lands. Existing callers
+  still use `run-capped.sh` until their replacement lands. Diagnose a failed or
   out-of-memory command before rerunning it; never repeat it unchanged to seek a
   pass.
 - **Reuse evidence.** The manager and reviewer reuse check evidence from the
   exact commit under review and do not duplicate a check for role-specific
   evidence.
 - **Browser checks early.** User-visible changes are exercised through scripted
-  headless Playwright suites as they land. A check that proves user interface
-  behavior with no hosted CI equivalent may run as a narrow, bounded local
-  exception under the same resource limits; it cannot replace or weaken the
-  release proof.
+  headless Playwright suites as they land. Opt-in native proofs follow the
+  accepted amendment below after integration and acceptance. Other local
+  exceptions need behavior with no hosted CI equivalent and a bounded brief
+  under the resource rules. Neither path replaces or weakens release proof.
 - **Correctable criteria.** An acceptance criterion that is wrong,
   unsatisfiable, or tests the wrong thing is fixed when found, with the change
   noted.
@@ -88,7 +90,7 @@ full-history gitleaks locally.
 A tag and deployment must refer to the exact commit that passed every required
 hosted check. A later commit cannot inherit an earlier commit's green result.
 The repository is public, so a secret in history is exposed on push and cannot
-be recalled. A capped local gate gives the owner a faster landing path while
+be recalled. A bounded local gate gives the owner a faster landing path while
 full hosted checks remain the release authority.
 
 ## Compatibility, security, and size
@@ -114,6 +116,43 @@ the shared laptop.
 - An independent acceptance pass returns only through a new ADR.
 
 ## History
+
+### Amendment: Tooling and display checks (2026-11-01)
+
+Accepted by the owner after independent review of
+[local tooling](../design/local-tooling-simplification.md) and
+[display assertions](../design/display-assertions.md):
+
+- Replace pixel comparisons with explicit display assertions after Linux and
+  macOS acceptance proves the full inventory. Keep renderer isolation, golden
+  HTML, production browser pins, and output determinism. Optional sanitized
+  images support manual review; they do not gate delivery.
+- Permit opt-in native macOS functional proofs in the owner's account, only for
+  owner-written or owner-reviewed clean commits. Review runner, spec,
+  configuration, workflow, and dependency changes before admission; contributor
+  heads use hosted CI. Disposable builds/profiles and explicit test-only
+  environments limit inputs, not access to the owner's files. The owner accepts
+  that residual privilege risk. Keep `ci-local` separate from browser proofs.
+- Native HTTPS requires attended profile-only CA trust and strict TLS probes.
+  Skip native HTTPS WebKit and only the exact whole server-rendering journeys
+  listed in the tooling design. Record partial native evidence; preserve full
+  Linux proof coverage. Display harness PDFs still run on macOS. Production
+  proof custody and authorization remain unchanged.
+- Remove laptop RSS/nice enforcement and the numeric job ceiling. Keep memory
+  hints, timeouts, existing managed locks, fixture coordination, and one shared
+  database/stack. The owner accepts possible RAM exhaustion, swap, OS kills, and
+  lost unsaved work. Production/container memory limits remain unchanged.
+- Add `server-runtime-smoke` to full CI and the aggregate when its script and
+  integration land. It consumes same-run production build artifacts and proves
+  capped cold-start/idle health, not throughput or host capacity. The tooling
+  design owns limits, evidence, failure handling, and the ninth prose omission.
+
+Implementation remains pending. Preserve existing commands and gates until their
+replacements land; remove pixel gates only after acceptance. No local run is
+authorized by this amendment. Full main CI, independent review, secret scans,
+and green exact-commit main push CI before tagging or deployment remain
+required. No application data or client migration occurs; drain stacks before
+tooling rollback and preserve shared databases, media, and keys.
 
 ### Amendment: One-line review exemption (2026-10-10)
 

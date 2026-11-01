@@ -1,6 +1,6 @@
 # 0019: Tailwind and shadcn-vue as the application UI toolkit
 
-Status: Accepted (2026-09-02, 2026-09-24).
+Status: Accepted (2026-09-02, 2026-09-24, 2026-11-01), by the owner.
 
 ## Context
 
@@ -92,8 +92,11 @@ metadata with an authorized URL still holds.
 - Generated components import icons from `@lucide/vue`; a wrapper script
   rewrites the generator's default import so no second icon package enters the
   bundle.
-- The renderer golden HTML and screenshot suites must pass unchanged when chrome
-  changes. A diff there is a leak, not a baseline update.
+- Renderer golden HTML and renderer expectations for layout, style, content,
+  accessibility, and PDF output must stay unchanged when chrome changes under
+  [display assertions](../design/display-assertions.md). Changed renderer output
+  is an isolation leak. Until the replacement passes acceptance and cutover
+  lands, the existing screenshot comparisons remain required.
 - Unit tests query by role, label, and stable data attributes.
 - Legacy stylesheets load in a cascade layer below the utilities so migrated
   components win, and are deleted when their last consumer migrates.
@@ -101,6 +104,14 @@ metadata with an authorized URL still holds.
   fails in CI if the second step is skipped.
 
 ## History
+
+### Amendment: Display assertions (2026-11-01)
+
+Accepted by the owner: replace pixel comparisons with the reviewed display
+assertion contract, preserving renderer isolation and golden HTML. This avoids
+environment-dependent pixel failures while retaining explicit layout and paint
+checks. Subtle optical defects remain a manual-review limit. Delete comparisons
+only after the contract's Linux and macOS coverage and mutation proofs pass.
 
 - Former ADR 0029 (2026-09-02): the toolkit and renderer isolation. Its "keep
   the zinc and emerald values" clause was replaced by the visual identity

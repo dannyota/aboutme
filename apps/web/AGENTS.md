@@ -12,7 +12,7 @@
 |`server/`|[Nitro routes and isolated render workers](server/AGENTS.md)|
 |`app/i18n/`|Interface catalogs and locale behavior|
 |`app/api/client.ts`, `app/api/generated/`|Handwritten client factory and generated contract types|
-|`test/`, `e2e/`|Unit and Nuxt tests, browser proofs, pixel and print baselines|
+|`test/`, `e2e/`|Unit and Nuxt tests, browser proofs, display assertions; pixel comparisons until cutover|
 
 Authenticated requests run client-side. Controllers supply authorized render input; renderer components do not read editor state or fetch data. Interface locale does not change resume language.
 
@@ -28,4 +28,4 @@ Authenticated requests run client-side. Controllers supply authorized render inp
 
 Read [web rules](../../instructions/web.md), [web design](../../docs/design/web.md), [localization](../../docs/design/localization.md), and [renderer architecture](../../docs/architecture/rendering-and-editor.md). [ADR 0019](../../docs/adr/0019-application-ui-toolkit.md) owns UI primitives.
 
-[Testing](../../instructions/testing.md) names web lint, typecheck, unit, build, and browser gates. [Web rules](../../instructions/web.md) own source manifests and hosted Baselines; QA owns proofs and baseline evidence.
+[Testing](../../instructions/testing.md) names web lint, typecheck, unit, build, and browser gates. [Web rules](../../instructions/web.md) own source manifests, display migration, interim hosted Baselines, and product-image generation; QA owns proofs and display evidence. Native macOS proofs remain pending runner integration and acceptance under the owner-account trusted-commit boundary.
