@@ -131,3 +131,59 @@ export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
       && getComputedStyle(frame).overflow === 'hidden';
   });
 }
+
+// --- gallery.spec.ts and gallery-baselines.spec.ts ---
+export async function measureGalleryGrid(grid: Locator): Promise<{
+  columns: number;
+  columnGap: number;
+  rowGap: number;
+  ordered: boolean;
+}> {
+  return grid.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const boxes = Array.from(element.children)
+      .filter((child) => !child.hasAttribute('hidden'))
+      .map((child) => child.getBoundingClientRect());
+    return {
+      columns: style.gridTemplateColumns.split(' ').length,
+      columnGap: Number.parseFloat(style.columnGap),
+      rowGap: Number.parseFloat(style.rowGap),
+      ordered: boxes.every((box, index) => {
+        if (box.width <= 0 || box.height <= 0) return false;
+        return boxes.slice(0, index).every((previous) => {
+          const sameRow = Math.abs(previous.top - box.top) <= 1;
+          return sameRow
+            ? box.left >= previous.right - 1
+            : box.top >= previous.bottom - 1;
+        });
+      }),
+    };
+  });
+}
+
+export async function measureGalleryDetail(layout: Locator): Promise<{
+  stacked: boolean;
+  columns: boolean;
+  contained: boolean;
+}> {
+  return layout.evaluate((element) => {
+    const info = element.querySelector('.template-detail__info')!
+      .getBoundingClientRect();
+    const sheet = element.querySelector('.template-detail__sheet')!
+      .getBoundingClientRect();
+    const root = element.getBoundingClientRect();
+    return {
+      stacked: sheet.top >= info.bottom - 1,
+      columns: info.left >= sheet.right - 1
+        && Math.abs(info.top - sheet.top) <= 1,
+      contained: [info, sheet].every((box) => box.width > 0 && box.height > 0
+        && box.left >= root.left - 1 && box.right <= root.right + 1),
+    };
+  });
+}
+
+export async function galleryFontLoaded(root: Locator): Promise<boolean> {
+  return root.evaluate(() => Array.from(document.fonts).some((face) =>
+    face.family.replaceAll('"', '') === 'Be Vietnam Pro'
+    && face.status === 'loaded'));
+}
