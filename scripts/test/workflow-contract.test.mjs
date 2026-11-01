@@ -399,9 +399,23 @@ test("required gate rejects competing and unprovable check names in every workfl
   checkRequiredGate(readWorkflow("ci"), vn);
 });
 
+test("required gate rejects YAML labels without a distinct visible prefix", () => {
+  for (const [name, scalar] of [
+    ["leading space", '" ${{ x }}"'],
+    ["uppercase ci", '"CI ${{ x }}"'],
+    ["mixed case ci", '"Ci${{ x }}"'],
+    ["folded empty prefix", ">-\n\n  ${{ x }}\n"],
+    ["quoted empty prefix", '"\\t${{ x }}"'],
+  ]) {
+    const ci = readWorkflow("ci");
+    ci.jobs.contracts.name = parseYaml(`name: ${scalar}\n`, name).toJS().name;
+    assert.throws(() => checkRequiredGate(ci, readWorkflow("vn-infra")), /static check name/, name);
+  }
+});
+
 test("required gate accepts matrix labels with a distinct static prefix", () => {
   const ci = readWorkflow("ci");
-  ci.jobs["web-e2e"].name = "Web E2E (${{ matrix.shard }})";
+  ci.jobs["web-e2e"].name = parseYaml('name: "Web E2E (${{ matrix.shard }})"\n', "fixture").toJS().name;
   checkRequiredGate(ci, readWorkflow("vn-infra"));
 });
 
@@ -735,8 +749,9 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
   })) {
     for (const [id, job] of Object.entries(workflow.jobs)) {
       const name = Object.hasOwn(job, "name") ? job.name : id;
+      const prefix = typeof name === "string" ? name.split("${{", 1)[0].trim().toLowerCase() : "";
       assert.ok(
-        typeof name === "string" && (!name.includes("${{") || !"ci".startsWith(name.split("${{", 1)[0])),
+        typeof name === "string" && (!name.includes("${{") || (prefix.length > 0 && !"ci".startsWith(prefix))),
         `${path}/${id}: static check name prefix required to prove ci uniqueness`,
       );
       if (path === ".github/workflows/ci.yml" && id === "ci") continue;
