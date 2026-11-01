@@ -343,6 +343,29 @@ function pathnameOf(url: string): string {
   }
 }
 
+function diagnosticURL(token: string): { origin: string; path: string; shape: string } {
+  let value = token;
+  let shape = 'absolute';
+  if (token.startsWith(`/${ORIGIN_HOST}/`)) {
+    value = `https:/${token}`;
+    shape = 'scheme-less-host';
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return { origin: 'unknown', path: 'unknown', shape: 'unparseable' };
+  }
+  const origin = url.origin === ORIGIN ? 'same' : 'other';
+  const path = url.pathname === '/api/v1/capabilities' ? 'capabilities'
+    : url.pathname.startsWith('/_nuxt/builds/meta/') ? 'build-meta'
+      : url.pathname.startsWith('/_nuxt/') ? 'nuxt-asset'
+        : url.pathname.startsWith('/api/') ? 'api'
+          : url.pathname.startsWith('/app/') ? 'app'
+            : 'other';
+  return { origin, path, shape };
+}
+
 // --- The core create flow (Chromium) ----------------------------------------
 
 test('entry link, review, and create land the imported content in the editor', async ({
@@ -607,6 +630,12 @@ for (const engine of ['chromium', 'webkit'] as const) {
     const fileByteViolations: string[] = [];
     const unexpectedPageErrors: string[] = [];
     const unexpectedConsoleMessages: RedactedConsoleMessage[] = [];
+    const diagnosticConsole: Record<string, string>[] = [];
+    const diagnosticRequests: Record<string, string>[] = [];
+    const recordDiagnostic = (events: Record<string, string>[], event: Record<string, string>): void => {
+      if (events.length === 16) events.shift();
+      events.push(event);
+    };
     // The chromium fixture's own browser carries the config's baseURL to any
     // context it creates. A directly launched WebKit browser has no baseURL,
     // so it needs one explicitly; it needs no certificate bypass, because
@@ -622,6 +651,16 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await installExternalRequestFirewall(context, counters);
       await installExternalWebSocketFirewall(context, counters);
       const page = await context.newPage();
+      page.on('requestfailed', (request) => {
+        const failure = request.failure()?.errorText ?? '';
+        recordDiagnostic(diagnosticRequests, {
+          event: 'request-failed', stage: lastStage,
+          ...diagnosticURL(request.url()),
+          resource: ['document', 'script', 'fetch', 'xhr'].includes(request.resourceType())
+            ? request.resourceType() : 'other',
+          failure: /cancel|abort/i.test(failure) ? 'cancel-or-abort' : 'other',
+        });
+      });
       // Same reasoning as the create-flow test above: filter the expected
       // anonymous /api/v1/me read at sign-in. Page errors keep the shared
       // counter (other proofs read it the same way) but this proof checks
@@ -634,6 +673,13 @@ for (const engine of ['chromium', 'webkit'] as const) {
           )
           && !isExpectedWebKitInterruptedFetch(engine, message.text()),
         onCountedConsoleError: (message) => {
+          const match = INTERRUPTED_FETCH_URL.exec(message.text());
+          recordDiagnostic(diagnosticConsole, {
+            event: 'console-error', stage: lastStage,
+            ...(match ? diagnosticURL(match[1]!) : {
+              origin: 'unknown', path: 'unknown', shape: 'no-access-control-match',
+            }),
+          });
           unexpectedConsoleMessages.push({
             pathname: pathnameOf(message.location().url),
             type: message.type(),
@@ -723,6 +769,15 @@ for (const engine of ['chromium', 'webkit'] as const) {
         : undefined;
       if (sourceLine !== undefined) {
         stage(`${engine}-failure-at-line-${sourceLine}`);
+      }
+      try {
+        await writeFile(
+          `/evidence/linkedin-import-diagnostic-${engine}.json`,
+          `${JSON.stringify({ schemaVersion: 1, console: diagnosticConsole, requests: diagnosticRequests })}\n`,
+          { flag: 'wx', mode: 0o600 },
+        );
+      } catch {
+        stage('diagnostic-evidence-write-failed');
       }
       try {
         await writeFailureEvidence(
