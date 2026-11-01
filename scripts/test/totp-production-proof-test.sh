@@ -194,13 +194,27 @@ cat >"$WORK/bin/stat" <<'STUB'
 set -Eeuo pipefail
 case ${STAGING_TAMPER-}:${1-}:${2-}:${3-} in
 file-owner:-c:%u:*/totp-prod-spec.*/auth.spec.ts | directory-owner:-c:%u:*/totp-prod-spec.*)
-  printf '0\n'; exit 0 ;;
+  : >"$OWNER_INJECTED"; printf '0\n'; exit 0 ;;
 esac
 exec "$STUB_REAL_STAT" "$@"
+STUB
+export STUB_REAL_PYTHON
+STUB_REAL_PYTHON=$(command -v python3)
+cat >"$WORK/bin/python3" <<'STUB'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [ "${1-}" = -I ] && [ "${2-}" = -c ] && [[ ${3-} == *'os.lstat(sys.argv[2])'* ]]; then
+  case ${STAGING_TAMPER-}:${4-}:${5-} in
+  file-owner:u:*/totp-prod-spec.*/auth.spec.ts | directory-owner:u:*/totp-prod-spec.*)
+    : >"$OWNER_INJECTED"; printf '0\n'; exit 0 ;;
+  esac
+fi
+exec "$STUB_REAL_PYTHON" "$@"
 STUB
 # Refuse GNU find formatting even when this test runs on Linux.
 export STUB_REAL_FIND
 STUB_REAL_FIND=$(command -v find)
+export OWNER_INJECTED=$WORK/owner-injected
 cat >"$WORK/bin/find" <<'STUB'
 #!/usr/bin/env bash
 for argument in "$@"; do
@@ -209,7 +223,7 @@ done
 exec "$STUB_REAL_FIND" "$@"
 STUB
 chmod 0700 "$WORK/bin/find"
-chmod 0700 "$WORK/bin/podman" "$WORK/bin/stat"
+chmod 0700 "$WORK/bin/podman" "$WORK/bin/stat" "$WORK/bin/python3"
 if ! output=$(PATH="$WORK/bin:$PATH" STAGED_PATH="$WORK/staged-path" run_wrapper 2>&1); then
   fail "wrapper staging did not pass runner validation: $output"
 fi
@@ -221,7 +235,7 @@ grep -Fq -- '--timeout 3600 -- ' "$WATCHDOG_LOG" || fail 'proof timeout missing'
 [ ! -e "$(cat "$WORK/staged-path")" ] || fail 'wrapper left its staging directory behind'
 
 for tamper in extra manifest missing file-symlink directory-symlink file-mode directory-mode file-owner directory-owner; do
-  rm -f "$WORK/staged-path"
+  rm -f "$WORK/staged-path" "$OWNER_INJECTED"
   if output=$(PATH="$WORK/bin:$PATH" STAGED_PATH="$WORK/staged-path" \
     STAGING_TAMPER=$tamper run_wrapper 2>&1); then
     fail "runner accepted staged source tampering: $tamper"
@@ -236,6 +250,9 @@ for tamper in extra manifest missing file-symlink directory-symlink file-mode di
   directory-owner) expected='spec input owner mismatch' ;;
   esac
   grep -Fq "$expected" <<<"$output" || fail "$tamper returned the wrong diagnostic: $output"
+  case $tamper in
+  file-owner | directory-owner) [ -e "$OWNER_INJECTED" ] || fail "$tamper did not reach the owner check" ;;
+  esac
   [ ! -e "$WORK/staged-path" ] || fail "$tamper reached the browser run"
   rm -rf -- "$REPO/.dev/v0.4.7/"totp-prod-spec.*
 done

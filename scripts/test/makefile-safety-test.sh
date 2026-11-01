@@ -336,7 +336,7 @@ for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs
   cp "$ROOT/deploy/dev-https-browser/$file" "$HTTPS_REPO/deploy/dev-https-browser/"
 done
 mkdir -p "$HTTPS_REPO/scripts/lib"
-cp "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$HTTPS_REPO/scripts/lib/"
+cp "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$ROOT/scripts/lib/platform.sh" "$HTTPS_REPO/scripts/lib/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
