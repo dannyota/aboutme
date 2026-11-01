@@ -66,3 +66,68 @@ export async function measureVerticalFlow(items: Locator): Promise<boolean> {
       && (index === 0 || box.top >= boxes[index - 1]!.bottom - 1));
   });
 }
+
+// --- chrome.spec.ts ---
+export async function measureChromeGrid(grid: Locator): Promise<{
+  columns: number;
+  gapX: number;
+  gapY: number;
+  separated: boolean;
+}> {
+  return grid.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const boxes = Array.from(element.children, (child) =>
+      child.getBoundingClientRect());
+    const first = boxes[0];
+    const columns = first
+      ? boxes.filter((box) => Math.abs(box.top - first.top) <= 1).length
+      : 0;
+    const separated = boxes.every((box, index) => box.width > 0
+      && box.height > 0 && boxes.slice(index + 1).every((other) =>
+        Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
+        || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
+          <= 1));
+    return {
+      columns,
+      gapX: Number.parseFloat(style.columnGap),
+      gapY: Number.parseFloat(style.rowGap),
+      separated,
+    };
+  });
+}
+
+export async function measureChromeSheet(stage: Locator): Promise<boolean> {
+  return stage.evaluate((element) => {
+    const sheet = element.querySelector('[data-testid="landing-sheet"]');
+    const ghost = element.querySelector('[data-testid="landing-ghost"]');
+    if (!sheet || !ghost) return false;
+    const a = element.getBoundingClientRect();
+    const b = sheet.getBoundingClientRect();
+    const style = getComputedStyle(ghost);
+    const offset = style.translate.split(' ').map(Number.parseFloat);
+    return a.width > 0 && a.height > 0
+      && Math.abs(a.left - b.left) <= 1
+      && Math.abs(a.top - b.top) <= 1
+      && Math.abs(a.width - b.width) <= 1
+      && Math.abs(a.height - b.height) <= 1
+      && Math.abs((offset[0] ?? 0) - (innerWidth >= 672 ? 24 : 12)) <= 1
+      && Math.abs((offset[1] ?? 0) - (innerWidth >= 672 ? -24 : -12)) <= 1;
+  });
+}
+
+export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
+  return card.evaluate((element) => {
+    const frame = element.querySelector('[data-sheet-thumbnail]');
+    const sheet = element.querySelector('.scaled-sheet-content');
+    if (!frame || !sheet) return false;
+    const box = frame.getBoundingClientRect();
+    const page = sheet.getBoundingClientRect();
+    const transform = new DOMMatrixReadOnly(getComputedStyle(sheet).transform);
+    return box.width > 0 && box.height > 0
+      && Math.abs(box.width / box.height - 794 / 1123) < 0.001
+      && Math.abs(transform.a - box.width / 794) < 0.001
+      && Math.abs(page.width - box.width) <= 1
+      && getComputedStyle(frame).backgroundColor === 'rgb(255, 255, 255)'
+      && getComputedStyle(frame).overflow === 'hidden';
+  });
+}
