@@ -606,6 +606,7 @@ apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
 apps/web/e2e/normal-csp.spec.ts
+apps/web/e2e/pdf-display.ts
 apps/web/e2e/playwright.config.ts
 apps/web/e2e/preview-gap-expected.json
 apps/web/e2e/preview-gap.spec.ts

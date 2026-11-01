@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /** Measure text against a named container, including clipped text. */
 export async function measureTextContainment(
@@ -279,5 +279,29 @@ export async function measureShowcaseSheet(sheet: Locator): Promise<boolean> {
           && rect.left >= box.left - 1 && rect.right <= box.right + 1
           && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
       });
+  });
+}
+
+// --- print.spec.ts ---
+export async function measurePrintRules(
+  page: Page,
+): Promise<Record<string, string>> {
+  return page.locator('.resume-document').evaluate((root) => {
+    const style = (selector: string): CSSStyleDeclaration => {
+      const element = root.querySelector(selector);
+      if (element === null) throw new Error('Missing print rule fixture.');
+      return getComputedStyle(element);
+    };
+    const paragraph = style('.entry-body p');
+    return {
+      bodyHeaderAfter: style('.entry-header:not(:last-child)').breakAfter,
+      entryInside: style('.entry').breakInside,
+      headerInside: style('.entry-header').breakInside,
+      orphans: paragraph.orphans,
+      printColorAdjust: getComputedStyle(root).printColorAdjust,
+      sectionAfter: style('.section-heading').breakAfter,
+      sectionInside: style('.resume-section').breakInside,
+      widows: paragraph.widows,
+    };
   });
 }
