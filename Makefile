@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := $(shell command -v bash)
-.PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
@@ -36,7 +36,7 @@ help: ## List targets
 ci: ## Local build, test, lint, and drift reproduction without hosted browser proofs; prohibited by ADR 0024
 	bash scripts/ci.sh
 
-check: ## Fast local subset; skips web checks, database-backed suites, S3 suites, and route-table tests
+check: ## Fast local subset; skips web checks, database-backed suites, media storage suites, and route-table tests
 	bash scripts/ci.sh --fast
 
 pre-push: ## Static checks on the files this branch changed (ESLint, Prettier, markdownlint, gofmt, golangci-lint, lengths, path case, shell) under the local-check lock and memory cap; run before every push
@@ -61,7 +61,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/security-scan-test.sh
 	bash -n scripts/test/native-http-capture-test.sh
 	bash scripts/test/native-http-capture-test.sh
-	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-products-contract-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
+	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-media-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-products-contract-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
 	bash scripts/test/check-path-case-test.sh
 	bash scripts/check-path-case.sh
 	bash scripts/test/render-topology-test.sh
@@ -181,16 +181,16 @@ server-test-realtime-stress: ## Measure 2,000 real SSE connections and churn loc
 SERVER_TEST_S3_RUN ?=
 SERVER_TEST_S3_SKIP ?= ^TestNormalizationBudget$$
 
-server-test-s3: ## Run the fail-closed media conformance suite against aboutme-test-s3 (needs test-s3-up; override SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP to select a subset)
-	bash scripts/test-s3.sh run bash -c 'cd apps/server && go test ./internal/media/... -race -count=1 -v $(if $(SERVER_TEST_S3_RUN),-run "$(SERVER_TEST_S3_RUN)") -skip "$(SERVER_TEST_S3_SKIP)"'
+server-test-media-s3: ## Run the fail-closed media conformance suite against aboutme-test-media-s3 (needs test-media-s3-up; override SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP to select a subset)
+	bash scripts/test-media-s3.sh run bash -c 'cd apps/server && go test ./internal/media/... -race -count=1 -v $(if $(SERVER_TEST_S3_RUN),-run "$(SERVER_TEST_S3_RUN)") -skip "$(SERVER_TEST_S3_SKIP)"'
 
 server-test-resumeapi: ## Run the fail-closed resume API suite with filesystem media (needs test-db-up)
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_MEDIA_BACKEND=fs \
 	  TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/resumeapi/... -race -count=1 -v
 
-server-test-resumeapi-s3: ## Run the fail-closed resume API suite with S3 media (needs test-db-up and test-s3-up)
-	bash scripts/test-s3.sh run bash -c 'cd apps/server && REQUIRE_TEST_DB=1 TEST_MEDIA_BACKEND=s3 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} go test ./internal/resumeapi/... -race -count=1 -v'
+server-test-resumeapi-s3: ## Run the fail-closed resume API suite with S3 media (needs test-db-up and test-media-s3-up)
+	bash scripts/test-media-s3.sh run bash -c 'cd apps/server && REQUIRE_TEST_DB=1 TEST_MEDIA_BACKEND=s3 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} go test ./internal/resumeapi/... -race -count=1 -v'
 
 web-build: ## Build the Nuxt web app
 	cd apps/web && npm run build
@@ -515,11 +515,11 @@ db-setup: ## Create or verify the fixed database roles and grants for DATABASE_U
 test-db-down: ## Stop the aboutme Postgres container (check no worker is mid-suite first)
 	podman rm -f aboutme-test-db
 
-test-s3-up: ## Start or reuse the one disposable MinIO conformance-test container on 127.0.0.1:20091
-	bash scripts/test-s3.sh up
+test-media-s3-up: ## Start MinIO, the local stand-in for production vStorage (S3), on 127.0.0.1:20091
+	bash scripts/test-media-s3.sh up
 
-test-s3-down: ## Remove only aboutme-test-s3 and its disposable credential file (check no media suite is active first)
-	bash scripts/test-s3.sh down
+test-media-s3-down: ## Remove only aboutme-test-media-s3 and its disposable credential file (check no media suite is active first)
+	bash scripts/test-media-s3.sh down
 
 server-test-integration: ## Run server integration tests (needs test-db-up or TEST_DATABASE_URL)
 	@printf '%s\n' 'server-test-integration: go test store integration package'

@@ -61,7 +61,7 @@ func TestRequireTestS3_SkipsWhenUnconfigured(t *testing.T) {
 
 // TestRequireTestS3_FailsClosedUnderRequire is the gate's own proof: with
 // REQUIRE_TEST_S3=1 a missing TEST_S3_ENDPOINT is a hard failure, never a
-// skip, so `make server-test-s3` can never pass vacuously.
+// skip, so `make server-test-media-s3` can never pass vacuously.
 func TestRequireTestS3_FailsClosedUnderRequire(t *testing.T) {
 	t.Parallel()
 	fake := &fakeTB{}

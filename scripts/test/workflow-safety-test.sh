@@ -125,13 +125,15 @@ git diff --name-status \"\$base\"...\"\$head\"" \
 
 grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
   fail "hosted S3 conformance does not pin a runner with Podman"
-grep -Fq 'run: make test-s3-up' "$WORKFLOW" ||
+grep -Fq 'run: make test-media-s3-up' "$WORKFLOW" ||
   fail "hosted S3 conformance does not start the pinned test service"
+grep -Fq 'make server-test-media-s3' "$WORKFLOW" ||
+  fail "hosted media conformance does not run the media storage suite"
 grep -Fq 'SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$' "$WORKFLOW" ||
   fail "hosted S3 conformance does not isolate the slow corpus test"
 grep -Fq 'SERVER_TEST_S3_SKIP: ^(TestNormalizationBudget|TestNormalizeAcceptsFrozenCorpusDeterministically)$' "$WORKFLOW" ||
   fail "hosted S3 conformance does not run the rest of the suite with both split-off tests skipped"
-grep -Fq 'run: make test-s3-down' "$WORKFLOW" ||
+grep -Fq 'run: make test-media-s3-down' "$WORKFLOW" ||
   fail "hosted S3 conformance does not tear down its disposable service"
 
 WEB_E2E_JOB=$(awk '/^  web-e2e:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")

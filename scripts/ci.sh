@@ -3,7 +3,7 @@
 # The full local run needs owner authorization; connected security scanning uses `make scan`.
 #
 #   scripts/ci.sh          local reproduction (`make ci`)
-#   scripts/ci.sh --fast   subset without web checks, DB/S3 suites, or route-table tests
+#   scripts/ci.sh --fast   subset without web checks, database and media storage suites, or route-table tests
 #                          (`make check`)
 #
 # The database-backed groups start or reuse the shared Postgres and always leave
@@ -178,16 +178,16 @@ s3_suites() {
   local platform
   platform=$(uname -s) || return
   if [ "$platform" != Linux ]; then
-    echo 'Skipping S3 suites: their host-networked MinIO client needs Linux; CI covers them.'
+    echo 'Skipping media storage suites: MinIO, the local stand-in for production vStorage (S3), needs Linux host networking; CI covers them.'
     return 0
   fi
-  make test-s3-up || return
+  make test-media-s3-up || return
   local status=0
-  make server-test-s3 || status=$?
+  make server-test-media-s3 || status=$?
   if [ "$status" -eq 0 ]; then
     make server-test-resumeapi-s3 || status=$?
   fi
-  make test-s3-down || status=$?
+  make test-media-s3-down || status=$?
   return "$status"
 }
 
@@ -225,7 +225,7 @@ else
   fi
   make test-db-up
   run "database suites" db_suites
-  run "S3 media and resume API suites" s3_suites
+  run "media storage suites (MinIO as vStorage)" s3_suites
   run "route table" route_table
 fi
 
