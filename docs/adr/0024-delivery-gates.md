@@ -46,7 +46,11 @@ Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
   request and green CI. Browser, pixel, and VN infrastructure suites run only in
   GitHub CI; failures on the main push are fixed forward. The local gate does
   not authorize a tag or deployment without green CI on the exact main push
-  commit.
+  commit. Run `make ci-local` only on commits the owner wrote or has reviewed,
+  because it executes the checkout's scripts and npm lifecycle hooks with the
+  owner's privileges. Review changes to the gate script, Makefile, workflows, or
+  dependency manifests before a local run; send contributor heads through hosted
+  CI.
 - **Bounded local work.** The primary uses the shared lock, the watchdog, nice
   level 10, and a time limit for local checks. See the
   [resource rules](../../instructions/resources.md). Diagnose a failed or
@@ -152,3 +156,6 @@ above retains this exemption.
   bypass for his Mac, retaining full main push CI and the exact-commit release
   gate. The `main-required-ci` ruleset has an always-on repository admin bypass;
   `main-history` blocks force pushes and deletion without a bypass.
+- 2026-11-01: Restricted local gate runs to trusted commits and required review
+  of gate and dependency changes before execution because they run with the
+  owner's privileges.

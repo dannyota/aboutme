@@ -21,6 +21,7 @@ STUB
 cat >"$WORK/bin/npm" <<'STUB'
 #!/usr/bin/env bash
 printf 'npm %s %s\n' "$PWD" "$*" >>"$CALL_LOG"
+[ "${PYTHONDONTWRITEBYTECODE:-}" = 1 ] || exit 7
 [ "$PWD" != "${STUB_INSTALL_FAIL:-}" ] || exit 1
 mkdir -p node_modules
 if [[ $PWD == */apps/web ]]; then mkdir -p .nuxt; touch .nuxt/eslint.config.mjs; fi
@@ -29,6 +30,7 @@ chmod +x "$WORK/bin/npm"
 cat >"$repo/scripts/ci.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'ci %s\n' "$PWD" >>"$CALL_LOG"
+[ "${PYTHONDONTWRITEBYTECODE:-}" = 1 ] || exit 7
 [[ -z $(find . -type l -print -quit) ]] || exit 8
 [ -d node_modules ] && [ -d apps/web/node_modules ] && [ -f apps/web/.nuxt/eslint.config.mjs ] &&
   [ -d deploy/dev-https-browser/node_modules ] || exit 9
@@ -39,12 +41,29 @@ STUB
 git -C "$repo" init -q
 git -C "$repo" config user.name Test
 git -C "$repo" config user.email test@example.invalid
-git -C "$repo" add scripts
+printf 'node_modules/\n.nuxt/\n' >"$repo/.gitignore"
+git -C "$repo" add scripts .gitignore
 git -C "$repo" commit -qm fixture
 git -C "$repo" worktree add -q -b fixture "$WORK/tree"
 mkdir -p "$WORK/tree/apps/web" "$WORK/tree/deploy/dev-https-browser"
 export CALL_LOG=$WORK/calls PATH="$WORK/bin:$PATH"
 run() { : >"$CALL_LOG"; (cd "$WORK/tree" && CI_LOCAL_LOCK_WAIT=0 bash scripts/ci-local.sh) >"$WORK/out" 2>&1; }
+mkdir -p "$WORK/sentinel"
+touch "$WORK/sentinel/keep"
+for path in apps/web/.nuxt apps/web/node_modules node_modules; do
+  ln -s "$WORK/sentinel" "$WORK/tree/$path"
+  run && fail "symlink $path was accepted"
+  grep -Fq "$path" "$WORK/out" || fail 'missing symlink path'
+  grep -q 'remove the link' "$WORK/out" || fail 'missing symlink removal instruction'
+  if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran with a symlink'; fi
+  [[ -f $WORK/sentinel/keep ]] || fail 'symlink target was changed'
+  rm "$WORK/tree/$path"
+done
+touch "$WORK/tree/dirty"
+run && fail 'dirty worktree was accepted'
+grep -q 'worktree and index must be clean' "$WORK/out" || fail 'missing dirty-tree refusal'
+if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran with a dirty worktree'; fi
+rm "$WORK/tree/dirty"
 run || fail 'successful run failed'
 grep -q -- '--timeout 3600 -- bash .* --capped report=1' "$CALL_LOG" || fail 'missing watchdog arguments'
 printf 'npm %s ci --prefer-offline --no-audit --no-fund\n' "$WORK/tree" "$WORK/tree/apps/web" "$WORK/tree/deploy/dev-https-browser" >"$WORK/expected"

@@ -42,3 +42,5 @@ Codex sandboxes cannot run local checks or write the Go build cache or npm cache
 ## Owner local gate
 
 The primary may run `make ci-local` on the owner’s Mac as the landing gate. It holds the shared lock and runs dependency installs in the checkout under test before `scripts/ci.sh`, all with the watchdog, a 3600-second timeout, and peak RSS reporting. It installs the root, web, and browser harness npm projects; the schema check installs its own dependencies. It runs no browser or pixel suites; Linux-only suites skip on macOS. A passing run permits the owner’s admin bypass; every main push still runs full GitHub CI, which gates tags and deploys on the exact commit. Do not run Nuxt tooling in a checkout used by an active browser proof or native stack.
+
+Run `make ci-local` only on commits the owner wrote or has reviewed, because it executes the checkout's scripts and npm lifecycle hooks with the owner's privileges. Review changes to the gate script, Makefile, workflows, or dependency manifests before a local run; send contributor heads through hosted CI.

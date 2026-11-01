@@ -38,7 +38,7 @@ outer() {
 }
 
 locked() {
-  exec env RUN_CAPPED_REPORT=1 bash "$ROOT/scripts/run-capped.sh" \
+  exec env RUN_CAPPED_REPORT=1 PYTHONDONTWRITEBYTECODE=1 bash "$ROOT/scripts/run-capped.sh" \
     --timeout "$TIMEOUT_SECONDS" -- bash "$SCRIPT" --capped
 }
 
@@ -60,7 +60,21 @@ capped() {
   trap finish EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  local dir
+  local dir path tree_status
+  for path in apps/web/.nuxt apps/web/node_modules node_modules; do
+    if [[ -L $ROOT/$path ]]; then
+      say "refused: $path is a symlink; remove the link before running local CI"
+      exit 2
+    fi
+  done
+  if ! tree_status=$(git status --porcelain); then
+    say 'refused: could not check worktree status; CI did not run'
+    exit 2
+  fi
+  if [[ -n $tree_status ]]; then
+    say 'refused: worktree and index must be clean before running local CI'
+    exit 2
+  fi
   for dir in . apps/web deploy/dev-https-browser; do
     if ! (cd "$ROOT/$dir" && npm ci --prefer-offline --no-audit --no-fund); then
       say "refused: dependency installation failed in $dir; CI did not run"
