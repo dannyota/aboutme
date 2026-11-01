@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- test-only row-collision avoidance (uniqueGitHubUserID below), not a security-sensitive value; same judgment already expressed to golangci-lint via the //nolint:gosec on that call site, and the same reasoning testutil/ids.go's identical import-line suppression documents.
+	"math/rand/v2" // Test-only row-collision avoidance, not a security-sensitive value.
 	"net/http"
 	"net/http/httptest"
 	"net/url"

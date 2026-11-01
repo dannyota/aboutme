@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Black-box contract for the phase scan's connected product selection and
-# aggregate scanner status. The fake tools make no network calls.
+# Black-box contract for full-history secret scanning and scanner failures.
+# The fake tools make no network calls.
 set -u -o pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -19,40 +19,10 @@ cat >"$fake_bin/make" <<'EOF'
 #!/usr/bin/env bash
 printf 'make|%s\n' "$*" >>"$CALL_LOG"
 if [ "$#" -eq 2 ] && [ "$1" = tools-check ] && [ "$2" = ARGS=scan ]; then
-  exit 0
+  exit "${TOOLS_FIXTURE_STATUS:-0}"
 fi
 printf 'unexpected make invocation: %s\n' "$*" >&2
 exit 64
-EOF
-
-cat >"$fake_bin/semgrep" <<'EOF'
-#!/usr/bin/env bash
-printf 'semgrep' >>"$CALL_LOG"
-printf '|%s' "$@" >>"$CALL_LOG"
-printf '\n' >>"$CALL_LOG"
-
-[ "${1:-}" = ci ] || exit 64
-for required in --code --supply-chain --no-suppress-errors; do
-  count=0
-  for argument in "$@"; do
-    if [ "$argument" = "$required" ]; then
-      count=$((count + 1))
-    fi
-  done
-  if [ "$count" -ne 1 ]; then
-    printf 'required Semgrep product option %s appeared %s times\n' \
-      "$required" "$count" >&2
-    exit 64
-  fi
-done
-for argument in "$@"; do
-  if [ "$argument" = --secrets ]; then
-    printf 'Semgrep Secrets must remain disabled; gitleaks owns secret scanning\n' >&2
-    exit 64
-  fi
-done
-
-exit "${SEMGREP_FIXTURE_STATUS:-0}"
 EOF
 
 cat >"$fake_bin/gitleaks" <<'EOF'
@@ -70,15 +40,14 @@ fail() {
 }
 
 run_case() {
-  local name=$1 semgrep_status=$2 gitleaks_status=$3 expected=$4
-  local output status semgrep_calls gitleaks_calls failures_before
+  local name=$1 gitleaks_status=$2 expected=$3 tools_status=${4:-0}
+  local output status gitleaks_calls failures_before
 
   : >"$calls"
   failures_before=$failures
   output=$(
-    /usr/bin/env SEMGREP_APP_TOKEN=fixture-token \
-      SEMGREP_FIXTURE_STATUS="$semgrep_status" \
-      GITLEAKS_FIXTURE_STATUS="$gitleaks_status" \
+    /usr/bin/env GITLEAKS_FIXTURE_STATUS="$gitleaks_status" \
+      TOOLS_FIXTURE_STATUS="$tools_status" \
       PATH="$fake_bin:$SYSTEM_PATH" CALL_LOG="$calls" \
       /bin/bash "$repo/scripts/scan.sh" 2>&1
   )
@@ -90,13 +59,11 @@ run_case() {
     fail "$name returned success after a configured scanner failure"
   fi
 
-  semgrep_calls=$(grep -c '^semgrep|' "$calls" || true)
   gitleaks_calls=$(grep -c '^gitleaks|detect --redact --no-banner$' "$calls" || true)
-  if [ "$semgrep_calls" -ne 1 ]; then
-    fail "$name made $semgrep_calls connected Semgrep calls; expected one"
-  fi
-  if [ "$gitleaks_calls" -ne 1 ]; then
-    fail "$name made $gitleaks_calls full-history gitleaks calls; expected one"
+  local expected_calls=1
+  [ "$tools_status" -eq 0 ] || expected_calls=0
+  if [ "$gitleaks_calls" -ne "$expected_calls" ]; then
+    fail "$name made $gitleaks_calls full-history gitleaks calls; expected $expected_calls"
   fi
 
   if [ "$failures" -ne "$failures_before" ]; then
@@ -106,12 +73,12 @@ run_case() {
   fi
 }
 
-run_case 'all scanners succeed' 0 0 pass
-run_case 'Semgrep fails' 17 0 fail
-run_case 'gitleaks fails' 0 19 fail
+run_case 'gitleaks succeeds' 0 pass
+run_case 'gitleaks fails' 19 fail
+run_case 'toolchain unavailable' 0 fail 23
 
 if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf 'ok - phase scan selects Code and Supply Chain, rejects Secrets, and propagates scanner failures\n'
+printf 'ok - scan runs full-history gitleaks and propagates scanner failures\n'

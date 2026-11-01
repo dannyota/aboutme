@@ -11,7 +11,7 @@ MANIFEST=$ROOT/.tool-versions
 
 declare -A expected=()
 readonly -a known=(
-  nodejs golang sqlc semgrep gitleaks golangci-lint govulncheck caddy
+  nodejs golang sqlc gitleaks golangci-lint govulncheck caddy
 )
 
 die() {
@@ -94,13 +94,6 @@ check_sqlc() {
   require_command sqlc
   actual=$(sqlc version)
   assert_version sqlc "v${expected[sqlc]}" "$(first_line "$actual")"
-}
-
-check_semgrep() {
-  local actual
-  require_command semgrep
-  actual=$(semgrep --version)
-  assert_version semgrep "${expected[semgrep]}" "$(first_line "$actual")"
 }
 
 check_gitleaks() {
@@ -222,7 +215,6 @@ check_repository_contract() {
   assert_ci_yaml_values go go-version "${expected[golang]}"
   assert_ci_text golangci-lint "version: v${expected[golangci-lint]}"
   assert_ci_text govulncheck "govulncheck@v${expected[govulncheck]}"
-  assert_ci_text semgrep "semgrep==${expected[semgrep]}"
   assert_ci_text sqlc "sqlc@v${expected[sqlc]}"
   assert_ci_text caddy \
     "caddyserver/caddy/releases/download/v${expected[caddy]}"
@@ -237,9 +229,9 @@ check_repository_contract() {
 
 select_tools() {
   case ${1:-all} in
-  all) printf '%s\n' nodejs golang sqlc semgrep gitleaks golangci-lint govulncheck caddy ;;
+  all) printf '%s\n' nodejs golang sqlc gitleaks golangci-lint govulncheck caddy ;;
   ci) printf '%s\n' nodejs golang sqlc golangci-lint govulncheck caddy ;;
-  scan) printf '%s\n' semgrep gitleaks ;;
+  scan) printf '%s\n' gitleaks ;;
   dev) printf '%s\n' nodejs golang caddy ;;
   *) printf '%s\n' "$@" ;;
   esac

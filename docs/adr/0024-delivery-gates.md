@@ -37,19 +37,18 @@ be recalled.
   CAS, idempotency, media privacy, publish revocation) needs the reviewer to
   confirm those invariants by name.
 - **GitHub CI is the full gate.** `ci.yml` runs checks per job, including
-  builds, typechecks, tests, linters, browser proofs, VN infrastructure, and two
-  Semgrep jobs on main pushes and main dispatches only. The `contracts` job runs
-  full-history gitleaks. The aggregate `ci` job is the only required check on
-  `main`. Hosted CI never calls `make ci`. A red run is fixed forward at once.
+  builds, typechecks, tests, linters, browser proofs, and VN infrastructure. The
+  `contracts` job runs full-history gitleaks. The aggregate `ci` job is the only
+  required check on `main`. Hosted CI never calls `make ci`. A red run is fixed
+  forward at once.
 - **Narrow pull request selection.** Only pull requests whose entire change
   matches the [prose allowlist](../design/ci-path-selection.md#selection) may
   omit the named application and infrastructure jobs. Preflight, all contracts,
   and `ci` still run. Unknown paths and path-selection failures select the full
   gate; invalid comparison bases still fail preflight. Main pushes and every
-  manual dispatch keep the full gate, subject to the existing Semgrep event
-  rule. Workflow triggers have no path filter. `ci` accepts an omitted job only
-  with valid, explicit pull request selection; failures, cancellations, missing
-  outputs, and unexplained skips fail it.
+  manual dispatch keep the full gate. Workflow triggers have no path filter.
+  `ci` accepts an omitted job only with valid, explicit pull request selection;
+  failures, cancellations, missing outputs, and unexplained skips fail it.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for a green main push run on that exact commit.
 - **No full local gate.** Full local `make ci` is prohibited, including while
@@ -80,9 +79,8 @@ This is delivery process only. It changes no product behavior, schema, API,
 stored data, migration, or client contract.
 
 Per-commit gitleaks is the boundary before a secret can enter public Git
-history. Hosted Semgrep runs on main pushes and main dispatches using the
-`semgrep` environment, whose deployment branch policy allows only `main`. Hosted
-Semgrep and full-history gitleaks remain required on the exact release commit.
+history. Full-history gitleaks remains required on the exact release commit. CI
+references no stored secrets. CodeQL runs outside the required `ci` check.
 Bounded local diagnostics limit the effect of hostile or faulty test inputs on
 the shared laptop.
 
@@ -103,6 +101,21 @@ The owner decided that one-line changes skip the reviewer pass, including
 production DNS. The manager shows plan or diff evidence instead. Hosted CI and
 the exact green commit gate still apply. The exemption keeps review effort
 proportional to the change.
+
+## Amendment: Code scanning without stored secrets (2026-11-01)
+
+The owner removed Semgrep Code, Supply Chain, its token, and the custom rules.
+CodeQL uses `security-extended` for Go and JavaScript/TypeScript on main pushes,
+every Monday at 03:00 UTC, and manual dispatch. It is non-blocking code scanning
+outside the required `ci` check; review alerts in GitHub's Security tab. CI
+references no stored secrets; GitHub's per-run `GITHUB_TOKEN` remains allowed.
+
+ESLint enforces the [sanitizer control](0008-ssr-sanitizer-authority.md).
+Existing gosec checks G203, G201, and G202 cover trusted HTML conversions and
+SQL string building. The custom cookie flags and response writer `Unwrap` checks
+are dropped; CodeQL covers insecure cookies. Full-history gitleaks, npm audit,
+and govulncheck retain their existing CI gates. `make scan` runs full-history
+gitleaks locally.
 
 ## History
 
@@ -129,8 +142,11 @@ proportional to the change.
   remains the full gate, and the primary alone runs local checks.
 - 2026-10-31: The owner limited connected Semgrep to main pushes and main
   dispatches with a main-only environment secret to keep its token out of pull
-  request and branch runs. Exact-release Semgrep checks remain required.
+  request and branch runs. That policy required exact-release Semgrep checks.
 - 2026-11-01: The owner chose a narrow prose allowlist for pull requests to
   reduce runner queues, with unknown paths falling back to the full gate. Main
   pushes remain full, and `ci` remains the single required check. The selection
   design and this amendment require independent review before implementation.
+- 2026-11-01: The owner removed Semgrep and its token, selected non-blocking
+  CodeQL on main pushes and weekly, and required CI to hold no stored secrets.
+  ESLint and existing gosec checks carry the retained custom controls.

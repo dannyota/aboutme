@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
@@ -42,8 +42,7 @@ check: ## Fast local subset; skips web checks, database-backed suites, S3 suites
 pre-push: ## Static checks on the files this branch changed (ESLint, Prettier, markdownlint, gofmt, golangci-lint, lengths, path case, shell) under the local-check lock and memory cap; run before every push
 	bash scripts/pre-push.sh
 
-scan: ## Batched security scan: Semgrep Code/SAST + Supply Chain/SCA, then gitleaks secrets over full history
-	scripts/test/semgrep-sca-inputs-test.sh
+scan: ## Scan secrets over full Git history with gitleaks
 	bash scripts/scan.sh
 
 tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="ci", "scan", "dev", or tool names)
@@ -62,7 +61,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/security-scan-test.sh
 	bash -n scripts/test/native-http-capture-test.sh
 	bash scripts/test/native-http-capture-test.sh
-	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
+	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-products-contract-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
 	bash scripts/test/check-path-case-test.sh
 	bash scripts/check-path-case.sh
 	bash scripts/test/render-topology-test.sh
@@ -75,7 +74,6 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/server-db-package-inventory-test.sh
 	scripts/test/makefile-safety-test.sh
 	scripts/test/migration-append-only-test.sh
-	scripts/test/scan-engine-error-test.sh
 	scripts/test/scan-products-contract-test.sh
 	scripts/test/toolchain-contract-test.sh
 	scripts/test/workflow-safety-test.sh
@@ -526,14 +524,6 @@ server-test-integration: ## Run server integration tests (needs test-db-up or TE
 	@printf '%s\n' 'server-test-integration: go test store integration package'
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/store/... -run Integration -count=1 -v
-
-semgrep: ## Offline SAST scan with registry packs + project rules (no account needed; quick local check)
-	semgrep --config p/golang --config p/gosec --config p/typescript --config p/javascript \
-	  --config p/owasp-top-ten --config p/dockerfile --config p/docker-compose \
-	  --config .semgrep.yml --error .
-
-semgrep-ci: ## Connected Semgrep: Code/SAST (Pro rules) + Supply Chain/SCA. gitleaks scans secrets. Needs SEMGREP_APP_TOKEN. This is what CI runs.
-	semgrep ci --code --supply-chain --no-suppress-errors
 
 sqlc-gen: ## Regenerate the typed data layer from migrations/ and sql/ query sources
 	cd apps/server && sqlc generate

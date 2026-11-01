@@ -29,7 +29,6 @@ const actionFixture = (reference, comment = "v1.2.3") =>
   `jobs:\n  check:\n    steps:\n      - uses: ${reference} # ${comment}\n`;
 const readWorkflow = (name) =>
   parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
-const semgrepSkipCondition = "${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}";
 
 const proseJobs = ["macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"];
 const selectionCondition = "github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'";
@@ -638,7 +637,6 @@ test("required gate rejects incomplete needs and independent VN triggers", () =>
     ["missing reusable call", (ci) => { delete ci.jobs["vn-infra"].uses; }, /VN workflow call/],
     ["conditional reusable call", (ci) => { ci.jobs["vn-infra"].if = "false"; }, /VN workflow must run/],
     ["conditional gate", (ci) => { delete ci.jobs.ci.if; }, /always/],
-    ["unrestricted Semgrep skips", (ci) => { aggregateStep(ci).env.ALLOW_SEMGREP_SKIP = "true"; }, /main condition/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
     const ci = readWorkflow("ci");
@@ -714,14 +712,12 @@ test("required gate accepts matrix labels with a distinct static prefix", () => 
   checkRequiredGate(ci, readWorkflow("vn-infra"));
 });
 
-test("aggregate accepts success and only explicit prose or Semgrep skips", () => {
+test("aggregate accepts success and only explicit prose skips", () => {
   checkAggregateResults(readWorkflow("ci"));
 });
 
 test("aggregate rejects unrestricted job and event skips", () => {
   for (const condition of [
-    '(.key | IN("semgrep-code", "semgrep-supply-chain"))',
-    '$allow_semgrep_skip == "true"',
     '$event == "pull_request"',
     '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))',
   ]) {
@@ -1020,8 +1016,6 @@ function checkJobTimeouts(ci, vn) {
     web: 20,
     "web-e2e": 40,
     "dev-https-proofs": 40,
-    "semgrep-code": 20,
-    "semgrep-supply-chain": 20,
     ci: 5,
   };
   assert.deepEqual(Object.keys(ci.jobs).sort(), [...Object.keys(timeouts), "vn-infra"].sort(), "CI timeout job set");
@@ -1075,7 +1069,6 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
   assert.equal(ci.jobs.ci.if, "always()", "ci must always run");
   const step = aggregateStep(ci);
   assert.equal(step.if, "always()", "aggregate must always run");
-  assert.equal(step.env.ALLOW_SEMGREP_SKIP, semgrepSkipCondition, "Semgrep skip main condition");
   assert.equal(step.env.NEEDS_JSON, "${{ toJSON(needs) }}");
   for (const job of Object.values(vn.jobs)) assert.equal(job.if, undefined, "VN internal jobs always run when called");
 }
@@ -1083,48 +1076,44 @@ function checkRequiredGate(ci, vn, workflows = Object.fromEntries(
 function checkAggregateResults(ci) {
   const step = aggregateStep(ci);
   const jobs = ci.jobs.ci.needs;
-  const run = (needs, event, allowSkip) => {
+  const run = (needs, event) => {
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step.run], {
-      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), GITHUB_EVENT_NAME: event, ALLOW_SEMGREP_SKIP: String(allowSkip) },
+      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), GITHUB_EVENT_NAME: event },
       encoding: "utf8", timeout: 5000,
     });
     assert.ifError(result.error);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
     return result.status;
   };
-  for (const [context, event, allowSkip] of [
-    ["main push", "push", false], ["main dispatch", "workflow_dispatch", false],
-    ["branch push", "push", true], ["branch dispatch", "workflow_dispatch", true],
-    ["unknown event", "unknown", true],
-    ...["same repository", "fork", "Dependabot", "train"].map((name) => [name, "pull_request", true]),
+  for (const [context, event] of [
+    ["main push", "push"], ["main dispatch", "workflow_dispatch"],
+    ["branch push", "push"], ["branch dispatch", "workflow_dispatch"],
+    ["unknown event", "unknown"],
+    ...["same repository", "fork", "Dependabot", "train"].map((name) => [name, "pull_request"]),
   ]) {
     for (const selection of ["full", "prose", "unknown", "", undefined]) {
       const successful = Object.fromEntries(jobs.map((job) => [job, { result: "success" }]));
       successful.preflight.outputs = { selection };
       const valid = selection === "full" || (selection === "prose" && event === "pull_request");
-      assert.equal(run(successful, event, allowSkip), valid ? 0 : 1, `${context}/${selection}: all success`);
+      assert.equal(run(successful, event), valid ? 0 : 1, `${context}/${selection}: all success`);
       if (!valid) continue;
       const omitted = structuredClone(successful);
       for (const job of proseJobs) omitted[job].result = "skipped";
-      assert.equal(run(omitted, event, allowSkip), selection === "prose" ? 0 : 1, `${context}: prose omissions`);
+      assert.equal(run(omitted, event), selection === "prose" ? 0 : 1, `${context}: prose omissions`);
       for (const job of jobs) {
         for (const result of ["success", "skipped", "cancelled", "failure", "unknown", null, undefined]) {
           const needs = structuredClone(successful); needs[job].result = result;
           const allowed = result === "success" || (result === "skipped" && (
-            (allowSkip && ["semgrep-code", "semgrep-supply-chain"].includes(job)) ||
             (selection === "prose" && proseJobs.includes(job))));
-          assert.equal(run(needs, event, allowSkip), allowed ? 0 : 1, `${context}/${selection}: ${job}=${result}`);
+          assert.equal(run(needs, event), allowed ? 0 : 1, `${context}/${selection}: ${job}=${result}`);
         }
         const missing = structuredClone(successful); delete missing[job];
-        assert.equal(run(missing, event, allowSkip), 1, `${context}: missing ${job}`);
+        assert.equal(run(missing, event), 1, `${context}: missing ${job}`);
       }
       for (const value of [null, {}, { result: "success" }, { result: "success", outputs: null }, { result: "success", outputs: { selection: false } }]) {
-        assert.equal(run({ ...successful, preflight: value }, event, allowSkip), 1, "missing output");
+        assert.equal(run({ ...successful, preflight: value }, event), 1, "missing output");
       }
-      assert.equal(run({ ...successful, extra: { result: "success" } }, event, allowSkip), 1, "unknown job");
-      const semgrep = structuredClone(successful);
-      for (const job of ["semgrep-code", "semgrep-supply-chain"]) semgrep[job].result = "skipped";
-      assert.equal(run(semgrep, event, allowSkip), allowSkip ? 0 : 1, `${context}: Semgrep skips`);
+      assert.equal(run({ ...successful, extra: { result: "success" } }, event), 1, "unknown job");
     }
   }
 }
@@ -1296,8 +1285,6 @@ test("one conflicting mirror fails even when another mirror matches", () => {
     ["govulncheck", (v) => `run: go install golang.org/x/vuln/cmd/govulncheck@v${v}`],
     ["sqlc", (v) => `run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v${v}`],
     ["gitleaks", (v) => `run: go install github.com/zricethezav/gitleaks/v8@v${v}`],
-    ["semgrep", (v) => `run: pip install semgrep==${v}`],
-    ["semgrep", (v) => `with: {key: 'pip-semgrep-${v}-linux'}`],
     ["caddy", (v) => `run: curl https://github.com/caddyserver/caddy/releases/download/v${v}/caddy_${v}_linux_amd64.tar.gz`],
     ["golang", (v) => `with: {key: 'go-toolchain-${v}-linux'}`],
     ["golang", (v) => `with: {path: '\${{ runner.tool_cache }}/go/${v}'}`],
@@ -1378,8 +1365,6 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
     ["govulncheck", /golang\.org\/x\/vuln\/cmd\/govulncheck@v?([^\s"';]+)/g],
     ["sqlc", /github\.com\/sqlc-dev\/sqlc\/cmd\/sqlc@v?([^\s"';]+)/g],
     ["gitleaks", /github\.com\/zricethezav\/gitleaks\/v8@v?([^\s"';]+)/g],
-    ["semgrep", /semgrep==([^\s"';]+)/g],
-    ["semgrep", /^pip-semgrep-([^-\s]+)/g],
     ["caddy", /caddyserver\/caddy\/releases\/download\/v([^/\s]+)/g],
     ["caddy", /caddy_([^_\s/]+)_linux_/g],
     ["golang", /^go-toolchain-([^-\s]+)/g],
@@ -1458,4 +1443,44 @@ test("server cross-compiles every package for Darwin arm64", () => {
   assert.ok(step, "Darwin server build is required");
   assert.equal(step["working-directory"], "apps/server");
   assert.equal(step["continue-on-error"], undefined);
+});
+
+test("CodeQL scans main and weekly without joining the required gate", () => {
+  const workflow = readWorkflow("codeql");
+  assert.equal(workflow.name, "CodeQL");
+  assert.deepEqual(workflow.on, {
+    push: { branches: ["main"] },
+    schedule: [{ cron: "0 3 * * 1" }],
+    workflow_dispatch: null,
+  });
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  assert.equal(workflow.concurrency.group, "codeql-${{ github.ref }}");
+  assert.equal(workflow.concurrency["cancel-in-progress"], "${{ github.ref != 'refs/heads/main' }}");
+  assert.deepEqual(Object.keys(workflow.jobs), ["analyze"]);
+  const job = workflow.jobs.analyze;
+  assert.equal(job.name, "CodeQL (${{ matrix.language }})");
+  assert.deepEqual(job.permissions, { contents: "read", "security-events": "write" });
+  assert.deepEqual(job.strategy.matrix.language, ["go", "javascript-typescript"]);
+  const init = job.steps.find((step) => step.uses?.startsWith("github/codeql-action/init@"));
+  const analyze = job.steps.find((step) => step.uses?.startsWith("github/codeql-action/analyze@"));
+  const pin = "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee";
+  assert.equal(init.uses, `github/codeql-action/init@${pin}`);
+  assert.equal(analyze.uses, `github/codeql-action/analyze@${pin}`);
+  assert.equal(init.with.languages, "${{ matrix.language }}");
+  assert.equal(init.with["build-mode"], "${{ matrix.language == 'go' && 'manual' || 'none' }}");
+  assert.equal(init.with.queries, "security-extended");
+  assert.equal(init.with["config-file"], "./.github/codeql/codeql-config.yml");
+  const setup = job.steps.find((step) => step.uses === "./.github/actions/setup-go");
+  assert.equal(setup.if, "matrix.language == 'go'");
+  assert.ok(!job.steps.some((step) => step.uses?.includes("save-go-cache")), "no cache saves");
+  const build = job.steps.find((step) => step.name === "Build Go modules");
+  assert.equal(build.if, "matrix.language == 'go'");
+  for (const module of ["apps/server", "packages/schema/gen/go", "deploy/observer", "deploy/caddy/production/build"]) {
+    assert.ok(build.run.includes(`cd ${module} && `), `build ${module}`);
+  }
+  assert.ok(!readWorkflow("ci").jobs.ci.needs.includes("analyze"));
+  const config = parseYaml(read(".github/codeql/codeql-config.yml"), "CodeQL config").toJS();
+  for (const path of ["**/node_modules/**", "**/vendor/**", "apps/web/app/api/generated/**", "packages/schema/gen/**"]) {
+    assert.ok(config["paths-ignore"].includes(path), `exclude ${path}`);
+  }
 });

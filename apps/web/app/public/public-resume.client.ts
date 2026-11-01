@@ -164,6 +164,8 @@ export async function hydratePublicResume(
       try {
         await mounter.hydrate(publicResume, root);
       } catch {
+        // Restores markup read from this element before the change.
+        // eslint-disable-next-line no-restricted-syntax -- ADR 0008
         root.innerHTML = original;
         throw new Error('public hydration failed');
       }
@@ -174,6 +176,8 @@ export async function hydratePublicResume(
       root.replaceChildren();
       await mounter.replace(publicResume, root);
     } catch {
+      // Restores markup read from this element before the change.
+      // eslint-disable-next-line no-restricted-syntax -- no new input; ADR 0008
       root.innerHTML = original;
       throw new Error('public mount failed');
     }
@@ -367,6 +371,8 @@ export function createPublicResumeRealtime(options: {
       }
       restoreScrollState(options.root, state);
     } catch {
+      // Restores markup read from this element before the change.
+      // eslint-disable-next-line no-restricted-syntax -- no new input; ADR 0008
       options.root.innerHTML = original;
       return { kind: 'failed' };
     }

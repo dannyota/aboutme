@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
-	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- seeded test fixtures require reproducible, non-cryptographic randomness
+	"math/rand/v2" // seeded test fixtures require reproducible, non-cryptographic randomness
 )
 
 // NewSeededRand returns a reproducible generator for test fixtures.
