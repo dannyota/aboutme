@@ -258,6 +258,26 @@ for byte in {1..32} 127; do
   GITHUB_TOKEN="fake-token${control}hostile-secret" run 1 check 'Synthetic quota diagnostic: stage=environment reason=token-format'
   [ ! -e "$tmp/state/curl-argv" ]
 done
+# Non-ASCII tokens stay invalid in UTF-8 locales.
+utf8_locale=
+available_locales=$(locale -a)
+for candidate in en_US.UTF-8 en_US.utf8 C.UTF-8 C.utf8; do
+  if grep -Fx "$candidate" <<< "$available_locales" > /dev/null; then
+    utf8_locale=$candidate
+    break
+  fi
+done
+if [ -n "$utf8_locale" ]; then
+  for token in $'fake-token\xc3\xa9hostile-secret' $'fake-token\xc3hostile-secret'; do
+    reset_case
+    LC_ALL="$utf8_locale" GITHUB_TOKEN="$token" run 1 check 'Synthetic quota diagnostic: stage=environment reason=token-format'
+    [ ! -e "$tmp/state/curl-argv" ]
+  done
+  reset_case
+  LC_ALL="$utf8_locale" GITHUB_TOKEN=ghs_fake_header.payload.signature-_ run 0 check
+else
+  printf '%s\n' 'Skipping UTF-8 token checks: neither en_US.UTF-8 nor C.UTF-8 is available'
+fi
 for repository in no-slash /repository owner/ owner/repository/extra 'owner/hostile-secret"'; do
   reset_case
   GITHUB_REPOSITORY="$repository" run 1 check 'Synthetic quota diagnostic: stage=environment reason=repository-format'
