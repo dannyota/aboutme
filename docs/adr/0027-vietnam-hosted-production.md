@@ -117,6 +117,24 @@ deleted, including its SES identity, configuration set, feedback queue, and
 alarms. Keeping AWS as a fictional-data test environment is superseded by
 removal of every deployed AWS resource.
 
+## Proposed amendment (not accepted)
+
+Production supports host-initiated deployment through `ansible-pull` at an exact
+signed coordinator commit, using a request explicitly approved by either
+maintainer. Environment self-review preserves solo operation. The host
+independently verifies approval, exact-main CI, publication evidence, image
+identity, release ordering, and compatibility.
+
+GitHub holds no production credentials and has no administrative network route
+to production. Laptop deployment shares the durable host protocol. External
+deployment proofs remain attended initially. Ownership survives interruption;
+uncertain operations require attended recovery. Local configuration changes
+invalidate pending requests before deployment resumes.
+
+One serving replica, deployment downtime, privacy gates, backup custody, and
+explicit data-loss rules remain unchanged. vMonitor quota renewal remains
+manual; no renewal automation or monitoring host is introduced.
+
 ## History
 
 Former ADR 0051 (2026-09-24), unchanged in substance. Later records it did not
