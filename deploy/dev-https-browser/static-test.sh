@@ -3,6 +3,10 @@ set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 readonly ROOT=$PWD
+# shellcheck source=scripts/lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+export -f platform_stat
+bash "$ROOT/scripts/test/platform-helpers-test.sh"
 readonly SOURCE=$ROOT/deploy/dev-https-browser
 readonly IMAGE=aboutme-dev-https-browser:static-test
 readonly IMAGE_ID=sha256:1111111111111111111111111111111111111111111111111111111111111111
@@ -12,6 +16,27 @@ fail() {
   printf 'dev-https-browser static test: %s\n' "$*" >&2
   exit 1
 }
+
+check_diagnostic_reporting() {
+  local output
+  output=$(wrong_diagnostic fixture 'expected fixture diagnostic' \
+    $'dev-https-browser: actual fixture diagnostic\n/private/example/path' 2>&1) || :
+  [[ $output == *'expected fixture diagnostic'* && $output == *'actual fixture diagnostic'* ]] ||
+    fail 'diagnostic reporting omitted the expected or actual message'
+  [[ $output != *'/private/example/path'* ]] || fail 'diagnostic reporting exposed a path'
+}
+
+wrong_diagnostic() {
+  local name=$1 expected=$2 output=$3 actual
+  actual=$(LC_ALL=C grep -E '^dev-https-browser: [[:alnum:] ,;:.<>=_-]+$' <<<"$output" || true)
+  printf 'dev-https-browser static test: %s returned the wrong diagnostic\n' "$name" >&2
+  printf 'expected: %.512s\n' "$expected" >&2
+  printf 'actual runner output (up to 2048 characters; other output withheld):\n%.2048s\n' \
+    "${actual:-(no runner diagnostic)}" >&2
+  exit 1
+}
+
+check_diagnostic_reporting
 
 mapfile -t SPEC_FILES <"$SOURCE/spec-sources.txt"
 readonly -a SPEC_FILES
@@ -202,7 +227,7 @@ assert_runner_rejected() {
     status=$?
   fi
   [ "$status" -ne 0 ] || fail "$name was accepted"
-  grep -Fq "$expected" <<<"$output" || fail "$name returned the wrong diagnostic"
+  grep -Fq "$expected" <<<"$output" || wrong_diagnostic "$name" "$expected" "$output"
   if tr '\0' '\n' <"$case_log" | grep -Fxq run; then
     fail "$name reached podman run"
   fi
@@ -1429,7 +1454,7 @@ within-editor-bound)
   cat >"$FAKE_INSIDE_EVIDENCE/editor-proof.json" <<'JSON'
 {"schemaVersion":1,"scenario":"authenticated-editor","origin":"https://localhost:20443","errors":{"certificate":0,"console":0,"externalRequest":0,"page":0},"steps":{"auth":true,"cache":true,"etag":true,"ifMatch":true,"autosave":true,"conflict":true,"template":true,"photo":true,"session":true,"persistence":true,"accessibility":true,"teardown":true}}
 JSON
-  while [ "$(stat -c %s "$FAKE_INSIDE_EVIDENCE/editor-proof.json")" -lt 5000 ]; do
+  while [ "$(wc -c <"$FAKE_INSIDE_EVIDENCE/editor-proof.json")" -lt 5000 ]; do
     printf ' ' >>"$FAKE_INSIDE_EVIDENCE/editor-proof.json"
   done
   ;;
@@ -1477,7 +1502,7 @@ assert_inside_rejected() {
     status=$?
   fi
   [ "$status" -ne 0 ] || fail "$name was accepted"
-  grep -Fq "$expected" <<<"$output" || fail "$name returned the wrong diagnostic"
+  grep -Fq "$expected" <<<"$output" || wrong_diagnostic "$name" "$expected" "$output"
   printf '%s' "$output"
 }
 
@@ -1490,7 +1515,7 @@ assert_inside_mcp_sdk_rejected() {
     status=$?
   fi
   [ "$status" -ne 0 ] || fail "$name was accepted"
-  grep -Fq "$expected" <<<"$output" || fail "$name returned the wrong diagnostic"
+  grep -Fq "$expected" <<<"$output" || wrong_diagnostic "$name" "$expected" "$output"
   printf '%s' "$output"
 }
 
@@ -1701,7 +1726,7 @@ grep -Fxq 'MODE=editor' "$BROWSER_LOG" ||
   fail 'editor mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/editor-proof.json" ] ||
   fail 'editor evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/editor-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/editor-proof.json")" = 600 ] ||
   fail 'editor evidence mode drifted'
 
 reset_inside
@@ -1743,7 +1768,7 @@ grep -Fxq 'MODE=password-auth' "$BROWSER_LOG" ||
   fail 'password-auth mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/password-proof.json" ] ||
   fail 'password-auth evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/password-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/password-proof.json")" = 600 ] ||
   fail 'password-auth evidence mode drifted'
 
 reset_inside
@@ -1769,7 +1794,7 @@ grep -Fxq 'MODE=mcp' "$BROWSER_LOG" ||
   fail 'mcp mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/mcp-proof.json" ] ||
   fail 'mcp evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/mcp-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/mcp-proof.json")" = 600 ] ||
   fail 'mcp evidence mode drifted'
 
 reset_inside
@@ -1800,8 +1825,10 @@ grep -Fxq 'MODE=mcp-sdk' "$BROWSER_LOG" ||
   fail 'mcp-sdk mode did not reach Playwright config'
 grep -Fxq "MCP_BROWSER_DIR=$INSIDE_MCP_BROWSER" "$BROWSER_LOG" ||
   fail 'mcp-sdk browser handoff directory was not passed to Playwright'
-evidence_after_mcp_sdk=$(find "$INSIDE_EVIDENCE" -mindepth 1 -maxdepth 1 -print -quit)
-[ -z "$evidence_after_mcp_sdk" ] ||
+shopt -s dotglob nullglob
+evidence_after_mcp_sdk=("$INSIDE_EVIDENCE"/*)
+shopt -u dotglob nullglob
+[ "${#evidence_after_mcp_sdk[@]}" -eq 0 ] ||
   fail 'mcp-sdk mode wrote to the unrelated evidence directory'
 
 reset_inside
@@ -1865,7 +1892,7 @@ grep -Fxq 'MODE=entry' "$BROWSER_LOG" ||
   fail 'entry mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/entry-proof.json" ] ||
   fail 'entry evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/entry-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/entry-proof.json")" = 600 ] ||
   fail 'entry evidence mode drifted'
 
 reset_inside
@@ -1895,7 +1922,7 @@ grep -Fxq 'MODE=publish' "$BROWSER_LOG" ||
   fail 'publish mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/publish-proof.json" ] ||
   fail 'publish evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/publish-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/publish-proof.json")" = 600 ] ||
   fail 'publish evidence mode drifted'
 if grep -Eiq '"(cookie|password|csrfToken|idempotencyKey|responseBody|body)"[[:blank:]]*:' \
   "$INSIDE_EVIDENCE/publish-proof.json"; then
@@ -1929,7 +1956,7 @@ grep -Fq 'ARGV=test --config playwright.config.ts privacy.spec.ts' "$BROWSER_LOG
   fail 'focused privacy invocation drifted'
 grep -Fxq 'MODE=privacy' "$BROWSER_LOG" || fail 'privacy mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/privacy-proof.json" ] || fail 'privacy evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/privacy-proof.json")" = 600 ] || fail 'privacy evidence mode drifted'
+[ "$(platform_stat a "$INSIDE_EVIDENCE/privacy-proof.json")" = 600 ] || fail 'privacy evidence mode drifted'
 
 reset_inside
 if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
@@ -1976,7 +2003,7 @@ grep -Fxq 'MODE=second-factor' "$BROWSER_LOG" ||
   fail 'second-factor mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/passkey-second-factor-proof.json" ] ||
   fail 'second-factor evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/passkey-second-factor-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/passkey-second-factor-proof.json")" = 600 ] ||
   fail 'second-factor evidence mode drifted'
 if grep -Eiq '"(code|codes|cookie|credential|csrfToken|password|privateKey|recoveryCodes|token)"[[:blank:]]*:' \
   "$INSIDE_EVIDENCE/passkey-second-factor-proof.json"; then
@@ -2041,7 +2068,7 @@ grep -Fq 'ARGV=test --config playwright.config.ts totp.spec.ts' "$BROWSER_LOG" |
 grep -Fxq 'MODE=totp' "$BROWSER_LOG" || fail 'totp mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/totp-second-factor-proof.json" ] ||
   fail 'totp evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/totp-second-factor-proof.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/totp-second-factor-proof.json")" = 600 ] ||
   fail 'totp evidence mode drifted'
 if grep -Eiq '"(code|codes|cookie|credential|csrfToken|email|password|privateKey|provisioningUri|recoveryCodes|secret|token)"[[:blank:]]*:' \
   "$INSIDE_EVIDENCE/totp-second-factor-proof.json"; then
@@ -2052,7 +2079,7 @@ if grep -Fq 'amr_' "$INSIDE_EVIDENCE/totp-second-factor-proof.json"; then
 fi
 [ -f "$INSIDE_EVIDENCE/totp-timing.json" ] ||
   fail 'totp timing evidence filename drifted'
-[ "$(stat -c %a "$INSIDE_EVIDENCE/totp-timing.json")" = 600 ] ||
+[ "$(platform_stat a "$INSIDE_EVIDENCE/totp-timing.json")" = 600 ] ||
   fail 'totp timing evidence mode drifted'
 if grep -Eiq '"(code|codes|cookie|credential|csrfToken|email|password|privateKey|provisioningUri|recoveryCodes|secret|token)"[[:blank:]]*:' \
   "$INSIDE_EVIDENCE/totp-timing.json"; then
@@ -2213,13 +2240,13 @@ fi
 
 # Exercise the host entry point with only the build, database, and browser
 # boundaries replaced. Preparation and cleanup use the real shell flow.
-if [ "$(uname -s)" = Linux ]; then
 readonly HOST_REPO=$CANONICAL_WORK/host-repo
 readonly HOST_BIN=$WORK/host-bin
 readonly HOST_CONTROL=$WORK/host-control
 install -d -m 0700 "$HOST_REPO/scripts/lib" "$HOST_REPO/apps/server" \
   "$HOST_REPO/deploy/dev-https-browser" "$HOST_BIN" "$HOST_CONTROL"
 cp -- "$ROOT/scripts/dev-https-check.sh" "$HOST_REPO/scripts/dev-https-check.sh"
+cp -- "$ROOT/scripts/lib/platform.sh" "$HOST_REPO/scripts/lib/platform.sh"
 cp -- "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$HOST_REPO/scripts/lib/dev-https-browser-stage.sh"
 for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$HOST_REPO/deploy/dev-https-browser/$file"
@@ -2236,6 +2263,25 @@ cat >"$HOST_BIN/curl" <<'FAKE_HOST_CURL'
 set -Eeuo pipefail
 [[ $* == *'DELETE'*'/api/messages'* ]]
 FAKE_HOST_CURL
+cat >"$HOST_BIN/python3" <<'FAKE_HOST_PYTHON'
+#!/usr/bin/env bash
+if [ "${FAKE_UUID_FAIL:-0}" = 1 ] && [ "${3-}" = 'import uuid; print(uuid.uuid4())' ]; then
+  exit 1
+fi
+if [ "${FAKE_UUID_FAIL:-0}" = malformed ] && [ "${3-}" = 'import uuid; print(uuid.uuid4())' ]; then
+  printf '%s\n' 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'
+  exit 0
+fi
+exec "$REAL_PYTHON" "$@"
+FAKE_HOST_PYTHON
+cat >"$HOST_BIN/id" <<'FAKE_HOST_ID'
+#!/usr/bin/env bash
+if [ "${FAKE_OWNER_MISMATCH:-0}" = 1 ] && [ "${1-}" = -u ]; then
+  printf '%s\n' 999999
+else
+  command -p id "$@"
+fi
+FAKE_HOST_ID
 cat >"$HOST_CONTROL/fixture" <<'FAKE_HOST_FIXTURE'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -2264,7 +2310,7 @@ second-factor-seed)
   [ "${FAKE_HOST_SEED_FAIL:-0}" -eq 0 ]
   ;;
 second-factor-cleanup)
-  [ -f "$credential" ] && [ "$(stat -c %a "$credential")" = 600 ]
+  [ -f "$credential" ] && [ "$(platform_stat a "$credential")" = 600 ]
   rm -f -- "$FAKE_HOST_CONTROL/active-account"
   ;;
 *) exit 64 ;;
@@ -2273,12 +2319,15 @@ FAKE_HOST_FIXTURE
 cat >"$HOST_REPO/deploy/dev-https-browser/run.sh" <<'FAKE_HOST_BROWSER'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[ -f "$2/second-factor-accounts.json" ] && [ "$(stat -c %a "$2/second-factor-accounts.json")" = 600 ]
+[ -f "$2/second-factor-accounts.json" ] && [ "$(platform_stat a "$2/second-factor-accounts.json")" = 600 ]
 [ -f "$FAKE_HOST_CONTROL/active-account" ]
+name=$(cat "$2/mcp-client-name")
+[[ $name =~ ^aboutme\ MCP\ UAT\ [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+printf '%s\n' "$name" >>"$FAKE_HOST_CONTROL/names"
 printf '%s\n' browser >>"$FAKE_HOST_CONTROL/calls"
 [ "${FAKE_HOST_BROWSER_FAIL:-0}" -eq 0 ]
 FAKE_HOST_BROWSER
-chmod 0700 "$HOST_BIN/go" "$HOST_BIN/curl" "$HOST_CONTROL/fixture" \
+chmod 0700 "$HOST_BIN/go" "$HOST_BIN/curl" "$HOST_BIN/python3" "$HOST_BIN/id" "$HOST_CONTROL/fixture" \
   "$HOST_REPO/deploy/dev-https-browser/run.sh"
 
 host_fixture_fail() {
@@ -2300,12 +2349,20 @@ run_host_fixture_case() {
     for file in Dockerfile package.json package-lock.json run.sh spec-sources.txt verify-evidence.mjs; do
       path=deploy/dev-https-browser/$file
       printf '%s\0' "$path"
-      sha256sum -- "$path"
-    done | sha256sum | awk '{print $1}'
+      platform_sha256sum "$path"
+    done | platform_sha256sum | awk '{print $1}'
   )
   printf 'image_id=%s\nsource_sha256=%s\n' "$IMAGE_ID" "$source_hash" >"$state/browser-image.manifest"
   chmod 0600 "$state/browser-image.manifest"
+  case $scenario in
+    bad-dir-mode) chmod 0755 "$state/input" ;;
+    bad-file-mode) chmod 0644 "$state/input/caddy-root.crt" ;;
+    symlink) mv "$state/input/caddy-root.crt" "$state/root"; ln -s "$state/root" "$state/input/caddy-root.crt" ;;
+  esac
   env PATH="$HOST_BIN:$PATH" FAKE_HOST_CONTROL="$HOST_CONTROL" \
+    REAL_PYTHON="$(command -v python3)" \
+    FAKE_UUID_FAIL="$([ "$scenario" = uuid-failure ] && printf 1 || { [ "$scenario" = uuid-malformed ] && printf malformed || printf 0; })" \
+    FAKE_OWNER_MISMATCH="$([ "$scenario" = owner-mismatch ] && printf 1 || printf 0)" \
     FAKE_HOST_SEED_FAIL="$([ "$scenario" = seed-failure ] && printf 1 || printf 0)" \
     FAKE_HOST_BROWSER_FAIL="$([ "$scenario" = browser-failure ] && printf 1 || printf 0)" \
     ABOUTME_PASSKEY_SHARD=recovery-attempts ABOUTME_TOTP_SHARD=primary \
@@ -2315,6 +2372,12 @@ run_host_fixture_case() {
   else
     [ "$status" -ne 0 ] || host_fixture_fail 'failed host fixture was accepted'
   fi
+  case $scenario in
+    uuid-failure | uuid-malformed | bad-dir-mode | bad-file-mode | symlink | owner-mismatch)
+      [ ! -e "$HOST_CONTROL/calls" ] || host_fixture_fail 'rejected fixture reached seed or browser'
+      return
+      ;;
+  esac
   [ -s "$HOST_CONTROL/credential-path" ] || host_fixture_fail 'host fixture never prepared private credentials'
   credential=$(<"$HOST_CONTROL/credential-path")
   [ ! -e "$credential" ] && [ ! -L "$credential" ] || host_fixture_fail 'host fixture retained private credentials'
@@ -2332,9 +2395,11 @@ for mode in passkey totp; do
     run_host_fixture_case "$mode" "$scenario"
   done
 done
-else
-  printf '%s\n' 'Skipping Linux-specific guarded host fixture; CI covers it.'
-fi
+for scenario in uuid-failure uuid-malformed bad-dir-mode bad-file-mode symlink owner-mismatch; do
+  run_host_fixture_case passkey "$scenario"
+done
+mapfile -t host_names <"$HOST_CONTROL/names"
+[ "${host_names[0]}" != "${host_names[2]}" ] || host_fixture_fail 'client names were reused'
 
 # CIMD proof evidence must name the real SDK flow, beyond the DCR proof.
 for step in cimdDiscovered cimdConsentApproved cimdTokenExchanged cimdToolsListed cimdRefreshed cimdGrantRevoked cimdRevokedRejected; do

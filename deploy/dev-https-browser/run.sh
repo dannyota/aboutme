@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# The macOS host may have either BSD or GNU stat on PATH.
+browser_stat() {
+  if [ "$(uname -s)" = Darwin ]; then
+    python3 -I -c 'import os,stat,sys
+s = os.lstat(sys.argv[2])
+print({"u": s.st_uid, "a": format(stat.S_IMODE(s.st_mode), "o"), "s": s.st_size, "h": s.st_nlink}[sys.argv[1]])' "$1" "$2"
+  else
+    stat -c "%$1" "$2"
+  fi
+}
+
+browser_realpath() {
+  python3 -I -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$1"
+}
+
+browser_entries() (
+  shopt -s dotglob nullglob
+  local -a entries=("$1"/*)
+  ((${#entries[@]})) || return 0
+  printf '%s\n' "${entries[@]##*/}" | sort
+)
+
+browser_has_entry() (
+  shopt -s dotglob nullglob
+  local -a entries=("$1"/*)
+  ((${#entries[@]})) || return 0
+  printf '%s\n' "${entries[0]}"
+)
+
 readonly IMAGE_CONTRACT=2
 readonly IMAGE_BASE='mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
 readonly IMAGE_PLAYWRIGHT=1.64.0
@@ -17,16 +46,16 @@ validate_spec_dir() {
   # validate_spec_dir <directory> <expected-owner-uid>
   local dir=$1 uid=$2 entries expected path
   [ -d "$dir" ] && [ ! -L "$dir" ] || fail 'spec input is not a real directory'
-  [ "$(stat -c %u "$dir")" = "$uid" ] || fail 'spec input owner mismatch'
-  [ "$(stat -c %a "$dir")" = 700 ] || fail 'spec input mode must be 0700'
-  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+  [ "$(browser_stat u "$dir")" = "$uid" ] || fail 'spec input owner mismatch'
+  [ "$(browser_stat a "$dir")" = 700 ] || fail 'spec input mode must be 0700'
+  entries=$(browser_entries "$dir")
   expected=$(printf '%s\n' "${SPEC_SOURCES[@]}" | sort)
   [ "$entries" = "$expected" ] || fail 'spec input must contain exactly the spec sources'
   for path in "${SPEC_SOURCES[@]}"; do
     [ -f "$dir/$path" ] && [ ! -L "$dir/$path" ] ||
       fail 'spec source is not a regular file'
-    [ "$(stat -c %u "$dir/$path")" = "$uid" ] || fail 'spec source owner mismatch'
-    [ "$(stat -c %a "$dir/$path")" = 600 ] || fail 'spec source mode must be 0600'
+    [ "$(browser_stat u "$dir/$path")" = "$uid" ] || fail 'spec source owner mismatch'
+    [ "$(browser_stat a "$dir/$path")" = 600 ] || fail 'spec source mode must be 0600'
   done
 }
 
@@ -40,8 +69,8 @@ validate_mcp_client_name_file() {
   local -a lines=()
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'MCP client name is not a regular file'
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'MCP client name owner mismatch'
-  [ "$(stat -c %a "$path")" = 600 ] || fail 'MCP client name mode must be 0600'
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail 'MCP client name owner mismatch'
+  [ "$(browser_stat a "$path")" = 600 ] || fail 'MCP client name mode must be 0600'
   mapfile -t lines <"$path"
   [ "${#lines[@]}" -eq 1 ] && [[ ${lines[0]} =~ $MCP_CLIENT_NAME_RE ]] ||
     fail 'MCP client name must contain a lowercase UUIDv4'
@@ -51,8 +80,8 @@ validate_capture_token_file() {
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'capture token is not a regular file'
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'capture token owner mismatch'
-  [ "$(stat -c %a "$path")" = 600 ] || fail 'capture token mode must be 0600'
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail 'capture token owner mismatch'
+  [ "$(browser_stat a "$path")" = 600 ] || fail 'capture token mode must be 0600'
 }
 
 # mode_input_entries prints the sorted CA input filenames a mode requires.
@@ -146,10 +175,10 @@ validate_mode_input_files() {
 validate_factor_accounts_file() {
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] || fail 'factor accounts are not a regular file'
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'factor accounts owner mismatch'
-  [ "$(stat -c %a "$path")" = 600 ] || fail 'factor accounts mode must be 0600'
-  [ "$(stat -c %h "$path")" = 1 ] || fail 'factor accounts must have one hard link'
-  [ "$(stat -c %s "$path")" -le 8192 ] || fail 'factor accounts exceed their bound'
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail 'factor accounts owner mismatch'
+  [ "$(browser_stat a "$path")" = 600 ] || fail 'factor accounts mode must be 0600'
+  [ "$(browser_stat h "$path")" = 1 ] || fail 'factor accounts must have one hard link'
+  [ "$(browser_stat s "$path")" -le 8192 ] || fail 'factor accounts exceed their bound'
 }
 
 validate_account_file() {
@@ -157,8 +186,8 @@ validate_account_file() {
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'production account file is not a regular file'
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'production account file owner mismatch'
-  [ "$(stat -c %a "$path")" = 600 ] || fail 'production account file mode must be 0600'
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail 'production account file owner mismatch'
+  [ "$(browser_stat a "$path")" = 600 ] || fail 'production account file mode must be 0600'
 }
 
 validate_mcp_credential_file() {
@@ -166,16 +195,16 @@ validate_mcp_credential_file() {
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'MCP credential file is not a regular file'
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'MCP credential file owner mismatch'
-  [ "$(stat -c %a "$path")" = 600 ] || fail 'MCP credential file mode must be 0600'
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail 'MCP credential file owner mismatch'
+  [ "$(browser_stat a "$path")" = 600 ] || fail 'MCP credential file mode must be 0600'
 }
 
 validate_evidence_file() { # <path> <uid> <size-limit> <fail-message-label>
   local path=$1 uid=$2 limit=$3 label=$4
   [ -f "$path" ] && [ ! -L "$path" ] || fail "$label is not a regular file"
-  [ "$(stat -c %u "$path")" = "$uid" ] || fail "$label owner mismatch"
-  [ "$(stat -c %a "$path")" = 600 ] || fail "$label mode must be 0600"
-  [ "$(stat -c %s "$path")" -le "$limit" ] || fail "$label exceeds its bound"
+  [ "$(browser_stat u "$path")" = "$uid" ] || fail "$label owner mismatch"
+  [ "$(browser_stat a "$path")" = 600 ] || fail "$label mode must be 0600"
+  [ "$(browser_stat s "$path")" -le "$limit" ] || fail "$label exceeds its bound"
 }
 
 validate_mcp_browser_dir() {
@@ -183,9 +212,9 @@ validate_mcp_browser_dir() {
   local dir=$1 uid=$2 entries
   [ -d "$dir" ] && [ ! -L "$dir" ] ||
     fail 'MCP browser directory is not a real directory'
-  [ "$(stat -c %u "$dir")" = "$uid" ] || fail 'MCP browser directory owner mismatch'
-  [ "$(stat -c %a "$dir")" = 700 ] || fail 'MCP browser directory mode must be 0700'
-  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -print -quit)
+  [ "$(browser_stat u "$dir")" = "$uid" ] || fail 'MCP browser directory owner mismatch'
+  [ "$(browser_stat a "$dir")" = 700 ] || fail 'MCP browser directory mode must be 0700'
+  entries=$(browser_has_entry "$dir")
   [ -z "$entries" ] || fail 'MCP browser directory must start empty'
 }
 
@@ -511,16 +540,16 @@ host_run() {
       fail 'mount paths contain control characters'
   fi
   [ "$production_sdk" -eq 1 ] ||
-    input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
-  spec_input=$(realpath -e -- "$spec_input") ||
+    input=$(browser_realpath "$input") || fail 'cannot resolve CA input directory'
+  spec_input=$(browser_realpath "$spec_input") ||
     fail 'cannot resolve spec input directory'
-  evidence=$(realpath -e -- "$evidence") || fail 'cannot resolve evidence directory'
+  evidence=$(browser_realpath "$evidence") || fail 'cannot resolve evidence directory'
   dir_paths=("$spec_input" "$evidence")
   [ "$production_sdk" -eq 1 ] || dir_paths+=("$input")
   if [ "$mode" = mcp-sdk ]; then
-    browser_dir=$(realpath -e -- "$browser_dir") ||
+    browser_dir=$(browser_realpath "$browser_dir") ||
       fail 'cannot resolve MCP browser directory'
-    credential=$(realpath -e -- "$credential") ||
+    credential=$(browser_realpath "$credential") ||
       fail 'cannot resolve MCP credential file'
     dir_paths+=("$browser_dir" "$credential")
   fi
@@ -534,11 +563,11 @@ host_run() {
   gid=$(id -g)
   [ "$uid" -ne 0 ] && [ "$gid" -ne 0 ] || fail 'host runner must be non-root'
   if [ "$production_sdk" -ne 1 ]; then
-    [ "$(stat -c %u "$input")" = "$uid" ] || fail 'CA input owner mismatch'
-    [ "$(stat -c %a "$input")" = 700 ] || fail 'CA input mode must be 0700'
+    [ "$(browser_stat u "$input")" = "$uid" ] || fail 'CA input owner mismatch'
+    [ "$(browser_stat a "$input")" = 700 ] || fail 'CA input mode must be 0700'
   fi
-  [ "$(stat -c %u "$evidence")" = "$uid" ] || fail 'evidence owner mismatch'
-  [ "$(stat -c %a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
+  [ "$(browser_stat u "$evidence")" = "$uid" ] || fail 'evidence owner mismatch'
+  [ "$(browser_stat a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
   [ -w "$evidence" ] || fail 'evidence output is not writable'
   if [ "$mode" = mcp-sdk ]; then
     validate_mcp_browser_dir "$browser_dir" "$uid"
@@ -546,7 +575,7 @@ host_run() {
   fi
 
   if [ "$production_sdk" -ne 1 ]; then
-    input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+    input_entries=$(browser_entries "$input")
     [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
       fail "$(mode_input_diagnostic "$mode")"
     if mode_is_totp_production "$mode"; then
@@ -554,14 +583,14 @@ host_run() {
     else
       [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
         fail 'Caddy root is not a regular file'
-      [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
+      [ "$(browser_stat u "$input/caddy-root.crt")" = "$uid" ] ||
         fail 'Caddy root owner mismatch'
-      [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
+      [ "$(browser_stat a "$input/caddy-root.crt")" = 600 ] ||
         fail 'Caddy root mode must be 0600'
       validate_mode_input_files "$mode" "$input" "$uid"
     fi
   fi
-  evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
+  evidence_entries=$(browser_has_entry "$evidence")
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
   validate_spec_dir "$spec_input" "$uid"
   command -v podman >/dev/null || fail 'podman is required'

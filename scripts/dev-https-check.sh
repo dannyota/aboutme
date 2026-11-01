@@ -10,6 +10,8 @@ set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 REPO=$PWD
+# shellcheck source=scripts/lib/platform.sh
+source "$REPO/scripts/lib/platform.sh"
 STATE=$REPO/.dev/native-https
 MANIFEST=$STATE/browser-image.manifest
 INPUT=$STATE/input
@@ -89,9 +91,9 @@ image_source_hash() {
     for path in "${IMAGE_SOURCES[@]}"; do
       [ -f "$path" ] && [ ! -L "$path" ] || return 1
       printf '%s\0' "$path"
-      sha256sum -- "$path"
+      platform_sha256sum "$path"
     done
-  } | sha256sum | awk '{print $1}'
+  } | platform_sha256sum | awk '{print $1}'
 }
 
 spec_source_hash() {
@@ -102,25 +104,25 @@ spec_source_hash() {
     for path in "${SPEC_SOURCES[@]}"; do
       [ -f "$base/$path" ] && [ ! -L "$base/$path" ] || return 1
       printf '%s\0' "$path"
-      sha256sum -- "$base/$path" | awk '{print $1}'
+      platform_sha256sum "$base/$path" | awk '{print $1}'
     done
-  } | sha256sum | awk '{print $1}'
+  } | platform_sha256sum | awk '{print $1}'
 }
 
 require_secure_dir() {
   local path=$1 label=$2
   [ -d "$path" ] && [ ! -L "$path" ] &&
-    [ "$(realpath -e -- "$path")" = "$path" ] || fail "invalid $label"
-  [ "$(stat -c %u "$path")" = "$UID_NOW" ] &&
-    [ "$(stat -c %a "$path")" = 700 ] ||
+    [ "$(platform_realpath "$path")" = "$path" ] || fail "invalid $label"
+  [ "$(platform_stat u "$path")" = "$UID_NOW" ] &&
+    [ "$(platform_stat a "$path")" = 700 ] ||
     fail "$label ownership or mode mismatch"
 }
 
 require_secure_dir "$STATE" 'state directory'
 
 [ -f "$MANIFEST" ] && [ ! -L "$MANIFEST" ] &&
-  [ "$(stat -c %u "$MANIFEST")" = "$UID_NOW" ] &&
-  [ "$(stat -c %a "$MANIFEST")" = 600 ] || fail 'invalid browser image manifest'
+  [ "$(platform_stat u "$MANIFEST")" = "$UID_NOW" ] &&
+  [ "$(platform_stat a "$MANIFEST")" = 600 ] || fail 'invalid browser image manifest'
 mapfile -t manifest_lines <"$MANIFEST"
 [ "${#manifest_lines[@]}" -eq 2 ] || fail 'malformed browser image manifest'
 [[ ${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$ ]] ||
@@ -136,12 +138,15 @@ current_source=$(image_source_hash) ||
   fail 'browser image sources changed after image build; rerun make dev-https-browser-image'
 
 require_secure_dir "$INPUT" 'CA input directory'
-mapfile -t input_entries < <(find "$INPUT" -mindepth 1 -maxdepth 1 -printf '%f\n')
+shopt -s dotglob nullglob
+input_entries=("$INPUT"/*)
+shopt -u dotglob nullglob
+input_entries=("${input_entries[@]##*/}")
 [ "${#input_entries[@]}" -eq 1 ] && [ "${input_entries[0]}" = caddy-root.crt ] ||
   fail 'CA input must contain one root'
 [ -f "$INPUT/caddy-root.crt" ] && [ ! -L "$INPUT/caddy-root.crt" ] &&
-  [ "$(stat -c %u "$INPUT/caddy-root.crt")" = "$UID_NOW" ] &&
-  [ "$(stat -c %a "$INPUT/caddy-root.crt")" = 600 ] || fail 'invalid Caddy root'
+  [ "$(platform_stat u "$INPUT/caddy-root.crt")" = "$UID_NOW" ] &&
+  [ "$(platform_stat a "$INPUT/caddy-root.crt")" = 600 ] || fail 'invalid Caddy root'
 
 if [[ -e "$EVIDENCE_ROOT" || -L "$EVIDENCE_ROOT" ]]; then
   require_secure_dir "$EVIDENCE_ROOT" 'evidence root'
@@ -205,7 +210,7 @@ prepare_factor_accounts() {
 # that registers a connected agent.
 new_client_name() {
   local run_id
-  run_id=$(</proc/sys/kernel/random/uuid)
+  run_id=$(python3 -I -c 'import uuid; print(uuid.uuid4())') || return 1
   [[ $run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
     return 1
   printf 'aboutme MCP UAT %s' "$run_id"
@@ -223,19 +228,8 @@ assert_server_flag() {
 
 # prune_evidence keeps only the newest EVIDENCE_KEEP runs of one prefix.
 prune_evidence() {
-  local prefix=$1 old
-  local -a stale=()
-  mapfile -t stale < <(
-    find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d \
-      -name "$prefix.*" -printf '%T@ %p\n' |
-      sort -rn | awk '{print $2}' | tail -n "+$((EVIDENCE_KEEP + 1))"
-  )
-  for old in "${stale[@]}"; do
-    case $old in
-    "$EVIDENCE_ROOT"/*) rm -rf -- "$old" ;;
-    *) fail 'refusing to prune outside the evidence root' ;;
-    esac
-  done
+  platform_prune_evidence "$EVIDENCE_ROOT" "$1" "$EVIDENCE_KEEP" ||
+    fail 'cannot prune evidence'
 }
 
 staging=$(mktemp -d "$STATE/spec-input.XXXXXX")
@@ -252,13 +246,13 @@ if [ "$MODE" = passkey ]; then
   # Caddy root. The disabled phase needs only the root.
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
-    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
     fail 'invalid capture secret'
   mcp_client_name=$(new_client_name) || fail 'cannot create a run client name'
   passkey_input=$(mktemp -d "$STATE/passkey-input.XXXXXX")
   chmod 0700 "$passkey_input"
   cp -- "$INPUT/caddy-root.crt" "$passkey_input/caddy-root.crt"
-  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  capture_token=$(base64 <"$capture_secret" | tr '+/' '-_' | tr -d '=\n')
   printf '%s' "$capture_token" >"$passkey_input/mail-capture-token"
   printf '%s\n' "$mcp_client_name" >"$passkey_input/mcp-client-name"
   chmod 0600 "$passkey_input/caddy-root.crt" \
@@ -279,8 +273,8 @@ if [ "$MODE" = passkey ]; then
   status=0
   assert_server_flag PASSKEY_ENROLLMENT_ENABLED true
   enabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-enabled.XXXXXX")
-  [ "$(stat -c %u "$enabled_evidence")" = "$UID_NOW" ] &&
-    [ "$(stat -c %a "$enabled_evidence")" = 700 ] ||
+  [ "$(platform_stat u "$enabled_evidence")" = "$UID_NOW" ] &&
+    [ "$(platform_stat a "$enabled_evidence")" = 700 ] ||
     fail 'evidence directory ownership or mode mismatch'
   "$CONTEXT/run.sh" "$image_id" "$passkey_input" "$staging" \
     "$enabled_evidence" second-factor || status=$?
@@ -303,8 +297,8 @@ if [ "$MODE" = passkey ]; then
       fail 'cannot restart the harness with passkey enrollment disabled'
     assert_server_flag PASSKEY_ENROLLMENT_ENABLED false
     disabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-disabled.XXXXXX")
-    [ "$(stat -c %u "$disabled_evidence")" = "$UID_NOW" ] &&
-      [ "$(stat -c %a "$disabled_evidence")" = 700 ] ||
+    [ "$(platform_stat u "$disabled_evidence")" = "$UID_NOW" ] &&
+      [ "$(platform_stat a "$disabled_evidence")" = 700 ] ||
       fail 'evidence directory ownership or mode mismatch'
     "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
       "$disabled_evidence" second-factor-disabled || status=$?
@@ -338,13 +332,13 @@ if [ "$MODE" = totp ]; then
   # and loss").
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
-    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
     fail 'invalid capture secret'
   mcp_client_name=$(new_client_name) || fail 'cannot create a run client name'
   totp_input=$(mktemp -d "$STATE/totp-input.XXXXXX")
   chmod 0700 "$totp_input"
   cp -- "$INPUT/caddy-root.crt" "$totp_input/caddy-root.crt"
-  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  capture_token=$(base64 <"$capture_secret" | tr '+/' '-_' | tr -d '=\n')
   printf '%s' "$capture_token" >"$totp_input/mail-capture-token"
   printf '%s\n' "$mcp_client_name" >"$totp_input/mcp-client-name"
   chmod 0600 "$totp_input/caddy-root.crt" \
@@ -365,8 +359,8 @@ if [ "$MODE" = totp ]; then
   status=0
   assert_server_flag TOTP_ENROLLMENT_ENABLED true
   enabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/totp-enabled.XXXXXX")
-  [ "$(stat -c %u "$enabled_evidence")" = "$UID_NOW" ] &&
-    [ "$(stat -c %a "$enabled_evidence")" = 700 ] ||
+  [ "$(platform_stat u "$enabled_evidence")" = "$UID_NOW" ] &&
+    [ "$(platform_stat a "$enabled_evidence")" = 700 ] ||
     fail 'evidence directory ownership or mode mismatch'
   "$CONTEXT/run.sh" "$image_id" "$totp_input" "$staging" \
     "$enabled_evidence" totp || status=$?
@@ -392,8 +386,8 @@ if [ "$MODE" = totp ]; then
       fail 'cannot restart the harness with TOTP enrollment disabled'
     assert_server_flag TOTP_ENROLLMENT_ENABLED false
     disabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/totp-disabled.XXXXXX")
-    [ "$(stat -c %u "$disabled_evidence")" = "$UID_NOW" ] &&
-      [ "$(stat -c %a "$disabled_evidence")" = 700 ] ||
+    [ "$(platform_stat u "$disabled_evidence")" = "$UID_NOW" ] &&
+      [ "$(platform_stat a "$disabled_evidence")" = 700 ] ||
       fail 'evidence directory ownership or mode mismatch'
     "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
       "$disabled_evidence" totp-disabled || status=$?
@@ -421,14 +415,14 @@ run_input=$INPUT
 if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
-    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
     fail 'invalid capture secret'
   password_input=$STATE/password-input
   rm -rf -- "$password_input"
   install -d -m 0700 "$password_input"
   cp -- "$INPUT/caddy-root.crt" "$password_input/caddy-root.crt"
   chmod 0600 "$password_input/caddy-root.crt"
-  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  capture_token=$(base64 <"$capture_secret" | tr '+/' '-_' | tr -d '=\n')
   printf '%s' "$capture_token" >"$password_input/mail-capture-token"
   chmod 0600 "$password_input/mail-capture-token"
   run_input=$password_input
@@ -448,13 +442,13 @@ elif [ "$MODE" = linkedin ]; then
   # "Tests").
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
-    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
     fail 'invalid capture secret'
   linkedin_input=$(mktemp -d "$STATE/linkedin-input.XXXXXX")
   chmod 0700 "$linkedin_input"
   cp -- "$INPUT/caddy-root.crt" "$linkedin_input/caddy-root.crt"
   chmod 0600 "$linkedin_input/caddy-root.crt"
-  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  capture_token=$(base64 <"$capture_secret" | tr '+/' '-_' | tr -d '=\n')
   printf '%s' "$capture_token" >"$linkedin_input/mail-capture-token"
   chmod 0600 "$linkedin_input/mail-capture-token"
   run_input=$linkedin_input
@@ -505,8 +499,8 @@ elif [ "$MODE" = publish ]; then
 fi
 
 evidence=$(mktemp -d "$EVIDENCE_ROOT/$evidence_prefix.XXXXXX")
-[ "$(stat -c %u "$evidence")" = "$UID_NOW" ] &&
-  [ "$(stat -c %a "$evidence")" = 700 ] ||
+[ "$(platform_stat u "$evidence")" = "$UID_NOW" ] &&
+  [ "$(platform_stat a "$evidence")" = 700 ] ||
   fail 'evidence directory ownership or mode mismatch'
 
 status=0
