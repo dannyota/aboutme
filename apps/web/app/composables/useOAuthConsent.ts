@@ -22,7 +22,8 @@ type OAuthConsentDecisionResult
   = components['schemas']['OAuthConsentDecisionResponse']['data'];
 
 export type OAuthConsentError
-  = 'session-required' | 'invalid-request' | 'unavailable' | 'agent-limit';
+  = 'session-required' | 'reauth-required' | 'invalid-request'
+    | 'unavailable' | 'agent-limit';
 
 export class OAuthConsentFailure extends Error {
   readonly kind: OAuthConsentError;
@@ -57,6 +58,9 @@ function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
   const code = codeOf(error);
   if (status === 401 && code === 'session_required') {
     return new OAuthConsentFailure('session-required');
+  }
+  if (status === 403 && code === 'reauth_required') {
+    return new OAuthConsentFailure('reauth-required');
   }
   if (
     (status === 400 && code === 'request_invalid')

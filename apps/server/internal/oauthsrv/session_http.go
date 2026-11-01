@@ -326,8 +326,8 @@ func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUI
 	return tx.Commit(ctx)
 }
 
-// reauthRequiredCode is the closed error code for the recent second-factor
-// reauthentication gate, matching every other sensitive-action route.
+// reauthRequiredCode covers stale primary proof and, for enrolled accounts,
+// stale second-factor proof, matching other sensitive-action routes.
 const reauthRequiredCode = "reauth_required"
 
 func writeConsentSessionError(w http.ResponseWriter, err error) {

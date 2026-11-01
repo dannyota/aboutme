@@ -508,7 +508,7 @@ export interface paths {
         };
         /**
          * Read the pending agent consent request
-         * @description Re-validates the complete authorization request against DCR registration or the current CIMD document and returns display name, kind, hostname, and requested scopes. `state` is echoed by the decision operation, but is never logged or returned as a separate response field. This read is safe and does not require CSRF.
+         * @description Re-validates the complete authorization request against DCR registration or the current CIMD document and returns display name, kind, hostname, and requested scopes. `state` is echoed by the decision operation, but is never logged or returned as a separate response field. This read is safe and does not require CSRF or recent authentication. The pending request is stateless; no authorization code exists until approval. A client registration removed while the user signs in again returns `404 not_found`; an invalid request or CIMD document returns `400 request_invalid`. Both require starting authorization again from the client app.
          */
         get: operations["getOAuthConsent"];
         put?: never;
@@ -6366,7 +6366,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The client or registered redirect URI was not found. */
+            /** @description The client or registered redirect URI was not found, including a registration collected while the user signed in again. The error does not distinguish those cases. Start again from the client app. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6396,6 +6396,23 @@ export interface operations {
                      *       "error": {
                      *         "code": "rate_limited",
                      *         "message": "too many requests"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal failure; distinct from a required sign-in or invalid request. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "an internal error occurred"
                      *       }
                      *     }
                      */
@@ -6468,7 +6485,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description CSRF/exact-Origin validation failed, OR — for `decision: approve` on an account enrolled in a second factor — the caller's recent second-factor proof is stale: two distinct codes under the same status (`csrf_rejected`, `reauth_required`); the CSRF check always runs first. `decision: deny` never requires a recent second-factor proof. */
+            /** @description CSRF/exact-Origin validation failed (`csrf_rejected`), or approval needs recent authentication (`reauth_required`). Approval requires primary proof within 15 minutes on every account, plus second-factor proof within 15 minutes on an enrolled account. The CSRF check always runs first. Denial needs only a live current-epoch session and CSRF, without recent proof. `reauth_required` returns no redirect destination and creates no grant or code. The consent page offers sign-in again with the same pending consent path as `next`, then revalidates the request and requires an explicit decision. A path outside the existing 2,048-byte login return-path bound shows restart guidance instead of losing the pending request. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6477,7 +6494,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The client or registered redirect URI was not found. */
+            /** @description The client or registered redirect URI was not found, including a registration collected while the user signed in again. The error does not distinguish those cases. Start again from the client app. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6542,6 +6559,23 @@ export interface operations {
                      *       "error": {
                      *         "code": "rate_limited",
                      *         "message": "too many requests"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal failure; distinct from a required sign-in or invalid request. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "internal_error",
+                     *         "message": "an internal error occurred"
                      *       }
                      *     }
                      */

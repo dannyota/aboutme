@@ -16,7 +16,7 @@ const query = {
   response_type: 'code' as const,
   scope: 'resumes:read resumes:write' as const,
   state: 'opaque-state',
-  code_challenge: 'abcdefghijklmnopqrstuvwxyz1234567890123456789',
+  code_challenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
   code_challenge_method: 'S256' as const,
 };
 
@@ -96,7 +96,11 @@ describe('useOAuthConsent', () => {
     [400, 'request_invalid', 'invalid-request'],
     [404, 'not_found', 'invalid-request'],
     [401, 'session_required', 'session-required'],
+    [403, 'reauth_required', 'reauth-required'],
+    [403, 'csrf_rejected', 'unavailable'],
+    [500, 'reauth_required', 'unavailable'],
     [400, 'other', 'unavailable'],
+    [500, 'internal_error', 'unavailable'],
     [503, 'server_error', 'unavailable'],
     [429, 'rate_limited', 'unavailable'],
   ] as const)('maps GET %s/%s to %s', async (status, code, kind) => {
@@ -126,7 +130,10 @@ describe('useOAuthConsent', () => {
     [400, 'request_invalid', 'invalid-request'],
     [404, 'not_found', 'invalid-request'],
     [401, 'session_required', 'session-required'],
+    [403, 'reauth_required', 'reauth-required'],
+    [400, 'reauth_required', 'unavailable'],
     [500, 'other', 'unavailable'],
+    [500, 'internal_error', 'unavailable'],
     // Rule 7: only the exact 409/agent_limit_reached pair maps to the
     // grant-limit failure; every other 409 or 400 stays unavailable.
     [409, 'agent_limit_reached', 'agent-limit'],
@@ -147,6 +154,23 @@ describe('useOAuthConsent', () => {
       kind,
     });
     expect(calls).toBe(1);
+  });
+
+  it('maps persistent CSRF rejection to unavailable', async () => {
+    let calls = 0;
+    registerEndpoint('/api/v1/oauth/consent', {
+      method: 'POST',
+      handler: (event) => {
+        calls += 1;
+        setResponseStatus(event, 403);
+        return { error: { code: 'csrf_rejected', message: 'x' } };
+      },
+    });
+    const wrapper = await mountSuspended(Probe);
+    await expect(wrapper.vm.decide(query, 'approve')).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
+    expect(calls).toBe(2);
   });
 
   it('does not retry a general 4xx mutation', async () => {
