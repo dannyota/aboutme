@@ -3,7 +3,7 @@ set -uo pipefail
 # Runner logs admit only fixed messages; shell errors can expose arguments.
 exec 2>/dev/null
 umask 077
-diagnostic='Synthetic quota diagnostic: stage=environment'
+diagnostic='Synthetic quota diagnostic: stage=environment reason=args'
 write_summary() {
   [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
   { printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"; } 2>/dev/null
@@ -16,37 +16,47 @@ fail() {
   exit "${1:-1}"
 }
 environment_fail() {
-  diagnostic='Synthetic quota diagnostic: stage=environment'
-  fail "${1:-1}"
+  local reason=${1:-args}
+  case "$reason" in
+    args|missing-VNGCLOUD_CLIENT_ID|missing-VNGCLOUD_CLIENT_SECRET|missing-VNGCLOUD_REGION|missing-VNGCLOUD_PROJECT_ID|missing-GITHUB_TOKEN|missing-GITHUB_REPOSITORY|token-format|repository-format|tool-curl|tool-jq|tool-python3|tool-mktemp|tool-mkdir|tool-cp|tool-sed|tool-cat|tool-env|tool-rm|cli-path|tempdir|config-write|summary|signal|copy|clock) ;;
+    *) reason=args ;;
+  esac
+  diagnostic="Synthetic quota diagnostic: stage=environment reason=$reason"
+  fail "${2:-1}"
 }
 success() {
-  write_summary 'Synthetic quota: healthy' || environment_fail
+  write_summary 'Synthetic quota: healthy' || environment_fail summary
   printf '%s\n' 'Synthetic quota: healthy'
   exit 0
 }
-trap 'environment_fail 130' INT
-trap 'environment_fail 143' TERM
-[ "$#" -eq 1 ] || fail
-case "$1" in check|renew) action=$1 ;; *) fail ;; esac
+trap 'environment_fail signal 130' INT
+trap 'environment_fail signal 143' TERM
+[ "$#" -eq 1 ] || environment_fail args
+case "$1" in check|renew) action=$1 ;; *) environment_fail args ;; esac
 for name in VNGCLOUD_CLIENT_ID VNGCLOUD_CLIENT_SECRET VNGCLOUD_REGION VNGCLOUD_PROJECT_ID GITHUB_TOKEN GITHUB_REPOSITORY; do
-  [ -n "${!name:-}" ] || fail
+  [ -n "${!name:-}" ] || environment_fail "missing-$name"
 done
-case "$GITHUB_TOKEN" in *[!a-zA-Z0-9_-]*) fail ;; esac
-case "$GITHUB_REPOSITORY" in *[!a-zA-Z0-9_.\/-]*|*/*/*|/*|*/) fail ;; */*) ;; *) fail ;; esac
+token_is_safe() {
+  local LC_ALL=C
+  # GitHub tokens are opaque; exclude bytes unsafe in curl's quoted header.
+  case "$GITHUB_TOKEN" in *[![:graph:]]*|*\"*|*\\*) return 1 ;; esac
+}
+token_is_safe || environment_fail token-format
+case "$GITHUB_REPOSITORY" in *[!a-zA-Z0-9_.\/-]*|*/*/*|/*|*/) environment_fail repository-format ;; */*) ;; *) environment_fail repository-format ;; esac
 for tool in curl jq python3 mktemp mkdir cp sed cat env rm; do
-  command -v "$tool" >/dev/null || fail
+  command -v "$tool" >/dev/null || environment_fail "tool-$tool"
 done
-cli=$(command -v vngcloud) || fail
-case "$cli" in /*) ;; *) fail ;; esac
-tmp=$(mktemp -d) || fail
+cli=$(command -v vngcloud) || environment_fail cli-path
+case "$cli" in /*) ;; *) environment_fail cli-path ;; esac
+tmp=$(mktemp -d) || environment_fail tempdir
 trap 'rm -rf "$tmp"' EXIT
-mkdir -m 700 "$tmp/home" || fail
-printf 'header = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github+json"\nheader = "X-GitHub-Api-Version: 2022-11-28"\n' "$GITHUB_TOKEN" > "$tmp/curl.conf" || fail
+mkdir -m 700 "$tmp/home" || environment_fail tempdir
+printf 'header = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github+json"\nheader = "X-GitHub-Api-Version: 2022-11-28"\n' "$GITHUB_TOKEN" > "$tmp/curl.conf" || environment_fail config-write
 issue_url="https://api.github.com/repos/$GITHUB_REPOSITORY/issues/146"
 issue_request() {
   local issue_stage=$1 rc=0 http_class=none
   shift
-  case "$issue_stage" in issue-read|issue-write) ;; *) environment_fail ;; esac
+  case "$issue_stage" in issue-read|issue-write) ;; *) environment_fail args ;; esac
   diagnostic="Synthetic quota diagnostic: stage=$issue_stage http=none"
   curl --disable --config "$tmp/curl.conf" --silent --show-error --fail --max-time 30 \
     --write-out '%{http_code}' -o "$tmp/issue" --proto '=https' "$@" "$issue_url" \
@@ -72,7 +82,7 @@ issue_write() {
 run_cli() {
   local cli_stage=$1 rc=0 code
   shift
-  case "$cli_stage" in quota-read|status-read|renew|readback) ;; *) environment_fail ;; esac
+  case "$cli_stage" in quota-read|status-read|renew|readback) ;; *) environment_fail args ;; esac
   diagnostic="Synthetic quota diagnostic: stage=$cli_stage cli-exit=0 code=other"
   env -i PATH="$PATH" HOME="$tmp/home" LC_ALL=C \
     VNGCLOUD_CLIENT_ID="$VNGCLOUD_CLIENT_ID" VNGCLOUD_CLIENT_SECRET="$VNGCLOUD_CLIENT_SECRET" \
@@ -82,7 +92,7 @@ run_cli() {
   diagnostic="Synthetic quota diagnostic: stage=$cli_stage cli-exit=$rc code=$code"
   return "$rc"
 }
-cat > "$tmp/validate.py" <<'PY' || fail
+cat > "$tmp/validate.py" <<'PY' || environment_fail config-write
 import calendar
 import datetime as dt
 from decimal import Decimal, getcontext
@@ -264,17 +274,17 @@ if [ "$hold" = open ]; then
   [ "$action" = check ] || fail
 fi
 run_cli quota-read --read-only monitor get-synthetic-quota --output json || fail
-cp "$tmp/cli-out" "$tmp/get" || environment_fail
+cp "$tmp/cli-out" "$tmp/get" || environment_fail copy
 run_cli status-read --read-only monitor quota-status --kind synthetic --output json || fail
-cp "$tmp/cli-out" "$tmp/status" || environment_fail
-now=$(python3 -I -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())') || environment_fail
+cp "$tmp/cli-out" "$tmp/status" || environment_fail copy
+now=$(python3 -I -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())') || environment_fail clock
 diagnostic='Synthetic quota diagnostic: stage=parse'
 parse_rc=0
 python3 -I "$tmp/validate.py" initial "$tmp/get" "$tmp/status" "$now" > "$tmp/decision" 2> "$tmp/error" || parse_rc=$?
 case "$parse_rc" in 0) ;; 2) diagnostic='Synthetic quota diagnostic: stage=threshold'; fail ;; *) fail ;; esac
-expiry=$(sed -n '1p' "$tmp/decision") || environment_fail
-decision=$(sed -n '2p' "$tmp/decision") || environment_fail
-healthy=$(sed -n '3p' "$tmp/decision") || environment_fail
+expiry=$(sed -n '1p' "$tmp/decision") || environment_fail copy
+decision=$(sed -n '2p' "$tmp/decision") || environment_fail copy
+healthy=$(sed -n '3p' "$tmp/decision") || environment_fail copy
 if [ "$action" = check ] || [ "$decision" = skip ]; then
   diagnostic='Synthetic quota diagnostic: stage=threshold'
   [ "$healthy" = healthy ] || fail
@@ -291,6 +301,6 @@ diagnostic=$renew_diagnostic
 [ "$rc" -eq 0 ] || fail "$rc"
 case "$classification" in 'close not-due') stage=not-due ;; 'close confirmed') stage=confirmed ;; *) fail ;; esac
 run_cli readback --read-only monitor quota-status --kind synthetic --output json || fail
-now=$(python3 -I -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())') || environment_fail
+now=$(python3 -I -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())') || environment_fail clock
 python3 -I "$tmp/validate.py" final "$tmp/cli-out" "$now" "$stage" "$expiry" 2> "$tmp/error" || fail
 success
