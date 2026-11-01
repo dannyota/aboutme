@@ -50,10 +50,10 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Font catalog](fonts.md)                                               | Font license gate, provenance, coverage, and fallback                      |
 | Other   | [MCP owner workflow](mcp-owner-workflow.md)                            | Official-SDK client run that copies one resume into Vietnamese             |
 | Other   | [MCP client compatibility](mcp-client-compatibility.md)                | OAuth rules Claude and TypeScript SDK clients need                         |
-| Other   | [MCP Client ID Metadata Documents](mcp-cimd.md)                        | Proposal: motivation, sources, release, and owner decisions                |
-| Other   | [MCP CIMD metadata fetching](mcp-cimd-fetch.md)                        | Proposal: URL validation, fetch, SSRF, documents, cache, and limits        |
-| Other   | [MCP CIMD authorization](mcp-cimd-authorization.md)                    | Proposal: consent, stored clients, errors, privacy, and compatibility      |
-| Other   | [MCP CIMD verification](mcp-cimd-verification.md)                      | Proposal: abuse cases and acceptance checks                                |
+| Other   | [MCP Client ID Metadata Documents](mcp-cimd.md)                        | Motivation, sources, release, and owner decisions                          |
+| Other   | [MCP CIMD metadata fetching](mcp-cimd-fetch.md)                        | URL validation, fetch, SSRF, documents, cache, and limits                  |
+| Other   | [MCP CIMD authorization](mcp-cimd-authorization.md)                    | Consent, stored clients, errors, privacy, and compatibility                |
+| Other   | [MCP CIMD verification](mcp-cimd-verification.md)                      | Abuse cases and acceptance checks                                          |
 | Other   | [MCP guide](mcp-guide.md)                                              | Public page on connecting an AI assistant through MCP                      |
 | Other   | [MCP guide copy](mcp-guide-copy.md)                                    | Vietnamese and English text of the MCP guide                               |
 | Other   | [Templates](templates/README.md)                                       | Preset data, tokens, colors, geometry, and print behavior                  |
