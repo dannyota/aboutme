@@ -508,7 +508,8 @@ async function expectVerifyDisplay(
   theme: 'light' | 'dark',
 ): Promise<void> {
   const title = locale === 'vi'
-    ? 'Kiểm chứng phiên bản đang chạy' : 'Verify what\'s running';
+    ? 'Kiểm chứng phiên bản đang chạy'
+    : 'Verify what\'s running';
   const heading = page.getByRole('heading', { level: 1, name: title });
   await expect(heading).toBeVisible();
   await expect(heading).toMatchAriaSnapshot(
@@ -527,14 +528,16 @@ async function expectVerifyDisplay(
   };
   await expect(status).toHaveCSS('background-color', colors[theme][state]);
   await expect(status).toHaveCSS('color', theme === 'light'
-    ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)');
+    ? 'rgb(16, 27, 63)'
+    : 'rgb(243, 241, 236)');
   expect(await page.evaluate(() => Array.from(document.fonts).some((face) =>
     face.family === 'Be Vietnam Pro' && face.status === 'loaded')))
     .toBe(true);
   const mark = status.locator('.verify-mark');
   await expect(mark.locator('svg')).toHaveCount(1);
   await expect(mark.locator(state === 'verified'
-    ? '.lucide-shield-check' : '.lucide-info')).toBeVisible();
+    ? '.lucide-shield-check'
+    : '.lucide-info')).toBeVisible();
   const pageWidth = page.viewportSize()!.width;
   await expect(mark).toHaveCSS('width', pageWidth < 672 ? '40px' : '56px');
   expect(await pageOverflow(page)).toBeLessThanOrEqual(1);
@@ -545,7 +548,8 @@ async function expectVerifyDisplay(
     '.verify-status-text [role="status"] > p',
   ).first())).toEqual({ contained: true, visible: true });
   await expect(page.getByTestId('verify-limits').getByRole('heading', {
-    level: 2, name: locale === 'vi' ? 'Trang này chứng minh gì'
+    level: 2, name: locale === 'vi'
+      ? 'Trang này chứng minh gì'
       : 'What this proves',
   })).toBeVisible();
   await expect(page.getByTestId('verify-limits').locator('li')).toHaveCount(5);
@@ -553,13 +557,15 @@ async function expectVerifyDisplay(
     await expect(page.getByTestId('verify-chain')).toHaveCount(0);
     await expect(page.getByTestId('verify-components')).toHaveCount(0);
     await expect(page.getByTestId('verify-selector')).toHaveCount(0);
-    await expect(page.getByTestId('verify-command-2')).toContainText('<digest>');
+    await expect(page.getByTestId('verify-command-2'))
+      .toContainText('<digest>');
     return;
   }
   const chain = page.getByTestId('verify-chain');
   await expect(chain.getByRole('heading', {
     level: 2,
-    name: locale === 'vi' ? 'Từ mã nguồn đến bản đang chạy'
+    name: locale === 'vi'
+      ? 'Từ mã nguồn đến bản đang chạy'
       : 'From source to running',
   })).toBeVisible();
   const steps = chain.locator('[data-step]');

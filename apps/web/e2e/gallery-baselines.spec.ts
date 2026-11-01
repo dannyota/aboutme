@@ -134,7 +134,8 @@ async function assertLibrary(
     await expect(fields.locator('[data-role="'
       + (filtered ? 'backend' : 'all') + '"]')).toHaveCSS(
       'background-color', theme === 'light'
-        ? 'rgb(38, 64, 156)' : 'rgb(143, 166, 240)',
+        ? 'rgb(38, 64, 156)'
+        : 'rgb(143, 166, 240)',
     );
   }
   const cards = page.locator('[data-template]:visible');
@@ -214,10 +215,12 @@ async function assertLibrarySheet(
   const heading = locale === 'vi' ? 'Bộ lọc' : 'Filters';
   await expect(sheet).toHaveRole('dialog');
   await expect(sheet).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(255, 255, 255)' : 'rgb(26, 33, 56)');
+    ? 'rgb(255, 255, 255)'
+    : 'rgb(26, 33, 56)');
   await expect(sheet.locator('[data-role="all"]')).toHaveCSS(
     'background-color', theme === 'light'
-      ? 'rgb(38, 64, 156)' : 'rgb(143, 166, 240)',
+      ? 'rgb(38, 64, 156)'
+      : 'rgb(143, 166, 240)',
   );
   await expect(sheet).toMatchAriaSnapshot(`- dialog "${heading}":
   - heading "${heading}" [level=2]`);
@@ -263,7 +266,8 @@ for (const locale of ['vi', 'en'] as const) {
               },
             ]);
             await page.goto(filtered
-              ? '/templates?role=backend&filter=technical' : '/templates');
+              ? '/templates?role=backend&filter=technical'
+              : '/templates');
             await assertLibrary(page, locale, theme, width, filtered);
             if (width === 390 && !filtered) {
               await page.locator('[data-action="gallery-filters-open"]')

@@ -172,9 +172,11 @@ test.describe('renderer screenshot subset', () => {
         '.resume-document:not(.pagination-measurement)',
       );
       const name = cell.fixture === 'vn-full'
-        ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace';
+        ? 'Nguyễn Thị Minh Châu'
+        : 'Ada Lovelace';
       const job = cell.fixture === 'vn-full'
-        ? 'Kỹ sư trưởng' : 'Principal Engineer';
+        ? 'Kỹ sư trưởng'
+        : 'Principal Engineer';
       await expect(documents.getByText(name, { exact: true })).toHaveCount(1);
       await expect(documents.getByText(name, { exact: true })).toBeVisible();
       await expect(documents.getByText(job, { exact: true })).toHaveCount(1);

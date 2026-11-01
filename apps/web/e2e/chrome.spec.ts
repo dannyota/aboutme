@@ -68,13 +68,15 @@ async function expectChrome(
     name: vi ? 'Cộng đồng' : 'Community', exact: true,
   })).toHaveCount(1);
   await expect(header).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(255, 255, 255)' : 'rgb(20, 26, 46)');
+    ? 'rgb(255, 255, 255)'
+    : 'rgb(20, 26, 46)');
   await expect(page.locator('body')).toHaveCSS('background-color',
     theme === 'light' ? 'rgb(249, 248, 245)' : 'rgb(12, 16, 32)');
   await expect(page.locator('body')).toHaveCSS('font-size', '15px');
   await expect(page.locator('body')).toHaveCSS('line-height', '22.5px');
   await expect(page.locator('body')).toHaveCSS('color', theme === 'light'
-    ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)');
+    ? 'rgb(16, 27, 63)'
+    : 'rgb(243, 241, 236)');
   await expect(page.locator('body')).toHaveCSS(
     'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
   );
@@ -101,19 +103,23 @@ async function expectChrome(
     await expect.poll(() => measureVerticalFlow(form.locator(':scope > div, '
       + ':scope > button'))).toBe(true);
     await expect(page.getByTestId('auth-brand-panel'))[width >= 1024
-      ? 'toBeVisible' : 'toBeHidden']();
+      ? 'toBeVisible'
+      : 'toBeHidden']();
     return;
   }
 
   const title = page.getByRole('heading', { level: 1 });
   await expect(title).toHaveText(name === 'home'
-    ? (vi ? 'CV của bạn. Chia sẻ theo cách của bạn.'
+    ? (vi
+        ? 'CV của bạn. Chia sẻ theo cách của bạn.'
         : 'Your resume. Your link. Your control.')
     : (vi ? 'Thư viện' : 'Library'));
   await expect(title).toMatchAriaSnapshot(name === 'home'
-    ? (vi ? '- heading "CV của bạn. Chia sẻ theo cách của bạn." [level=1]'
+    ? (vi
+        ? '- heading "CV của bạn. Chia sẻ theo cách của bạn." [level=1]'
         : '- heading "Your resume. Your link. Your control." [level=1]')
-    : (vi ? '- heading "Thư viện" [level=1]'
+    : (vi
+        ? '- heading "Thư viện" [level=1]'
         : '- heading "Library" [level=1]'));
   await expect(title).toHaveCSS('font-weight', '700');
   await expect(title).toHaveCSS('font-size', name === 'home'
@@ -158,7 +164,8 @@ async function expectChrome(
   } else {
     const galleryHeader = page.getByTestId('gallery-header');
     await expect(galleryHeader).toHaveCSS('background-color', theme === 'light'
-      ? 'rgb(236, 238, 247)' : 'rgb(21, 29, 54)');
+      ? 'rgb(236, 238, 247)'
+      : 'rgb(21, 29, 54)');
     await expect(galleryHeader).toHaveCSS('border-radius', '20px');
     const grid = page.locator('.gallery-grid');
     await expect(grid.locator(':scope > li')).toHaveCount(TEMPLATES.length);
@@ -175,14 +182,18 @@ async function expectChrome(
       await image.scrollIntoViewIfNeeded();
       await expect.poll(() => image.evaluate(async (element, lng) => {
         const img = element as HTMLImageElement;
-        try { await img.decode(); } catch { return false; }
+        try {
+          await img.decode();
+        } catch {
+          return false;
+        }
         const id = img.closest('[data-template]')
           ?.getAttribute('data-template');
         return img.naturalWidth === 1240 && img.naturalHeight === 1754
           && img.currentSrc.endsWith(`/templates/pages/${id}-${lng}-p1.png`)
           && Math.abs(img.naturalWidth / img.naturalHeight
             - Number(img.getAttribute('width'))
-              / Number(img.getAttribute('height'))) < 0.001;
+            / Number(img.getAttribute('height'))) < 0.001;
       }, locale)).toBe(true);
     }
   }
@@ -339,7 +350,9 @@ for (const locale of ['vi', 'en'] as const) {
       expect((await page.goto('/templates'))?.status()).toBe(200);
       for (const width of [640, 641, 899, 900, 1023, 1024, 1179, 1180]) {
         await page.setViewportSize({ width, height: 900 });
-        await expect.poll(() => measureChromeGrid(page.locator('.gallery-grid')))
+        await expect.poll(
+          () => measureChromeGrid(page.locator('.gallery-grid')),
+        )
           .toEqual({
             columns: width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5,
             gapX: width < 641 ? 14 : 28,

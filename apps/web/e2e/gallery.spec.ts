@@ -643,11 +643,11 @@ for (const locale of ['vi', 'en'] as const) {
         await expect.poll(() =>
           measureGalleryGrid(page.locator('.gallery-grid')),
         ).toEqual({
-            columns: expected,
-            columnGap: width < 641 ? 14 : 28,
-            rowGap: width < 641 ? 24 : 40,
-            ordered: true,
-          });
+          columns: expected,
+          columnGap: width < 641 ? 14 : 28,
+          rowGap: width < 641 ? 24 : 40,
+          ordered: true,
+        });
       }
     });
   }
@@ -924,11 +924,12 @@ async function assertGalleryDetail(
     );
   }
   await expect(page.getByRole('tablist')).toMatchAriaSnapshot(
-    `- tablist "${locale === 'vi' ? 'Cách xem CV mẫu'
+    `- tablist "${locale === 'vi'
+      ? 'Cách xem CV mẫu'
       : 'How to view the sample'}":\n`
-    + names.map((name, index) =>
-      `  - tab "${name}"${index === selected ? ' [selected]' : ''}`,
-    ).join('\n'),
+      + names.map((name, index) =>
+        `  - tab "${name}"${index === selected ? ' [selected]' : ''}`,
+      ).join('\n'),
   );
   await expect.poll(
     () => measureGalleryDetail(page.locator('.template-detail__layout')),
@@ -1012,7 +1013,8 @@ for (const locale of ['vi', 'en'] as const) {
               const id = tab === 'page' ? 'creative-accent' : 'executive-band';
               await page.goto(`/templates/${id}`);
               if (tab !== 'page') {
-                const name = tab === 'pdf' ? 'PDF'
+                const name = tab === 'pdf'
+                  ? 'PDF'
                   : locale === 'vi' ? 'ATS đọc được gì' : 'What an ATS reads';
                 await page.getByRole('tab', { name }).click();
               }

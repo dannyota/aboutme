@@ -84,9 +84,9 @@ export async function measureChromeGrid(grid: Locator): Promise<{
       : 0;
     const separated = boxes.every((box, index) => box.width > 0
       && box.height > 0 && boxes.slice(index + 1).every((other) =>
-        Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
-        || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
-          <= 1));
+      Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
+      || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
+      <= 1));
     return {
       columns,
       gapX: Number.parseFloat(style.columnGap),
@@ -236,9 +236,9 @@ export async function measureShowcaseGrid(
           && Math.abs(box.width - width) <= 1
           && Math.abs(box.left - bounds.left
             - column * (width + expected.gap)) <= 1
-          && (!previous || column === 0
-            || box.left >= previous.right + expected.gap - 1)
-          && (!above || box.top >= above.bottom + expected.gap - 1);
+            && (!previous || column === 0
+              || box.left >= previous.right + expected.gap - 1)
+            && (!above || box.top >= above.bottom + expected.gap - 1);
       });
   }, { columns, gap });
 }

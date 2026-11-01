@@ -412,8 +412,10 @@ async function expectCardDisplay(
   await expect(photo.locator('.preview-card-photo-clip')).toHaveCSS(
     'overflow', 'hidden');
   await expect(photo).toHaveCSS('border-color',
-    card.accent === '#000000' ? 'rgb(0, 0, 0)'
-      : card.accent === '#2f855a' ? 'rgb(47, 133, 90)'
+    card.accent === '#000000'
+      ? 'rgb(0, 0, 0)'
+      : card.accent === '#2f855a'
+        ? 'rgb(47, 133, 90)'
         : 'rgb(26, 92, 235)');
   const image = photo.locator('img');
   await expect(image).toHaveCSS('object-fit', 'cover');

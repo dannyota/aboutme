@@ -258,7 +258,7 @@ async function assertShowcase(
     await expect(page.locator('[data-state="empty"] p')).toHaveText(
       locale === 'vi'
         ? 'Chưa có CV nào ở đây. Xuất bản CV của bạn và bật Hiện trong '
-          + 'trang Cộng đồng để là người đầu tiên.'
+        + 'trang Cộng đồng để là người đầu tiên.'
         : 'No resumes here yet. Publish your resume and turn on Show in the '
           + 'community showcase to be the first.',
     );
@@ -288,7 +288,8 @@ async function assertShowcase(
         && box.height > 0 && getComputedStyle(img).objectFit === 'cover';
     })).toBe(true);
     await expect(tile).toHaveCSS('background-color', theme === 'light'
-      ? 'rgb(255, 255, 255)' : 'rgb(20, 26, 46)');
+      ? 'rgb(255, 255, 255)'
+      : 'rgb(20, 26, 46)');
     await expect.poll(() => measureTextContainment(
       tile.locator('.showcase-tile__meta'),
     )).toEqual({ visible: true, contained: true });
@@ -299,17 +300,21 @@ async function assertShowcase(
   await expect(grid.locator(':scope > li')).toHaveCount(13);
   const resultsWidth = await page.getByTestId('showcase-results')
     .evaluate((element) => element.getBoundingClientRect().width);
-  const columns = width < 641 ? 1
+  const columns = width < 641
+    ? 1
     : width >= 1024 && resultsWidth >= 860 ? 3 : 2;
   const gap = width >= 1024 ? 28 : width >= 641 ? 24 : 16;
   await expect.poll(() => measureShowcaseGrid(grid, columns, gap)).toBe(true);
   const invite = page.getByTestId('showcase-invite');
   await expect(invite.getByRole('heading')).toHaveText(locale === 'vi'
-    ? 'Muốn CV của bạn ở đây?' : 'Want your resume here?');
+    ? 'Muốn CV của bạn ở đây?'
+    : 'Want your resume here?');
   await expect(invite.getByRole('link')).toHaveText(locale === 'vi'
-    ? 'Tạo CV miễn phí' : 'Create a free resume');
+    ? 'Tạo CV miễn phí'
+    : 'Create a free resume');
   await expect(invite).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(246, 238, 223)' : 'rgb(35, 29, 22)');
+    ? 'rgb(246, 238, 223)'
+    : 'rgb(35, 29, 22)');
   await expect.poll(() => measureTextContainment(invite))
     .toEqual({ visible: true, contained: true });
   const pager = page.getByTestId('showcase-pager');
