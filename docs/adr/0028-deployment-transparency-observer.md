@@ -87,4 +87,8 @@ claim and unchanged attestation verification policy.
 2026-10-11: Added a host observer container to verify runtime digests with the
 existing verifier while keeping Podman access in the root reporter.
 
+2026-11-01: Consolidated the host reporting and verification amendments to
+reflect Vietnam production under ADR 0027, preserving the observer's trust
+limits.
+
 Originally proposed as ADR 0057.

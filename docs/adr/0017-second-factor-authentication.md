@@ -182,3 +182,5 @@ later, or a forward fix.
   authentication epoch, the wire contract, and the release fence (v0.4.2).
 - Former ADR 0049 (2026-09-23): authenticator-app second factor with sealed
   secrets and a derived-ID key ring, shared recovery, and floor v0.4.7.
+- 2026-11-01: Corrected the production fence and secret custody to match the
+  Vietnam host under ADR 0027, while retaining the accepted factor safeguards.

@@ -132,3 +132,5 @@ images by digest.
   at Cloudflare" clause was replaced by 0056.
 - Former ADR 0056 (2026-09-26): Route 53 DNS with DNSSEC, so CloudFront picks
   edges near the viewer.
+- 2026-11-01: Marked this AWS decision historical and consolidated its surviving
+  single-host and public release rules in ADR 0027 after the Vietnam cutover.

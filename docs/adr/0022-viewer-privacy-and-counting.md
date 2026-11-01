@@ -138,3 +138,6 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 - The AWS counting layers cost about USD 15 a month at the traffic estimated
   when approved. The 2026-10-11 Vietnam cutover removed AWS delivery; layers 2
   and 3 are inactive.
+- 2026-11-01: Corrected the counting layers for direct Vietnam delivery under
+  ADR 0027 and distinguished analytics from CrowdSec's separate security
+  retention, so the privacy claims match the production controls.

@@ -156,3 +156,6 @@ exempted the stored link-preview card from the 60-second cache limit. Former ADR
 
 Amended (2026-10-01): the operator `account-delete` command deletes an account
 without the in-process fences; new requests still return `404` at once.
+
+2026-11-01: Corrected production delivery to reflect the direct Vietnam host
+under ADR 0027, while retaining the live-state gate and revocation rules.
