@@ -690,9 +690,10 @@ test('verify flow assertion detects overlapping cards', async ({ page }) => {
     '[data-testid="verify-page"] > :not(.sr-only)',
   );
   expect(await measureVerticalFlow(flow)).toBe(true);
-  await page.getByTestId('verify-chain').evaluate((el) => {
-    (el as HTMLElement).style.marginTop = '-40px';
+  const gap = await page.getByTestId('verify-chain').evaluate((el) =>
+    Number.parseFloat(getComputedStyle(el.parentElement!).rowGap));
+  await page.addStyleTag({
+    content: `[data-testid="verify-chain"] { margin-top: ${-gap - 4}px }`,
   });
-  const separated = await measureVerticalFlow(flow);
-  expect(() => expect(separated).toBe(true)).toThrow();
+  await expect.poll(() => measureVerticalFlow(flow)).toBe(false);
 });

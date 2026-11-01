@@ -3,12 +3,21 @@ import type { Locator } from '@playwright/test';
 /** Measure text against a named container, including clipped text. */
 export async function measureTextContainment(
   container: Locator,
+  verticalContainer?: string,
 ): Promise<{ visible: boolean; contained: boolean }> {
-  return container.evaluate((root) => {
+  return container.evaluate((root, selector) => {
     const bounds = root.getBoundingClientRect();
+    const outer = selector ? root.closest(selector) : root;
+    if (!outer) return { visible: false, contained: false };
+    const rootStyle = getComputedStyle(root);
+    const rootClipsY = /^(hidden|clip|scroll|auto)$/u.test(rootStyle.overflowY);
+    const next = outer !== root
+      ? root.nextElementSibling?.getBoundingClientRect()
+      : undefined;
     let visible = bounds.width > 0 && bounds.height > 0;
     let contained = root.scrollWidth <= root.clientWidth + 1
-      && root.scrollHeight <= root.clientHeight + 1;
+      && ((outer !== root && !rootClipsY)
+        || root.scrollHeight <= root.clientHeight + 1);
     let hasText = false;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
@@ -18,8 +27,11 @@ export async function measureTextContainment(
       const parent = node.parentElement;
       if (!parent) continue;
       const clips: { rect: DOMRect; x: boolean; y: boolean }[] = [
-        { rect: bounds, x: true, y: true },
+        { rect: bounds, x: true, y: outer === root || rootClipsY },
       ];
+      if (outer !== root) {
+        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true });
+      }
       for (
         let element: Element | null = parent;
         element;
@@ -35,7 +47,7 @@ export async function measureTextContainment(
             y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
           });
         }
-        if (element === root) break;
+        if (element === outer) break;
       }
       const range = document.createRange();
       range.selectNodeContents(node);
@@ -44,6 +56,10 @@ export async function measureTextContainment(
         visible = false;
       }
       for (const rect of rects) {
+        if (next && rect.right > next.left + 1 && rect.left < next.right - 1
+          && rect.bottom > next.top + 1 && rect.top < next.bottom - 1) {
+          contained = false;
+        }
         for (const clip of clips) {
           if ((clip.x && (rect.left < clip.rect.left - 1
             || rect.right > clip.rect.right + 1))
@@ -55,7 +71,7 @@ export async function measureTextContainment(
       }
     }
     return { visible: visible && hasText, contained };
-  });
+  }, verticalContainer);
 }
 
 /** Measure all adjacent boxes at once to avoid mixing layout frames. */

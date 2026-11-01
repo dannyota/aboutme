@@ -125,7 +125,10 @@ async function expectChrome(
   await expect(title).toHaveCSS('font-size', name === 'home'
     ? (width < 1024 ? '48px' : '60px')
     : (width < 640 ? '40px' : '48px'));
-  await expect.poll(() => measureTextContainment(title))
+  const titleContainer = name === 'home'
+    ? '[data-testid="landing-hero"]'
+    : '[data-testid="gallery-header"]';
+  await expect.poll(() => measureTextContainment(title, titleContainer))
     .toEqual({ visible: true, contained: true });
 
   if (name === 'home') {
@@ -376,10 +379,11 @@ test('chrome measurements detect layout and content mutations', async ({
   expect((await page.goto('/'))?.status()).toBe(200);
   const stage = page.getByTestId('landing-stage');
   await expect.poll(() => measureChromeSheet(stage)).toBe(true);
-  await page.getByTestId('landing-sheet').evaluate((element) => {
-    (element as HTMLElement).style.translate = '4px 0';
+  await page.addStyleTag({
+    content: '[data-testid="landing-sheet"] { '
+      + 'transform: translateX(4px) scale(var(--sheet-zoom)) !important; }',
   });
-  expect(await measureChromeSheet(stage)).toBe(false);
+  await expect.poll(() => measureChromeSheet(stage)).toBe(false);
 
   const grid = page.getByTestId('landing-template-grid');
   await expect.poll(() => measureChromeGrid(grid)).toMatchObject({
@@ -420,6 +424,35 @@ test('chrome measurements detect layout and content mutations', async ({
     });
   await expect(page.getByTestId('app-shell').getByRole('navigation')
     .getByRole('link', { name: 'Thư viện', exact: true })).toHaveCount(0);
+});
+
+test('desktop heading text stays within its visible container', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const path of ['/', '/templates']) {
+    await page.goto(path);
+    await page.evaluate(() => document.fonts.ready);
+    const title = page.getByRole('heading', { level: 1 });
+    const container = path === '/'
+      ? '[data-testid="landing-hero"]'
+      : '[data-testid="gallery-header"]';
+    await expect.poll(() => measureTextContainment(title, container))
+      .toEqual({ visible: true, contained: true });
+    const style = await page.addStyleTag({
+      content: 'h1 { height: 20px !important; overflow: visible !important; }',
+    });
+    await expect.poll(async () => (await measureTextContainment(
+      title, container,
+    )).contained).toBe(false);
+    await style.evaluate((element) => {
+      element.textContent = 'h1 { height: 20px !important; '
+        + 'overflow: hidden !important; }';
+    });
+    await expect.poll(async () => (await measureTextContainment(
+      title, container,
+    )).contained).toBe(false);
+  }
 });
 
 // The hero sheet and its ghost stay the same size and centered at phone

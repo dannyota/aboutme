@@ -1056,10 +1056,12 @@ test('template detail measurements detect displacement and clipped ATS text',
     await page.goto('/templates/executive-band');
     const layout = page.locator('.template-detail__layout');
     expect((await measureGalleryDetail(layout)).contained).toBe(true);
-    await page.locator('.template-detail__info').evaluate((element) => {
-      (element as HTMLElement).style.transform = 'translateX(4px)';
+    await page.addStyleTag({
+      content: '.template-detail__info { '
+        + 'transform: translateX(4px) !important; }',
     });
-    expect((await measureGalleryDetail(layout)).contained).toBe(false);
+    await expect.poll(async () => (await measureGalleryDetail(layout))
+      .contained).toBe(false);
     await page.getByRole('tab', { name: 'ATS đọc được gì' }).click();
     const text = page.locator('[data-ats-text]');
     expect((await measureTextContainment(text)).contained).toBe(true);
