@@ -11,6 +11,7 @@ fail() {
 }
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-document-check-test.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
 
 REPO=$WORK/repo

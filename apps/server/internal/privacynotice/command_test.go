@@ -5,14 +5,12 @@ import (
 	"io/fs"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 func TestCommandPreparePartialCaptureWithoutSendReceipt(t *testing.T) {
 	ctx, s := noticeTestService(t)
-	s.now = time.Now
 	s.authorityFS = fstest.MapFS{".": {Mode: fs.ModeDir | 0755}, "epoch": {Data: []byte(uuid.NewString() + "\n"), Mode: 0444}}
 	if _, err := s.pool.Exec(ctx, `INSERT INTO users(email,name) SELECT 'fixture-'||n||'@example.com','Fixture' FROM generate_series(1,205) n`); err != nil {
 		t.Fatal("partial capture fixture failed")

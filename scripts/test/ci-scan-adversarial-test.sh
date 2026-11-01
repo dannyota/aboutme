@@ -82,7 +82,7 @@ EOF
 go_call_seen() {
   local calls=$1 directory=$2 verb=$3 cwd command
   while IFS='|' read -r cwd command; do
-    if [ "$cwd" = "$directory" ] &&
+    if [ "$cwd" -ef "$directory" ] &&
       [[ $command == "go $verb "* ]] && [[ $command == *"./..."* ]]; then
       return 0
     fi
@@ -95,12 +95,13 @@ test_local_ci_preserves_shared_db_and_checks_schema_go() {
   local repo=$case_dir/repo
   local fake_bin=$case_dir/bin
   local calls=$case_dir/calls
-  local output status failed=0 verb
+  local output status failed=0 verb cwd command
 
   setup_ci_fixture "$repo" "$fake_bin" "$calls"
+  ln -s repo "$case_dir/repo-link"
   output=$(
     /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" CALL_LOG="$calls" \
-      /bin/bash "$repo/scripts/ci.sh" 2>&1
+      "$BASH" "$repo/scripts/ci.sh" 2>&1
   )
   status=$?
 
@@ -110,12 +111,14 @@ test_local_ci_preserves_shared_db_and_checks_schema_go() {
   if [[ $output != *"aboutme-test-db already running (shared)"* ]]; then
     note_failure "the shared database probe became false after its first matching line" || failed=1
   fi
-  if grep -Fqx "$repo|make test-db-down" "$calls"; then
-    note_failure "CI cleanup requested test-db-down for a database it did not start" || failed=1
-  fi
+  while IFS='|' read -r cwd command; do
+    if [ "$cwd" -ef "$case_dir/repo-link" ] && [ "$command" = 'make test-db-down' ]; then
+      note_failure "CI cleanup requested test-db-down for a database it did not start" || failed=1
+    fi
+  done <"$calls"
 
   for verb in build vet test; do
-    if ! go_call_seen "$calls" "$repo/packages/schema/gen/go" "$verb"; then
+    if ! go_call_seen "$calls" "$case_dir/repo-link/packages/schema/gen/go" "$verb"; then
       note_failure "local CI did not run 'go $verb ./...' in packages/schema/gen/go" || failed=1
     fi
   done
@@ -224,6 +227,9 @@ test_native_status_checks_database_host_port() {
   local -a launchers=()
 
   mkdir -p "$repo/scripts" "$repo/.dev" "$fake_bin"
+  for name in realpath stat base64 sha256sum date; do
+    ln -s "$(command -v "$name")" "$fake_bin/$name"
+  done
   cp "$ROOT/scripts/dev-native.sh" "$repo/scripts/dev-native.sh"
   mkdir -p "$repo/scripts/lib"
   cp "$ROOT/scripts/lib/platform.sh" "$repo/scripts/lib/"
@@ -249,7 +255,7 @@ EOF
 
   for name in mail-capture server web caddy; do
     ready=$case_dir/$name.ready
-    /usr/bin/setsid /bin/bash -c '
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' /bin/bash -c '
       printf "%s\n" "$$" >"$1"
       exec /bin/sleep 30
     ' native-status-fixture "$ready" >/dev/null 2>&1 &
@@ -259,8 +265,8 @@ EOF
     for attempt in $(seq 1 100); do
       if [ -s "$ready" ]; then
         pid=$(<"$ready")
-        sid=$(/usr/bin/ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ')
         if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null &&
+          sid=$(python3 -I -c 'import os, sys; print(os.getsid(int(sys.argv[1])))' "$pid" 2>/dev/null) &&
           [ "$sid" = "$pid" ]; then
           fixture_ready=1
           break
@@ -279,12 +285,12 @@ EOF
   if [ "$failed" -eq 0 ]; then
     output=$(
       /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=0 \
-        /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
+        "$BASH" "$repo/scripts/dev-native.sh" status 2>&1
     )
     status=$?
     connected_output=$(
       /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" NATIVE_TEST_DB_LISTENING=1 \
-        /bin/bash "$repo/scripts/dev-native.sh" status 2>&1
+        "$BASH" "$repo/scripts/dev-native.sh" status 2>&1
     )
     connected_status=$?
   else

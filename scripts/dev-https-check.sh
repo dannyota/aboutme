@@ -467,7 +467,7 @@ elif [ "$MODE" = linkedin ]; then
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
 elif [ "$MODE" = mcp ] || [ "$MODE" = mcp-ts-sdk ] || [ "$MODE" = privacy ]; then
-  mcp_run_id=$(</proc/sys/kernel/random/uuid)
+  mcp_run_id=$(python3 -I -c 'import uuid; print(uuid.uuid4())')
   [[ $mcp_run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
     fail 'cannot create an MCP run identifier'
   mcp_client_name="aboutme MCP UAT $mcp_run_id"

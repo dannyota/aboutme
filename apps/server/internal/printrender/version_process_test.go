@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -14,6 +15,9 @@ import (
 )
 
 func TestVersionCancellationJoinsStartedBrowser(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("print rendering runs only on Linux; CI covers browser cancellation")
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	startedPath := filepath.Join(t.TempDir(), "browser-started")

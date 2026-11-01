@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-make-safety.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
 
 REPO=$WORK/repo
@@ -19,12 +20,17 @@ cat >"$BIN/podman" <<'EOF'
 #!/usr/bin/env bash
 printf 'podman %s\n' "$*" >>"$CALL_LOG"
 if [ "${1:-}" = ps ]; then
-  if [ "${PODMAN_PS_MODE:-fail}" = compose-db ]; then
-    printf '%s\n' 'aboutme-postgres-1|aboutme|postgres'
-    exit 0
-  fi
-  exit 17
+  case ${PODMAN_PS_MODE:-fail} in
+    compose-db) printf '%s\n' '[{"Names":["aboutme-postgres-1"],"Labels":{"com.docker.compose.project":"aboutme","com.docker.compose.service":"postgres"}}]' ;;
+    unrelated) printf '%s\n' '[{"Names":["radar-postgres"],"Labels":{"com.docker.compose.project":"radar","com.docker.compose.service":"postgres"}}]' ;;
+    malformed) printf '%s\n' 'not json' ;;
+    missing-labels) printf '%s\n' '[{"Names":["aboutme-postgres-1"]}]' ;;
+    invalid-labels) printf '%s\n' '[{"Names":["aboutme-postgres-1"],"Labels":[]}]' ;;
+    *) exit 17 ;;
+  esac
+  exit 0
 fi
+if [ "${1:-}" = run ]; then exit 19; fi
 exit 0
 EOF
 
@@ -190,7 +196,7 @@ for fixture in ["mismatch", "symlink", "unknown-image", "raw-response", "malform
     assert sorted(images) == sorted(["card--no-name-expected.png", "card--no-name-diff.png"] +
                                    ([] if fixture in rejected else ["card--no-name-actual.png"]) +
                                    (["engineer-compact-en-p1-expected.png", "engineer-compact-en-p1-actual.png",
-                                     "engineer-compact-en-p1-diff.png"] if fixture == "template-page" else []))
+                                     "engineer-compact-en-p1-diff.png"] if fixture == "template-page" else [])), (fixture, images)
     assert (public / "normal/0/card--no-name-diff.png").is_file()
     assert (public / "normal/0/card--no-name-expected.png").is_file()
     summary = json.loads((public / "failure-summary.json").read_text())
@@ -253,7 +259,7 @@ for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e
     for status in [42, 0]:
         run_id = f"{target}-{shard}-{status}"
         result = subprocess.run(["/usr/bin/make", "--no-print-directory", target], cwd=repo, env={
-            **os.environ, "PATH": str(bin_dir) + ":/usr/bin:/bin",
+            **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
             "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
             "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
             "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
@@ -298,6 +304,18 @@ if grep -Eq '^podman run([[:space:]]|$)' "$CALLS"; then
   printf 'makefile-safety-test: test-db-up started a second Postgres\n' >&2
   exit 1
 fi
+
+for mode in unrelated malformed missing-labels invalid-labels; do
+  : >"$CALLS"
+  (cd "$REPO" && PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" PODMAN_PS_MODE="$mode" \
+    /usr/bin/make --no-print-directory test-db-up) >"$WORK/$mode.out" 2>&1 || true
+  if [ "$mode" = unrelated ]; then
+    grep -q '^podman run ' "$CALLS" || { echo 'unrelated project blocked test database' >&2; exit 1; }
+  elif grep -q '^podman run ' "$CALLS"; then
+    echo 'malformed inspection allowed container mutation' >&2
+    exit 1
+  fi
+done
 
 printf 'Makefile container-discovery safety tests passed\n'
 
@@ -398,7 +416,7 @@ run_https_make() {
   set -- "${@:1:$#-1}"
   (
     cd "$HTTPS_REPO"
-    env PATH="$HTTPS_BIN:/usr/bin:/bin" HTTPS_CALL_LOG="$HTTPS_CALLS" \
+    env PATH="$HTTPS_BIN:$PATH" HTTPS_CALL_LOG="$HTTPS_CALLS" \
       FAKE_HTTPS_IMAGE_ID="$HTTPS_ID" FAKE_HTTPS_BASE="$HTTPS_BASE" "$@" \
       /usr/bin/make --no-print-directory "$target"
   )
@@ -449,9 +467,47 @@ fi
   exit 1
 }
 
+if /bin/bash -c '(( BASH_VERSINFO[0] < 4 ))'; then
+  : >"$HTTPS_CALLS"
+  if (
+    cd "$HTTPS_REPO"
+    env PATH="$HTTPS_BIN:$PATH" HTTPS_CALL_LOG="$HTTPS_CALLS" \
+      FAKE_HTTPS_IMAGE_ID="$HTTPS_ID" FAKE_HTTPS_BASE="$HTTPS_BASE" \
+      /usr/bin/make --no-print-directory SHELL=/bin/bash dev-https-browser-image
+  ) >"$WORK/https-image-old-bash.out" 2>&1; then
+    printf 'makefile-safety-test: browser image accepted Bash below 4\n' >&2
+    exit 1
+  fi
+  grep -Fq 'dev-https-browser-image requires Bash 4 or newer' \
+    "$WORK/https-image-old-bash.out" || {
+    printf 'makefile-safety-test: browser image lacked Bash setup message\n' >&2
+    exit 1
+  }
+  if read_https_calls | grep -Fxq podman; then
+    printf 'makefile-safety-test: old Bash reached the image build\n' >&2
+    exit 1
+  fi
+fi
+
+mkdir "$WORK/shell-bin"
+cat >"$WORK/shell-bin/bash" <<'EOF'
+#!/bin/sh
+case ${2-} in
+  *'podman build --tag'*) printf 'browser image\n' >>"$SHELL_CALL_LOG" ;;
+esac
+exec "$FIXTURE_BASH" "$@"
+EOF
+chmod +x "$WORK/shell-bin/bash"
+: >"$WORK/shell.calls"
 : >"$HTTPS_CALLS"
-run_https_make dev-https-browser-image >"$WORK/https-image.out" 2>&1 || {
+run_https_make PATH="$WORK/shell-bin:$HTTPS_BIN:$PATH" \
+  FIXTURE_BASH="$BASH" SHELL_CALL_LOG="$WORK/shell.calls" \
+  dev-https-browser-image >"$WORK/https-image.out" 2>&1 || {
   printf 'makefile-safety-test: browser image target failed\n' >&2
+  exit 1
+}
+grep -Fxq 'browser image' "$WORK/shell.calls" || {
+  printf 'makefile-safety-test: browser image did not use Bash from PATH\n' >&2
   exit 1
 }
 HTTPS_MANIFEST=$HTTPS_REPO/.dev/native-https/browser-image.manifest
@@ -744,7 +800,19 @@ fi
 }
 
 : >"$HTTPS_CALLS"
-run_https_make dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
+mkdir "$WORK/uuid-bin"
+cat >"$WORK/uuid-bin/python3" <<'EOF'
+#!/bin/bash
+if [ "${1-}" = -I ] && [ "${2-}" = -c ] &&
+  [ "${3-}" = 'import uuid; print(uuid.uuid4())' ]; then
+  printf '%s\n' '12345678-1234-4123-8123-123456789abc'
+else
+  exec "$FIXTURE_PYTHON" "$@"
+fi
+EOF
+chmod +x "$WORK/uuid-bin/python3"
+run_https_make PATH="$WORK/uuid-bin:$HTTPS_BIN:$PATH" \
+  FIXTURE_PYTHON="$(command -v python3)" dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
   sed -n '1,120p' "$WORK/https-mcp.out" >&2
   printf 'makefile-safety-test: mcp check target failed\n' >&2
   exit 1
@@ -759,6 +827,10 @@ run_https_make dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
 }
 HTTPS_MCP_LOG=$WORK/https-mcp-runtime.calls
 read_https_calls >"$HTTPS_MCP_LOG"
+[ "$(grep -Fxc 'aboutme MCP UAT 12345678-1234-4123-8123-123456789abc' "$HTTPS_MCP_LOG")" -eq 3 ] || {
+  printf 'makefile-safety-test: mcp fixture did not use the generated client name\n' >&2
+  exit 1
+}
 grep -Fxq mcp "$HTTPS_MCP_LOG" || {
   printf 'makefile-safety-test: mcp mode did not reach the runner\n' >&2
   exit 1

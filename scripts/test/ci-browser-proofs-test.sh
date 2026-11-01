@@ -75,7 +75,7 @@ run_group() {
   : >"$WORK/$name.summary"
   (
     cd "$REPO"
-    PATH="$BIN:/usr/bin:/bin" CALL_LOG="$WORK/$name.calls" \
+    PATH="$BIN:$PATH" CALL_LOG="$WORK/$name.calls" \
       GITHUB_STEP_SUMMARY="$WORK/$name.summary" \
       bash scripts/ci-browser-proofs.sh "$@"
   ) >"$WORK/$name.out" 2>&1

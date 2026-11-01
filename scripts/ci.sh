@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Local build, test, lint, and drift reproduction without hosted browser proofs.
-# ADR 0024 prohibits the full local run; connected security scanning uses `make scan`.
+# The full local run needs owner authorization; connected security scanning uses `make scan`.
 #
-#   scripts/ci.sh          local reproduction (`make ci`; prohibited by ADR 0024)
+#   scripts/ci.sh          local reproduction (`make ci`)
 #   scripts/ci.sh --fast   subset without web checks, DB/S3 suites, or route-table tests
 #                          (`make check`)
 #
@@ -48,7 +48,16 @@ run() { group "$@" || true; }
 docs() { make docs-lint; }
 lengths() { make lengths-check; }
 tool_versions() { make tools-check ARGS=ci; }
-operational_contracts() { make operational-test; }
+operational_contracts() {
+  local platform
+  platform=$(uname -s) || return
+  if [ "$platform" = Linux ]; then
+    make operational-test
+  else
+    echo 'Skipping Linux-specific dev-https static contracts; CI covers them.'
+    make operational-test-fast operational-test-deploy operational-test-browser
+  fi
+}
 schema() {
   make schema-check || return
   (
@@ -166,6 +175,12 @@ db_suites() {
 
 s3_suites() {
   cd "$ROOT" || return
+  local platform
+  platform=$(uname -s) || return
+  if [ "$platform" != Linux ]; then
+    echo 'Skipping S3 suites: their host-networked MinIO client needs Linux; CI covers them.'
+    return 0
+  fi
   make test-s3-up || return
   local status=0
   make server-test-s3 || status=$?

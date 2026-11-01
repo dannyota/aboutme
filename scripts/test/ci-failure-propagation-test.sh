@@ -11,7 +11,7 @@ REPO=$WORK/repo
 BIN=$WORK/bin
 CALLS=$WORK/calls
 mkdir -p "$REPO/scripts" "$REPO/apps/server" \
-  "$REPO/packages/schema/gen/go" "$BIN"
+  "$REPO/packages/schema/gen/go" "$REPO/deploy/caddy/production/build" "$BIN"
 cp "$ROOT/scripts/ci.sh" "$REPO/scripts/ci.sh"
 cp "$ROOT/scripts/check-migrations-append-only.sh" "$REPO/scripts/"
 : >"$REPO/apps/server/go.mod"
@@ -47,6 +47,7 @@ cat >"$BIN/git" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = rev-parse ]; then
   if [ "${FAIL_GIT_REVPARSE:-0}" = 1 ]; then
+    printf 'git rev-parse failed\n' >>"$CALL_LOG"
     exit 128
   fi
   if [ -n "${FAIL_GIT_DIFF_PATH:-}" ]; then
@@ -55,6 +56,7 @@ if [ "${1:-}" = rev-parse ]; then
   exit 0
 fi
 if [ "${1:-}" = diff ] && [[ " $* " == *" ${FAIL_GIT_DIFF_PATH:-__none__} "* ]]; then
+  printf 'git diff failed %s\n' "$FAIL_GIT_DIFF_PATH" >>"$CALL_LOG"
   exit 31
 fi
 exit 0
@@ -68,39 +70,58 @@ if [ "${1:-}" = ps ]; then
 fi
 exit 64
 EOF
+cat >"$BIN/uname" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${FIXTURE_PLATFORM:-Linux}"
+EOF
 chmod +x "$BIN"/*
 
 assert_ci_failure() {
-  local label=$1 expected_group=$2 mode=$3
-  shift 3
+  local label=$1 expected_group=$2 expected_call=$3 mode=$4
+  shift 4
   local output=$WORK/${label// /-}.out
 
   : >"$CALLS"
   if /usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" "$@" \
-    /bin/bash "$REPO/scripts/ci.sh" "$mode" >"$output" 2>&1; then
+    "$BASH" "$REPO/scripts/ci.sh" "$mode" >"$output" 2>&1; then
     printf 'ci-failure-propagation-test: %s was reported successful\n' "$label" >&2
     exit 1
   fi
-  grep -Fq -- "--- $expected_group FAILED" "$output" || {
-    printf 'ci-failure-propagation-test: %s did not fail group %s\n' \
+  grep -Fxq -- "FAILED: $expected_group" "$output" || {
+    printf 'ci-failure-propagation-test: %s did not fail only %s\n' \
       "$label" "$expected_group" >&2
+    exit 1
+  }
+  grep -Fxq -- "$expected_call" "$CALLS" || {
+    printf 'ci-failure-propagation-test: %s did not reach %s\n' \
+      "$label" "$expected_call" >&2
     exit 1
   }
 }
 
-assert_ci_failure 'schema first command' schema-check --fast \
+assert_ci_failure 'schema first command' schema-check 'make schema-check' --fast \
   /usr/bin/env FAIL_MAKE_TARGET=schema-check
-assert_ci_failure 'go tidy middle command' 'go mod tidy' --fast \
+assert_ci_failure 'go tidy middle command' 'go mod tidy' 'go mod tidy' --fast \
   /usr/bin/env FAIL_GO_TIDY=1
-assert_ci_failure 'database first command' 'database suites' '' \
+assert_ci_failure 'database first command' 'database suites' 'make server-test-integration' '' \
   /usr/bin/env FAIL_MAKE_TARGET=server-test-integration
-assert_ci_failure 'web source manifest build' web '' \
+assert_ci_failure 'S3 startup command' 'S3 media and resume API suites' 'make test-s3-up' '' \
+  /usr/bin/env FAIL_MAKE_TARGET=test-s3-up
+assert_ci_failure 'web source manifest build' web 'make web-lint web-typecheck web-test web-build web-source-build' '' \
   /usr/bin/env FAIL_MAKE_TARGET=web-source-build
-assert_ci_failure 'migration diff command' 'migrations append-only' --fast \
+assert_ci_failure 'migration diff command' 'migrations append-only' 'git diff failed apps/server/migrations' --fast \
   /usr/bin/env FAIL_GIT_DIFF_PATH=apps/server/migrations
-assert_ci_failure 'released schema diff command' 'released schemas append-only' --fast \
+assert_ci_failure 'released schema diff command' 'released schemas append-only' 'git diff failed packages/schema/resume.v*.schema.json' --fast \
   /usr/bin/env FAIL_GIT_DIFF_PATH=packages/schema/resume.v\*.schema.json
-assert_ci_failure 'upstream resolution command' 'migrations append-only' --fast \
+assert_ci_failure 'upstream resolution command' 'migrations append-only released schemas append-only' 'git rev-parse failed' --fast \
   /usr/bin/env FAIL_GIT_REVPARSE=1
+
+: >"$CALLS"
+/usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" FIXTURE_PLATFORM=Darwin \
+  "$BASH" "$REPO/scripts/ci.sh" >"$WORK/darwin.out" 2>&1
+grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/darwin.out"
+grep -Fq 'Skipping S3 suites: their host-networked MinIO client needs Linux; CI covers them.' "$WORK/darwin.out"
+grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
+! grep -Fqx 'make test-s3-up' "$CALLS"
 
 printf 'CI failure-propagation tests passed\n'

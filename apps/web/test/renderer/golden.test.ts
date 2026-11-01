@@ -4,7 +4,15 @@
 
 import type { Resume, Section } from '@aboutme/schema';
 import { JSDOM } from 'jsdom';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createSSRApp, h } from 'vue';
@@ -135,17 +143,27 @@ describe('golden matrix contract', () => {
   });
 
   it('resolves symlink aliases before Git checks without writing', () => {
-    const rootAlias = '/proc/self/root';
-    expect(() =>
-      assertSafeOutputDirectory(
-        resolve(rootAlias, goldenDirectory.slice(1), 'nested'),
-      ),
-    ).toThrow('reserved tracked golden directory');
-    expect(() =>
-      assertSafeOutputDirectory(
-        resolve(rootAlias, tmpdir().slice(1), 'aboutme-golden-output'),
-      ),
-    ).toThrow('must stay inside the workspace');
+    const tempRoot = realpathSync(
+      mkdtempSync(resolve(tmpdir(), 'aboutme-golden-')),
+    );
+    const workspaceAlias = resolve(tempRoot, 'workspace');
+    const outsideAlias = resolve(tempRoot, 'outside');
+    try {
+      symlinkSync(realpathSync(workspaceRoot), workspaceAlias);
+      symlinkSync(tempRoot, outsideAlias);
+      expect(() =>
+        assertSafeOutputDirectory(
+          resolve(workspaceAlias, 'apps/web/test/renderer/golden/nested'),
+        ),
+      ).toThrow('reserved tracked golden directory');
+      expect(() =>
+        assertSafeOutputDirectory(
+          resolve(outsideAlias, 'aboutme-golden-output'),
+        ),
+      ).toThrow('must stay inside the workspace');
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it.each(matrix)('$filename is deterministic and byte-exact', async (cell) => {

@@ -12,7 +12,7 @@ cat >"$WORK/bin/podman" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "podman $*" >>"$DB_SETUP_TEST_CALLS"
 case "$1" in
-ps) printf '%s\n' 'aboutme-test-db||' ;;
+ps) printf '%s\n' '[{"Names":["aboutme-test-db"],"Labels":null}]' ;;
 exec)
   if [[ "$*" == *'SELECT 1 FROM pg_database'* ]]; then printf '1\n'; fi
   ;;
