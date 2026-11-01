@@ -1,56 +1,80 @@
 # Anonymous approval probe evidence
 
-Status: unverified. Template only; no live scenarios or checks recorded.
+Status: partially verified on 2026-11-01. Live approval, rejection, comment,
+rerun, cancellation, and missing-approval mappings behaved as designed.
+Pagination and approval by a second maintainer remain unverified, and anonymous
+reads were observed to be cached for up to 60 seconds.
 
 ## Context
 
-- Observation date (UTC):
-- Tested commit:
+- Observation date (UTC): 2026-11-01, about 14:00 to 14:25.
+- Tested commit: `f1bd30a2` (checker, workflow, and runbook on `main`).
 - Reviewed pins commit (IDs remain in `scripts/approval-probe.json`):
-- Independent expected main SHA source:
-- Required reviewer setting inspected:
-- Self-review prevention disabled:
-- Administrator bypass disabled:
-- Selected branch `main`, no tag rule:
-- Environment secrets and variables absent:
+  `9b529813`.
+- Independent expected main SHA source: `git rev-parse origin/main` after
+  `git fetch`, taken before each dispatch.
+- Required reviewer setting inspected: one required reviewer, `dannyota`.
+- Self-review prevention disabled: yes (`prevent_self_review` false).
+- Administrator bypass disabled: yes (`can_admins_bypass` false).
+- Selected branch `main`, no tag rule: yes, one branch policy `main`.
+- Environment secrets and variables absent: yes, zero of each.
 - Hosted contracts run URL and exact commit:
+  [run 41314714851](https://github.com/dannyota/aboutme/actions/runs/41314714851)
+  on `f1bd30a2`, success.
 
 ## Live observations
 
-Use the [runbook](../runbooks/approval-probe.md). Repeat this block for approve,
-self-approve, reject, cancel, rerun, wrong comment, missing approval, and
-pagination. Keep fixture results separate.
+The owner account dispatched every run and reviewed it through the REST pending
+deployments endpoint. Each checker invocation was anonymous.
 
-- Scenario:
-- Public run URL and attempt:
-- Expected fixed reason:
-- Observed verdict JSON:
-- Requests used:
-- Starting and ending remaining/reset counters:
-- UI-observed result:
-- Verified or unverified, with precise limitation:
+| Scenario                             | Run and attempt                                                                        | Expected                              | Observed verdict              | Requests | Remaining after | Status                           |
+| ------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------- | ----------------------------- | -------: | --------------: | -------------------------------- |
+| Self-approve                         | [41314873657](https://github.com/dannyota/aboutme/actions/runs/41314873657), attempt 1 | `ACCEPTED`                            | `accept`, `ACCEPTED`          |        4 |              48 | Verified                         |
+| Pagination, `per_page=1`             | 41314873657, attempt 1                                                                 | `ACCEPTED`, one approval across pages | `accept`, `ACCEPTED`          |        4 |              41 | Unverified: one review, one page |
+| Rerun                                | 41314873657, attempt 2 waiting                                                         | `RUN_ATTEMPT`                         | `refuse`, `RUN_ATTEMPT`       |        4 |              37 | Verified                         |
+| Reject                               | [41315177792](https://github.com/dannyota/aboutme/actions/runs/41315177792), attempt 1 | `APPROVAL_REJECTED`                   | `refuse`, `APPROVAL_REJECTED` |        2 |              35 | Verified                         |
+| Wrong comment                        | [41315273143](https://github.com/dannyota/aboutme/actions/runs/41315273143), attempt 1 | `APPROVAL_COMMENT`                    | `refuse`, `APPROVAL_COMMENT`  |        2 |              33 | Verified                         |
+| Missing approval, waiting            | [41315486803](https://github.com/dannyota/aboutme/actions/runs/41315486803), attempt 1 | `RUN_INCOMPLETE`                      | `refuse`, `RUN_INCOMPLETE`    |        1 |              32 | Verified                         |
+| Cancel, checked at once              | 41315486803, attempt 1                                                                 | `RUN_CANCELLED`                       | `refuse`, `RUN_INCOMPLETE`    |        1 |              31 | Stale anonymous read             |
+| Cancel, rechecked after cache window | 41315486803, attempt 1                                                                 | `RUN_CANCELLED`                       | `refuse`, `RUN_CANCELLED`     |        1 |              27 | Verified                         |
+
+Approval by a maintainer other than the dispatcher: unverified. Only one
+maintainer is enrolled, so the self-approval case does not prove distinct
+identities.
+
+### Anonymous caching
+
+Right after cancellation, the authenticated view reported `completed` and
+`cancelled`, while the anonymous checker still saw an unfinished run. The
+anonymous run response carried `cache-control: public, max-age=60, s-maxage=60`.
+A later anonymous read returned `completed` and `cancelled`. The checker refused
+in both reads, so the stale read was safe, but the reason code was wrong until
+the cache expired. A host must wait at least 60 seconds after a terminal run
+state, or treat anonymous answers younger than that window as provisional.
 
 ## Complete-cycle budget
 
-- Observation window and shared-IP client use:
-- Discovery requests:
-- Approval requests and page count:
-- CI and publication requests:
-- Release and asset requests:
-- Mutable evidence revalidation requests:
-- Observer requests:
-- Other requests, redirects, and pagination:
-- Total requests:
-- Starting and ending remaining/reset counters:
-- Reserve maintained:
-- Measured cycle or arithmetic hypothesis:
+- Observation window and shared-IP client use: one hour window resetting at
+  epoch 1793545205. Other anonymous reads from the same IP that hour included
+  the pin discovery and two header reads.
+- Approval requests and page count: one page per run (`P = 1`).
+- Successful verification cost: 4 requests (`P + 3`), matching the runbook.
+- Refusals cost 1 to 4 requests, depending on where the checker stopped.
+- Total checker requests in this session: 19. The remaining counter fell from 48
+  after the first check to 27.
+- CI, publication, release, observer, and revalidation requests: not measured;
+  the probe covers only the approval read path.
+- Measured cycle or arithmetic hypothesis: the approval path is measured. The
+  full 37-request cycle remains a hypothesis.
 
 ## Decision
 
-- Unverified fields, ordering, or pagination:
-- Owner transport decision:
-- Evidence supporting that decision:
-- Probe workflow and environment removal:
+- Unverified fields, ordering, or pagination: live pagination (the review
+  history endpoint does not document `per_page` or `page`), and distinct
+  dispatcher and approver identities.
+- Owner transport decision: pending.
+- Evidence supporting that decision: this record and the hosted fixtures.
+- Probe workflow and environment removal: pending the owner decision.
 
 ## Sources
 
