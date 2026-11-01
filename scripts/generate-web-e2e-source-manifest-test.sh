@@ -180,13 +180,17 @@ git -C "$MAKE_REPO" config user.name 'Source Manifest Make Test'
 git -C "$MAKE_REPO" commit --allow-empty -qm base
 cat >"$MAKE_BIN/bash" <<'EOF'
 #!/bin/bash
+case ${1-} in
+  scripts/generate-web-e2e-source-manifest.sh|scripts/web-source-build.sh) ;;
+  *) printf 'unexpected Bash invocation: %s\n' "$*" >&2; exit 1 ;;
+esac
 printf '%s\n' "$*" >>"$MAKE_CALLS"
 EOF
 chmod 0755 "$MAKE_BIN/bash"
 (
   cd "$MAKE_REPO"
   PATH="$MAKE_BIN:/usr/bin:/bin" MAKE_CALLS="$MAKE_CALLS" \
-    /usr/bin/make --no-print-directory web-source-build
+    /usr/bin/make --no-print-directory "SHELL=$BASH" web-source-build
 )
 cat >"$WORK/expected-make-calls" <<'EOF'
 scripts/generate-web-e2e-source-manifest.sh --check

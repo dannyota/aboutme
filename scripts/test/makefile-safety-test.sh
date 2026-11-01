@@ -800,7 +800,19 @@ fi
 }
 
 : >"$HTTPS_CALLS"
-run_https_make dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
+mkdir "$WORK/uuid-bin"
+cat >"$WORK/uuid-bin/python3" <<'EOF'
+#!/bin/bash
+if [ "${1-}" = -I ] && [ "${2-}" = -c ] &&
+  [ "${3-}" = 'import uuid; print(uuid.uuid4())' ]; then
+  printf '%s\n' '12345678-1234-4123-8123-123456789abc'
+else
+  exec "$FIXTURE_PYTHON" "$@"
+fi
+EOF
+chmod +x "$WORK/uuid-bin/python3"
+run_https_make PATH="$WORK/uuid-bin:$HTTPS_BIN:$PATH" \
+  FIXTURE_PYTHON="$(command -v python3)" dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
   sed -n '1,120p' "$WORK/https-mcp.out" >&2
   printf 'makefile-safety-test: mcp check target failed\n' >&2
   exit 1
@@ -815,6 +827,10 @@ run_https_make dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
 }
 HTTPS_MCP_LOG=$WORK/https-mcp-runtime.calls
 read_https_calls >"$HTTPS_MCP_LOG"
+[ "$(grep -Fxc 'aboutme MCP UAT 12345678-1234-4123-8123-123456789abc' "$HTTPS_MCP_LOG")" -eq 3 ] || {
+  printf 'makefile-safety-test: mcp fixture did not use the generated client name\n' >&2
+  exit 1
+}
 grep -Fxq mcp "$HTTPS_MCP_LOG" || {
   printf 'makefile-safety-test: mcp mode did not reach the runner\n' >&2
   exit 1
