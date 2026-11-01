@@ -1,7 +1,10 @@
 # vMonitor quota renewal
 
+2026-11-01: The email quota was deleted; references to email renewal below are
+superseded. That portion of this pending design is dropped.
+
 Approved direction (2026-10-14), pending implementation: GitHub renews the free
-Synthetic Test and Email quotas behind the
+Synthetic Test quota behind the
 [Vietnam alarm](vietnam-production.md#logs-metrics-and-alarms). The renew-only
 service account is the approved cloud-credential exception. Amend ADR 0027
 before enabling writes.

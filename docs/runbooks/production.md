@@ -135,7 +135,7 @@ The deployer then:
 
 vMonitor and the uptime backstop keep running during maintenance. Host alarms
 and backup timers also remain active. A deploy can therefore send a site-down
-mail.
+notification.
 
 Public-page stylesheets and hydration scripts use a build-time content hash.
 Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
@@ -248,37 +248,35 @@ under its accepted recovery and expiration policy.
 GreenNode vMonitor check `aboutme-readyz` is the site-down alarm. It sends GET
 `https://aboutme.vn/readyz` every minute from public locations `SYNTT-VN-HCM01`
 and `SYNTT-VN-HAN01`, with a 10-second timeout. The default assertion fails on
-4xx or 5xx responses. Three consecutive failures at both locations trigger an
-alarm. In-alarm and Up notifications go to email channel `aboutme-owner-email`,
-the owner's operations mailbox.
+4xx or 5xx responses. Three consecutive failures at either location trigger an
+alarm. In-alarm, Up, and Undetermined notifications go to Telegram channel
+`aboutme-alerts`, which targets the owner's private alert group.
 
 To confirm delivery safely, create a temporary check against a URL that returns
-404, using the same locations, failure threshold, and notification channel. Wait
-for its In-alarm email to reach the owner, record the receipt time, then delete
-the temporary check. Do not interrupt production to test delivery.
+404, using the same locations, failure threshold, and Telegram channel. Wait for
+its In-alarm notification to reach the owner, record the receipt time, then
+delete the temporary check. Do not interrupt production to test delivery.
 
-Both quotas are free, have no auto-renew, and last at most one month:
+The Basic Synthetic Test quota is free and lasts at most one month. The server
+refuses auto-renew for free packages. Pro and Enterprise packages are disabled.
+The email notification quota was deleted. Telegram needs no notification quota;
+each send increments the synthetic usage counter's Telegram count.
 
-| Quota                          | Allowance         | Expiry recorded 2026-10-14 (UTC) |
-| ------------------------------ | ----------------- | -------------------------------- |
-| Synthetic Test                 | 10 checks         | 2026-10-25 21:43                 |
-| Email Notification `emailfree` | 20 emails a month | 2026-11-13 03:10                 |
+| Quota                | Allowance | Expiry recorded 2026-11-01 (UTC) |
+| -------------------- | --------- | -------------------------------- |
+| Synthetic Test Basic | 10 checks | 2026-12-01T05:19:45Z             |
 
-Renew both by hand each month before expiry:
+Renew the synthetic quota each month in its last seven days. The next window is
+2026-11-24 to 2026-12-01 UTC:
 
 1. Open the vMonitor console, then **Quota & Usage**.
-2. Select **Synthetic test** and renew the free Synthetic Test quota.
-3. Select **Notification** and renew the Email Notification package. The buy
-   page preselects paid `email5k`; select `emailfree` before confirming.
-4. Confirm both quotas are active and record their new expiry dates.
+2. Select **Synthetic test** and renew the free Basic quota. Once released, the
+   `vngcloud` CLI renew command may also be used.
+3. Confirm the quota is active and record its new expiry date.
 
-Each state change at each location sends one email, so an outage costs about two
-(In-alarm, then Up). Editing a check can replay a state change and send an extra
-email; change the production check only when needed.
-
-Billing allows three notification-quota actions a month. A lapsed Synthetic Test
-quota stops checks; a lapsed email quota stops mail while alarms still fire. The
-`vngcloud` CLI does not yet read or renew quotas.
+A lapsed synthetic quota stops checks. If it lapses, recover Basic from trash at
+0 VND, confirm it is active, and record the new expiry. The quota expired on
+2026-10-25 and was recovered on 2026-11-01.
 
 [`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) is a slower
 backstop. It requests a five-minute schedule, tries `/readyz` three times, 20
@@ -388,5 +386,5 @@ Healthy state has these properties:
   maintenance timers are enabled and active, with normal scheduled passes
   observed.
 - The fence has no operation lock or mutation marker between operations.
-- vMonitor `aboutme-readyz` is healthy, both quotas are active, and the uptime
-  backstop is enabled with recent successful runs.
+- vMonitor `aboutme-readyz` is healthy, the synthetic quota is active, and the
+  uptime backstop is enabled with recent successful runs.
