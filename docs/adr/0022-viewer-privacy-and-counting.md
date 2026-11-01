@@ -33,17 +33,20 @@ public representation is served without authentication.
 1. aboutme is the controller and processor (Law Article 2(9)) of the transient
    viewer data counting uses, and fixes the fields, filters, and retention for
    every resume. Owners cannot change what is processed.
-2. aboutme records nothing about any viewer. It stores only daily totals per
-   resume, which are not personal data, and keeps the IP address, user agent,
-   and the day's network key in memory only.
+2. Viewer analytics stores only daily totals per resume, which are not personal
+   data, and keeps the IP address, user agent, and the day's network key in
+   memory only. CrowdSec separately retains bounded security records under its
+   [privacy contract](../design/crowdsec-http-privacy.md).
 3. Counting is always on for every published resume and needs no consent; the
    privacy notice discloses it. Owners receive only totals.
 4. Daily totals are kept 400 days. Agents never read them.
 
 ### Counting layers
 
-A view counts when it passes every layer
-([counting](../design/viewer-analytics/counting.md)):
+A view counts when it passes the active layers
+([counting](../design/viewer-analytics/counting.md)). Layers 2 and 3 were
+approved for AWS delivery and are inactive on direct Vietnam delivery under ADR
+0027:
 
 1. Known crawlers, by user agent on the HTML request, never count; link-preview
    fetchers become share signals.
@@ -74,8 +77,9 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 2. Sign-in uses the existing provider flows with a new unauthenticated OAuth
    purpose, `view`, bound to the resume. Its callback never reads, creates,
    links, or signs in an account, never creates a session, and discards every
-   claim once the ID token verifies. Nothing about the viewer is stored or
-   logged, and the owner is not told who viewed.
+   claim once the ID token verifies. This flow stores or logs no provider
+   claims, and the owner is not told who viewed. CrowdSec security records are
+   governed separately by its privacy contract.
 3. The pass is a `__Host-view-pass` cookie holding signed passes that name a
    resume, its pass epoch, and an expiry 7 days out, never extended. aboutme
    keeps no copy. It authorizes public reads of that resume only.
@@ -109,12 +113,10 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
   page, or owner terms exist.
 - The privacy notice states that views are counted as described and never
   implies tracking.
-- About USD 15 a month in WAF fees at current traffic.
 - A deploy ends outstanding tokens and the day's dedupe map: some views are lost
   and some counted twice on deploy days.
 - Two people on one network count once a day; one person on two days counts
   twice. The page states this.
-- The Vietnam move loses layers 2 and 3 unless vCDN offers equivalents.
 - A second replica needs a shared dedupe and nonce store.
 - The OAuth transaction table gains a purpose value and a resume column; the
   resumes table gains the switch and the pass epoch. Every gated public route
@@ -122,7 +124,8 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 - A pass cannot be revoked one by one; raising the epoch or rotating the pass
   key ends passes together.
 - LinkedIn appears on the gate only while LinkedIn sign-in is enabled.
-- Operators must turn the switch off on every resume before lowering the fence.
+- Supported deploy and rollback paths never lower the release floor. Privileged
+  host administration can bypass it and must establish compatibility first.
 - Any future feature that records a viewer needs a new decision.
 
 ## History
@@ -132,3 +135,6 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
   cookies, consent records, owner terms, and viewer data page were withdrawn.
 - Former ADR 0061 (2026-09-26): seven-layer human-view counting.
 - Former ADR 0062 (2026-09-26): sign in to view without an account.
+- The AWS counting layers cost about USD 15 a month at the traffic estimated
+  when approved. The 2026-10-11 Vietnam cutover removed AWS delivery; layers 2
+  and 3 are inactive.

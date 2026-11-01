@@ -1,14 +1,14 @@
 # Replica scaling
 
 Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md), with
-[ADR 0025](../../adr/0025-single-host-production.md) and
+[ADR 0027](../../adr/0027-vietnam-hosted-production.md) and
 [ADR 0005](../../adr/0005-database-migrations.md). These pages hold the accepted
 design that a second serving replica needs. Only the
 [policy catalog](policy-catalog.md) describes built behavior.
 
 ## Current state
 
-Production runs one serving replica on one host under ADR 0025. Deployment
+Production runs one serving replica on one host under ADR 0027. Deployment
 configuration, not the database, holds the service at one replica. With one
 replica these process-local mechanisms are correct:
 
@@ -81,6 +81,6 @@ Raise the service maximum above one only after these steps, in order:
 5. Prove locally a 1 → 2 → 1 transition during writes, revocation, render and
    SSE traffic, plus crash and graceful-drain cases, without weakening any limit
    (ADR 0026).
-6. Decide the fleet edge and load balancer. Single-host production (ADR 0025)
+6. Decide the fleet edge and load balancer. Single-host production (ADR 0027)
    has no load balancer; the ALB edge that ADR 0026's history records is
    retired.

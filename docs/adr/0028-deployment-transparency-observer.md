@@ -4,6 +4,46 @@ Status: Accepted (2026-09-27). The owner approved the choices marked **Owner
 approval** (A1 to A5) in the
 [deployment transparency design](../design/deployment-transparency/README.md).
 
+## Decision
+
+Production on one GreenNode vServer uses a root host timer to inspect running
+Podman containers. It writes an unchecked observation to a root-owned directory.
+An observer container without Podman socket access checks the running digests
+with the existing `sigstore-go` verifier and atomically publishes the deployment
+document to a directory Caddy mounts read-only and serves through the direct
+edge. The [host design](../design/deployment-transparency/host.md) owns the
+source, publication, headers, and failure rules. The document identifies Podman
+in its version 1 platform field.
+
+The observer rejects observations older than 180 seconds or more than 60 seconds
+in the future. Its verification cache stays in memory; no bucket or secret is
+needed. It runs independently of application maintenance with a read-only root
+filesystem and bounded memory. Deploy verifies the native amd64 observer image's
+provenance before use. That image uses the `<tag>-amd64` tag; a release without
+it leaves the installed observer unchanged. The plain version tag remains an
+arm64 image for Lambda.
+
+The bilingual `/verify` page, linked from the landing footer, shows the chain
+from source to running service and gives an independent verification command. It
+shows Verified only for fresh, checked evidence. A stale or unchecked report is
+never verified. The host reports itself, and an observer on that host cannot
+prove host or operator honesty or runtime integrity. Deploy-time checks are not
+runtime verification.
+
+ECS and Kubernetes retain an observer separate from the application with
+read-only platform access. It publishes `/.well-known/deployment.json` with
+every running digest per serving component and replica count, plus version,
+commit, signature and SBOM status, and links from signed provenance. On AWS, a
+Lambda function runs every minute with permission only to list and describe ECS
+tasks, write one S3 object, and write logs; CloudFront caches the object for 30
+seconds. On Kubernetes the image runs in its own namespace with a Role limited
+to `get` and `list` on pods. Those documents use an allowlist and a closed JSON
+Schema; a test rejects infrastructure identifiers.
+
+`release-images.yml` publishes a signed SBOM attestation per image. No separate
+cosign signature is added. Signature policy and independent commands are shared
+across platforms.
+
 ## Context
 
 aboutme is open source, and its users should be able to see exactly what runs in
@@ -16,77 +56,18 @@ compromised application can report anything. It is stronger if a separate
 program with read-only access asks the platform what runs and checks each digest
 against the signed build record.
 
-## Decision
-
-- On ECS and Kubernetes, an observer separate from the application and read-only
-  on the platform publishes `https://aboutme.vn/.well-known/deployment.json`:
-  every running digest per serving component with its replica count, and the
-  version, commit, signature status, SBOM status, and links taken from the
-  signed provenance for that digest.
-- On AWS the observer is a Lambda function running the observer container image,
-  started every minute, with a role that may call only `ecs:ListTasks` and
-  `ecs:DescribeTasks` on the production cluster, write one S3 object, and write
-  its logs. CloudFront serves the object from S3 and caches it for 30 seconds.
-  On Kubernetes the same image runs in its own namespace with a Role limited to
-  `get` and `list` on pods.
-- The ECS and Kubernetes document is built from an allowlist and validated
-  against a closed JSON Schema before it is written; a test fails if any
-  infrastructure identifier reaches it.
-- `release-images.yml` publishes a signed SBOM attestation per image. No
-  separate cosign signature is added.
-- A bilingual page at `/verify`, linked from the landing footer, shows the chain
-  from source to running service, never shows "verified" for stale or unchecked
-  data, and gives the command to verify independently.
-
 ## Consequences
 
-- CloudFront caches one more path, beside `/_nuxt/*` (ADR 0025). ADR 0010 is
-  unaffected: the document holds no publication state.
-- An ECS deployment uses a Lambda function, an ECR repository, an S3 bucket, a
-  schedule, and an alarm, for under USD 0.50 a month. The deploy role can update
-  the observer.
-- The evidence stops at the platform's report. The ECS agent on the host reports
-  digests, and host-network containers can reach the instance role that makes
-  those reports, so a compromised host or `app` task could forge them. The page
-  states that it does not prove host honesty.
-- The owner's administrator login can still change the observer. The design
-  defends against a compromised application and silent drift, not against the
-  operator.
+- ADR 0010 is unaffected: the deployment document holds no publication state.
+- The AWS ECS alternative uses a Lambda function, ECR repository, S3 bucket,
+  schedule, and alarm, for under USD 0.50 a month. Its deploy role can update
+  the observer; CloudFront caches the document alongside `/_nuxt/*` (ADR 0025).
+- ECS evidence stops at the platform's report. The ECS agent on the host reports
+  digests, and host-network containers can reach the instance role, so a
+  compromised host or `app` task could forge them.
+- The owner's administrator login can change the observer. The design defends
+  against a compromised application and silent drift, not against the operator.
 - `verify` is a reserved slug in the public-root registry.
-- The Vietnam Podman host uses the weaker host report described in the dated
-  amendment below.
-
-## Amendment: Vietnam host reporter (2026-10-11)
-
-Production on one GreenNode vServer uses a host timer to inspect running Podman
-containers and publish the same deployment document through the direct Caddy
-edge. The [host design](../design/deployment-transparency/host.md) defines the
-source, atomic publication, headers, and failure rules. The existing platform
-fields identify Podman; version 1 adds that enum value without a new field.
-
-The host reports itself, not an independent platform API. Its evidence is weaker
-than ECS's off-host observer. The report does not prove host honesty or runtime
-integrity. Deploy-time checks are not runtime verification. AWS ECS and
-Kubernetes retain their observer implementations.
-
-## Amendment: Vietnam host signature verification (2026-10-11)
-
-The root reporter writes an unchecked observation to a root-owned directory. An
-observer container reads that file without Podman socket access, checks the
-digests through the existing `sigstore-go` verifier, and atomically publishes
-the deployment document to a directory Caddy mounts read-only. The observer
-rejects observations older than 180 seconds or more than 60 seconds in the
-future. Its verification cache stays in memory; no bucket or secret is needed.
-
-The observer runs independently of application maintenance with a read-only root
-filesystem and bounded memory. Its native amd64 release image uses the
-`<tag>-amd64` tag; the plain version tag remains a single arm64 image for
-Lambda. Deploy checks the observer's provenance before use. A release without
-the amd64 image leaves the installed observer unchanged.
-
-The page shows Verified only for fresh, checked evidence. The signature policy
-and independent commands stay the same across platforms. An observer sharing the
-host cannot prove host honesty; the page states that limit.
 
 ## Alternatives
 
