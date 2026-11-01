@@ -264,10 +264,10 @@ each send increments the synthetic usage counter's Telegram count.
 
 | Quota                | Allowance | Expiry recorded 2026-11-01 (UTC) |
 | -------------------- | --------- | -------------------------------- |
-| Synthetic Test Basic | 10 checks | 2026-12-01T05:19:45Z             |
+| Synthetic Test Basic | 10 checks | 2026-12-01T06:54:54Z             |
 
 Renew the synthetic quota each month in its last seven days. The next window is
-2026-11-24 to 2026-12-01 UTC:
+2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z:
 
 1. Open the vMonitor console, then **Quota & Usage**.
 2. Select **Synthetic test** and renew the free Basic quota. Once released, the
@@ -275,8 +275,10 @@ Renew the synthetic quota each month in its last seven days. The next window is
 3. Confirm the quota is active and record its new expiry date.
 
 A lapsed synthetic quota stops checks. If it lapses, recover Basic from trash at
-0 VND, confirm it is active, and record the new expiry. The quota expired on
-2026-10-25 and was recovered on 2026-11-01.
+0 VND, confirm it is active, and record the new expiry. Deleting the synthetic
+quota deletes all checks, so recreate them from a saved configuration. The
+current quota is active from 2026-11-01T06:54:54Z to 2026-12-01T06:54:54Z. The
+previous quota expired on 2026-10-25 and was recovered on 2026-11-01.
 
 [`.github/workflows/uptime.yml`](../../.github/workflows/uptime.yml) is a slower
 backstop. It requests a five-minute schedule, tries `/readyz` three times, 20
