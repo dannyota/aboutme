@@ -19,8 +19,8 @@ redact_logs() { sed 's/synthetic-private-value/[REDACTED]/g'; }
 trap 'printf "rollback-started\n" >&2' EXIT
 start_stack() { start_server; }
 start_server() { start_service; }
-start_service() { complete_launch_record || return 7; }
-complete_launch_record() { return 1; }
+start_service() { validate_session_anchor || return 7; }
+validate_session_anchor() { return 1; }
 if [ "${BREAK_DIAGNOSTICS:-0}" = 1 ]; then
   for target in timeline rejections report; do
     suffix=log
@@ -30,34 +30,35 @@ if [ "${BREAK_DIAGNOSTICS:-0}" = 1 ]; then
 fi
 start_stack
 EOF
-cat >"$work/bin/ss" <<'EOF'
+cat >"$work/bin/lsof" <<'EOF'
 #!/usr/bin/env bash
-printf 'LISTEN 0 1 127.0.0.1:20441 0.0.0.0:*\n'
+printf 'p123\nn127.0.0.1:20441\n'
 EOF
-chmod +x "$work/bin/ss"
+chmod +x "$work/bin/lsof"
 printf 'server stdout\nserver stderr synthetic-private-value\n' >"$work/log/server.log"
 printf 'database=stub provisioned=yes migrated=yes\n' >"$work/diagnostics/database"
 printf 'server readiness: not reached\n' >"$work/diagnostics/probe-server"
 printf '%s\n' "$$" >"$work/run/server.pid"
+printf 'version=2\ncheckout=/synthetic checkout\npid=%s\npgid=%s\nlaunch_token=synthetic-public-token\nprivate=synthetic-private-value\n' "$$" "$$" >"$work/run/session"
 status=0
 FIXTURE=$work PATH="$work/bin:$PATH" DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
   DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR="$work/artifacts" \
   BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
   bash "$work/dev-https.sh" up >"$work/output" 2>&1 || status=$?
 [ "$status" -eq 7 ] || fail "diagnostics changed exit 7 to $status"
-for expected in 'startup failure status=7' 'function=complete_launch_record' \
+for expected in 'startup failure status=7' 'function=validate_session_anchor' \
   'startup timeline' 'combined stdout and stderr' \
   'step=start_server duration=' \
   'rejected' \
   'server stdout' 'server stderr [REDACTED]' 'server readiness: not reached' \
-  'database=stub provisioned=yes migrated=yes' '127.0.0.1:20441' \
-  'process state' 'rollback-started'; do
+  'database=stub provisioned=yes migrated=yes' '123' \
+  'process state' 'session record' 'version=2' 'pgid=' 'rollback-started'; do
   grep -Fq -- "$expected" "$work/output" || fail "missing evidence: $expected"
 done
 awk -v pid="$$" '
   /process state/ { processes=1; next }
   / record / { processes=0 }
-  processes && $1 == pid && NF == 8 { found++ }
+  processes && $1 == pid && NF == 5 { found++ }
   END { exit !(found == 1) }
 ' "$work/output" || fail 'process snapshot lost the supervisor pidfile PID'
 ! compgen -G "$work/diagnostics/locations.*.log" >/dev/null || fail 'diagnostics wrote a command trail'
@@ -88,7 +89,7 @@ grep -Fq 'server readiness: exit=0 response=stubbed-success body=empty' "$work/o
 awk -v pid="$$" '
   /process state/ { processes=1; next }
   / record / { processes=0 }
-  processes && $1 == pid && NF == 8 { found++ }
+  processes && $1 == pid && NF == 5 { found++ }
   END { exit !(found == 1) }
 ' "$work/output" || fail 'process snapshot did not retain one row for duplicate PIDs'
 

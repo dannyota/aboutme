@@ -5,9 +5,12 @@
 
 require_tools() {
   local tool
-  for tool in podman go npm node caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head; do
+  for tool in podman go npm node caddy curl make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head python3 uname; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
+  require_modern_bash || die 'Bash 4+ is required'
+  require_gnu_tools realpath stat base64 sha256sum date || die 'GNU coreutils are required'
+  command -v lsof >/dev/null || command -v ss >/dev/null || die 'lsof or ss is not on PATH'
 }
 
 load_source_digests() {
@@ -49,28 +52,25 @@ compose_http_active() {
 
 any_pidfile() {
   local name
+  [ -e "$(session_record)" ] && return 0
+  for name in "$RUN_DIR"/session.*; do [ ! -e "$name" ] || return 0; done
   for name in "${SERVICES[@]}"; do
-    [ -e "$(pidfile "$name")" ] && return 0
+    [ -e "$(pidfile "$name")" ] || [ -e "$(identity_file "$name")" ] || [ -e "$(launch_file "$name")" ] || continue
+    return 0
   done
   return 1
 }
 
 assert_owned_complete_state() {
-  local generated name pid port mode
-  for name in "${SERVICES[@]}"; do
-    [ -e "$(pidfile "$name")" ] || die "partial HTTPS harness state: missing $(pidfile "$name"); run 'scripts/dev-https.sh down' after inspecting ownership"
-    pid=$(read_pid "$name") || die "$name has an invalid PID file; recovery requires manual inspection because ownership is unproved"
-    validate_service_identity "$name" 1 || die "$name pid $pid does not match its exact owned process identity; no process was signalled and ownership evidence was preserved"
-    port=$(port_of "$name")
-    require_port_listening "$port" "$name pid $pid is owned but port $port is not listening; run 'scripts/dev-https.sh down'"
-  done
+  local generated mode
+  session_health && session_ready || die 'HTTPS session ownership or listener health is unproved; run down with a validated anchor or use manual recovery'
   generated=$(generate_caddyfile) || die "could not regenerate the HTTPS route table; run 'scripts/dev-https.sh down' before applying config changes"
   [ -f "$CADDYFILE_GEN" ] && [ "$generated" = "$(<"$CADDYFILE_GEN")" ] || \
     die "HTTPS harness configuration changed while it was running; run 'scripts/dev-https.sh down' then 'scripts/dev-https.sh up'"
   [ -r "$EXPORTED_ROOT" ] || die "exported Caddy root is missing or unreadable; run 'scripts/dev-https.sh down' then 'scripts/dev-https.sh up'"
   mode=$(stat -c '%a' "$EXPORTED_ROOT" 2>/dev/null || true)
   [ "$mode" = 600 ] || die "exported Caddy root has mode $mode, want 600; run 'scripts/dev-https.sh down'"
-  validate_effective_config || die "effective config, source, binary, route, or process identity drifted; run 'scripts/dev-https.sh down' then rebuild with 'scripts/dev-https.sh up'"
+  validate_effective_config || die "effective config, source, binary, route, or session ownership drifted; run 'scripts/dev-https.sh down' then rebuild with 'scripts/dev-https.sh up'"
 }
 
 reject_http_stack() {

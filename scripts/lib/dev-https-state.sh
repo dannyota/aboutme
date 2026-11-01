@@ -30,7 +30,7 @@ validate_existing_state_node() {
 }
 
 validate_state_path_integrity() {
-  local path unsafe
+  local path
   if [ -e "$DEV_DIR" ] || [ -L "$DEV_DIR" ]; then
     validate_existing_state_node "$DEV_DIR" directory
   fi
@@ -40,27 +40,36 @@ validate_state_path_integrity() {
   else
     return 0
   fi
-  unsafe=$(find -P "$STATE_DIR" -xdev -mindepth 1 \
-    \( -type l -o ! -uid "$EUID" -o -perm /022 \
-    -o \( ! -type d -a ! -type f \) \) -print -quit 2>/dev/null) || \
-    die "state path descendants cannot be inspected safely: $STATE_DIR"
-  [ -z "$unsafe" ] || die "state path descendant is unsafe: $unsafe"
-  unsafe=$(find -P "$STATE_DIR" -xdev -type f -links +1 -print -quit 2>/dev/null) || \
-    die "state path file links cannot be inspected safely: $STATE_DIR"
-  [ -z "$unsafe" ] || die "state path regular file has multiple hard links: $unsafe"
-  unsafe=$(find -P "$STATE_DIR" -xdev -type d ! -path "$CADDY_DIR" \
-    ! -perm 0700 -print -quit 2>/dev/null) || \
-    die "state path directory modes cannot be inspected safely: $STATE_DIR"
-  [ -z "$unsafe" ] || die "state path directory must have mode 700: $unsafe"
-  if [ -d "$BIN_DIR" ]; then
-    unsafe=$(find -P "$BIN_DIR" -xdev -type f ! -perm 0755 -print -quit 2>/dev/null) || \
-      die "state path binary modes cannot be inspected safely: $BIN_DIR"
-    [ -z "$unsafe" ] || die "state path binary must have mode 755: $unsafe"
-  fi
-  unsafe=$(find -P "$STATE_DIR" -xdev -path "$BIN_DIR" -prune -o \
-    -type f ! -perm 0600 -print -quit 2>/dev/null) || \
-    die "state path file modes cannot be inspected safely: $STATE_DIR"
-  [ -z "$unsafe" ] || die "state path sensitive file must have mode 600: $unsafe"
+  python3 -I - "$STATE_DIR" "$BIN_DIR" "$CADDY_DIR" "$EUID" <<'PYTHON' || die "state path descendants cannot be inspected safely: $STATE_DIR"
+import os, stat, sys
+root, binaries, caddy, uid = sys.argv[1:]
+def inspect(path):
+    node = os.lstat(path)
+    mode = stat.S_IMODE(node.st_mode)
+    def reject(reason):
+        print("state path " + reason + ": " + path, file=sys.stderr)
+        sys.exit(1)
+    if node.st_uid != int(uid) or mode & 0o022:
+        reject("owner or mode is unsafe")
+    if stat.S_ISDIR(node.st_mode):
+        if mode != 0o700 and not (path == caddy and mode == 0o755):
+            reject("directory must have mode 700")
+        with os.scandir(path) as entries:
+            for entry in entries:
+                inspect(entry.path)
+    elif stat.S_ISREG(node.st_mode):
+        if node.st_nlink != 1:
+            reject("regular file has multiple hard links")
+        expected = 0o755 if os.path.commonpath([binaries, path]) == binaries else 0o600
+        if mode != expected:
+            reject("file mode is unsafe")
+    else:
+        reject("descendant is unsafe")
+try:
+    inspect(root)
+except OSError:
+    sys.exit(1)
+PYTHON
   for path in "$RUN_DIR" "$LOG_DIR" "$BIN_DIR" "$MEDIA_DIR" "$INPUT_DIR" \
     "$CADDY_DIR/config" "$CADDY_DIR/data"; do
     if [ -e "$path" ] || [ -L "$path" ]; then
