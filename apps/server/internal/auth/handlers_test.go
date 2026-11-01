@@ -249,10 +249,9 @@ func extractCookie(resp *http.Response, name string) *http.Cookie {
 }
 
 // requestCookie builds a Cookie request-header value. Secure, HttpOnly, and
-// SameSite are response attributes with no request representation; the inline
-// suppression applies only to this centralized request helper.
+// SameSite are response attributes with no request representation.
 func requestCookie(name, value string) *http.Cookie {
-	return &http.Cookie{Name: name, Value: value} // nosemgrep: go.lang.security.audit.net.cookie-missing-httponly.cookie-missing-httponly,go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- request-side cookie (see this function's own doc comment): Secure/HttpOnly/SameSite are response-cookie attributes with no meaning on a Cookie header this helper builds for req.AddCookie.
+	return &http.Cookie{Name: name, Value: value}
 }
 
 // failingSessionIssuer reaches the internal-error funnel deterministically.

@@ -370,19 +370,19 @@ in `cmd/server`: that target does not run cmd/server with DB enforcement. Unit
 command tests inject the domain read. Extend `server-test-db` only if a new
 package requires it, with an explicit primary-owned Makefile brief. The VN glob
 already finds the new executable shell tests; no CI job name or workflow change
-is needed. Existing hosted `semgrep-code`, `semgrep-supply-chain`, full-history
-gitleaks in `contracts`, docs lint/link/length checks, and aggregate `ci` remain
-required. Extend `.github/actions/release-image-check/action.yml` with bounded,
-no-network, credential-free command dispatch probes on the built server image.
-For each new command, send invalid arguments and require its exact usage string
-and exit 2; for account status also send a valid synthetic UUID without DB
-configuration and require its fixed failure diagnostic (exit 1), not the older
-usage exit 2. Probe existing re-encryption with invalid arguments and its exact
-usage/exit 1. Each probe has a 30-second timeout and captures only fixed
-diagnostics. Add probes with each command's release and run them through both
-`release-check.yml` and `release-images.yml`, which use this action. Bare-server
-readiness alone does not prove subcommand dispatch. Production proofs establish
-live behavior separately.
+is needed. Existing hosted full-history gitleaks in `contracts`, docs
+lint/link/length checks, and aggregate `ci` remain required. Extend
+`.github/actions/release-image-check/action.yml` with bounded, no-network,
+credential-free command dispatch probes on the built server image. For each new
+command, send invalid arguments and require its exact usage string and exit 2;
+for account status also send a valid synthetic UUID without DB configuration and
+require its fixed failure diagnostic (exit 1), not the older usage exit 2. Probe
+existing re-encryption with invalid arguments and its exact usage/exit 1. Each
+probe has a 30-second timeout and captures only fixed diagnostics. Add probes
+with each command's release and run them through both `release-check.yml` and
+`release-images.yml`, which use this action. Bare-server readiness alone does
+not prove subcommand dispatch. Production proofs establish live behavior
+separately.
 
 ## Shipping docs
 

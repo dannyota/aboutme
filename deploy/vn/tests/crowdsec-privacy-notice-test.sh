@@ -29,9 +29,21 @@ cleanup() {
   umount /etc/containers/systemd 2>/dev/null || true; umount /etc/aboutme 2>/dev/null || true; umount /usr/local/lib/aboutme 2>/dev/null || true; umount -R /var/lib/aboutme 2>/dev/null || true
   umount -R /srv/data 2>/dev/null || true
   for device in "${loops[@]}"; do losetup -d "$device"; done
-  rm -rf -- "$work"
+  umount "$work" 2>/dev/null || true
+  /usr/bin/rm -rf -- "$work"
 }
-trap cleanup EXIT; mkdir -p "$work/bin" "$work/lib" /srv/data /var/lib/aboutme /usr/local/lib/aboutme; truncate -s 64M "$work/disk"
+trap cleanup EXIT
+# Exercise fixture execution with a noexec backing mount, regardless of runner policy.
+mount --bind "$work" "$work"; mount -o remount,bind,noexec "$work"
+stub "$work/exec-probe" <<'STUB'
+exit 0
+STUB
+probe_result=0; "$work/exec-probe" >/dev/null 2>&1 || probe_result=$?
+[[ $probe_result == 126 ]] || fail 'noexec fixture control'
+# Permit only this private fixture bind to execute its copied helpers and stubs.
+mount -o remount,bind,exec "$work"
+"$work/exec-probe" >/dev/null 2>&1 || fail 'executable fixture mount'
+mkdir -p "$work/bin" "$work/lib" /srv/data /var/lib/aboutme /usr/local/lib/aboutme; truncate -s 64M "$work/disk"
 mkfs.ext4 -q -L aboutme-data "$work/disk"; device=$(losetup --find --show "$work/disk")
 loops+=("$device"); mount "$device" /srv/data; mkdir /srv/data/aboutme
 install -d -o root -g root -m 0700 /srv/data/host-operations
@@ -274,8 +286,12 @@ PYTHON
 }
 refusal_count=0
 refusal_details() {
-  printf 'refusal=%d caller_lines=(%s) exit=%d elapsed_ms=%d stdout_bytes=%d stderr_bytes=%d' \
-    "$refusal_count" "$3" "$1" "$2" "$(wc -c <"$work/out")" "$(wc -c <"$work/err")"
+  local category=other
+  if grep -Fq 'Text file busy' "$work/err"; then category=text-file-busy
+  elif grep -Fq 'Permission denied' "$work/err"; then category=permission-denied
+  fi
+  printf 'refusal=%d caller_lines=(%s) exit=%d elapsed_ms=%d stdout_bytes=%d stderr_bytes=%d stderr_category=%s' \
+    "$refusal_count" "$3" "$1" "$2" "$(wc -c <"$work/out")" "$(wc -c <"$work/err")" "$category"
 }
 refuse() {
   local result=0 started elapsed

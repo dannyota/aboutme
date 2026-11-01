@@ -1,6 +1,6 @@
 name = "troubleshooter"
 description = "Finds the root cause of one aboutme failure from the evidence the primary supplies and fixes it in the brief's owned paths."
-model = "gpt-6.1-sol"
+model = "gpt-6.1-terra"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 developer_instructions = """

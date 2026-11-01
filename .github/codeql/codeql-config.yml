@@ -1,0 +1,18 @@
+name: aboutme
+
+paths-ignore:
+  - "**/node_modules/**"
+  - "**/vendor/**"
+  - "**/.nuxt/**"
+  - "**/.output/**"
+  - "**/dist/**"
+  - "**/coverage/**"
+  - apps/web/app/api/generated/**
+  - apps/web/app/editor/documentValidator.generated.mjs
+  - apps/web/app/public-roots.generated.ts
+  - packages/schema/gen/**
+  - apps/server/internal/store/*.sql.go
+  - apps/server/internal/store/db.go
+  - apps/server/internal/store/models.go
+  - apps/server/internal/showcase/presets.generated.go
+  - apps/server/internal/publicroots/generated.go

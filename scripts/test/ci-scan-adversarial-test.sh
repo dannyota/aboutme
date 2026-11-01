@@ -40,46 +40,6 @@ EOF
   chmod +x "$path"
 }
 
-test_phase_scan_requires_connected_semgrep() {
-  local case_dir=$WORK/scan
-  local repo=$case_dir/repo
-  local fake_bin=$case_dir/bin
-  local calls=$case_dir/calls
-  local output status failed=0
-
-  mkdir -p "$repo/scripts" "$fake_bin"
-  cp "$ROOT/scripts/scan.sh" "$repo/scripts/scan.sh"
-  : >"$calls"
-
-  make_logging_stub "$fake_bin/make" make
-  make_logging_stub "$fake_bin/semgrep" semgrep
-  make_logging_stub "$fake_bin/gitleaks" gitleaks
-
-  output=$(
-    /usr/bin/env -u SEMGREP_APP_TOKEN \
-      PATH="$fake_bin:$SYSTEM_PATH" CALL_LOG="$calls" \
-      /bin/bash "$repo/scripts/scan.sh" 2>&1
-  )
-  status=$?
-
-  if [ "$status" -eq 0 ]; then
-    note_failure "scan exited 0 without SEMGREP_APP_TOKEN; a phase gate must fail closed" || failed=1
-  fi
-  if ! grep -Fqx "$repo|gitleaks detect --redact --no-banner" "$calls"; then
-    note_failure "gitleaks did not run after the missing-token failure" || failed=1
-  fi
-  if ! grep -Fqx "$repo|make semgrep" "$calls" &&
-    ! grep -Fqx "$repo|semgrep ci" "$calls"; then
-    note_failure "the Semgrep fixture was not exercised" || failed=1
-  fi
-
-  if [ "$failed" -ne 0 ]; then
-    printf '    observed status: %s\n' "$status" >&2
-    printf '    observed output: %s\n' "${output//$'\n'/ | }" >&2
-  fi
-  return "$failed"
-}
-
 setup_ci_fixture() {
   local repo=$1 fake_bin=$2 calls=$3
 
@@ -410,8 +370,6 @@ test_live_db_gate_includes_privacy_notices() {
   fi
 }
 
-run_test "phase scan fails closed without connected Semgrep and still runs gitleaks" \
-  test_phase_scan_requires_connected_semgrep
 run_test "local CI preserves a shared DB under pipefail and checks generated Go" \
   test_local_ci_preserves_shared_db_and_checks_schema_go
 run_test "Compose smoke refuses to start beside the shared database" \

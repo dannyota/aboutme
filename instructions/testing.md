@@ -20,7 +20,7 @@ The table names required verification, not commands every worker must run locall
 |Renderer or public page|Nuxt gate plus `make web-e2e`; baselines as in [web rules](web.md) and [Releases](releases.md#releases)|
 |Authenticated UI|`make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check`|
 |Public surface|`make native-http-check` and `make dev-https-public-check`|
-|Security-sensitive or release|CI's Semgrep and gitleaks jobs; diagnose their hosted logs without a local scan|
+|Security-sensitive or release|CI's gitleaks and dependency checks; review CodeQL alerts in GitHub's Security tab|
 
 Reusable browser automation is scripted headless Playwright. To author it, use the Playwright MCP server in `.codex/config.toml` to inspect real selectors, requests, and state, then write what you observed as `@playwright/test` specs. MCP never runs the recorded automation. Report missing configuration or access to the primary.
 

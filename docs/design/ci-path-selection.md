@@ -66,19 +66,18 @@ runs unless event is `pull_request` and selection is `prose`; ordinary success
 dependency handling stays. No web/server job is needed: contracts already runs
 docs lint, link tests/checks using `base_sha`, lengths, full-history gitleaks,
 schema/API checks, operational tests, and npm audits. Keep all those steps.
-Semgrep job conditions and their main-only environment stay unchanged.
 
 Keep `ci` as the sole check with that name, `if: always()`, and `needs` equal to
 every other job. Validate the complete expected job-key set and every result,
 plus preflight success and a known selection value, before accepting skips.
 Reject `prose` outside PRs even if every result is successful. Success is valid;
-`skipped` is valid only for a named omission in PR `prose`, or either Semgrep
-job under its existing outside-main-push/dispatch rule. Missing/null results,
-unknown values, failures, cancellations, and all other skips fail. Never treat a
-missing output as permission to skip. Preserve shard evidence downloads and
-coverage checks whenever `dev-https-proofs` succeeds; omit them only when that
-job is legitimately omitted. Failed coverage still fails the aggregate job. Keep
-reusable VN triggers, read-only permissions, and no caller-cancelling group.
+`skipped` is valid only for a named omission in PR `prose`. Missing/null
+results, unknown values, failures, cancellations, and all other skips fail.
+Never treat a missing output as permission to skip. Preserve shard evidence
+downloads and coverage checks whenever `dev-https-proofs` succeeds; omit them
+only when that job is legitimately omitted. Failed coverage still fails the
+aggregate job. Keep reusable VN triggers, read-only permissions, and no
+caller-cancelling group.
 
 ## Tests and delivery
 
@@ -91,11 +90,11 @@ repositories. Assert every event's selection, all job conditions, and
 guard-before-selection ordering. Test every result per job and missing whole job
 keys, unknown/absent outputs, forged `prose` on push/dispatch, and
 PR/fork/Dependabot/train contexts. Mutations removing event/name restrictions or
-required needs must fail. Keep proof matrices, shard verification, Semgrep
-isolation, and unique `ci` tests.
+required needs must fail. Keep proof matrices, shard verification, and unique
+`ci` tests.
 
-Update `scripts/test/workflow-safety-test.sh`'s Semgrep-only skip assertions for
-the two explicit permissions, with negative mutations of both. Retain its
+Assert the explicit prose skip permission in
+`scripts/test/workflow-safety-test.sh`, with negative mutations. Retain its
 secret, guard, and browser dependency assertions. Replace the unconditional VN
 caller assertion with the exact selection condition; its internal jobs remain
 full whenever called. Run both suites in existing `operational-test-fast` CI.
@@ -110,11 +109,11 @@ exact commit.
 
 Independent Sol review precedes implementation. Ship selector, aggregate, tests,
 and instructions together; the workflow edit selects full CI. No data, schema,
-client, key, or credential migration occurs. Retain existing token custody and
-revocation. Recovery is a reviewed change forcing `full`. New readers of an
-allowed path must remove its exemption in the same change. PR authors can edit
-the candidate gate itself, so selection is not a sandbox: `.github/` changes
-select full, and gate edits need review before the signed merge. Application,
-session/MCP, network-to-edge, container, database, and backup attackers gain no
-CI authority. No production access or third-party action is added. Main may
-still fail after a reduced PR; its full run remains the release boundary.
+client, key, or credential migration occurs. Recovery is a reviewed change
+forcing `full`. New readers of an allowed path must remove its exemption in the
+same change. PR authors can edit the candidate gate itself, so selection is not
+a sandbox: `.github/` changes select full, and gate edits need review before the
+signed merge. Application, session/MCP, network-to-edge, container, database,
+and backup attackers gain no CI authority. No production access or third-party
+action is added. Main may still fail after a reduced PR; its full run remains
+the release boundary.

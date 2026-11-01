@@ -33,38 +33,7 @@ if [ "${1:-}" = run ]; then exit 19; fi
 exit 0
 EOF
 
-cat >"$BIN/semgrep" <<'EOF'
-#!/usr/bin/env bash
-printf 'semgrep|%s\n' "$*" >>"$CALL_LOG"
-EOF
-chmod +x "$BIN/podman" "$BIN/semgrep"
-
-assert_semgrep_products() {
-  local target=$1 call
-  : >"$CALLS"
-  (
-    cd "$REPO"
-    PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" \
-      /usr/bin/make --no-print-directory "$target"
-  ) >"$WORK/$target.out" 2>&1
-  call=$(cat "$CALLS")
-  [ "$(grep -c '^semgrep|' "$CALLS" || true)" -eq 1 ] || {
-    printf 'makefile-safety-test: make %s did not run Semgrep exactly once\n' "$target" >&2
-    exit 1
-  }
-  [[ $call != *'--secrets'* && $call != *'p/secrets'* ]] || {
-    printf 'makefile-safety-test: make %s enabled Semgrep Secrets\n' "$target" >&2
-    exit 1
-  }
-}
-
-assert_semgrep_products semgrep
-assert_semgrep_products semgrep-ci
-SEMGREP_CI_CALL=$(cat "$CALLS")
-[[ $SEMGREP_CI_CALL == *'--code'* && $SEMGREP_CI_CALL == *'--supply-chain'* ]] || {
-  printf 'makefile-safety-test: make semgrep-ci did not select Code and Supply Chain\n' >&2
-  exit 1
-}
+chmod +x "$BIN/podman"
 
 assert_guarded() {
   local target=$1

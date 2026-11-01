@@ -40,7 +40,8 @@ DOMPurify is client-only.**
 The [web rich-text design](../design/web.md#rich-text),
 [template contract §5.5](../design/templates/contract.md#55-rich-text),
 `packages/schema/README.md`, the sanitizer allowlist, the hostile corpus, and
-`.semgrep.yml` describe DOMPurify as the client render-path sanitizer.
+the ESLint sanitizer rules describe DOMPurify as the client render-path
+sanitizer.
 
 ## Consequences
 
@@ -53,7 +54,11 @@ The [web rich-text design](../design/web.md#rich-text),
 - The build assertion that the server bundle contains no `dompurify` stays and
   must not be weakened to a source-level grep.
 - Assigning `innerHTML` from server-provided HTML on a client path without the
-  DOMPurify pass is a defect; the `.semgrep.yml` rules exist to catch it.
+  DOMPurify pass is a defect. ESLint enforces `vue/no-v-html` and
+  `no-restricted-syntax` for `innerHTML`/`outerHTML` assignments and
+  `insertAdjacentHTML` calls, with file-scoped sanitizer exceptions in
+  `apps/web/eslint.config.mjs`. Hydration rollback uses line-level exceptions
+  only to restore markup captured from the same element before mutation.
 - The CSP backstop is unaffected. The renderer-surface baseline CSP stays as the
   [rich-text design](../design/web.md#rich-text) defines it.
 - Server-side DOMPurify needs a new ADR that justifies `jsdom` against the
