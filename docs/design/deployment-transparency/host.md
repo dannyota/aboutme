@@ -4,7 +4,7 @@ The GreenNode vServer reports its running Podman containers to an observer
 container, which checks their signed build records and publishes
 `/.well-known/deployment.json`. The root reporter and observer share the host.
 The report is weaker evidence than the AWS ECS observer's platform API report
-([ADR 0028](../../adr/0028-deployment-transparency-observer.md)).
+([ADR 0027](../../adr/0027-deployment-transparency-observer.md)).
 
 ## Source and publication
 

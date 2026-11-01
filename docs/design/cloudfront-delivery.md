@@ -11,7 +11,8 @@ This page is part of the
   answers; price class All.
 - The viewer `Host` is forwarded, so Caddy sees the same hosts as behind
   Cloudflare, and `www` keeps redirecting at the origin.
-- **DNS is Route 53** ([ADR 0025](../adr/0025-single-host-production.md)). The
+- **DNS is Route 53**
+  ([historical AWS production decision](../adr/history/aws-production.md)). The
   apex and `www` are alias A, AAAA, and HTTPS records to the distribution in a
   DNSSEC-signed zone ([DNS runbook](../runbooks/dns.md)). An alias answer
   follows the resolver's client subnet: a Vietnamese subnet got `HAN50`.
@@ -115,7 +116,7 @@ adds label-only rules on one path
 Cloudflare handles no page traffic, IP addresses, or decrypted content, and
 after the DNS move it answers no queries either. AWS, already the hosting
 processor, terminates TLS at CloudFront edges worldwide, including in Vietnam,
-so data still leaves Vietnam until the ADR 0027 move. CloudFront access logs and
+so data still leaves Vietnam until the ADR 0026 move. CloudFront access logs and
 WAF logs stay off, as the privacy policy promises no IP address in request logs.
 
 The notice in `apps/web/app/i18n/legal.ts` changes in both languages at cutover:

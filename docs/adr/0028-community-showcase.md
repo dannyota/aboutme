@@ -1,4 +1,4 @@
-# 0029: Community showcase of opted-in resumes
+# 0028: Community showcase of opted-in resumes
 
 Status: Accepted (2026-09-27; amended 2026-10-01). The
 [showcase design](../design/showcase.md) records the approvals. The owner
@@ -80,7 +80,7 @@ document stores no template identity.
   runs, lists nothing, and never lists a resume the new rules would not.
 - The privacy notice and terms carry the text in the design, with no review
   claim. Assessment decisions follow
-  [ADR 0027](0027-vietnam-hosted-production.md).
+  [ADR 0026](0026-vietnam-hosted-production.md).
 
 ## History
 

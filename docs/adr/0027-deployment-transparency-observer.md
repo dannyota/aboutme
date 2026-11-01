@@ -1,4 +1,4 @@
-# 0028: Deployment transparency through an independent observer
+# 0027: Deployment transparency through an independent observer
 
 Status: Accepted (2026-09-27). The owner approved the choices marked **Owner
 approval** (A1 to A5) in the
@@ -61,7 +61,8 @@ against the signed build record.
 - ADR 0010 is unaffected: the deployment document holds no publication state.
 - The AWS ECS alternative uses a Lambda function, ECR repository, S3 bucket,
   schedule, and alarm, for under USD 0.50 a month. Its deploy role can update
-  the observer; CloudFront caches the document alongside `/_nuxt/*` (ADR 0025).
+  the observer; CloudFront caches the document alongside `/_nuxt/*`
+  ([historical AWS production decision](history/aws-production.md)).
 - ECS evidence stops at the platform's report. The ECS agent on the host reports
   digests, and host-network containers can reach the instance role, so a
   compromised host or `app` task could forge them.

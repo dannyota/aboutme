@@ -29,7 +29,7 @@ slug-claim set, the web root list, and the parity fixtures, as every new root
 has. `guide` becomes a reserved slug.
 
 Production runs on the Vietnam host under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). Deployment and recovery
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). Deployment and recovery
 follow the [Vietnam production design](vietnam-production.md#deploy) and the
 [production runbook](../runbooks/production.md#deploy). The
 [host logging contract](vietnam-production.md#logs-metrics-and-alarms) applies.

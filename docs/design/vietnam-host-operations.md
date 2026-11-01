@@ -2,8 +2,8 @@
 
 Status: Proposed (2026-10-12), revised 2026-10-14. The owner approved building
 these operations on 2026-10-13; independent design review precedes
-implementation. [ADR 0027](../adr/0027-vietnam-hosted-production.md) owns the
-host boundary, [ADR 0029](../adr/0029-community-showcase.md) requires operator
+implementation. [ADR 0026](../adr/0026-vietnam-hosted-production.md) owns the
+host boundary, [ADR 0028](../adr/0028-community-showcase.md) requires operator
 deletion, and
 [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) forbids an
 operator HTTP surface. No accepted decision changes.

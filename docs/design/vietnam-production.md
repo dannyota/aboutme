@@ -1,7 +1,7 @@
 # Vietnam production
 
 Production at `https://aboutme.vn` runs on GreenNode in Vietnam, with Bizfly
-Email Transaction, under [ADR 0027](../adr/0027-vietnam-hosted-production.md).
+Email Transaction, under [ADR 0026](../adr/0026-vietnam-hosted-production.md).
 The [production runbook](../runbooks/production.md) owns operator procedures.
 
 Status: serving production. Cutover completed on 2026-10-11 with release v0.7.3.
@@ -34,7 +34,7 @@ mails alarms through Bizfly.
 Compute and network run in HCM03 and vStorage in HCM04, both Ho Chi Minh City
 (owner, 2026-10-10); vStorage exists only in HCM04 and HAN02.
 
-One serving replica ([ADR 0026](../adr/0026-replica-scaling.md)), the migrator
+One serving replica ([ADR 0025](../adr/0025-replica-scaling.md)), the migrator
 and roles ([ADR 0005](../adr/0005-database-migrations.md)), the public
 revocation gate ([ADR 0010](../adr/0010-public-artifact-revocation.md)), private
 media ([ADR 0009](../adr/0009-private-media-delivery.md)), and the HTTP, SSE,

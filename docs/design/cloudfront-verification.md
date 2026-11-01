@@ -31,7 +31,7 @@ Each step ships alone; the site stays on Cloudflare until step 5.
    both) enables the 443 and 8443 listeners, with the client address rule, HSTS,
    `nosniff`, and `Server` removal. Tests cover forged headers per listener,
    IPv4 and unbracketed IPv6 values, duplicates, and a missing header. ADR
-   0027's Caddy edge selection later adds `vcdn` to this list.
+   0026's Caddy edge selection later adds `vcdn` to this list.
 3. **Build the edge.** `tls.sh` stores the client CA parameter and imports the
    client certificate; OpenTofu adds the viewer certificate, the security group,
    the policies, the distribution, and the web ACL; task definitions get

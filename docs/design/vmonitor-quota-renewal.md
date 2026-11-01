@@ -6,7 +6,7 @@ superseded. That portion of this pending design is dropped.
 Approved direction (2026-10-14), pending implementation: GitHub renews the free
 Synthetic Test quota behind the
 [Vietnam alarm](vietnam-production.md#logs-metrics-and-alarms). The renew-only
-service account is the approved cloud-credential exception. Amend ADR 0027
+service account is the approved cloud-credential exception. Amend ADR 0026
 before enabling writes.
 
 ## Timing and budget
@@ -245,7 +245,7 @@ Evidence names the release commit, test command, run URL, and request-count
 assertions using the real CLI transport path. Fake-CLI tests cannot prove this.
 
 Release order: publish CLI version/sum, JSON contract, and transport evidence;
-verify narrowed IAM and environment metadata; amend ADR 0027 and the runbook's
+verify narrowed IAM and environment metadata; amend ADR 0026 and the runbook's
 credential rule; create the hold issue. Merge with **no schedule trigger** after
 independent design/adversarial implementation review and green CI. The first
 credentialed run is `action=check` on main. After it passes, the owner clears

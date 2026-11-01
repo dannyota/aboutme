@@ -134,4 +134,4 @@ notification path do not satisfy the gate.
 - Production at `https://aboutme.vn` is where the owner tests the complete
   product, restore, migration, alarms, real email, and edge behavior. A separate
   UAT environment returns at about 500 users
-  ([ADR 0027](../adr/0027-vietnam-hosted-production.md)).
+  ([ADR 0026](../adr/0026-vietnam-hosted-production.md)).

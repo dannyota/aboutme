@@ -4,7 +4,7 @@ The community showcase is a public page, `/showcase`, that lists published
 resumes whose owners chose to show them, so visitors see real examples before
 they sign up. Each listing shows the resume's stored link-preview card and links
 to the public resume. Nothing about visitors is recorded.
-[ADR 0029](../adr/0029-community-showcase.md) records the decisions.
+[ADR 0028](../adr/0028-community-showcase.md) records the decisions.
 
 Status: approved and built ([approvals](#owner-approvals)); the legal dates in
 [Copy](showcase-copy.md#copy) change at release. The
@@ -203,7 +203,7 @@ days, and CloudTrail keeping the task's arguments for 90 days, so the policy
 discloses that record; the audit needs both to tie a deletion to its report.
 
 Production uses the Vietnam host under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). The
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). The
 [root-only host audit](../runbooks/account-delete.md#audit-and-failures) retains
 UUIDs, reported, shown, and returned slugs, action, outcome, and event UTC for
 180 days. Tie a deletion to its report by reported slug and time. Server

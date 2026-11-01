@@ -1,4 +1,4 @@
--- Community showcase queries (docs/design/showcase.md, ADR 0029). The
+-- Community showcase queries (docs/design/showcase.md, ADR 0028). The
 -- resume_showcase row exists only while the opt-in does.
 
 -- name: GetResumeShowcase :one

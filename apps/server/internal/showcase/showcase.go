@@ -1,7 +1,7 @@
 // Package showcase implements the community showcase: the opt-in row, the
 // derived card version and template, the startup recompute, and the uncached
 // public listing. Nothing is reviewed before listing. See
-// docs/design/showcase.md and docs/adr/0029-community-showcase.md.
+// docs/design/showcase.md and docs/adr/0028-community-showcase.md.
 package showcase
 
 // Roles is the closed role list: the nine Library roles plus Other.

@@ -3,7 +3,7 @@
 Cloudflare is authoritative for `aboutme.vn` since 2026-10-10 20:56 UTC, on the
 Free plan. Every record is DNS-only, with proxying off. The OpenTofu root
 `deploy/vn/dns/` owns the records under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md). Change records through a
+[ADR 0026](../adr/0026-vietnam-hosted-production.md). Change records through a
 reviewed configuration or local input change and a reviewed plan. Do not edit
 managed records in the dashboard.
 

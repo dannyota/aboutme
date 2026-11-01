@@ -3,7 +3,7 @@
 Proposal: [floating IP][ip], drill groups, private SSH through production.
 Reject [Public NAT V2][nat]: VPC-wide routing instead of one-instance NAT.
 
-Follow [ADR 0027](../adr/0027-vietnam-hosted-production.md) and the
+Follow [ADR 0026](../adr/0026-vietnam-hosted-production.md) and the
 [restore contract](vietnam-production.md#postgresql): HCM03-1C, HCM04 backups, 2
 vCPU/4 GiB, encrypted 30 GB root and 20 GB data disks. Run only PostgreSQL 18
 and pgBackRest, no app, renderer, public DB, snapshots, or backup jobs. Keep

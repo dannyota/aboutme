@@ -3,8 +3,8 @@
 Status: **undeployed reference**. These procedures require a reviewed AWS ECS
 rebuild serving `aboutme.vn` through CloudFront. They do not operate current
 production, which uses the [Vietnam observer](observer.md) under
-[ADR 0027](../adr/0027-vietnam-hosted-production.md) and
-[ADR 0028](../adr/0028-deployment-transparency-observer.md).
+[ADR 0026](../adr/0026-vietnam-hosted-production.md) and
+[ADR 0027](../adr/0027-deployment-transparency-observer.md).
 
 The [observer design](../design/deployment-transparency/README.md) owns the AWS
 mechanism and trust limits. Paths and commands below refer to `deploy/aws/`.

@@ -1,4 +1,4 @@
-# DNS record ownership follows docs/adr/0027-vietnam-hosted-production.md.
+# DNS record ownership follows docs/adr/0026-vietnam-hosted-production.md.
 terraform {
   required_version = "= 1.12.6"
   required_providers {

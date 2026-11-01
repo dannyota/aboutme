@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Sourced by deploy.sh. The deploy-time origin-certificate guard
-# (docs/design/cloudfront-edge.md, "Origin certificate"; ADR 0025: "A deploy
+# (docs/design/cloudfront-edge.md, "Origin certificate";
+# docs/adr/history/aws-production.md: "A deploy
 # refuses to run when it has fewer than 21 days left"). Needs $region, $work,
 # and say() already set.
 
@@ -50,7 +51,8 @@ edge_origin_cert_check() {
 }
 
 # Runs on every deploy: production's only edge is CloudFront
-# (docs/design/cloudfront-edge.md; ADR 0025). Checks the live distribution
+# (docs/design/cloudfront-edge.md; docs/adr/history/aws-production.md).
+# Checks the live distribution
 # with the base caller's own credentials, as origin_ip does: cloudfront:List*
 # and ec2:DescribeAddresses are outside the deploy role's closed list.
 edge_distribution_check() {

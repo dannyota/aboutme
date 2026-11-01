@@ -52,7 +52,7 @@ application access. The owner accepts the related first-enrollment denial risk.
 **Enrollment uses a durable release fence.** The
 [release-fence contract](../design/passkey-release-fence.md) owns the monotonic
 minimum release, serialized operation lock, and failure order. Production uses
-the root-owned host fence under ADR 0027. Each factor release deploys with
+the root-owned host fence under ADR 0026. Each factor release deploys with
 enrollment off; after flag-off proof, the serialized production operation raises
 the floor (v0.4.2 for passkeys, v0.4.7 for TOTP); only then may enrollment turn
 on. Disabling enrollment later never lowers the floor or turns off verification.

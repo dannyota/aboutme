@@ -1,5 +1,5 @@
 -- +goose Up
--- Community showcase (docs/design/showcase.md "Data and contract", ADR 0029).
+-- Community showcase (docs/design/showcase.md "Data and contract", ADR 0028).
 -- One row per opted-in resume. The row is a publication setting, not
 -- document content: the owner's role, the request time, the operator's review
 -- result, and three values Go keeps current inside every resume write

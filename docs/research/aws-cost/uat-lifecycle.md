@@ -7,7 +7,7 @@ live production service.
 The two-day planning campaign with 16 test hours costs **USD 27.636091 per
 730-hour month before tax**, without free-tier allowances. It leaves USD
 2.363909 below the approved USD 30 ceiling. This is a planning envelope under
-[ADR 0026](../../adr/0026-replica-scaling.md), pending local lifecycle proof and
+[ADR 0026](../../adr/0025-replica-scaling.md), pending local lifecycle proof and
 hosted timing measurements.
 
 ## Reproduction and scope

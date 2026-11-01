@@ -32,7 +32,7 @@ Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
 and API work. Auth feature checks run at the native HTTPS origin. Complete
 product acceptance runs in production, per
-[ADR 0027](../adr/0027-vietnam-hosted-production.md).
+[ADR 0026](../adr/0026-vietnam-hosted-production.md).
 
 ## Production topology
 
@@ -46,12 +46,12 @@ the laptop by image digest.
 
 Production runs on one GreenNode host in Vietnam with Caddy, Go, Nuxt,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage
-([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Cloudflare provides
+([ADR 0026](../adr/0026-vietnam-hosted-production.md)). Cloudflare provides
 DNS-only records. The [Vietnam production design](vietnam-production.md) owns
 the topology. The AWS deployment was removed on 2026-10-11; `deploy/aws/`
 remains undeployed for a possible AWS ECS or Kubernetes path.
 
-One serving replica runs under [ADR 0026](../adr/0026-replica-scaling.md). Grow
+One serving replica runs under [ADR 0025](../adr/0025-replica-scaling.md). Grow
 the host first. Raising the replica count alone is unsafe: publication fences,
 render jobs and capabilities, and SSE state are process-local until the
 [scaling contract](scaling/README.md) is implemented.
@@ -136,7 +136,7 @@ networking remains open. See the
 [Vietnam database design](vietnam-production.md#postgresql).
 
 Migrations run as a separate deploy step, never at server startup
-([ADR 0026](../adr/0026-replica-scaling.md)); the
+([ADR 0025](../adr/0025-replica-scaling.md)); the
 [Vietnam production design](vietnam-production.md#deploy) lists the order. A
 nonzero migration exit blocks the update. The runner uses goose's Provider with
 a PostgreSQL session advisory locker, which takes the lock before reading the
