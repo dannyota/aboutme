@@ -1,46 +1,40 @@
 # vMonitor Synthetic quota renewal
 
-Approved direction (2026-10-14), updated 2026-11-01, pending implementation:
-GitHub Actions renews the free Basic Synthetic Test quota behind the
-[Vietnam alarm](vietnam-production.md#logs-metrics-and-alarms). Notifications go
-to Telegram. The
+Approved 2026-10-14, updated 2026-11-01, pending implementation: GitHub Actions
+renews the free Basic Synthetic Test quota for the
+[Vietnam alarm](vietnam-production.md#logs-metrics-and-alarms). Telegram handles
+notifications without quota processing. The
 [ADR 0026 amendment](../adr/0026-vietnam-hosted-production.md#amendment-synthetic-quota-renewal-in-github-actions-2026-11-01)
-authorizes the sole cloud-credential exception. This design has no notification
-quota processing.
+authorizes the sole cloud-credential exception.
 
 ## Timing and budget
 
 The [runbook](../runbooks/production.md#alarms) owns allowances and live expiry.
-Basic cannot auto-renew. The provider permits free renewal only in the last
-seven days [Synthetic]. Use the last 72 hours until a successful renewal proves
-whether it extends the old expiry or starts a new term. Early renewal may lose
-unused days. A 409 window refusal is a sent, definite refusal, not proof that no
-request left the client.
+Basic cannot auto-renew; free renewal opens in the last seven days [Synthetic].
+Use the last 72 hours until successful renewal proves whether it extends expiry
+or starts a new term. Early renewal may lose unused days. A 409 window refusal
+is a sent, definite refusal, not proof of no send.
 
-After live validation, schedule `37 5,17 * * *` UTC. Compute remaining time from
-fresh provider reads and current UTC time, never the schedule timestamp or
-rounded calendar days. Fail if the quota has at most 172800 seconds left after
-processing. Expiry stops checks; recovery stays human. GitHub may delay or drop
-runs and disables idle public-repository schedules after 60 days [schedule]. The
-operator checks enabled state and recent runs, since silence sends no alert. The
-uptime workflow remains a backstop.
+After live validation, schedule `37 5,17 * * *` UTC. Compute time left from
+fresh provider reads and current UTC, never schedule timestamps or rounded days.
+Fail at <= 172800 seconds after processing. Expiry stops checks; recovery stays
+human. GitHub may delay/drop runs and disables idle public-repository schedules
+after 60 days [schedule]. Operators check enabled state and recent runs: silence
+sends no alert. The uptime workflow remains a backstop.
 
-Renew only when `0 < seconds-left <= 259200`. A free quote is mandatory; this
-design does not apply a notification-quota action budget to Synthetic. Provider
-rate limits and whether refusals consume any Synthetic allowance remain
-unverified. Never retry a renewal invocation within a run. An uncertain send
-blocks later runs through the persistent hold; confirmed renewal needs no human
-clearance.
+Renew only when `0 < seconds-left <= 259200`, with a free quote. Synthetic has
+no notification-quota action budget. Provider rate limits and refusal costs to
+Synthetic allowances remain unverified. Never retry renewal within a run.
+Uncertain sends hold later runs; confirmed renewal needs no human clearance.
 
 ## Workflow and trust boundary
 
 `.github/workflows/vmonitor-renew.yml` has one `renew` job on `ubuntu-24.04`:
 
-- Initially only `workflow_dispatch`; add `schedule` through the release gate.
-  These are the only permitted events. Dispatch input `action` is a choice of
-  `renew` (default) or `check`. Schedule selects `renew`. Pass the action
-  through step `env`, validate it in the script, never interpolate it into shell
-  source. `check` uses only read commands with `--read-only`.
+- Permit only `workflow_dispatch` initially; add `schedule` through the release
+  gate. Dispatch input `action` chooses `renew` (default) or `check`; schedule
+  selects `renew`. Pass it through step `env`, validate in the script, never
+  interpolate into shell source. `check` uses only reads with `--read-only`.
 - Set `permissions: {}` with only job-level `issues: write`. Guard repository
   `dannyota/aboutme`, ref `refs/heads/main`, and the allowed event. Workflow
   concurrency is `vmonitor-renew`, `cancel-in-progress: false`; job timeout is
@@ -53,21 +47,21 @@ clearance.
   checkout ref; a nonmatching job fails before running [branch-failure].
   Protection rules gate secret access even if branch code removes the job guard
   [environments]. Inspect this configuration before credentialed use.
-- Forks do not inherit secrets; ordinary pull-request refs do not match `main`.
-  An environment is not bound to one workflow file. Trusted-main
-  `pull_request_target` or `workflow_run` code could request it: never execute
-  PR-controlled code with this environment. Review workflow and test changes
-  before merge; green candidate CI alone is not a security boundary.
+- Forks lack secrets; ordinary pull-request refs do not match `main`.
+  Environments are not bound to workflow files: trusted-main
+  `pull_request_target` or `workflow_run` code could request access. Never
+  execute PR-controlled code here. Review workflow/test changes before merge;
+  green candidate CI is no boundary.
 - SHA-pinned `actions/checkout` reads public `dannyota/aboutme`,
   `refs/heads/main`, with `persist-credentials: false`. No candidate checkout or
   local action runs. Main may be newer than the event commit; log the checkout
   SHA. SHA-pinned `actions/setup-go` mirrors `.tool-versions`, with
   `cache: false` [setup-go]. Pins carry version comments and use grouped
   Dependabot updates.
-- Install and verify the CLI as specified below before providing cloud secrets.
-  Use fresh temporary install, module-cache, and build-cache directories; do not
-  restore or save caches. Review CLI and dependency changes: hashes establish
-  identity, not safe behavior [gomod].
+- Install and verify the CLI below before providing cloud secrets, using fresh
+  temporary install, module-cache, and build-cache directories; never restore or
+  save caches. Review CLI/dependency changes: hashes prove identity, not safety
+  [gomod].
 - Only the final script step, with ID `renew`, receives `VNGCLOUD_CLIENT_ID`,
   `VNGCLOUD_CLIENT_SECRET`, `VNGCLOUD_REGION`, `VNGCLOUD_PROJECT_ID`, and
   `GITHUB_TOKEN`. No cloud secrets reach checkout or installation. No username,
@@ -89,11 +83,11 @@ Before executing that same absolute binary, assert its module identity using
 danny.vn/vngcloud v0.89.0 h1:o9YirnefFhEqpEJtalX41uHci6PR6P4AcotwPrWiqkA=
 ```
 
-The maintainer evidence gate is satisfied for this pin, from the supplied
-release evidence: verified signed annotated tag [v0.89.0][release] points to
-commit `2eddd4a00198f71c6ad3db6f631402b2f4d6603f`; its successful [master CI
-run][cli-ci] includes `go test -race ./...`. The real-transport tests with
-retries enabled live in `internal/cli/svc_monitor_ci_test.go`:
+Supplied release evidence satisfies this pin's maintainer gate: verified signed
+annotated tag [v0.89.0][release] points to
+`2eddd4a00198f71c6ad3db6f631402b2f4d6603f`; successful [master CI][cli-ci]
+includes `go test -race ./...`. Real-transport tests with retries enabled live
+in `internal/cli/svc_monitor_ci_test.go`:
 
 - `TestSyntheticMutationCLIRealTransport`
 - `TestSyntheticMutationCLISendFailures`
@@ -101,15 +95,11 @@ retries enabled live in `internal/cli/svc_monitor_ci_test.go`:
 - `TestSyntheticMutationPreSDKOutcome`
 - `TestSyntheticQuotaCIEnvironmentOnlyAuth`
 
-These are the supplied evidence for request counts, retained attempt outcomes,
-preflight refusal, and environment-only authentication. Fake-CLI tests in this
-repository cannot prove transport safety. Live smoke established a 0 VND quote
-and a not-due result at 30 days left with nothing sent. A live successful
-renewal and its term arithmetic remain unverified; the response body alone is
-not proof of success.
-
-These contract sources and JSON goldens are pinned to v0.89.0. Wiki section
-names locate the matching guidance.
+These supply evidence for request counts, retained attempt outcomes, preflight
+refusal, and environment-only auth; fake-CLI tests here cannot prove transport
+safety. Live smoke found a 0 VND quote and not-due at 30 days left, with no
+send. Live renewal and term arithmetic remain unverified. Sources and JSON
+goldens below pin v0.89.0; wiki section names locate guidance.
 
 - **Quota status snapshot:** [monitor/quotas_status.go][status-source], lines
   16–34, defines `AsOf`, `Items`, `Complete`, and row keys `Kind`, `ClassName`,
@@ -155,13 +145,12 @@ names locate the matching guidance.
 
 ## Script and CLI contract
 
-`scripts/vmonitor-renew.sh` uses JSON and `jq`. Create a mode-0700 temporary
-directory with `umask 077` and assign a fresh child directory to `HOME` for CLI
-processes. Pass only the four named cloud variables and required process
-settings through a clean child environment. Unset `VNGCLOUD_PROFILE` and all
-config/credential path overrides; the clean environment must also exclude
-endpoint and debug overrides. Do not load a profile or reuse a token cache. Keep
-the issue API token out of the CLI child environment.
+`scripts/vmonitor-renew.sh` uses JSON and `jq`. With `umask 077`, create a
+mode-0700 temporary directory and a fresh child `HOME` for CLI processes. Their
+clean environment admits only the four named cloud variables and required
+process settings; exclude `VNGCLOUD_PROFILE`, config/credential paths,
+endpoint/debug overrides, and the issue API token. Never load profiles or reuse
+token caches.
 
 Before any possible write, read with the verified absolute binary:
 
@@ -191,23 +180,20 @@ vngcloud monitor renew-synthetic-quota \
   --expected-end-time "$expiry" --max-days-left 3 --max-price 0 --output json
 ```
 
-Open and verify the guard before this command. The CLI re-reads, refuses stale
-expected expiry or missing/nonzero price, and sends at most once. Neither the
-script nor CLI resends a mutation for auth, timeout, 429, 5xx, or settlement
-failure; bounded polling may only read. `--expected-end-time` is not durable
-idempotency or proven server-side compare-and-swap. Human renewal must not
-overlap a run. No Recover, Buy, or notification command is permitted.
+Open and verify the guard first. The CLI re-reads, refuses stale expected expiry
+or missing/nonzero price, and sends at most once. Script and CLI never resend
+for auth, timeout, 429, 5xx, or settlement failure; bounded polling only reads.
+`--expected-end-time` is not durable idempotency or proven server-side
+compare-and-swap. Human renewal must not overlap a run. No Recover, Buy, or
+notification commands.
 
-Renew stdout has exactly these top-level fields: `Sent`, `Stage`, `Error`,
+Renew stdout is one object with exactly `Sent`, `Stage`, `Error`,
 `PreviousEndTime`, `Quota`, `OrderID`, `PaymentPending`, `Renewed`. `Error` is
-null or has exactly `Code`, `Operation`, and `Status`. Validate one JSON object,
-its exact keys, types and allowed combinations in the table against the pinned
-contract; never search arbitrary output for a safe field. Missing, invalid,
-contradictory, or unknown output retains an opened guard. Capture exit status
-separately; a nonzero exit does not imply no send.
-
-This table allows the pinned wiki's **Unattended CI** combinations. Other SDK
-outputs remain unclassified and retain the hold under this workflow's policy.
+null or has exactly `Code`, `Operation`, `Status`. Validate exact JSON keys,
+types, and pinned **Unattended CI** combinations below; never search arbitrary
+output for a safe field. Missing, invalid, contradictory, unknown, or
+unclassified SDK output retains the opened guard. Capture exit status
+separately; nonzero does not imply no send.
 
 | Outcome                                       | `Sent`                  | `Stage`     | `Error.Code` (`Error.Status`)                                                                                                                                                                                | CLI exit               | Guard          |
 | --------------------------------------------- | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- | -------------- |
@@ -231,115 +217,104 @@ Only `confirmed` has `Renewed == true`. `accepted` cannot pass this workflow,
 which never sets `NoWait`. Preflight failures emit the full object. The
 lowercase stderr `error` envelope is separate from the stdout outcome.
 
-The only closure predicate for valid output is `Sent == "no"` with stage
-`not-due` or `preflight`, or stage `refused`, or stage `confirmed` with
-`Renewed == true`. Anything else keeps the hold. HTTP status and CLI exit alone
-never authorize closure; interrupted or broken output may lack usable JSON. A
-definite refusal proves the request was rejected, not that it was unsent.
+Close only for valid output with `Sent == "no"` and stage `not-due` or
+`preflight`, or stage `refused`, or stage `confirmed` with `Renewed == true`.
+Otherwise keep the hold. HTTP status and CLI exit alone never authorize closure;
+interrupted or broken output may lack usable JSON. Refusal proves rejection, not
+absence of a send.
 
-Only valid not-due or confirmed output with CLI exit 0 can proceed toward
-success; invalid output or any other outcome fails even if later reads look
-healthy. After either valid zero-exit outcome, repeat the read-only status
-command. A sent renewal passes only if read-back proves a strictly later end
-instant than `expiry`. Require active Basic status and more than 172800 seconds
-left in every passing run, including `check` and not-due runs. A valid confirmed
-result permits guard closure under the predicate even if this final health check
-fails; the run still fails. Never use a later read to turn `unconfirmed` into
-success or clear its hold. Response-body claims alone cannot pass the run.
+Only valid not-due or confirmed output with exit 0 proceeds to read-only status
+read-back; all other outcomes fail despite healthy later reads. Sent renewal
+needs an end instant strictly later than `expiry`. Every passing run, including
+`check` and not-due, needs active Basic status and > 172800 seconds left. Valid
+confirmation allows closure despite failed final health, but the run fails.
+Later reads cannot make `unconfirmed` succeed or clear its hold; response bodies
+alone cannot pass.
 
-Stop on a nonzero CLI exit, classify its captured output, close only if allowed,
-and fail with that exit (1, 2, 3, or 4). Do not use shell fail-fast behavior
-that skips classification. Script validation, health, or issue API failures exit
-1; unknown CLI exits also fail and retain an opened guard. A guard-closure
-failure cannot replace a nonzero CLI result with success. `check` may report an
-open hold and pass healthy reads, but must never change the hold or send a
-renewal.
+On nonzero CLI exit, classify captured output, close only if allowed, and fail
+with that exit (1, 2, 3, or 4); shell fail-fast must not skip classification.
+Script validation, health, or issue API failures exit 1. Unknown CLI exits fail
+and retain an opened guard. Failed guard closure cannot turn nonzero CLI results
+into success. `check` never changes the hold or sends renewal.
 
 ## Persistent hold
 
 The owner creates one dedicated, initially open issue in `dannyota/aboutme`; pin
-its number in the main script. Closed means armed; open blocks sends. Every
-schedule, dispatch, and rerun reads it before processing. Open/missing/invalid
-state or API failure fails `renew` before any renewal invocation. `check`
-reports an open hold and may continue read-only checks; missing/invalid state or
-API failure still fails the run. No other workflow may use this key.
+its number in the main script. Closed arms; open blocks sends. Every schedule,
+dispatch, and rerun reads it first. Open/missing/invalid state or API failure
+fails `renew` before invocation. `check` reports open holds and may pass healthy
+reads; missing/invalid state or API failure fails. No other workflow may use
+this key.
 
-After validated reads, immediately before a renewal invocation, reopen the issue
-and read back its open state. An uncertain marker write aborts without renewal.
-Keep the guard across cancellation or runner loss. A script-level skip before
-opening it leaves the issue closed. Only the run that opened the guard may close
-it automatically, using the CLI closure predicate above, then confirm closed
-state. Never close a hold inherited from another run, delete or replace the
-issue, or store provider bodies or credentials in it.
+After validated reads, immediately before renewal invocation, reopen the issue
+and read back open state. Uncertain marker writes abort renewal. Keep the guard
+across cancellation or runner loss; a script skip before opening leaves it
+closed. Only the opening run may close it automatically under the CLI predicate
+above, then confirm closed state. Never close inherited holds, delete/replace
+the issue, or store provider bodies or credentials in it.
 
-Missing evidence after interruption is uncertain, even between opening the guard
-and invoking the CLI. Failed guard closure also blocks later sends. A later read
-showing extended expiry does not clear a retained hold. Only a human reconciles
-it: disable the workflow, cancel queued and active runs, wait for termination,
-reconcile the quota and settlement with the provider, then close the issue and
-re-enable. An unchanged end time cannot settle an ambiguous send. Manual renewal
-uses this same disabled-workflow window. A missing issue needs owner repair.
+Missing evidence after interruption is uncertain, even between guard opening and
+CLI invocation. Failed closure blocks later sends; extended expiry cannot clear
+holds. Only a human reconciles: disable the workflow, cancel queued/active runs,
+wait for termination, reconcile quota and settlement with the provider, then
+close the issue and re-enable. Unchanged expiry cannot settle ambiguity. Manual
+renewal uses this disabled window. The owner repairs missing issues.
 
-The issue API grants repository-wide `issues: write`, not per-issue scope
-[issues]. Grant no `actions: write`. Self-disabling misses abrupt termination
-and adds workflow control. An Actions-write token can dispatch, re-enable, or
-cancel runs [actions-api], but cannot close the issue or edit trusted main.
-Repeated dispatches remain blocked; disabling alarms remains possible. Issue
-writers can bypass the hold and must be trusted. A stolen job token can clear
-it; runner/action compromise already exposes the cloud key. Revoke credentials
-and disable the workflow on that compromise.
+The issue API grants repository-wide, not per-issue, `issues: write` [issues].
+Grant no `actions: write`: self-disabling misses abrupt termination and adds
+workflow control. Actions-write tokens can dispatch, re-enable, or cancel
+[actions-api], but cannot close issues or edit trusted main. Dispatches stay
+blocked; disabling alarms remains possible. Trust issue writers: they and stolen
+job tokens can bypass holds. Runner/action compromise exposes the cloud key;
+revoke credentials and disable the workflow.
 
-A token with both Issues and Actions write can close the hold and dispatch on
-main. Through trusted-main code the zero-price guard still applies; repeated
-free renewals may lose days or exhaust provider limits. This accepted residual
-risk does not imply a stolen cloud key cannot incur cost: it bypasses the CLI
-price guard. Provider-side limits remain part of the IAM inspection.
+Both Issues and Actions write allow hold closure and main dispatch. Trusted-main
+code still enforces zero price; repeated free renewals may lose days or exhaust
+provider limits. This risk is accepted. Stolen cloud keys bypass the CLI price
+guard and may incur cost. Inspect provider-side limits with IAM.
 
 ## Logging, custody, and limits
 
-Capture stdout/stderr privately; emit only fixed quota labels, validated UTC
-times, allowlisted statuses/actions, numeric prices, and exit codes. Never emit
-raw errors, bodies, identifiers, `OrderID`, `NextSafeCommand`, or tokens to
-logs, annotations, summaries, or the issue. No tracing, `--debug`, artifacts, or
-token cache uploads. Delete temporary responses and `HOME` on exit; runner
-disposal covers interruption. GitHub masking is only a backstop [secrets].
-Failures emit a fixed `::error::` and summary; timeout/setup failures remain
-failed jobs. Keep Actions failure notifications enabled for schedule and
-dispatch actors; they are distinct from the Telegram-only vMonitor alarm
-channel.
+Capture stdout/stderr privately. Logs, annotations, summaries, and the issue may
+contain only fixed quota labels, validated UTC times, allowlisted
+statuses/actions, numeric prices, and exit codes; never raw errors, bodies,
+identifiers, `OrderID`, `NextSafeCommand`, or tokens. No tracing, `--debug`,
+artifacts, or token cache uploads. Delete temporary responses and `HOME` on
+exit; runner disposal covers interruption. GitHub masking is only a backstop
+[secrets]. Failures emit a fixed `::error::` and summary; timeout/setup failures
+remain failed jobs. Keep Actions failure notifications enabled for schedule and
+dispatch actors, separate from Telegram-only vMonitor alarms.
 
 `aboutme-vmonitor-renew` has no console login. Allow only these `vmonitor`
 actions on resource `*`: `GetSyntheticQuota`, `GetSyntheticTestQuotaDetail`,
 `GetSyntheticUsage`, `GetQuotaUsages`, `ListDetailedQuotasInTrash`, and
 `RenewSyntheticQuota`. No notification actions, Recover, Buy, or other writes.
-Verify the required reads/quote and effective IAM against the pinned CLI before
-enabling renewal. Do not probe forbidden mutations or widen permissions to make
-the CLI pass; an unexpected dependency needs a reviewed design change.
+Before enabling renewal, verify required reads/quote and effective IAM against
+the pin. Never probe forbidden mutations or widen permissions to pass;
+unexpected dependencies need a reviewed design change.
 
 Keep an age-encrypted backup in `aboutme-infra`. Replace the environment key
 through a secret-safe pipe, run `check`, then revoke the old key. Revoke on
-suspected compromise or loss of trusted-main access. Issued tokens reportedly
-last 1800 seconds; verify whether revocation invalidates them sooner. Main
-writers, admins, the runner, and pinned actions/CLI are trusted with the key.
-Application backups contain no copy; compromise of the encrypted infrastructure
-backup and its decryption key requires cloud-key revocation too.
+suspected compromise, loss of trusted-main access, or compromise of both the
+infrastructure backup and its decryption key. App backups hold no copy. Tokens
+reportedly last 1800 seconds; verify whether revocation invalidates them sooner.
+Trust main writers, admins, the runner, and pinned actions/CLI with the key.
 
-Anonymous visitors, signed-in users, hostile resumes, stolen app sessions/MCP
-tokens, database writers, leaked app backups, and compromised host containers
-have no route to the credential. It never reaches the host, renderer, or app
-data. Require TLS verification for provider and GitHub calls; a network attacker
-may interrupt them but cannot supply trusted outcomes without defeating TLS.
-Uncertain results fail closed through the guard. No app API, schema, client, or
-data migration changes. Older CLI versions are unsupported; a pin mismatch
-aborts before credentials. No fallback to an older outcome contract.
+The credential never reaches the host, renderer, or app data. Anonymous
+visitors, signed-in users, hostile resumes, stolen app sessions/MCP tokens,
+database writers, leaked app backups, and compromised host containers have no
+route to it. Verify TLS for provider and GitHub calls: network attackers may
+interrupt, but cannot supply trusted outcomes without defeating TLS. Uncertainty
+fails closed through the guard. No app API, schema, client, or data migration
+changes. Older CLIs are unsupported; pin mismatch aborts before credentials,
+with no older-outcome fallback.
 
-Rollback disables the workflow and follows hold reconciliation before manual
-renewal; never discard an uncertain hold. Existing check data stays unchanged;
-expiry and deletion recovery follow the runbook. Laptop timers need uptime; host
-timers expose the key to host compromise. Paid packages were rejected. Telegram
-removes the notification quota, but Synthetic still needs renewal. The
-implementation is one small workflow, one script, and focused tests, with no new
-service or durable store beyond the hold issue.
+Rollback disables the workflow and reconciles holds before manual renewal; never
+discard an uncertain hold. Check data stays unchanged; expiry/deletion recovery
+follows the runbook. Laptop timers need uptime; host timers expose the key to
+compromise. Paid packages were rejected. Telegram removes notification quota;
+Synthetic still needs renewal. Scope: one small workflow, one script, focused
+tests, and no new service or durable store beyond the hold issue.
 
 ## Verification and release
 
@@ -396,28 +371,27 @@ become a credential-bearing dependency of `ci.yml`.
 
 Release order:
 
-1. Land the accepted ADR amendment and this reviewed design. The pinned CLI
-   release-evidence gate is satisfied and JSON details are pinned above; verify
-   IAM reads/quote dependencies, environment metadata, and narrowed grants.
+1. Land the accepted ADR amendment and reviewed design. CLI evidence and JSON
+   are pinned above; verify IAM reads/quote dependencies, environment metadata,
+   and narrowed grants.
 2. Create the initially open hold issue. Merge the workflow, script, and tests
    with **no schedule trigger**, independent adversarial review, and green CI.
 3. Run `action=check` on main with credentials. It may pass healthy reads while
    leaving the initial hold open. After it passes, the owner closes that hold
    and coordinates a due `action=renew`; no console renewal may overlap.
-4. The provider window starts 2026-11-24 for the runbook's current term; this
-   design's 72-hour threshold starts 2026-11-28T06:54:54Z. Keep the schedule
-   absent until a successful due dispatch proves later expiry by read-back and
-   records term arithmetic. A November 24 dispatch must remain not due. An
-   unconfirmed send requires reconciliation, not another attempt.
+4. For the runbook's current term, the provider window starts 2026-11-24; the
+   72-hour threshold starts 2026-11-28T06:54:54Z. Keep the schedule absent until
+   successful due dispatch proves later expiry by read-back and records term
+   arithmetic. November 24 dispatch must stay not due. Unconfirmed sends require
+   reconciliation, not another attempt.
 5. Add the cron trigger in a separate reviewed, green change under the owner's
    standing approval. Keep coordinated manual renewal during rollout. Record
    live evidence and update the runbook's expiry after success.
 
-No additional product choice needs owner approval. The owner controls initial
-arming and hold recovery. Pin changes, permission widening, paid renewal,
-recovery automation, or a wider credential exception require a new reviewed
-decision. Revocation timing, provider limits, and live term arithmetic remain
-explicit verification items.
+No further product choice needs owner approval. The owner controls initial
+arming and hold recovery. Pin changes, wider permissions or credential
+exceptions, paid renewal, and automated recovery need a new reviewed decision.
+Verify revocation timing, provider limits, and live term arithmetic.
 
 [Synthetic]:
   https://docs.greennode.ai/vmonitor/dashboards/synthetics/lam-viec-voi-synthetic-test-quota
