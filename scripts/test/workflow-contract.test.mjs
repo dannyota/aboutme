@@ -30,6 +30,54 @@ const actionFixture = (reference, comment = "v1.2.3") =>
 const readWorkflow = (name) =>
   parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
 
+function checkApprovalProbe(workflow) {
+  const condition = "github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'";
+  const job = (name, stepName, text) => ({
+    name, if: condition, "runs-on": "ubuntu-24.04", "timeout-minutes": 2,
+    permissions: {}, steps: [{ name: stepName, run: `echo '${text}'` }],
+  });
+  assert.deepEqual(workflow, {
+    name: "Approval probe", on: { workflow_dispatch: null }, permissions: {},
+    concurrency: { group: "approval-probe", "cancel-in-progress": false },
+    jobs: {
+      "prepare-request": job("Prepare request", "Prepare harmless request", "Harmless approval probe request prepared."),
+      "record-approval": {
+        ...job("Record approval", "Record harmless approval", "Harmless approval probe approved."),
+        needs: ["prepare-request"], environment: "approval-probe",
+      },
+    },
+  }, "approval probe must retain the harmless main-only gated contract");
+}
+
+test("approval probe has only fixed echoes and a main-only environment gate", () => {
+  checkApprovalProbe(readWorkflow("approval-probe"));
+});
+
+test("approval probe rejects trigger, authority, gate, and execution drift", () => {
+  for (const mutate of [
+    (workflow) => { workflow.on.push = null; },
+    (workflow) => { workflow.permissions = { contents: "read" }; },
+    (workflow) => { workflow.env = { TOKEN: "${{ secrets.GITHUB_TOKEN }}" }; },
+    (workflow) => { workflow.concurrency["cancel-in-progress"] = true; },
+    (workflow) => { workflow.jobs["prepare-request"].environment = "approval-probe"; },
+    (workflow) => { delete workflow.jobs["record-approval"].environment; },
+    (workflow) => { workflow.jobs["record-approval"].environment = "production"; },
+    (workflow) => { delete workflow.jobs["record-approval"].needs; },
+    ...["prepare-request", "record-approval"].flatMap((name) => [
+      (workflow) => { delete workflow.jobs[name].if; },
+      (workflow) => { workflow.jobs[name].permissions = { contents: "write" }; },
+      (workflow) => { workflow.jobs[name]["timeout-minutes"] = 30; },
+      (workflow) => { workflow.jobs[name].steps[0].run = "echo '${{ github.actor }}'"; },
+      (workflow) => { workflow.jobs[name].steps.push({ uses: "actions/checkout@main" }); },
+      (workflow) => { workflow.jobs[name].steps[0].env = { TOKEN: "${{ github.token }}" }; },
+    ]),
+  ]) {
+    const workflow = readWorkflow("approval-probe");
+    mutate(workflow);
+    assert.throws(() => checkApprovalProbe(workflow), /harmless main-only gated contract/);
+  }
+});
+
 const proseJobs = ["macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"];
 const selectionCondition = "github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'";
 

@@ -384,6 +384,17 @@ NODE
 }
 assert_workflow_secrets "$ROOT/.github/workflows"
 
+PROBE_WORKFLOW=$ROOT/.github/workflows/approval-probe.yml
+PROBE_PREPARE=$(awk '/^  prepare-request:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$PROBE_WORKFLOW")
+PROBE_APPROVAL=$(awk '/^  record-approval:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$PROBE_WORKFLOW")
+grep -Fxq 'permissions: {}' "$PROBE_WORKFLOW" || fail "approval probe needs empty default permissions"
+grep -Fxq '    permissions: {}' <<<"$PROBE_PREPARE" || fail "approval probe preparation needs no authority"
+grep -Fxq '    permissions: {}' <<<"$PROBE_APPROVAL" || fail "approval probe approval needs no authority"
+! grep -Fq 'environment:' <<<"$PROBE_PREPARE" || fail "approval probe preparation must precede the gate"
+grep -Fxq '    environment: approval-probe' <<<"$PROBE_APPROVAL" || fail "approval probe needs its environment gate"
+grep -Fxq '    needs: [prepare-request]' <<<"$PROBE_APPROVAL" || fail "approval probe must need preparation"
+! grep -Eq 'secrets|uses:|checkout|curl|gh api' "$PROBE_WORKFLOW" || fail "approval probe must only echo fixed text"
+
 mkdir -p "$WORK/workflows"
 cp "$WORKFLOW" "$WORK/workflows/ci.yml"
 cat >"$WORK/workflows/ordinary.yml" <<'YAML'
