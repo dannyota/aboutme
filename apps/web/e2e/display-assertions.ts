@@ -1,6 +1,6 @@
 import type { Locator } from '@playwright/test';
 
-/** Measure text against a named container, including text hidden by clipping. */
+/** Measure text against a named container, including clipped text. */
 export async function measureTextContainment(
   container: Locator,
 ): Promise<{ visible: boolean; contained: boolean }> {
@@ -47,8 +47,8 @@ export async function measureTextContainment(
         for (const clip of clips) {
           if ((clip.x && (rect.left < clip.rect.left - 1
             || rect.right > clip.rect.right + 1))
-            || (clip.y && (rect.top < clip.rect.top - 1
-              || rect.bottom > clip.rect.bottom + 1))) {
+          || (clip.y && (rect.top < clip.rect.top - 1
+            || rect.bottom > clip.rect.bottom + 1))) {
             contained = false;
           }
         }

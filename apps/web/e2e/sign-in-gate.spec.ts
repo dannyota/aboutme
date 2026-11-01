@@ -57,7 +57,8 @@ test.describe('sign-in gate', () => {
       const labels = cell.providers.split(',').map((provider) => {
         const name = provider === 'google' ? 'Google' : 'LinkedIn';
         return cell.lng === 'vi'
-          ? `Tiếp tục với ${name}` : `Continue with ${name}`;
+          ? `Tiếp tục với ${name}`
+          : `Continue with ${name}`;
       });
       await expect(page.locator('.gate-provider')).toHaveText(labels);
       await expect(page.locator('.gate-providers')).toMatchAriaSnapshot(
@@ -65,7 +66,8 @@ test.describe('sign-in gate', () => {
       );
       await expect(page.locator('.gate-text strong')).toHaveText(
         cell.lng === 'vi'
-          ? 'Đăng nhập để xem CV này.' : 'Sign in to view this resume.',
+          ? 'Đăng nhập để xem CV này.'
+          : 'Sign in to view this resume.',
       );
       if (cell.message === 'failed') {
         await expect(page.locator('.gate-message')).toHaveText(cell.lng === 'vi'
@@ -79,9 +81,13 @@ test.describe('sign-in gate', () => {
         .toHaveCSS('color', 'rgb(16, 27, 63)');
       await expect(page.locator('.gate-provider').first())
         .toHaveCSS('height', '44px');
-      await expect.poll(() => measureTextContainment(page.locator('.gate-card')))
+      await expect.poll(
+        () => measureTextContainment(page.locator('.gate-card')),
+      )
         .toEqual({ visible: true, contained: true });
-      await expect.poll(() => measureVerticalFlow(page.locator('.gate-provider')))
+      await expect.poll(
+        () => measureVerticalFlow(page.locator('.gate-provider')),
+      )
         .toBe(true);
       await expect(page.locator('.gate-provider')).toHaveCount(
         cell.providers.split(',').length,
@@ -186,14 +192,16 @@ test.describe('join invite', () => {
   }
 });
 
-test('display measurements detect clipped text and overlapping siblings', async ({
+test('display measurements detect clipped text and '
+  + 'overlapping siblings', async ({
   page,
 }) => {
   await page.setContent(`
     <div id="text" style="width: 100px; height: 20px; overflow: hidden">
       <span>One line</span>
     </div>
-    <div id="flow"><div style="height: 20px"></div><div style="height: 20px"></div></div>
+    <div id="flow"><div style="height: 20px"></div>`
+    + `<div style="height: 20px"></div></div>
   `);
   const text = page.locator('#text');
   const siblings = page.locator('#flow > div');
