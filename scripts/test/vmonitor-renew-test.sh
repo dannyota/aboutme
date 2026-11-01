@@ -50,6 +50,7 @@ cat > "$tmp/bin/vngcloud" <<'SH'
 state=$(dirname "$0")/../state
 printf '%s\n' "$*" >> "$state/argv"
 env | sort > "$state/cli-env"
+printf '%s\n' "$VNGCLOUD_CLIENT_ID $VNGCLOUD_CLIENT_SECRET $VNGCLOUD_PROJECT_ID hostile-secret" >&2
 [ ! -e "$HOME/.vngcloud/config" ] || exit 98
 case "$*" in
   *get-synthetic-quota*) cat "$state/get" ;;
@@ -67,6 +68,7 @@ SH
 chmod +x "$tmp/bin/"*
 export PATH="$tmp/bin:$PATH" VNGCLOUD_CLIENT_ID=fake-client VNGCLOUD_CLIENT_SECRET=fake-secret
 export VNGCLOUD_REGION=fake-region VNGCLOUD_PROJECT_ID=fake-project GITHUB_TOKEN=fake-token GITHUB_REPOSITORY=example/repository
+export GITHUB_STEP_SUMMARY="$tmp/summary"
 mkdir -p "$tmp/original-home/.vngcloud"
 printf '%s\n' fake-cache > "$tmp/original-home/.vngcloud/config"
 export HOME="$tmp/original-home"
@@ -92,9 +94,17 @@ JSON
 }
 run() {
   local expected=$1 action=$2 rc=0
+  : > "$GITHUB_STEP_SUMMARY"
   bash "$root/scripts/vmonitor-renew.sh" "$action" > "$tmp/output" 2>&1 || rc=$?
   if [ "$rc" -ne "$expected" ]; then printf 'expected %s, got %s\n' "$expected" "$rc" >&2; exit 1; fi
   if grep -Ev '^($|Synthetic quota: healthy|Synthetic quota: hold open|Synthetic quota: failed|::error::Synthetic quota renewal failed)$' "$tmp/output"; then exit 1; fi
+  if [ "$expected" -eq 0 ]; then
+    printf '%s\n' 'Synthetic quota: healthy' > "$tmp/expected-summary"
+  else
+    printf '%s\n' 'Synthetic quota: failed' > "$tmp/expected-summary"
+  fi
+  cmp -s "$tmp/expected-summary" "$GITHUB_STEP_SUMMARY" || { printf '%s\n' 'unexpected step summary' >&2; exit 1; }
+  ! grep -Eq 'fake-client|fake-secret|fake-project|fake-token|hostile-secret|quota-syn-1|package-1' "$GITHUB_STEP_SUMMARY"
 }
 assert_count() {
   local expected=$1 pattern=$2 count
@@ -107,7 +117,7 @@ assert_count 1 '^--read-only monitor get-synthetic-quota --output json$'
 assert_count 2 '^--read-only monitor quota-status --kind synthetic --output json$'
 assert_count 1 '^monitor renew-synthetic-quota --expected-end-time 2026-01-03T12:00:00+00:00 --max-days-left 3 --max-price 0 --output json$'
 [ "$(cat "$tmp/state/issue")" = closed ]
-! grep -E 'GITHUB_TOKEN|VNGCLOUD_PROFILE|VNGCLOUD_CONFIG_FILE|VNGCLOUD_ENDPOINT' "$tmp/state/cli-env"
+! grep -E 'GITHUB_TOKEN|GITHUB_STEP_SUMMARY|VNGCLOUD_PROFILE|VNGCLOUD_CONFIG_FILE|VNGCLOUD_ENDPOINT' "$tmp/state/cli-env"
 cp "$tmp/state/status-after" "$tmp/state/status"
 jq '.Quota.EndTime = "2026-02-01T00:00:00Z"' "$tmp/state/get" > "$tmp/changed"
 mv "$tmp/changed" "$tmp/state/get"
@@ -210,14 +220,15 @@ run 0 renew
 assert_count 0 renew-synthetic-quota
 # All recognized output combinations either close or retain the durable hold.
 outcome_case() {
-  local sent=$1 stage=$2 code=$3 status=$4 cli_exit=$5 expected_hold=$6 expected_exit=$7 renewed=false error=null
+  local sent=$1 stage=$2 code=$3 status=$4 cli_exit=$5 expected_hold=$6 expected_exit=$7 pending=${8:-false} renewed=false error=null
   [ "$stage" != confirmed ] || renewed=true
+  renewed=${9:-$renewed}
   if [ "$code" != null ]; then
     error=$(jq -cn --arg code "$code" --argjson status "$status" '{Code:$code,Operation:"monitor.RenewSyntheticQuota",Status:$status}')
   fi
   reset_case
-  jq -cn --arg sent "$sent" --arg stage "$stage" --argjson error "$error" --argjson renewed "$renewed" \
-    '{Sent:$sent,Stage:$stage,Error:$error,PreviousEndTime:null,Quota:null,OrderID:"",PaymentPending:false,Renewed:$renewed}' > "$tmp/state/outcome"
+  jq -cn --arg sent "$sent" --arg stage "$stage" --argjson error "$error" --argjson renewed "$renewed" --argjson pending "$pending" \
+    '{Sent:$sent,Stage:$stage,Error:$error,PreviousEndTime:null,Quota:null,OrderID:"",PaymentPending:$pending,Renewed:$renewed}' > "$tmp/state/outcome"
   echo "$cli_exit" > "$tmp/state/exit"
   run "$expected_exit" renew
   [ "$(cat "$tmp/state/issue")" = "$expected_hold" ]
@@ -227,7 +238,9 @@ outcome_case no not-due null 0 0 closed 0
 outcome_case unknown confirmed null 0 0 closed 0
 outcome_case yes accepted null 0 0 open 1
 outcome_case yes unconfirmed NotSettled 200 1 open 1
+outcome_case yes unconfirmed NotSettled 200 1 open 1 true
 outcome_case unknown unconfirmed NotSettled 0 1 open 1
+outcome_case unknown unconfirmed NotSettled 200 1 open 1 true
 for code in PriceAboveMax Unpriced QuotaChanged TokenCacheFailed RequestFailed UnexpectedStatus; do outcome_case no preflight "$code" 0 1 closed 1; done
 for code in InvalidUsage ReadOnly InvalidConfig; do outcome_case no preflight "$code" 0 2 closed 2; done
 for code in NoCredentials ServiceAccountLoginFailed; do outcome_case no preflight "$code" 401 3 closed 3; done
@@ -241,6 +254,47 @@ outcome_case yes refused Forbidden 403 1 closed 1
 outcome_case yes refused Throttled 429 1 closed 1
 outcome_case yes refused Unauthorized 401 3 closed 3
 outcome_case yes refused NotFound 404 4 closed 4
+# Pending payment cannot authorize closure or an accepted outcome.
+outcome_case no not-due null 0 0 open 1 true
+outcome_case yes confirmed null 0 0 open 1 true
+outcome_case unknown confirmed null 0 0 open 1 true
+outcome_case no preflight PriceAboveMax 0 1 open 1 true
+outcome_case no preflight InvalidConfig 0 2 open 2 true
+outcome_case no preflight NoCredentials 401 3 open 3 true
+outcome_case yes refused Conflict 409 1 open 1 true
+outcome_case yes refused Unauthorized 401 3 open 3 true
+outcome_case yes refused NotFound 404 4 open 4 true
+outcome_case yes accepted null 0 0 open 1 true
+# Transmission, settlement, error, and exit evidence must agree.
+outcome_case no confirmed null 0 0 open 1
+outcome_case yes not-due null 0 0 open 1
+outcome_case unknown preflight RequestFailed 0 1 open 1
+outcome_case no refused Conflict 409 1 open 1
+outcome_case yes confirmed NotSettled 200 1 open 1
+outcome_case yes confirmed null 0 1 open 1
+outcome_case no not-due null 0 2 open 2
+outcome_case no preflight InvalidConfig 0 0 open 1
+outcome_case yes refused Unauthorized 401 1 open 1
+outcome_case yes confirmed null 0 0 open 1 false false
+outcome_case no not-due null 0 0 open 1 false true
+outcome_case no preflight InvalidConfig 0 2 open 2 false true
+outcome_case yes refused Conflict 409 1 open 1 false true
+outcome_case yes accepted null 0 0 open 1 false true
+outcome_case yes unconfirmed NotSettled 200 1 open 1 false true
+# Contradictory confirmation retains the hold even with unchanged expiry.
+reset_case
+cp "$tmp/state/status" "$tmp/state/status-after"
+change outcome '.PaymentPending = true'
+run 1 renew
+[ "$(cat "$tmp/state/issue")" = open ]
+assert_count 1 renew-synthetic-quota
+assert_count 1 quota-status
+change outcome '.PaymentPending = false'
+run 1 renew
+[ "$(cat "$tmp/state/issue")" = open ]
+assert_count 1 renew-synthetic-quota
+assert_count 1 quota-status
+! grep -q 'closed' "$tmp/state/curl-argv"
 for filter in \
   'del(.Sent)' '.Sent = "YES"' '.Renewed = false' '.Extra = 1' '.Error = {}' \
   '.Stage = "refused" | .Error = {Code:"Conflict",Operation:"wrong",Status:409}' \

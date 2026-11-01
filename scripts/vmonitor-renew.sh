@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
 set -uo pipefail
 umask 077
-fail() { printf '%s\n' '::error::Synthetic quota renewal failed' 'Synthetic quota: failed'; exit "${1:-1}"; }
+write_summary() {
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+  { printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"; } 2>/dev/null
+}
+fail() {
+  printf '%s\n' '::error::Synthetic quota renewal failed' 'Synthetic quota: failed'
+  write_summary 'Synthetic quota: failed' || :
+  exit "${1:-1}"
+}
+success() {
+  write_summary 'Synthetic quota: healthy' || fail
+  printf '%s\n' 'Synthetic quota: healthy'
+  exit 0
+}
+trap 'fail 130' INT
+trap 'fail 143' TERM
 [ "$#" -eq 1 ] || fail
 case "$1" in check|renew) action=$1 ;; *) fail ;; esac
 for name in VNGCLOUD_CLIENT_ID VNGCLOUD_CLIENT_SECRET VNGCLOUD_REGION VNGCLOUD_PROJECT_ID GITHUB_TOKEN GITHUB_REPOSITORY; do
@@ -97,6 +112,7 @@ def outcome(path, rc):
     assert obj['Quota'] is None or isinstance(obj['Quota'], dict)
     assert isinstance(obj['OrderID'], str) and type(obj['PaymentPending']) is bool and type(obj['Renewed']) is bool
     assert obj['Renewed'] == (stage == 'confirmed')
+    assert not obj['PaymentPending'] or stage == 'unconfirmed'
     code, status = None, None
     if error is not None:
         assert isinstance(error, dict) and set(error) == {'Code', 'Operation', 'Status'}
@@ -165,8 +181,7 @@ decision=$(sed -n '2p' "$tmp/decision")
 healthy=$(sed -n '3p' "$tmp/decision")
 if [ "$action" = check ] || [ "$decision" = skip ]; then
   [ "$healthy" = healthy ] || fail
-  printf '%s\n' 'Synthetic quota: healthy'
-  exit 0
+  success
 fi
 issue_write open || fail
 rc=0
@@ -179,4 +194,4 @@ case "$classification" in 'close not-due') stage=not-due ;; 'close confirmed') s
 run_cli --read-only monitor quota-status --kind synthetic --output json || fail
 now=$(python3 -I -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())') || fail
 python3 -I "$tmp/validate.py" final "$tmp/cli-out" "$now" "$stage" "$expiry" 2> "$tmp/error" || fail
-printf '%s\n' 'Synthetic quota: healthy'
+success

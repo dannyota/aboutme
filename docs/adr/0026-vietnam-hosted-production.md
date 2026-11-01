@@ -134,12 +134,14 @@ solutions and request to renew the free Synthetic quota through GitHub Actions.
 Implementation and live renewal verification remain pending.
 
 The renew-only GreenNode service account `aboutme-vmonitor-renew` is the one
-approved cloud-credential exception in CI. Its client ID and client secret live
-only in environment `vmonitor-renew`, as secrets `VNGCLOUD_CLIENT_ID` and
-`VNGCLOUD_CLIENT_SECRET`. The environment admits the selected branch `main`
-only, with no tag rule. No repository or organization secret duplicates are
-allowed. GitHub receives no host, database, storage, deployment, or general
-cloud administration credentials.
+approved cloud-credential exception in CI. Its client ID, client secret, and
+project ID live only in environment `vmonitor-renew`, as three secrets:
+`VNGCLOUD_CLIENT_ID`, `VNGCLOUD_CLIENT_SECRET`, and `VNGCLOUD_PROJECT_ID`.
+Secret mapping masks the project identifier before the runner prints step
+environment values. The environment admits the selected branch `main` only, with
+no tag rule. No repository or organization secret duplicates are allowed. GitHub
+receives no host, database, storage, deployment, or general cloud administration
+credentials.
 
 The account may read the quota and quote and renew only the free Basic Synthetic
 Test quota. It has no console login, notification-quota permissions, Buy,
@@ -178,7 +180,8 @@ renewal design; live term arithmetic remains unverified.
 
 2026-11-01: Named and narrowed the accepted cloud-credential exception to
 Synthetic renewal, with a main-only environment and a dispatch-first rollout,
-because Basic cannot auto-renew and Telegram removed the notification quota.
+because Basic cannot auto-renew and Telegram removed the notification quota. The
+project ID also uses an environment secret to mask runner logging.
 
 ## History
 

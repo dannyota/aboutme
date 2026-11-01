@@ -343,7 +343,7 @@ function inspect(value, parts, file, trusted, isKey) {
       if (token.toLowerCase() !== "secrets" || tokens[index - 1] === ".") continue;
       const property = tokens[index + 1] === "." ? tokens[index + 2] : undefined;
       if (property === "GITHUB_TOKEN") continue;
-      const allowed = ["VNGCLOUD_CLIENT_ID", "VNGCLOUD_CLIENT_SECRET"].includes(property) &&
+      const allowed = ["VNGCLOUD_CLIENT_ID", "VNGCLOUD_CLIENT_SECRET", "VNGCLOUD_PROJECT_ID"].includes(property) &&
         trusted && !isKey && parts.length === 6 && parts[0] === "jobs" && parts[1] === "renew" &&
         parts[2] === "steps" && parts[3] === 4 && parts[4] === "env" && parts[5] === property &&
         value === "${{ secrets." + property + " }}";
@@ -377,7 +377,7 @@ for (const file of readdirSync(directory, { recursive: true, withFileTypes: true
   if (document.errors.length) throw new Error(`${path}: ${document.errors.join("; ")}`);
   // Bind the exception to the whole workflow contract, including its execution steps.
   const trusted = path === join(directory, "vmonitor-renew.yml") &&
-    createHash("sha256").update(source).digest("hex") === "f4c73cd32c4ba7ba42b0f7e5ce749429720bdbd92a8ac9b3c56ddc39c78be435";
+    createHash("sha256").update(source).digest("hex") === "c60de2da688b5ce085b29ccdb39ae263bad5b18ba50cf714ea63a526bedeb7d0";
   walk(document.toJS({ mapAsMap: true }), [], path, trusted);
 }
 NODE
@@ -432,7 +432,12 @@ for drift in \
   's/environment: vmonitor-renew/environment: other/' \
   's/VNGCLOUD_CLIENT_ID: /OTHER: /' \
   's/secrets.VNGCLOUD_CLIENT_ID/secrets["VNGCLOUD_CLIENT_ID"]/' \
+  's/VNGCLOUD_PROJECT_ID: /OTHER: /' \
+  's/secrets.VNGCLOUD_PROJECT_ID/vars.VNGCLOUD_PROJECT_ID/' \
+  's/secrets.VNGCLOUD_PROJECT_ID/secrets.OTHER/' \
+  's/secrets.VNGCLOUD_PROJECT_ID/secrets["VNGCLOUD_PROJECT_ID"]/' \
   's/persist-credentials: false/persist-credentials: true/' \
+  's/run: bash scripts\/vmonitor-renew.sh "\$ACTION"/run: echo "\${{ secrets.VNGCLOUD_PROJECT_ID }}"/' \
   's/run: bash scripts\/vmonitor-renew.sh "\$ACTION"/run: echo "\${{ secrets.VNGCLOUD_CLIENT_ID }}"/'; do
   sed "$drift" "$ROOT/.github/workflows/vmonitor-renew.yml" >"$WORK/workflows/vmonitor-renew.yml"
   status=0
@@ -447,18 +452,21 @@ status=0
 ( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
 [ "$status" -eq 1 ] || fail 'renewal credentials in another file did not fail'
 rm "$WORK/workflows/other.yml"
-for fixture in job step key aggregate; do
-  case "$fixture" in
-    job) printf 'jobs:\n  renew:\n    env:\n      VNGCLOUD_CLIENT_ID: ${{ secrets.VNGCLOUD_CLIENT_ID }}\n' ;;
-    step) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          VNGCLOUD_CLIENT_SECRET: ${{ secrets.VNGCLOUD_CLIENT_SECRET }}\n' ;;
-    key) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          "${{ secrets.VNGCLOUD_CLIENT_ID }}": value\n' ;;
-    aggregate) printf 'jobs:\n  renew:\n    env:\n      ALL: ${{ toJSON(secrets) }}\n' ;;
-  esac >"$WORK/workflows/vmonitor-renew.yml"
-  status=0
-  ( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
-  [ "$status" -eq 1 ] || fail "renewal credential fixture did not fail: $fixture"
-  grep -Fq 'references an unapproved secret' "$WORK/renewal-secret-drift" ||
-    fail "renewal credential fixture lacks the expected diagnostic: $fixture"
+for credential in VNGCLOUD_CLIENT_ID VNGCLOUD_CLIENT_SECRET VNGCLOUD_PROJECT_ID; do
+  for fixture in job step key run aggregate; do
+    case "$fixture" in
+      job) printf 'jobs:\n  renew:\n    env:\n      %s: ${{ secrets.%s }}\n' "$credential" "$credential" ;;
+      step) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          %s: ${{ secrets.%s }}\n' "$credential" "$credential" ;;
+      key) printf 'jobs:\n  renew:\n    steps:\n      - env:\n          "${{ secrets.%s }}": value\n' "$credential" ;;
+      run) printf 'jobs:\n  renew:\n    steps:\n      - run: echo "${{ secrets.%s }}"\n' "$credential" ;;
+      aggregate) printf 'jobs:\n  renew:\n    env:\n      ALL: ${{ toJSON(secrets) }}\n' ;;
+    esac >"$WORK/workflows/vmonitor-renew.yml"
+    status=0
+    ( assert_workflow_secrets "$WORK/workflows" ) >"$WORK/renewal-secret-drift" 2>&1 || status=$?
+    [ "$status" -eq 1 ] || fail "renewal credential fixture did not fail: $credential $fixture"
+    grep -Fq 'references an unapproved secret' "$WORK/renewal-secret-drift" ||
+      fail "renewal credential fixture lacks the expected diagnostic: $credential $fixture"
+  done
 done
 rm "$WORK/workflows/vmonitor-renew.yml"
 

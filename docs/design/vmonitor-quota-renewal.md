@@ -40,13 +40,15 @@ Uncertain sends hold later runs; confirmed renewal needs no human clearance.
   concurrency is `vmonitor-renew`, `cancel-in-progress: false`; job timeout is
   10 minutes. This serializes the workflow, not console actions.
 - Use environment `vmonitor-renew`, with selected **Branch** rule `main`, no tag
-  rule. Client ID and client secret are environment secrets; region and project
-  are environment variables `VNGCLOUD_REGION` and `VNGCLOUD_PROJECT_ID`. Keep
-  their values out of documentation. Do not duplicate credentials in repository
-  or organization secrets. Environment policy evaluates the run ref, not the
-  checkout ref; a nonmatching job fails before running [branch-failure].
-  Protection rules gate secret access even if branch code removes the job guard
-  [environments]. Inspect this configuration before credentialed use.
+  rule. Its three secrets are `VNGCLOUD_CLIENT_ID`, `VNGCLOUD_CLIENT_SECRET`,
+  and `VNGCLOUD_PROJECT_ID`. Secret mapping masks the project identifier before
+  the runner prints step environment values. `VNGCLOUD_REGION` names a shared
+  provider location and stays a variable. Keep values out of documentation and
+  do not duplicate secrets in repository or organization settings. Environment
+  policy evaluates the run ref; a nonmatching job fails before running
+  [branch-failure]. Protection rules gate secret access even if branch code
+  removes the job guard [environments]. Inspect this configuration before
+  credentialed use.
 - Forks lack secrets; ordinary pull-request refs do not match `main`.
   Environments are not bound to workflow files: trusted-main
   `pull_request_target` or `workflow_run` code could request access. Never
@@ -213,9 +215,11 @@ separately; nonzero does not imply no send.
 | Other pre-send failure                        | no                      | preflight   | TokenCacheFailed, RequestFailed, UnexpectedStatus (0); NotFound (404); BadRequest, Unauthorized, Forbidden, Conflict, Throttled, ServerError, ClientError, InvalidResponse, ResponseTooLarge (source status) | 1; auth 3, NotFound 4  | Close          |
 
 `Sent` strings are `no`, `yes`, `unknown`; retained describes prior evidence.
-Only `confirmed` has `Renewed == true`. `accepted` cannot pass this workflow,
-which never sets `NoWait`. Preflight failures emit the full object. The
-lowercase stderr `error` envelope is separate from the stdout outcome.
+Only `confirmed` has `Renewed == true`. `PaymentPending` must be false outside
+`unconfirmed`, including every closing outcome and `accepted`. Validate these
+flags together with the table's `Sent`, `Stage`, `Error`, and exit combinations
+before closure. `accepted` cannot pass this workflow, which never sets `NoWait`.
+Preflight failures emit the full object; stderr's lowercase `error` is separate.
 
 Close only for valid output with `Sent == "no"` and stage `not-due` or
 `preflight`, or stage `refused`, or stage `confirmed` with `Renewed == true`.
@@ -281,9 +285,12 @@ statuses/actions, numeric prices, and exit codes; never raw errors, bodies,
 identifiers, `OrderID`, `NextSafeCommand`, or tokens. No tracing, `--debug`,
 artifacts, or token cache uploads. Delete temporary responses and `HOME` on
 exit; runner disposal covers interruption. GitHub masking is only a backstop
-[secrets]. Failures emit a fixed `::error::` and summary; timeout/setup failures
-remain failed jobs. Keep Actions failure notifications enabled for schedule and
-dispatch actors, separate from Telegram-only vMonitor alarms.
+[secrets]. Write `Synthetic quota: healthy` on success or
+`Synthetic quota: failed` on failure to `GITHUB_STEP_SUMMARY`. Failures also
+emit a fixed `::error::`; catchable termination writes the failure summary.
+Timeout/setup failures remain failed jobs. Keep Actions failure notifications
+enabled for schedule and dispatch actors, separate from Telegram-only vMonitor
+alarms.
 
 `aboutme-vmonitor-renew` has no console login. Allow only these `vmonitor`
 actions on resource `*`: `GetSyntheticQuota`, `GetSyntheticTestQuotaDetail`,
@@ -332,16 +339,17 @@ and its fixtures (the assertion beginning with "No workflow may reference a
 secret except GitHub's per-run GITHUB_TOKEN"). Its `property === "GITHUB_TOKEN"`
 allowlist needs one contextual exception: exact file
 `.github/workflows/vmonitor-renew.yml`, job `renew`, final step ID `renew`,
-environment `vmonitor-renew`, and that step's two exact `env` mappings from
-`secrets.VNGCLOUD_CLIENT_ID` and `secrets.VNGCLOUD_CLIENT_SECRET` to the same
-names. Require the trusted workflow contract, not merely the filename. Reject
-those names in another file/job/step, job-level env, `run`, YAML keys, computed
-access, or aggregate secret expressions; keep existing hostile expression
-fixtures and the proof-job secret prohibition unchanged. Add a positive exact
-mapping fixture and negative context/mapping fixtures. Keep release-check and
-shared-image-action no-secret assertions in
-`scripts/test/workflow-contract.test.mjs` unchanged. This exception implements
-ADR 0026; it does not grant secrets to `ci.yml` or its reusable jobs.
+environment `vmonitor-renew`, and that step's three exact `env` mappings from
+`secrets.VNGCLOUD_CLIENT_ID`, `secrets.VNGCLOUD_CLIENT_SECRET`, and
+`secrets.VNGCLOUD_PROJECT_ID` to the same names. Require the trusted workflow
+contract, not merely the filename. Reject those names in another file/job/step,
+job-level env, `run`, YAML keys, computed access, or aggregate secret
+expressions; keep existing hostile expression fixtures and the proof-job secret
+prohibition unchanged. Add a positive exact mapping fixture and negative
+context/mapping fixtures. Keep release-check and shared-image-action no-secret
+assertions in `scripts/test/workflow-contract.test.mjs` unchanged. This
+exception implements ADR 0026; it does not grant secrets to `ci.yml` or its
+reusable jobs.
 
 Add `scripts/test/vmonitor-renew-test.sh`, with fake CLI, issue API, and clock.
 Cover 72/48-hour boundaries, delayed runs, invalid
@@ -358,7 +366,9 @@ before verified guard creation, and strictly later read-back for success. Test
 confirmed output followed by failed health read: guard closure is allowed,
 success is not. Test nonzero safe outcomes: guard closes, job fails. Exercise
 missing/invalid/contradictory JSON, 401/404, exit 2/3, timeouts, 5xx, and
-`NotSettled`; a status alone never clears a guard.
+`NotSettled`; a status alone never clears a guard. Assert fixed, redacted
+success and failure summaries and persistent holds after contradictory pending
+payment.
 
 Persist the fake issue across runs. Cover interruption before/after send, failed
 marker read/write/closure, inherited holds despite later extended expiry, and

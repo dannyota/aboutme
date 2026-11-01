@@ -57,6 +57,6 @@ jobs:
           VNGCLOUD_CLIENT_ID: ${{ secrets.VNGCLOUD_CLIENT_ID }}
           VNGCLOUD_CLIENT_SECRET: ${{ secrets.VNGCLOUD_CLIENT_SECRET }}
           VNGCLOUD_REGION: ${{ vars.VNGCLOUD_REGION }}
-          VNGCLOUD_PROJECT_ID: ${{ vars.VNGCLOUD_PROJECT_ID }}
+          VNGCLOUD_PROJECT_ID: ${{ secrets.VNGCLOUD_PROJECT_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/vmonitor-renew.sh "$ACTION"
