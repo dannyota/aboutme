@@ -140,7 +140,7 @@ test_local_ci_preserves_shared_db_and_checks_schema_go() {
   setup_ci_fixture "$repo" "$fake_bin" "$calls"
   output=$(
     /usr/bin/env PATH="$fake_bin:$SYSTEM_PATH" CALL_LOG="$calls" \
-      /bin/bash "$repo/scripts/ci.sh" 2>&1
+      "$BASH" "$repo/scripts/ci.sh" 2>&1
   )
   status=$?
 
