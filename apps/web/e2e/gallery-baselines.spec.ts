@@ -292,11 +292,27 @@ test('gallery geometry detects changed columns and overlapping cards', async ({
   await grid.evaluate((element) => {
     (element as HTMLElement).style.gridTemplateColumns = '1fr';
   });
-  expect((await measureGalleryGrid(grid)).columns).not.toBe(2);
+  await expect.poll(async () => (await measureGalleryGrid(grid)).columns)
+    .not.toBe(2);
   await grid.evaluate((element) => {
     (element as HTMLElement).style.gridTemplateColumns = '';
-    (element.children[1] as HTMLElement).style.marginLeft = '-20px';
+    const first = element.children[0]!.getBoundingClientRect();
+    const second = element.children[1] as HTMLElement;
+    const box = second.getBoundingClientRect();
+    second.style.setProperty('transition', 'none', 'important');
+    second.style.marginLeft = `${first.right - box.left - 4}px`;
   });
+  await expect.poll(() => grid.evaluate((element) => {
+    const first = element.children[0]!.getBoundingClientRect();
+    const second = element.children[1]!.getBoundingClientRect();
+    return first.right - second.left;
+  })).toBeCloseTo(4, 0);
+  await expect.poll(() => grid.evaluate((element) => {
+    const first = element.children[0]!.getBoundingClientRect();
+    const second = element.children[1]!.getBoundingClientRect();
+    return first.height > 0 && second.height > 0
+      && Math.abs(first.top - second.top) <= 1;
+  })).toBe(true);
   expect((await measureGalleryGrid(grid)).ordered).toBe(false);
 });
 

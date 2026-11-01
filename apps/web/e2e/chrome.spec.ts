@@ -393,17 +393,24 @@ test('chrome measurements detect layout and content mutations', async ({
     (element as HTMLElement).style.gridTemplateColumns = '1fr';
   });
   expect((await measureChromeGrid(grid)).columns).toBe(1);
-  await grid.evaluate((element) => {
+  const axis = await grid.evaluate((element) => {
     const first = element.children[0]!.getBoundingClientRect();
     const second = element.children[1] as HTMLElement;
-    const top = second.getBoundingClientRect().top;
-    second.style.transform = `translateY(${first.bottom - top + 4}px)`;
+    const box = second.getBoundingClientRect();
+    const row = Math.abs(first.top - box.top) <= 1;
+    const shift = row ? first.right - box.left - 4 : first.bottom - box.top - 4;
+    second.style.transform = row
+      ? `translateX(${shift}px)`
+      : `translateY(${shift}px)`;
+    return row ? 'row' : 'column';
   });
-  await expect.poll(() => grid.evaluate((element) => {
+  await expect.poll(() => grid.evaluate((element, layout) => {
     const first = element.children[0]!.getBoundingClientRect();
     const second = element.children[1]!.getBoundingClientRect();
-    return first.bottom - second.top;
-  })).toBeCloseTo(4, 0);
+    return layout === 'row'
+      ? first.right - second.left
+      : first.bottom - second.top;
+  }, axis)).toBeCloseTo(4, 0);
   await expect.poll(async () => (await measureChromeGrid(grid)).separated)
     .toBe(false);
 
