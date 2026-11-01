@@ -175,12 +175,6 @@ db_suites() {
 
 s3_suites() {
   cd "$ROOT" || return
-  local platform
-  platform=$(uname -s) || return
-  if [ "$platform" != Linux ]; then
-    echo 'Skipping media storage suites: MinIO, the local stand-in for production vStorage (S3), needs Linux host networking; CI covers them.'
-    return 0
-  fi
   make test-media-s3-up || return
   local status=0
   make server-test-media-s3 || status=$?

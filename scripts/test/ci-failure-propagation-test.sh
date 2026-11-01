@@ -105,8 +105,6 @@ assert_ci_failure 'go tidy middle command' 'go mod tidy' 'go mod tidy' --fast \
   /usr/bin/env FAIL_GO_TIDY=1
 assert_ci_failure 'database first command' 'database suites' 'make server-test-integration' '' \
   /usr/bin/env FAIL_MAKE_TARGET=server-test-integration
-assert_ci_failure 'S3 startup command' 'media storage suites (MinIO as vStorage)' 'make test-media-s3-up' '' \
-  /usr/bin/env FAIL_MAKE_TARGET=test-media-s3-up
 assert_ci_failure 'web source manifest build' web 'make web-lint web-typecheck web-test web-build web-source-build' '' \
   /usr/bin/env FAIL_MAKE_TARGET=web-source-build
 assert_ci_failure 'migration diff command' 'migrations append-only' 'git diff failed apps/server/migrations' --fast \
@@ -116,12 +114,25 @@ assert_ci_failure 'released schema diff command' 'released schemas append-only' 
 assert_ci_failure 'upstream resolution command' 'migrations append-only released schemas append-only' 'git rev-parse failed' --fast \
   /usr/bin/env FAIL_GIT_REVPARSE=1
 
-: >"$CALLS"
-/usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" FIXTURE_PLATFORM=Darwin \
-  "$BASH" "$REPO/scripts/ci.sh" >"$WORK/darwin.out" 2>&1
-grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/darwin.out"
-grep -Fq 'Skipping media storage suites: MinIO, the local stand-in for production vStorage (S3), needs Linux host networking; CI covers them.' "$WORK/darwin.out"
-grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
-! grep -Fqx 'make test-media-s3-up' "$CALLS"
+for platform in Linux Darwin; do
+  for target in test-media-s3-up server-test-media-s3 server-test-resumeapi-s3 test-media-s3-down; do
+    assert_ci_failure "$platform S3 $target" 'media storage suites (MinIO as vStorage)' "make $target" '' \
+      /usr/bin/env FIXTURE_PLATFORM="$platform" FAIL_MAKE_TARGET="$target"
+    if [ "$target" != test-media-s3-up ]; then
+      grep -Fxq 'make test-media-s3-down' "$CALLS"
+    fi
+  done
+  : >"$CALLS"
+  /usr/bin/env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" FIXTURE_PLATFORM="$platform" \
+    "$BASH" "$REPO/scripts/ci.sh" >"$WORK/$platform.out" 2>&1
+  sed -n '/^make test-media-s3-up$/,/^make test-media-s3-down$/p' "$CALLS" >"$WORK/s3-calls"
+  printf '%s\n' 'make test-media-s3-up' 'make server-test-media-s3' \
+    'make server-test-resumeapi-s3' 'make test-media-s3-down' >"$WORK/s3-expected"
+  cmp -s "$WORK/s3-expected" "$WORK/s3-calls"
+  if [ "$platform" = Darwin ]; then
+    grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
+  fi
+done
+grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/Darwin.out"
 
 printf 'CI failure-propagation tests passed\n'
