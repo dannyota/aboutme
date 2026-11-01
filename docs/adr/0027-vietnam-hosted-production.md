@@ -27,8 +27,10 @@ Vietnam:
   [CrowdSec privacy contract](../design/crowdsec-http-privacy.md).
 - The release fence, secrets, jobs, logs, and alarms move to the host: journald
   keeps the logs and a host timer mails alarms. A GreenNode vMonitor synthetic
-  check probes `/readyz` from outside the host and mails the owner; the GitHub
-  uptime workflow remains a slower backstop.
+  check probes `/readyz` from outside the host. Its `aboutme-readyz` alarm fires
+  when one of two locations fails three consecutive one-minute tests. It sends
+  In-alarm, Up, and Undetermined notifications to the Telegram channel
+  `aboutme-alerts`; the GitHub uptime workflow remains a slower backstop.
 
 The AWS production stack and its state bootstrap are removed. Nothing from
 `deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
@@ -180,4 +182,7 @@ returning to service. This is an accepted design, not evidence of cutover.
 
 2026-11-01: Consolidated the surviving single-host and public release rules from
 ADR 0025 here. This records existing decisions without changing their acceptance
-dates.
+dates. The `aboutme-readyz` alarm moved to the Telegram channel `aboutme-alerts`
+for In-alarm, Up, and Undetermined notifications. It fires when one of two
+locations fails three consecutive one-minute tests. The email notification quota
+was deleted.
