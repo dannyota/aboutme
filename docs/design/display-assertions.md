@@ -1,7 +1,10 @@
 # Display assertions
 
-Status: Proposed, 2026-11-01. Owner direction: test display with Playwright
-without pixel comparisons.
+Status: Accepted by the owner, 2026-11-01; implementation pending. Owner
+direction: test display with Playwright without pixel comparisons. Accepted: the
+assertion contract and ADR 0019, 0020, and 0024 amendments; delete the 107
+test-only PNGs after replacement proofs; keep 26 product images and eight
+optional 14-day review screenshots; keep Git history.
 [Merged owner choices and delivery jobs](local-tooling-simplification.md#owner-choices-and-combined-jobs)
 cover both proposals; this document owns the display replacement contract.
 

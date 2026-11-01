@@ -2,10 +2,13 @@
 
 Status: owner decisions accepted, 2026-11-01; implementation pending. Use **A:
 one session per HTTPS stack** on macOS and Linux, with native Playwright
-functional proofs on the Mac. Remaining choices are consolidated below.
-[Display assertions](display-assertions.md) replaces all pixel comparisons.
-Remove per-process `/proc` identity, laptop RSS/nice enforcement, numeric job
-ceilings and dependency borrowing. Add a capped production startup smoke.
+functional proofs on the Mac. The owner accepted every choice below on
+2026-11-01, including profile-only CA trust in a disposable Chromium profile, no
+native WebKit for HTTPS proofs, and whole-journey Mac skips for server-rendering
+tests. [Display assertions](display-assertions.md) replaces all pixel
+comparisons. Remove per-process `/proc` identity, laptop RSS/nice enforcement,
+numeric job ceilings and dependency borrowing. Add a capped production startup
+smoke.
 
 The owner has a 36 GiB Apple silicon MacBook and two Linux ThinkPads. The
 [Linux runner](local-linux-runner.md) stays withdrawn. No execution is
