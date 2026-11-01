@@ -1,11 +1,18 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { expect, test, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { measurePrintRules } from './display-assertions';
-import { pdfMarkerPosition, pdfTextPage } from './pdf-display';
+import {
+  pdfEntryIds,
+  pdfMarkerPosition,
+  pdfMembership,
+  pdfTextPage,
+  type PdfMembership,
+  type PdfTextPage,
+} from './pdf-display';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -52,6 +59,92 @@ const CASES: readonly PrintCase[] = [
 ];
 
 const EXPECTED_PAGES = 2;
+
+type PrintLanguage = 'en' | 'vi';
+type PrintPaper = 'a4' | 'letter';
+type PrintScheme = 'light' | 'dark';
+type MembershipSuffix = `${PrintLanguage}-${PrintPaper}-${PrintScheme}`;
+type MembershipKey = `${PrintCase['fixture']}-${MembershipSuffix}`;
+
+const EXPECTED_MEMBERSHIP: Partial<
+  Record<MembershipKey, PdfMembership | undefined>
+> = {
+  // approved after review
+  'print-main-overflow-en-a4-light': undefined,
+  'print-main-overflow-en-a4-dark': undefined,
+  'print-main-overflow-en-letter-light': undefined,
+  'print-main-overflow-en-letter-dark': undefined,
+  'print-main-overflow-vi-a4-light': undefined,
+  'print-main-overflow-vi-a4-dark': undefined,
+  'print-main-overflow-vi-letter-light': undefined,
+  'print-main-overflow-vi-letter-dark': undefined,
+  'print-sidebar-overflow-en-a4-light': undefined,
+  'print-sidebar-overflow-en-a4-dark': undefined,
+  'print-sidebar-overflow-en-letter-light': undefined,
+  'print-sidebar-overflow-en-letter-dark': undefined,
+  'print-sidebar-overflow-vi-a4-light': undefined,
+  'print-sidebar-overflow-vi-a4-dark': undefined,
+  'print-sidebar-overflow-vi-letter-light': undefined,
+  'print-sidebar-overflow-vi-letter-dark': undefined,
+};
+
+async function attachMembership(
+  pages: readonly PdfTextPage[],
+  printCase: PrintCase,
+  testInfo: TestInfo,
+): Promise<PdfMembership> {
+  const membership = pdfMembership(pages, printCase);
+  const membershipPath = testInfo.outputPath('membership.json');
+  await writeFile(membershipPath, `${JSON.stringify(membership, null, 2)}\n`);
+  await testInfo.attach('membership', {
+    contentType: 'application/json', path: membershipPath,
+  });
+  return membership;
+}
+
+function checkMembership(membership: PdfMembership, key: MembershipKey): void {
+  const expected = EXPECTED_MEMBERSHIP[key];
+  if (expected !== undefined) expect(membership).toEqual(expected);
+  else if (process.env.CI) {
+    expect.soft(
+      expected,
+      `PDF membership has not been approved: ${key} `
+      + JSON.stringify(membership),
+    ).toBeDefined();
+  }
+}
+
+function expectedEntryIds(printCase: PrintCase): string[] {
+  return Array.from({ length: printCase.total }, (_, index) =>
+    `${printCase.prefix}${String(index + 1).padStart(2, '0')}`,
+  );
+}
+
+async function printedTextPages(page: Page): Promise<PdfTextPage[]> {
+  const pdf = await page.pdf({
+    displayHeaderFooter: false,
+    margin: { bottom: 0, left: 0, right: 0, top: 0 },
+    preferCSSPageSize: true,
+    printBackground: true,
+    scale: 1,
+  });
+  const loadingTask = getDocument({
+    data: new Uint8Array(pdf),
+    isImageDecoderSupported: false,
+    isOffscreenCanvasSupported: false,
+    useSystemFonts: false,
+  });
+  try {
+    const document = await loadingTask.promise;
+    return await Promise.all(
+      Array.from({ length: document.numPages }, async (_, index) =>
+        pdfTextPage(await document.getPage(index + 1)),
+      ),
+    );
+  } finally {
+    await loadingTask.destroy();
+  }
+}
 
 async function compareRaster(
   actual: Buffer,
@@ -134,7 +227,7 @@ async function verifyRaster(
   );
 }
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'default' });
 
 test('wraps an unbroken entry token within its column', async ({ page }) => {
   test.setTimeout(20_000);
@@ -212,6 +305,15 @@ for (const printCase of CASES) {
     });
     try {
       const document = await loadingTask.promise;
+      const membershipPages = await Promise.all(
+        Array.from({ length: document.numPages }, async (_, index) =>
+          pdfTextPage(await document.getPage(index + 1)),
+        ),
+      );
+      const membership = await attachMembership(
+        membershipPages, printCase, testInfo,
+      );
+      checkMembership(membership, `${printCase.fixture}-vi-a4-light`);
       expect(document.numPages).toBeGreaterThanOrEqual(2);
       expect(document.numPages).toBe(EXPECTED_PAGES);
       const pageTexts: string[] = [];
@@ -299,7 +401,7 @@ for (const printCase of CASES) {
       for (const scheme of ['light', 'dark'] as const) {
         test(
           `${printCase.fixture} ${lng} ${paper} ${scheme}`,
-          async ({ page }) => {
+          async ({ page }, testInfo) => {
             test.setTimeout(20_000);
             const external = await denyExternalRequests(page);
             await page.emulateMedia({ colorScheme: scheme, media: 'print' });
@@ -336,10 +438,18 @@ for (const printCase of CASES) {
             });
             try {
               const document = await loadingTask.promise;
+              const pages = await Promise.all(
+                Array.from({ length: document.numPages }, async (_, index) =>
+                  pdfTextPage(await document.getPage(index + 1)),
+                ),
+              );
+              const key: MembershipKey
+                = `${printCase.fixture}-${lng}-${paper}-${scheme}`;
+              const membership = await attachMembership(
+                pages, printCase, testInfo,
+              );
+              checkMembership(membership, key);
               expect(document.numPages).toBe(EXPECTED_PAGES);
-              const pages = await Promise.all([1, 2].map(async (number) =>
-                pdfTextPage(await document.getPage(number)),
-              ));
               const dimensions = paper === 'a4' ? [595.28, 841.89] : [612, 792];
               for (const pdfPage of pages) {
                 expect(Math.abs(pdfPage.width - dimensions[0]!))
@@ -348,6 +458,34 @@ for (const printCase of CASES) {
                   .toBeLessThanOrEqual(1);
                 expect(pdfPage.items.length).toBeGreaterThan(0);
               }
+              expect(pdfEntryIds(
+                pages,
+                printCase.prefix === 'MAIN-ENTRY-' ? 'MAIN' : 'SIDEBAR',
+              )).toEqual(expectedEntryIds(printCase));
+              const column = printCase.prefix === 'MAIN-ENTRY-'
+                ? 'main'
+                : 'sidebar';
+              const firstId = membership.pages[0]?.[column].first;
+              const continuationId = membership.pages[1]?.[column].first;
+              expect(firstId).toBeTruthy();
+              expect(continuationId).toBeTruthy();
+              const first = pdfMarkerPosition(pages[0]!, firstId!);
+              const continuation = pdfMarkerPosition(
+                pages[1]!, continuationId!,
+              );
+              expect(first).not.toBeNull();
+              expect(continuation).not.toBeNull();
+              expect(Math.abs(first!.x - continuation!.x))
+                .toBeLessThanOrEqual(1);
+              const bodyText = printCase.fixture === 'print-main-overflow'
+                ? (lng === 'vi'
+                    ? 'Nội dung kiểm tra phân trang bản in'
+                    : 'Print pagination test content')
+                : (lng === 'vi'
+                    ? 'Nội dung kiểm tra phân trang'
+                    : 'Pagination test content');
+              expect(pages.map((part) => part.text).join(' '))
+                .toContain(bodyText);
               expect(pages[0]!.text).toContain(printCase.start);
               expect(pages[0]!.text).toContain(printCase.opposite);
               expect(pages[1]!.text).toContain(printCase.end);
@@ -372,6 +510,85 @@ for (const printCase of CASES) {
       }
     }
   }
+}
+
+test('PDF content measurements detect entry and accent mutations', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const external = await denyExternalRequests(page);
+  const printCase = CASES[1]!;
+  const expected = expectedEntryIds(printCase);
+  for (const mutation of ['hide', 'duplicate', 'reorder', 'accents'] as const) {
+    const response = await page.goto(
+      '/_harness/render?fixture=print-main-overflow'
+      + '&template=modern-sidebar&mode=continuous&lng=vi&paper=a4',
+    );
+    expect(response?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    await page.emulateMedia({ media: 'print' });
+    const baseline = await printedTextPages(page);
+    expect(pdfEntryIds(baseline, 'MAIN')).toEqual(expected);
+    expect(baseline.map((part) => part.text).join(' '))
+      .toContain('Nội dung kiểm tra phân trang bản in');
+    const entries = page.locator('.resume-main .entry');
+    await expect(entries).toHaveCount(printCase.total);
+    await entries.first().evaluate((first, change) => {
+      const next = first.nextElementSibling;
+      if (change === 'hide') (first as HTMLElement).style.display = 'none';
+      if (change === 'duplicate') first.after(first.cloneNode(true));
+      if (change === 'reorder' && next !== null) first.before(next);
+      if (change === 'accents') {
+        first.closest('.resume-main')!.querySelectorAll('.entry-body')
+          .forEach((body) => {
+            body.textContent = (body.textContent ?? '')
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .replace(/đ/g, 'd').replace(/Đ/g, 'D');
+          });
+      }
+    }, mutation);
+    const mutated = await printedTextPages(page);
+    if (mutation === 'accents') {
+      expect(mutated.map((part) => part.text).join(' '))
+        .not.toContain('Nội dung kiểm tra phân trang bản in');
+    } else {
+      expect(pdfEntryIds(mutated, 'MAIN')).not.toEqual(expected);
+    }
+  }
+  expect(external).toEqual([]);
+});
+
+for (const mutation of ['forced break', 'unbreakable entries'] as const) {
+  test(`PDF membership detects ${mutation}`, async ({ page }) => {
+    test.setTimeout(30_000);
+    const external = await denyExternalRequests(page);
+    const printCase = CASES[1]!;
+    const response = await page.goto(
+      '/_harness/render?fixture=print-main-overflow'
+      + '&template=modern-sidebar&mode=continuous&lng=vi&paper=a4',
+    );
+    expect(response?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    await page.emulateMedia({ media: 'print' });
+    const baseline = pdfMembership(await printedTextPages(page), printCase);
+    expect(baseline.pageCount).toBe(EXPECTED_PAGES);
+    const entries = page.locator('.resume-main .entry');
+    await expect(entries).toHaveCount(printCase.total);
+    if (mutation === 'forced break') {
+      await entries.nth(3).evaluate((entry) => {
+        (entry as HTMLElement).style.breakBefore = 'page';
+      });
+    } else {
+      await page.addStyleTag({
+        content: '.entry { break-inside: avoid !important; }',
+      });
+    }
+    const altered = pdfMembership(await printedTextPages(page), printCase);
+    expect(altered).not.toEqual(baseline);
+    expect(external).toEqual([]);
+  });
 }
 
 function normalizeHeading(text: string | null): string {

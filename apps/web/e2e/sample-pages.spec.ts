@@ -6,10 +6,11 @@ import {
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { SAMPLES } from '@aboutme/schema/samples';
+import { loadSample, SAMPLES } from '@aboutme/schema/samples';
 
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
-import { denyExternalRequests } from './support';
+import { pdfTextPage } from './pdf-display';
+import { denyExternalRequests, waitForImages } from './support';
 
 // Every gallery sample's PDF pages, rasterized through the same print path
 // that produces the real PDF: the harness in continuous mode, print media,
@@ -175,17 +176,26 @@ for (const { templateId, lng } of SAMPLES) {
       + `&template=${templateId}&mode=continuous&print=1`,
     );
     expect(response?.ok()).toBe(true);
+    const sample = await loadSample(templateId, lng);
+    expect(sample).toBeDefined();
+    const fullName = sample?.personalDetails.fullName;
+    expect(fullName).toBeTruthy();
     await expect(
       page.locator('[data-render-mode="continuous"]'),
     ).toHaveCount(1);
     await expect(page.locator('[data-pagination-settled]')).toHaveCount(0);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
     expect(external).toEqual([]);
 
-    const marginYmm = await page.locator('.resume-document').evaluate(
-      (article) => Number.parseFloat(
-        getComputedStyle(article).getPropertyValue('--page-margin-y'),
-      ),
+    const margins = await page.locator('.resume-document').evaluate(
+      (article) => {
+        const style = getComputedStyle(article);
+        return {
+          x: Number.parseFloat(style.getPropertyValue('--page-margin-x')),
+          y: Number.parseFloat(style.getPropertyValue('--page-margin-y')),
+        };
+      },
     );
     await page.emulateMedia({ media: 'print' });
 
@@ -209,10 +219,10 @@ for (const { templateId, lng } of SAMPLES) {
     });
     try {
       const document = await loadingTask.promise;
-      const firstFill = await textFill(await document.getPage(1), marginYmm);
+      const firstFill = await textFill(await document.getPage(1), margins.y);
       const lastFill = await textFill(
         await document.getPage(document.numPages),
-        marginYmm,
+        margins.y,
       );
       console.log(
         `sample fill ${templateId} ${lng}: pages=${document.numPages}`
@@ -241,6 +251,21 @@ for (const { templateId, lng } of SAMPLES) {
         }).promise;
         const filename = `${templateId}-${lng}-p${pageNumber}.png`;
         await verifyPageImage(canvas.toBuffer('image/png'), filename, testInfo);
+        const textPage = await pdfTextPage(pdfPage);
+        expect(Math.abs(textPage.width - 595.28)).toBeLessThanOrEqual(1);
+        expect(Math.abs(textPage.height - 841.89)).toBeLessThanOrEqual(1);
+        expect(textPage.items.length).toBeGreaterThan(0);
+        expect(textPage.text.toLocaleLowerCase('en-US'))
+          .toContain(fullName!.normalize('NFC').toLocaleLowerCase('en-US'));
+        for (const item of textPage.items) {
+          const marginX = margins.x * POINTS_PER_MM;
+          const marginY = margins.y * POINTS_PER_MM;
+          expect(item.x).toBeGreaterThanOrEqual(marginX - 1);
+          expect(item.x + item.width)
+            .toBeLessThanOrEqual(textPage.width - marginX + 1);
+          expect(item.y).toBeGreaterThanOrEqual(marginY - 1);
+          expect(item.y).toBeLessThanOrEqual(textPage.height - marginY + 1);
+        }
         files.push(filename);
       }
       manifestEntries.push({
