@@ -1,6 +1,6 @@
 # Static checks for deploy/vn. This workflow runs without cloud credentials
 # (docs/design/vietnam-production.md, "Infrastructure code and state"). ci.yml
-# calls this workflow on every gate run, including shellcheck for host scripts.
+# calls this workflow on full gate runs, including shellcheck for host scripts.
 name: VN infrastructure
 
 on:
@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   check:
+    name: Infrastructure contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -71,6 +72,7 @@ jobs:
           exit "$failed"
 
   crowdsec-privacy-notice:
+    name: CrowdSec privacy notice
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -81,6 +83,7 @@ jobs:
         run: sudo unshare --mount --propagation private bash deploy/vn/tests/crowdsec-privacy-notice-test.sh
 
   crowdsec-integration:
+    name: CrowdSec integration
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -110,6 +113,7 @@ jobs:
             unshare --mount --propagation private bash deploy/vn/tests/crowdsec-integration-test.sh
 
   crowdsec-postgresql:
+    name: CrowdSec PostgreSQL
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

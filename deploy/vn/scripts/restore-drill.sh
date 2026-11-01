@@ -279,7 +279,7 @@ pg_target=$(date -u -d "$target_time" '+%Y-%m-%d %H:%M:%S+00') ||
   die "--target-time is not a valid time"
 
 umask 077
-run=$(mktemp -d "$XDG_RUNTIME_DIR/restore-drill.XXXXXX")
+run='' ssh_dir=''
 server_id='' create_attempted=0 drill_ip='' volume_id='' volume_attempted=0
 failures=0
 declare -a result_lines=() count_lines=()
@@ -292,9 +292,12 @@ cleanup() {
   local rc=$?
   trap - EXIT
   set +e
-  ssh -p "$SSH_PORT" -S "$run/drill.sock" -O exit x >/dev/null 2>&1
-  ssh -p "$SSH_PORT" -S "$run/prod.sock" -O exit x >/dev/null 2>&1
-  rm -rf "$run"
+  if [[ -n $ssh_dir ]]; then
+    ssh -p "$SSH_PORT" -S "$ssh_dir/drill.sock" -O exit x >/dev/null 2>&1
+    ssh -p "$SSH_PORT" -S "$ssh_dir/prod.sock" -O exit x >/dev/null 2>&1
+  fi
+  if [[ -n $run ]]; then rm -rf "$run"; fi
+  if [[ -n $ssh_dir ]]; then rm -rf "$ssh_dir"; fi
   if [[ -z $server_id && $create_attempted == 1 ]]; then
     server_id=$(find_server_id)
   fi
@@ -326,6 +329,9 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
+
+run=$(mktemp -d "$XDG_RUNTIME_DIR/restore-drill.XXXXXX")
+ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
 
 # ---- vngcloud ------------------------------------------------------------
 
@@ -464,9 +470,9 @@ server_private_ip() {
 # The drill server's host key is the one this run generated and handed to
 # cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
 # strict checking: a server that presents any other key is refused.
-prod_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$run/prod.sock" -o ControlPersist=15m
+prod_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$ssh_dir/prod.sock" -o ControlPersist=15m
   -o ConnectTimeout=15)
-drill_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$run/drill.sock" -o ControlPersist=15m
+drill_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$ssh_dir/drill.sock" -o ControlPersist=15m
   -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "HostKeyAlias=$SERVER_NAME" -o LogLevel=ERROR
   -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=30)
 
@@ -494,7 +500,7 @@ connect_drill() {
   drill_ip=$(server_private_ip)
   [[ -n $drill_ip ]] || die "could not read the drill server's private IP"
   if ((!direct)); then
-    drill_opts+=(-o "ProxyCommand=ssh -p $SSH_PORT -o ControlPath=$run/prod.sock -W %h:%p $ADMIN_USER@$prod_host")
+    drill_opts+=(-o "ProxyCommand=ssh -p $SSH_PORT -o ControlPath=$ssh_dir/prod.sock -W %h:%p $ADMIN_USER@$prod_host")
   fi
   prsh true || die "cannot reach the production host $prod_host over SSH"
   say "waiting for SSH on the drill server $drill_ip"

@@ -1,4 +1,4 @@
-name: Set up the trusted-browser proof harness
+name: Set up HTTPS proof harness
 description: >-
   Prepares a runner for the dev-https browser proofs: Node, Go, Caddy, the
   pinned host Chromium, the runner-local database, the native HTTPS harness,

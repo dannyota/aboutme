@@ -133,7 +133,7 @@ cd deploy/observer && GOWORK=off go test ./...
 
 `make observer-test` from the repository root runs the same command. GitHub CI
 additionally runs `go build`, `go vet`, `golangci-lint`, a `go mod tidy` no-op
-check, and `govulncheck` (`.github/workflows/ci.yml`, the `observer` job).
+check, and `govulncheck` (`.github/workflows/ci.yml`, the `server` job).
 
 The ECS and Kubernetes adapters are tested against `httptest` servers standing
 in for the ECS control plane and the in-cluster Kubernetes API, using

@@ -293,7 +293,7 @@ grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
 
 # Hosted Semgrep runs one scan per selected product, each in its own job. The
 # jobs select Code and Supply Chain, fail closed, and leave secret scanning to
-# gitleaks. The gate requires each job and permits only these jobs to skip.
+# gitleaks. The gate also permits the named prose omissions on pull requests.
 semgrep_jobs=(semgrep-code semgrep-supply-chain)
 semgrep_if="    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
 actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_ALL=C sort)
@@ -344,14 +344,40 @@ for job in "${semgrep_jobs[@]}"; do
   grep -Fxq "      - $job" <<<"$CI_JOB" ||
     fail "ci gate does not require the $job job"
 done
-[ "$(grep -Fc '"skipped"' <<<"$CI_JOB")" -eq 1 ] ||
-  fail "ci gate accepts a skipped result in more than one place"
-grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
-  fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
-grep -Fq "ALLOW_SEMGREP_SKIP: \${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}" <<<"$CI_JOB" ||
-  fail "ci gate does not bind Semgrep skips to runs outside main pushes and main dispatches"
-grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
-  fail "ci gate does not enforce the Semgrep skip condition"
+assert_skip_permissions() { # aggregate-job-body
+  grep -Fq "ALLOW_SEMGREP_SKIP: \${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}" <<<"$1" ||
+    fail "ci gate does not bind Semgrep skips to runs outside main pushes and main dispatches"
+  grep -Fq '$allow_semgrep_skip == "true"' <<<"$1" &&
+    grep -Fq '(.key | IN("semgrep-code", "semgrep-supply-chain"))' <<<"$1" ||
+    fail "ci gate does not enforce named Semgrep skips"
+  grep -Fq '$selection == "prose" and $event == "pull_request"' <<<"$1" &&
+    grep -Fq '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))' <<<"$1" ||
+    fail "ci gate does not enforce named pull request prose skips"
+  [ "$(grep -Fc '.value.result == "skipped"' <<<"$1")" -eq 1 ] ||
+    fail "ci gate accepts a skipped result in more than one place"
+}
+assert_skip_permissions "$CI_JOB"
+for pattern in '$allow_semgrep_skip == "true"' '(.key | IN("semgrep-code", "semgrep-supply-chain"))'; do
+  expect_guard_drift assert_skip_permissions "$(grep -Fv "$pattern" <<<"$CI_JOB")" \
+    'ci gate does not enforce named Semgrep skips'
+done
+for pattern in '$selection == "prose" and $event == "pull_request"' '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))'; do
+  expect_guard_drift assert_skip_permissions "$(grep -Fv "$pattern" <<<"$CI_JOB")" \
+    'ci gate does not enforce named pull request prose skips'
+done
+
+assert_vn_selection() { # caller-job-body
+  grep -Fxq "    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'" <<<"$1" ||
+    fail "VN caller does not use the exact selection condition"
+  grep -Fxq '    needs: [preflight]' <<<"$1" ||
+    fail "VN caller does not require preflight"
+}
+VN_JOB=$(awk '/^  vn-infra:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+assert_vn_selection "$VN_JOB"
+expect_guard_drift assert_vn_selection "$(sed '/^    if:/d' <<<"$VN_JOB")" \
+  'VN caller does not use the exact selection condition'
+expect_guard_drift assert_vn_selection "$(sed '/^    needs:/d' <<<"$VN_JOB")" \
+  'VN caller does not require preflight'
 
 # Only the connected Semgrep jobs may read a stored secret. GITHUB_TOKEN is
 # GitHub's per-run token and remains available to release publication jobs.

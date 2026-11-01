@@ -57,7 +57,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 operational-test: operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 
 operational-test-fast: ## operational-test's sub-second-to-low-single-digit-second scripts
-	python3 -I -c 'from pathlib import Path; path = Path("scripts/collect-browser-diagnostics.py"); compile(path.read_bytes(), str(path), "exec")'
+	python3 -I -c 'from pathlib import Path; paths = ("scripts/collect-browser-diagnostics.py", "scripts/ci-path-selection.py"); [compile(Path(path).read_bytes(), path, "exec") for path in paths]'
 	bash -n scripts/test/security-scan-test.sh
 	bash scripts/test/security-scan-test.sh
 	bash -n scripts/test/native-http-capture-test.sh
