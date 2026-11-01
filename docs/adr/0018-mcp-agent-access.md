@@ -1,7 +1,9 @@
 # 0018: MCP agent access
 
-Status: Accepted (2026-09-01; extended 2026-10-13 and 2026-10-14). The CIMD
-extension is approved; implementation and production activation are pending.
+Status: Accepted (2026-09-01; extended 2026-10-13 and 2026-10-14). CIMD is
+implemented and enabled in production. The owner proof passed with Claude Code
+on 2026-10-14; hosted Claude's CIMD connection remains unverified. CI,
+independent review, and hosted HTTPS proof execution remain outstanding.
 
 ## Context
 
@@ -39,8 +41,8 @@ discover and connect without a bespoke handshake.
 **Client ID Metadata Documents (CIMD).** An MCP client may identify itself with
 an HTTPS metadata URL under the approved [CIMD design](../design/mcp-cimd.md).
 Dynamic client registration remains available. The extension keeps public
-clients, PKCE, account-wide scopes, and the publish boundary. Its implementation
-and production activation follow the release and proof steps in that design.
+clients, PKCE, account-wide scopes, and the publish boundary. The
+[production proof](../design/mcp-guide.md#other-clients) covers Claude Code.
 
 **Editor parity minus publish.** Fifteen tools cover resume lifecycle, content,
 and photo operations, and each dispatches into the same validation, sanitizer,
@@ -101,3 +103,5 @@ Former ADR 0026, unchanged in substance.
 - 2026-10-14: The owner approved the loopback-hostname addition.
 - 2026-11-01: Recorded the approved extension and distinguished it from
   implementation and production activation.
+- 2026-11-01: Corrected CIMD implementation and production status against the
+  recorded Claude Code proof; retained the outstanding verification gaps.
