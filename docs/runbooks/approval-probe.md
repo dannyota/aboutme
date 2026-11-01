@@ -125,10 +125,10 @@ reviews are visible, the expected result is `APPROVAL_COUNT`, or a conflicting
 comment/rejection refusal. Never treat that run as accepted.
 
 The fake-curl fixtures exercise an unrelated review on page one and the sole
-relevant approval on page two, including `Link` traversal and a third page.
-The checker retains advertised `last` bounds and refuses missing `next` before
-that page, missing `prev` after page one, changed bounds, empty advertised pages,
-or any relation beyond `last`. Fixture execution awaits hosted checks. GitHub's
+relevant approval on page two, including `Link` traversal and a third page. The
+checker retains advertised `last` bounds and refuses missing `next` before that
+page, missing `prev` after page one, changed bounds, empty advertised pages, or
+any relation beyond `last`. Fixture execution awaits hosted checks. GitHub's
 [review-history reference](https://docs.github.com/en/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run)
 does not document `per_page` or `page` for this endpoint. A single live page
 does **not** prove pagination support. Record unavailable live pagination as
