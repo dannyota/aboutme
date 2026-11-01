@@ -24,6 +24,10 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # apps/server/cmd/mcp-workflow/evidence.go and scripts/mcp-owner-workflow.sh
+      # pin the SDK evidence label; update both with the SDK.
+      - dependency-name: github.com/modelcontextprotocol/go-sdk
   - package-ecosystem: gomod
     directories:
       - /deploy/caddy/production/build

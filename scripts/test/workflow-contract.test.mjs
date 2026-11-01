@@ -845,6 +845,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         schedule: { interval: "weekly" },
         "open-pull-requests-limit": 2,
         groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
+        ignore: [{ "dependency-name": "github.com/modelcontextprotocol/go-sdk" }],
       },
       {
         "package-ecosystem": "gomod",
@@ -1003,7 +1004,9 @@ function checkDependabot(config) {
     .map((name) => ({ "dependency-name": name }));
   const scopes = [
     ["github-actions", ["/"], []],
-    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"], []],
+    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"], [
+      { "dependency-name": "github.com/modelcontextprotocol/go-sdk" },
+    ]],
     ["gomod", ["/deploy/caddy/production/build"], [
       { "dependency-name": "github.com/caddyserver/caddy/v2" },
       { "dependency-name": "github.com/google/cel-go", versions: [">= 0.29.0"] },
