@@ -64,13 +64,13 @@ for path in paths:
         digest.update(chunk)
     if f is not sys.stdin.buffer:
         f.close()
-    escaped = "\\" in path or "\n" in path
-    name = path.replace("\\", "\\\\").replace("\n", "\\n")
+    escaped = "\\" in path or "\n" in path or "\r" in path
+    name = path.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
     print(("\\" if escaped else "") + digest.hexdigest() + "  " + name)' "$@"
 }
 
 platform_prune_evidence() {
-  python3 -I -c 'import os,shutil,sys
+  LC_ALL=C python3 -I -c 'import os,shutil,sys
 root, prefix, keep = sys.argv[1], sys.argv[2] + ".", int(sys.argv[3])
 with os.scandir(root) as entries:
     dirs = [(e.stat(follow_symlinks=False).st_mtime_ns, os.fsencode(e.path), e.path)
