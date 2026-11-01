@@ -64,7 +64,7 @@ SELECT resume_id, requested_at, role, review_key, card_version, template_id, rev
 WHERE resume_id = $1
 `
 
-// Community showcase queries (docs/design/showcase.md, ADR 0029). The
+// Community showcase queries (docs/design/showcase.md, ADR 0028). The
 // resume_showcase row exists only while the opt-in does.
 func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcase, resumeID)

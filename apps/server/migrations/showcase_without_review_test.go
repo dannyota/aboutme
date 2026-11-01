@@ -1,4 +1,4 @@
-// Migration 00011 (docs/design/showcase.md "Data and contract", ADR 0029):
+// Migration 00011 (docs/design/showcase.md "Data and contract", ADR 0028):
 // the showcase has no review. It ends declined opt-ins, clears every stored
 // review result, defaults the unused review key, and adds the listing index.
 package migrations_test

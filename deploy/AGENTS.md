@@ -20,6 +20,6 @@ The Dockerfiles compile `apps/server/` and `apps/web/` into release images. The 
 
 ## Authorities and checks
 
-Read [deployment rules](../instructions/deploy.md), [release rules](../instructions/releases.md), [Vietnam production design](../docs/design/vietnam-production.md), and [production runbook](../docs/runbooks/production.md). [ADR 0027](../docs/adr/0027-vietnam-hosted-production.md) owns the live hosting choice.
+Read [deployment rules](../instructions/deploy.md), [release rules](../instructions/releases.md), [Vietnam production design](../docs/design/vietnam-production.md), and [production runbook](../docs/runbooks/production.md). [ADR 0026](../docs/adr/0026-vietnam-hosted-production.md) owns the live hosting choice.
 
 Component guides name static suites. [Verification](../instructions/verification.md) owns CI evidence; [release rules](../instructions/releases.md) own image build checks and publication eligibility.

@@ -391,7 +391,7 @@ type Querier interface {
 	// A stored card is derived data (ADR 0014); every public read passes the
 	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
-	// Community showcase queries (docs/design/showcase.md, ADR 0029). The
+	// Community showcase queries (docs/design/showcase.md, ADR 0028). The
 	// resume_showcase row exists only while the opt-in does.
 	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
 	// Locks the opt-in row so concurrent derived-value writes serialize.

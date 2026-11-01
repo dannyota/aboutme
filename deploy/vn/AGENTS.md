@@ -22,6 +22,6 @@ Keep persistent deployment locks and workload locks intact. Failed recovery reta
 
 ## Authorities and checks
 
-[Deployment rules](../../instructions/deploy.md), [release rules](../../instructions/releases.md), [production runbook](../../docs/runbooks/production.md), and [Vietnam README](README.md) own deployment and recovery. [Vietnam design](../../docs/design/vietnam-production.md) and [ADR 0027](../../docs/adr/0027-vietnam-hosted-production.md) own host layout and trust boundaries.
+[Deployment rules](../../instructions/deploy.md), [release rules](../../instructions/releases.md), [production runbook](../../docs/runbooks/production.md), and [Vietnam README](README.md) own deployment and recovery. [Vietnam design](../../docs/design/vietnam-production.md) and [ADR 0026](../../docs/adr/0026-vietnam-hosted-production.md) own host layout and trust boundaries.
 
 [Verification](../../instructions/verification.md) names the hosted VN infrastructure gate. `tests/deploy-safety-test.sh`, `tests/deploy-failure-test.sh`, `tests/workload-lock-test.sh`, and `tests/secrets-regression-test.sh` cover static safety; the remaining `tests/` cover deployment, observer publication, alerts, and CrowdSec. Infrastructure formatting and validation use the hosted gate.

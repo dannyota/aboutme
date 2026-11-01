@@ -3,8 +3,8 @@
 #
 #   tls.sh export       export the ACM origin certificate for aboutme.vn and
 #                       www.aboutme.vn (docs/design/cloudfront-edge.md,
-#                       "Origin certificate"; ADR 0025) to SSM, and print the
-#                       next step
+#                       "Origin certificate"; docs/adr/history/aws-production.md)
+#                       to SSM, and print the next step
 #   tls.sh client-ca      new CloudFront origin mTLS CA (docs/design/
 #                         cloudfront-edge.md, "Origin access"): the CA
 #                         certificate joins the SSM trust pool (key

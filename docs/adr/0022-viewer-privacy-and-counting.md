@@ -46,7 +46,7 @@ public representation is served without authentication.
 A view counts when it passes the active layers
 ([counting](../design/viewer-analytics/counting.md)). Layers 2 and 3 were
 approved for AWS delivery and are inactive on direct Vietnam delivery under ADR
-0027:
+0026:
 
 1. Known crawlers, by user agent on the HTML request, never count; link-preview
    fetchers become share signals.

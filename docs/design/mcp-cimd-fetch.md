@@ -126,7 +126,7 @@ The guard matters on the production host. Go runs in the `aboutme-server`
 container with host networking, so it shares the host loopback with Caddy.
 PostgreSQL runs on the same Vietnam host
 ([Vietnam production](vietnam-production.md#host),
-[ADR 0027](../adr/0027-vietnam-hosted-production.md)). The fetch leaves through
+[ADR 0026](../adr/0026-vietnam-hosted-production.md)). The fetch leaves through
 the host's floating IP like other outbound calls; there is no egress proxy. The
 guard lives in Go, not in host networking.
 

@@ -1,7 +1,7 @@
 # Admission policy catalog
 
 This catalog lists the production rate limiters and concurrency caps and the
-fleet scope each takes under [ADR 0026](../../adr/0026-replica-scaling.md). The
+fleet scope each takes under [ADR 0025](../../adr/0025-replica-scaling.md). The
 current columns describe built behavior. The fleet column is accepted design;
 [admission](admission.md) defines it. Numeric budgets come from
 [`budgets.md`](../budgets.md).

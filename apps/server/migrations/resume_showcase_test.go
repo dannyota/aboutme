@@ -1,5 +1,5 @@
 // Community showcase table (docs/design/showcase.md "Data and contract", ADR
-// 0029; AC-SHOW-001, AC-SHOW-009, AC-SHOW-015): its column checks, cascades,
+// 0028; AC-SHOW-001, AC-SHOW-009, AC-SHOW-015): its column checks, cascades,
 // listing index, and the slug refusal.
 package migrations_test
 

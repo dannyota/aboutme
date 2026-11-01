@@ -1,6 +1,6 @@
 # Fleet admission, render and realtime
 
-Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md). Not built.
+Status: Accepted under [ADR 0025](../../adr/0025-replica-scaling.md). Not built.
 The [scaling index](README.md) holds the shared rules.
 
 With two replicas, every limit in the [policy catalog](policy-catalog.md) must

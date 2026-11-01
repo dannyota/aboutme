@@ -1,14 +1,14 @@
 # Replica scaling
 
-Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md), with
-[ADR 0027](../../adr/0027-vietnam-hosted-production.md) and
+Status: Accepted under [ADR 0025](../../adr/0025-replica-scaling.md), with
+[ADR 0026](../../adr/0026-vietnam-hosted-production.md) and
 [ADR 0005](../../adr/0005-database-migrations.md). These pages hold the accepted
 design that a second serving replica needs. Only the
 [policy catalog](policy-catalog.md) describes built behavior.
 
 ## Current state
 
-Production runs one serving replica on one host under ADR 0027. Deployment
+Production runs one serving replica on one host under ADR 0026. Deployment
 configuration, not the database, holds the service at one replica. With one
 replica these process-local mechanisms are correct:
 
@@ -20,7 +20,7 @@ replica these process-local mechanisms are correct:
   in the policy catalog.
 
 The schema holds no coordination tables. Migrations run as a deploy step through
-plain goose under a session advisory lock (ADR 0026, ADR 0005). The design below
+plain goose under a session advisory lock (ADR 0025, ADR 0005). The design below
 returns as new migrations with explicit grants.
 
 ## Pages
@@ -36,7 +36,9 @@ returns as new migrations with explicit grants.
 
 This design has no database write barrier, scheduled UAT stop receipt, wake
 operation or protected migrator. Those served scheduled UAT shutdown and
-migration inside a running fleet. ADR 0026 and ADR 0025 retired both uses, and
+migration inside a running fleet. ADR 0025 and the
+[historical AWS production decision](../../adr/history/aws-production.md)
+retired both uses, and
 ADR 0005 removed the code. Hosted UAT returns at about 500 users under a new
 decision.
 
@@ -80,7 +82,7 @@ Raise the service maximum above one only after these steps, in order:
 4. Compose membership, readiness and the lifecycle controller.
 5. Prove locally a 1 → 2 → 1 transition during writes, revocation, render and
    SSE traffic, plus crash and graceful-drain cases, without weakening any limit
-   (ADR 0026).
-6. Decide the fleet edge and load balancer. Single-host production (ADR 0027)
-   has no load balancer; the ALB edge that ADR 0026's history records is
+   (ADR 0025).
+6. Decide the fleet edge and load balancer. Single-host production (ADR 0026)
+   has no load balancer; the ALB edge that ADR 0025's history records is
    retired.

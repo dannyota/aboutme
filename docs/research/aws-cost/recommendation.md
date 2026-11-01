@@ -10,12 +10,12 @@ The owner approved part-time UAT and production autoscaling on 2026-09-06:
 USD before tax. These are workload estimates, not a measured bill or a promise
 that arbitrary traffic fits the range.
 
-[ADR 0026](../../adr/0026-replica-scaling.md) records the decision. The
+[ADR 0026](../../adr/0025-replica-scaling.md) records the decision. The
 operating plan replaces the proposed $100, 14-day UAT campaign and separate
 $8/month retained-resource allowance. Use **$30/month** as the UAT operating
 ceiling, including retained and allocated shared costs. Production launch still
 requires Phase 11 approval under
-[ADR 0025](../../adr/0025-single-host-production.md). This research has not
+[ADR 0025](../../adr/history/aws-production.md). This research has not
 provisioned resources or purchased a plan.
 
 ## Selected configuration
@@ -164,7 +164,7 @@ environment. These operations have different costs and data-loss effects.
 
 ## GitHub and mail handoff
 
-[ADR 0025](../../adr/0025-single-host-production.md) keeps all four image builds
+[ADR 0025](../../adr/history/aws-production.md) keeps all four image builds
 and native smoke in public `aboutme`. Private `aboutme-infra` validates
 artifacts, publishes to ECR, and deploys using its available quota. Public
 workflows receive no AWS credentials. Keep public caches within 10 GiB and

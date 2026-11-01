@@ -2,7 +2,7 @@
 
 Fifteen acceptance-criterion rows use the `AC-SHOW-` prefix, for the community
 showcase ([design](../../design/showcase.md),
-[ADR 0029](../../adr/0029-community-showcase.md)). The owner approved S1 to S13
+[ADR 0028](../../adr/0028-community-showcase.md)). The owner approved S1 to S13
 on 2026-09-27 and removed review on 2026-10-01. Twelve rows are `LANDED`;
 `AC-SHOW-010` and `AC-SHOW-011` need a release step and are `PLANNED`;
 `AC-SHOW-007` is `DEFERRED`. A `LANDED` row moves to `PROVEN` once GitHub CI

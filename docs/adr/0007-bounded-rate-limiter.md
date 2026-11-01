@@ -40,7 +40,7 @@ The route-specific limiter is additional to the outer client-IP limiter. The
 numeric budget source is [`../design/budgets.md`](../design/budgets.md).
 
 Limiter state is process-local, which is correct while one replica serves (ADR
-0026). A second replica needs the fleet rate policies of the
+0025). A second replica needs the fleet rate policies of the
 [scaling design](../design/scaling/admission.md): shared PostgreSQL time and
 state with the same algorithms, overflow, and debt, and one 300 per minute
 client-IP budget shared by both outer API route chains.

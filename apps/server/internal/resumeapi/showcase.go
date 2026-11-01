@@ -1,7 +1,7 @@
 package resumeapi
 
 // Community showcase publish rules: the opt-in switch and the owner's role
-// (docs/design/showcase.md "Opt-in" and "Data and contract", ADR 0029).
+// (docs/design/showcase.md "Opt-in" and "Data and contract", ADR 0028).
 
 import (
 	"context"

@@ -46,10 +46,10 @@ for deployment smoke checks.
 
 Production runs on one GreenNode vServer in Ho Chi Minh City, with Caddy,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage, per
-[ADR 0027](adr/0027-vietnam-hosted-production.md) and the
+[ADR 0026](adr/0026-vietnam-hosted-production.md) and the
 [Vietnam production design](design/vietnam-production.md). Cloudflare provides
 DNS-only records; clients connect directly to the host. It runs one replica
-under [ADR 0026](adr/0026-replica-scaling.md). Revocation leases, print jobs,
+under [ADR 0025](adr/0025-replica-scaling.md). Revocation leases, print jobs,
 event subscribers, and limiters hold process-local state, which is correct only
 with one replica. The [scaling contract](design/scaling/README.md) records which
 parts of a multi-replica runtime are deferred.

@@ -178,7 +178,7 @@ records nothing; a malformed body is a 400 and records nothing.
 
 A restart loses the day's map, so a person who views before and after a deploy
 may count twice that day. Production has one replica
-([ADR 0026](../../adr/0026-replica-scaling.md)); a second replica needs a shared
+([ADR 0025](../../adr/0025-replica-scaling.md)); a second replica needs a shared
 dedupe store ([scaling](../scaling/README.md)).
 
 ## Aggregation

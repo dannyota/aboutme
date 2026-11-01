@@ -2,7 +2,7 @@
 
 ## Source map and status
 
-This directory is an undeployed reference. Production runs in `deploy/vn/` under [ADR 0027](../../docs/adr/0027-vietnam-hosted-production.md). AWS roots, resource names, and adapter configuration here are not evidence of live resources or authority to operate them.
+This directory is an undeployed reference. Production runs in `deploy/vn/` under [ADR 0026](../../docs/adr/0026-vietnam-hosted-production.md). AWS roots, resource names, and adapter configuration here are not evidence of live resources or authority to operate them.
 
 |Path|Role|
 |-|-|
