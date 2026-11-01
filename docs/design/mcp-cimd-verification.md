@@ -1,6 +1,8 @@
 # MCP CIMD verification
 
-Status: approved design; implementation is next.
+Status: implemented and enabled in production. The owner proof passed with
+Claude Code on 2026-10-14; hosted Claude's CIMD connection remains unverified.
+CI, independent review, and hosted HTTPS proof execution remain outstanding.
 [MCP Client ID Metadata Documents](mcp-cimd.md) holds the motivation, sources,
 release order, and the approval record.
 
