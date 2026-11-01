@@ -187,3 +187,24 @@ export async function galleryFontLoaded(root: Locator): Promise<boolean> {
     face.family.replaceAll('"', '') === 'Be Vietnam Pro'
     && face.status === 'loaded'));
 }
+
+// --- verify and card ---
+
+/** Measure crop geometry in viewport coordinates. */
+export async function measureCardCrop(image: Locator): Promise<{
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}> {
+  return image.evaluate((element) => {
+    const imageBox = element.getBoundingClientRect();
+    const frame = element.parentElement!.getBoundingClientRect();
+    return {
+      height: imageBox.height / frame.height,
+      left: (imageBox.left - frame.left) / frame.width,
+      top: (imageBox.top - frame.top) / frame.height,
+      width: imageBox.width / frame.width,
+    };
+  });
+}
