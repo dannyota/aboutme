@@ -1,6 +1,8 @@
 # MCP Client ID Metadata Documents
 
-Status: approved design; implementation is next.
+Status: implemented and enabled in production. The owner proof passed with
+Claude Code on 2026-10-14; hosted Claude's CIMD connection remains unverified.
+CI, independent review, and hosted HTTPS proof execution remain outstanding.
 
 C1 to C9 approved by the owner on 2026-10-13; C10 and C11 decided as recommended
 on the owner's instruction the same day. The [decision record](#owner-decisions)
