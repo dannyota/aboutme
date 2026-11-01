@@ -38,9 +38,8 @@ This design has no database write barrier, scheduled UAT stop receipt, wake
 operation or protected migrator. Those served scheduled UAT shutdown and
 migration inside a running fleet. ADR 0025 and the
 [historical AWS production decision](../../adr/history/aws-production.md)
-retired both uses, and
-ADR 0005 removed the code. Hosted UAT returns at about 500 users under a new
-decision.
+retired both uses, and ADR 0005 removed the code. Hosted UAT returns at about
+500 users under a new decision.
 
 ## Shared rules
 

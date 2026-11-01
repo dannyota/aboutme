@@ -74,8 +74,9 @@ retention policy; other privacy deadlines remain in force.
 ## Context
 
 At the provider decision, production ran on one AWS host in Singapore
-([historical AWS production decision](history/aws-production.md)), with RDS,
-S3, SES, and a Google Workspace mailbox. Account, resume, photo, and sign-in data were stored abroad.
+([historical AWS production decision](history/aws-production.md)), with RDS, S3,
+SES, and a Google Workspace mailbox. Account, resume, photo, and sign-in data
+were stored abroad.
 
 Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
 transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),

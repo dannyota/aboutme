@@ -164,12 +164,12 @@ environment. These operations have different costs and data-loss effects.
 
 ## GitHub and mail handoff
 
-[ADR 0025](../../adr/history/aws-production.md) keeps all four image builds
-and native smoke in public `aboutme`. Private `aboutme-infra` validates
-artifacts, publishes to ECR, and deploys using its available quota. Public
-workflows receive no AWS credentials. Keep public caches within 10 GiB and
-private artifacts limited to release metadata. The old private Actions columns
-are overage sensitivities, not approved spend.
+[ADR 0025](../../adr/history/aws-production.md) keeps all four image builds and
+native smoke in public `aboutme`. Private `aboutme-infra` validates artifacts,
+publishes to ECR, and deploys using its available quota. Public workflows
+receive no AWS credentials. Keep public caches within 10 GiB and private
+artifacts limited to release metadata. The old private Actions columns are
+overage sensitivities, not approved spend.
 
 GitHub private-repository required-reviewer eligibility remains a Phase 10
 input. Verify an existing eligible plan or design a replacement approval

@@ -2,8 +2,9 @@
 
 Status: Historical. Accepted from 2026-09-05 to 2026-09-26 by the human owner's
 direction and superseded for production by
-[ADR 0027](../0026-vietnam-hosted-production.md) on 2026-10-11. The owner approved
-every choice in the [CloudFront edge design](../../design/cloudfront-edge.md).
+[ADR 0027](../0026-vietnam-hosted-production.md) on 2026-10-11. The owner
+approved every choice in the
+[CloudFront edge design](../../design/cloudfront-edge.md).
 
 The AWS deployment was removed on 2026-10-11; the code is kept as an undeployed
 reference. The decision and its history below remain as historical evidence.
@@ -86,9 +87,9 @@ images by digest.
 - Route 53 signs the zone with DNSSEC. The key-signing key (key tag 2015) uses a
   KMS key in `us-east-1`. Two CloudWatch alarms mail the owner when Route 53
   reports a signing problem.
-- The move from Cloudflare follows the [DNS runbook](../../runbooks/dns.md): remove
-  Cloudflare's DS record, change name servers after the DS TTL, add the Route 53
-  DS record after Cloudflare's NS TTL, then remove the Cloudflare zone.
+- The move from Cloudflare follows the [DNS runbook](../../runbooks/dns.md):
+  remove Cloudflare's DS record, change name servers after the DS TTL, add the
+  Route 53 DS record after Cloudflare's NS TTL, then remove the Cloudflare zone.
 
 ## Consequences
 

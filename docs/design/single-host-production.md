@@ -2,8 +2,7 @@
 
 This page describes the undeployed AWS single-host reference architecture under
 [historical AWS production decision](../adr/history/aws-production.md).
-Production uses the
-[Vietnam host](vietnam-production.md) under
+Production uses the [Vietnam host](vietnam-production.md) under
 [ADR 0026](../adr/0026-vietnam-hosted-production.md). Follow the
 [production runbook](../runbooks/production.md) for live operations. The AWS
 commands below apply only after rebuilding and reviewing that path.
