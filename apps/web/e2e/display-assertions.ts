@@ -208,3 +208,60 @@ export async function measureCardCrop(image: Locator): Promise<{
     };
   });
 }
+
+// --- showcase-baselines.spec.ts ---
+
+/** Check grid tracks, gaps, and sibling separation in one layout frame. */
+export async function measureShowcaseGrid(
+  grid: Locator,
+  columns: number,
+  gap: number,
+): Promise<boolean> {
+  return grid.evaluate((element, expected) => {
+    const style = getComputedStyle(element);
+    const tracks = style.gridTemplateColumns.split(' ');
+    const bounds = element.getBoundingClientRect();
+    const boxes = Array.from(element.children, (child) =>
+      child.getBoundingClientRect());
+    const width = (bounds.width - expected.gap * (expected.columns - 1))
+      / expected.columns;
+    return tracks.length === expected.columns
+      && Math.abs(parseFloat(style.columnGap) - expected.gap) <= 1
+      && Math.abs(parseFloat(style.rowGap) - expected.gap) <= 1
+      && boxes.every((box, index) => {
+        const column = index % expected.columns;
+        const previous = boxes[index - 1];
+        const above = boxes[index - expected.columns];
+        return box.width > 0 && box.height > 0
+          && Math.abs(box.width - width) <= 1
+          && Math.abs(box.left - bounds.left
+            - column * (width + expected.gap)) <= 1
+          && (!previous || column === 0
+            || box.left >= previous.right + expected.gap - 1)
+          && (!above || box.top >= above.bottom + expected.gap - 1);
+      });
+  }, { columns, gap });
+}
+
+/** Check that a fixed sheet and its controls fit the viewport. */
+export async function measureShowcaseSheet(sheet: Locator): Promise<boolean> {
+  return sheet.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const controls = element.querySelectorAll<HTMLElement>(
+      '[data-action="showcase-filters-close"], '
+      + '[data-action="showcase-filters-clear"], '
+      + '[data-action="showcase-filters-apply"]',
+    );
+    return box.width > 0 && box.height > 0
+      && box.left >= -1 && box.right <= innerWidth + 1
+      && box.top >= -1 && Math.abs(box.bottom - innerHeight) <= 1
+      && box.height <= innerHeight * 0.85 + 1
+      && controls.length === 3
+      && Array.from(controls).every((control) => {
+        const rect = control.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0
+          && rect.left >= box.left - 1 && rect.right <= box.right + 1
+          && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
+      });
+  });
+}
