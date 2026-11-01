@@ -3,6 +3,12 @@
 Status: Proposed 2026-11-01; ADR 0026 amendment pending owner acceptance after
 the approval API proof
 
+Runtime decision (owner, 2026-11-01): keep the Podman containers on the host and
+use Ansible pull for deployment and host configuration. A read-only measurement
+that day found about 11 MiB and no measurable CPU for the container runtime
+helpers on the 2 vCPU, 4 GiB host, so native services would save little while
+losing signed image digests, read-only roots, and container isolation.
+
 The production host verifies an explicitly approved request, then runs
 `ansible-pull` at its exact signed coordinator commit. GitHub builds and signs
 public images. The host holds no GitHub credential. CI receives no production
