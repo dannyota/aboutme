@@ -1,4 +1,4 @@
-name: security-scan
+name: Security scan
 
 # Scans default-branch dependencies and published release images on a schedule,
 # so a vulnerability disclosed after a release still surfaces. This does not
@@ -26,6 +26,7 @@ permissions:
 
 jobs:
   govulncheck:
+    name: Scan Go dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,7 +39,7 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: apps/server
+      - name: Scan server Go dependencies
         run: govulncheck ./...
         working-directory: apps/server
       - if: ${{ !cancelled() }}
@@ -61,6 +62,7 @@ jobs:
         run: echo "### govulncheck failed (reachable vulnerability or scan error)" >>"$GITHUB_STEP_SUMMARY"
 
   npm-audit:
+    name: Scan npm dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -88,6 +90,7 @@ jobs:
   # weekly-scan continues past a failing target so one run always reports
   # the complete picture.
   image-scan:
+    name: Scan release images
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

@@ -1,4 +1,4 @@
-name: release-check
+name: Release checks
 
 # Checks every release image on native runners without publication authority.
 on:
@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   build:
+    name: Release checks (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     permissions:

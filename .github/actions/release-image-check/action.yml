@@ -1,4 +1,4 @@
-name: Release image check
+name: Check release image
 description: Build, smoke-test, and scan one native release image without publication.
 inputs:
   report-name:
