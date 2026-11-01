@@ -162,9 +162,8 @@ This amendment narrows the 2026-10-14 exception to Synthetic because Telegram
 needs no notification quota. It supersedes the manual-only renewal sentence in
 the proposed deployment amendment above, without accepting that deployment
 proposal. It also makes this named workflow the sole exception to the blanket
-no-stored-secrets wording in
-[ADR 0024](0024-delivery-gates.md#amendment-code-scanning-without-stored-secrets-2026-11-01).
-Build, test, release, and code-scanning workflows remain without stored secrets;
+no-stored-secrets wording in [ADR 0024](0024-delivery-gates.md#decision). Build,
+test, release, and code-scanning workflows remain without stored secrets;
 GitHub's per-run token remains allowed under their existing permissions.
 
 The benefit is unattended renewal without exposing the key to host compromise or
