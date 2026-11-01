@@ -1,11 +1,12 @@
 # 0025: Single-host AWS production behind CloudFront and Route 53
 
-The AWS deployment was removed on 2026-10-11; the code is kept as an undeployed
-reference.
+Status: Historical. Accepted from 2026-09-05 to 2026-09-26 by the human owner's
+direction and superseded for production by
+[ADR 0027](0027-vietnam-hosted-production.md) on 2026-10-11. The owner approved
+every choice in the [CloudFront edge design](../design/cloudfront-edge.md).
 
-Status: Accepted (2026-09-05 to 2026-09-26), by the human owner's direction. The
-owner approved every choice in the
-[CloudFront edge design](../design/cloudfront-edge.md).
+The AWS deployment was removed on 2026-10-11; the code is kept as an undeployed
+reference. The decision and its history below remain as historical evidence.
 
 ## Context
 
@@ -131,3 +132,5 @@ images by digest.
   at Cloudflare" clause was replaced by 0056.
 - Former ADR 0056 (2026-09-26): Route 53 DNS with DNSSEC, so CloudFront picks
   edges near the viewer.
+- 2026-11-01: Marked this AWS decision historical and consolidated its surviving
+  single-host and public release rules in ADR 0027 after the Vietnam cutover.

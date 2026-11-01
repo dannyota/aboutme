@@ -6,22 +6,10 @@ direction; the design choices in the
 2026-10-10 and amended on 2026-10-11. The CrowdSec storage and backup amendment
 was accepted on 2026-10-18. Production runs on the Vietnam host.
 
-## Context
-
-At the provider decision, production ran on one AWS host in Singapore (ADR
-0025), with RDS, S3, SES, and a Google Workspace mailbox. Account, resume,
-photo, and sign-in data were stored abroad.
-
-Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
-transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),
-treats storing personal data on a foreign provider's cloud as such a transfer.
-Hosting in Vietnam removes that transfer for the core service. The owner files
-no data protection impact assessment (DPIA) or cross-border dossier
-(2026-10-10): the processors are GreenNode and Bizfly, both in Vietnam.
-
 ## Decision
 
-Production uses providers that store and process data in Vietnam:
+Production runs on one host and uses providers that store and process data in
+Vietnam:
 
 - GreenNode (VNG Cloud) for compute (vServer) and object storage (vStorage). Its
   vWAF is the escalation if a flood exceeds the host.
@@ -39,8 +27,10 @@ Production uses providers that store and process data in Vietnam:
   [CrowdSec privacy contract](../design/crowdsec-http-privacy.md).
 - The release fence, secrets, jobs, logs, and alarms move to the host: journald
   keeps the logs and a host timer mails alarms. A GreenNode vMonitor synthetic
-  check probes `/readyz` from outside the host and mails the owner; the GitHub
-  uptime workflow remains a slower backstop.
+  check probes `/readyz` from outside the host. Its `aboutme-readyz` alarm fires
+  when one of two locations fails three consecutive one-minute tests. It sends
+  In-alarm, Up, and Undetermined notifications to the Telegram channel
+  `aboutme-alerts`; the GitHub uptime workflow remains a slower backstop.
 
 The AWS production stack and its state bootstrap are removed. Nothing from
 `deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
@@ -65,16 +55,34 @@ These stay outside the move:
   sends their own mail; the application never sends account data to it.
 - GitHub holds code and public images with no personal data.
 
-These stand through the move: the single-host shape, production without hosted
-UAT until about 500 users, laptop-run deploys by digest, public infrastructure
-code without secrets, GitHub without cloud credentials other than the vMonitor
-quota-renewal service account (History, 2026-10-14), one serving replica and
-deploy-step migrations (ADRs 0005 and 0026), the second-factor fence rules with
-a new store (ADR 0017), and the live-state gate (ADR 0010), with no edge cache.
-Public HTTP, SSE, and MCP contracts and private media authorization remain in
-force. The CrowdSec amendment separates its live-retention deadline from the
-existing physical-backup retention policy; other privacy deadlines remain in
-force.
+Production has no hosted UAT until about 500 users. The owner runs deployments
+from the laptop by digest. Release images build from the exact reviewed commit,
+are public, and carry signed build provenance; public build archives and logs
+contain only public inputs and synthetic evidence. Infrastructure code is public
+and contains no secrets, account identifiers, or private hostnames. GitHub holds
+no cloud credentials other than the vMonitor quota-renewal service account
+accepted on 2026-10-14 (see History). Cost reductions must not silently weaken
+authentication, private media, revocation, backup, or recovery requirements.
+
+One serving replica and deploy-step migrations follow ADRs 0026 and 0005. The
+second-factor fence rules (ADR 0017) use a host store, and the live-state gate
+(ADR 0010) applies without an edge cache. Public HTTP, SSE, and MCP contracts
+and private media authorization remain in force. The CrowdSec amendment
+separates its live-retention deadline from the existing physical-backup
+retention policy; other privacy deadlines remain in force.
+
+## Context
+
+At the provider decision, production ran on one AWS host in Singapore
+([ADR 0025](0025-single-host-production.md)), with RDS, S3, SES, and a Google
+Workspace mailbox. Account, resume, photo, and sign-in data were stored abroad.
+
+Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
+transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),
+treats storing personal data on a foreign provider's cloud as such a transfer.
+Hosting in Vietnam removes that transfer for the core service. The owner files
+no data protection impact assessment (DPIA) or cross-border dossier
+(2026-10-10): the processors are GreenNode and Bizfly, both in Vietnam.
 
 ## Consequences
 
@@ -100,23 +108,6 @@ force.
   writes would be a new transfer abroad, so recovery after that is forward only.
 - No AWS test environment remains deployed.
 
-## Amendment: 2026-10-11
-
-Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC, on
-the Free plan. Every record is DNS-only. Apex and `www` A records point to the
-host's floating IP with TTL 300. Cloudflare signs with DNSSEC algorithm 13; the
-owner adds its DS record at the `.vn` registrar. This replaces the Route 53 DNS
-choice. The zone, its key-signing key, and its KMS key were deleted on
-2026-10-11. The GitHub uptime workflow replaces the Route 53 health check.
-
-Production cut over on 2026-10-11 with release v0.7.3. The AWS production stack
-and state bootstrap were destroyed that day. RDS was deleted without a final
-snapshot. Production data lives only on the Vietnam host and its pgBackRest
-backups in GreenNode vStorage. The `aboutme-email` CloudFormation stack was also
-deleted, including its SES identity, configuration set, feedback queue, and
-alarms. Keeping AWS as a fictional-data test environment is superseded by
-removal of every deployed AWS resource.
-
 ## Proposed amendment (not accepted)
 
 Production supports host-initiated deployment through `ansible-pull` at an exact
@@ -136,6 +127,21 @@ explicit data-loss rules remain unchanged. vMonitor quota renewal remains
 manual; no renewal automation or monitoring host is introduced.
 
 ## History
+
+Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC, on
+the Free plan. Every record is DNS-only. Apex and `www` A records point to the
+host's floating IP with TTL 300. Cloudflare signs with DNSSEC algorithm 13; the
+owner adds its DS record at the `.vn` registrar. This replaces the Route 53 DNS
+choice. The zone, its key-signing key, and its KMS key were deleted on
+2026-10-11. The GitHub uptime workflow replaces the Route 53 health check.
+
+Production cut over on 2026-10-11 with release v0.7.3. The AWS production stack
+and state bootstrap were destroyed that day. RDS was deleted without a final
+snapshot. Production data lives only on the Vietnam host and its pgBackRest
+backups in GreenNode vStorage. The `aboutme-email` CloudFormation stack was also
+deleted, including its SES identity, configuration set, feedback queue, and
+alarms. Keeping AWS as a fictional-data test environment is superseded by
+removal of every deployed AWS resource.
 
 Former ADR 0051 (2026-09-24), unchanged in substance. Later records it did not
 foresee: former ADR 0054 put CloudFront in front of AWS production as an interim
@@ -173,3 +179,10 @@ recovery before consumer startup. The owner also approved conditional samples of
 rejected target paths, bounded by that contract. Fresh CrowdSec provisioning
 after every restore prevents old statistics and revoked credentials from
 returning to service. This is an accepted design, not evidence of cutover.
+
+2026-11-01: Consolidated the surviving single-host and public release rules from
+ADR 0025 here. This records existing decisions without changing their acceptance
+dates. The `aboutme-readyz` alarm moved to the Telegram channel `aboutme-alerts`
+for In-alarm, Up, and Undetermined notifications. It fires when one of two
+locations fails three consecutive one-minute tests. The email notification quota
+was deleted.

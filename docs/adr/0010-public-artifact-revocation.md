@@ -129,10 +129,9 @@ its commit:
   origin authorization check for every public reuse.
 - An operator account deletion lets responses admitted before its commit finish,
   which a fenced deletion would cancel.
-- The edge may store public bytes and answer a validated `304`, but it cannot
-  absorb a request without revalidation. Production's edge caches only hashed
-  `/_nuxt/*` assets and passes public representations through uncached, which is
-  stricter (ADR 0025).
+- An edge may store public bytes and answer a validated `304`, but it cannot
+  absorb a request without revalidation. Production delivers directly through
+  Caddy without an edge cache (ADR 0027).
 - Rendering and immutable media bytes can still use a bounded generation-keyed
   cache behind the gate.
 - Concurrency tests must cover a cached old response and a request admitted at
@@ -157,3 +156,6 @@ exempted the stored link-preview card from the 60-second cache limit. Former ADR
 
 Amended (2026-10-01): the operator `account-delete` command deletes an account
 without the in-process fences; new requests still return `404` at once.
+
+2026-11-01: Corrected production delivery to reflect the direct Vietnam host
+under ADR 0027, while retaining the live-state gate and revocation rules.

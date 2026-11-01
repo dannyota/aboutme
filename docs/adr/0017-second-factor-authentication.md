@@ -51,12 +51,13 @@ application access. The owner accepts the related first-enrollment denial risk.
 
 **Enrollment uses a durable release fence.** The
 [release-fence contract](../design/passkey-release-fence.md) owns the monotonic
-DynamoDB minimum release, serialized operation lock, roles, and failure order.
-Each factor release deploys with enrollment off; after flag-off proof, the
-serialized production operation raises the floor (v0.4.2 for passkeys, v0.4.7
-for TOTP); only then may enrollment turn on. Disabling enrollment later never
-lowers the floor or turns off verification. Direct AWS administration remains a
-named privileged bypass and must prove factor compatibility first.
+minimum release, serialized operation lock, and failure order. Production uses
+the root-owned host fence under ADR 0027. Each factor release deploys with
+enrollment off; after flag-off proof, the serialized production operation raises
+the floor (v0.4.2 for passkeys, v0.4.7 for TOTP); only then may enrollment turn
+on. Disabling enrollment later never lowers the floor or turns off verification.
+Privileged host administration is a bypass and must prove factor compatibility
+first.
 
 ### Passkeys
 
@@ -102,14 +103,14 @@ reuses that exact value.
 
 **Sealed secrets with a separate key ring.** AES-256-GCM binds ciphertext to its
 account, row, record kind, format, and key identifier. Each key ID is derived
-from its key value. Runtime holds one active key and at most one previous key,
-chosen from two production parameter slots by nonsecret OpenTofu variables. New
-writes use the active key. Successful use rotates lazily, and a bounded one-shot
-task in its own family rotates dormant rows before the previous key is removed.
-Only the app ECS execution role reads the exact TOTP parameter ARNs; scheduled
-jobs receive no TOTP key access. An unknown key ID or authenticated-decryption
-failure fails closed for that TOTP row only, keeps `/readyz` green, and raises a
-dedicated alarm. A malformed ring fails startup.
+from its key value. Runtime holds one active key and at most one previous key.
+New writes use the active key, and successful use rotates lazily. The host
+supplies keys as Podman secrets to units that need them. A bounded re-encryption
+operation must rotate dormant rows before the previous key is removed, but the
+reviewed [host rotation procedure](../runbooks/totp-keys.md#key-rotation)
+remains open. An unknown key ID or authenticated-decryption failure fails closed
+for that TOTP row only, keeps `/readyz` green, and raises a dedicated alarm. A
+malformed ring fails startup.
 
 **Guessing bound.** Each TOTP credential carries a consecutive-failure count and
 a cool-down that grows from 15 minutes to 24 hours, independent of client IP,
@@ -181,3 +182,5 @@ later, or a forward fix.
   authentication epoch, the wire contract, and the release fence (v0.4.2).
 - Former ADR 0049 (2026-09-23): authenticator-app second factor with sealed
   secrets and a derived-ID key ring, shared recovery, and floor v0.4.7.
+- 2026-11-01: Corrected the production fence and secret custody to match the
+  Vietnam host under ADR 0027, while retaining the accepted factor safeguards.
