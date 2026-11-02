@@ -417,7 +417,8 @@ async function expectCardDisplay(
       expected.style.backgroundImage = `radial-gradient(circle, `
         + `${tint(input.shares[2])} 3px, transparent 3.5px)`;
       const dots = getComputedStyle(expected).backgroundImage;
-      expected.style.maskImage = `linear-gradient(to ${direction}, `
+      const maskDirection = input.left ? '90deg' : '270deg';
+      expected.style.maskImage = `linear-gradient(${maskDirection}, `
         + '#000 0, #000 96px, transparent 285px)';
       const mask = getComputedStyle(expected).maskImage;
       expected.remove();
@@ -537,6 +538,15 @@ for (const [name, css] of [
     const assertCard = () => expectCardDisplay(page, card, 'no-photo-en');
     await assertCard();
     const mutation = await page.addStyleTag({ content: css });
+    if (name === 'band color') {
+      await expect(page.locator('.preview-card-band-left'))
+        .toHaveCSS('background-color', 'rgb(255, 0, 0)');
+    } else {
+      const dots = await page.locator('.preview-card-band-right')
+        .evaluate((element) =>
+          getComputedStyle(element, '::after').backgroundImage);
+      expect(dots).toBe('none');
+    }
     await expect(assertCard()).rejects.toThrow();
     await mutation.evaluate((node) => node.remove());
     await assertCard();
