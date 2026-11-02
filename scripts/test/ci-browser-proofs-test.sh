@@ -22,6 +22,21 @@ BIN=$WORK/bin
 mkdir -p "$REPO/scripts" "$REPO/.dev/native-https/evidence" \
   "$REPO/.dev/native-https/log" "$BIN"
 cp "$ROOT/scripts/ci-browser-proofs.sh" "$REPO/scripts/"
+cat >"$REPO/scripts/dev-https.sh" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = guard ] || exit 80
+shift
+allow_stop=0
+if [ "${1-}" = --allow-stop ]; then allow_stop=1; shift; fi
+[ "$1" = -- ] || exit 81
+shift
+printf 'guard:allow-stop=%s\n' "$allow_stop" >>"$GUARD_LOG"
+export PROOF_GUARDED=1
+"$@"
+status=$?
+[ "${GUARD_FAIL:-0}" = 0 ] || exit 82
+exit "$status"
+EOF
 
 # The fake make logs each target with the shard variables it saw. A TOTP
 # check leaves one enabled run directory holding each listed shard's own
@@ -34,6 +49,10 @@ cat >"$BIN/make" <<'EOF'
 #!/usr/bin/env bash
 printf '%s totp=%s passkey=%s\n' "$1" "${ABOUTME_TOTP_SHARD-unset}" \
   "${ABOUTME_PASSKEY_SHARD-unset}" >>"$CALL_LOG"
+case $1 in
+dev-https-*-check) [ "${PROOF_GUARDED:-0}" = 1 ] || exit 83 ;;
+*) [ "${PROOF_GUARDED:-0}" = 0 ] || exit 84 ;;
+esac
 evidence=.dev/native-https/evidence
 case $1 in
 dev-https-totp-check)
@@ -76,7 +95,7 @@ run_group() {
   (
     cd "$REPO"
     PATH="$BIN:$PATH" CALL_LOG="$WORK/$name.calls" \
-      GITHUB_STEP_SUMMARY="$WORK/$name.summary" \
+      GUARD_LOG="$WORK/$name.guards" GITHUB_STEP_SUMMARY="$WORK/$name.summary" \
       bash scripts/ci-browser-proofs.sh "$@"
   ) >"$WORK/$name.out" 2>&1
 }
@@ -92,6 +111,9 @@ dev-https totp=unset passkey=unset
 dev-https-editor-check totp=unset passkey=unset'
 [ "$(cat "$WORK/ok.calls")" = "$expected" ] ||
   fail "unexpected make calls: $(cat "$WORK/ok.calls")"
+[ "$(cat "$WORK/ok.guards")" = 'guard:allow-stop=1
+guard:allow-stop=1
+guard:allow-stop=0' ] || fail 'proof guard lost sharded restart permissions'
 staged=$REPO/.dev/proof-evidence
 for shard in skew epoch-disabled; do
   [ -f "$staged/totp-browser-proof-evidence-$shard/totp-enabled.x/totp-second-factor-proof.json" ] &&
@@ -125,6 +147,9 @@ awk -F '\t' '
 ' "$timing" || fail "passing proof timings lack durations or results"
 [ "$(awk -F '\t' 'NR == 2 { print $3 }' "$timing")" = 0 ] ||
   fail "the first proof recorded a harness restart"
+
+GUARD_FAIL=1 run_group unhealthy editor && fail 'session failure admitted successful proof'
+grep -Fq 'failed proofs: editor' "$WORK/unhealthy.out" || fail 'lost session failure'
 
 if run_group failing exports auth; then
   fail "a group with a failing proof passed"

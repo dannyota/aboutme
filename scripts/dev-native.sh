@@ -2,16 +2,7 @@
 # Native development stack: Go server, Nuxt, and Caddy on one origin, backed by
 # the shared Postgres container's aboutme_dev database. See
 # docs/runbooks/native-development.md.
-#
-#   scripts/dev-native.sh up      start everything (idempotent)
-#   scripts/dev-native.sh down    stop exactly what up started
-#   scripts/dev-native.sh status  liveness + ports; non-zero if anything is down
-#   scripts/dev-native.sh logs    per-process logs
-#   scripts/dev-native.sh seed    seed the development account and sample resume
-#
-# Open http://localhost:20080: that is the only URL a browser should use;
-# it is PUBLIC_ORIGIN, so cookie scope, CSRF Origin checks, and OAuth
-# redirects match what the code expects.
+# Use http://localhost:20080 so cookie scope, CSRF and OAuth match PUBLIC_ORIGIN.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -91,15 +82,7 @@ AUTH_EMAIL_CAPTURE_BEARER_B64=
 TOTP_ACTIVE_KEY_B64=
 VIEW_PASS_KEY_B64=
 
-# --------------------------------------------------------------------------
-# output helpers
-# --------------------------------------------------------------------------
-
-# --------------------------------------------------------------------------
-# process bookkeeping
-#
-# Each saved PID belongs to a detached watchdog that owns service cleanup.
-# --------------------------------------------------------------------------
+# Each saved PID belongs to a detached owner that waits for service cleanup.
 
 pidfile() { printf '%s/%s.pid' "$DEV_DIR" "$1"; }
 logfile() { printf '%s/%s.log' "$DEV_DIR" "$1"; }
@@ -114,29 +97,93 @@ port_of() {
   esac
 }
 
-read_pid() {
-  local f
-  f=$(pidfile "$1")
-  [ -s "$f" ] || return 1
-  local pid
-  pid=$(<"$f")
-  [[ $pid =~ ^[0-9]+$ ]] || return 1
-  printf '%s' "$pid"
+# Bind saved PIDs to a checkout, random launch token, birth time and command.
+native_identity() {
+  "$(command -v python3)" -I -B - "$ROOT" "$DEV_DIR" "$@" <<'IDENTITY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import time
+
+root, directory, action, name, *arguments = sys.argv[1:]
+base = Path(directory)
+pidfile = base / f"{name}.pid"
+identity = base / f"{name}.identity"
+
+def read_private(path, bound):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd) as source:
+        meta = os.fstat(source.fileno())
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_uid != os.getuid()
+                or stat.S_IMODE(meta.st_mode) != 0o600 or meta.st_nlink != 1
+                or meta.st_size > bound):
+            raise ValueError("unsafe process record")
+        return source.read(bound + 1)
+
+try:
+    if name not in ("caddy", "web", "server", "mail-capture"):
+        raise ValueError("unknown service")
+    if str(base.resolve()) != str(base):
+        raise ValueError("linked state path")
+    value = read_private(pidfile, 32).strip()
+    if not value.isdecimal() or int(value) <= 1:
+        raise ValueError("invalid PID")
+    pid = int(value)
+    if action == "pid":
+        print(pid)
+        sys.exit(0)
+    if not arguments or pid != int(arguments[0]):
+        raise ValueError("PID changed")
+    token = arguments[1] if action == "write" else None
+    record = None if action == "write" else json.loads(read_private(identity, 4096))
+    if record is not None:
+        token = record["token"]
+    if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{32}", token):
+        raise ValueError("invalid launch token")
+    output = subprocess.check_output(
+        ["ps", "-ww", "-p", str(pid), "-o", "pgid=,uid=,lstart=,args="],
+        text=True, timeout=2, env={**os.environ, "LC_ALL": "C"})
+    fields = output.strip().split(None, 7)
+    if len(fields) != 8 or int(fields[0]) != pid or int(fields[1]) != os.getuid():
+        raise ValueError("foreign process group or user")
+    if pid == os.getpgrp() or os.getsid(pid) != pid:
+        raise ValueError("foreign session")
+    started = " ".join(fields[2:7])
+    time.strptime(started, "%a %b %d %H:%M:%S %Y")
+    # Framework launchers can replace argv[0]; compare the live interpreter.
+    interpreter = subprocess.check_output(
+        ["ps", "-ww", "-p", str(os.getpid()), "-o", "args="], text=True, timeout=2).strip()
+    suffix = " -I -B - " + " ".join(sys.argv[1:])
+    if not interpreter.endswith(suffix):
+        raise ValueError("cannot inspect identity interpreter")
+    prefix = f"{interpreter[:-len(suffix)]} -B {root}/scripts/lib/run-owned.py --owner {token} -- "
+    if not fields[7].startswith(prefix):
+        raise ValueError("foreign process command")
+    current = dict(version=1, root=root, name=name, pid=pid, token=token,
+                   started=started, command_sha256=hashlib.sha256(fields[7].encode()).hexdigest())
+    if action == "write":
+        fd = os.open(identity, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as target:
+            json.dump(current, target)
+    elif action != "check" or record != current:
+        raise ValueError("process identity changed")
+except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+    sys.exit(1)
+IDENTITY
 }
 
-# is_ours reports whether pid is alive and is still the group leader we
-# started, rather than an unrelated process that inherited a recycled pid.
-is_ours() {
-  local pid=$1 pgid
-  kill -0 "$pid" 2>/dev/null || return 1
-  pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
-  [ "$pgid" = "$pid" ]
-}
+read_pid() { native_identity pid "$1"; }
+is_ours() { native_identity check "$1" "$2"; }
 
 service_pid() {
   local pid
   pid=$(read_pid "$1") || return 1
-  is_ours "$pid" || return 1
+  is_ours "$1" "$pid" || return 1
   printf '%s' "$pid"
 }
 
@@ -194,39 +241,42 @@ ensure_secrets() {
 start_service() {
   local name=$1 workdir=$2
   shift 2
-  local pf lf
+  local pf lf token pid i
   pf=$(pidfile "$name")
   lf=$(logfile "$name")
-  rm -f "$pf"
-  {
-    printf '\n===== %s started %s =====\n' "$name" "$(date -Is)"
-  } >>"$lf"
-  # The child records its own pid before exec, so the pid in the file is
-  # the process itself (== its process-group id), not a wrapper's.
+  [ ! -e "$pf" ] && [ ! -L "$pf" ] &&
+    [ ! -e "$DEV_DIR/$name.identity" ] && [ ! -L "$DEV_DIR/$name.identity" ] ||
+    die "$name: process state already exists; stop it or recover ownership manually"
+  token=$(python3 -I -B -c 'import secrets; print(secrets.token_hex(16))')
+  printf '\n===== %s started %s =====\n' "$name" "$(date -Is)" >>"$lf"
   detach bash -c '
-    echo $$ >"$1"
+    umask 077
+    set -o noclobber
+    echo $$ >"$1" || exit 127
     cd "$2" || exit 127
-    shift 2
-    exec "$@"
-  ' dev-native "$pf" "$workdir" bash "$ROOT/scripts/run-capped.sh" -- "$@" >>"$lf" 2>&1 </dev/null
-
-  local i
+    owner=$3 token=$4
+    shift 4
+    # Keep service credentials in the environment, outside owner argv/state.
+    if [ "$1" = env ]; then
+      shift
+      while [[ ${1:-} == *=* ]]; do export "$1"; shift; done
+    fi
+    exec bash "$owner" --owner "$token" -- "$@"
+  ' dev-native "$pf" "$workdir" "$ROOT/scripts/run-owned.sh" "$token" "$@" >>"$lf" 2>&1 </dev/null
   for i in $(seq 1 50); do
-    [ -s "$pf" ] && return 0
+    if pid=$(read_pid "$name") && native_identity write "$name" "$pid" "$token"; then return 0; fi
     sleep 0.1
   done
-  die "$name: no pid file appeared at $pf"
+  die "$name: cannot establish process ownership; preserve state for manual recovery"
 }
 
 stop_service() {
   local name=$1 pid
-  if ! pid=$(read_pid "$name"); then
-    return 0
-  fi
-  if ! is_ours "$pid"; then
-    warn "$name: pid $pid is not our process any more; removing stale pid file"
-    rm -f "$(pidfile "$name")"
-    return 0
+  if [ ! -e "$(pidfile "$name")" ] && [ ! -L "$(pidfile "$name")" ] &&
+    [ ! -e "$DEV_DIR/$name.identity" ] && [ ! -L "$DEV_DIR/$name.identity" ]; then return 0; fi
+  if ! pid=$(read_pid "$name") || ! is_ours "$name" "$pid"; then
+    warn "$name: cannot validate process ownership; preserving state for manual recovery"
+    return 1
   fi
   kill -TERM "$pid" 2>/dev/null || true
   local deadline=$((SECONDS + 10))
@@ -237,7 +287,7 @@ stop_service() {
     fi
     sleep 0.1
   done
-  rm -f "$(pidfile "$name")"
+  rm -f "$(pidfile "$name")" "$DEV_DIR/$name.identity"
   info "stopped $name (pid $pid)"
 }
 
@@ -248,7 +298,7 @@ wait_http() {
   pid=$(service_pid "$name") || die "$name exited before it began serving; see $(logfile "$name")"
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if ! is_ours "$pid"; then
+    if ! is_ours "$name" "$pid"; then
       tail -n 30 "$(logfile "$name")" >&2 || true
       die "$name (pid $pid) exited during startup; full log: $(logfile "$name")"
     fi
@@ -269,7 +319,7 @@ wait_capture() {
   pid=$(service_pid "$name") || die "$name exited before it began serving; see $(logfile "$name")"
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if ! is_ours "$pid"; then
+    if ! is_ours "$name" "$pid"; then
       tail -n 30 "$(logfile "$name")" >&2 || true
       die "$name (pid $pid) exited during startup; full log: $(logfile "$name")"
     fi
@@ -282,18 +332,7 @@ wait_capture() {
   die "$name did not start listening on port $port within ${timeout}s; full log: $(logfile "$name")"
 }
 
-# --------------------------------------------------------------------------
-# Caddy config
-#
-# The dev route table is deploy/caddy/Caddyfile itself, with only its three
-# environment-specific tokens rewritten: the same three the route-table
-# test rewrites in apps/server/internal/routetable/route_table_test.go
-# (adaptedCaddyfile): the site address and the two compose-service
-# upstreams. Every matcher, handle block, and directive is byte-for-byte
-# the shipped file. Each token must occur exactly once; a different count
-# means the Caddyfile's shape changed and this script refuses to run rather
-# than silently serve a route table that no longer resembles the real one.
-# --------------------------------------------------------------------------
+# Adapt only environment tokens; route-table tests check the same substitutions.
 
 count_occurrences() {
   local hay=$1 needle=$2 n=0
@@ -317,10 +356,7 @@ generate_caddyfile() {
   suffix=${content#*"$PUBLIC_ROOTS_MARKER"}
   content=$prefix$fragment$suffix
 
-  # Site address: `bind` restricts the listener to loopback while leaving
-  # the site's host matcher empty, so both http://localhost:20080 and
-  # http://127.0.0.1:20080 still match. A `127.0.0.1:20080` site address
-  # would bind correctly but reject the Host header a browser sends.
+  # Bind loopback without a Host matcher so localhost and 127.0.0.1 both work.
   local -a olds=(
     ':80 {'
     'reverse_proxy server:8080 {'
@@ -346,10 +382,6 @@ generate_caddyfile() {
 
   printf '%s\n' "$content"
 }
-
-# --------------------------------------------------------------------------
-# commands
-# --------------------------------------------------------------------------
 
 require_tools() {
   local t
@@ -483,8 +515,7 @@ start_web() {
   ! port_blocked_by_stranger web || die "port $WEB_PORT is already in use by a process this script did not start"
   [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'npm ci' in apps/web first"
   info "--- web (:$WEB_PORT)"
-  # --port/--host on the command line beat nuxt.config.ts's devServer.port,
-  # so the Nuxt config stays untouched.
+  # Explicit flags override nuxt.config.ts's devServer.port.
   start_service web "$ROOT/apps/web" \
     env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
   # First request compiles the app, so this is the slow one.

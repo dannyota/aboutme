@@ -13,6 +13,9 @@ type ConsentCopy = {
   readonly loading: string;
   readonly invalid: string;
   readonly unavailable: string;
+  readonly reauthRequired: string;
+  readonly restartRequired: string;
+  readonly signInAgain: string;
   /** Where approval returns for an `https` redirect (design rule 6). */
   readonly returnToHost: (host: string) => string;
   /** Where approval returns for a loopback redirect (design rule 6). */
@@ -45,8 +48,15 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
       'Chỉ cho phép nếu bạn vừa bắt đầu đăng nhập '
       + 'từ một ứng dụng trên máy tính này.',
     loading: 'Đang tải yêu cầu cấp quyền…',
-    invalid: 'Yêu cầu cấp quyền này không hợp lệ.',
+    invalid: 'Yêu cầu cấp quyền này đã hết hạn hoặc không hợp lệ. '
+      + 'Hãy bắt đầu lại từ ứng dụng của bạn.',
     unavailable: 'Không thể tải yêu cầu cấp quyền. Hãy thử lại.',
+    reauthRequired: 'Để cấp quyền truy cập, bạn cần đăng nhập lại. '
+      + 'Sau đó, bạn sẽ quay lại yêu cầu này.',
+    restartRequired:
+      'Hãy đăng nhập lại, sau đó bắt đầu lại yêu cầu cấp quyền '
+      + 'từ ứng dụng của bạn.',
+    signInAgain: 'Đăng nhập lại',
     returnToHost: (host) => `Sau khi cho phép, bạn sẽ quay lại ${host}.`,
     returnToLoopback: (host) =>
       'Sau khi cho phép, bạn quay lại một ứng dụng trên máy tính này '
@@ -82,8 +92,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
       'Approve only if you just started this sign-in '
       + 'from an app on this computer.',
     loading: 'Loading authorization…',
-    invalid: 'This authorization request is invalid.',
+    invalid: 'This authorization request has expired or is invalid. '
+      + 'Start again from your app.',
     unavailable: 'Unable to load authorization. Please try again.',
+    reauthRequired: 'Sign in again to allow access. '
+      + 'You will return to this request afterward.',
+    restartRequired:
+      'Sign in again, then start authorization again from your app.',
+    signInAgain: 'Sign in again',
     returnToHost: (host) => `After you approve, you return to ${host}.`,
     returnToLoopback: (host) =>
       `After you approve, you return to an app on this computer (${host}).`,

@@ -135,6 +135,20 @@ api_load() {
   printf '%s | %s' "$peak" "$(grep -cE ' status=429( |$)' <<<"$lines" || true)"
 }
 
+guarded_proof() {
+  local -a options=()
+  case $kind in passkey | totp) options+=(--allow-stop) ;; esac
+  # The workflow safety contract checks the explicit shard-to-make dispatch.
+  bash scripts/dev-https.sh guard "${options[@]}" -- bash -c '
+    kind=$1 shard=$2 target=$3
+    case $kind in
+    totp) ABOUTME_TOTP_SHARD=$shard make "$target" ;;
+    passkey) ABOUTME_PASSKEY_SHARD=$shard make "$target" ;;
+    *) make "$target" ;;
+    esac
+  ' ci-browser-proof "$kind" "$shard" "$target"
+}
+
 failed=()
 first=1
 {
@@ -166,11 +180,7 @@ for proof in "$@"; do
   first=0
   if [ "$status" -eq 0 ]; then
     check_start=$SECONDS
-    case $kind in
-    totp) ABOUTME_TOTP_SHARD=$shard make "$target" || status=$? ;;
-    passkey) ABOUTME_PASSKEY_SHARD=$shard make "$target" || status=$? ;;
-    *) make "$target" || status=$? ;;
-    esac
+    guarded_proof || status=$?
     check_seconds=$((SECONDS - check_start))
   fi
   case $kind in

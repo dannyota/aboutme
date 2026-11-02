@@ -1,0 +1,33 @@
+name: Approval probe
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: approval-probe
+  cancel-in-progress: false
+
+jobs:
+  prepare-request:
+    name: Prepare request
+    if: github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Prepare harmless request
+        run: echo 'Harmless approval probe request prepared.'
+
+  record-approval:
+    name: Record approval
+    needs: [prepare-request]
+    if: github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    environment: approval-probe
+    permissions: {}
+    steps:
+      - name: Record harmless approval
+        run: echo 'Harmless approval probe approved.'

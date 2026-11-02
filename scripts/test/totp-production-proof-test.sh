@@ -23,9 +23,9 @@ cp "$SCRIPT" "$REPO/scripts/totp-production-proof.sh" 2>/dev/null ||
 mkdir -p "$REPO/scripts/lib"
 cp "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$REPO/scripts/lib/"
 cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$REPO/scripts/lib/"
-cat >"$REPO/scripts/run-capped.sh" <<'STUB'
+cat >"$REPO/scripts/run-owned.sh" <<'STUB'
 #!/usr/bin/env bash
-[ "${RUN_CAPPED_TOTAL_KIB:-}" != invalid ] || { echo 'refused: cannot establish memory limit' >&2; exit 125; }
+[ "${STUB_OWNED_REFUSAL:-}" != invalid ] || { echo 'refused: cannot inspect process ownership' >&2; exit 125; }
 printf '%s\n' "$*" >>"$WATCHDOG_LOG"
 shift 3
 exec "$@"
@@ -84,11 +84,11 @@ chmod 0700 "$REPO/.dev/v0.4.7/production-input"
 
 # --- watchdog refusal --------------------------------------------------------
 
-if output=$(RUN_CAPPED_TOTAL_KIB=invalid run_wrapper 2>&1); then
-  fail 'missing total memory was accepted'
+if output=$(STUB_OWNED_REFUSAL=invalid run_wrapper 2>&1); then
+  fail 'missing process ownership was accepted'
 fi
-grep -Fq 'refused: cannot establish memory limit' <<<"$output" ||
-  fail 'missing memory returned the wrong diagnostic'
+grep -Fq 'refused: cannot inspect process ownership' <<<"$output" ||
+  fail 'missing ownership returned the wrong diagnostic'
 
 # --- active stack ------------------------------------------------------------
 
@@ -99,6 +99,11 @@ fi
 grep -Fq 'an aboutme development stack is active' <<<"$output" ||
   fail 'active stack returned the wrong diagnostic'
 rm -f -- "$REPO/.dev/native-https/run/server.pid"
+
+printf '{"version":1}\n' >"$REPO/.dev/native-https/run/session"
+if output=$(run_wrapper 2>&1); then fail 'development session state was accepted'; fi
+grep -Fq 'development session state exists' <<<"$output" || fail 'missing session refusal'
+rm "$REPO/.dev/native-https/run/session"
 
 # --- shared lock --------------------------------------------------------
 

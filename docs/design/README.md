@@ -38,6 +38,7 @@ Current behavior lives in code, deployment configuration, and
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
+| Other   | [Telegram host alerts](telegram-host-alerts.md)                        | Host alert transport, custody, limits, and rollout                         |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                  |
 | Other   | [CI path selection](ci-path-selection.md)                              | Pull request prose allowlist and required gate behavior                    |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                 |

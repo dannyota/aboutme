@@ -1,7 +1,9 @@
 # Production pull deployment
 
-Status: Proposed 2026-11-01; ADR 0026 amendment pending owner acceptance after
-the approval API proof
+Status: Accepted with conditions (2026-11-01), under the
+[ADR 0026 amendment](../../adr/0026-vietnam-hosted-production.md#amendment-anonymous-approval-pull-deployment-2026-11-01).
+Implementation is planned; the [live probe](../../research/approval-probe.md)
+records the evidence and its limits.
 
 Runtime decision (owner, 2026-11-01): keep the Podman containers on the host and
 use Ansible pull for deployment and host configuration. A read-only measurement
@@ -11,17 +13,17 @@ losing signed image digests, read-only roots, and container isolation.
 
 The production host verifies an explicitly approved request, then runs
 `ansible-pull` at its exact signed coordinator commit. GitHub builds and signs
-public images. The host holds no GitHub credential. CI receives no production
-credential or administrative network access.
+public images. The host holds no GitHub credential. Deployment jobs receive no
+production credential or administrative network access.
 
-The first version retains attended laptop proofs, manual vMonitor quota renewal,
-and an empty automatic rollback allowlist. It adds no monitoring VM. ADRs 0024
-and 0025 remain unchanged;
-[ADR 0026](../../adr/0026-vietnam-hosted-production.md) needs the proposed
-amendment. Pull removes CI’s administrative access at the cost of host
-verification, polling delay, and durable recovery state. Laptop deployment
-shares the same controls. A push service or unattended proof service requires a
-separate decision.
+The first version retains attended laptop proofs and an empty automatic rollback
+allowlist. It adds no monitoring VM. The separate
+[Synthetic quota-renewal amendment](../../adr/0026-vietnam-hosted-production.md#amendment-synthetic-quota-renewal-in-github-actions-2026-11-01)
+governs vMonitor credentials and automation. Pull removes CI’s administrative
+access at the cost of host verification, polling delay, and durable recovery
+state. Laptop deployment stays available in parallel and shares the same
+controls. A push service or unattended proof service requires a separate
+decision.
 
 ## Pages
 
@@ -36,11 +38,13 @@ separate decision.
 
 ## Anonymous verification prerequisite
 
-The approval API proof below establishes that one approval is visible
-anonymously, but does not prove all required approval semantics. Before building
-deployment machinery, prove approval, self-approval, rejection, cancellation,
-rerun rejection, pagination, and the following mapping using a harmless workflow
-with production-equivalent protections and no production access or secrets.
+The owner accepted the measured approval path with the
+[cache wait, single-page history, and single-review conditions](evidence.md#anonymous-approval-and-freshness).
+The host must apply those conditions and the mapping below. Live multi-page
+history and approval by a second maintainer remain unverified; the restricted
+contract permits implementation without claiming either was proved. Keep
+[approval enrollment](#approval-enrollment) owner-only until distinct-maintainer
+approval is verified. Solo owner approval is an accepted supplied requirement.
 
 | Response            | Host acceptance rule                                                                                                                                         |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -57,26 +61,24 @@ approval files never substitute for review history. The runbook owns fixture
 capture and API inspection procedures; sanitized observations belong in research
 evidence.
 
-Prove a complete cycle within the anonymous 60-request hourly budget per IP,
-including discovery and observer use. Missing fields, ambiguous ordering, or
-insufficient budget stop the automatic path before implementation. Return the
-transport decision to the owner and retain attended laptop deployment; introduce
-no credential or weaker verification silently.
+Before enabling pull, record live or controlled proof that review history with
+more than one page or more than one relevant review refuses admission. Also
+prove a complete cycle within the anonymous 60-request hourly budget per IP,
+including discovery, post-cache revalidation, and observer use. Missing fields,
+ambiguous history, or insufficient budget stop admission. The
+[evidence contract](evidence.md#anonymous-approval-and-freshness) owns timing
+and deferral; keep attended laptop deployment available without silently adding
+a credential or weaker verification.
 
 ## Approval API proof
 
-The first milestone was met on 2026-11-01. A throwaway environment with required
-reviewers and a push-triggered run was approved once. Unauthenticated
-`GET https://api.github.com/repos/dannyota/aboutme/actions/runs/<run-id>/approvals`
-returned state `approved`, the exact approval comment, the approving user's
-login and numeric ID, and the environment name and numeric ID. An
-unauthenticated GET of the run returned event, `run_attempt`, `head_sha`,
-workflow path, actor, and `triggering_actor`.
-
-The unauthenticated core rate limit is 60 requests per hour per IP, so the
-host's polling budget must stay well under that limit. The throwaway environment
-and branch were deleted afterwards. This observation does not replace the
-remaining prerequisite cases or the complete-cycle budget proof above.
+The [2026-11-01 live evidence](../../research/approval-probe.md) records
+accepted self-approval and refusal of rejection, wrong comments, missing
+approval, reruns, and cancellation after cache expiry. The successful
+approval-only check used four requests. It did not measure the full deployment
+cycle or prove multi-page history or distinct dispatcher/approver identities.
+The owner chose the restricted anonymous transport on that evidence;
+implementation and runtime acceptance remain separate.
 
 ## Approval and independent inspection
 
@@ -91,14 +93,14 @@ and Actions reads. Neither receives production secrets, deployment OIDC
 authority, SSH identities, or a host connection. Preserve full-SHA action pins
 and cache trust boundaries.
 
-| Control      | Required setting                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Main         | Required `ci`, signed commits, pull requests, no force push, deletion, or bypass; zero mandatory human PR approvals |
-| Release tags | Admin-only `v*` creation; updates and deletion prohibited                                                           |
-| Environment  | `production`, enrolled numeric ID; selected branch `main` only, no tag rule; no secrets                             |
-| Reviewers    | `dannyota`, `minhmq`; one suffices; self-review allowed; administrator bypass disabled                              |
-| Concurrency  | `production-approval`, `cancel-in-progress: false`; no FIFO assumption                                              |
-| Reruns       | Refused; use a new dispatch                                                                                         |
+| Control      | Required setting                                                                                                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Main         | [ADR 0024](../../adr/0024-delivery-gates.md#decision): required `ci`, signed commits, pull requests, owner local-gate admin bypass only; no force push or deletion; zero mandatory human PR approvals |
+| Release tags | Admin-only `v*` creation; updates and deletion prohibited                                                                                                                                             |
+| Environment  | `production`, enrolled numeric ID; selected branch `main` only, no tag rule; no secrets                                                                                                               |
+| Reviewers    | `dannyota` only until the [enrollment gate](#approval-enrollment) passes; self-review allowed; administrator bypass disabled                                                                          |
+| Concurrency  | `production-approval`, `cancel-in-progress: false`; no FIFO assumption                                                                                                                                |
+| Reruns       | Refused; use a new dispatch                                                                                                                                                                           |
 
 Before approving, the maintainer uses the independently installed read-only
 checker: `aboutme-deploy-check inspect --tag <tag> --run <run-id> --attempt 1`.
@@ -120,13 +122,76 @@ The continuous deployment runbook will own checker installation, API fixture
 procedures, enrollment steps, operational commands, and the supporting reference
 catalog. Deployment and quota documents link to their owning contracts.
 
+### Approval enrollment
+
+Initially enroll only `dannyota` in the production environment's reviewer list
+and the host's maintainer-ID allowlist. Before adding `minhmq` to either list,
+verify live approval by a maintainer distinct from the dispatcher in a separate
+proof, including numeric actor and reviewer IDs against the host acceptance
+rules. Record that evidence before expanding production enrollment. Either
+maintainer may approve after that gate passes; one approval suffices.
+
 ## Release order and owner decisions
 
-Ship separate reviewed changes: anonymous feasibility evidence; status-capable
-release and publication job names; durable coordinator and shared laptop
-protocol with pull disabled; pinned Ansible with unchanged convergence;
-verification and approval workflow; then attended enrollment and first approved
-pull. Transfer further configuration responsibilities separately.
+The owner accepted the evidence and transport. Ship the remaining changes in
+this order, with independent review and exact-commit CI for each release:
+
+1. **Retire the probe.** Disable the workflow and cancel/drain its runs. In a
+   reviewed change remove `.github/workflows/approval-probe.yml`, its assertions
+   in `scripts/test/workflow-contract.test.mjs` and
+   `scripts/test/workflow-safety-test.sh`, `scripts/approval-probe.sh`,
+   `scripts/approval-probe.json`, `scripts/test/approval-probe-test.sh`, their
+   three `Makefile` lines, and `docs/runbooks/approval-probe.md`. Keep the
+   research evidence and Git history. The checker is removed, not retained as
+   the host reference: it permits multi-page history and does not implement the
+   accepted cache or full host verification contract. After that change lands
+   green and no pending run can recreate it, delete the `approval-probe`
+   environment and confirm absence. Environment deletion is a separate primary
+   operation.
+2. **Release status and publication names.** Own `deploy/caddy/production/`,
+   `deploy/vn/host/quadlet/`, `deploy/vn/tests/`,
+   `.github/workflows/release-images.yml`, and its assertions in
+   `scripts/test/workflow-contract.test.mjs`. Add serving/maintenance status and
+   the [publication names](evidence.md); publish and prove a candidate for `F`.
+3. **Durable state and admission.** Own `deploy/vn/pull/`,
+   `deploy/vn/scripts/fence.sh`, and `deploy/vn/tests/`. Implement closed
+   schemas, atomic state/journals, generation and revision checks, configuration
+   barriers, and admission locks. Keep pull disabled.
+4. **Execution and shared laptop protocol.** Own `deploy/vn/pull/`,
+   `deploy/vn/host/`, `deploy/vn/scripts/`, `deploy/vn/tests/`, and
+   `docs/runbooks/production.md`. Integrate lifecycle guards, attendance,
+   cleanup, recovery, and laptop entry points; prove interruption safety in a
+   disposable Ubuntu VM. Keep pull disabled and laptop deployment usable.
+5. **Pinned Ansible.** Own `deploy/vn/ansible/`, `deploy/vn/host/install.sh`,
+   `deploy/vn/pull/`, `deploy/vn/tests/`, and `.github/workflows/vn-infra.yml`.
+   Pin toolchain hashes, converge unchanged enrolled configuration, prove no
+   changes/restarts on repeat convergence, and verify host memory fit.
+6. **Host verifier and independent checker.** Own `deploy/vn/pull/`,
+   `deploy/vn/tests/`, `deploy/observer/internal/verify/`, and
+   `docs/runbooks/continuous-deployment/`. Implement approval/freshness, release
+   and image checks, request inspection, denial lists, and budget accounting.
+   Use the accepted contract and evidence, not the retired probe as authority.
+7. **Approval workflow and polling integration.** Own
+   `.github/workflows/production-approve.yml`,
+   `scripts/test/workflow-contract.test.mjs`,
+   `scripts/test/workflow-safety-test.sh`, `deploy/vn/pull/`,
+   `deploy/vn/host/etc/systemd/system/`, `deploy/vn/tests/`, and
+   `docs/runbooks/continuous-deployment/`. Prove the full anonymous cycle and
+   failure/deferral paths, including live or controlled refusal evidence for
+   multi-page history and more than one relevant review. Keep production polling
+   disabled until those proofs pass.
+8. **Attended enrollment and first pull.** Own
+   `docs/runbooks/continuous-deployment/` and private host enrollment state;
+   separately reviewed ingress changes own `deploy/vn/prod/` and
+   `deploy/vn/host/`. Require the preceding full-cycle and refusal evidence,
+   prove remote/console access, and enroll controls, keys and actual `F`. Apply
+   the [owner-only enrollment gate](#approval-enrollment), then enable polling
+   and perform the first approved pull with attended proofs. Preserve parallel
+   laptop deployment.
+9. **Transfer further configuration separately.** Each responsibility owns its
+   exact files in `deploy/vn/ansible/`, `deploy/vn/host/`, and
+   `deploy/vn/tests/`. Remove its former writer together with
+   unchanged-convergence proof.
 
 Hosted CI must cover schema rejection, approval substitution,
 publication/evidence profiles, reruns, replay, downgrade refusal, challenge
@@ -138,9 +203,9 @@ unchanged-convergence checks without production access. A disposable Ubuntu VM
 must prove systemd cleanup, successful exit preserving service, reboot guards,
 and blocked admission during cleanup; container tests alone are insufficient.
 
-Owner decisions remain: accept the ADR amendment; approve concrete VPN ingress
-rules after remote-access and console proofs; approve the actual enrolled
-release identity after evidence exists; and choose another transport if
-anonymous verification fails, retaining laptop deployment meanwhile. Ansible
-adoption, solo approval, attended proofs, manual renewal, and no automatic
-rollback are supplied requirements.
+Owner decisions remain: approve concrete VPN ingress rules after remote-access
+and console proofs, and approve the actual enrolled release identity after
+evidence exists. If the restricted anonymous contract cannot be met, keep pull
+disabled and return any transport change to the owner. Ansible adoption, solo
+approval, parallel laptop deployment, attended proofs, and no automatic rollback
+are supplied requirements.

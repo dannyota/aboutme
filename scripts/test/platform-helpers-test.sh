@@ -3,7 +3,7 @@ set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 source scripts/lib/platform.sh
 work=$(mktemp -d "${TMPDIR:-/tmp}/platform-helpers.XXXXXX")
-trap 'rm -rf -- "$work"' EXIT
+trap 'if [ -n "${anchor_pid:-}" ]; then kill -KILL -- "-$anchor_pid" 2>/dev/null || true; fi; rm -rf -- "$work"' EXIT
 printf abc >"$work/file"
 chmod 0600 "$work/file"
 mkdir "$work/directory"
@@ -22,7 +22,7 @@ source <(sed -n '/^browser_stat() {$/,/^}$/p' deploy/dev-https-browser/run.sh)
 mkdir "$work/bin"
 cat >"$work/bin/uname" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' Darwin
+printf '%s\n' "${LISTENER_OS:-Darwin}"
 EOF
 cat >"$work/bin/stat" <<'EOF'
 #!/usr/bin/env bash
@@ -91,4 +91,195 @@ survivor=${first##*/}
 LC_ALL=C platform_prune_evidence "$work/ties" proof 1
 [ -d "$work/ties/$survivor" ]
 [ ! -e "$work/ties/proof.Z" ]
+# Snapshot commands keep spaces and obtain numeric session IDs on both hosts.
+row=$(platform_process_snapshot "$$")
+read -r pid ppid pgid uid sid state command <<<"$row"
+[ "$pid" = "$$" ] && [ "$uid" = "$EUID" ]
+[[ $sid =~ ^[1-9][0-9]*$ && -n $command ]]
+for bad in 0 1 -1 invalid; do
+  if platform_signal_group TERM "$bad" ignored; then exit 1; fi
+done
+if platform_signal_group TERM "$pgid" ignored; then
+  printf 'signalled own group\n' >&2; exit 1
+fi
+# Every listener, including IPv6 and multiple owners, needs an identified PID.
+cat >"$work/bin/lsof" <<'EOF'
+#!/usr/bin/env bash
+case $LISTENER_CASE in
+empty | omitted) exit 1 ;;
+hidden) printf 'n[::1]:20443\n' ;;
+malformed) printf 'p123\nn127.0.0.1:wrong\n' ;;
+error) printf 'inspection denied\n' >&2; exit 1 ;;
+*) printf 'p123\nn127.0.0.1:20443\np456\nn[::1]:20443\n' ;;
+esac
+EOF
+chmod 0700 "$work/bin/lsof"
+[ "$(PATH="$work/bin:$PATH" LISTENER_CASE=valid platform_listener_pids 20443)" = $'123\n456' ]
+for scenario in hidden malformed error; do
+  if PATH="$work/bin:$PATH" LISTENER_CASE=$scenario platform_listener_pids 20443; then exit 1; fi
+done
+status=0
+PATH="$work/bin:$PATH" LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
+[ "$status" = 1 ]
+# Linux must see sockets that an unprivileged lsof omits entirely, including
+# a hidden listener beside another socket with a visible owner.
+cat >"$work/bin/ss" <<'EOF'
+#!/usr/bin/env bash
+case $LISTENER_CASE in
+empty) exit 0 ;;
+error) printf 'inspection denied\n' >&2; exit 1 ;;
+malformed) printf 'malformed\n'; exit 0 ;;
+hidden | omitted) printf 'LISTEN 0 4096 [::1]:20443 [::]:*\n'; exit 0 ;;
+esac
+printf 'LISTEN 0 4096 127.0.0.1:20443 0.0.0.0:* users:(("node",pid=123,fd=8),("node",pid=456,fd=9))\n'
+if [ "$LISTENER_CASE" = mixed ]; then
+  printf 'LISTEN 0 4096 [::1]:20443 [::]:*\n'
+fi
+EOF
+chmod 0700 "$work/bin/ss"
+[ "$(PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=valid platform_listener_pids 20443)" = $'123\n456' ]
+for scenario in hidden omitted mixed malformed error; do
+  status=0
+  PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=$scenario platform_listener_pids 20443 || status=$?
+  [ "$status" = 2 ] || { printf 'Linux listener %s returned %s, expected busy or unknown\n' "$scenario" "$status" >&2; exit 1; }
+done
+status=0
+PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
+[ "$status" = 1 ]
+# Force the Python detach path and verify complete argv and UID checks.
+mkdir "$work/fallback"
+ln -s "$(command -v python3)" "$work/fallback/python3"
+cat >"$work/anchor with spaces.sh" <<'EOF'
+#!/bin/bash
+trap 'exit 0' TERM
+printf '%s\n' "$$" >"$1"
+/bin/sleep 300 &
+wait "$!"
+EOF
+PATH="$work/fallback" detach /bin/bash "$work/anchor with spaces.sh" "$work/anchor.pid" public-token
+for _ in $(seq 1 50); do [ -s "$work/anchor.pid" ] && break; sleep 0.02; done
+anchor_pid=$(<"$work/anchor.pid")
+expected="/bin/bash $work/anchor with spaces.sh $work/anchor.pid public-token"
+platform_validate_anchor "$anchor_pid" "$expected"
+platform_group_members "$anchor_pid" | grep -Fxq "$anchor_pid"
+if platform_signal_group TERM "$anchor_pid" "$expected-other"; then exit 1; fi
+kill -0 "$anchor_pid"
+# Controlled ps rows still use a real process for os.getsid.
+cat >"$work/bin/ps" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = -o ]; then exec /bin/ps "$@"; fi
+printf '%s\n' "$SNAPSHOT_ROW"
+EOF
+chmod 0700 "$work/bin/ps"
+SNAPSHOT_ROW="$anchor_pid 1 $anchor_pid $EUID S $expected"
+export SNAPSHOT_ROW
+PATH="$work/bin:$PATH" platform_validate_anchor "$anchor_pid" "$expected"
+for SNAPSHOT_ROW in \
+  "$anchor_pid 1 $anchor_pid 999999 S $expected" \
+  "$anchor_pid 1 $anchor_pid $EUID Z $expected" \
+  "$anchor_pid 1 $anchor_pid $EUID S $expected extra" \
+  "$anchor_pid 1 $anchor_pid $EUID S" \
+  'malformed'; do
+  if PATH="$work/bin:$PATH" platform_validate_anchor "$anchor_pid" "$expected"; then exit 1; fi
+done
+kill -0 "$anchor_pid"
+platform_signal_group TERM "$anchor_pid" "$expected"
+
+# Draining membership must not compare separate, changing process lists or
+# resolve sessions for children that can exit after ps takes its snapshot.
+(
+  export PATH="$work/bin:$PATH" GROUP_ANCHOR=$$ GROUP_UID=$EUID
+  export GROUP_PS_LOG=$work/group-ps.calls GROUP_PS_CASE=draining GROUP_OS=Darwin
+  cat >"$work/bin/uname" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$GROUP_OS"
+EOF
+  cat >"$work/bin/ps" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GROUP_PS_LOG"
+case $GROUP_PS_CASE in
+error) printf 'inspection denied\n' >&2; exit 1 ;;
+silent-error) exit 9 ;;
+empty) exit 1 ;;
+empty-success) exit 0 ;;
+absent) printf '1 1\n'; exit 0 ;;
+failed-output) printf '%s %s\n' "$GROUP_ANCHOR" "$GROUP_ANCHOR"; exit 1 ;;
+malformed) printf 'malformed\n'; exit 0 ;;
+duplicate) printf '%s %s\n%s %s\n' "$GROUP_ANCHOR" "$GROUP_ANCHOR" "$GROUP_ANCHOR" "$GROUP_ANCHOR"; exit 0 ;;
+foreign) printf '%s 1\n' "$GROUP_ANCHOR"; exit 0 ;;
+esac
+case " $* " in
+*' -axo '*)
+  if [[ $* == *pid=,pgid= ]]; then
+    printf '900000001 %s\n1 1\n%s %s\n' "$GROUP_ANCHOR" "$GROUP_ANCHOR" "$GROUP_ANCHOR"
+  else
+    printf '%s 1 %s %s S anchor\n900000001 %s %s %s S exiting-child\n' \
+      "$GROUP_ANCHOR" "$GROUP_ANCHOR" "$GROUP_UID" "$GROUP_ANCHOR" "$GROUP_ANCHOR" "$GROUP_UID"
+  fi
+  ;;
+*" -g $GROUP_ANCHOR "*)
+  if [[ $* == *pid=,pgid= ]]; then
+    printf '%s %s\n' "$GROUP_ANCHOR" "$GROUP_ANCHOR"
+  else
+    printf '%s\n' "$GROUP_ANCHOR"
+  fi
+  ;;
+*) exit 9 ;;
+esac
+EOF
+  for GROUP_OS in Darwin Linux; do
+    : >"$GROUP_PS_LOG"
+    members=$(platform_group_members "$GROUP_ANCHOR")
+    if [ "$GROUP_OS" = Darwin ]; then
+      [ "$members" = "$GROUP_ANCHOR" ]
+    else
+      [ "$members" = "$(printf '%s\n900000001' "$GROUP_ANCHOR")" ]
+    fi
+    [ "$(wc -l <"$GROUP_PS_LOG")" -eq 1 ]
+    for GROUP_PS_CASE in error silent-error empty-success failed-output malformed duplicate; do
+      status=0
+      platform_group_members "$GROUP_ANCHOR" || status=$?
+      [ "$status" = 2 ]
+    done
+    GROUP_PS_CASE=empty
+    status=0
+    members=$(platform_group_members "$GROUP_ANCHOR") || status=$?
+    [ -z "$members" ]
+    if [ "$GROUP_OS" = Darwin ]; then [ "$status" = 0 ]; else [ "$status" = 2 ]; fi
+    if [ "$GROUP_OS" = Linux ]; then
+      GROUP_PS_CASE=absent
+      members=$(platform_group_members "$GROUP_ANCHOR")
+      [ -z "$members" ]
+    fi
+    GROUP_PS_CASE=draining
+  done
+  GROUP_OS=Darwin GROUP_PS_CASE=foreign
+  status=0
+  platform_group_members "$GROUP_ANCHOR" || status=$?
+  [ "$status" = 2 ]
+  for invalid in 0 1 -1 invalid; do
+    : >"$GROUP_PS_LOG"
+    status=0
+    platform_group_members "$invalid" || status=$?
+    [ "$status" = 2 ] && [ ! -s "$GROUP_PS_LOG" ]
+  done
+)
+
+# Linux inspection needs ss even when lsof is unavailable.
+ln -s "$(command -v bash)" "$work/fallback/bash"
+cat >"$work/fallback/uname" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' Linux
+EOF
+cat >"$work/fallback/ss" <<'EOF'
+#!/usr/bin/env bash
+if [ "$LISTENER_CASE" = hidden ]; then
+  printf 'LISTEN 0 4096 [::1]:20443 [::]:*\n'
+else
+  printf 'LISTEN 0 4096 127.0.0.1:20443 0.0.0.0:* users:(("node",pid=123,fd=8),("node",pid=456,fd=9))\n'
+fi
+EOF
+chmod 0700 "$work/fallback/ss" "$work/fallback/uname"
+[ "$(PATH="$work/fallback" LISTENER_CASE=valid platform_listener_pids 20443)" = $'123\n456' ]
+if PATH="$work/fallback" LISTENER_CASE=hidden platform_listener_pids 20443; then exit 1; fi
 printf '%s\n' 'platform helper tests: PASS'

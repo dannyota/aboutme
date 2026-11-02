@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Process-identity tracking for the native HTTPS harness: proves a PID
-# file, launch record, or identity record still names the exact process
-# this script started before any signal or state mutation.
-# Sourced by scripts/dev-https.sh; defines functions and constants only.
-
+# Session ownership and live service/listener checks for the HTTPS harness.
 port_of() {
   case $1 in
   mock-oauth) printf '%s' "$MOCK_PORT" ;;
@@ -11,410 +7,172 @@ port_of() {
   server) printf '%s' "$SERVER_PORT" ;;
   web) printf '%s' "$WEB_PORT" ;;
   caddy) printf '%s' "$CADDY_PORT" ;;
-  *) die "unknown service $1" ;;
+  *) return 1 ;;
   esac
+}
+
+sha256_file() { sha256sum "$1" | awk '{print $1}'; }
+identity_field() {
+  awk -F= -v key="$2" '$1 == key { sub(/^[^=]*=/, ""); value=$0; count++ }
+    END { if (count != 1) exit 1; print value }' "$1"
 }
 
 read_pid() {
   local file pid
   file=$(pidfile "$1")
-  [ -s "$file" ] || return 1
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
   pid=$(<"$file")
-  [[ $pid =~ ^[0-9]+$ ]] || return 1
+  [[ $pid =~ ^[1-9][0-9]*$ ]] && [ "$pid" -gt 1 ] || return 1
   printf '%s' "$pid"
 }
 
+# HTTP stack exclusion needs no signal authority.
 is_ours() {
-  local pid=$1 sid
-  kill -0 "$pid" 2>/dev/null || return 1
-  sid=$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
+  local row pid ppid pgid uid sid rest
+  row=$(platform_process_snapshot "$1") || return 1
+  read -r pid ppid pgid uid sid rest <<<"$row"
   [ "$sid" = "$pid" ]
 }
 
+session_record() { printf '%s/session' "$RUN_DIR"; }
+session_command() { printf '%s %s/scripts/lib/dev-https-session.sh %s %s' "$BASH_BIN" "$ROOT" "$ROOT" "$SESSION_TOKEN"; }
+
+validate_session_record() {
+  local values
+  values=$(python3 -I - "$(session_record)" "$ROOT" <<'PYTHON'
+import os, re, stat, sys
+try:
+    fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd) as record:
+        node = os.fstat(record.fileno())
+        if not stat.S_ISREG(node.st_mode) or stat.S_IMODE(node.st_mode) != 0o600 or node.st_uid != os.geteuid() or node.st_nlink != 1:
+            sys.exit(1)
+        text = record.read(4097)
+    lines = text.splitlines()
+    if len(text) > 4096 or len(lines) != 5 or any("=" not in line for line in lines):
+        sys.exit(1)
+    values = dict(line.split("=", 1) for line in lines)
+    if set(values) != {"version", "checkout", "pid", "pgid", "launch_token"}:
+        sys.exit(1)
+    if values["version"] != "2" or values["checkout"] != sys.argv[2] or values["pgid"] != values["pid"]:
+        sys.exit(1)
+    if not re.fullmatch(r"[1-9][0-9]*", values["pid"]) or int(values["pid"]) <= 1 or not re.fullmatch(r"[0-9a-f]{32}", values["launch_token"]):
+        sys.exit(1)
+    print(values["pid"], values["launch_token"])
+except (OSError, UnicodeError):
+    sys.exit(1)
+PYTHON
+) || return 1
+  read -r SESSION_PID SESSION_TOKEN <<<"$values"
+}
+
+validate_session_anchor() {
+  validate_session_record && platform_validate_anchor "$SESSION_PID" "$(session_command)"
+}
+
+session_matches() {
+  local token=$1
+  validate_session_record && [ "$SESSION_TOKEN" = "$token" ]
+}
+
+latch_session_failure() {
+  local token=$1 name=${2:-inspection}
+  session_matches "$token" || return 1
+  case $name in mock-oauth | mail-capture | server | web | caddy | inspection) ;; *) return 1 ;; esac
+  # Persist the latch before optional diagnostics or proof notifications.
+  (set -o noclobber; printf '%s\n' "$token" >"$RUN_DIR/session.failed") 2>/dev/null ||
+    [ "$(cat "$RUN_DIR/session.failed" 2>/dev/null)" = "$token" ] || return 1
+  (set -o noclobber; printf '%s\n' "$name" >"$RUN_DIR/session.failed-service") 2>/dev/null || true
+  notify_proofs failed
+}
+
 service_pid() {
-  local pid
-  pid=$(read_pid "$1") || return 1
-  validate_service_identity "$1" 1 || return 1
+  local name=$1 pid recorded row actual ppid pgid uid sid state command
+  validate_session_anchor || return 1
+  [ ! -e "$RUN_DIR/session.failed" ] && [ ! -e "$RUN_DIR/session.stopping" ] || return 1
+  [ "$(identity_field "$RUN_DIR/session.children" launch_token)" = "$SESSION_TOKEN" ] || return 1
+  recorded=$(identity_field "$RUN_DIR/session.children" "$name") || return 1
+  pid=$(read_pid "$name") || return 1
+  [ "$pid" = "$recorded" ] || return 1
+  row=$(platform_process_snapshot "$pid") || return 1
+  read -r actual ppid pgid uid sid state command <<<"$row"
+  [ "$actual" = "$pid" ] && [ "$ppid" = "$SESSION_PID" ] && [ "$pgid" = "$SESSION_PID" ] &&
+    [ "$sid" = "$SESSION_PID" ] && [ "$uid" = "$EUID" ] && [[ $state != [ZX]* ]] || return 1
   printf '%s' "$pid"
 }
 
-sha256_file() { sha256sum "$1" | awk '{print $1}'; }
+validate_service_identity() { service_pid "$1" >/dev/null; }
 
-hash_argv() {
-  printf '%s\0' "$@" | sha256sum | awk '{print $1}'
-}
-
-expected_service_cmdline_hash() {
-  local name=$1 file environment workdir
-  file=$(pidfile "$name")
-  environment=$(service_env_file "$name")
-  case $name in
-  mock-oauth)
-    workdir=$ROOT/apps/server
-    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" "$BIN_DIR/mock-oauth"
-    ;;
-  mail-capture)
-    workdir=$ROOT/apps/server
-    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" "$BIN_DIR/mail-capture" --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
-    ;;
-  server)
-    workdir=$ROOT/apps/server
-    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" "$BIN_DIR/server"
-    ;;
-  web)
-    workdir=$ROOT/apps/web
-    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
-    ;;
-  caddy)
-    workdir=$ROOT
-    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile
-    ;;
-  *) return 1 ;;
-  esac
-}
-
-proc_starttime() {
-  local stat rest
-  stat=$(<"/proc/$1/stat") || return 1
-  rest=${stat##*) }
-  set -- $rest
-  [ "$#" -ge 20 ] || return 1
-  printf '%s' "${20}"
-}
-
-proc_cmdline_hash() {
-  [ -r "/proc/$1/cmdline" ] || return 1
-  sha256sum "/proc/$1/cmdline" | awk '{print $1}'
-}
-
-identity_field() {
-  local file=$1 key=$2 lines
-  lines=$(awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print }' "$file") || return 1
-  [ "$(wc -l <<<"$lines")" -eq 1 ] || return 1
-  printf '%s' "$lines"
-}
-
-group_members() {
-  local pgid=$1 sid=$2
-  ps -eo pid=,pgid=,sid= | awk -v pgid="$pgid" -v sid="$sid" '$2 == pgid && $3 == sid { print $1 }'
-}
-
-proc_member_environ_path() { printf '/proc/%s/environ' "$1"; }
-
-proc_member_exists() { [ -d "/proc/$1" ]; }
-
-member_has_token() {
-  local pid=$1 token=$2 environment path
-  path=$(proc_member_environ_path "$pid") || return 1
-  environment=$(tr '\0' '\n' 2>/dev/null <"$path") || return 1
-  grep -Fx "ABOUTME_DEV_HTTPS_IDENTITY=$token" <<<"$environment" >/dev/null
-}
-
-# Keep group IDs, state, and exit flags in one snapshot after a failed token read.
-proc_member_state() {
-  local pid=$1 stat stat_flags
-  local -a fields=()
-  if ! stat=$(cat "/proc/$pid/stat" 2>/dev/null); then
-    ! proc_member_exists "$pid" || return 1
-    return 0
-  fi
-  read -ra fields <<<"${stat##*) }" || return 1
-  stat_flags=${fields[6]-}
-  [[ ${fields[2]-} =~ ^[0-9]+$ && ${fields[3]-} =~ ^[0-9]+$ ]] || return 1
-  [[ ${fields[0]-} =~ ^[RSDZTtWXxKPI]$ ]] || return 1
-  [[ $stat_flags =~ ^[0-9]+$ ]] || return 1
-  printf '%s %s %s %s\n' "${fields[2]}" "${fields[3]}" "${fields[0]}" "$stat_flags"
-}
-
-validate_group_member() {
-  local pid=$1 pgid=$2 sid=$3 token=$4 actual actual_pgid actual_sid state flags
-  actual=$(ps -o pgid=,sid=,stat= -p "$pid" 2>/dev/null) || return 0
-  [ -n "$actual" ] || return 0
-  read -r actual_pgid actual_sid state <<<"$actual"
-  [[ $actual_pgid =~ ^[0-9]+$ && $actual_sid =~ ^[0-9]+$ ]] || return 1
-  [[ $state == [RSDZTtWXxKPI]* ]] || return 1
-  # A listed PID can exit or be reused outside this group before this probe.
-  [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 0
-  [[ $state == [ZXx]* ]] && return 0
-  if member_has_token "$pid" "$token"; then
-    return 0
-  fi
-  # An exiting child can lose its readable environment before becoming a
-  # zombie. Only a live member of this group must still prove the token.
-  actual=$(proc_member_state "$pid") || return 1
-  [ -n "$actual" ] || return 0
-  read -r actual_pgid actual_sid state flags <<<"$actual"
-  [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 0
-  [[ $state == [ZXx]* ]] && return 0
-  # PF_EXITING is bit 2 of stat field 9 (Linux include/linux/sched.h).
-  (( (flags & 4) != 0 )) && return 0
-  return 1
-}
-
-validate_process_record() {
-  local name=$1 file=$2 mode version service pid pidfile_pid starttime sid pgid expected_executable expected_cmdline token
-  [ -f "$file" ] || return 1
-  mode=$(stat -c '%a' "$file" 2>/dev/null || true)
-  [ "$mode" = 600 ] || return 1
-  version=$(identity_field "$file" version) || return 1
-  service=$(identity_field "$file" service) || return 1
-  pid=$(identity_field "$file" pid) || return 1
-  starttime=$(identity_field "$file" starttime) || return 1
-  sid=$(identity_field "$file" sid) || return 1
-  pgid=$(identity_field "$file" pgid) || return 1
-  expected_executable=$(identity_field "$file" expected_executable) || return 1
-  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
-  token=$(identity_field "$file" identity_token) || return 1
-  pidfile_pid=$(read_pid "$name") || return 1
-  [ "$version" = 1 ] || return 1
-  [ "$service" = "$name" ] || return 1
-  [ "$pid" = "$pidfile_pid" ] || return 1
-  [[ $pid =~ ^[0-9]+$ && $starttime =~ ^[0-9]+$ && $sid =~ ^[0-9]+$ && $pgid =~ ^[0-9]+$ ]] || return 1
-  [ "$pid" = "$sid" ] && [ "$pid" = "$pgid" ] || return 1
-  [[ $expected_executable == /* ]] || return 1
-  [[ $expected_cmdline =~ ^[0-9a-f]{64}$ ]] || return 1
-  local token_suffix=${token#"$name-"}
-  [ "$token_suffix" != "$token" ] && [[ $token_suffix =~ ^[0-9a-f]{64}$ ]] || return 1
-}
-
-validate_identity_record() {
-  validate_process_record "$1" "$(identity_file "$1")"
-}
-
-validate_prepared_launch_record() {
-  local name=$1 file mode version state service expected_executable expected_cmdline token token_suffix
-  file=$(launch_file "$name")
-  [ -f "$file" ] || return 1
-  mode=$(stat -c '%a' "$file" 2>/dev/null || true)
-  [ "$mode" = 600 ] || return 1
-  version=$(identity_field "$file" version) || return 1
-  state=$(identity_field "$file" launch_state) || return 1
-  service=$(identity_field "$file" service) || return 1
-  expected_executable=$(identity_field "$file" expected_executable) || return 1
-  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
-  token=$(identity_field "$file" identity_token) || return 1
-  [ "$version" = 1 ] && [ "$state" = prepared ] && [ "$service" = "$name" ] || return 1
-  [[ $expected_executable == /* ]] || return 1
-  [[ $expected_cmdline =~ ^[0-9a-f]{64}$ ]] || return 1
-  token_suffix=${token#"$name-"}
-  [ "$token_suffix" != "$token" ] && [[ $token_suffix =~ ^[0-9a-f]{64}$ ]] || return 1
-}
-
-VALIDATED_PREPARED_PID=
-VALIDATED_PREPARED_STARTTIME=
-VALIDATED_PREPARED_RECORD_HASH=
-
-validate_prepared_launch_service() {
-  local name=$1 require_leader=$2 required_record_hash=${3:-} required_starttime=${4:-}
-  local file record_hash pid starttime= expected_executable expected_cmdline token actual_sid actual_pgid members member
-  file=$(launch_file "$name")
-  validate_prepared_launch_record "$name" || return 1
-  record_hash=$(sha256_file "$file") || return 1
-  [ -z "$required_record_hash" ] || [ "$record_hash" = "$required_record_hash" ] || return 1
-  pid=$(read_pid "$name") || return 1
-  expected_executable=$(identity_field "$file" expected_executable) || return 1
-  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
-  token=$(identity_field "$file" identity_token) || return 1
-  if kill -0 "$pid" 2>/dev/null; then
-    starttime=$(proc_starttime "$pid") || return 1
-    [ -z "$required_starttime" ] || [ "$starttime" = "$required_starttime" ] || return 1
-    [ "$(readlink -f "/proc/$pid/exe")" = "$expected_executable" ] || return 1
-    [ "$(proc_cmdline_hash "$pid")" = "$expected_cmdline" ] || return 1
-    actual_sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
-    actual_pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
-    [ "$actual_sid" = "$pid" ] && [ "$actual_pgid" = "$pid" ] || return 1
-    member_has_token "$pid" "$token" || return 1
-  elif [ "$require_leader" = 1 ]; then
-    return 1
-  else
-    [ -n "$required_starttime" ] || return 1
-    starttime=$required_starttime
-  fi
-  members=$(group_members "$pid" "$pid") || return 1
-  if [ -z "$members" ]; then
-    [ "$require_leader" = 0 ] || return 1
-  else
-    while IFS= read -r member; do
-      [[ $member =~ ^[0-9]+$ ]] || return 1
-      validate_group_member "$member" "$pid" "$pid" "$token" || return 1
-    done <<<"$members"
-  fi
-  [ "$(sha256_file "$file")" = "$record_hash" ] || return 1
-  VALIDATED_PREPARED_PID=$pid
-  VALIDATED_PREPARED_STARTTIME=$starttime
-  VALIDATED_PREPARED_RECORD_HASH=$record_hash
-}
-
-remove_absent_prepared_launch() {
-  local name=$1 file identity launch environment record_hash pid attempt members
-  file=$(pidfile "$name")
-  identity=$(identity_file "$name")
-  launch=$(launch_file "$name")
-  environment=$(service_env_file "$name")
-  validate_prepared_launch_record "$name" || return 1
-  record_hash=$(sha256_file "$launch") || return 1
-  pid=$(read_pid "$name") || return 1
-  for attempt in $(seq 1 "$STOP_KILL_ATTEMPTS"); do
-    members=$(group_members "$pid" "$pid") || return 1
-    if ! kill -0 "$pid" 2>/dev/null && [ -z "$members" ]; then
-      break
+# Require every socket owner to descend from this service's live direct child.
+validate_service_listeners() {
+  local name=$1 allow_absent=${2:-0} child owners status owner row pid ppid pgid uid sid state command seen port absent=0
+  local -a ports=("$(port_of "$1")")
+  [ "$name" != server ] || ports+=(20445)
+  child=$(service_pid "$name") || return 2
+  for port in "${ports[@]}"; do
+    if owners=$(platform_listener_pids "$port"); then
+      SESSION_LISTENERS_SEEN[$port]=1
+    else
+      status=$?
+      if [ "$status" -eq 1 ] && [ "$allow_absent" = 1 ] &&
+        [ -z "${SESSION_LISTENERS_SEEN[$port]+set}" ] && [ ! -e "$RUN_DIR/session.ready" ]; then
+        absent=1
+        continue
+      fi
+      return 2
     fi
-    sleep 0.1
+    while IFS= read -r owner; do
+      seen=' '
+      while :; do
+        [[ $owner =~ ^[1-9][0-9]*$ && $seen != *" $owner "* ]] || return 2
+        seen+="$owner "
+        row=$(platform_process_snapshot "$owner") || return 2
+        read -r pid ppid pgid uid sid state command <<<"$row"
+        [ "$pgid" = "$SESSION_PID" ] && [ "$sid" = "$SESSION_PID" ] &&
+          [ "$uid" = "$EUID" ] && [[ $state != [ZX]* ]] || return 2
+        [ "$owner" != "$child" ] || break
+        owner=$ppid
+      done
+    done <<<"$owners"
   done
-  validate_prepared_launch_record "$name" || return 1
-  [ "$(sha256_file "$launch")" = "$record_hash" ] || return 1
-  [ "$(read_pid "$name")" = "$pid" ] || return 1
-  ! kill -0 "$pid" 2>/dev/null || return 1
-  members=$(group_members "$pid" "$pid") || return 1
-  [ -z "$members" ] || return 1
-  rm -f -- "$file" "$identity" "$launch" "$environment"
+  service_pid "$name" >/dev/null || return 2
+  [ "$absent" = 0 ] || return 1
 }
 
-validate_absent_process_record() {
-  local name=$1 record=$2 record_hash pid sid pgid members
-  validate_process_record "$name" "$record" || return 1
-  record_hash=$(sha256_file "$record") || return 1
-  pid=$(identity_field "$record" pid) || return 1
-  sid=$(identity_field "$record" sid) || return 1
-  pgid=$(identity_field "$record" pgid) || return 1
-  ! kill -0 "$pid" 2>/dev/null || return 1
-  members=$(group_members "$pgid" "$sid") || return 1
-  [ -z "$members" ] || return 1
-  validate_process_record "$name" "$record" || return 1
-  [ "$(sha256_file "$record")" = "$record_hash" ] || return 1
-  [ "$(read_pid "$name")" = "$pid" ] || return 1
-  ! kill -0 "$pid" 2>/dev/null || return 1
-  members=$(group_members "$pgid" "$sid") || return 1
-  [ -z "$members" ]
+session_health() {
+  local name token proof=${1:-} stopped=${2:-}
+  validate_session_anchor || return 1
+  token=$SESSION_TOKEN
+  [ ! -e "$RUN_DIR/session.failed" ] && [ ! -e "$RUN_DIR/session.stopping" ] || return 1
+  for name in "${SERVICES[@]}"; do
+    if ! validate_service_listeners "$name"; then
+      # An allowed proof can inspect a child while a validated stop drains it.
+      # A prior session's stop marker cannot excuse an unexpected service loss.
+      if [ -z "$proof" ] || ! proof_stop_observed "$proof" "$stopped" "$token"; then
+        latch_session_failure "$token" "$name" || true
+      fi
+      return 1
+    fi
+  done
+  validate_session_anchor && [ "$SESSION_TOKEN" = "$token" ] && [ ! -e "$RUN_DIR/session.failed" ]
 }
 
-remove_absent_process_record() {
-  local name=$1 record=$2 file identity launch environment
-  file=$(pidfile "$name")
-  identity=$(identity_file "$name")
-  launch=$(launch_file "$name")
-  environment=$(service_env_file "$name")
-  validate_absent_process_record "$name" "$record" || return 1
-  rm -f -- "$file" "$identity" "$launch" "$environment"
+# Startup permits unbound ports, but never a foreign or unreadable owner.
+session_startup_health() {
+  local name status token
+  validate_session_anchor || return 1
+  token=$SESSION_TOKEN
+  for name in "${SERVICES[@]}"; do
+    status=0
+    validate_service_listeners "$name" 1 || status=$?
+    if [ "$status" -gt 1 ]; then
+      latch_session_failure "$token" "$name" || true
+      return 1
+    fi
+  done
+  [ ! -e "$RUN_DIR/session.failed" ]
 }
 
-validate_service_identity_from() {
-  local name=$1 require_leader=$2 file=$3 pid starttime sid pgid expected_executable expected_cmdline token actual_sid actual_pgid members member
-  validate_process_record "$name" "$file" || return 1
-  pid=$(identity_field "$file" pid)
-  starttime=$(identity_field "$file" starttime)
-  sid=$(identity_field "$file" sid)
-  pgid=$(identity_field "$file" pgid)
-  expected_executable=$(identity_field "$file" expected_executable)
-  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256)
-  token=$(identity_field "$file" identity_token)
-  if kill -0 "$pid" 2>/dev/null; then
-    [ "$(proc_starttime "$pid")" = "$starttime" ] || return 1
-    [ "$(readlink -f "/proc/$pid/exe")" = "$expected_executable" ] || return 1
-    [ "$(proc_cmdline_hash "$pid")" = "$expected_cmdline" ] || return 1
-    actual_sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
-    actual_pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
-    [ "$actual_sid" = "$sid" ] && [ "$actual_pgid" = "$pgid" ] || return 1
-    member_has_token "$pid" "$token" || return 1
-  elif [ "$require_leader" = 1 ]; then
-    return 1
-  fi
-  members=$(group_members "$pgid" "$sid") || return 1
-  if [ -z "$members" ]; then
-    [ "$require_leader" = 0 ] || return 1
-    return 0
-  fi
-  while IFS= read -r member; do
-    [[ $member =~ ^[0-9]+$ ]] || return 1
-    validate_group_member "$member" "$pgid" "$sid" "$token" || return 1
-  done <<<"$members"
-}
-
-validate_service_identity() {
-  validate_service_identity_from "$1" "${2:-1}" "$(identity_file "$1")"
-}
-
-write_process_record() {
-  local file=$1 name=$2 pid=$3 starttime=$4 sid=$5 pgid=$6 expected_executable=$7 expected_cmdline=$8 token=$9 temporary
-  temporary="$file.tmp.$BASHPID"
-  umask 077
-  {
-    printf 'version=1\n'
-    printf 'service=%s\n' "$name"
-    printf 'pid=%s\n' "$pid"
-    printf 'starttime=%s\n' "$starttime"
-    printf 'sid=%s\n' "$sid"
-    printf 'pgid=%s\n' "$pgid"
-    printf 'expected_executable=%s\n' "$expected_executable"
-    printf 'expected_cmdline_sha256=%s\n' "$expected_cmdline"
-    printf 'identity_token=%s\n' "$token"
-  } >"$temporary" || return 1
-  chmod 0600 "$temporary" || { rm -f -- "$temporary"; return 1; }
-  mv -f -- "$temporary" "$file" || { rm -f -- "$temporary"; return 1; }
-  chmod 0600 "$file"
-}
-
-write_launch_intent() {
-  local name=$1 token=$2 file expected_cmdline
-  file=$(launch_file "$name")
-  expected_cmdline=$(expected_service_cmdline_hash "$name") || return 1
-  umask 077
-  {
-    printf 'version=1\n'
-    printf 'launch_state=prepared\n'
-    printf 'service=%s\n' "$name"
-    printf 'expected_executable=%s\n' "$BASH_BIN"
-    printf 'expected_cmdline_sha256=%s\n' "$expected_cmdline"
-    printf 'identity_token=%s\n' "$token"
-  } >"$file" || return 1
-  chmod 0600 "$file"
-}
-
-complete_launch_record() {
-  local name=$1 token=$2 file mode version state service expected_executable expected_cmdline recorded_token
-  local pid starttime sid pgid actual_executable actual_cmdline
-  file=$(launch_file "$name")
-  mode=$(stat -c '%a' "$file" 2>/dev/null || true)
-  [ "$mode" = 600 ] || return 1
-  version=$(identity_field "$file" version) || return 1
-  state=$(identity_field "$file" launch_state) || return 1
-  service=$(identity_field "$file" service) || return 1
-  expected_executable=$(identity_field "$file" expected_executable) || return 1
-  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
-  recorded_token=$(identity_field "$file" identity_token) || return 1
-  [ "$version" = 1 ] && [ "$state" = prepared ] && [ "$service" = "$name" ] || return 1
-  [ "$expected_executable" = "$BASH_BIN" ] || return 1
-  [ "$expected_cmdline" = "$(expected_service_cmdline_hash "$name")" ] || return 1
-  [ "$recorded_token" = "$token" ] || return 1
-  pid=$(read_pid "$name") || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
-  starttime=$(proc_starttime "$pid") || return 1
-  sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
-  pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
-  [ "$pid" = "$sid" ] && [ "$pid" = "$pgid" ] || return 1
-  actual_executable=$(readlink -f "/proc/$pid/exe") || return 1
-  [ "$actual_executable" = "$expected_executable" ] || return 1
-  actual_cmdline=$(proc_cmdline_hash "$pid") || return 1
-  [ "$actual_cmdline" = "$expected_cmdline" ] || return 1
-  write_process_record "$file" "$name" "$pid" "$starttime" "$sid" "$pgid" \
-    "$expected_executable" "$expected_cmdline" "$token" || return 1
-  validate_service_identity_from "$name" 1 "$file"
-}
-
-write_identity() {
-  local name=$1 token=$2 launch identity pid starttime sid pgid expected_executable expected_cmdline recorded_token
-  launch=$(launch_file "$name")
-  identity=$(identity_file "$name")
-  validate_service_identity_from "$name" 1 "$launch" || return 1
-  pid=$(identity_field "$launch" pid) || return 1
-  starttime=$(identity_field "$launch" starttime) || return 1
-  sid=$(identity_field "$launch" sid) || return 1
-  pgid=$(identity_field "$launch" pgid) || return 1
-  expected_executable=$(identity_field "$launch" expected_executable) || return 1
-  expected_cmdline=$(identity_field "$launch" expected_cmdline_sha256) || return 1
-  recorded_token=$(identity_field "$launch" identity_token) || return 1
-  [ "$recorded_token" = "$token" ] || return 1
-  write_process_record "$identity" "$name" "$pid" "$starttime" "$sid" "$pgid" \
-    "$expected_executable" "$expected_cmdline" "$token" || return 1
-  validate_service_identity "$name" 1
+session_ready() {
+  [ -f "$RUN_DIR/session.ready" ] && [ "$(cat "$RUN_DIR/session.ready")" = "$SESSION_TOKEN" ]
 }

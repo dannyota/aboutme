@@ -2,7 +2,7 @@
 
 # Tests scripts/pre-push.sh in temporary repositories with stub tools: change
 # detection, per-check file selection, refusals, the lock and watchdog refusals,
-# the watchdog arguments, and worktree borrowing of node_modules.
+# the watchdog arguments, and checkout-local dependencies.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -78,19 +78,27 @@ new_repo() { # new_repo <dir>: a committed repository whose origin/main is HEAD
     "$ROOT/scripts/check-path-case.sh" "$repo/scripts/"
   mkdir -p "$repo/scripts/lib"
   cp "$ROOT/scripts/lib/platform.sh" "$ROOT/scripts/lib/local-check.py" "$repo/scripts/lib/"
-  cat >"$repo/scripts/run-capped.sh" <<'STUB'
+  cat >"$repo/scripts/run-owned.sh" <<'STUB'
 #!/usr/bin/env bash
-printf 'run-capped %s report=%s\n' "$*" "$RUN_CAPPED_REPORT" >>"$CALL_LOG"
-[ -z "${STUB_CAPPED_STATUS:-}" ] || exit "$STUB_CAPPED_STATUS"
+printf 'run-owned %s\n' "$*" >>"$CALL_LOG"
+[ -z "${STUB_OWNED_STATUS:-}" ] || exit "$STUB_OWNED_STATUS"
 shift 3
 exec "$@"
 STUB
 
   printf 'golangci-lint 2.15.0\n' >"$repo/.tool-versions"
   printf '{}\n' >"$repo/package.json"
-  printf '{}\n' >"$repo/apps/web/package.json"
+  printf '{"dependencies":{"@aboutme/schema":"file:../../packages/schema"}}\n' >"$repo/apps/web/package.json"
+  printf '{"name":"@aboutme/schema"}\n' >"$repo/packages/schema/package.json"
   lockfile "$repo/package-lock.json" "${root_packages[@]}"
   lockfile "$repo/apps/web/package-lock.json" "${web_packages[@]}"
+  node - "$repo/apps/web/package-lock.json" <<'LOCK'
+const fs = require('node:fs');
+const file = process.argv[2];
+const lock = JSON.parse(fs.readFileSync(file, 'utf8'));
+lock.packages['node_modules/@aboutme/schema'] = {link: true, resolved: '../../packages/schema'};
+fs.writeFileSync(file, JSON.stringify(lock));
+LOCK
   printf 'export const a = 1;\n' >"$repo/apps/web/app/a.ts"
   printf 'package foo\n' >"$repo/apps/server/internal/foo/foo.go"
   printf 'package gone\n' >"$repo/apps/server/internal/gone/gone.go"
@@ -122,6 +130,8 @@ STUB
     node_tool "$repo/apps/web/node_modules" \
       "$([[ $package == eslint ]] && echo eslint)" "$package" 1.0.0
   done
+  mkdir -p "$repo/apps/web/node_modules/@aboutme"
+  ln -s "$repo/packages/schema" "$repo/apps/web/node_modules/@aboutme/schema"
   mkdir -p "$repo/apps/web/.nuxt"
   printf 'export default [];\n' >"$repo/apps/web/.nuxt/eslint.config.mjs"
 }
@@ -146,21 +156,21 @@ has_line() { grep -Eq -- "$1" "$WORK/out" || fail "missing output: $1"; }
 REPO=$WORK/repo
 new_repo "$REPO"
 
-# No changes: every check skips, lengths runs, under the lock and the cap.
+# No changes: every check skips, lengths runs, under the lock and deadline.
 check "$REPO" 0
 
-has_call "run-capped --timeout 600 -- bash $REPO/scripts/pre-push.sh --capped report=1"
+has_call "run-owned --timeout 600 -- bash $REPO/scripts/pre-push.sh --capped"
 has_line 'eslint +skip'
 has_line 'lengths +pass'
 has_line 'path-case +pass'
 no_call eslint
 
 # A watchdog refusal means nothing ran. Runtime failures are check failures.
-check "$REPO" 2 STUB_CAPPED_STATUS=125
+check "$REPO" 2 STUB_OWNED_STATUS=125
 has_line 'refused: watchdog could not start'
 no_call gofmt
 for code in 123 124 126 127 130 137; do
-  check "$REPO" 1 STUB_CAPPED_STATUS=$code
+  check "$REPO" 1 STUB_OWNED_STATUS=$code
   has_line 'FAIL: watchdog stopped'
 done
 
@@ -181,7 +191,7 @@ check "$REPO" 2
 kill "$holder"
 wait "$holder" || true
 has_line 'another local check held'
-no_call run-capped
+no_call run-owned
 
 # Committed, uncommitted, and untracked web sources all reach ESLint; other
 # files under apps/web do not.
@@ -302,25 +312,66 @@ check "$REPO" 1
 has_line 'lengths +FAIL'
 git -C "$REPO" rm -q -f docs/long.md
 
-# A worktree borrows the main checkout's install and .nuxt, then removes both.
+# A worktree never borrows or changes the main checkout's dependencies.
 TREE=$WORK/tree
 git -C "$REPO" worktree add -q -b topic "$TREE" HEAD
 printf 'export const a = 3;\n' >"$TREE/apps/web/app/a.ts"
-check "$TREE" 0
-has_call "eslint --no-warn-ignored -- app/a.ts (in web, modules $REPO/apps/web/node_modules)"
-
-[[ ! -e $TREE/apps/web/node_modules && ! -e $TREE/apps/web/.nuxt ]] ||
-  fail "worktree kept the borrowed node_modules or .nuxt"
-[[ -d $REPO/apps/web/node_modules && ! -L $REPO/apps/web/node_modules ]] ||
-  fail "main checkout lost its node_modules"
-
-# Leftovers from a killed run are reclaimed and removed.
-ln -s "$REPO/apps/web/node_modules" "$TREE/apps/web/node_modules"
+printf 'sentinel\n' >"$REPO/apps/web/.nuxt/.pre-push-copy"
+check "$TREE" 2
+has_line 'eslint +REFUSED +no checkout-local node_modules'
+no_call eslint
+[[ ! -e $TREE/apps/web/node_modules && ! -e $TREE/apps/web/.nuxt ]] || fail 'dependencies were borrowed'
+[[ $(cat "$REPO/apps/web/.nuxt/.pre-push-copy") == sentinel ]] || fail 'main sentinel changed'
+for target in apps/web/node_modules apps/web/.nuxt; do
+  ln -s "$REPO/$target" "$TREE/$target"
+  check "$TREE" 2
+  no_call eslint
+  [[ -L $TREE/$target ]] || fail 'pre-push removed a dependency link'
+  [[ $(cat "$REPO/apps/web/.nuxt/.pre-push-copy") == sentinel ]] || fail 'main sentinel changed'
+  rm "$TREE/$target"
+done
 mkdir -p "$TREE/apps/web/.nuxt"
-: >"$TREE/apps/web/.nuxt/.pre-push-copy"
+printf 'keep\n' >"$TREE/apps/web/.nuxt/.pre-push-copy"
+for package in "${web_packages[@]}"; do
+  node_tool "$TREE/apps/web/node_modules" "$([[ $package == eslint ]] && echo eslint)" "$package" 1.0.0
+done
+mkdir -p "$TREE/apps/web/node_modules/@aboutme"
+ln -s "$TREE/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+check "$TREE" 2
+has_line 'eslint +REFUSED +no generated checkout-local'
+[[ $(cat "$TREE/apps/web/.nuxt/.pre-push-copy") == keep ]] || fail 'local marker was reclaimed'
+printf 'export default [];\n' >"$TREE/apps/web/.nuxt/eslint.config.mjs"
 check "$TREE" 0
-[[ ! -e $TREE/apps/web/node_modules && ! -e $TREE/apps/web/.nuxt ]] ||
-  fail "worktree kept leftovers from a killed run"
+has_call 'eslint --no-warn-ignored -- app/a.ts (in web, modules real)'
+# The declared schema link cannot redirect source reads to another checkout.
+rm "$TREE/apps/web/node_modules/@aboutme/schema"
+ln -s "$REPO/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+check "$TREE" 2
+no_call eslint
+[[ -L $TREE/apps/web/node_modules/@aboutme/schema ]] || fail 'schema link was removed'
+rm "$TREE/apps/web/node_modules/@aboutme/schema"
+ln -s "$TREE/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+ln -s "$REPO/apps/web/.nuxt" "$TREE/apps/web/.nuxt-linked"
+mv "$TREE/apps/web/.nuxt" "$WORK/local-nuxt"
+mv "$TREE/apps/web/.nuxt-linked" "$TREE/apps/web/.nuxt"
+check "$TREE" 2
+no_call eslint
+[[ $(cat "$REPO/apps/web/.nuxt/.pre-push-copy") == sentinel ]] || fail 'main sentinel changed'
+rm "$TREE/apps/web/.nuxt"
+mv "$WORK/local-nuxt" "$TREE/apps/web/.nuxt"
+# Scoped package links and generated-directory ancestors also refuse.
+mv "$TREE/apps/web/node_modules/@nuxt" "$WORK/nuxt-packages"
+ln -s "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
+check "$TREE" 2
+no_call eslint
+rm "$TREE/apps/web/node_modules/@nuxt"
+mv "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
+mkdir -p "$TREE/.dev"
+printf '%s' "$$" >"$TREE/.dev/server.pid"
+check "$TREE" 2
+has_line 'active development stack'
+no_call eslint
+rm "$TREE/.dev/server.pid"
 
 # A worktree branch that changed the web lockfile is refused.
 node -e 'const fs=require("fs"); const p=process.argv[1]; fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace("1.0.0", "1.1.0"));' "$TREE/apps/web/package-lock.json"
@@ -330,8 +381,8 @@ has_line 'eslint +REFUSED +the branch changed apps/web/package.json or its lockf
 # Interrupt the actual lock -> pre-push -> watchdog -> check chain.
 REAL=$WORK/real
 new_repo "$REAL"
-cp "$ROOT/scripts/run-capped.sh" "$REAL/scripts/"
-cp "$ROOT/scripts/lib/run-capped.py" "$REAL/scripts/lib/"
+cp "$ROOT/scripts/run-owned.sh" "$REAL/scripts/"
+cp "$ROOT/scripts/lib/run-owned.py" "$REAL/scripts/lib/"
 cat >"$REAL/scripts/check-lengths.sh" <<'CHECK'
 #!/usr/bin/env bash
 exec python3 -c '
@@ -355,7 +406,7 @@ for number in (signal.SIGTERM, signal.SIGINT):
     owned.unlink(missing_ok=True)
     environment = {**os.environ, "PATH": binary + os.pathsep + os.environ["PATH"],
                    "CALL_LOG": calls, "OWNED_PID": str(owned),
-                   "RUN_CAPPED_TOTAL_KIB": "262144", "RUN_CAPPED_RESERVE_KIB": "0"}
+                   "PYTHONDONTWRITEBYTECODE": "1"}
     with open(Path(work) / "out", "w") as output:
         child = subprocess.Popen(["bash", "scripts/pre-push.sh"], cwd=repo,
                                  env=environment, stdout=output, stderr=output,
@@ -378,8 +429,8 @@ for number in (signal.SIGTERM, signal.SIGINT):
                     except BlockingIOError:
                         assert time.monotonic() < deadline, "lock never released"
                         time.sleep(0.05)
-                result = subprocess.run(["ps", "-o", "rss=", "-p", pid], capture_output=True, text=True)
-                assert not result.stdout.strip() or int(result.stdout) == 0, "lock released before child ended"
+                result = subprocess.run(["ps", "-o", "stat=", "-p", pid], capture_output=True, text=True)
+                assert not result.stdout.strip() or result.stdout.strip().startswith("Z"), "lock released before child ended"
             assert child.wait(timeout=10) == 1, "interrupted pre-push did not report failure"
         finally:
             if child.poll() is None:

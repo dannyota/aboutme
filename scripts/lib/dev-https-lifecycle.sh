@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Service start/stop supervision for the native HTTPS harness:
-# per-service env files, launch, readiness waits, and owned-process
-# shutdown.
+# Environment and readiness helpers for the native HTTPS harness.
 # Sourced by scripts/dev-https.sh; defines functions and constants only.
 
 # passkey_enrollment_flag echoes the closed PASSKEY_ENROLLMENT_ENABLED value
@@ -29,13 +27,6 @@ totp_enrollment_flag() {
   esac
 }
 
-# VIEW_PASS_KEY signs the harness's own throwaway pass cookie
-# (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). Unlike the
-# generated secrets above, it is a fixed dev-only constant, not per-stack
-# state: this exact 32-byte ASCII string, unpadded base64url encoded.
-readonly dev_https_view_pass_key=$(printf '%s' "aboutme-dev-only-view-pass-key32" |
-  base64 -w0 | tr '+/' '-_' | tr -d '=')
-
 write_service_env() {
   local name=$1 file
   file=$(service_env_file "$name")
@@ -46,7 +37,9 @@ write_service_env() {
       127.0.0.1 "$MOCK_PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$LINKEDIN_CLIENT_ID" "$LINKEDIN_CLIENT_SECRET" >"$file"
     ;;
   server)
-    local passkey_enrollment totp_enrollment
+    local passkey_enrollment totp_enrollment dev_https_view_pass_key
+    # The throwaway viewer-pass key belongs only to this development harness.
+    dev_https_view_pass_key=$(printf '%s' "aboutme-dev-only-view-pass-key32" | base64 -w0 | tr '+/' '-_' | tr -d '=')
     passkey_enrollment=$(passkey_enrollment_flag) || return 1
     totp_enrollment=$(totp_enrollment_flag) || return 1
     # PROVIDER_LOGIN_ENABLED lists google and linkedin only, so the harness's
@@ -75,41 +68,21 @@ write_service_env() {
   chmod 0600 "$file"
 }
 
-start_service() {
-  local name=$1 workdir=$2 file environment log pid token
-  shift 2
-  file=$(pidfile "$name")
-  environment=$(service_env_file "$name")
-  log=$(logfile "$name")
-  [ ! -e "$file" ] || return 1
-  write_service_env "$name" || return 1
-  printf '\n===== %s started %s =====\n' "$name" "$(date -Is)" >>"$log"
-  token="$name-$(printf '%s' "$name:$BASHPID:$(date +%s%N)" | sha256sum | awk '{print $1}')"
-  write_launch_intent "$name" "$token" || return 1
-  STARTED_SERVICES+=("$name")
-  ABOUTME_DEV_HTTPS_IDENTITY="$token" setsid --fork "$BASH_BIN" -c "$SUPERVISOR_CODE" \
-    "dev-https-$name" "$file" "$workdir" "$environment" "$@" >>"$log" 2>&1 </dev/null
-  local attempt
-  for attempt in $(seq 1 50); do
-    if [ -s "$file" ]; then
-      pid=$(<"$file")
-      if [[ $pid =~ ^[0-9]+$ ]] && complete_launch_record "$name" "$token"; then
-        write_identity "$name" "$token" || return 1
-        return 0
-      fi
-    fi
-    sleep 0.1
-  done
-  return 1
-}
-
 wait_http() {
   local name=$1 url=$2 timeout=$3 pid deadline
   pid=$(service_pid "$name") || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    validate_service_identity "$name" 1 || return 1
-    curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null && return 0
+    session_startup_health || return 1
+    if validate_service_listeners "$name" 1; then
+      local probe_status=0
+      curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null || probe_status=$?
+      session_startup_health && validate_service_listeners "$name" || { latch_session_failure "$SESSION_TOKEN"; return 1; }
+      [ "$probe_status" -ne 0 ] || return 0
+    else
+      local status=$?
+      [ "$status" = 1 ] || { latch_session_failure "$SESSION_TOKEN"; return 1; }
+    fi
     sleep 0.3
   done
   return 1
@@ -120,8 +93,16 @@ wait_https() {
   pid=$(service_pid caddy) || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    validate_service_identity caddy 1 || return 1
-    curl -fsS -o /dev/null --max-time 5 --cacert "$EXPORTED_ROOT" "$url" 2>/dev/null && return 0
+    session_startup_health || return 1
+    if validate_service_listeners caddy 1; then
+      local probe_status=0
+      curl -fsS -o /dev/null --max-time 5 --cacert "$EXPORTED_ROOT" "$url" 2>/dev/null || probe_status=$?
+      session_health || return 1
+      [ "$probe_status" -ne 0 ] || return 0
+    else
+      local status=$?
+      [ "$status" = 1 ] || { latch_session_failure "$SESSION_TOKEN"; return 1; }
+    fi
     sleep 0.3
   done
   return 1
@@ -132,104 +113,19 @@ wait_for_caddy_root() {
   pid=$(service_pid caddy) || return 1
   deadline=$((SECONDS + 30))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    validate_service_identity caddy 1 || return 1
+    session_startup_health || return 1
     [ -s "$CADDY_ROOT" ] && return 0
     sleep 0.2
   done
   return 1
 }
 
-stop_owned_service() {
-  local name=$1 rollback=${2:-0} file identity launch environment evidence evidence_kind=full
-  local pid sid pgid starttime record_hash attempt members
-  file=$(pidfile "$name")
-  identity=$(identity_file "$name")
-  launch=$(launch_file "$name")
-  environment=$(service_env_file "$name")
-  if [ ! -e "$file" ]; then
-    if [ "$rollback" = 1 ] && validate_prepared_launch_record "$name"; then
-      rm -f -- "$identity" "$launch" "$environment"
-    fi
-    return 0
-  fi
-  if ! pid=$(read_pid "$name"); then
-    return 1
-  fi
-  if validate_service_identity_from "$name" 1 "$identity"; then
-    evidence=$identity
-  elif [ "$rollback" = 1 ] && validate_service_identity_from "$name" 1 "$launch"; then
-    evidence=$launch
-  elif validate_absent_process_record "$name" "$identity"; then
-    remove_absent_process_record "$name" "$identity"
-    return
-  elif validate_absent_process_record "$name" "$launch"; then
-    remove_absent_process_record "$name" "$launch"
-    return
-  elif [ "$rollback" = 1 ] && validate_prepared_launch_service "$name" 1; then
-    evidence=$launch
-    evidence_kind=prepared
-    pid=$VALIDATED_PREPARED_PID
-    sid=$pid
-    pgid=$pid
-    starttime=$VALIDATED_PREPARED_STARTTIME
-    record_hash=$VALIDATED_PREPARED_RECORD_HASH
-  elif [ "$rollback" = 1 ] && remove_absent_prepared_launch "$name"; then
-    return 0
-  else
-    return 1
-  fi
-  if [ "$evidence_kind" = full ]; then
-    sid=$(identity_field "$evidence" sid)
-    pgid=$(identity_field "$evidence" pgid)
-  fi
-  # The complete exact identity and every current group member are rechecked
-  # immediately before the first destructive signal.
-  if [ "$evidence_kind" = prepared ]; then
-    validate_prepared_launch_service "$name" 1 "$record_hash" "$starttime" || return 1
-    [ "$VALIDATED_PREPARED_PID" = "$pid" ] || return 1
-  else
-    validate_service_identity_from "$name" 1 "$evidence" || return 1
-  fi
-  kill -TERM -- "-$pgid" 2>/dev/null || return 1
-  for attempt in $(seq 1 "$STOP_TERM_ATTEMPTS"); do
-    members=$(group_members "$pgid" "$sid") || return 1
-    [ -z "$members" ] && break
-    sleep 0.1
-  done
-  members=$(group_members "$pgid" "$sid") || return 1
-  if [ -n "$members" ]; then
-    if [ "$evidence_kind" = prepared ]; then
-      validate_prepared_launch_service "$name" 0 "$record_hash" "$starttime" || return 1
-      [ "$VALIDATED_PREPARED_PID" = "$pid" ] || return 1
-    else
-      validate_service_identity_from "$name" 0 "$evidence" || return 1
-    fi
-    members=$(group_members "$pgid" "$sid") || return 1
-    if [ -n "$members" ]; then
-      warn "$name process group $pgid did not drain after SIGTERM; sending SIGKILL after re-proving every remaining member"
-      kill -KILL -- "-$pgid" 2>/dev/null || return 1
-    fi
-    for attempt in $(seq 1 "$STOP_KILL_ATTEMPTS"); do
-      members=$(group_members "$pgid" "$sid") || return 1
-      [ -z "$members" ] && break
-      sleep 0.1
-    done
-  fi
-  members=$(group_members "$pgid" "$sid") || return 1
-  [ -z "$members" ] || return 1
-  rm -f -- "$file" "$identity" "$launch" "$environment"
-  info "stopped $name (pid $pid)"
-}
-
-# report_startup_failure names the one service the start_* wrappers were
-# waiting on when startup aborted (CURRENT_SERVICE, set for the duration of
-# each wrapper's start_service/wait_* pair) and prints its redacted log tail,
-# so a public CI failure names its cause instead of only "startup failed"
-# (the rollback below removes the pidfile and identity records that would
-# otherwise let a later run distinguish this service, but never removes the
-# log file itself).
 report_startup_failure() {
-  local log line
+  local log line failed_service
+  if [ -f "$RUN_DIR/session.failed-service" ]; then
+    failed_service=$(<"$RUN_DIR/session.failed-service")
+    case $failed_service in mock-oauth | mail-capture | server | web | caddy) CURRENT_SERVICE=$failed_service ;; esac
+  fi
   if [ -z "$CURRENT_SERVICE" ]; then
     warn "startup failed before any service was launched; see the build and migration output above"
     return 0
@@ -247,13 +143,11 @@ report_startup_failure() {
 }
 
 rollback_startup() {
-  local index name
-  warn "startup failed; rolling back only services started by this invocation"
+  warn "startup failed; rolling back this invocation's session"
   report_startup_failure
-  for ((index = ${#STARTED_SERVICES[@]} - 1; index >= 0; index--)); do
-    name=${STARTED_SERVICES[$index]}
-    stop_owned_service "$name" 1 || true
-  done
+  if [ -n "${STARTED_SESSION_TOKEN:-}" ] && session_matches "$STARTED_SESSION_TOKEN"; then
+    stop_session || warn 'rollback could not prove a drained group; manual recovery required; state preserved'
+  fi
 }
 
 on_exit() {
@@ -284,7 +178,6 @@ build_and_migrate() {
 
 start_mock() {
   CURRENT_SERVICE=mock-oauth
-  start_service mock-oauth "$ROOT/apps/server" "$BIN_DIR/mock-oauth"
   wait_http mock-oauth "$GOOGLE_ISSUER_URL/.well-known/openid-configuration" 30
   wait_http mock-oauth "$LINKEDIN_ISSUER_URL/.well-known/openid-configuration" 30
   CURRENT_SERVICE=
@@ -294,12 +187,13 @@ start_mock() {
 # server authenticates every route, so an HTTP probe cannot be used without
 # putting the bearer secret on a command line.
 wait_mail_capture() {
-  local name=$1 port=$2 timeout=$3 pid deadline status
+  local name=$1 timeout=$3 pid deadline status
   pid=$(service_pid "$name") || return 1
   deadline=$((SECONDS + timeout))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    validate_service_identity "$name" 1 || return 1
-    if port_listening "$port"; then
+    session_startup_health || return 1
+    if validate_service_listeners "$name" 1; then
+      validate_service_listeners "$name" || return 1
       return 0
     else
       status=$?
@@ -312,15 +206,12 @@ wait_mail_capture() {
 
 start_mail_capture() {
   CURRENT_SERVICE=mail-capture
-  start_service mail-capture "$ROOT/apps/server" "$BIN_DIR/mail-capture" \
-    --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
   wait_mail_capture mail-capture "$MAIL_CAPTURE_PORT" 30
   CURRENT_SERVICE=
 }
 
 start_server() {
   CURRENT_SERVICE=server
-  start_service server "$ROOT/apps/server" "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:${SERVER_PORT}/healthz" 30
   CURRENT_SERVICE=
 }
@@ -328,17 +219,12 @@ start_server() {
 start_web() {
   CURRENT_SERVICE=web
   [ -d "$ROOT/apps/web/node_modules" ] || return 1
-  start_service web "$ROOT/apps/web" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
   wait_http web "http://127.0.0.1:${WEB_PORT}/" 240
   CURRENT_SERVICE=
 }
 
 start_caddy() {
-  local generated
   CURRENT_SERVICE=caddy
-  generated=$(generate_caddyfile) || return 1
-  printf '%s' "$generated" >"$CADDYFILE_GEN"
-  start_service caddy "$ROOT" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile
   wait_for_caddy_root
   install -m 0600 "$CADDY_ROOT" "$EXPORTED_ROOT"
   wait_https "$PUBLIC_ORIGIN/healthz" 30

@@ -156,7 +156,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
 
   it("uses the shared closed error envelope for documented failures", () => {
     const expected: Record<string, string[]> = {
-      getOAuthConsent: ["400", "401", "404", "429"],
+      getOAuthConsent: ["400", "401", "404", "429", "500"],
       postOAuthConsentDecision: [
         "400",
         "401",
@@ -165,6 +165,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
         "409",
         "415",
         "429",
+        "500",
       ],
       listAgentGrants: ["401"],
       revokeAgentGrant: ["401", "403", "404"],
@@ -183,7 +184,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
 
   it("documents the exact status matrix, including strict media type rejection", () => {
     const expected: Record<string, string[]> = {
-      getOAuthConsent: ["200", "400", "401", "404", "429"],
+      getOAuthConsent: ["200", "400", "401", "404", "429", "500"],
       postOAuthConsentDecision: [
         "200",
         "400",
@@ -194,6 +195,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
         "413",
         "415",
         "429",
+        "500",
       ],
       listAgentGrants: ["200", "401"],
       revokeAgentGrant: ["204", "401", "403", "404"],
@@ -202,6 +204,15 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
       const op = operation(operationId as keyof typeof OPERATIONS);
       expect(Object.keys(op.responses).sort(), operationId).toEqual(
         [...statuses].sort(),
+      );
+    }
+  });
+
+  it("distinguishes internal consent failures from required authentication", () => {
+    for (const id of ["getOAuthConsent", "postOAuthConsentDecision"] as const) {
+      const failed = response(operation(id).responses["500"]);
+      expect(failed.content["application/json"].example.error.code).toBe(
+        "internal_error",
       );
     }
   });

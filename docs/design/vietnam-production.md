@@ -100,16 +100,13 @@ Google Workspace receives replies at `danny@aboutme.vn`. Bizfly Email
 Transaction sends application mail. The [email runbook](../runbooks/email.md)
 owns mail DNS and SMTP configuration.
 
-Go uses an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS or STARTTLS on the
-configured port (Bizfly: `smtp.bizflycloud.vn`, 465 or 587) with certificate
-verification, `PLAIN` authentication, one message per connection. A 2xx after
-`DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and transport errors
-are temporary. Logs carry the reply code only. Go uses SMTP rather than the
-Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard contract that a
-local stub can test. Bizfly's SMTP account sends only as its own address, and
-the account refused a second sender for the domain, so auth mail goes from
-`Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11); replies reach
-the Google Workspace mailbox.
+Go uses SMTP (`AUTH_EMAIL_MODE=smtp`), chosen by the owner on 2026-10-10 because
+a local stub can test its standard contract. The
+[email runbook](../runbooks/email.md) owns TLS, credentials, sending, and
+failure behavior. Bizfly permits only its account address as sender and refused
+a second domain sender. Auth mail therefore uses
+`Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11), with replies to
+Google Workspace.
 
 ## Host
 
@@ -183,13 +180,6 @@ All four scheduled jobs receive the media keys because server configuration
 requires them when `MEDIA_ENDPOINT` is set. Only the two media jobs have
 outbound network access; the database jobs run with `--network none`.
 
-If application keys are ever copied in from another platform again, rotate them
-once that platform's copies are deleted, as `deploy/vn/scripts/secrets.sh`
-requires. The cutover rotation is complete: on 2026-10-10 at about 20:46 UTC,
-before deleting the AWS parameter copies, the host rotated the auth-mail key and
-key ID, TOTP key A, password-rate HMAC key, and view-pass key. No TOTP
-credentials or queued mail jobs existed. Sign-in was rechecked afterwards.
-
 Each vStorage service account has a policy for one bucket: media (get, put,
 list, delete), backups, or state. The state key, the OpenTofu provider's
 credentials, and the Bizfly API key stay on the laptop.
@@ -251,35 +241,26 @@ reviewed deployment helpers when selecting older images.
 
 ## Release fence
 
-`deploy/vn/scripts/fence.sh` changes root-owned `/var/lib/aboutme/fence.json`
-outside PostgreSQL under `flock` per the
-[fence design](passkey-release-fence.md). Images check the minimum before
-Podman; new hosts start at floor 4007. Each `cutover` subcommand locks the
-installed tag, checkpoints before mutation, and holds through quiescence;
-`verify` locks. Before mutation, the fence writes a marker with its ID, kind,
-state, and start time. A retained cutover operation or cutover marker refuses
-server, web, serving Caddy, migrate, and scheduled-job starts before Podman,
-including after reboot. Maintenance can start. `db-setup` starts only for a
-valid active `reset-db` marker sharing the cutover lock ID; missing, symlinked,
-malformed, wrong-kind, or mismatched state refuses it. The owning cutover
-operation removes its marker after safe quiescence. Uncertainty keeps the marker
-and lock closed. Manual clear refuses a marker; privileged recovery logs its
-reason and clears it after inspection. Cleanup releases the exact ID only
-without a cutover marker. A retry cannot replace its owner.
+`fence.sh` owns root-only `/var/lib/aboutme/fence.json` under `flock`. Images
+check the minimum before Podman; new hosts start at floor 4007. Cutover locks
+the installed tag, checkpoints before mutation, and holds through quiescence;
+`verify` locks. Its marker records ID, kind, state, and start time. Retained
+cutover ownership or a marker blocks server, web, serving Caddy, migrate, and
+jobs across reboot; maintenance can start. Only a valid active `reset-db` marker
+matching the lock permits db-setup. Missing, symlinked, malformed, wrong-kind,
+or mismatched state refuses it. The owner removes the marker after quiescence.
+Uncertainty retains ownership. Manual clear refuses markers; privileged recovery
+records its reason. Cleanup releases only its exact ID without a marker; retries
+cannot replace an owner. Other operation kinds retain minimum-only checks unless
+their contract adds gates.
 
 The
 [notice host contract](crowdsec-privacy-notification.md#send-authority-and-restore-fence)
-owns canonical guest mount checks, bootstrap/adoption, app-absent admission,
-restore sequencing, and proof limits. Its fixed `notice_restore` kind uses the
-same persistent operation fence, then the workload lock. Retained ownership
-blocks server, web, serving Caddy, migrate, db-setup, scheduled-job, and
-changed-ingestion consumer starts across reboot. It has no db-setup exception;
-PostgreSQL recovery and static maintenance remain subject to their existing
-gates. The contract's initializing adoption state independently blocks the same
-application/ingestion starts. Other non-cutover operation kinds keep
-minimum-only behavior, subject to existing mount, key-change, and other safety
-guards. Restore completion releases only its exact operation ownership; it never
-clears notice reconciliation or grants send/activation authority.
+owns mount checks, adoption, restore sequencing, and proof limits. Its
+`notice_restore` takes the fence before the workload lock; retained ownership
+and initializing adoption block app/ingestion starts, including db-setup, across
+reboot. PostgreSQL recovery and maintenance retain their existing gates. Restore
+releases only its own ownership, never reconciliation or send/activation gates.
 
 ## Scheduled jobs
 
@@ -304,10 +285,9 @@ two public locations and alerts the owner on Telegram. The GitHub
 [production runbook](../runbooks/production.md#alarms) owns check settings,
 notification delivery, and monthly quota renewal.
 
-The [quota renewal design](vmonitor-quota-renewal.md) defines the approved
-scheduled GitHub renewal and its security and failure boundaries, pending
-implementation. Its renew-only GreenNode service account is the one approved
-exception to GitHub holding no cloud credentials (owner, 2026-10-14).
+The [quota renewal design](vmonitor-quota-renewal.md) owns renewal security and
+failure boundaries. Dispatch is live; due-renewal proof and scheduling remain
+pending. Its renew-only account is GitHub's approved cloud-credential exception.
 
 | Signal   | Mechanism                                                        |
 | -------- | ---------------------------------------------------------------- |
@@ -328,6 +308,14 @@ unknown record kinds. Rule-match counts are callback records, not distinct
 requests or blocked responses. The connector's interruption summary is an engine
 diagnostic because an interruption can also come from a body limit.
 
+### Proposed host Telegram alerts
+
+The [Telegram host-alert design](telegram-host-alerts.md) proposes replacing
+host SMTP alerts with Telegram only, preserving metadata limits and daily
+suppression. Mail remains current until cutover; application SMTP stays
+unchanged. The design owns transport, custody, authorization, failures,
+verification, and rollout.
+
 ## Infrastructure code and state
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21) covers servers, volumes,
@@ -337,12 +325,10 @@ IAM, service accounts, buckets and their keys and policies, and billing budgets;
 its calls live in `deploy/vn/scripts/`. The vWAF escalation is a runbook
 checklist for the root portal.
 
-State uses the S3 backend on a vStorage bucket with path-style addressing and
-the AWS-only checks skipped. OpenTofu encrypts state client-side with the
-`pbkdf2` key provider; the passphrase lives in the ignored credentials file and,
-age-encrypted, in `aboutme-infra`. OpenTofu's lock file is on: vStorage refuses
-a create-only `PUT` on an existing key, so a second operator's plan fails with
-"Error acquiring the state lock" (tested 2026-10-10). Public CI runs
+State uses vStorage's S3 backend, path-style addressing, AWS-only checks
+skipped, and OpenTofu `pbkdf2` encryption. The passphrase stays in ignored
+credentials and age-encrypted in `aboutme-infra`. Locking rejects a second
+operator's plan via create-only `PUT` (tested 2026-10-10). CI runs
 `tofu fmt -check` and `tofu validate` for `deploy/vn/` without credentials.
 
 ## Media
@@ -356,81 +342,19 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
 
 ## Deploy
 
-`deploy/vn/scripts/deploy.sh <tag>` runs from the laptop over SSH:
-
-1. Resolve the tag to digests with an `amd64` manifest. Require the tag on
-   `main` with green CI.
-2. Verify tag-bound build provenance and the installed host scripts. Take the
-   fence lock on the host. A lower tag or a held lock stops here.
-3. Pull images by digest while the old release serves. Check every referenced
-   secret by name.
-4. Run a pgBackRest incremental backup annotated with the tag.
-5. Stop the job timers and active jobs. Start maintenance beside Caddy (both
-   bind 80 and 443 with `SO_REUSEPORT`), then stop Caddy and the server.
-6. Require the marked 503 from outside the host.
-7. Render the new units. Run `db-setup` with `--first-deploy`, then `migrate`;
-   normal deploys run `migrate` only. Require exit 0.
-8. Restart web at the new digest, start the server, and wait for `/readyz` on Go
-   at `127.0.0.1:8080` from the host. Start Caddy beside maintenance, then stop
-   maintenance and prove it stopped. The readiness check does not depend on
-   which Caddy takes an external connection.
-9. Start the job timers. vMonitor and the uptime backstop run throughout
-   deploys.
-10. Smoke from outside: health, TLS, security headers, and a 403 for a
-    CrowdSec-banned test address. Release the lock.
-
-Before a migration request, a failed deploy restores the previous release. After
-a migration may have run, maintenance stays up with the app and jobs stopped.
-Recovery is a forward fix or a point-in-time restore. A failed recovery keeps
-the operation lock. `--rollback` skips backup and migration and is safe only
-when the failed release applied no migration and the older release can read
-every stored document version.
-
-## `deploy/vn/` layout
-
-```text
-deploy/vn/
-  README.md
-  prod/        OpenTofu root: vServer, volumes, security groups, floating IP
-  host/        cloud-init, sysctl, Quadlet units, timers, postgresql.conf,
-               pg_hba.conf, pgbackrest.conf, journal and alert config
-  edge/        CrowdSec and Coraza config, vWAF escalation checklist
-  probe/       host fact checks (Podman networking, Chromium sandbox)
-  scripts/     deploy.sh, fence.sh, secrets.sh, buckets.sh, restore-drill.sh,
-               cutover.sh
-```
-
-`backend.hcl`, `prod.tfvars`, and state stay ignored.
+The [production runbook](../runbooks/production.md#deploy) owns release gates,
+deployment, rollback, and recovery; the [host guide](../../deploy/vn/README.md)
+maps `deploy/vn/`. Backend settings, provider variables, and state stay ignored.
 
 ## AWS reference and recovery
 
-The production stack in `deploy/aws/prod` and its state bootstrap were destroyed
-on 2026-10-11. RDS was deleted without a final snapshot. Production data lives
-only on the Vietnam host and its pgBackRest backups in GreenNode vStorage. The
-`aboutme-email` CloudFormation stack, including its SES identity, configuration
-set, feedback queue, and alarms, was deleted.
-
-Nothing from `deploy/aws/` is deployed. The code stays so production could
-return to AWS ECS or move to Kubernetes later. A return would need a new
-reviewed infrastructure and data-transfer decision. Recovery uses the Vietnam
-host or its backups.
+Nothing from `deploy/aws/` is deployed.
+[ADR 0026](../adr/0026-vietnam-hosted-production.md#history) records the stack
+and SES teardown on 2026-10-11. Production data lives only on the Vietnam host
+and its pgBackRest backups. Returning to AWS ECS or moving to Kubernetes needs a
+reviewed infrastructure and data-transfer decision.
 
 ## Provider facts to confirm
 
-The [host guide](../../deploy/vn/README.md#provider-questions) records the
-account results for these questions. Unresolved facts remain marked there.
-
-| ID  | Provider           | Question                                                                                                    |
-| --- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Q1  | GreenNode compute  | Does a vServer floating IP get network-level DDoS protection, and to what capacity?                         |
-| Q2  | GreenNode compute  | Is IPv6 offered on a floating IP?                                                                           |
-| Q3  | GreenNode vStorage | Does `PUT` with `If-None-Match: *` return 412 when the key exists?                                          |
-| Q4  | GreenNode vStorage | Are pgBackRest and the OpenTofu S3 backend supported with path-style addressing and conditional writes?     |
-| Q5  | GreenNode vStorage | Where is each region's data stored, including replicas?                                                     |
-| Q6  | GreenNode compute  | Is an ARM vServer offered? Which volume types are encrypted, at what price?                                 |
-| Q7  | GreenNode vDB      | Are PostgreSQL 18 and point-in-time recovery planned, and when?                                             |
-| Q8  | GreenNode          | Is there a data processing agreement? Does any subprocessor store customer data outside Vietnam?            |
-| Q9  | Bizfly             | What are the SMTP host, ports, and TLS modes for Email Transaction?                                         |
-| Q10 | Bizfly             | How are bounces and complaints reported? Is there a suppression list? What are the rate limits?             |
-| Q11 | Bizfly             | Which DKIM key length and selector does Email Transaction use? Is a custom return-path subdomain supported? |
-| Q12 | Bizfly             | Where is Email Transaction data stored? Is there a data processing agreement?                               |
+The [host guide](../../deploy/vn/README.md#provider-questions) owns unresolved
+provider questions and account results.

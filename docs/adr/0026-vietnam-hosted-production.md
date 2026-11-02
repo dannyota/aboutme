@@ -109,29 +109,92 @@ no data protection impact assessment (DPIA) or cross-border dossier
   writes would be a new transfer abroad, so recovery after that is forward only.
 - No AWS test environment remains deployed.
 
-## Proposed amendment (not accepted)
+## Amendment: Host alerts through Telegram (2026-11-02)
+
+Status: Proposed. Requires owner acceptance; host SMTP remains in force until
+cutover. This does not amend application authentication mail.
+
+Replace the host timer and unit-failure mail sender with one Bot API HTTPS
+`sendMessage` request per alert, using existing curl and jq. Preserve metadata
+limits and per-key daily suppression. Choose Telegram only, with no automatic
+SMTP fallback: one transport is simpler, but blocking or provider failure can
+lose host notifications. vMonitor checks remain external; their Telegram
+notifications share that delivery risk. The slower GitHub uptime backstop stays.
+
+This proposes an explicit exception to the Vietnam-only consequence above for
+the owner's Telegram chat ID (personal data), host source IP, and operational
+alert metadata sent to Telegram. It permits no resume, account, or raw log data.
+Telegram location/retention and the owner's required transfer obligations remain
+unverified; this amendment makes no legal compliance claim. The owner must
+accept that boundary before activation.
+
+The
+[host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts)
+owns transport, custody, authorization, limits, failures, and verification.
+Permitted token storage is the ignored local `.env` key `TELEGRAM_BOT`, the host
+secret, and any age-encrypted backup copy. The chat ID may reside in its host
+secret and encrypted backup. Imports use pipes only; no plaintext staging.
+Telegram receives the token in the HTTPS request URL for authentication,
+separately from the bounded alert content. Neither token nor chat ID belongs in
+alert text. The owner can revoke the token. The benefit is one alert destination
+without a new service or dependency. SMTP fallback offers delivery diversity at
+the cost of a second maintained transport; keeping SMTP alone would avoid this
+new provider but not meet the requested move. No app contract or stored-data
+migration is required. Cutover needs an actual receipt proof; rollback restores
+the reviewed mail sender and verifies receipt without reverting unrelated host
+safety changes.
+
+### Proposed amendment history
+
+2026-11-02: Proposed replacing host alert email and accepting the bounded
+Telegram transfer because the owner requested the same destination as vMonitor.
+Token custody names the approved local source, host secrets, and encrypted
+backups; authentication transfer is distinct from alert content. Acceptance and
+production cutover are not recorded.
+
+## Amendment: Anonymous-approval pull deployment (2026-11-01)
+
+Status: Accepted with conditions (2026-11-01), by the owner after the
+[live approval probe](../research/approval-probe.md). Implementation remains
+pending in the
+[design's release order](../design/production-pull-deploy/README.md#release-order-and-owner-decisions).
 
 Production supports host-initiated deployment through `ansible-pull` at an exact
 signed coordinator commit, using a request explicitly approved by either
-maintainer. Environment self-review preserves solo operation. The host
-independently verifies approval, exact-main CI, publication evidence, image
-identity, release ordering, and compatibility.
+maintainer. Anonymous GitHub reads supply approval evidence; the host holds no
+GitHub credential. Solo approval by the owner is an accepted supplied
+requirement, so environment self-review remains allowed. The host independently
+verifies approval, exact-main CI, publication evidence, image identity, release
+ordering, and compatibility.
 
-GitHub holds no production credentials and has no administrative network route
-to production. Laptop deployment shares the durable host protocol. External
-deployment proofs remain attended initially. Ownership survives interruption;
-uncertain operations require attended recovery. Local configuration changes
-invalidate pending requests before deployment resumes.
+Acceptance requires a wait of at least 60 seconds after observing a terminal run
+state before trusting anonymous reads, because the probe observed
+`cache-control: public, max-age=60`. Refuse a run whose review history spans
+more than one page or contains more than one relevant review. The
+[host evidence contract](../design/production-pull-deploy/evidence.md#anonymous-approval-and-freshness)
+owns revalidation and the combined cache/freshness bound. Multi-page history and
+approval by a second maintainer remain unverified; neither is required to start
+implementation under these conditions.
+
+GitHub holds no deployment credentials and has no administrative network route
+to production. Laptop deployment remains available in parallel and shares the
+durable host protocol. External deployment proofs remain attended initially.
+Ownership survives interruption; uncertain operations require attended recovery.
+Local configuration changes invalidate pending requests before deployment
+resumes.
 
 One serving replica, deployment downtime, privacy gates, backup custody, and
-explicit data-loss rules remain unchanged. vMonitor quota renewal remains
-manual; no renewal automation or monitoring host is introduced.
+explicit data-loss rules remain unchanged. This acceptance introduces no
+monitoring host and does not change the separate Synthetic quota-renewal
+amendment below or its credential exception.
 
 ## Amendment: Synthetic quota renewal in GitHub Actions (2026-11-01)
 
 Status: Accepted (2026-11-01), under the owner's standing approval for reviewed
 solutions and request to renew the free Synthetic quota through GitHub Actions.
-Implementation and live renewal verification remain pending.
+The dispatch workflow is live: `check` passed on 2026-11-01 and hold issue
+[#146](https://github.com/dannyota/aboutme/issues/146) is closed. First due
+`renew` verification remains pending after 2026-11-28.
 
 The renew-only GreenNode service account `aboutme-vmonitor-renew` is the one
 approved cloud-credential exception in CI. Its client ID, client secret, and
@@ -161,12 +224,14 @@ uncertain writes behind the durable hold and require human reconciliation. Do
 not grant `actions: write` or make this workflow a dependency of `ci.yml`.
 
 This amendment narrows the 2026-10-14 exception to Synthetic because Telegram
-needs no notification quota. It supersedes the manual-only renewal sentence in
-the proposed deployment amendment above, without accepting that deployment
-proposal. It also makes this named workflow the sole exception to the blanket
-no-stored-secrets wording in [ADR 0024](0024-delivery-gates.md#decision). Build,
-test, release, and code-scanning workflows remain without stored secrets;
-GitHub's per-run token remains allowed under their existing permissions.
+needs no notification quota. When accepted, it superseded the manual-only
+renewal sentence in the then-proposed deployment amendment without accepting
+that proposal at that time. The deployment amendment was accepted separately
+with conditions. This renewal amendment also makes its named workflow the sole
+exception to the blanket no-stored-secrets wording in
+[ADR 0024](0024-delivery-gates.md#decision). Build, test, release, and
+code-scanning workflows remain without stored secrets; GitHub's per-run token
+remains allowed under their existing permissions.
 
 The benefit is unattended renewal without exposing the key to host compromise or
 depending on laptop uptime. The cost is a narrowly scoped static cloud key in
@@ -243,3 +308,8 @@ dates. The `aboutme-readyz` alarm moved to the Telegram channel `aboutme-alerts`
 for In-alarm, Up, and Undetermined notifications. It fires when one of two
 locations fails three consecutive one-minute tests. The email notification quota
 was deleted.
+
+2026-11-01: Accepted anonymous approval reads and Ansible pull with a cache wait
+and single-page, single-review limits after the live probe. Retained solo owner
+approval and parallel laptop deployment; implementation follows the design's
+release order.
