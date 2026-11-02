@@ -933,9 +933,9 @@ function checkTemplatePages(workflow, ci) {
   assert.match(upload.uses, /^actions\/upload-artifact@[a-f0-9]{40}$/);
   assert.equal(upload.with.name, "candidate-template-pages");
   assert.deepEqual(upload.with.path.trim().split("\n"), [
-    ".dev/web-template-pages/*/*/candidate/*.png",
-    ".dev/web-template-pages/*/*/candidate/manifest.json",
-    ".dev/web-template-pages/*/*/candidate/source-metadata.txt",
+    ".dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/*.png",
+    ".dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/manifest.json",
+    ".dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/source-metadata.txt",
   ]);
   assert.equal(upload.with["retention-days"], 14);
   assert.equal(upload.with["if-no-files-found"], "error");
@@ -968,6 +968,31 @@ test("product image workflow is manual, read-only, bounded and success-only", ()
   ci.jobs.web.steps = ci.jobs.web.steps.filter((step) =>
     step.run !== "node scripts/validate-template-pages.mts --test");
   assert.throws(() => checkTemplatePages(readWorkflow("template-pages"), ci));
+});
+
+test("product image uploads reject other commit and run directories", () => {
+  for (const file of ["*.png", "manifest.json", "source-metadata.txt"]) {
+    for (const directory of [
+      "*/*",
+      "*/pages-${{ github.run_id }}-${{ github.run_attempt }}",
+      "${{ github.sha }}/*",
+      "extra/extra",
+      "${{ github.sha }}/pages-${{ github.run_id }}-1",
+    ]) {
+      const workflow = readWorkflow("template-pages");
+      const upload = workflow.jobs["template-pages"].steps[3];
+      upload.with.path = upload.with.path.trim().split("\n").map((path) =>
+        path.endsWith(`/candidate/${file}`)
+          ? `.dev/web-template-pages/${directory}/candidate/${file}`
+          : path).join("\n");
+      assert.throws(() => checkTemplatePages(workflow, readWorkflow("ci")),
+        `${directory}/${file}`);
+    }
+  }
+  const workflow = readWorkflow("template-pages");
+  workflow.jobs["template-pages"].steps[3].with.path
+    += "\n.dev/web-template-pages/extra/extra/candidate/unvalidated.png\n";
+  assert.throws(() => checkTemplatePages(workflow, readWorkflow("ci")));
 });
 
 test("contracts retains sanitized startup evidence when a check fails", () => {

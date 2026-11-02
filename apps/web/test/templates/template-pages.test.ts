@@ -118,8 +118,15 @@ describe('template page freshness', () => {
   it.each([
     'apps/web/scripts/generate-template-pages.mts',
     'apps/web/scripts/validate-template-pages.mts',
+    'apps/web/app/app.vue',
+    'apps/web/app/composables/useLocale.ts',
+    'apps/web/app/i18n/locale.ts',
+    'apps/web/app/i18n/meta.ts',
+    'apps/web/app/middleware/signed-in.global.ts',
     'apps/web/app/components/resume/ResumeDocument.vue',
+    'apps/web/app/utils/csp.ts',
     'apps/web/app/utils/fontsReady.ts',
+    'apps/web/app/utils/returnPath.ts',
     'apps/web/app/assets/fonts/inter-var.woff2',
     'apps/web/app/assets/css/fonts.css',
     'apps/web/app/pages/_harness/sample-fixtures.ts',
@@ -128,6 +135,10 @@ describe('template page freshness', () => {
     'packages/schema/samples/ats-plain.en.json',
     'apps/web/nuxt.config.ts',
     'apps/web/package-lock.json',
+    'apps/web/public/csp-bootstrap.js',
+    'apps/web/public/theme-bootstrap.js',
+    'apps/web/server/plugins/csp-externalize.ts',
+    'apps/web/server/utils/cspExternalize.ts',
   ])('rejects changed source %s', (path) => {
     refreshHashes(root);
     put(join(root, path), 'changed');
@@ -149,11 +160,13 @@ describe('template page freshness', () => {
     expect(() => validatePages(root)).toThrow(/stale source hash/);
   });
 
-  it('excludes outputs and font tooling from sources', () => {
+  it('excludes outputs, font tooling and unrelated files', () => {
     const before = sourceFingerprint(root).sha256;
     put(join(pages, 'ats-plain-en-p1.png'), 'changed image');
     put(join(pages, 'manifest.json'), 'changed manifest');
     put(join(root, 'apps/web/app/assets/fonts/tools/local.py'), 'tool');
+    put(join(root, 'apps/web/app/pages/app/unrelated.vue'), 'page');
+    put(join(root, 'apps/web/public/unrelated.txt'), 'asset');
     expect(sourceFingerprint(root).sha256).toBe(before);
   });
 

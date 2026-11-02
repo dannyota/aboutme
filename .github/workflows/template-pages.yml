@@ -27,9 +27,9 @@ jobs:
         with:
           name: candidate-template-pages
           path: |
-            .dev/web-template-pages/*/*/candidate/*.png
-            .dev/web-template-pages/*/*/candidate/manifest.json
-            .dev/web-template-pages/*/*/candidate/source-metadata.txt
+            .dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/*.png
+            .dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/manifest.json
+            .dev/web-template-pages/${{ github.sha }}/pages-${{ github.run_id }}-${{ github.run_attempt }}/candidate/source-metadata.txt
           if-no-files-found: error
           retention-days: 14
           include-hidden-files: true
