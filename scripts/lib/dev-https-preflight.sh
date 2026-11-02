@@ -10,7 +10,11 @@ require_tools() {
   done
   require_modern_bash || die 'Bash 4+ is required'
   require_gnu_tools realpath stat base64 sha256sum date || die 'GNU coreutils are required'
-  command -v lsof >/dev/null || command -v ss >/dev/null || die 'lsof or ss is not on PATH'
+  case $(uname -s) in
+  Linux) command -v ss >/dev/null || die 'ss is not on PATH' ;;
+  Darwin) command -v lsof >/dev/null || die 'lsof is not on PATH' ;;
+  *) die 'unsupported host platform' ;;
+  esac
 }
 
 load_source_digests() {

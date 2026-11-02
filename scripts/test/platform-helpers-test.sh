@@ -22,7 +22,7 @@ source <(sed -n '/^browser_stat() {$/,/^}$/p' deploy/dev-https-browser/run.sh)
 mkdir "$work/bin"
 cat >"$work/bin/uname" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' Darwin
+printf '%s\n' "${LISTENER_OS:-Darwin}"
 EOF
 cat >"$work/bin/stat" <<'EOF'
 #!/usr/bin/env bash
@@ -106,7 +106,7 @@ fi
 cat >"$work/bin/lsof" <<'EOF'
 #!/usr/bin/env bash
 case $LISTENER_CASE in
-empty) exit 1 ;;
+empty | omitted) exit 1 ;;
 hidden) printf 'n[::1]:20443\n' ;;
 malformed) printf 'p123\nn127.0.0.1:wrong\n' ;;
 error) printf 'inspection denied\n' >&2; exit 1 ;;
@@ -120,6 +120,31 @@ for scenario in hidden malformed error; do
 done
 status=0
 PATH="$work/bin:$PATH" LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
+[ "$status" = 1 ]
+# Linux must see sockets that an unprivileged lsof omits entirely, including
+# a hidden listener beside another socket with a visible owner.
+cat >"$work/bin/ss" <<'EOF'
+#!/usr/bin/env bash
+case $LISTENER_CASE in
+empty) exit 0 ;;
+error) printf 'inspection denied\n' >&2; exit 1 ;;
+malformed) printf 'malformed\n'; exit 0 ;;
+hidden | omitted) printf 'LISTEN 0 4096 [::1]:20443 [::]:*\n'; exit 0 ;;
+esac
+printf 'LISTEN 0 4096 127.0.0.1:20443 0.0.0.0:* users:(("node",pid=123,fd=8),("node",pid=456,fd=9))\n'
+if [ "$LISTENER_CASE" = mixed ]; then
+  printf 'LISTEN 0 4096 [::1]:20443 [::]:*\n'
+fi
+EOF
+chmod 0700 "$work/bin/ss"
+[ "$(PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=valid platform_listener_pids 20443)" = $'123\n456' ]
+for scenario in hidden omitted mixed malformed error; do
+  status=0
+  PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=$scenario platform_listener_pids 20443 || status=$?
+  [ "$status" = 2 ] || { printf 'Linux listener %s returned %s, expected busy or unknown\n' "$scenario" "$status" >&2; exit 1; }
+done
+status=0
+PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
 [ "$status" = 1 ]
 # Force the Python detach path and verify complete argv and UID checks.
 mkdir "$work/fallback"
@@ -240,8 +265,12 @@ EOF
   done
 )
 
-# The Linux fallback must retain every IPv4/IPv6 owner too.
+# Linux inspection needs ss even when lsof is unavailable.
 ln -s "$(command -v bash)" "$work/fallback/bash"
+cat >"$work/fallback/uname" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' Linux
+EOF
 cat >"$work/fallback/ss" <<'EOF'
 #!/usr/bin/env bash
 if [ "$LISTENER_CASE" = hidden ]; then
@@ -250,7 +279,7 @@ else
   printf 'LISTEN 0 4096 127.0.0.1:20443 0.0.0.0:* users:(("node",pid=123,fd=8),("node",pid=456,fd=9))\n'
 fi
 EOF
-chmod 0700 "$work/fallback/ss"
+chmod 0700 "$work/fallback/ss" "$work/fallback/uname"
 [ "$(PATH="$work/fallback" LISTENER_CASE=valid platform_listener_pids 20443)" = $'123\n456' ]
 if PATH="$work/fallback" LISTENER_CASE=hidden platform_listener_pids 20443; then exit 1; fi
 printf '%s\n' 'platform helper tests: PASS'

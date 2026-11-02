@@ -34,7 +34,13 @@ cat >"$work/bin/lsof" <<'EOF'
 #!/usr/bin/env bash
 printf 'p123\nn127.0.0.1:20441\n'
 EOF
-chmod +x "$work/bin/lsof"
+cat >"$work/bin/ss" <<'EOF'
+#!/usr/bin/env bash
+port=${!#}
+port=${port##*:}
+printf 'LISTEN 0 4096 127.0.0.1:%s 0.0.0.0:* users:(("fixture",pid=123,fd=8))\n' "$port"
+EOF
+chmod +x "$work/bin/lsof" "$work/bin/ss"
 printf 'server stdout\nserver stderr synthetic-private-value\n' >"$work/log/server.log"
 printf 'database=stub provisioned=yes migrated=yes\n' >"$work/diagnostics/database"
 printf 'server readiness: not reached\n' >"$work/diagnostics/probe-server"
