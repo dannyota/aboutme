@@ -36,8 +36,10 @@ STUB
 
 cat >"$work/lib/alert.sh" <<'STUB'
 #!/usr/bin/env bash
+(( ${#2} <= 200 )) || exit 1
 printf '%s|%s\n' "$1" "$2" >>"$WATCH_TEST_ALERTS"
-cat >/dev/null
+cat >"$WATCH_TEST_ALERTS.$1.detail"
+[[ ${WATCH_TEST_SEND_FAILS:-0} == 0 ]]
 STUB
 cat >"$work/lib/crowdsec-retention-fail.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -63,6 +65,9 @@ printf 'Use%%\n10%%\n'
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${1-} == list-units && -n ${WATCH_TEST_FAILED_UNITS:-} ]]; then
+  cat "$WATCH_TEST_FAILED_UNITS"
+fi
 if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
   exit 1
 fi
@@ -91,7 +96,13 @@ esac
 STUB
 cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
-[[ ${1-} == +%s ]] && printf '2000000000\n'
+case $* in
+  +%s) printf '2000000000\n' ;;
+  '-u +%F') printf '2030-01-02\n' ;;
+  '-u +%FT%TZ') printf '2030-01-02T03:04:05Z\n' ;;
+  -R) printf 'Wed, 02 Jan 2030 03:04:05 +0000\n' ;;
+  *) exit 1 ;;
+esac
 STUB
 cat >"$work/bin/cscli" <<'STUB'
 #!/usr/bin/env bash
@@ -140,6 +151,71 @@ EOF
 } >"$with_diagnostic"
 
 run_watch "$base" "$work/base.alerts"
+
+for ((i=0; i<100; i++)); do
+  printf 'aboutme-long-failed-unit-%03d.service loaded failed failed\n' "$i"
+done >"$work/failed-units"
+printf 'hostile\033[31m.service loaded failed failed\n' >>"$work/failed-units"
+: >"$work/host-checks.log"
+WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/failed.alerts"
+grep -qxF 'failed-units|failed units: 101' "$work/failed.alerts"
+grep -qxF 'omitted units: 81' "$work/failed.alerts.failed-units.detail"
+[[ $(wc -c <"$work/failed.alerts.failed-units.detail") -le 2048 ]]
+[[ $(grep -c '^aboutme-' "$work/failed.alerts.failed-units.detail") == 20 ]]
+
+# Exercise both transports with the watcher's long failure list.
+cp "$work/lib/alert.sh" "$work/alert-stub.sh"
+cp "$repo_root/deploy/vn/host/bin/alert.sh" "$work/lib/alert.sh"
+cp "$repo_root/deploy/vn/host/bin/alert-telegram.sh" "$work/lib/alert-telegram.sh"
+cp "$repo_root/deploy/vn/host/telegram-state.sh" "$work/lib/telegram-state.sh"
+mkdir -m 0700 "$work/alert-state" "$work/alert-state/secrets"
+printf username >"$work/alert-state/secrets/smtp-username"
+printf password >"$work/alert-state/secrets/smtp-password"
+cat >"$work/alert-state/smtp.env" <<'ENV'
+SMTP_HOST=smtp.example.test
+SMTP_PORT=465
+SMTP_TLS=implicit
+SES_FROM_ADDRESS=no-reply@example.test
+SES_FROM_NAME=aboutme
+ALERT_TO=support@example.test
+ENV
+cat >"$work/bin/msmtp" <<'STUB'
+#!/usr/bin/env bash
+cat >"$WATCH_TEST_MESSAGE"
+STUB
+cat >"$work/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+cat >"$WATCH_TEST_MESSAGE"
+while (($#)); do
+  if [[ $1 == --output ]]; then printf '{"ok":true}' >"$2"; break; fi
+  shift
+done
+printf 'http:200\n'
+STUB
+chmod +x "$work/lib/alert-telegram.sh" "$work/bin/msmtp" "$work/bin/curl"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/smtp-message \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/smtp.alerts"
+grep -qxF 'Subject: [aboutme-prod] failed units: 101' "$work/smtp-message"
+grep -qxF 'omitted units: 81' "$work/smtp-message"
+printf '123456:synthetic_BOT-token' >"$work/alert-state/secrets/telegram-bot-token"
+printf '%s' '-1001234567890' >"$work/alert-state/secrets/telegram-chat-id"
+chmod 0400 "$work/alert-state/secrets/telegram-"*
+rm -f "$work/alert-state/alerts/failed-units."*
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-test \
+  bash "$repo_root/deploy/vn/host/bin/alert-telegram.sh" --test </dev/null
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state \
+  bash "$repo_root/deploy/vn/host/alert-transport.sh" confirm-receipt --received
+cp "$work/alert-state/alert-transport" "$work/lib/alert-transport"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-message \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
+grep -qF 'failed units: 101' "$work/telegram-message"
+grep -qF 'omitted units: 81' "$work/telegram-message"
+rm "$work/lib/alert-transport"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state bash "$repo_root/deploy/vn/host/alert-transport.sh" stage
+cp "$work/alert-stub.sh" "$work/lib/alert.sh"
+WATCH_TEST_SEND_FAILS=1 WATCH_TEST_FAILED_UNITS=$work/failed-units \
+  run_watch "$work/host-checks.log" "$work/send-failure.alerts"
+grep -qF 'coraza counts in the last hour:' "$work/send-failure.alerts.journal"
 
 # A hung LAPI call must release both locks without waiting for the unit deadline.
 WATCH_TEST_HUNG_CSCLI=1 WATCH_TEST_CSCLI_ENTERED=$work/cscli-entered \
