@@ -308,13 +308,13 @@ unknown record kinds. Rule-match counts are callback records, not distinct
 requests or blocked responses. The connector's interruption summary is an engine
 diagnostic because an interruption can also come from a body limit.
 
-### Proposed host Telegram alerts
+### Host Telegram alerts
 
-The [Telegram host-alert design](telegram-host-alerts.md) proposes replacing
-host SMTP alerts with Telegram only, preserving metadata limits and daily
-suppression. Mail remains current until cutover; application SMTP stays
-unchanged. The design owns transport, custody, authorization, failures,
-verification, and rollout.
+The owner accepted the [Telegram host-alert design](telegram-host-alerts.md) on
+2026-11-02: host alerts move from SMTP to Telegram only, preserving metadata
+limits and daily suppression. Mail remains current until the receipt-gated
+cutover; application SMTP stays unchanged. The design owns transport, custody,
+authorization, failures, verification, and rollout.
 
 ## Infrastructure code and state
 

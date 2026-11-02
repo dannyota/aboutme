@@ -128,8 +128,7 @@ metadata sent to Telegram. It permits no resume, account, or raw log data.
 Telegram location/retention and the owner's required transfer obligations remain
 unverified; this amendment makes no legal compliance claim.
 
-The
-[host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts)
+The [host alert contract](../design/vietnam-production.md#host-telegram-alerts)
 owns transport, custody, authorization, limits, failures, and verification.
 Permitted token storage is the ignored local `.env` key `TELEGRAM_BOT`, the host
 secret, and any age-encrypted backup copy. The chat ID may reside in its host
