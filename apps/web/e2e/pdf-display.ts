@@ -100,13 +100,14 @@ export function pdfMembership(
 export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
   const content = await page.getTextContent();
   const items = content.items.flatMap((item): PdfTextItem[] => {
-    if (!('str' in item) || item.str.trim() === '') return [];
+    if (!('str' in item) || item.str.trim() === ''
+      || (item.width === 0 && item.height === 0)) return [];
     const style = content.styles[item.fontName];
     const ascent = style?.ascent ?? 0.8;
     const descent = style?.descent ?? -0.25;
     const [a, b, c, d, x, y] = item.transform as number[];
     if ([a, b, c, d, x, y, ascent, descent, item.width, item.height]
-      .some((value) => !Number.isFinite(value)) || item.height <= 0) {
+      .some((value) => !Number.isFinite(value))) {
       throw new Error('Unsupported PDF glyph geometry.');
     }
     const advance = Math.hypot(a!, b!);

@@ -394,9 +394,13 @@ export async function measurePdfLayout(
       headings: Array.from(root.querySelectorAll('.section-heading'),
         (element) => {
           const css = getComputedStyle(element);
-          return { ...box(element),
+          const bounds = box(element);
+          const rule = parseFloat(css.borderBottomWidth);
+          return { ...bounds,
             sidebar: element.closest('.resume-sidebar') !== null,
-            rule: parseFloat(css.borderBottomWidth),
+            rule,
+            ruleStyle: css.borderBottomStyle,
+            ruleBox: { ...bounds, top: bounds.bottom - rule * 0.75 },
             color: css.borderBottomColor,
             gap: parseFloat(css.marginBottom),
           };

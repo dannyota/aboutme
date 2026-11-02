@@ -4,6 +4,8 @@ import {
   loadImage,
   Path2D,
   PathOp,
+  StrokeCap,
+  StrokeJoin,
 } from '@napi-rs/canvas';
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createHash } from 'node:crypto';
@@ -44,6 +46,16 @@ export interface PdfPaint {
 }
 
 type Matrix = [number, number, number, number, number, number];
+interface Stroke {
+  color: string;
+  alpha: number;
+  transparent: boolean;
+  width: number;
+  cap: StrokeCap;
+  join: StrokeJoin;
+  miterLimit: number;
+  dashed: boolean;
+}
 interface State {
   matrix: Matrix;
   clip: Path2D;
@@ -54,6 +66,7 @@ interface State {
   textMatrix: Matrix;
   transparent: boolean;
   bold: boolean;
+  stroke: Stroke;
 }
 
 export const UNSUPPORTED_PDF_PAINT = 'Unsupported PDF paint evidence.';
@@ -241,14 +254,40 @@ function imageIdentity(value: unknown): Pick<PdfImage,
 }
 
 const textOperators = new Set<number>([
-  OPS.dependency, OPS.setLineWidth, OPS.setLineCap, OPS.setLineJoin,
-  OPS.setMiterLimit, OPS.setDash, OPS.setRenderingIntent, OPS.setFlatness,
+  OPS.dependency, OPS.setRenderingIntent, OPS.setFlatness,
   OPS.beginText, OPS.endText, OPS.setCharSpacing, OPS.setWordSpacing,
   OPS.setHScale, OPS.setLeading, OPS.setTextRise, OPS.moveText,
-  OPS.setLeadingMoveText, OPS.nextLine, OPS.setStrokeRGBColor,
-  OPS.setStrokeTransparent, OPS.markPoint, OPS.markPointProps,
+  OPS.setLeadingMoveText, OPS.nextLine, OPS.markPoint, OPS.markPointProps,
   OPS.beginMarkedContent, OPS.endMarkedContent, OPS.beginCompat, OPS.endCompat,
 ]);
+const strokeOperators = new Map<number, string>([
+  [OPS.setLineWidth, 'LW'], [OPS.setLineCap, 'LC'],
+  [OPS.setLineJoin, 'LJ'], [OPS.setMiterLimit, 'ML'], [OPS.setDash, 'D'],
+]);
+
+function strokeSetting(stroke: Stroke, key: string, value: unknown): void {
+  if (key === 'D') {
+    if (!Array.isArray(value) || value.length !== 2) unsupported();
+    stroke.dashed = numbers(value[0]).length > 0;
+    numbers([value[1]], 1);
+    return;
+  }
+  const number = numbers([value], 1)[0]!;
+  if (key === 'LW') {
+    if (number < 0) unsupported();
+    stroke.width = number;
+  } else if (key === 'LC' || key === 'LJ') {
+    if (![0, 1, 2].includes(number)) unsupported();
+    if (key === 'LC') stroke.cap = number;
+    else stroke.join = number;
+  } else if (key === 'ML') {
+    if (number < 1) unsupported();
+    stroke.miterLimit = number;
+  } else if (key === 'CA') {
+    if (number < 0 || number > 1) unsupported();
+    stroke.alpha = number;
+  } else unsupported();
+}
 
 export async function pdfPaintPage(page: PDFPageProxy): Promise<PdfPaint> {
   const operators = await page.getOperatorList({ intent: 'print' });
@@ -265,15 +304,28 @@ export async function pdfPaintOperators(
   let state: State = { matrix: matrix(viewport.transform),
     clip: rectangle([0, 0, viewport.width, viewport.height]),
     color: '#000000', alpha: 1, font: '', size: 0, textMatrix: identity(),
-    transparent: false, bold: false };
+    transparent: false, bold: false,
+    stroke: { color: '#000000', alpha: 1, transparent: false,
+      width: 1, cap: StrokeCap.Butt, join: StrokeJoin.Miter,
+      miterLimit: 10, dashed: false } };
   const stack: State[] = [];
   const fills: PdfFill[] = [];
   const images: PdfImage[] = [];
   const text: PdfInk[] = [];
   let pendingClip: FillType | undefined;
-  const save = () => stack.push({ ...state });
+  const save = () => stack.push({ ...state, stroke: { ...state.stroke } });
   const restore = () => {
     state = stack.pop() ?? unsupported();
+  };
+  const record = (
+    path: Path2D, color: string, alpha: number, curves: number,
+  ) => {
+    const visible = clipped(transformed(path, state.matrix), state.clip);
+    const box = bounds(visible);
+    if (!box || alpha <= 0) return;
+    const fill = { ...box, color, alpha, curves };
+    shapes.set(fill, visible);
+    fills.push(fill);
   };
   for (let index = 0; index < functions.length; index += 1) {
     const op = functions[index]!;
@@ -286,17 +338,26 @@ export async function pdfPaintOperators(
       state.color = color(args[0]);
       state.transparent = false;
     } else if (op === OPS.setFillTransparent) state.transparent = true;
-    else if (op === OPS.setGState) {
+    else if (op === OPS.setStrokeRGBColor) {
+      state.stroke.color = color(args[0]);
+      state.stroke.transparent = false;
+    } else if (op === OPS.setStrokeTransparent) {
+      state.stroke.transparent = true;
+    } else if (strokeOperators.has(op)) {
+      const key = strokeOperators.get(op)!;
+      strokeSetting(state.stroke, key, key === 'D' ? args : args[0]);
+    } else if (op === OPS.setGState) {
       if (!Array.isArray(args[0])) unsupported();
       for (const [key, value] of args[0] as [string, unknown][]) {
         if (key === 'ca') {
           state.alpha = numbers([value], 1)[0]!;
           if (state.alpha < 0 || state.alpha > 1) unsupported();
+        } else if (['LW', 'LC', 'LJ', 'ML', 'D', 'CA'].includes(key)) {
+          strokeSetting(state.stroke, key, value);
         } else if (key === 'BM' && value === 'source-over') continue;
         else if ((key === 'SMask' && !value) || (key === 'TR'
           && value === null)) continue;
-        else if (!['LW', 'LC', 'LJ', 'ML', 'D', 'RI', 'FL', 'CA']
-          .includes(key)) unsupported();
+        else if (!['RI', 'FL'].includes(key)) unsupported();
       }
     } else if (op === OPS.clip || op === OPS.eoClip) {
       pendingClip = op === OPS.clip ? FillType.Winding : FillType.EvenOdd;
@@ -306,22 +367,24 @@ export async function pdfPaintOperators(
       const { path, curves } = args[1][0] === null
         ? { path: new Path2D(), curves: 0 }
         : drawing(args[1][0]);
+      if ([OPS.closeStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]
+        .includes(consume as number)) path.closePath();
       if ([OPS.eoFill, OPS.eoFillStroke, OPS.closeEOFillStroke]
         .includes(consume as number)) path.setFillType(FillType.EvenOdd);
-      const shape = transformed(path, state.matrix);
-      const visible = clipped(shape, state.clip);
-      const box = bounds(visible);
       if ([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke,
         OPS.closeFillStroke, OPS.closeEOFillStroke]
         .includes(consume as number)) {
-        if (box && state.alpha > 0 && !state.transparent) {
-          const fill = { ...box, color: state.color,
-            alpha: state.alpha, curves };
-          shapes.set(fill, visible);
-          fills.push(fill);
-        }
+        if (!state.transparent) record(path, state.color, state.alpha, curves);
       } else if (![OPS.stroke, OPS.closeStroke, OPS.endPath]
         .includes(consume as number)) unsupported();
+      if ([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke,
+        OPS.closeFillStroke, OPS.closeEOFillStroke].includes(consume as number)
+        && !state.stroke.transparent && state.stroke.alpha > 0) {
+        const stroke = state.stroke;
+        if (stroke.width === 0 || stroke.dashed) unsupported();
+        record(new Path2D(path).stroke(stroke), stroke.color,
+          stroke.alpha, curves);
+      }
       if (pendingClip !== undefined) {
         path.setFillType(pendingClip);
         state.clip = clipped(transformed(path, state.matrix), state.clip);

@@ -194,19 +194,6 @@ for (const printCase of CASES) {
               page.locator('[data-fonts-ready="true"]'),
             ).toHaveCount(1);
             await waitForImages(page);
-            await expect(page.locator('.resume-document')).toHaveCSS(
-              'background-color', 'rgb(255, 255, 255)',
-            );
-            await expect(page.locator('.resume-sidebar')).toHaveCSS(
-              'background-color', 'rgb(227, 236, 240)',
-            );
-            expect(await photoCropGeometry(page))
-              .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
-            const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
-            const layout = await measurePdfLayout(page, margins);
-            expect(Math.abs(layout.width - (width * 0.75 - 2 * margins.x)))
-              .toBeLessThanOrEqual(1);
-            const photo = await fixturePhotoIdentity();
             const pdf = await page.pdf({
               displayHeaderFooter: false,
               margin: { bottom: 0, left: 0, right: 0, top: 0 },
@@ -233,6 +220,19 @@ for (const printCase of CASES) {
                 pages, printCase, testInfo,
               );
               expect.soft(() => checkMembership(membership, key)).not.toThrow();
+              await expect(page.locator('.resume-document')).toHaveCSS(
+                'background-color', 'rgb(255, 255, 255)',
+              );
+              await expect(page.locator('.resume-sidebar')).toHaveCSS(
+                'background-color', 'rgb(227, 236, 240)',
+              );
+              expect(await photoCropGeometry(page))
+                .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+              const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
+              const layout = await measurePdfLayout(page, margins);
+              expect(Math.abs(layout.width - (width * 0.75 - 2 * margins.x)))
+                .toBeLessThanOrEqual(1);
+              const photo = await fixturePhotoIdentity();
               expect(document.numPages).toBe(EXPECTED_PAGES);
               const dimensions = paper === 'a4' ? [595.28, 841.89] : [612, 792];
               for (const pdfPage of pages) {

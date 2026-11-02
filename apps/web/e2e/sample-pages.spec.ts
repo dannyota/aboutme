@@ -128,9 +128,9 @@ async function assertSampleStyle(
       .toBeLessThanOrEqual(1);
     if (heading.showRule) {
       const color = mixedColor(accent, surface, 0.6);
+      expect(decoration.ruleStyle).toBe('solid');
       expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
-      expect(pdfHasFill(display.paint, { ...decoration,
-        top: decoration.bottom - 0.75 }, color)).toBe(true);
+      expect(pdfHasFill(display.paint, decoration.ruleBox, color)).toBe(true);
     }
   }
   let transform = 'none';
