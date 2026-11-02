@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+fail() { echo "$1" >&2; exit 1; }
+
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 alert=$repo_root/deploy/vn/host/bin/alert.sh
 work=$(mktemp -d)
@@ -51,7 +53,7 @@ valid=$work/valid
 capture=$work/valid-capture
 write_env "$valid" 'Danny from aboutme.vn'
 printf '%s' ' lead\" user ' >"$valid/secrets/smtp-username"
-run_alert "$valid" "$capture"
+run_alert "$valid" "$capture" || fail 'valid SMTP delivery failed'
 [[ -e $capture.called ]] || { echo "msmtp was not called" >&2; exit 1; }
 [[ $(<"$capture.mode") == 600 ]] || { echo "msmtp config was not private" >&2; exit 1; }
 grep -qxF 'user " lead\\\" user "' "$capture.config" || {
@@ -66,17 +68,17 @@ grep -qxF 'From: "Danny from aboutme.vn" <no-reply@example.test>' "$capture.mess
   echo "documented sender name did not reach the message" >&2
   exit 1
 }
-grep -qxF 'Read the details on the host with journalctl.' "$capture.message"
+grep -qxF 'Read the details on the host with journalctl.' "$capture.message" || fail 'SMTP journal guidance missing'
 
 key=coraza-log-invalid
 root=$work/$key
 capture=$work/$key-capture
 write_env "$root" 'aboutme.vn'
 printf 'username' >"$root/secrets/smtp-username"
-run_alert "$root" "$capture" "$key" 'Coraza diagnostic test'
-grep -qxF 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.' "$capture.message"
-grep -qxF 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.' "$capture.message"
-grep -qxF 'Check the WAF log format and reader. Match and unparsed counts are available with journalctl -u aboutme-watch; they do not trigger mail.' "$capture.message"
+run_alert "$root" "$capture" "$key" 'Coraza diagnostic test' || fail 'SMTP Coraza delivery failed'
+grep -qxF 'Read Coraza metadata on the host in /run/aboutme/caddy-log/waf (tmpfs), including current and rotated serving-match and maintenance-match logs.' "$capture.message" || fail 'SMTP Coraza metadata guidance missing'
+grep -qxF 'Summarize timestamps, levels, message kinds, and rule IDs only. Do not copy raw request data, full URLs, messages, or credentials into mail.' "$capture.message" || fail 'SMTP Coraza privacy guidance missing'
+grep -qxF 'Check the WAF log format and reader. Match and unparsed counts are available with journalctl -u aboutme-watch; they do not trigger mail.' "$capture.message" || fail 'SMTP Coraza reader guidance missing'
 if grep -qF 'Read the details on the host with journalctl.' "$capture.message"; then
   echo "Coraza metadata was routed to journald" >&2
   exit 1
@@ -87,8 +89,8 @@ for key in aboutme-server.service coraza coraza-other coraza-matches coraza-unpa
   capture=$work/$key-capture
   write_env "$root" 'aboutme.vn'
   printf 'username' >"$root/secrets/smtp-username"
-  run_alert "$root" "$capture" "$key" 'Unit diagnostic test'
-  grep -qxF 'Read the details on the host with journalctl.' "$capture.message"
+  run_alert "$root" "$capture" "$key" 'Unit diagnostic test' || fail 'SMTP unit diagnostic delivery failed'
+  grep -qxF 'Read the details on the host with journalctl.' "$capture.message" || fail 'SMTP unit journal guidance missing'
   if grep -qF '/run/aboutme/caddy-log/waf' "$capture.message"; then
     echo "an unrelated key was routed to Coraza metadata" >&2
     exit 1
@@ -102,10 +104,10 @@ expect_rejected() { # label sender-name extra username-writer
   write_env "$root" "$name" "$extra"
   printf '%b' "$username" >"$root/secrets/smtp-username"
   if run_alert "$root" "$capture"; then
-    echo "$label was accepted" >&2
+    echo 'invalid SMTP configuration was accepted' >&2
     exit 1
   fi
-  [[ ! -e $capture.called ]] || { echo "$label reached msmtp" >&2; exit 1; }
+  [[ ! -e $capture.called ]] || fail 'invalid SMTP configuration reached msmtp'
 }
 
 expect_rejected control-c0 $'bad\tname' '' username
@@ -114,3 +116,4 @@ expect_rejected duplicate 'Danny from aboutme.vn' 'SMTP_HOST=other.example.test'
 expect_rejected username-newline 'Danny from aboutme.vn' '' 'username\n'
 
 echo "SMTP alert tests passed"
+bash "$repo_root/deploy/vn/tests/telegram-alert-test.sh" || fail 'Telegram alert suite failed'

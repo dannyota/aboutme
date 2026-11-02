@@ -7,20 +7,43 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/lib"
 # Only the canonical lock path and wait duration are redirected in this fixture.
-sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" -e 's/flock -s -w 30 /flock -s -w 0 /' "$watch_source" >"$work/watch.sh"
+sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" \
+  -e "s|/run/aboutme/crowdsec-retention.lock|$work/retention.lock|g" \
+  -e 's/flock -s -w 30 /flock -s -w 0 /' \
+  -e 's/timeout --kill-after=1s 5 cscli/timeout --kill-after=1s 0.2 cscli/' \
+  "$watch_source" >"$work/watch.sh"
 chmod +x "$work/watch.sh"
 watch=$work/watch.sh
 : >"$work/fence.lock"
-grep -qF 'flock -s -w 30' "$watch_source"
+: >"$work/retention.lock"
+chmod 0600 "$work/retention.lock"
+grep -qF 'flock -s -n' "$watch_source"
 cat >"$work/lib/crowdsec-db.sh" <<'STUB'
 crowdsec_db_held_lock() { return 0; }
-crowdsec_db_ready() { [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]; }
+crowdsec_db_ready() {
+  if [[ ${WATCH_TEST_PAUSE_PREFLIGHT:-0} == 1 ]]; then
+    : >"$WATCH_TEST_PREFLIGHT_ENTERED"
+    while [[ ! -e $WATCH_TEST_PREFLIGHT_RELEASE ]]; do sleep 0.01; done
+  fi
+  if [[ ${WATCH_TEST_IGNORE_TERM_PREFLIGHT:-0} == 1 ]]; then
+    timeout 15 bash -c '
+      trap "" TERM
+      printf "%s\n" "$BASHPID" >"$WATCH_TEST_PREFLIGHT_ENTERED"
+      sleep 30 &
+      printf "%s\n" "$!" >"$WATCH_TEST_PREFLIGHT_ENTERED.child"
+      wait
+    '
+  fi
+  [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
+}
 STUB
 
 cat >"$work/lib/alert.sh" <<'STUB'
 #!/usr/bin/env bash
+(( ${#2} <= 200 )) || exit 1
 printf '%s|%s\n' "$1" "$2" >>"$WATCH_TEST_ALERTS"
-cat >/dev/null
+cat >"$WATCH_TEST_ALERTS.$1.detail"
+[[ ${WATCH_TEST_SEND_FAILS:-0} == 0 ]]
 STUB
 cat >"$work/lib/crowdsec-retention-fail.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -46,6 +69,9 @@ printf 'Use%%\n10%%\n'
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${1-} == list-units && -n ${WATCH_TEST_FAILED_UNITS:-} ]]; then
+  cat "$WATCH_TEST_FAILED_UNITS"
+fi
 if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
   exit 1
 fi
@@ -63,16 +89,31 @@ cat >"$work/bin/runuser" <<'STUB'
 case " $* " in
   *' pg_isready '*) exit 0 ;;
   *' psql '*) printf 'f\n' ;;
-  *' pgbackrest '*) printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n' ;;
+  *' pgbackrest '*)
+    if [[ ${WATCH_TEST_HUNG_BACKUP:-0} == 1 ]]; then
+      : >"$WATCH_TEST_BACKUP_ENTERED"
+      while [[ ! -e $WATCH_TEST_BACKUP_RELEASE ]]; do sleep 0.01; done
+    fi
+    printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n' ;;
   *) exit 2 ;;
 esac
 STUB
 cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
-[[ ${1-} == +%s ]] && printf '2000000000\n'
+case $* in
+  +%s) printf '2000000000\n' ;;
+  '-u +%F') printf '2030-01-02\n' ;;
+  '-u +%FT%TZ') printf '2030-01-02T03:04:05Z\n' ;;
+  -R) printf 'Wed, 02 Jan 2030 03:04:05 +0000\n' ;;
+  *) exit 1 ;;
+esac
 STUB
 cat >"$work/bin/cscli" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${WATCH_TEST_HUNG_CSCLI:-0} == 1 ]]; then
+  : >"$WATCH_TEST_CSCLI_ENTERED"
+  exec sleep 30
+fi
 printf '[]\n'
 STUB
 cat >"$work/bin/find" <<'STUB'
@@ -114,6 +155,192 @@ EOF
 } >"$with_diagnostic"
 
 run_watch "$base" "$work/base.alerts"
+
+for ((i=0; i<100; i++)); do
+  printf 'aboutme-long-failed-unit-%03d.service loaded failed failed\n' "$i"
+done >"$work/failed-units"
+printf 'hostile\033[31m.service loaded failed failed\n' >>"$work/failed-units"
+: >"$work/host-checks.log"
+WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/failed.alerts"
+grep -qxF 'failed-units|failed units: 101' "$work/failed.alerts"
+grep -qxF 'omitted units: 81' "$work/failed.alerts.failed-units.detail"
+[[ $(wc -c <"$work/failed.alerts.failed-units.detail") -le 2048 ]]
+[[ $(grep -c '^aboutme-' "$work/failed.alerts.failed-units.detail") == 20 ]]
+
+# Exercise both transports with the watcher's long failure list.
+cp "$work/lib/alert.sh" "$work/alert-stub.sh"
+cp "$repo_root/deploy/vn/host/bin/alert.sh" "$work/lib/alert.sh"
+cp "$repo_root/deploy/vn/host/bin/alert-telegram.sh" "$work/lib/alert-telegram.sh"
+cp "$repo_root/deploy/vn/host/telegram-state.sh" "$work/lib/telegram-state.sh"
+mkdir -m 0700 "$work/alert-state" "$work/alert-state/secrets"
+printf username >"$work/alert-state/secrets/smtp-username"
+printf password >"$work/alert-state/secrets/smtp-password"
+cat >"$work/alert-state/smtp.env" <<'ENV'
+SMTP_HOST=smtp.example.test
+SMTP_PORT=465
+SMTP_TLS=implicit
+SES_FROM_ADDRESS=no-reply@example.test
+SES_FROM_NAME=aboutme
+ALERT_TO=support@example.test
+ENV
+cat >"$work/bin/msmtp" <<'STUB'
+#!/usr/bin/env bash
+cat >"$WATCH_TEST_MESSAGE"
+STUB
+cat >"$work/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+cat >"$WATCH_TEST_MESSAGE"
+while (($#)); do
+  if [[ $1 == --output ]]; then printf '{"ok":true}' >"$2"; break; fi
+  shift
+done
+printf 'http:200\n'
+STUB
+chmod +x "$work/lib/alert-telegram.sh" "$work/bin/msmtp" "$work/bin/curl"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/smtp-message \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/smtp.alerts"
+grep -qxF 'Subject: [aboutme-prod] failed units: 101' "$work/smtp-message"
+grep -qxF 'omitted units: 81' "$work/smtp-message"
+printf '123456:synthetic_BOT-token' >"$work/alert-state/secrets/telegram-bot-token"
+printf '%s' '-1001234567890' >"$work/alert-state/secrets/telegram-chat-id"
+chmod 0400 "$work/alert-state/secrets/telegram-"*
+rm -f "$work/alert-state/alerts/failed-units."*
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-test \
+  bash "$repo_root/deploy/vn/host/bin/alert-telegram.sh" --test </dev/null
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state \
+  bash "$repo_root/deploy/vn/host/alert-transport.sh" confirm-receipt --received
+cp "$work/alert-state/alert-transport" "$work/lib/alert-transport"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-message \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
+grep -qF 'failed units: 101' "$work/telegram-message"
+grep -qF 'omitted units: 81' "$work/telegram-message"
+# Pause after the watcher selected Telegram, then roll back and replace chat.
+rm -f "$work/alert-state/alerts/failed-units."*
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/after-rollback-message \
+  WATCH_TEST_PAUSE_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/rollback-entered \
+  WATCH_TEST_PREFLIGHT_RELEASE=$work/rollback-release WATCH_TEST_FAILED_UNITS=$work/failed-units \
+  run_watch "$work/host-checks.log" "$work/rollback.alerts" 2>"$work/rollback.err" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do [[ ! -e $work/rollback-entered ]] || break; sleep 0.01; done
+[[ -e $work/rollback-entered ]] || { echo 'rollback watcher did not pause' >&2; exit 1; }
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state bash "$repo_root/deploy/vn/host/alert-transport.sh" stage
+chmod 0600 "$work/alert-state/secrets/telegram-chat-id"
+printf '%s' '-1008888888888' >"$work/alert-state/secrets/telegram-chat-id"
+chmod 0400 "$work/alert-state/secrets/telegram-chat-id"
+touch "$work/rollback-release"
+wait "$watch_pid"
+[[ ! -e $work/after-rollback-message && ! -e $work/alert-state/alerts/failed-units.2030-01-02 ]]
+grep -qxF 'alert-telegram: invalid_secret failed-units' "$work/rollback.err"
+grep -qF 'coraza counts in the last hour:' "$work/rollback.alerts.journal"
+rm "$work/lib/alert-transport"
+cp "$work/alert-stub.sh" "$work/lib/alert.sh"
+WATCH_TEST_SEND_FAILS=1 WATCH_TEST_FAILED_UNITS=$work/failed-units \
+  run_watch "$work/host-checks.log" "$work/send-failure.alerts"
+grep -qF 'coraza counts in the last hour:' "$work/send-failure.alerts.journal"
+
+# A hung LAPI call must release both locks without waiting for the unit deadline.
+WATCH_TEST_HUNG_CSCLI=1 WATCH_TEST_CSCLI_ENTERED=$work/cscli-entered \
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/hung.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/hung.failures "$watch" >"$work/hung.journal" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do
+  [[ ! -e $work/cscli-entered ]] || break
+  sleep 0.01
+done
+[[ -e $work/cscli-entered ]] || { echo 'hung cscli fixture did not start' >&2; exit 1; }
+if flock -n "$work/retention.lock" true; then
+  echo 'watch query overlapped an edge transition' >&2; exit 1
+fi
+timeout 3 flock -x "$work/fence.lock" true || {
+  echo 'hung watch retained the fence lock' >&2; exit 1;
+}
+wait "$watch_pid"
+flock -n "$work/retention.lock" true
+
+# A nested preflight that ignores TERM must not escape the query's process group
+# and retain either inherited safety descriptor after the whole query deadline.
+sed 's/timeout --kill-after=1s 20 /timeout --kill-after=0.1s 0.5 /' "$watch" >"$work/watch-preflight.sh"
+WATCH_TEST_IGNORE_TERM_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/preflight-entered \
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/preflight.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/preflight.failures \
+  timeout 3 bash "$work/watch-preflight.sh" >"$work/preflight.journal"
+[[ -e $work/preflight-entered ]] || { echo 'TERM-ignoring preflight did not run' >&2; exit 1; }
+grep -qxF 'retention failure' "$work/preflight.failures"
+flock -n "$work/fence.lock" true
+flock -n "$work/retention.lock" true
+for pid_file in "$work/preflight-entered" "$work/preflight-entered.child"; do
+  process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+  [[ -z $process_state || $process_state == *Z* ]] || { echo 'preflight descendant survived its deadline' >&2; exit 1; }
+done
+
+# Exercise the real failure action with cleanup that ignores TERM and owns a
+# sleeping descendant. Denial and shutdown proof must precede bounded cleanup.
+cp "$work/lib/crowdsec-retention-fail.sh" "$work/failure-stub.sh"
+sed 's/--kill-after=2s 73 /--kill-after=0.1s 3 /' \
+  "$repo_root/deploy/vn/host/crowdsec-retention-fail.sh" >"$work/lib/crowdsec-retention-fail.sh"
+cat >"$work/bin/failure-systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$WATCH_TEST_SHUTDOWN"
+if [[ $* == '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' ]]; then exit 0; fi
+if [[ $1 == show ]]; then
+  printf 'ActiveState=inactive\nJob=\nMainPID=0\nControlPID=0\nControlGroup=\n'
+fi
+STUB
+cat >"$work/bin/rm" <<'STUB'
+#!/usr/bin/env bash
+if [[ ${WATCH_TEST_HUNG_CLEANUP:-0} == 1 && ${!#} == "$ABOUTME_RETENTION_FEED_DIR" ]]; then
+  trap '' TERM
+  printf '%s\n' "$BASHPID" >"$WATCH_TEST_CLEANUP_PID"
+  sleep 30 &
+  printf '%s\n' "$!" >"$WATCH_TEST_CLEANUP_PID.child"
+  wait
+fi
+exec /bin/rm "$@"
+STUB
+chmod +x "$work/bin/failure-systemctl" "$work/bin/rm"
+mkdir "$work/feed"
+printf 'retained\n' >"$work/feed/serving.json"
+touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
+WATCH_TEST_HUNG_CLEANUP=1 WATCH_TEST_CLEANUP_PID=$work/cleanup-pid \
+  WATCH_TEST_SHUTDOWN=$work/shutdown.log ABOUTME_RETENTION_SYSTEMCTL=$work/bin/failure-systemctl \
+  ABOUTME_RETENTION_FAILURE_MARKER=$work/failure-marker \
+  ABOUTME_RETENTION_FEED_DIR=$work/feed WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/cleanup.alerts WATCH_TEST_RETENTION_FAILURES=$work/cleanup.failures \
+  timeout 8 "$watch" >"$work/cleanup.journal" </dev/null
+[[ -s $work/cleanup-pid && -s $work/cleanup-pid.child &&
+  -s $work/feed/serving.json && -e $work/failure-marker && ! -e $ABOUTME_RETENTION_SUCCESS_MARKER ]] || {
+  echo 'hung cleanup bypassed denial, shutdown, or the cleanup deadline' >&2; exit 1;
+}
+for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service \
+  crowdsec.service aboutme-crowdsec-retention-startup.service; do
+  grep -q -- "--property=ControlGroup $unit$" "$work/shutdown.log"
+done
+grep -qxF -- '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' "$work/shutdown.log"
+timeout 2 flock -x "$work/fence.lock" true || { echo 'cleanup retained the fence' >&2; exit 1; }
+timeout 2 flock -x "$work/retention.lock" true || { echo 'cleanup retained retention ownership' >&2; exit 1; }
+for pid_file in "$work/cleanup-pid" "$work/cleanup-pid.child"; do
+  process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+  [[ -z $process_state || $process_state == *Z* ]] || { echo 'cleanup descendant survived its deadline' >&2; exit 1; }
+done
+cp "$work/failure-stub.sh" "$work/lib/crowdsec-retention-fail.sh"
+: >"$ABOUTME_RETENTION_SUCCESS_MARKER"
+
+# An unrelated blocked backup check must not retain either safety lock.
+WATCH_TEST_HUNG_BACKUP=1 WATCH_TEST_BACKUP_ENTERED=$work/backup-entered \
+  WATCH_TEST_BACKUP_RELEASE=$work/backup-release WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/backup.alerts WATCH_TEST_RETENTION_FAILURES=$work/backup.failures \
+  "$watch" >"$work/backup.journal" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do
+  [[ ! -e $work/backup-entered ]] || break
+  sleep 0.01
+done
+[[ -e $work/backup-entered ]] || { echo 'blocked backup fixture did not start' >&2; exit 1; }
+flock -n "$work/fence.lock" true
+flock -n "$work/retention.lock" true
+touch "$work/backup-release"
+wait "$watch_pid"
+
 run_watch "$with_diagnostic" "$work/diagnostic.alerts"
 cmp "$work/base.alerts" "$work/diagnostic.alerts"
 grep -qxF 'coraza-log-invalid|the Coraza match log has 1 unknown records in the last hour' "$work/diagnostic.alerts"
@@ -218,4 +445,27 @@ if WATCH_TEST_ALERTS=$work/admission.alerts WATCH_TEST_RETENTION_FAILURES=$work/
 fi
 [[ ! -s $work/admission.failures ]]
 flock -u "$guard"
+
+# A tick during any edge mutation waits before its safety or failure body.
+for transition in maintenance-up app-down render restore-previous app-up maintenance-down fail-closed; do
+  : >"$work/transition.failures"
+  exec {edge_guard}>"$work/retention.lock"
+  flock -x "$edge_guard"
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/transition.alerts \
+    WATCH_TEST_RETENTION_FAILURES=$work/transition.failures "$watch" >"$work/transition.out" 2>&1
+  [[ ! -s $work/transition.failures ]] || { echo "fresh lease failed during $transition" >&2; exit 1; }
+  flock -u "$edge_guard"
+  exec {edge_guard}>&-
+done
+
+exec {stuck_guard}>"$work/retention.lock"
+flock -x "$stuck_guard"
+touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
+WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/stuck.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/stuck.failures "$watch" >"$work/stuck.out" 2>&1
+grep -qxF 'retention failure' "$work/stuck.failures" || {
+  echo 'stuck retention lock suppressed the expired-lease watchdog' >&2; exit 1;
+}
+flock -u "$stuck_guard"
+exec {stuck_guard}>&-
 echo "watch tests passed"

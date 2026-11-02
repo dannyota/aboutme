@@ -250,7 +250,7 @@ migration_run() {
   "$lib/crowdsec-migrate.sh" "$@" >"$retention_fixture/migrate-out" 2>"$retention_fixture/migrate-err" || status=$?
   if ((status)); then
     diagnostic=$(cat "$retention_fixture/migrate-err")
-    if [[ $diagnostic =~ ^crowdsec_migrate_refused\ step=(arguments|lock|idle|notice|stop|fresh-admission|provision|activate|activate-config|activate-offline|activate-gate|activate-config-proof|activate-detection|activate-files|discard-sqlite|machine|startup-retention|maintenance-timers|unmask|enable|engine|caddy-register|firewall-register|firewall-start|firewall-ready|edge-start|lapi|final-gate|lease|watch)$ ||
+    if [[ $diagnostic =~ ^crowdsec_migrate_refused\ step=(arguments|lock|idle|notice|stop|fresh-admission|provision|activate|activate-config|activate-offline|activate-gate|activate-config-proof|activate-detection|activate-files|discard-sqlite|machine|startup-admission|startup-retention|maintenance-timers|unmask|enable|engine|caddy-register|firewall-register|firewall-start|firewall-ready|edge-start|lapi|final-gate|lease|watch)$ ||
       $diagnostic == crowdsec_migrate_stop_failed ]]; then
       printf '%s\n' "$diagnostic" >&2
     else
@@ -786,10 +786,16 @@ for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-
   [[ $(systemctl show --property=ActiveState --value "$unit") == inactive ]]
 done
 [[ ! -e /run/aboutme/crowdsec-retention-ok && ! -e /run/aboutme/caddy-log/crowdsec ]]
+integration_stage=database-loss-runtime-cleared
+[[ ! -e /run/aboutme/crowdsec ]]
 runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/data" \
   -l "$retention_fixture/data/server.log" -w start >/dev/null 2>&1
 [[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
-/usr/local/lib/aboutme/crowdsec-retention.sh startup
+integration_stage=database-loss-reset
+migration_run --reset
+integration_stage=database-loss-runtime-restored
+[[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
+  $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 ]]
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-database-loss-stops-consumers-and-removes-feeds\n'
 

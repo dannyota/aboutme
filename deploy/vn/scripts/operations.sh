@@ -50,6 +50,7 @@ files=(
   host/etc/systemd/system/aboutme-operation-retention.timer
   host/etc/systemd/system/aboutme-job@.service
   host/etc/systemd/system/aboutme-alert@.service host/bin/alert.sh
+  host/bin/alert-telegram.sh host/telegram-state.sh
 )
 for source in "${files[@]}"; do
   name=${source##*/} target="$lib/$name"

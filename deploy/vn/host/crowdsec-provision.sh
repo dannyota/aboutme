@@ -76,6 +76,11 @@ COMMIT;
 SQL
   fi
   [[ $(dpkg-query -W -f='${Version}' crowdsec 2>/dev/null) == 1.8.1 ]] || return 1
+  # Failure cleanup removes private logs before an explicit reset can run.
+  [[ ! -L /run/aboutme/crowdsec ]] || return 1
+  if [[ ! -e /run/aboutme/crowdsec ]]; then
+    install -d -o root -g root -m 0700 /run/aboutme/crowdsec || return 1
+  fi
   [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec && \
     $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 && \
     $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]] || return 1

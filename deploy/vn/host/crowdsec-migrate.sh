@@ -8,7 +8,8 @@ migrate_consumers=(aboutme-caddy.service aboutme-maintenance.service
   crowdsec-firewall-bouncer.service crowdsec.service
   aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer
   aboutme-crowdsec-retention.service aboutme-crowdsec-vacuum.service
-  aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service)
+  aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service
+  aboutme-crowdsec-retention-failure.service)
 
 migrate_at() {
   migrate_step=$1
@@ -79,8 +80,14 @@ PY
 migrate_stop() {
   # shellcheck source=crowdsec-retention-fail.sh
   source "$lib/crowdsec-retention-fail.sh"
-  local systemctl_cmd=/usr/bin/systemctl
-  local -a protected_units=("${migrate_consumers[@]}")
+  local systemctl_cmd=/usr/bin/systemctl unit
+  local -a protected_units=()
+  # Stop and join every trigger before cancelling its queued failure response.
+  for unit in "${migrate_consumers[@]}"; do
+    [[ $unit == aboutme-crowdsec-retention-failure.service ]] || protected_units+=("$unit")
+  done
+  retention_stop || return 1
+  protected_units=(aboutme-crowdsec-retention-failure.service)
   retention_stop
 }
 migrate_postgresql_selected() {
@@ -182,6 +189,9 @@ migrate_main() {
   migrate_at machine "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   cscli machines add -a --force --error || return 1
   chmod 0600 /etc/crowdsec/local_api_credentials.yaml || return 1
+  # Only admitted fresh provisioning or explicit reset can reopen failed startup.
+  # Both have stopped consumers and passed the new catalog and activation gates.
+  migrate_at startup-admission rm -f -- /run/aboutme/crowdsec-retention-failed || return 1
   # Startup retention clears owned cache/firewall state and binds the new lease.
   migrate_at startup-retention systemctl start aboutme-crowdsec-retention-startup.service || return 1
   migrate_at maintenance-timers systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer || return 1
@@ -202,6 +212,8 @@ migrate_main() {
 }
 migrate_failure() {
   if [[ ${migrate_changed:-no} == yes ]]; then
+    rm -f -- /run/aboutme/crowdsec-retention-ok
+    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
     if ! migrate_stop >/dev/null 2>&1; then
       printf 'crowdsec_migrate_stop_failed\n' >&2
       return 1

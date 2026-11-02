@@ -1,13 +1,14 @@
 # Telegram host alerts
 
-Status: proposed (2026-11-02), pending owner acceptance of the
+Status: accepted (2026-11-02), by the owner under the
 [ADR amendment](../adr/0026-vietnam-hosted-production.md#amendment-host-alerts-through-telegram-2026-11-02).
-Mail remains current until cutover; app contracts do not change.
+Production cutover is not yet done. Mail remains current until cutover; app
+contracts do not change.
 
-Recommend Telegram only; fallback adds maintenance and duplicates. Keep app
-SMTP. vMonitor remains the external readiness backstop but shares Telegram
-delivery risk and misses healthy-site disk/backup faults. GitHub uptime is
-slower.
+The owner accepted Telegram only, host SMTP removal after confirmed receipt, and
+the narrow transfer exception in the ADR amendment. Keep app SMTP. vMonitor
+remains the external readiness backstop but shares Telegram delivery risk and
+misses healthy-site disk/backup faults. GitHub uptime is slower.
 
 **Transport and custody.** Keep the one-shot root sender and existing curl, jq,
 and CA roots; no new daemon/package. Each unsuppressed call makes one POST to
@@ -18,7 +19,7 @@ disables curl config. No traces, verbose output, webhook, polling daemon, or
 inbound firewall opening.
 
 The owner reuses the existing bot and vMonitor supergroup through the
-[runbook's pipe-only imports](../runbooks/production.md#host-telegram-setup-and-rotation-draft).
+[runbook's pipe-only imports](../runbooks/production.md#host-telegram-setup-and-rotation).
 Files live under `/etc/aboutme/secrets`, root-owned 0400, under the root-only
 directory; reject symlinks, wrong permissions, empty or malformed values. Token:
 `[0-9]+:[A-Za-z0-9_-]+`, at most 256 ASCII bytes. Chat ID: `-?[0-9]{1,20}`, as a
@@ -33,8 +34,9 @@ memory even without Content-Length; pipe them to the validator, suppress raw
 curl/jq errors, and discard bodies without writing files. Success requires curl
 exit 0, HTTP 200, and a JSON object with boolean `ok=true`. Only fixed outcomes
 (`sent`, `suppressed`, `invalid_input`, `invalid_secret`, `transport_failed`,
-`rejected`, `invalid_response`) and validated keys reach the journal. Never log
-values, URLs, request/response bodies, or provider descriptions.
+`rejected`, `invalid_response`, `stamp_failed`) and validated keys reach the
+journal. Never log values, URLs, request/response bodies, or provider
+descriptions.
 
 **Content and deduplication.** `alert-telegram.sh` keeps `<key> <subject>` and
 bounded stdin. Keys retain `[A-Za-z0-9@._-]{1,120}`. Subjects are 1 to 200
@@ -51,13 +53,30 @@ names and an omitted count in detail; never concatenate unit names into the
 subject.
 
 Keep atomic noclobber stamps at `/var/lib/aboutme/alerts/<key>.<UTC-date>`.
-Concurrent calls for one key/day send at most one in-flight request. Keep the
-stamp on confirmed success; remove this invocation's stamp on failure or caught
-termination. Failures return nonzero; the watcher continues its other checks.
-Later calls retry ongoing faults, normally at the next five-minute tick. No
-queue: transient events can be lost, unknown delivery can duplicate later, and
-SIGKILL/power loss can suppress until the next UTC day. Preserve stamps at
-cutover.
+Concurrent calls for one key/day send at most one in-flight request. Suppress
+only an existing empty, private regular stamp. A creation failure returns
+nonzero with `stamp_failed`. Keep the stamp on confirmed success; remove this
+invocation's stamp on failure or caught termination. Failures return nonzero;
+the watcher continues its other checks. Later calls retry ongoing faults,
+normally at the next five-minute tick. No queue: transient events can be lost,
+unknown delivery can duplicate later, and SIGKILL/power loss can suppress until
+the next UTC day. Preserve stamps at cutover. Every non-test send requires the
+active Telegram selector and matching credential approval while holding the
+shared credential lock, including calls from a watcher that selected its sender
+before rollback. Bind proof and approval to a SHA-256 digest of the validated
+credential pair, computed from memory through a pipe under that lock. Keep the
+digest only in root-only state. Metadata-only changes preserve approval; imports
+and replacements explicitly clear proof and approval.
+
+Retention failure dispatches `aboutme-alert@aboutme-crowdsec-retention.service`
+with `systemctl --no-block start`. Its five-second dispatch bound does not share
+the sender's process group or locks. Dispatch failure makes the retention action
+fail. Shutdown keeps its 60-second stop bound and 75-second cleanup bound. The
+alert service allows 60 seconds for the 20-second credential-lock wait,
+15-second request, and outcome cleanup, then five seconds to stop. It discards
+stdout and sends sanitized sender outcomes to its own journal. Delivery failure
+does not reopen retention admission; its daily key is
+`unit-aboutme-crowdsec-retention`.
 
 **Trust and egress.** Existing open egress permits resolver DNS and TCP 443 to
 `api.telegram.org`; no IP pin or circumvention proxy. Telegram receives
@@ -83,17 +102,17 @@ files/argv/logs, oversized replies, stamp races/retry, rotation without Podman,
 SMTP-active staging, receipt-gated caller switching, and the watcher-to-sender
 path with a failure list exceeding 200 characters.
 
-The [runbook](../runbooks/production.md#host-telegram-setup-and-rotation-draft)
-owns setup, rotation, and rollback. Order: owner acceptance, source
-verification, implementation/regressions, green exact-commit CI, staged
-installation and proof. Stage `alert-telegram.sh` beside active SMTP `alert.sh`.
-Its `--test` sends fixed `[aboutme-prod] host alert delivery test`, no caller
-text, same transport and credentials, one send per invocation, no daily-stamp
-read/write. Only owner receipt permits switching `watch.sh` and
-`aboutme-alert@.service` to Telegram. Every credential/destination change also
-needs receipt; failure blocks cutover, never stops serving or rolls back the
-app. Ordinary app deploys do not send tests. Older app images keep current host
-helpers; no data migration or alert replay.
+The [runbook](../runbooks/production.md#host-telegram-setup-and-rotation) owns
+setup, rotation, and rollback. Order: owner acceptance, source verification,
+implementation/regressions, green exact-commit CI, staged installation and
+proof. Stage `alert-telegram.sh` beside active SMTP `alert.sh`. Its `--test`
+sends fixed `[aboutme-prod] host alert delivery test`, no caller text, same
+transport and credentials, one send per invocation, no daily-stamp read/write.
+Only owner receipt permits switching `watch.sh` and `aboutme-alert@.service` to
+Telegram. Every credential/destination change also needs receipt; failure blocks
+cutover, never stops serving or rolls back the app. Ordinary app deploys do not
+send tests. Older app images keep current host helpers; no data migration or
+alert replay.
 
 First-party references, unfetched under the network prohibition:
 [API requests](https://core.telegram.org/bots/api#making-requests),
@@ -104,8 +123,66 @@ result semantics, limits, revocation, and installed curl bounds.
 
 ## Operator reference
 
-Proposed only. Use after owner acceptance and reviewed implementation of the
-host alert contract.
+The [runbook](../runbooks/production.md#host-telegram-setup-and-rotation) owns
+implemented setup, receipt confirmation, cutover, rotation, and rollback
+commands. A successful HTTP response does not prove owner receipt or production
+activation.
 
-Commands require the proposed helper support. Origin HTTP success does not prove
-alert delivery.
+The owner's choice reuses the existing bot from local `TELEGRAM_BOT` and the
+vMonitor `aboutme-alerts` supergroup. Add that bot with send permission and no
+admin rights; leave VNG's bot and its notifications intact. Coordinate
+shared-bot revocation with every sender. Keep application SMTP and working host
+SMTP during initial staging. No automatic SMTP fallback is configured. With the
+reviewed bundle copied, the host administrator installs it before the runbook's
+`stage`:
+
+```sh
+sudo bash <bundle>/host/install.sh <bundle>
+```
+
+Do not run setup with tracing or terminal recording enabled.
+
+`telegram-setup.sh` reads the literal local `.env` value without sourcing it. It
+filters `vngcloud monitor list-channels --output json` for exactly one Telegram
+channel named `aboutme-alerts` with a numeric supergroup address, then pipes
+both values to the host importer without newlines. Missing, duplicate,
+malformed, or failed results stop setup. `--replace` invalidates proof and
+approval while keeping Telegram selected. Automatic sends stay disabled until a
+successful fresh test and `confirm-receipt --received`. A failed test clears its
+proof. Destination changes require owner approval and the same receipt sequence;
+never accept API-suggested destination changes.
+
+Inspect names and metadata only on the host:
+
+```sh
+sudo stat -c '%u:%a %n' /etc/aboutme/secrets \
+  /etc/aboutme/secrets/telegram-bot-token \
+  /etc/aboutme/secrets/telegram-chat-id
+```
+
+Expect directory `0:700` and files `0:400`. Never print, inspect, tee, or save
+values or raw provider responses. Telegram secrets never enter Podman or
+database backups. For each encrypted custody refresh, set `AGE_RECIPIENT` and a
+fresh `ENCRYPTED_BACKUP` path on the trusted laptop; the helper refuses
+overwrite and creates no plaintext intermediate. Record only UTC receipt time
+and success/failure, with no values or screenshots.
+
+After successful initial cutover, remove host-alert `ALERT_TO` on the host:
+
+```sh
+sudo sed -i '/^ALERT_TO=/d' /etc/aboutme/smtp.env
+```
+
+The installer requires msmtp only while SMTP is selected. Package removal is
+operator cleanup; retain application SMTP settings and secrets. Before rollback,
+restore the reviewed SMTP configuration and `ALERT_TO`, ensure `msmtp` and SMTP
+secrets exist, then follow the runbook's `stage` and fresh-key mail proof. The
+same command removes the Telegram override, selector, proof, and approval and
+reloads systemd. Preserve daily stamps and other host safety changes; no app
+restart is needed. After restore, verify membership and current credentials
+without displaying values; rotate exposed tokens and repeat test, owner receipt,
+and explicit confirmation. Inspect only fixed journal outcomes:
+
+```sh
+sudo journalctl -u 'aboutme-alert@*' -u aboutme-watch --since -30min -o cat
+```

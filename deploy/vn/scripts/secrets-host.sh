@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # The host half of secrets.sh (docs/design/vietnam-production.md, "Secrets and
 # host identity"). Runs as root on the production host, installed at
 # /usr/local/lib/aboutme/secrets-host.sh. Each secret is one root-owned 0400
 # file under /etc/aboutme/secrets, on the encrypted data volume, and a Podman
-# secret of the same name. Nothing here prints, logs, or echoes a value, and
+# secret of the same name, except the host-only Telegram credentials.
+# Nothing here prints, logs, or echoes a value, and
 # nothing overwrites a value except an explicit --replace on a name that moves
 # from AWS at cutover or rotates.
 #
@@ -16,6 +18,7 @@
 #   secrets-host.sh list                    names present, never values
 #   secrets-host.sh age-copy <recipient>    age ciphertext of every value on stdout
 set -euo pipefail
+set +xv
 
 dir=/etc/aboutme/secrets
 pgb_conf=/etc/pgbackrest/conf.d/secrets.conf
@@ -26,13 +29,14 @@ generated=(db-admin-password db-migrator-password db-app-password
   view-pass-key totp-key-a pgbackrest-cipher-pass)
 # Values the owner pipes in.
 imported=(google-client-id google-client-secret linkedin-client-id linkedin-client-secret
-  smtp-username smtp-password totp-key-b)
+  smtp-username smtp-password totp-key-b telegram-bot-token telegram-chat-id)
 # Values that move from AWS once at cutover and replace the rehearsal ones,
 # or rotate later (docs/design/vietnam-production.md, "Secrets and host
 # identity"): only these accept --replace.
 replaceable=(auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a totp-key-b google-client-id google-client-secret
-  linkedin-client-id linkedin-client-secret smtp-username smtp-password)
+  linkedin-client-id linkedin-client-secret smtp-username smtp-password
+  telegram-bot-token telegram-chat-id)
 # Values the containers read as Podman secrets.
 podman_names=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
@@ -133,8 +137,48 @@ cmd_import() { # name [--replace]
   [[ ${2-} == --replace ]] && replace=1
   member "$name" "${imported[@]}" "${replaceable[@]}" || die "$name is not an importable name"
   ((!replace)) || member "$name" "${replaceable[@]}" || die "$name cannot be replaced"
+  case $name in
+    telegram-bot-token | telegram-chat-id)
+      store_telegram "$name" "$replace"
+      return
+      ;;
+  esac
   store "$name" "$replace"
   ((!replace)) || cmd_podman_sync --replace "$name"
+}
+
+# Telegram uses the final host file directly under the sender's exclusive
+# lock. No temporary plaintext file or Podman copy is made during rotation.
+store_telegram() { # name replace(0|1)
+  local name=$1 replace=$2 value pattern exists=no
+  export -n value
+  # shellcheck source=../host/telegram-state.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/telegram-state.sh"
+  telegram_init exclusive 2>/dev/null || die 'Telegram state is unsafe'
+  case $name in
+    telegram-bot-token) pattern='\A[0-9]+:[A-Za-z0-9_-]+\z' ;;
+    telegram-chat-id) pattern='\A-?[0-9]{1,20}\z' ;;
+  esac
+  value=$(head -c 258 | jq -Rrse --arg pattern "$pattern" '
+    if utf8bytelength <= 256 and test($pattern) then . else error("invalid") end' 2>/dev/null) ||
+    die 'invalid Telegram secret'
+  if [[ -e $dir/$name || -L $dir/$name ]]; then
+    telegram_private_file "$dir/$name" 400 || die 'unsafe Telegram secret file'
+    if ((!replace)); then say "kept $name"; return; fi
+    exists=yes
+  fi
+  rm -f -- "$telegram_proof" "$telegram_approved" || die 'Telegram state write failed'
+  if [[ $exists == yes ]]; then
+    chmod 0600 -- "$dir/$name" || die 'unsafe Telegram secret file'
+    if ! printf '%s' "$value" >|"$dir/$name"; then
+      chmod 0400 -- "$dir/$name"
+      die 'Telegram secret write failed'
+    fi
+  else
+    (set -o noclobber; printf '%s' "$value" >"$dir/$name") || die 'Telegram secret exists'
+  fi
+  chmod 0400 -- "$dir/$name" || die 'Telegram secret permissions failed'
+  say "stored $name"
 }
 
 # The key file create-s3-key writes, in the AWS shared credentials format: one
@@ -178,6 +222,7 @@ cmd_podman_sync() { # [--replace name]
   local name
   if [[ ${1-} == --replace ]]; then
     name=$2
+    member "$name" "${podman_names[@]}" || die 'not a Podman secret'
     podman secret rm "$name" >/dev/null 2>&1 || true
     podman secret create "$name" "$dir/$name" >/dev/null
     say "replaced Podman secret $name"

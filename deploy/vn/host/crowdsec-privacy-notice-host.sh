@@ -387,7 +387,18 @@ notice_adopt() {
   aboutme_stop_jobs 60 || return 1
   exec {notice_boot_fd}>>/run/aboutme/workload.lock || return 1
   flock -x -w 300 "$notice_boot_fd" || return 1
-  aboutme_fail_closed 60 && aboutme_assert_cutover_quiescent || return 1
+  # The fixed legacy edge predates PostgreSQL retention admission. This verified
+  # adoption owns cutover/workload guards and proves stopped writers itself.
+  systemctl stop aboutme-caddy aboutme-server aboutme-web || return 1
+  for name in aboutme-caddy aboutme-server aboutme-web; do
+    state=$(systemctl show --all --property=ActiveState --property=Job \
+      --property=MainPID --property=ControlPID "$name") || return 1
+    [[ $(wc -l <<<"$state") == 4 ]] && grep -qxE 'ActiveState=(inactive|failed)' <<<"$state" &&
+      grep -qxF 'Job=' <<<"$state" && grep -qxF MainPID=0 <<<"$state" &&
+      grep -qxF ControlPID=0 <<<"$state" || return 1
+  done
+  systemctl start aboutme-maintenance || return 1
+  aboutme_assert_fail_closed && aboutme_assert_cutover_quiescent || return 1
   "$base/fence.sh" checkpoint "$notice_operation" "$tag" >/dev/null 2>&1 || return 1
   if [[ $resuming == no ]]; then notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1; fi
   # The legacy helper cannot write evidence; use the incoming reviewed helper.

@@ -19,6 +19,8 @@ PY
   )
 }
 crowdsec_lease_check() {
+  [[ ! -e /run/aboutme/crowdsec-retention-failed &&
+    ! -L /run/aboutme/crowdsec-retention-failed ]] || return 1
   # The executed preflight-ready interface and this source-only path use the
   # same complete read-only gate. Internal callers retain the canonical lock.
   # shellcheck source=crowdsec-db.sh

@@ -7,6 +7,8 @@ trap 'rm -rf -- "$work"' EXIT
 # Redirect configuration paths; exercise the production predicates and activation.
 sed -e "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.yaml|g" \
   -e "s|/etc/crowdsec/|$work/config/|g" \
+  -e "s|/run/aboutme|$work/runtime|g" \
+  -e "s|/usr/bin/systemctl|$work/bin/systemctl|g" \
   "$root/deploy/vn/host/crowdsec-migrate.sh" >"$work/crowdsec-migrate.sh"
 # shellcheck source=../host/crowdsec-migrate.sh
 source "$work/crowdsec-migrate.sh"
@@ -14,9 +16,12 @@ source "$work/crowdsec-migrate.sh"
 eval "$(declare -f migrate_lock | sed '1s/migrate_lock/real_migrate_lock/')"
 eval "$(declare -f migrate_firewall_register | sed '1s/migrate_firewall_register/real_firewall_register/')"
 eval "$(declare -f migrate_activate | sed '1s/migrate_activate/real_migrate_activate/')"
+eval "$(declare -f migrate_stop | sed '1s/migrate_stop/real_migrate_stop/')"
 lib=$work/lib
 mkdir -p "$lib"
+mkdir -p "$work/runtime"
 export MIGRATE_CALLS=$work/calls
+export MIGRATE_FAILURE_MARKER=$work/runtime/crowdsec-retention-failed
 cat >"$lib/crowdsec-db.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'gate\n' >>"$MIGRATE_CALLS"
@@ -34,7 +39,7 @@ printf 'secret %s\n' "$*" >>"$MIGRATE_CALLS"
 SH
 cat >"$lib/crowdsec-retention-lease-check.sh" <<'SH'
 #!/usr/bin/env bash
-[[ ${MIGRATE_FAIL:-} != lease ]]
+[[ ${MIGRATE_FAIL:-} != lease && ! -e $MIGRATE_FAILURE_MARKER ]]
 SH
 /usr/bin/chmod +x "$lib/"*
 chmod() { :; }
@@ -101,6 +106,7 @@ notice=no; refused notice --reset; [[ ! -s $MIGRATE_CALLS ]]; notice=yes
 printf 'PASS lock-owner-and-notice-before-stop\n'
 selected=yes
 for credentials in missing empty malformed absent unvalidated complete; do
+  rm -f "$MIGRATE_FAILURE_MARKER"
   rm -f "$work/local_api_credentials.yaml"
   listed_machines='[{"machineId":"fixture-machine","isValidated":true}]'
   case $credentials in
@@ -152,7 +158,9 @@ listed_bouncers='[{"name":"aboutme-caddy"},{"name":"aboutme-firewall"}]'
 printf 'PASS missing-registration-refuses-occupied-catalog\n'
 selected=no
 : >"$MIGRATE_CALLS"
+touch "$work/runtime/crowdsec-retention-failed"
 migrate_run
+[[ ! -e $work/runtime/crowdsec-retention-failed ]]
 cat >"$work/expected" <<'CALLS'
 stop-joined
 provision fresh
@@ -199,7 +207,9 @@ unset MIGRATE_FAIL
 printf 'PASS failures-join-consumers\n'
 active_edge=none
 : >"$MIGRATE_CALLS"
+touch "$work/runtime/crowdsec-retention-failed"
 migrate_run --reset 2>"$work/err"
+[[ ! -e $work/runtime/crowdsec-retention-failed ]]
 grep -qxF crowdsec_migrate_no_edge "$work/err"
 ! grep -qE '^unit start aboutme-(caddy|maintenance)' "$MIGRATE_CALLS"
 sed -e 's/provision fresh/provision restore-reset/' -e '/^unit start aboutme-caddy.service$/d' "$work/expected" >"$work/reset-expected"
@@ -285,6 +295,65 @@ SH
   cmp "$lib/crowdsec/acquis.d/fixture.yaml" "$work/config/acquis.d/fixture.yaml"
 )
 printf 'PASS activation-boundaries-hide-command-output\n'
+
+# A stopped trigger can leave an already queued or running failure response.
+# Join that response separately before provisioning or clearing startup denial.
+(
+  cp "$root/deploy/vn/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
+  cat >"$work/bin/systemctl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$MIGRATE_CALLS"
+case $1 in
+  stop)
+    if [[ " $* " == *' aboutme-crowdsec-retention-failure.service '* ]]; then
+      # A simultaneous stop can be followed by a trigger's late OnFailure job.
+      if [[ -e $MIGRATE_CALLS.triggers-stopped ]]; then
+        rm -f "$MIGRATE_CALLS.failure-pending"
+        printf 'failure-joined\n' >>"$MIGRATE_CALLS"
+      fi
+    fi
+    if [[ " $* " == *' aboutme-watch.service '* &&
+      " $* " == *' aboutme-crowdsec-retention.service '* &&
+      " $* " == *' aboutme-crowdsec-retention-startup.service '* ]]; then
+      touch "$MIGRATE_CALLS.triggers-stopped"
+    fi ;;
+  show)
+    state=inactive job= pid=0
+    if [[ ${!#} == aboutme-crowdsec-retention-failure.service &&
+      -e $MIGRATE_CALLS.failure-pending ]]; then
+      if [[ $(cat "$MIGRATE_CALLS.failure-pending") == queued ]]; then
+        state=inactive job=7
+      else
+        state=active pid=1
+      fi
+    fi
+    printf 'ActiveState=%s\nJob=%s\n' "$state" "$job"
+    if [[ $* == *--property=MainPID* ]]; then
+      printf 'MainPID=%s\nControlPID=0\nControlGroup=\n' "$pid"
+    fi ;;
+  *) exit 2 ;;
+esac
+SH
+  /usr/bin/chmod +x "$work/bin/systemctl"
+  cat >"$lib/crowdsec-provision.sh" <<'SH'
+#!/usr/bin/env bash
+[[ ! -e $MIGRATE_CALLS.failure-pending ]] || exit 1
+printf 'provision %s\n' "$1" >>"$MIGRATE_CALLS"
+SH
+  migrate_stop() { real_migrate_stop; }
+  for response in queued running; do
+    : >"$MIGRATE_CALLS"
+    rm -f "$MIGRATE_CALLS.triggers-stopped"
+    printf '%s\n' "$response" >"$MIGRATE_CALLS.failure-pending"
+    touch "$MIGRATE_FAILURE_MARKER"
+    migrate_run --reset 2>"$work/err"
+    [[ ! -e $MIGRATE_FAILURE_MARKER && ! -e $MIGRATE_CALLS.failure-pending ]]
+    grep -qxF failure-joined "$MIGRATE_CALLS"
+    grep -qxF 'provision restore-reset' "$MIGRATE_CALLS"
+  done
+)
+printf 'PASS reset-joins-failure-response-after-triggers\n'
 
 # Gate each schema-capable bouncer command even when the prior list passed.
 cat >"$lib/crowdsec-db.sh" <<'SH'
