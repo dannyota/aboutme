@@ -48,15 +48,9 @@ async function assertFlow(
   await expect(flow.locator('.entry-title')).toHaveText(
     sections.flatMap((index) => [...content.titles[index]!]),
   );
-  for (const heading of await flow.locator('.section-heading h2').all()) {
-    await expect(heading).toBeVisible();
-  }
-  for (const title of await flow.locator('.entry-title').all()) {
-    await expect(title).toBeVisible();
-  }
-  const paragraphs = flow.locator('.entry-body p');
-  for (const paragraph of await paragraphs.all()) {
-    await expect.poll(() => measureTextContainment(paragraph)).toEqual({
+  const text = flow.locator('.section-heading h2, .entry-title, .entry-body p');
+  for (const element of await text.all()) {
+    await expect.poll(() => measureTextContainment(element)).toEqual({
       visible: true, contained: true,
     });
   }
@@ -177,6 +171,26 @@ test('renderer rejects a hidden language section', async ({ page }) => {
   await expect(assertClean()).rejects.toThrow();
   await page.reload();
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  await assertClean();
+});
+
+test('renderer rejects a transparent language section', async ({ page }) => {
+  await page.goto('/_harness/render?fixture=vn-full'
+    + '&template=modern-sidebar&mode=continuous');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const assertClean = () => assertRenderer(page, 'modern-sidebar', 'vi');
+  await assertClean();
+  const section = page.locator('.resume-sidebar .resume-section').filter({
+    has: page.getByRole('heading', { name: 'Ngôn ngữ', exact: true }),
+  });
+  await expect(section).toHaveCount(1);
+  await section.evaluate((node) => {
+    (node as HTMLElement).style.opacity = '0';
+  });
+  await expect(assertClean()).rejects.toThrow();
+  await section.evaluate((node) => {
+    (node as HTMLElement).style.removeProperty('opacity');
+  });
   await assertClean();
 });
 
