@@ -372,104 +372,57 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-test('chrome measurements detect layout and content mutations', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 900 });
-  expect((await page.goto('/'))?.status()).toBe(200);
-  const stage = page.getByTestId('landing-stage');
-  await expect.poll(() => measureChromeSheet(stage)).toBe(true);
-  await page.addStyleTag({
-    content: '[data-testid="landing-sheet"] { '
-      + 'transform: translateX(4px) scale(var(--sheet-zoom)) !important; }',
-  });
-  await expect.poll(() => measureChromeSheet(stage)).toBe(false);
-
-  const grid = page.getByTestId('landing-template-grid');
-  await expect.poll(() => measureChromeGrid(grid)).toMatchObject({
-    columns: 2, separated: true,
-  });
-  await grid.evaluate((element) => {
-    (element as HTMLElement).style.gridTemplateColumns = '1fr';
-  });
-  expect((await measureChromeGrid(grid)).columns).toBe(1);
-  const axis = await grid.evaluate((element) => {
-    const first = element.children[0]!.getBoundingClientRect();
-    const second = element.children[1] as HTMLElement;
-    const box = second.getBoundingClientRect();
-    const row = Math.abs(first.top - box.top) <= 1;
-    const shift = row ? first.right - box.left - 4 : first.bottom - box.top - 4;
-    second.style.transform = row
-      ? `translateX(${shift}px)`
-      : `translateY(${shift}px)`;
-    return row ? 'row' : 'column';
-  });
-  await expect.poll(() => grid.evaluate((element, layout) => {
-    const first = element.children[0]!.getBoundingClientRect();
-    const second = element.children[1]!.getBoundingClientRect();
-    return layout === 'row'
-      ? first.right - second.left
-      : first.bottom - second.top;
-  }, axis)).toBeCloseTo(4, 0);
-  await expect.poll(async () => (await measureChromeGrid(grid)).separated)
-    .toBe(false);
-
-  const title = page.getByTestId('landing-title');
-  await expect.poll(() => measureTextContainment(title))
-    .toEqual({ visible: true, contained: true });
-  await title.evaluate((element) => {
-    Object.assign((element as HTMLElement).style, {
-      height: '20px', overflow: 'hidden', whiteSpace: 'nowrap',
-    });
-  });
-  expect((await measureTextContainment(title)).contained).toBe(false);
-  const body = page.locator('body');
-  await expect(body).toHaveCSS('color', 'rgb(16, 27, 63)');
-  await expect(body).toHaveCSS('font-size', '15px');
-  await body.evaluate((element) => {
-    Object.assign((element as HTMLElement).style, {
-      color: 'rgb(1, 2, 3)', fontSize: '17px',
-    });
-  });
-  await expect(body).not.toHaveCSS('color', 'rgb(16, 27, 63)');
-  await expect(body).not.toHaveCSS('font-size', '15px');
-
-  await page.getByTestId('app-shell').getByRole('navigation')
-    .getByRole('link').first().evaluate((element) => {
-      (element as HTMLElement).style.display = 'none';
-    });
-  await expect(page.getByTestId('app-shell').getByRole('navigation')
-    .getByRole('link', { name: 'Thư viện', exact: true })).toHaveCount(0);
-});
-
-test('desktop heading text stays within its visible container', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  for (const path of ['/', '/templates']) {
-    await page.goto(path);
+for (const [name, css] of [
+  ['sheet alignment', '[data-testid="landing-sheet"] { '
+  + 'transform: translateX(4px) scale(var(--sheet-zoom)) !important; }'],
+  ['columns', '[data-testid="landing-template-grid"] '
+  + '{ grid-template-columns: 1fr !important; }'],
+  ['card overlap', '[data-testid="landing-template-grid"] '
+  + '> :nth-child(2) { transform: translateX(-20px) !important; }'],
+  ['row gap', '[data-testid="landing-template-grid"] '
+  + '> :nth-child(n+3) { transform: translateY(4px) !important; }'],
+  ['title clipping', '[data-testid="landing-title"] '
+  + '{ height: 20px !important; overflow: hidden !important; '
+  + 'white-space: nowrap !important; }'],
+  ['body color', 'body { color: rgb(1, 2, 3) !important; }'],
+  ['body font size', 'body { font-size: 17px !important; }'],
+  ['navigation', 'nav a[href="/templates"] { display: none !important; }'],
+] as const) {
+  test(`chrome assertions reject changed ${name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    expect((await page.goto('/'))?.status()).toBe(200);
     await page.evaluate(() => document.fonts.ready);
-    const title = page.getByRole('heading', { level: 1 });
-    const container = path === '/'
-      ? '[data-testid="landing-hero"]'
-      : '[data-testid="gallery-header"]';
-    await expect.poll(() => measureTextContainment(title, container))
-      .toEqual({ visible: true, contained: true });
-    const style = await page.addStyleTag({
-      content: 'h1 { height: 20px !important; overflow: visible !important; }',
+    const assertClean = () => expectChrome(page, 'home', 'vi', 'light', 390);
+    await assertClean();
+    const mutation = await page.addStyleTag({ content: css });
+    await expect(assertClean()).rejects.toThrow();
+    await mutation.evaluate((node) => node.remove());
+    await assertClean();
+  });
+}
+
+for (const path of ['/', '/templates'] as const) {
+  for (const overflow of ['visible', 'hidden'] as const) {
+    test(`desktop heading rejects ${overflow} overflow on ${path}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(path);
+      await page.evaluate(() => document.fonts.ready);
+      const assertClean = () => expectChrome(
+        page, path === '/' ? 'home' : 'templates', 'vi', 'light', 1440,
+      );
+      await assertClean();
+      const mutation = await page.addStyleTag({
+        content: `h1 { height: 20px !important; `
+          + `overflow: ${overflow} !important; }`,
+      });
+      await expect(assertClean()).rejects.toThrow();
+      await mutation.evaluate((node) => node.remove());
+      await assertClean();
     });
-    await expect.poll(async () => (await measureTextContainment(
-      title, container,
-    )).contained).toBe(false);
-    await style.evaluate((element) => {
-      element.textContent = 'h1 { height: 20px !important; '
-        + 'overflow: hidden !important; }';
-    });
-    await expect.poll(async () => (await measureTextContainment(
-      title, container,
-    )).contained).toBe(false);
   }
-});
+}
 
 // The hero sheet and its ghost stay the same size and centered at phone
 // widths in both engines. iPhone Safari once laid the zoomed sheet out

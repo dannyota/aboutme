@@ -606,6 +606,7 @@ apps/web/e2e/fixtures/deployment/verified.json
 apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
+apps/web/e2e/guide-screenshot.spec.ts
 apps/web/e2e/normal-csp.spec.ts
 apps/web/e2e/pdf-display.ts
 apps/web/e2e/pdf-fonts.ts
@@ -621,6 +622,7 @@ apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
 apps/web/e2e/print-mutations.spec.ts
 apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print.spec.ts
+apps/web/e2e/resume-screen.spec.ts
 apps/web/e2e/sample-pages.spec.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts

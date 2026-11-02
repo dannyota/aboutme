@@ -74,6 +74,8 @@ export default defineConfig({
   testMatch: surface === 'harness'
     ? [
         'screenshot.spec.ts',
+        'guide-screenshot.spec.ts',
+        'resume-screen.spec.ts',
         'fonts-offline.spec.ts',
         'corpus.spec.ts',
         'print.spec.ts',

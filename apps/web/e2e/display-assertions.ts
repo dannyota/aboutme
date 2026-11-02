@@ -47,7 +47,6 @@ export async function measureTextContainment(
             y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
           });
         }
-        if (element === outer) break;
       }
       const range = document.createRange();
       range.selectNodeContents(node);
@@ -98,15 +97,30 @@ export async function measureChromeGrid(grid: Locator): Promise<{
     const columns = first
       ? boxes.filter((box) => Math.abs(box.top - first.top) <= 1).length
       : 0;
+    const gapX = Number.parseFloat(style.columnGap);
+    const gapY = Number.parseFloat(style.rowGap);
     const separated = boxes.every((box, index) => box.width > 0
       && box.height > 0 && boxes.slice(index + 1).every((other) =>
       Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
       || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
-      <= 1));
+      <= 1)) && boxes.every((box, index) => {
+      const column = index % columns;
+      const rowStart = index - column;
+      const row = boxes.slice(rowStart, rowStart + columns);
+      if (Math.abs(box.top - row[0]!.top) > 1) return false;
+      if (column > 0
+        && Math.abs(box.left - boxes[index - 1]!.right - gapX) > 1) {
+        return false;
+      }
+      if (rowStart === 0) return true;
+      const previous = boxes.slice(rowStart - columns, rowStart);
+      const bottom = Math.max(...previous.map((item) => item.bottom));
+      return Math.abs(box.top - bottom - gapY) <= 1;
+    });
     return {
       columns,
-      gapX: Number.parseFloat(style.columnGap),
-      gapY: Number.parseFloat(style.rowGap),
+      gapX,
+      gapY,
       separated,
     };
   });
@@ -160,18 +174,26 @@ export async function measureGalleryGrid(grid: Locator): Promise<{
     const boxes = Array.from(element.children)
       .filter((child) => !child.hasAttribute('hidden'))
       .map((child) => child.getBoundingClientRect());
+    const columns = style.gridTemplateColumns.split(' ').length;
+    const columnGap = Number.parseFloat(style.columnGap);
+    const rowGap = Number.parseFloat(style.rowGap);
     return {
-      columns: style.gridTemplateColumns.split(' ').length,
-      columnGap: Number.parseFloat(style.columnGap),
-      rowGap: Number.parseFloat(style.rowGap),
+      columns,
+      columnGap,
+      rowGap,
       ordered: boxes.every((box, index) => {
         if (box.width <= 0 || box.height <= 0) return false;
-        return boxes.slice(0, index).every((previous) => {
-          const sameRow = Math.abs(previous.top - box.top) <= 1;
-          return sameRow
-            ? box.left >= previous.right - 1
-            : box.top >= previous.bottom - 1;
-        });
+        const column = index % columns;
+        const rowStart = index - column;
+        if (Math.abs(box.top - boxes[rowStart]!.top) > 1) return false;
+        if (column > 0
+          && Math.abs(box.left - boxes[index - 1]!.right - columnGap) > 1) {
+          return false;
+        }
+        if (rowStart === 0) return true;
+        const previous = boxes.slice(rowStart - columns, rowStart);
+        const bottom = Math.max(...previous.map((item) => item.bottom));
+        return Math.abs(box.top - bottom - rowGap) <= 1;
       }),
     };
   });
@@ -253,8 +275,10 @@ export async function measureShowcaseGrid(
           && Math.abs(box.left - bounds.left
             - column * (width + expected.gap)) <= 1
             && (!previous || column === 0
-              || box.left >= previous.right + expected.gap - 1)
-            && (!above || box.top >= above.bottom + expected.gap - 1);
+              || (Math.abs(box.left - previous.right - expected.gap) <= 1
+                && Math.abs(box.top - previous.top) <= 1))
+              && (!above
+                || Math.abs(box.top - above.bottom - expected.gap) <= 1);
       });
   }, { columns, gap });
 }

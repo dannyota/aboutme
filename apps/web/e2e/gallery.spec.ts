@@ -1050,25 +1050,22 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-test('template detail measurements detect displacement and clipped ATS text',
-  async ({ page }) => {
+for (const [name, css] of [
+  ['displacement', '.template-detail__info { '
+  + 'transform: translateX(4px) !important; }'],
+  ['clipped ATS text', '[data-ats-text] { height: 24px !important; '
+  + 'overflow: hidden !important; }'],
+] as const) {
+  test(`template detail assertions reject ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/templates/executive-band');
-    const layout = page.locator('.template-detail__layout');
-    expect((await measureGalleryDetail(layout)).contained).toBe(true);
-    await page.addStyleTag({
-      content: '.template-detail__info { '
-        + 'transform: translateX(4px) !important; }',
-    });
-    await expect.poll(async () => (await measureGalleryDetail(layout))
-      .contained).toBe(false);
     await page.getByRole('tab', { name: 'ATS đọc được gì' }).click();
-    const text = page.locator('[data-ats-text]');
-    expect((await measureTextContainment(text)).contained).toBe(true);
-    await text.evaluate((element) => {
-      Object.assign((element as HTMLElement).style, {
-        height: '24px', overflow: 'hidden', whiteSpace: 'nowrap',
-      });
-    });
-    expect((await measureTextContainment(text)).contained).toBe(false);
+    await page.evaluate(() => document.fonts.ready);
+    const assertClean = () => assertGalleryDetail(page, 'vi', 1440, 'ats');
+    await assertClean();
+    const mutation = await page.addStyleTag({ content: css });
+    await expect(assertClean()).rejects.toThrow();
+    await mutation.evaluate((node) => node.remove());
+    await assertClean();
   });
+}
