@@ -31,11 +31,26 @@ printf '%s' '-1001234567890' >"$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/"*
 export ABOUTME_ALERT_TEST_ROOT=$work/state
 export ABOUTME_ALERT_TEST_ENDPOINT=http://127.0.0.1:20983
-export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT
+export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM
 TG_REAL_CURL=$(command -v curl) || fail 'curl is unavailable'
 TG_REAL_STAT=$(command -v stat) || fail 'stat is unavailable'
+TG_REAL_SHA256SUM=$(command -v sha256sum) || fail 'sha256sum is unavailable'
+cat >"$work/bin/sha256sum" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >>"$TG_FIXTURE/hash-argv"
+[[ $# == 0 ]] || exit 1
+if env | grep -E 'synthetic_BOT-token|-1001234567890' >/dev/null; then
+  : >"$TG_FIXTURE/hash-secret-exported"
+  exit 1
+fi
+exec "$TG_REAL_SHA256SUM" "$@"
+STUB
 cat >"$work/bin/stat" <<'STUB'
 #!/usr/bin/env bash
+if env | grep -E 'synthetic_BOT-token|-1001234567890' >/dev/null; then
+  : >"$TG_FIXTURE/stat-secret-exported"
+  exit 1
+fi
 "$TG_REAL_STAT" "$@" || exit
 # Remove the directory after admission to force a real stamp creation error.
 if [[ ${TG_STAMP_CREATE_FAIL:-0} == 1 && $* == "-c %u:%a -- $TG_FIXTURE/state/alerts" ]]; then
@@ -135,15 +150,24 @@ for ((i=0; i<100; i++)); do [[ ! -e $work/ready ]] || break; sleep 0.01; done
 run_sender() { bash "$sender" "$@" >"$work/out" 2>"$work/err"; }
 count_requests() { if [[ -f $work/requests ]]; then wc -l <"$work/requests"; else echo 0; fi; }
 private_output() {
-  if grep -qE 'synthetic_BOT-token|-1001234567890|/bot123456:' "$work/out" "$work/err" "$work/argv"; then
+  if grep -qE 'synthetic_BOT-token|-1001234567890|/bot123456:' \
+    "$work/out" "$work/err" "$work/argv" "$work/hash-argv" "$work/cutover.out"; then
     echo 'Telegram credential escaped its pipe' >&2; exit 1
   fi
+  [[ ! -e $work/hash-secret-exported ]] || fail 'Telegram credential reached the hash environment'
+  [[ ! -e $work/stat-secret-exported ]] || fail 'Telegram credential reached the stat environment'
 }
 if run_sender unconfirmed diagnostic </dev/null; then fail 'unconfirmed delivery was accepted'; fi
 grep -qxF 'alert-telegram: invalid_secret unconfirmed' "$work/err" || fail 'unconfirmed delivery did not report invalid_secret'
 [[ $(count_requests) == 0 && ! -e $work/state/alerts ]] || fail 'unconfirmed delivery sent or created stamps'
-run_sender --test </dev/null || fail 'initial test delivery failed'
-bash "$transport" confirm-receipt --received || fail 'initial receipt confirmation failed'
+telegram_token=inherited telegram_chat=inherited digest=inherited run_sender --test </dev/null || fail 'initial test delivery failed'
+# Metadata changes between test delivery and receipt keep the same credentials.
+touch -d '2030-01-01 00:00:00 UTC' "$work/state/secrets/telegram-bot-token"
+telegram_token=inherited telegram_chat=inherited digest=inherited \
+  bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1 || fail 'receipt rejected unchanged credentials after a metadata change'
+[[ -s $work/hash-argv ]] || fail 'credential identity did not use the hash pipe'
+grep -qxE '[0-9a-f]{64}' "$work/state/telegram-approved" || fail 'approval did not store a credential digest'
+[[ $(stat -c %a "$work/state/telegram-approved") == 400 ]] || fail 'credential digest was not private'
 # A matching approval without its selector cannot authorize a cached caller.
 mv "$work/state/alert-transport" "$work/selector"
 if run_sender missing-selector diagnostic </dev/null; then fail 'delivery without a selector was accepted'; fi
@@ -196,6 +220,46 @@ for option in --connect-timeout --max-time --proto --proto-redir --max-redirs --
   grep -qxF -- "$option" "$work/argv" || fail 'curl safety option missing'
 done
 if grep -qE -- '(^-L$|^--location|^--insecure$|^--verbose$|^--trace)' "$work/argv"; then fail 'unsafe curl option used'; fi
+
+# Approval follows credential contents across permission, timestamp, and inode changes.
+for change in mode timestamp restore; do
+  case $change in
+    mode)
+      chmod 0600 "$work/state/secrets/telegram-bot-token"
+      chmod 0400 "$work/state/secrets/telegram-bot-token" ;;
+    timestamp) touch -d '2030-01-02 00:00:00 UTC' "$work/state/secrets/telegram-bot-token" ;;
+    restore)
+      cp "$work/state/secrets/telegram-bot-token" "$work/restored-token"
+      chmod 0400 "$work/restored-token"
+      mv -f "$work/restored-token" "$work/state/secrets/telegram-bot-token" ;;
+  esac
+  before=$(count_requests)
+  run_sender "metadata-$change" diagnostic </dev/null || fail 'metadata-only credential change lost approval'
+  grep -qxF "alert-telegram: sent metadata-$change" "$work/err" || fail 'metadata-only change did not report sent'
+  [[ $(count_requests) == $((before + 1)) ]] || fail 'metadata-only change did not send exactly once'
+  private_output
+done
+
+# Each member of the credential pair must match the approved content.
+for name in telegram-bot-token telegram-chat-id; do
+  original=$(<"$work/state/secrets/$name")
+  chmod 0600 "$work/state/secrets/$name"
+  case $name in
+    telegram-bot-token) printf '123456:changed_synthetic-token' >"$work/state/secrets/$name" ;;
+    telegram-chat-id) printf '%s' '-1008888888888' >"$work/state/secrets/$name" ;;
+  esac
+  chmod 0400 "$work/state/secrets/$name"
+  before=$(count_requests)
+  if run_sender "changed-$name" diagnostic </dev/null; then fail 'changed credentials reused approval'; fi
+  grep -qxF "alert-telegram: invalid_secret changed-$name" "$work/err" || fail 'changed content did not report invalid_secret'
+  [[ $(count_requests) == "$before" && ! -e $work/state/alerts/changed-$name.2030-01-02 ]] || fail 'changed credentials sent or created a stamp'
+  private_output
+  chmod 0600 "$work/state/secrets/$name"
+  printf '%s' "$original" >"$work/state/secrets/$name"
+  chmod 0400 "$work/state/secrets/$name"
+  run_sender "restored-$name" diagnostic </dev/null || fail 'restoring identical credentials lost approval'
+  private_output
+done
 
 # Failed creation is an error, while only a private empty regular stamp dedups.
 before=$(count_requests)
@@ -318,16 +382,12 @@ chmod 0400 "$work/state/secrets/telegram-chat-id"
   if telegram_private_file "$work/state/secrets/telegram-bot-token" 400; then fail 'foreign-owned token was accepted'; fi
 )
 
-# Restoring valid bytes changes file identity and still requires a fresh receipt.
+# Restoring the approved pair after invalid-file checks preserves approval.
 before=$(count_requests)
-if run_sender restored-unapproved diagnostic </dev/null; then
-  fail 'restored credentials reused stale approval'
-fi
-grep -qxF 'alert-telegram: invalid_secret restored-unapproved' "$work/err" || fail 'restored credentials did not report stale approval'
-[[ $(count_requests) == "$before" && ! -e $work/state/alerts/restored-unapproved.2030-01-02 ]] || fail 'restored credentials sent or created a stamp before receipt'
-run_sender --test </dev/null || fail 'restored credentials test delivery failed'
-if run_sender restored-unapproved diagnostic </dev/null; then fail 'restored credentials test implicitly approved delivery'; fi
-bash "$transport" confirm-receipt --received || fail 'restored credentials receipt confirmation failed'
+run_sender restored-approved diagnostic </dev/null || fail 'restored credentials lost approval'
+grep -qxF 'alert-telegram: sent restored-approved' "$work/err" || fail 'restored credentials did not report sent'
+[[ $(count_requests) == $((before + 1)) && -e $work/state/alerts/restored-approved.2030-01-02 ]] || fail 'restored credentials did not send and create a stamp'
+private_output
 
 printf slow >"$work/scenario"
 rm -f "$work/entered"

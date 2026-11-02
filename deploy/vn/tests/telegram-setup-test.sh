@@ -94,6 +94,10 @@ done
 (cmd_podman_sync) >"$work/out" 2>"$work/err"
 printf telegram >"$work/state/alert-transport"
 printf approved >"$work/state/telegram-approved"
+printf proof >"$work/state/telegram-test-passed"
+printf '123456:rotated_synthetic-token' | (cmd_import telegram-bot-token --replace) >"$work/out" 2>"$work/err"
+[[ -e $work/state/alert-transport && ! -e $work/state/telegram-approved && ! -e $work/state/telegram-test-passed ]]
+printf approved >"$work/state/telegram-approved"
 printf '123456:unconfirmed-token' | (cmd_import telegram-bot-token --replace) >"$work/out" 2>"$work/err"
 [[ -e $work/state/alert-transport && ! -e $work/state/telegram-approved ]]
 [[ $(<"$dir/telegram-bot-token") == '123456:unconfirmed-token' ]]
@@ -105,7 +109,10 @@ if printf '123456:ab\000c' | (cmd_import telegram-bot-token --replace) >"$work/o
 [[ $(<"$dir/telegram-bot-token") == '123456:unconfirmed-token' ]]
 [[ -z $(find "$dir" -name '.new.*' -print) ]]
 rm "$dir/telegram-chat-id"
-printf '%s' '-1001234567890' | (cmd_import telegram-chat-id --replace) >"$work/out" 2>"$work/err"
+printf approved >"$work/state/telegram-approved"
+printf proof >"$work/state/telegram-test-passed"
+printf '%s' '-1001234567890' | (cmd_import telegram-chat-id) >"$work/out" 2>"$work/err"
+[[ ! -e $work/state/telegram-approved && ! -e $work/state/telegram-test-passed ]]
 [[ $(stat -c %a "$dir/telegram-chat-id") == 400 ]]
 pgb_conf=$work/pgbackrest.conf
 printf 'synthetic pgBackRest config' >"$pgb_conf"

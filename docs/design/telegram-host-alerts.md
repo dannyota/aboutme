@@ -1,13 +1,14 @@
 # Telegram host alerts
 
-Status: proposed (2026-11-02), pending owner acceptance of the
+Status: accepted (2026-11-02), by the owner under the
 [ADR amendment](../adr/0026-vietnam-hosted-production.md#amendment-host-alerts-through-telegram-2026-11-02).
-Mail remains current until cutover; app contracts do not change.
+Production cutover is not yet done. Mail remains current until cutover; app
+contracts do not change.
 
-Recommend Telegram only; fallback adds maintenance and duplicates. Keep app
-SMTP. vMonitor remains the external readiness backstop but shares Telegram
-delivery risk and misses healthy-site disk/backup faults. GitHub uptime is
-slower.
+The owner accepted Telegram only, host SMTP removal after confirmed receipt, and
+the narrow transfer exception in the ADR amendment. Keep app SMTP. vMonitor
+remains the external readiness backstop but shares Telegram delivery risk and
+misses healthy-site disk/backup faults. GitHub uptime is slower.
 
 **Transport and custody.** Keep the one-shot root sender and existing curl, jq,
 and CA roots; no new daemon/package. Each unsuppressed call makes one POST to
@@ -62,7 +63,10 @@ unknown delivery can duplicate later, and SIGKILL/power loss can suppress until
 the next UTC day. Preserve stamps at cutover. Every non-test send requires the
 active Telegram selector and matching credential approval while holding the
 shared credential lock, including calls from a watcher that selected its sender
-before rollback.
+before rollback. Bind proof and approval to a SHA-256 digest of the validated
+credential pair, computed from memory through a pipe under that lock. Keep the
+digest only in root-only state. Metadata-only changes preserve approval; imports
+and replacements explicitly clear proof and approval.
 
 Retention failure dispatches `aboutme-alert@aboutme-crowdsec-retention.service`
 with `systemctl --no-block start`. Its five-second dispatch bound does not share

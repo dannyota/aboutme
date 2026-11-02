@@ -111,8 +111,9 @@ no data protection impact assessment (DPIA) or cross-border dossier
 
 ## Amendment: Host alerts through Telegram (2026-11-02)
 
-Status: Proposed. Requires owner acceptance; host SMTP remains in force until
-cutover. This does not amend application authentication mail.
+Status: Accepted (2026-11-02), by the owner. Host SMTP remains in force until
+confirmed receipt and cutover, then is removed. Production cutover is not yet
+done. This does not amend application authentication mail.
 
 Replace the host timer and unit-failure mail sender with one Bot API HTTPS
 `sendMessage` request per alert, using existing curl and jq. Preserve metadata
@@ -121,12 +122,11 @@ SMTP fallback: one transport is simpler, but blocking or provider failure can
 lose host notifications. vMonitor checks remain external; their Telegram
 notifications share that delivery risk. The slower GitHub uptime backstop stays.
 
-This proposes an explicit exception to the Vietnam-only consequence above for
-the owner's Telegram chat ID (personal data), host source IP, and operational
-alert metadata sent to Telegram. It permits no resume, account, or raw log data.
+This permits an explicit exception to the Vietnam-only consequence above for the
+owner's Telegram chat ID (personal data), host source IP, and operational alert
+metadata sent to Telegram. It permits no resume, account, or raw log data.
 Telegram location/retention and the owner's required transfer obligations remain
-unverified; this amendment makes no legal compliance claim. The owner must
-accept that boundary before activation.
+unverified; this amendment makes no legal compliance claim.
 
 The
 [host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts)
@@ -144,13 +144,13 @@ migration is required. Cutover needs an actual receipt proof; rollback restores
 the reviewed mail sender and verifies receipt without reverting unrelated host
 safety changes.
 
-### Proposed amendment history
+### Amendment history
 
-2026-11-02: Proposed replacing host alert email and accepting the bounded
-Telegram transfer because the owner requested the same destination as vMonitor.
-Token custody names the approved local source, host secrets, and encrypted
-backups; authentication transfer is distinct from alert content. Acceptance and
-production cutover are not recorded.
+2026-11-02: The owner accepted Telegram only, host SMTP removal after confirmed
+receipt, and the narrow transfer exception for chat ID, host source IP, and
+operational alert metadata. Token custody names the approved local source, host
+secrets, and encrypted backups; authentication transfer is distinct from alert
+content. Production cutover is not yet done.
 
 ## Amendment: Anonymous-approval pull deployment (2026-11-01)
 

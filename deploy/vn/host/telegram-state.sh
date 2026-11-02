@@ -72,9 +72,12 @@ telegram_credentials() {
 }
 
 telegram_identity() {
-  local name
-  for name in telegram-bot-token telegram-chat-id; do
-    telegram_private_file "$telegram_secrets/$name" 400 || return 1
-    stat -c '%d:%i:%s:%y:%z' -- "$telegram_secrets/$name" || return 1
-  done
+  local telegram_token telegram_chat digest
+  export -n telegram_token telegram_chat digest
+  telegram_credentials 2>/dev/null || return 1
+  # Validated values contain no newlines. Only the pipe carries their bytes.
+  digest=$(builtin printf '%s\n%s\n' "$telegram_token" "$telegram_chat" | sha256sum 2>/dev/null) || return 1
+  digest=${digest%% *}
+  [[ $digest =~ ^[0-9a-f]{64}$ ]] || return 1
+  builtin printf '%s\n' "$digest"
 }
