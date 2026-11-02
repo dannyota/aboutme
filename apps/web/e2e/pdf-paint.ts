@@ -38,9 +38,14 @@ export interface PdfInk {
   readonly text: string;
   readonly color: string;
   readonly font: string;
+  readonly fontId?: string;
+  readonly advances?: readonly { unicode: string; width: number }[];
   readonly size: number;
-  readonly bold: boolean;
+  readonly bold: boolean | undefined;
   readonly weight?: number;
+  readonly advanceWeight?: {
+    shared: number; wider: number; meanDelta: number;
+  };
   readonly x: number;
   readonly y: number;
 }
@@ -72,6 +77,7 @@ interface State {
   color: string;
   alpha: number;
   font: string;
+  fontId: string;
   size: number;
   textMatrix: Matrix;
   textPosition: { x: number; y: number; lineX: number; lineY: number;
@@ -371,7 +377,8 @@ export async function pdfPaintOperators(
   const viewport = page.getViewport({ scale: 1 });
   let state: State = { matrix: matrix(viewport.transform),
     clip: rectangle([0, 0, viewport.width, viewport.height]),
-    color: '#000000', alpha: 1, font: '', size: 0, textMatrix: identity(),
+    color: '#000000', alpha: 1, font: '', fontId: '', size: 0,
+    textMatrix: identity(),
     textPosition: { x: 0, y: 0, lineX: 0, lineY: 0, leading: 0,
       rise: 0, scale: 1, charGap: 0, wordGap: 0, unit: 0.001 },
     transparent: false, bold: false, weight: undefined, type3: undefined,
@@ -506,6 +513,7 @@ export async function pdfPaintOperators(
       state.type3 = font.isType3Font ? font.charProcOperatorList : undefined;
       if (font.isType3Font && !(state.type3 instanceof Map)) unsupported();
       state.font = font.name;
+      state.fontId = args[0] as string;
       state.weight = pdfFontWeight(font.data);
       state.bold = state.weight === undefined
         ? font.bold === true || /bold/iu.test(font.name)
@@ -584,6 +592,13 @@ export async function pdfPaintOperators(
       const y = position.y + position.rise;
       if (state.alpha !== 1 || state.transparent) unsupported();
       text.push({ text: value, font: state.font, color: state.color,
+        fontId: state.fontId,
+        // Glyph.width comes from the PDF width table. Exclude text size,
+        // tracking, kerning adjustments and horizontal scaling.
+        advances: args[0].flatMap((glyph) => typeof glyph === 'number'
+          ? []
+          : [{ unicode: glyph.unicode,
+              width: numbers([glyph.width], 1)[0]! * position.unit }]),
         bold: state.bold, weight: state.weight,
         x: m[4] + m[0] * x + m[2] * y,
         y: m[5] + m[1] * x + m[3] * y,

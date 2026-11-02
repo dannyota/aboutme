@@ -420,7 +420,10 @@ test('header-only entries break within both columns without blank pages',
   });
 
 for (const rule of ['orphan', 'widow'] as const) {
-  test(`the ${rule} rule moves a two-line paragraph`, async ({ page }) => {
+  const title = rule === 'widow'
+    ? 'widow rules protect two-line and longer paragraphs'
+    : 'the orphan rule moves a two-line paragraph';
+  test(title, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     expect((await page.goto(`${PROBE_ROUTE}${rule}`))?.ok())
@@ -453,11 +456,12 @@ for (const rule of ['orphan', 'widow'] as const) {
     expect(lines.map((part) => part.length)).toEqual([1, 1]);
     expect(Math.abs(lines[1]![0]! - lines[0]![0]! - 24))
       .toBeLessThanOrEqual(0.1);
-    // Relax the other constraint to prove each rule independently.
-    await paragraph.evaluate((element, selected) => {
-      const other = selected === 'orphan' ? 'widows' : 'orphans';
-      (element as HTMLElement).style[other] = '1';
-    }, rule);
+    // print.md §4 requires both constraints for the two-line widow fixture.
+    if (rule === 'orphan') {
+      await paragraph.evaluate((element) => {
+        (element as HTMLElement).style.widows = '1';
+      });
+    }
     const pages = await printedTextPages(page);
     expect(pages).toHaveLength(2);
     expect(pages[0]!.text).not.toContain(`${rule.toUpperCase()}-FIRST`);
@@ -476,6 +480,55 @@ for (const rule of ['orphan', 'widow'] as const) {
     expect(split).toHaveLength(2);
     expect(split[0]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
     expect(split[1]!.text).toContain(`${rule.toUpperCase()}-SECOND`);
+    if (rule === 'widow') {
+      // Four lines permit a 2/2 split, so widows can be isolated from orphans.
+      await page.addStyleTag({ content: '.harness-paper::before {'
+        + ' height: calc(267mm - 72px) !important; }' });
+      const markers = ['FIRST', 'SECOND', 'THIRD', 'FOURTH']
+        .map((suffix) => `WIDOW-${suffix}`);
+      await paragraph.evaluate((element, values) => {
+        element.replaceChildren(...values.flatMap((value, index) => {
+          const token = document.createElement('span');
+          token.textContent = value;
+          token.style.whiteSpace = 'nowrap';
+          return index === 0 ? [token] : [' ', token];
+        }));
+        Object.assign((element as HTMLElement).style, {
+          orphans: '2', widows: '2',
+        });
+      }, markers);
+      const positions = await paragraph.evaluate((element) =>
+        [...element.children].map((token) =>
+          token.getBoundingClientRect().top));
+      expect(positions).toHaveLength(4);
+      for (let index = 1; index < positions.length; index += 1) {
+        expect(Math.abs(positions[index]! - positions[index - 1]! - 24))
+          .toBeLessThanOrEqual(0.1);
+      }
+      const guarded = await printedTextPages(page);
+      expect(guarded).toHaveLength(2);
+      for (const [index, marker] of markers.entries()) {
+        const membership = index < 2 ? 0 : 1;
+        expect(guarded[membership]!.text).toContain(marker);
+        expect(guarded[1 - membership]!.text).not.toContain(marker);
+      }
+      for (let index = 0; index < guarded.length; index += 1) {
+        expect(pdfParagraphGeometry(guarded[index]!, [{
+          text: markers.slice(index * 2, index * 2 + 2).join(' '), pitch: 18,
+        }])).toBe(true);
+      }
+      await paragraph.evaluate((element) => {
+        (element as HTMLElement).style.widows = '1';
+      });
+      await expect(paragraph).toHaveCSS('orphans', '2');
+      const relaxed = await printedTextPages(page);
+      expect(relaxed).toHaveLength(2);
+      for (const [index, marker] of markers.entries()) {
+        const membership = index < 3 ? 0 : 1;
+        expect(relaxed[membership]!.text).toContain(marker);
+        expect(relaxed[1 - membership]!.text).not.toContain(marker);
+      }
+    }
     expect(external).toEqual([]);
   });
 }

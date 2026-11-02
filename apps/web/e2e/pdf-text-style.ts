@@ -7,8 +7,8 @@ interface TextStyle {
   bold: boolean;
 }
 
-// Variable font instances can retain a Regular PostScript name. Read the
-// embedded OpenType OS/2 usWeightClass instead of inferring their weight.
+// Static faces can expose their weight in the embedded OpenType OS/2 table.
+// Variable instances need advance evidence even when this table is present.
 export function pdfFontWeight(data: unknown): number | undefined {
   if (!(data instanceof Uint8Array) || data.length < 12) return undefined;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -59,6 +59,93 @@ function textRuns(paint: PdfPaint, value: string): PdfInk[][] {
   return matches;
 }
 
+const variableFamily = (font: string) => family(font
+  .replace(/^[A-Z]{6}\+/u, '')
+  .replace(/-(?:Regular|Bold|Italic|BoldItalic)$/iu, ''));
+const variableFamilies = new Set(['inter', 'bevietnampro']);
+
+interface Advances {
+  family: string;
+  widths: Map<string, number>;
+  valid: boolean;
+}
+
+function mergeAdvance(target: Advances, unicode: string, width: number) {
+  if (!Number.isFinite(width) || width < 0) target.valid = false;
+  const key = unicode.normalize('NFC');
+  if (!/^[\p{L}\p{N}]$/u.test(key) || width <= 0) return;
+  const previous = target.widths.get(key);
+  if (previous !== undefined && Math.abs(previous - width) > 0.000001) {
+    target.valid = false;
+  }
+  target.widths.set(key, width);
+}
+
+// Anchor regular resources to independently checked print-DOM weight 400.
+// Compare the same Unicode glyphs in em units, never total text-run widths.
+export function pdfVariableTextWeights(
+  paint: PdfPaint, expectedFamily: string, regularText: readonly string[],
+): PdfPaint {
+  const fonts = new Map<string, Advances>();
+  for (const run of paint.text) {
+    const name = variableFamily(run.font);
+    if (!variableFamilies.has(name) || !run.fontId) continue;
+    const metrics = fonts.get(run.fontId)
+      ?? { family: name, widths: new Map(), valid: true };
+    if (metrics.family !== name || !run.advances) metrics.valid = false;
+    for (const glyph of run.advances ?? []) {
+      mergeAdvance(metrics, glyph.unicode, glyph.width);
+    }
+    fonts.set(run.fontId, metrics);
+  }
+  const regular = new Set<string>();
+  for (const value of regularText) {
+    const matches = textRuns(paint, value);
+    if (matches.length !== 1) continue;
+    for (const run of matches[0]!) {
+      if (run.fontId && variableFamily(run.font) === family(expectedFamily)) {
+        regular.add(run.fontId);
+      }
+    }
+  }
+  const baseline: Advances = { family: family(expectedFamily),
+    widths: new Map(), valid: regular.size > 0 };
+  for (const id of regular) {
+    const metrics = fonts.get(id);
+    if (!metrics?.valid) baseline.valid = false;
+    for (const [unicode, width] of metrics?.widths ?? []) {
+      mergeAdvance(baseline, unicode, width);
+    }
+  }
+  const evidence = new Map<string, Pick<PdfInk, 'bold' | 'advanceWeight'>>();
+  for (const [id, metrics] of fonts) {
+    let bold: boolean | undefined;
+    const deltas = [...metrics.widths].flatMap(([unicode, width]) => {
+      const other = baseline.widths.get(unicode);
+      return other === undefined ? [] : [width - other];
+    });
+    const shared = deltas.length;
+    const wider = deltas.filter((delta) => delta > 0.001).length;
+    const meanDelta = shared ? deltas.reduce((a, b) => a + b, 0) / shared : 0;
+    if (baseline.valid && metrics.valid
+      && metrics.family === baseline.family) {
+      if (regular.has(id)) bold = false;
+      else if (shared >= 3) {
+        if (wider >= 3 && meanDelta > 0.001) bold = true;
+        else if (deltas.every((delta) => Math.abs(delta) <= 0.000001)) {
+          bold = false;
+        }
+      }
+    }
+    evidence.set(id, { bold, advanceWeight: { shared, wider, meanDelta } });
+  }
+  return { ...paint, text: paint.text.map((run) =>
+    variableFamilies.has(variableFamily(run.font))
+      ? { ...run, bold: undefined, advanceWeight: undefined,
+          ...evidence.get(run.fontId ?? '') }
+      : run) };
+}
+
 function styleMatches(run: PdfInk, expected: TextStyle): boolean {
   return pdfColorMatches(run.color, expected.color)
     && Math.abs(run.size - expected.size) <= 0.075
@@ -100,7 +187,8 @@ export function pdfTextStyleDiagnostic(
     expected: { ...expected, color: wanted },
     found: found
       ? { color: channels(found.color), size: found.size,
-          family: found.font, bold: found.bold, weight: found.weight ?? null }
+          family: found.font, bold: found.bold ?? null,
+          weight: found.weight ?? null, advanceWeight: found.advanceWeight }
       : null,
     delta: found
       ? {

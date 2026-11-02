@@ -31,6 +31,7 @@ import {
   pdfTextStyleMatches,
   pdfTextStyleDiagnostic,
 } from './pdf-paint';
+import { pdfVariableTextWeights } from './pdf-text-style';
 import { denyExternalRequests, waitForImages } from './support';
 
 // Every gallery sample's PDF pages, rasterized through the same print path
@@ -141,6 +142,7 @@ async function assertSampleStyle(
   let transform = 'none';
   if (heading.style === 'uppercase') transform = 'uppercase';
   if (heading.style === 'titlecase' && lng === 'en') transform = 'capitalize';
+  const expectedChunks = [];
   for (const chunk of layout.chunks) {
     const region = target !== 'none' && chunk.region === target;
     const darkHeader = templateId === 'executive-band' && region;
@@ -169,10 +171,16 @@ async function assertSampleStyle(
       value = value.replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase());
     }
     const expected = { color, size: size * 0.75, family, bold };
-    const matches = pdfTextStyleMatches(display.paint, value, expected);
+    expectedChunks.push({ value, expected });
+  }
+  const paint = pdfVariableTextWeights(display.paint, family,
+    expectedChunks.filter(({ expected }) => !expected.bold)
+      .map(({ value }) => value));
+  for (const { value, expected } of expectedChunks) {
+    const matches = pdfTextStyleMatches(paint, value, expected);
     expect(matches, matches
       ? undefined
-      : pdfTextStyleDiagnostic(display.paint, value, expected)).toBe(true);
+      : pdfTextStyleDiagnostic(paint, value, expected)).toBe(true);
   }
   for (const text of layout.text) {
     if (text.role === 'heading') {
