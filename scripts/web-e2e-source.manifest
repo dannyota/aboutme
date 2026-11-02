@@ -624,6 +624,7 @@ apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print.spec.ts
 apps/web/e2e/resume-screen.spec.ts
 apps/web/e2e/sample-pages.spec.ts
+apps/web/e2e/sample-pdf-content.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
 apps/web/e2e/showcase-baselines.spec.ts

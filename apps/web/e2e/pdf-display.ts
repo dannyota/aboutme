@@ -163,11 +163,12 @@ export function pdfGlyphGeometry(
       && bounds.top >= margins.y - 1
       && bounds.bottom <= page.height - margins.y + 1),
     separated: items.every((item, index) => items.slice(index + 1)
-      .every((next) => Math.abs(item.y - next.y) <= 1
-        || Math.min(item.x + item.width, next.x + next.width)
-        - Math.max(item.x, next.x) <= 1
-        || (item.bounds !== undefined && next.bounds !== undefined
-          && next.bounds.top >= item.bounds.bottom - 1))),
+      .every((next) => Math.min(item.bounds?.right ?? item.x + item.width,
+        next.bounds?.right ?? next.x + next.width)
+      - Math.max(item.bounds?.left ?? item.x, next.bounds?.left ?? next.x) <= 1
+      || (item.bounds !== undefined && next.bounds !== undefined
+        && Math.min(item.bounds.bottom, next.bounds.bottom)
+        - Math.max(item.bounds.top, next.bounds.top) <= 1))),
   };
 }
 
@@ -183,8 +184,12 @@ export function pdfColumnsMatch(
     && (!firstPage || item.bounds.top >= sidebar.top - 1));
   return columnItems.length > 0 && columnItems.every((item) => {
     const box = item.bounds!;
-    const sidebarEntry = /SIDEBAR/u.test(item.text);
-    if (sidebarEntry && box.left < sidebar.left - 1) return false;
+    if (/\bSIDEBAR\b/u.test(item.text) && box.left < sidebar.left - 1) {
+      return false;
+    }
+    if (/\bMAIN\b/u.test(item.text) && box.left >= sidebar.left - 1) {
+      return false;
+    }
     return box.left >= sidebar.left - 1
       ? box.right <= page.width - margins.x + 1
       : box.right <= sidebar.left - 8 * 72 / 25.4 + 1;
@@ -474,9 +479,10 @@ export function pdfWidgetMatches(
       || Math.abs(track.left - measured.title.left) > 1
       || Math.abs(track.right - measured.entry.right) > 1) return false;
     // A full solid bar hides its track; Chromium can omit the covered paint.
-    if (level < 5 && !pdfHasFill(paint, track, colors.track)) return false;
     const expected = { ...track,
       right: track.left + (track.right - track.left) * level / 5 };
+    if (level < 5 && !pdfHasFill(paint, track, colors.track,
+      { ...track, left: expected.right })) return false;
     return level === 0
       ? !paint.fills.some((fill) => inside(fill, track)
         && pdfColorMatches(fill.color, colors.solid))
