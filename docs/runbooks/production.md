@@ -339,54 +339,55 @@ maintenance logs. Summarize timestamps, levels, message kinds, and rule IDs;
 these records do not establish response status or successful access. Check the
 configured Coraza mode before interpreting a match as a blocked request.
 
-### Host Telegram setup and rotation draft
+### Host Telegram setup and rotation
 
-[Setup prerequisites](../design/telegram-host-alerts.md#operator-reference).
+Keep application SMTP and VNG's bot. The
+[operator reference](../design/telegram-host-alerts.md#operator-reference)
+covers the existing bot/group, reviewed installation, custody, and cleanup. On
+the host:
 
-1. Reuse the bot whose token is `TELEGRAM_BOT` in the ignored local `.env`. Do
-   not create a bot. The owner adds it to the existing vMonitor `aboutme-alerts`
-   supergroup with send permission before any test. vMonitor uses VNG's own bot;
-   leave that bot and its notification configuration intact.
-2. Install reviewed secret-helper support with SMTP still active. On the trusted
-   owner machine, parse only the literal `TELEGRAM_BOT` value without sourcing
-   `.env`; pipe it without a newline directly into
-   `bash deploy/vn/scripts/secrets.sh import telegram-bot-token` stdin.
-3. Pipe `vngcloud monitor list-channels --output json` into a filter selecting
-   `.Items[]` with `Name == "aboutme-alerts"`. Require exactly one Telegram
-   channel and a valid numeric supergroup `.Address`; pipe that address without
-   a newline directly into
-   `bash deploy/vn/scripts/secrets.sh import telegram-chat-id` stdin. Fail
-   closed on missing, duplicate, malformed, or unexpected results.
-4. Use existing `DEPLOY_HOST`. Both pipelines must suppress value-bearing errors
-   and fail on any stage error. Never print, inspect, tee, or save values or raw
-   responses; no temporary input files, shell tracing, or terminal recording.
-   Check secret names and permissions only. Refresh the age-encrypted copy by
-   pipe, with no plaintext intermediate. Telegram secrets never enter Podman.
-5. Stage `/usr/local/lib/aboutme/alert-telegram.sh` beside SMTP `alert.sh`;
-   `watch.sh` and `aboutme-alert@.service` must still call SMTP `alert.sh`. Run
-   the staged sender with `--test` as the host administrator. Require exit 0 and
-   owner confirmation of the fixed message in the intended supergroup. Record
-   only UTC receipt time and success/failure, never values or screenshots.
-6. Only after that receipt, switch both automatic callers to `alert-telegram.sh`
-   and reload the systemd unit. Preserve daily stamps. Then remove host-alert
-   `ALERT_TO` and the msmtp requirement; keep application SMTP credentials and
-   settings. Failed staging or proof leaves SMTP active and cutover incomplete.
-   For rollback after switching, restore both SMTP caller paths and reviewed
-   mail configuration/package, reload systemd, and prove mail with a fresh
-   synthetic key. Preserve other host safety changes and stamps; do not restart
-   the app.
+```sh
+sudo /usr/local/lib/aboutme/alert-transport.sh stage
+```
 
-For rotation, revoke the existing bot's token in BotFather and update only
-`TELEGRAM_BOT` in the ignored local `.env`. Repeat its pipe-only import with
-`--replace`, refresh the encrypted copy by pipe, and repeat the staged sender's
-`--test` with owner receipt. Coordinate other senders using this bot; sends may
-fail during rotation. No app restart is needed. To replace the destination,
-require owner approval of the vMonitor channel change, repeat the same channel
-lookup and pipe-only import with `--replace`, and prove membership and receipt.
-Never accept API-suggested destination changes. After restore, verify membership
-and current credentials without displaying values; revoke exposed tokens and
-repeat the same rotation path. Inspect only fixed journal outcomes and local
-DNS/HTTPS reachability.
+On the trusted laptop, with `DEPLOY_HOST` exported:
+
+```sh
+bash deploy/vn/scripts/telegram-setup.sh
+bash deploy/vn/scripts/secrets.sh age-copy "$AGE_RECIPIENT" "$ENCRYPTED_BACKUP"
+```
+
+On the host, require exit 0 and owner receipt in the intended group of
+`[aboutme-prod] host alert delivery test` before confirmation:
+
+```sh
+sudo /usr/local/lib/aboutme/alert-telegram.sh --test </dev/null
+sudo /usr/local/lib/aboutme/alert-transport.sh confirm-receipt --received
+```
+
+For rotation, coordinate token revocation with other senders and update only
+local `TELEGRAM_BOT`; destination changes need owner approval. On the laptop:
+
+```sh
+bash deploy/vn/scripts/telegram-setup.sh --replace
+```
+
+Refresh encrypted custody as above, using a fresh output path. Keep Telegram
+selected; do not run `stage`. On the host, require fresh owner receipt:
+
+```sh
+sudo /usr/local/lib/aboutme/alert-telegram.sh --test </dev/null
+sudo /usr/local/lib/aboutme/alert-transport.sh confirm-receipt --received
+```
+
+For rollback, restore reviewed `/etc/aboutme/smtp.env` including `ALERT_TO`,
+SMTP secrets, and `msmtp` first. On the host, switch and prove mail receipt:
+
+```sh
+sudo /usr/local/lib/aboutme/alert-transport.sh stage
+sudo /usr/local/lib/aboutme/alert.sh "rollback-$(date -u +%s)" \
+  'host alert rollback test' </dev/null
+```
 
 ## Vulnerability scans
 

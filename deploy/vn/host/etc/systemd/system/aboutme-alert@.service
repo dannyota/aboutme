@@ -1,4 +1,4 @@
-# Mails the support mailbox once a day per failed unit; every aboutme unit and
+# Sends host metadata once a day per failed unit; every aboutme unit and
 # the packaged services name it in OnFailure= (docs/design/vietnam-production.md,
 # "Logs, metrics, and alarms").
 [Unit]
@@ -8,3 +8,7 @@ Description=aboutme alert for %i
 Type=oneshot
 ExecStart=/usr/local/lib/aboutme/alert.sh unit-%i "unit %i failed"
 StandardInput=null
+TimeoutStartSec=60s
+TimeoutStopSec=5s
+StandardOutput=null
+StandardError=journal

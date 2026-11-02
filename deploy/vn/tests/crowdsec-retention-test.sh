@@ -414,9 +414,32 @@ assert 'deadline=60' in source
 assert 'timeout --signal=TERM --kill-after=2s "$deadline"' in source
 PY
 
+check alert-service-delivery-budget python3 - "$host/etc/systemd/system/aboutme-alert@.service" <<'PY'
+import configparser, sys
+unit = configparser.ConfigParser(interpolation=None)
+unit.read(sys.argv[1])
+service = unit["Service"]
+# Allow the credential lock (20s), request (15s), and outcome cleanup to finish.
+assert 35 < int(service["TimeoutStartSec"].removesuffix("s")) <= 120
+assert 1 <= int(service["TimeoutStopSec"].removesuffix("s")) <= 10
+assert service["StandardError"] == "journal"
+assert service["StandardOutput"] == "null"
+PY
+
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$ABOUTME_TEST_SYSTEMCTL"
+if [[ $* == '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' ]]; then
+  if [[ ${ABOUTME_TEST_DISPATCH_FAILS:-0} == 1 ]]; then exit 1; fi
+  if [[ ${ABOUTME_TEST_HUNG_DISPATCH:-0} == 1 ]]; then
+    trap '' TERM
+    printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
+    sleep 30 &
+    printf '%s\n' "$!" >"$ABOUTME_TEST_CLIENT_PID.child"
+    wait
+  fi
+  exit 0
+fi
 if [[ ${ABOUTME_TEST_IGNORE_TERM_VERB:-} == "${1-}" ]]; then
   trap '' TERM
   printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
@@ -437,33 +460,20 @@ if [[ ${1-} == is-active && ${ABOUTME_TEST_STILL_ACTIVE:-0} == 1 ]]; then
 fi
 [[ ${1-} != is-active ]]
 STUB
-cat >"$work/bin/alert.sh" <<'STUB'
-#!/usr/bin/env bash
-if [[ ${ABOUTME_TEST_HUNG_ALERT:-0} == 1 ]]; then
-  trap '' TERM
-  printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
-  sleep 30 &
-  printf '%s\n' "$!" >"$ABOUTME_TEST_CLIENT_PID.child"
-  wait
-fi
-printf '%s\n' "$*" >>"$ABOUTME_TEST_ALERT"
-STUB
-chmod +x "$work/bin/systemctl" "$work/bin/alert.sh"
+chmod +x "$work/bin/systemctl"
 export ABOUTME_RETENTION_SYSTEMCTL=$work/bin/systemctl
-export ABOUTME_RETENTION_ALERT=$work/bin/alert.sh
 export ABOUTME_RETENTION_FAILURE_MARKER=$work/failure
 export ABOUTME_RETENTION_FEED_DIR=$work/feed
 export ABOUTME_RETENTION_SUCCESS_MARKER=$work/retention-ok
 export ABOUTME_TEST_SYSTEMCTL=$work/systemctl.log
-export ABOUTME_TEST_ALERT=$work/alert.log
 
 : >"$work/retention-ok"
 "$host/crowdsec-retention-fail.sh"
 grep -qxF 'stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service aboutme-crowdsec-retention-startup.service' \
   "$work/systemctl.log" || { echo "FAIL retention-stop-consumers" >&2; exit 1; }
 [[ $(cat "$work/failure") == retention-failed ]] || { echo "FAIL retention-fixed-marker" >&2; exit 1; }
-grep -qxF 'crowdsec-retention CrowdSec retention failed' "$work/alert.log" || {
-  echo "FAIL retention-fixed-alarm" >&2
+grep -qxF -- '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' "$work/systemctl.log" || {
+  echo "FAIL retention-dispatches-alert-service" >&2
   exit 1
 }
 [[ ! -e $work/feed && ! -e $work/retention-ok ]] || {
@@ -471,6 +481,9 @@ grep -qxF 'crowdsec-retention CrowdSec retention failed' "$work/alert.log" || {
 }
 if grep -qE '(stop|kill).*postgresql' "$work/systemctl.log"; then
   echo "FAIL retention-preserves-application-database" >&2; exit 1
+fi
+if ABOUTME_TEST_DISPATCH_FAILS=1 "$host/crowdsec-retention-fail.sh"; then
+  echo 'FAIL retention-accepted-failed-alert-dispatch' >&2; exit 1
 fi
 
 mkdir -p "$work/feed"
@@ -487,7 +500,7 @@ grep -qF 'kill --kill-whom=all --signal=SIGKILL' "$work/systemctl.log" || {
 }
 
 # Shorten only fixture clocks. A stuck manager call must not consume several
-# independent timeout budgets, and SMTP cannot retain watchdog safety locks.
+# independent timeout budgets, and alert dispatch cannot retain safety locks.
 sed -e 's/--kill-after=2s 58 /--kill-after=0.1s 0.2 /' \
   -e 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
   "$host/crowdsec-retention-fail.sh" >"$work/bounded-failure.sh"
@@ -497,17 +510,17 @@ if ABOUTME_TEST_HUNG_STOP=1 bash "$work/bounded-failure.sh"; then
 fi
 ((SECONDS - before < 3)) || { echo 'FAIL consumer-stop-whole-deadline' >&2; exit 1; }
 [[ -s $work/feed/serving.json ]] || { echo 'FAIL stuck-stop-removed-live-feed' >&2; exit 1; }
-# A healthy stop keeps its production budget while only SMTP is shortened.
+# A healthy stop keeps its production budget while only dispatch is shortened.
 sed 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
   "$host/crowdsec-retention-fail.sh" >"$work/bounded-alert.sh"
 before=$SECONDS
 exec {failure_guard}>"$work/failure.lock"
 flock -x "$failure_guard"
-ABOUTME_TEST_HUNG_ALERT=1 ABOUTME_TEST_SHOW_DELAY=0.1 ABOUTME_TEST_CLIENT_PID=$work/alert-pid \
+ABOUTME_TEST_HUNG_DISPATCH=1 ABOUTME_TEST_SHOW_DELAY=0.1 ABOUTME_TEST_CLIENT_PID=$work/alert-pid \
   bash "$work/bounded-alert.sh" &
 response_pid=$!
 exec {failure_guard}>&-
-wait "$response_pid"
+if wait "$response_pid"; then echo 'FAIL hung-alert-dispatch-accepted' >&2; exit 1; fi
 ((SECONDS - before < 3)) || { echo 'FAIL unbounded-retention-alert' >&2; exit 1; }
 flock -n "$work/failure.lock" true || { echo 'FAIL alert-retained-lock' >&2; exit 1; }
 for pid_file in "$work/alert-pid" "$work/alert-pid.child"; do

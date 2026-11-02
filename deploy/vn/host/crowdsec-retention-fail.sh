@@ -84,7 +84,6 @@ retention_fail_main() {
   exec >/dev/null 2>/dev/null
   if ((EUID == 0)) && {
     [[ -n ${ABOUTME_RETENTION_SYSTEMCTL:-} ]] ||
-      [[ -n ${ABOUTME_RETENTION_ALERT:-} ]] ||
       [[ -n ${ABOUTME_RETENTION_FAILURE_MARKER:-} ]] ||
       [[ -n ${ABOUTME_RETENTION_FEED_DIR:-} ]] ||
       [[ -n ${ABOUTME_RETENTION_SUCCESS_MARKER:-} ]];
@@ -93,7 +92,6 @@ retention_fail_main() {
   fi
 
   systemctl_cmd=${ABOUTME_RETENTION_SYSTEMCTL:-/usr/bin/systemctl}
-  alert=${ABOUTME_RETENTION_ALERT:-/usr/local/lib/aboutme/alert.sh}
   marker=${ABOUTME_RETENTION_FAILURE_MARKER:-/run/aboutme/crowdsec-retention-failed}
   feed_dir=${ABOUTME_RETENTION_FEED_DIR:-/run/aboutme/caddy-log/crowdsec}
   success=${ABOUTME_RETENTION_SUCCESS_MARKER:-/run/aboutme/crowdsec-retention-ok}
@@ -115,11 +113,12 @@ retention_fail_main() {
     declare -f retention_quiescent retention_stop_main retention_stop retention_fail_action
     printf '%s\n' 'trap "" TERM' 'retention_fail_action'
   } | timeout --signal=TERM --kill-after=2s 73 bash || failed=1
-  # Alarm even when cleanup exhausted its budget; admission stays revoked.
+  # The manager starts delivery outside this process group and its safety locks.
+  # Bound only dispatch here; the alert service owns delivery and its journal.
   {
-    declare -p alert
-    printf '%s\n' 'trap "" TERM' '"$alert" crowdsec-retention "CrowdSec retention failed"'
-  } | timeout --kill-after=1s 5 bash || true
+    declare -p systemctl_cmd
+    printf '%s\n' 'trap "" TERM' '"$systemctl_cmd" --no-block start aboutme-alert@aboutme-crowdsec-retention.service'
+  } | timeout --kill-after=1s 5 bash || failed=1
   exit "$failed"
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then retention_fail_main "$@"; fi

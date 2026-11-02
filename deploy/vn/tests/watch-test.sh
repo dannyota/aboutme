@@ -21,6 +21,10 @@ grep -qF 'flock -s -n' "$watch_source"
 cat >"$work/lib/crowdsec-db.sh" <<'STUB'
 crowdsec_db_held_lock() { return 0; }
 crowdsec_db_ready() {
+  if [[ ${WATCH_TEST_PAUSE_PREFLIGHT:-0} == 1 ]]; then
+    : >"$WATCH_TEST_PREFLIGHT_ENTERED"
+    while [[ ! -e $WATCH_TEST_PREFLIGHT_RELEASE ]]; do sleep 0.01; done
+  fi
   if [[ ${WATCH_TEST_IGNORE_TERM_PREFLIGHT:-0} == 1 ]]; then
     timeout 15 bash -c '
       trap "" TERM
@@ -210,8 +214,25 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-mess
   WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
 grep -qF 'failed units: 101' "$work/telegram-message"
 grep -qF 'omitted units: 81' "$work/telegram-message"
-rm "$work/lib/alert-transport"
+# Pause after the watcher selected Telegram, then roll back and replace chat.
+rm -f "$work/alert-state/alerts/failed-units."*
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/after-rollback-message \
+  WATCH_TEST_PAUSE_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/rollback-entered \
+  WATCH_TEST_PREFLIGHT_RELEASE=$work/rollback-release WATCH_TEST_FAILED_UNITS=$work/failed-units \
+  run_watch "$work/host-checks.log" "$work/rollback.alerts" 2>"$work/rollback.err" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do [[ ! -e $work/rollback-entered ]] || break; sleep 0.01; done
+[[ -e $work/rollback-entered ]] || { echo 'rollback watcher did not pause' >&2; exit 1; }
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state bash "$repo_root/deploy/vn/host/alert-transport.sh" stage
+chmod 0600 "$work/alert-state/secrets/telegram-chat-id"
+printf '%s' '-1008888888888' >"$work/alert-state/secrets/telegram-chat-id"
+chmod 0400 "$work/alert-state/secrets/telegram-chat-id"
+touch "$work/rollback-release"
+wait "$watch_pid"
+[[ ! -e $work/after-rollback-message && ! -e $work/alert-state/alerts/failed-units.2030-01-02 ]]
+grep -qxF 'alert-telegram: invalid_secret failed-units' "$work/rollback.err"
+grep -qF 'coraza counts in the last hour:' "$work/rollback.alerts.journal"
+rm "$work/lib/alert-transport"
 cp "$work/alert-stub.sh" "$work/lib/alert.sh"
 WATCH_TEST_SEND_FAILS=1 WATCH_TEST_FAILED_UNITS=$work/failed-units \
   run_watch "$work/host-checks.log" "$work/send-failure.alerts"
@@ -260,6 +281,7 @@ sed 's/--kill-after=2s 73 /--kill-after=0.1s 3 /' \
 cat >"$work/bin/failure-systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$WATCH_TEST_SHUTDOWN"
+if [[ $* == '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' ]]; then exit 0; fi
 if [[ $1 == show ]]; then
   printf 'ActiveState=inactive\nJob=\nMainPID=0\nControlPID=0\nControlGroup=\n'
 fi
@@ -281,7 +303,7 @@ printf 'retained\n' >"$work/feed/serving.json"
 touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
 WATCH_TEST_HUNG_CLEANUP=1 WATCH_TEST_CLEANUP_PID=$work/cleanup-pid \
   WATCH_TEST_SHUTDOWN=$work/shutdown.log ABOUTME_RETENTION_SYSTEMCTL=$work/bin/failure-systemctl \
-  ABOUTME_RETENTION_ALERT=$work/lib/alert.sh ABOUTME_RETENTION_FAILURE_MARKER=$work/failure-marker \
+  ABOUTME_RETENTION_FAILURE_MARKER=$work/failure-marker \
   ABOUTME_RETENTION_FEED_DIR=$work/feed WATCH_TEST_FIXTURE=$base \
   WATCH_TEST_ALERTS=$work/cleanup.alerts WATCH_TEST_RETENTION_FAILURES=$work/cleanup.failures \
   timeout 8 "$watch" >"$work/cleanup.journal" </dev/null
@@ -293,7 +315,7 @@ for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-
   crowdsec.service aboutme-crowdsec-retention-startup.service; do
   grep -q -- "--property=ControlGroup $unit$" "$work/shutdown.log"
 done
-grep -qxF 'crowdsec-retention|CrowdSec retention failed' "$work/cleanup.alerts"
+grep -qxF -- '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' "$work/shutdown.log"
 timeout 2 flock -x "$work/fence.lock" true || { echo 'cleanup retained the fence' >&2; exit 1; }
 timeout 2 flock -x "$work/retention.lock" true || { echo 'cleanup retained retention ownership' >&2; exit 1; }
 for pid_file in "$work/cleanup-pid" "$work/cleanup-pid.child"; do

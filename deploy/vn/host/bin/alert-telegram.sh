@@ -37,7 +37,7 @@ telegram_init "$lock" 2>/dev/null || fail invalid_secret
 unset telegram_token telegram_chat
 telegram_credentials 2>/dev/null || fail invalid_secret
 identity=$(telegram_identity) || fail invalid_secret
-if [[ $test_mode != yes && ( -e $telegram_active || -L $telegram_active ) ]]; then
+if [[ $test_mode != yes ]]; then
   telegram_private_file "$telegram_active" 600 && [[ $(<"$telegram_active") == telegram ]] || fail invalid_secret
   telegram_private_file "$telegram_approved" 400 && [[ $(<"$telegram_approved") == "$identity" ]] || fail invalid_secret
 fi
@@ -78,7 +78,8 @@ else
   install -d -m 0700 "$telegram_stamps" 2>/dev/null || fail invalid_input
   [[ $(stat -c '%u:%a' -- "$telegram_stamps") == "$EUID:700" ]] || fail invalid_input
   stamp=$telegram_stamps/$key.$(date -u +%F)
-  if ! (set -o noclobber; : >"$stamp") 2>/dev/null; then
+  if [[ -e $stamp || -L $stamp ]] || ! (set -o noclobber; : >"$stamp") 2>/dev/null; then
+    telegram_private_file "$stamp" 600 && [[ ! -s $stamp ]] || fail stamp_failed
     outcome suppressed
     exit 0
   fi

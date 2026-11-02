@@ -123,4 +123,20 @@ grep -qF '"$bundle/host/telegram-state.sh"' "$repo/deploy/vn/host/install.sh"
 grep -qF '"$bundle/host/alert-transport.sh"' "$repo/deploy/vn/host/install.sh"
 grep -qxF 'ExecStart=/usr/local/lib/aboutme/alert.sh unit-%i "unit %i failed"' \
   "$repo/deploy/vn/host/etc/systemd/system/aboutme-alert@.service"
+# Missing rotation confirmation leaves automatic delivery disabled.
+python3 -I - "$repo/docs/runbooks/production.md" <<'PY'
+import pathlib, sys
+runbook = pathlib.Path(sys.argv[1]).read_text()
+section = runbook.split("### Host Telegram setup and rotation", 1)[1].split("\n## ", 1)[0]
+assert len(runbook.splitlines()) <= 450
+confirm = "sudo /usr/local/lib/aboutme/alert-transport.sh confirm-receipt --received"
+test = "sudo /usr/local/lib/aboutme/alert-telegram.sh --test </dev/null"
+setup, rotation = section.split("For rotation,", 1)
+rotation, rollback = rotation.split("For rollback,", 1)
+assert "bash deploy/vn/scripts/telegram-setup.sh" in setup
+assert setup.index(test) < setup.index(confirm)
+assert rotation.index("bash deploy/vn/scripts/telegram-setup.sh --replace") < rotation.index(test) < rotation.index(confirm)
+assert "sudo /usr/local/lib/aboutme/alert-transport.sh stage" in rollback
+assert "sudo /usr/local/lib/aboutme/alert.sh" in rollback
+PY
 echo 'Telegram setup tests passed'

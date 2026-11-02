@@ -180,6 +180,10 @@ SQL
   printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/systemctl"
   cat >>"$retention_fixture/bin/systemctl" <<'SH'
 printf '%s\n' "$*" >>"$fixture/control-log"
+if [[ $* == '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' ]]; then
+  printf 'alarm\n' >>"$fixture/alarms"
+  exit 0
+fi
 if [[ -x $fixture/control && $* != *postgresql@18-main.service* ]]; then
   exec "$fixture/control" "$@"
 fi
