@@ -8,7 +8,7 @@ interface TextStyle {
 }
 
 // Static faces can expose their weight in the embedded OpenType OS/2 table.
-// Variable instances need advance evidence even when this table is present.
+// Variable advances only detect contradictions, even with this table present.
 export function pdfFontWeight(data: unknown): number | undefined {
   if (!(data instanceof Uint8Array) || data.length < 12) return undefined;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -127,15 +127,10 @@ export function pdfVariableTextWeights(
     const shared = deltas.length;
     const wider = deltas.filter((delta) => delta > 0.001).length;
     const meanDelta = shared ? deltas.reduce((a, b) => a + b, 0) / shared : 0;
-    if (baseline.valid && metrics.valid
+    if (shared >= 3 && baseline.valid && metrics.valid
       && metrics.family === baseline.family) {
-      if (regular.has(id)) bold = false;
-      else if (shared >= 3) {
-        if (wider >= 3 && meanDelta > 0.001) bold = true;
-        else if (deltas.every((delta) => Math.abs(delta) <= 0.000001)) {
-          bold = false;
-        }
-      }
+      if (wider >= 3 && meanDelta > 0.001) bold = true;
+      else if (wider === 0) bold = false;
     }
     evidence.set(id, { bold, advanceWeight: { shared, wider, meanDelta } });
   }
@@ -146,11 +141,24 @@ export function pdfVariableTextWeights(
       : run) };
 }
 
+function weightMatches(run: PdfInk, bold: boolean): boolean {
+  return run.bold === bold || (run.bold === undefined
+    && variableFamilies.has(variableFamily(run.font)));
+}
+
+function weightEvidence(run: PdfInk): string | undefined {
+  if (!variableFamilies.has(variableFamily(run.font))) return undefined;
+  if (!run.advanceWeight) return 'unavailable';
+  if (run.advanceWeight.shared < 3) return 'insufficient';
+  if (run.bold === undefined) return 'inconclusive';
+  return run.bold ? 'wider' : 'not-wider';
+}
+
 function styleMatches(run: PdfInk, expected: TextStyle): boolean {
   return pdfColorMatches(run.color, expected.color)
     && Math.abs(run.size - expected.size) <= 0.075
     && family(run.font).includes(family(expected.family))
-    && run.bold === expected.bold;
+    && weightMatches(run, expected.bold);
 }
 
 export function pdfTextStyleMatches(
@@ -188,7 +196,8 @@ export function pdfTextStyleDiagnostic(
     found: found
       ? { color: channels(found.color), size: found.size,
           family: found.font, bold: found.bold ?? null,
-          weight: found.weight ?? null, advanceWeight: found.advanceWeight }
+          weight: found.weight ?? null, advanceWeight: found.advanceWeight,
+          weightEvidence: weightEvidence(found) }
       : null,
     delta: found
       ? {
@@ -196,7 +205,7 @@ export function pdfTextStyleDiagnostic(
             .map((value, index) => value - wanted[index]!),
           size: found.size - expected.size,
           family: family(found.font).includes(family(expected.family)),
-          bold: found.bold === expected.bold,
+          bold: weightMatches(found, expected.bold),
         }
       : null,
   });

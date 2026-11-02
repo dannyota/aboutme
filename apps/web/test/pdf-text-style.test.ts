@@ -25,7 +25,9 @@ const expected = {
 };
 const run = { text: 'Đặng An', font: 'AAAAAA+Inter-Regular',
   color: '#14304f', size: 19.5, bold: true, weight: 700, x: 10, y: 20 };
-const paint = (text = [run]): PdfPaint => ({ fills: [], images: [], text });
+const paint = (text: PdfPaint['text'] = [run]): PdfPaint => ({
+  fills: [], images: [], text,
+});
 
 async function variablePaint(
   family = 'Inter', widths = [550, 550, 550, 550, 550],
@@ -60,6 +62,9 @@ describe('PDF variable font weight', () => {
       expect(pdfTextStyleMatches(result, 'decab', {
         color: '#000000', size: 20, family, bold: true,
       })).toBe(true);
+      expect(pdfTextStyleMatches(result, 'decab', {
+        color: '#000000', size: 20, family, bold: false,
+      })).toBe(false);
     });
 
   it('rejects dropped bold with identical advances', async () => {
@@ -76,13 +81,13 @@ describe('PDF variable font weight', () => {
     { name: 'missing text', anchors: ['absent'] },
     { name: 'different family', anchors: ['abcde'],
       family: 'Be Vietnam Pro' },
-  ])('rejects $name', async ({ anchors, family = 'Inter' }) => {
+  ])('leaves $name advisory', async ({ anchors, family = 'Inter' }) => {
     const result = pdfVariableTextWeights(await variablePaint(),
       family, anchors);
     expect(result.text[1]!.bold).toBeUndefined();
   });
 
-  it('rejects ambiguous regular text', async () => {
+  it('leaves ambiguous regular text advisory', async () => {
     const source = await variablePaint();
     const duplicate = { ...source, text: [source.text[0]!,
       { ...source.text[1]!, text: 'abcde' }] };
@@ -91,30 +96,144 @@ describe('PDF variable font weight', () => {
   });
 
   it.each([
-    { name: 'too few shared glyphs', advances: [...'deXYZ']
-      .map((unicode) => ({ unicode, width: 0.55 })) },
     { name: 'missing advances', advances: undefined },
     { name: 'missing resource identity', fontId: undefined },
     { name: 'nonfinite width', advances: [{ unicode: 'a', width: NaN }] },
-  ])('rejects $name', async ({ name: _, ...changed }) => {
+  ])('leaves $name advisory', async ({ name: _, ...changed }) => {
     const source = await variablePaint();
     const result = pdfVariableTextWeights({ ...source, text: [
       source.text[0]!, { ...source.text[1]!, ...changed },
     ] }, 'Inter', ['abcde']);
     expect(result.text[1]!.bold).toBeUndefined();
+    expect(pdfTextStyleMatches(result, 'decab', {
+      color: '#000000', size: 20, family: 'Inter', bold: true,
+    })).toBe(true);
   });
 
   it.each([
+    { glyphs: 'XYZ', width: 0.55, shared: 0 },
+    { glyphs: 'dXYZ', width: 0.55, shared: 1 },
+    { glyphs: 'deXYZ', width: 0.55, shared: 2 },
+    { glyphs: 'deXYZ', width: 0.495, shared: 2 },
+  ])('allows $shared shared glyphs and width $width',
+    async ({ glyphs, width, shared }) => {
+      const source = await variablePaint();
+      const result = pdfVariableTextWeights({ ...source, text: [
+        source.text[0]!, { ...source.text[1]!, text: glyphs,
+          advances: [...glyphs].map((unicode) => ({ unicode, width })) },
+      ] }, 'Inter', ['abcde']);
+      expect(result.text[1]).toMatchObject({
+        advanceWeight: { shared },
+      });
+      expect(result.text[1]!.bold).toBeUndefined();
+      for (const bold of [true, false]) {
+        const expected = { color: '#000000', size: 20,
+          family: 'Inter', bold };
+        expect(pdfTextStyleMatches(result, glyphs, expected)).toBe(true);
+        expect(pdfTextStyleDiagnostic(result, glyphs, expected))
+          .toContain('"weightEvidence":"insufficient"');
+      }
+    });
+
+  it.each([
+    [550, 500, 500, 500, 500],
     [550, 550, 500, 500, 500],
-    [500.1, 500.1, 500.1, 500.1, 500.1],
-    [450, 450, 450, 450, 450],
-  ])('rejects insufficient widening %j', async (...widths) => {
+    [550, 550, 550, 400, 400],
+  ])('allows inconclusive widening %j', async (...widths) => {
     const result = pdfVariableTextWeights(await variablePaint('Inter', widths),
       'Inter', ['abcde']);
     expect(result.text[1]!.bold).toBeUndefined();
+    for (const bold of [true, false]) {
+      const expected = { color: '#000000', size: 20, family: 'Inter', bold };
+      expect(pdfTextStyleMatches(result, 'decab', expected)).toBe(true);
+      expect(pdfTextStyleDiagnostic(result, 'decab', expected))
+        .toContain('"weightEvidence":"inconclusive"');
+    }
   });
 
-  it('rejects conflicting widths within a resource or regular anchors',
+  it('allows three shared glyphs with only one wider glyph', async () => {
+    const source = await variablePaint();
+    const result = pdfVariableTextWeights({ ...source, text: [
+      source.text[0]!, { ...source.text[1]!, text: 'dea',
+        advances: [
+          { unicode: 'd', width: 0.55 }, { unicode: 'e', width: 0.5 },
+          { unicode: 'a', width: 0.5 },
+        ] },
+    ] }, 'Inter', ['abcde']);
+    expect(result.text[1]).toMatchObject({ advanceWeight: {
+      shared: 3, wider: 1,
+    } });
+    const expected = { color: '#000000', size: 20,
+      family: 'Inter', bold: true };
+    expect(pdfTextStyleMatches(result, 'dea', expected)).toBe(true);
+    expect(pdfTextStyleDiagnostic(result, 'dea', expected))
+      .toContain('"weightEvidence":"inconclusive"');
+  });
+
+  it.each([
+    [500.1, 500.1, 500.1, 500.1, 500.1],
+    [450, 450, 450, 450, 450],
+  ])('rejects expected bold when shared glyphs are not wider %j',
+    async (...widths) => {
+      const result = pdfVariableTextWeights(
+        await variablePaint('Inter', widths), 'Inter', ['abcde']);
+      expect(result.text[1]!.bold).toBe(false);
+      expect(pdfTextStyleMatches(result, 'decab', {
+        color: '#000000', size: 20, family: 'Inter', bold: true,
+      })).toBe(false);
+    });
+
+  it('detects contradictions with exactly three shared glyphs', async () => {
+    const source = await variablePaint();
+    for (const [width, bold] of [[0.5, false], [0.55, true]] as const) {
+      const result = pdfVariableTextWeights({ ...source, text: [
+        source.text[0]!, { ...source.text[1]!, text: 'dea',
+          advances: [...'dea'].map((unicode) => ({ unicode, width })) },
+      ] }, 'Inter', ['abcde']);
+      expect(result.text[1]).toMatchObject({ bold,
+        advanceWeight: { shared: 3 } });
+      expect(pdfTextStyleMatches(result, 'dea', {
+        color: '#000000', size: 20, family: 'Inter', bold: !bold,
+      })).toBe(false);
+    }
+  });
+
+  it('keeps family, size and color strict with insufficient weight evidence',
+    async () => {
+      const source = await variablePaint();
+      const result = pdfVariableTextWeights({ ...source, text: [
+        source.text[0]!, { ...source.text[1]!, text: 'de',
+          advances: source.text[1]!.advances!.slice(0, 2) },
+      ] }, 'Inter', ['abcde']);
+      const expected = { color: '#000000', size: 20,
+        family: 'Inter', bold: true };
+      expect(pdfTextStyleMatches(result, 'de', expected)).toBe(true);
+      for (const changed of [
+        { color: '#020000' }, { size: 20.076 }, { family: 'Alegreya' },
+      ]) {
+        expect(pdfTextStyleMatches(result, 'de', { ...expected, ...changed }))
+          .toBe(false);
+      }
+    });
+
+  it('requires weight evidence for static faces', () => {
+    const source = paint([{ ...run, font: 'AAAAAA+Alegreya-Regular',
+      bold: undefined }]);
+    expect(pdfTextStyleMatches(source, run.text, {
+      ...expected, family: 'Alegreya', bold: false,
+    })).toBe(false);
+  });
+
+  it('leaves absent regular anchors advisory in style matching', async () => {
+    const result = pdfVariableTextWeights(await variablePaint(),
+      'Inter', []);
+    expect(result.text[1]!.bold).toBeUndefined();
+    expect(pdfTextStyleMatches(result, 'decab', {
+      color: '#000000', size: 20, family: 'Inter', bold: true,
+    })).toBe(true);
+  });
+
+  it('leaves conflicting glyph widths advisory',
     async () => {
       const source = await variablePaint();
       for (const fontId of ['g_regular', 'g_other']) {

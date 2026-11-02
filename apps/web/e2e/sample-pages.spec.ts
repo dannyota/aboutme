@@ -18,6 +18,7 @@ import {
   pdfTextPage,
   pdfWidgetMatches,
   pdfWidgetDiagnostic,
+  printedDisplayPages,
   type PdfDisplayPage,
 } from './pdf-display';
 import {
@@ -161,7 +162,7 @@ async function assertSampleStyle(
     expect(Math.abs(chunk.size - size)).toBeLessThanOrEqual(0.1);
     let weight = bold ? '700' : '400';
     if (chunk.role === 'title' && chunk.strong) weight = '900';
-    expect(chunk.weight).toBe(weight);
+    expect(chunk.weight, 'Print DOM text weight.').toBe(weight);
     expect(pdfColorMatches(cssHex(chunk.color), color)).toBe(true);
     let value = chunk.text;
     if (chunk.role === 'heading' && transform === 'uppercase') {
@@ -516,6 +517,70 @@ for (const { templateId, lng } of SAMPLES) {
     }
   });
 }
+
+test('sample print DOM and PDF detect dropped bold with shared glyphs',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    expect((await page.goto('/_harness/render?fixture=sample-minimal-air-en'
+      + '&template=minimal-air&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const samplePath = resolve(import.meta.dirname,
+      '../../../packages/schema/samples/minimal-air.en.json');
+    const sample = JSON.parse(await readFile(samplePath, 'utf8')) as Resume;
+    const margins = sample.customization.spacing.pageMargin!;
+    const inset = { x: margins.x * POINTS_PER_MM,
+      y: margins.y * POINTS_PER_MM };
+    await page.setViewportSize({
+      width: Math.round((210 - 2 * margins.x) * 96 / 25.4), height: 1123,
+    });
+    const heading = 'Shared heading glyphs';
+    const regular = 'Shared regular glyphs';
+    const name = page.locator('.resume-name');
+    await name.evaluate((element, text) => {
+      element.textContent = text;
+    }, heading);
+    await page.locator('.resume-headline').evaluate((element, text) => {
+      element.textContent = text;
+    }, regular);
+    const layout = await measurePdfLayout(page, inset);
+    const baseline = await printedDisplayPages(page);
+    expect(baseline).toHaveLength(1);
+    await assertSampleStyle(sample, 'minimal-air', 'en', layout, baseline[0]!);
+    const expected = { color: sample.customization.colors.primary,
+      size: sample.customization.font.baseSizePx * 2 * 0.75,
+      family: 'Inter', bold: true };
+    const correct = pdfVariableTextWeights(baseline[0]!.paint, 'Inter',
+      [regular]);
+    expect(pdfTextStyleMatches(correct, heading, expected),
+      pdfTextStyleDiagnostic(correct, heading, expected)).toBe(true);
+    await name.evaluate((element) => {
+      (element as HTMLElement).style.fontWeight = '400';
+    });
+    const alteredLayout = await measurePdfLayout(page, inset);
+    expect(alteredLayout.chunks.find(({ role }) => role === 'name')?.weight)
+      .toBe('400');
+    await expect(assertSampleStyle(sample, 'minimal-air', 'en',
+      alteredLayout, baseline[0]!)).rejects.toThrow('Print DOM text weight.');
+    const altered = await printedDisplayPages(page);
+    expect(altered).toHaveLength(1);
+    const dropped = pdfVariableTextWeights(altered[0]!.paint, 'Inter',
+      [regular]);
+    const diagnostic = pdfTextStyleDiagnostic(dropped, heading, expected);
+    const measurements = JSON.parse(diagnostic.slice(diagnostic.indexOf('{')));
+    expect(measurements.found).toMatchObject({ bold: false,
+      weightEvidence: 'not-wider' });
+    expect(measurements.found.advanceWeight.shared).toBeGreaterThanOrEqual(3);
+    expect(pdfTextStyleMatches(dropped, heading, expected), diagnostic)
+      .toBe(false);
+    await name.evaluate((element) => {
+      (element as HTMLElement).style.removeProperty('font-weight');
+    });
+    await assertSampleStyle(sample, 'minimal-air', 'en',
+      await measurePdfLayout(page, inset), baseline[0]!);
+    expect(external).toEqual([]);
+  });
 
 test('gallery sample page manifest stays current', async () => {
   const testInfo = test.info();
