@@ -1,8 +1,14 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
+import {
+  galleryFontLoaded,
+  measureGalleryDetail,
+  measureGalleryGrid,
+  measureTextContainment,
+} from './display-assertions';
 import {
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
@@ -484,6 +490,7 @@ test('creative accent Page at 390px matches baseline', async ({
     - document.documentElement.clientWidth);
   expect(overflow).toBe(0);
 
+  await assertGalleryDetail(page, 'vi', 390, 'page');
   await verifyScreenshot(
     page,
     'template-page--creative-accent--light--390.png',
@@ -533,6 +540,7 @@ for (const theme of THEMES) {
         - document.documentElement.clientWidth);
       expect(overflow).toBe(0);
 
+      await assertGalleryDetail(page, 'vi', width, 'pdf');
       await verifyScreenshot(
         page,
         `template-pdf--${theme}--${width}.png`,
@@ -570,6 +578,7 @@ for (const width of WIDTHS) {
       - document.documentElement.clientWidth);
     expect(overflow).toBe(0);
 
+    await assertGalleryDetail(page, 'vi', width, 'ats');
     await verifyScreenshot(
       page,
       `template-ats--dark--${width}.png`,
@@ -592,7 +601,7 @@ for (const locale of ['vi', 'en'] as const) {
       ]);
       await page.goto('/templates?role=fresher&filter=first-job');
       for (const width of [
-        360, 390, 640, 641, 768, 900, 1023, 1024, 1179, 1180, 1440,
+        360, 390, 640, 641, 768, 899, 900, 1023, 1024, 1179, 1180, 1440,
       ]) {
         await page.setViewportSize({ width, height: 900 });
         expect(
@@ -631,6 +640,14 @@ for (const locale of ['vi', 'en'] as const) {
                 getComputedStyle(node).gridTemplateColumns.split(' ').length,
             ),
         ).toBe(expected);
+        await expect.poll(() =>
+          measureGalleryGrid(page.locator('.gallery-grid')),
+        ).toEqual({
+          columns: expected,
+          columnGap: width < 641 ? 14 : 28,
+          rowGap: width < 641 ? 24 : 40,
+          ordered: true,
+        });
       }
     });
   }
@@ -883,3 +900,175 @@ test('incoming URLs and history derive both groups without remounting', async ({
     page.locator('[data-template="one-page-tight"]'),
   ).toHaveAttribute('data-retained', 'true');
 });
+
+async function assertGalleryDetail(
+  page: Page,
+  locale: 'vi' | 'en',
+  width: number,
+  tab: 'page' | 'pdf' | 'ats',
+): Promise<void> {
+  await expect.poll(() => galleryFontLoaded(page.locator('html'))).toBe(true);
+  await expect(page.locator('.template-detail__info h1')).toHaveCSS(
+    'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
+  );
+  const names = locale === 'vi'
+    ? ['Trang CV', 'PDF', 'ATS đọc được gì']
+    : ['Page', 'PDF', 'What an ATS reads'];
+  const selected = tab === 'page' ? 0 : tab === 'pdf' ? 1 : 2;
+  const tabs = page.getByRole('tab');
+  await expect(tabs).toHaveCount(3);
+  await expect(tabs).toHaveText(names);
+  for (let index = 0; index < names.length; index += 1) {
+    await expect(tabs.nth(index)).toHaveAttribute(
+      'aria-selected', String(index === selected),
+    );
+  }
+  await expect(page.getByRole('tablist')).toMatchAriaSnapshot(
+    `- tablist "${locale === 'vi'
+      ? 'Cách xem CV mẫu'
+      : 'How to view the sample'}":\n`
+      + names.map((name, index) =>
+        `  - tab "${name}"${index === selected ? ' [selected]' : ''}`,
+      ).join('\n'),
+  );
+  await expect.poll(
+    () => measureGalleryDetail(page.locator('.template-detail__layout')),
+  ).toEqual({ stacked: width < 900, columns: width >= 900, contained: true });
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )).toBeLessThanOrEqual(1);
+  if (tab === 'page') {
+    await expect(page.locator('.resume-document')).toContainText(
+      'Đinh Công Khánh',
+    );
+    await expect(page.locator('.template-paper')).toHaveCSS(
+      'background-color', 'rgb(255, 255, 255)',
+    );
+  } else if (tab === 'pdf') {
+    const image = page.locator('img[data-pdf-page]');
+    await expect(image).toHaveCount(1);
+    await expect(image).toHaveAttribute(
+      'src', `/templates/pages/executive-band-${locale}-p1.png`,
+    );
+    await expect(image).toHaveAttribute('alt', locale === 'vi'
+      ? 'Trang 1/1 của CV mẫu Executive Band'
+      : 'Page 1 of 1 of the Executive Band sample resume');
+    await image.scrollIntoViewIfNeeded();
+    await image.evaluate((element) => (element as HTMLImageElement).decode());
+    await expect.poll(() => image.evaluate((element) => {
+      const img = element as HTMLImageElement;
+      const box = img.getBoundingClientRect();
+      const sheet = img.closest('.template-paper')!.getBoundingClientRect();
+      return img.naturalWidth === 1240 && img.naturalHeight === 1754
+        && Math.abs(box.width - sheet.width) <= 1
+        && Math.abs(box.width / box.height - 1240 / 1754) <= 0.001;
+    })).toBe(true);
+    await expect(page.locator('figcaption')).toHaveText(
+      locale === 'vi' ? 'Trang 1/1' : 'Page 1 of 1',
+    );
+    await page.evaluate(() => window.scrollTo(0, 0));
+  } else {
+    const text = page.locator('[data-ats-text]');
+    await expect(text).toBeVisible();
+    await expect(text).toHaveCSS('white-space', 'pre-wrap');
+    await expect(text).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(text).toHaveCSS('color', 'rgb(23, 26, 24)');
+    await expect.poll(() => measureTextContainment(text))
+      .toEqual({ visible: true, contained: true });
+    const content = (await text.innerText()).normalize('NFC');
+    const terms = locale === 'vi'
+      ? ['Vũ Đức Trung', 'TÓM TẮT', 'KINH NGHIỆM LÀM VIỆC', 'HỌC VẤN']
+      : ['Lan Hoang', 'EXECUTIVE SUMMARY', 'EXPERIENCE', 'EDUCATION'];
+    let previous = -1;
+    for (const term of terms) {
+      const position = content.indexOf(term);
+      expect(position).toBeGreaterThan(previous);
+      expect(content.indexOf(term, position + term.length)).toBe(-1);
+      previous = position;
+    }
+  }
+}
+
+for (const locale of ['vi', 'en'] as const) {
+  for (const theme of THEMES) {
+    for (const width of WIDTHS) {
+      for (const tab of ['page', 'pdf', 'ats'] as const) {
+        for (const viewer of THEMES) {
+          test(`template detail ${tab} ${locale} ${theme} ${viewer} ${width}`,
+            async ({ page }) => {
+              await page.setViewportSize({ width, height: 900 });
+              await page.emulateMedia({
+                colorScheme: viewer, reducedMotion: 'reduce',
+              });
+              await page.context().addCookies([
+                {
+                  name: 'aboutme-locale', value: locale,
+                  url: 'http://127.0.0.1:20092',
+                },
+                {
+                  name: 'aboutme-theme', value: theme,
+                  url: 'http://127.0.0.1:20092',
+                },
+              ]);
+              const id = tab === 'page' ? 'creative-accent' : 'executive-band';
+              await page.goto(`/templates/${id}`);
+              if (tab !== 'page') {
+                const name = tab === 'pdf'
+                  ? 'PDF'
+                  : locale === 'vi' ? 'ATS đọc được gì' : 'What an ATS reads';
+                await page.getByRole('tab', { name }).click();
+              }
+              await page.evaluate(() => document.fonts.ready);
+              await assertGalleryDetail(page, locale, width, tab);
+            });
+        }
+      }
+    }
+  }
+}
+
+for (const locale of ['vi', 'en'] as const) {
+  for (const theme of THEMES) {
+    test(`template detail changes layout at 900px ${locale} ${theme}`,
+      async ({ page }) => {
+        await page.context().addCookies([
+          { name: 'aboutme-locale', value: locale,
+            url: 'http://127.0.0.1:20092' },
+          { name: 'aboutme-theme', value: theme,
+            url: 'http://127.0.0.1:20092' },
+        ]);
+        await page.goto('/templates/creative-accent');
+        for (const width of [899, 900]) {
+          await page.setViewportSize({ width, height: 900 });
+          await expect.poll(() =>
+            measureGalleryDetail(page.locator('.template-detail__layout')),
+          ).toEqual({
+            stacked: width < 900, columns: width >= 900, contained: true,
+          });
+        }
+      });
+  }
+}
+
+test('template detail measurements detect displacement and clipped ATS text',
+  async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/templates/executive-band');
+    const layout = page.locator('.template-detail__layout');
+    expect((await measureGalleryDetail(layout)).contained).toBe(true);
+    await page.addStyleTag({
+      content: '.template-detail__info { '
+        + 'transform: translateX(4px) !important; }',
+    });
+    await expect.poll(async () => (await measureGalleryDetail(layout))
+      .contained).toBe(false);
+    await page.getByRole('tab', { name: 'ATS đọc được gì' }).click();
+    const text = page.locator('[data-ats-text]');
+    expect((await measureTextContainment(text)).contained).toBe(true);
+    await text.evaluate((element) => {
+      Object.assign((element as HTMLElement).style, {
+        height: '24px', overflow: 'hidden', whiteSpace: 'nowrap',
+      });
+    });
+    expect((await measureTextContainment(text)).contained).toBe(false);
+  });

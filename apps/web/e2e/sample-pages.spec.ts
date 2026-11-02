@@ -289,5 +289,12 @@ test('gallery sample page manifest stays current', async () => {
     return;
   }
   const expected = await readFile(resolve(PAGES_DIR, 'manifest.json'), 'utf8');
-  expect(json).toBe(expected);
+  const stored: Record<string, unknown>[] = JSON.parse(expected);
+  const withHashes = ordered.map((entry, index) => ({
+    ...entry,
+    ...Object.fromEntries(Object.entries(stored[index] ?? {}).filter(
+      ([key]) => key === 'sourceSha256' || key === 'outputSha256',
+    )),
+  }));
+  expect(`${JSON.stringify(withHashes, null, 2)}\n`).toBe(expected);
 });

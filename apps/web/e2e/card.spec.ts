@@ -17,6 +17,7 @@ import {
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import type { PrintCardEnvelope } from '../server/utils/print/envelope';
 import { PRINT_CONTENT_SECURITY_POLICY } from '../server/utils/print/protocol';
+import { measureCardCrop } from './display-assertions';
 import { denyExternalRequests, verifyScreenshot } from './support';
 
 // The harness Nitro output directory (apps/web/nuxt.config.ts sets
@@ -168,7 +169,13 @@ async function expectBoxInSafeSquare(
     return rects;
   });
   expect(lines.length).toBeGreaterThan(0);
-  for (const line of lines) expectRectInSafeSquare(line);
+  for (const line of lines) {
+    expectRectInSafeSquare(line);
+    expect(line.x).toBeGreaterThanOrEqual(box!.x - 1);
+    expect(line.y).toBeGreaterThanOrEqual(box!.y - 1);
+    expect(line.x + line.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+    expect(line.y + line.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+  }
   if (
     selector === '.preview-card-name' || selector === '.preview-card-headline'
   ) {
@@ -347,6 +354,84 @@ const CASES: readonly CardCase[] = [
   },
 ];
 
+async function expectCardDisplay(
+  page: Page,
+  card: PreviewCardContent,
+  name: string,
+): Promise<void> {
+  const root = page.locator('.preview-card');
+  await expect(root).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(root).toHaveCSS('color', 'rgb(23, 26, 24)');
+  await expect(root).toHaveCSS('font-family', '"Be Vietnam Pro", sans-serif');
+  await expect(root).toHaveCSS('font-synthesis', 'none');
+  await expect(root).toHaveAttribute('lang', card.lng);
+  expect(await page.evaluate(() => Array.from(document.fonts).some((face) =>
+    face.family === 'Be Vietnam Pro' && face.status === 'loaded')))
+    .toBe(true);
+  const rootBox = await root.boundingBox();
+  expect(rootBox).toMatchObject({ height: 630, width: 1200, x: 0, y: 0 });
+  const sizes: Record<string, string> = {
+    'long-name-vi': '52px',
+    'no-name': '24px',
+  };
+  await expect(page.locator('.preview-card-name')).toHaveCSS(
+    'font-size', sizes[name] ?? '72px');
+  await expect(page.locator('.preview-card-name')).toHaveCSS(
+    'font-weight', '700');
+  if (card.headline !== null && card.name !== null) {
+    await expect(page.locator('.preview-card-headline')).toHaveCSS(
+      'font-size', '32px');
+  } else {
+    await expect(page.locator('.preview-card-headline')).toHaveCount(0);
+  }
+  const logo = page.getByRole('img', { name: 'aboutme.vn' });
+  await expect(logo).toHaveCount(1);
+  await expect(logo).toHaveAttribute('viewBox', '0 0 30 32');
+  await expect(logo.locator('[data-logo-ring]')).toHaveCount(2);
+  await expect(logo.locator('[data-logo-part="mark"]')).toHaveCSS(
+    'color', 'rgb(204, 38, 73)');
+  for (const [selector, x] of [
+    ['.preview-card-band-left', 0],
+    ['.preview-card-band-right', 915],
+  ] as const) {
+    const band = page.locator(selector);
+    expect(await band.boundingBox()).toMatchObject({
+      height: 630, width: 285, x, y: 0,
+    });
+    expect(await band.evaluate((el) => getComputedStyle(el).backgroundImage))
+      .toContain('linear-gradient');
+  }
+  const photo = page.locator('.preview-card-photo');
+  if (card.photo === null) {
+    await expect(photo).toHaveCount(0);
+    return;
+  }
+  await expect(photo).toBeVisible();
+  const photoBox = await photo.boundingBox();
+  expect(photoBox).toMatchObject({ height: 208, width: 208 });
+  await expect(photo.locator('.preview-card-photo-clip')).toHaveCSS(
+    'overflow', 'hidden');
+  await expect(photo).toHaveCSS('border-color',
+    card.accent === '#000000'
+      ? 'rgb(0, 0, 0)'
+      : card.accent === '#2f855a'
+        ? 'rgb(47, 133, 90)'
+        : 'rgb(26, 92, 235)');
+  const image = photo.locator('img');
+  await expect(image).toHaveCSS('object-fit', 'cover');
+  expect(await image.evaluate((el) => {
+    const img = el as HTMLImageElement;
+    return img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+  })).toBe(true);
+  const crop = await measureCardCrop(image);
+  const expected = card.photo.crop === null
+    ? { height: 1, left: 0, top: 0, width: 1 }
+    : { height: 1.25, left: -0.125, top: -0.0625, width: 1.25 };
+  for (const key of ['height', 'left', 'top', 'width'] as const) {
+    expect(Math.abs(crop[key] - expected[key])).toBeLessThanOrEqual(0.001);
+  }
+}
+
 for (const { card, name } of CASES) {
   test(`card--${name}`, async ({ page }, testInfo) => {
     const external = await denyExternalRequests(page);
@@ -354,6 +439,7 @@ for (const { card, name } of CASES) {
     await openCard(page, html);
     await expectGeometry(page);
     await expectPageContent(page, card);
+    await expectCardDisplay(page, card, name);
     await verifyScreenshot(
       page,
       `card--${name}.png`,
@@ -363,6 +449,43 @@ for (const { card, name } of CASES) {
     expect(external).toEqual([]);
   });
 }
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const { card, name } of CASES) {
+    test(`card display ${name} with ${scheme} preference`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      const html = await renderCardHTML(buildEnvelope(card));
+      await openCard(page, html);
+      await expectGeometry(page);
+      await expectPageContent(page, card);
+      await expectCardDisplay(page, card, name);
+    });
+  }
+  for (const variant of ['no-photo-en', 'no-name'] as const) {
+    test(`Vietnamese ${variant} card with ${scheme} preference`, async ({
+      page,
+    }) => {
+      const original = CASES.find((item) => item.name === variant)!;
+      const card = { ...original.card, lng: 'vi' };
+      await page.emulateMedia({ colorScheme: scheme });
+      await openCard(page, await renderCardHTML(buildEnvelope(card)));
+      await expectGeometry(page);
+      await expectPageContent(page, card);
+      await expectCardDisplay(page, card, variant);
+    });
+  }
+}
+
+test('card crop assertion detects ignored offsets', async ({ page }) => {
+  const card = CASES[0]!.card;
+  await openCard(page, await renderCardHTML(buildEnvelope(card)));
+  const image = page.locator('.preview-card-photo-image');
+  await expectCardDisplay(page, card, 'long-name-vi');
+  await image.evaluate((el) => {
+    (el as HTMLElement).style.left = '0';
+  });
+  await expect(expectCardDisplay(page, card, 'long-name-vi')).rejects.toThrow();
+});
 
 // Generates a JPEG data URL of random pixels, backing off the encoder
 // quality until it fits PRINT_PHOTO_MAX_BYTES: random pixels are the

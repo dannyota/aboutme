@@ -592,6 +592,7 @@ apps/web/e2e/baselines/verify--verified--light--390.png
 apps/web/e2e/card.spec.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
+apps/web/e2e/display-assertions.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
 apps/web/e2e/fixtures/deployment/mismatch-missing.json
 apps/web/e2e/fixtures/deployment/mismatch-not-found.json
@@ -605,6 +606,7 @@ apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
 apps/web/e2e/normal-csp.spec.ts
+apps/web/e2e/pdf-display.ts
 apps/web/e2e/playwright.config.ts
 apps/web/e2e/preview-gap-expected.json
 apps/web/e2e/preview-gap.spec.ts
@@ -691,6 +693,8 @@ apps/web/public/templates/pages/nordic-muted-vi-p1.png
 apps/web/public/templates/pages/one-page-tight-en-p1.png
 apps/web/public/templates/pages/one-page-tight-vi-p1.png
 apps/web/public/theme-bootstrap.js
+apps/web/scripts/generate-template-pages.mts
+apps/web/scripts/validate-template-pages.mts
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts

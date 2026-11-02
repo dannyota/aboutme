@@ -4,6 +4,8 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import { measurePrintRules } from './display-assertions';
+import { pdfMarkerPosition, pdfTextPage } from './pdf-display';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -182,6 +184,16 @@ for (const printCase of CASES) {
     expect(external).toEqual([]);
     await page.emulateMedia({ media: 'print' });
     expect(await photoCropGeometry(page)).toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+    expect(await measurePrintRules(page)).toEqual({
+      bodyHeaderAfter: 'avoid',
+      entryInside: 'auto',
+      headerInside: 'avoid',
+      orphans: '2',
+      printColorAdjust: 'exact',
+      sectionAfter: 'avoid',
+      sectionInside: 'auto',
+      widows: '2',
+    });
 
     const pdf = await page.pdf({
       displayHeaderFooter: false,
@@ -203,12 +215,14 @@ for (const printCase of CASES) {
       expect(document.numPages).toBeGreaterThanOrEqual(2);
       expect(document.numPages).toBe(EXPECTED_PAGES);
       const pageTexts: string[] = [];
+      const textPages = [];
       for (
         let pageNumber = 1;
         pageNumber <= document.numPages;
         pageNumber += 1
       ) {
         const pdfPage = await document.getPage(pageNumber);
+        textPages.push(await pdfTextPage(pdfPage));
         const text = await pdfPage.getTextContent();
         pageTexts.push(text.items
           .map((item) => ('str' in item ? item.str : ''))
@@ -233,6 +247,32 @@ for (const printCase of CASES) {
         );
       }
 
+      const lastOnFirst = printCase.fixture === 'print-main-overflow' ? 7 : 11;
+      const pageMarkers = textPages.map((textPage) => textPage.text
+        .replace(/-\s+(?=ENTRY-\d{2})/g, '-'));
+      for (let number = 1; number <= printCase.total; number += 1) {
+        const marker = `${printCase.prefix}${String(number).padStart(2, '0')}`;
+        const expectedPage = number <= lastOnFirst ? 0 : 1;
+        expect(pageMarkers[expectedPage]).toContain(marker);
+        expect(pageMarkers[1 - expectedPage]).not.toContain(marker);
+      }
+      const firstPosition = pdfMarkerPosition(
+        textPages[0]!, `${printCase.prefix}02`,
+      );
+      const secondPosition = pdfMarkerPosition(
+        textPages[1]!,
+        `${printCase.prefix}${String(lastOnFirst + 1).padStart(2, '0')}`,
+      );
+      expect(firstPosition).not.toBeNull();
+      expect(secondPosition).not.toBeNull();
+      expect(Math.abs(firstPosition!.x - secondPosition!.x))
+        .toBeLessThanOrEqual(1);
+      for (const textPage of textPages) {
+        expect(Math.abs(textPage.width - 595.28)).toBeLessThanOrEqual(1);
+        expect(Math.abs(textPage.height - 841.89)).toBeLessThanOrEqual(1);
+        expect(textPage.items.length).toBeGreaterThan(0);
+      }
+
       expect(pageTexts[0]).toContain(printCase.start);
       expect(pageTexts[1]).toContain(printCase.end);
       expect(pageTexts[0]).toContain(printCase.opposite);
@@ -251,6 +291,87 @@ for (const printCase of CASES) {
       await loadingTask.destroy();
     }
   });
+}
+
+for (const printCase of CASES) {
+  for (const lng of ['en', 'vi'] as const) {
+    for (const paper of ['a4', 'letter'] as const) {
+      for (const scheme of ['light', 'dark'] as const) {
+        test(
+          `${printCase.fixture} ${lng} ${paper} ${scheme}`,
+          async ({ page }) => {
+            test.setTimeout(20_000);
+            const external = await denyExternalRequests(page);
+            await page.emulateMedia({ colorScheme: scheme, media: 'print' });
+            const response = await page.goto(
+              `/_harness/render?fixture=${printCase.fixture}`
+              + `&template=modern-sidebar&mode=continuous&lng=${lng}`
+              + `&paper=${paper}`,
+            );
+            expect(response?.ok()).toBe(true);
+            await expect(
+              page.locator('[data-fonts-ready="true"]'),
+            ).toHaveCount(1);
+            await waitForImages(page);
+            await expect(page.locator('.resume-document')).toHaveCSS(
+              'background-color', 'rgb(255, 255, 255)',
+            );
+            await expect(page.locator('.resume-sidebar')).toHaveCSS(
+              'background-color', 'rgb(227, 236, 240)',
+            );
+            expect(await photoCropGeometry(page))
+              .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+            const pdf = await page.pdf({
+              displayHeaderFooter: false,
+              margin: { bottom: 0, left: 0, right: 0, top: 0 },
+              preferCSSPageSize: true,
+              printBackground: true,
+              scale: 1,
+            });
+            const loadingTask = getDocument({
+              data: new Uint8Array(pdf),
+              isImageDecoderSupported: false,
+              isOffscreenCanvasSupported: false,
+              useSystemFonts: false,
+            });
+            try {
+              const document = await loadingTask.promise;
+              expect(document.numPages).toBe(EXPECTED_PAGES);
+              const pages = await Promise.all([1, 2].map(async (number) =>
+                pdfTextPage(await document.getPage(number)),
+              ));
+              const dimensions = paper === 'a4' ? [595.28, 841.89] : [612, 792];
+              for (const pdfPage of pages) {
+                expect(Math.abs(pdfPage.width - dimensions[0]!))
+                  .toBeLessThanOrEqual(1);
+                expect(Math.abs(pdfPage.height - dimensions[1]!))
+                  .toBeLessThanOrEqual(1);
+                expect(pdfPage.items.length).toBeGreaterThan(0);
+              }
+              expect(pages[0]!.text).toContain(printCase.start);
+              expect(pages[0]!.text).toContain(printCase.opposite);
+              expect(pages[1]!.text).toContain(printCase.end);
+              expect(pages[1]!.text).not.toContain(printCase.opposite);
+              const text = pages.map((pdfPage) => pdfPage.text).join(' ')
+                .replace(/-\s+(?=ENTRY-\d{2})/g, '-');
+              let previous = -1;
+              for (let number = 1; number <= printCase.total; number += 1) {
+                const marker = `${printCase.prefix}`
+                  + String(number).padStart(2, '0');
+                expect(text.split(marker)).toHaveLength(2);
+                const position = text.indexOf(marker);
+                expect(position).toBeGreaterThan(previous);
+                previous = position;
+              }
+            } finally {
+              await loadingTask.destroy();
+            }
+            expect(external).toEqual([]);
+          },
+        );
+      }
+    }
+  }
 }
 
 function normalizeHeading(text: string | null): string {
