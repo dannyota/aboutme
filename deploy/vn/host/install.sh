@@ -95,7 +95,7 @@ for required in host/crowdsec-privacy-notice-host.sh host/workload-lock.sh \
   scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh \
   scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh; do
   [[ -f $bundle/$required && ! -L $bundle/$required ]] || die "required notice helper is missing"
-  install -o root -g root -m 0755 "$bundle/$required" "$lib/${required##*/}"
+  install --compare -o root -g root -m 0755 "$bundle/$required" "$lib/${required##*/}"
 done
 "$lib/crowdsec-privacy-notice-host.sh" initialize || die "invalid_state"
 
@@ -131,7 +131,7 @@ install_key() { # committed-key fingerprint outfile
   local fprs
   fprs=$(gpg --show-keys --with-colons "$1" | awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }')
   [ "$fprs" = "$2" ] || die "$1 is not exactly one primary key with fingerprint $2"
-  install -m 0644 "$1" "$3"
+  install --compare -m 0644 "$1" "$3"
 }
 
 # Installs packages at their pinned versions and proves dpkg holds exactly
@@ -165,7 +165,7 @@ copy_tree() {
     for s in "$@"; do [ "$rel" = "$s" ] && skip=yes; done
     [ "$skip" = no ] || continue
     install -d -m 0755 "$(dirname "$dest/$rel")"
-    install -m 0644 "$f" "$dest/$rel"
+    install --compare -m 0644 "$f" "$dest/$rel"
   done < <(find "$src" -type f ! -name '*.example' -print0 | sort -z)
 }
 
@@ -193,13 +193,13 @@ if [ "$only" = postgres ]; then
   chmod 0750 /srv/data/pgbackrest-conf
   install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
     "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
-  install -m 0644 "$bundle/host/etc/pgbackrest/pgbackrest.conf" /etc/pgbackrest/pgbackrest.conf
-  install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_hba.conf" \
+  install --compare -m 0644 "$bundle/host/etc/pgbackrest/pgbackrest.conf" /etc/pgbackrest/pgbackrest.conf
+  install --compare -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_hba.conf" \
     /etc/postgresql/18/main/pg_hba.conf
-  install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_ident.conf" \
+  install --compare -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_ident.conf" \
     /etc/postgresql/18/main/pg_ident.conf
   install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
-  install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
+  install --compare -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
     /etc/postgresql/18/main/conf.d/90-aboutme.conf
   systemctl restart postgresql@18-main.service
   say "PostgreSQL and pgBackRest installed"
@@ -216,10 +216,10 @@ apt-get update -qq
 # 2. CrowdSec config goes in before the package starts the service, so its
 # local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
-install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
-install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
-install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
-install -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
+install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
 rm -f /etc/crowdsec/acquis.d/caddy.yaml
 
@@ -240,9 +240,9 @@ install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGR
 # check, a reboot during package installation fails closed.
 install -d -m 0755 /etc/systemd/system/crowdsec.service.d \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d
-install -m 0644 "$bundle/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf" \
+install --compare -m 0644 "$bundle/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf" \
   /etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf
-install -m 0644 \
+install --compare -m 0644 \
   "$bundle/host/etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf" \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf
 systemctl daemon-reload
@@ -254,7 +254,7 @@ for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftab
       # The package needs a key to skip automatic registration. The migration
       # replaces this unregistered private value before starting the bouncer.
       if [[ ! -s /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local ]]; then
-        install -m 0600 /dev/null /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
+        install --compare -m 0600 /dev/null /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
         (umask 077
          cat "$bundle/edge/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local"
          printf 'api_key: '
@@ -276,42 +276,43 @@ copy_tree "$etc" /etc \
   postgresql/18/main/pg_hba.conf \
   postgresql/18/main/pg_ident.conf \
   postgresql/18/main/conf.d/90-aboutme.conf
-install -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_hba.conf" /etc/postgresql/18/main/pg_hba.conf
-install -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_ident.conf" /etc/postgresql/18/main/pg_ident.conf
+# Admission requires peer-file mtimes at or before PostgreSQL's last reload.
+install --compare -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_hba.conf" /etc/postgresql/18/main/pg_hba.conf
+install --compare -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_ident.conf" /etc/postgresql/18/main/pg_ident.conf
 install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
-install -o postgres -g postgres -m 0644 "$etc/postgresql/18/main/conf.d/90-aboutme.conf" \
+install --compare -o postgres -g postgres -m 0644 "$etc/postgresql/18/main/conf.d/90-aboutme.conf" \
   /etc/postgresql/18/main/conf.d/90-aboutme.conf
 
-install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
-install -m 0644 "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-install -m 0644 "$bundle/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
-install -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install --compare -m 0644 "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
+install --compare -m 0644 "$bundle/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
+install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
-install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
 rm -f /etc/crowdsec/acquis.d/caddy.yaml
 install -d -m 0755 /etc/crowdsec/parsers/s01-parse /etc/crowdsec/parsers/s02-enrich \
   /etc/crowdsec/scenarios
-install -m 0644 "$bundle/edge/crowdsec/parsers/s01-parse/aboutme-http.yaml" \
+install --compare -m 0644 "$bundle/edge/crowdsec/parsers/s01-parse/aboutme-http.yaml" \
   /etc/crowdsec/parsers/s01-parse/aboutme-http.yaml
-install -m 0644 "$bundle/edge/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
+install --compare -m 0644 "$bundle/edge/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
   /etc/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml
 for scenario in "$bundle"/edge/crowdsec/scenarios/*.yaml; do
-  install -m 0644 "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
+  install --compare -m 0644 "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
 done
 
 # The startup retention gate must run before the first unmasked CrowdSec
-# start. Install its scripts early; step 6 refreshes the same copies.
+# start. Install its scripts early; matching copies must stay intact.
 lib=/usr/local/lib/aboutme
 install -d -m 0755 "$lib"
 for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-migrate; do
-  install -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
+  install --compare -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
 done
-install -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"
-install -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
-install -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
-install -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
+install --compare -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"
+install --compare -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
+install --compare -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
+install --compare -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
-install -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
+install --compare -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
 
 # Reload peer and logging policy without changing the PostgreSQL process epoch.
 systemctl reload postgresql@18-main.service
@@ -348,7 +349,7 @@ say "configuration copied to /etc"
 install -d -m 0755 "$lib" /etc/aboutme
 copy_script() {
   if [ -f "$1" ]; then
-    install -m 0755 "$1" "$lib/$(basename "$1")"
+    install --compare -m 0755 "$1" "$lib/$(basename "$1")"
   else
     say "skipping missing $1"
   fi
@@ -378,7 +379,7 @@ done
 if [ -d "$bundle/host/quadlet" ]; then
   install -d -m 0755 "$lib/quadlet"
   for f in "$bundle"/host/quadlet/*; do
-    [ -f "$f" ] && install -m 0644 "$f" "$lib/quadlet/$(basename "$f")"
+    [ -f "$f" ] && install --compare -m 0644 "$f" "$lib/quadlet/$(basename "$f")"
   done
 else
   say "skipping missing $bundle/host/quadlet"
@@ -386,13 +387,13 @@ fi
 # The bridge networks do not depend on a release. The observer's firewall
 # must load before any observer starts, including after a reboot.
 install -d -m 0755 /etc/containers/systemd
-install -m 0644 "$bundle/host/quadlet/aboutme.network" /etc/containers/systemd/aboutme.network
-install -m 0644 "$bundle/host/quadlet/aboutme-observer.network" /etc/containers/systemd/aboutme-observer.network
+install --compare -m 0644 "$bundle/host/quadlet/aboutme.network" /etc/containers/systemd/aboutme.network
+install --compare -m 0644 "$bundle/host/quadlet/aboutme-observer.network" /etc/containers/systemd/aboutme-observer.network
 systemctl daemon-reload
 systemctl enable aboutme-observer-firewall.service >/dev/null
 systemctl restart aboutme-observer-firewall.service
 for f in "$bundle"/host/env/*.env; do
-  [ -f "$f" ] && install -m 0644 "$f" "/etc/aboutme/$(basename "$f")"
+  [ -f "$f" ] && install --compare -m 0644 "$f" "/etc/aboutme/$(basename "$f")"
 done
 for f in "$bundle"/host/env/*.env.example; do
   [ -f "$f" ] || continue
@@ -400,7 +401,7 @@ for f in "$bundle"/host/env/*.env.example; do
   if [ -e "$target" ]; then
     say "kept existing $target"
   else
-    install -m 0644 "$f" "$target"
+    install --compare -m 0644 "$f" "$target"
   fi
 done
 if [ -x "$lib/fence.sh" ]; then
