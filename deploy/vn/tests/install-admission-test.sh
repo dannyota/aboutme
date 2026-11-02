@@ -221,10 +221,11 @@ for tree in ('etc','lib'):
     for path in (root/tree).rglob('*'):
         if not path.is_file(): continue
         entry=path.lstat()
+        # GNU install before 9.12 reapplies matching attributes, changing ctime.
         state[str(path.relative_to(root))]=[
             hashlib.sha256(path.read_bytes()).hexdigest(),entry.st_ino,
             entry.st_uid,entry.st_gid,entry.st_mode,entry.st_nlink,
-            entry.st_mtime_ns,entry.st_ctime_ns]
+            entry.st_mtime_ns]
 saved=root/'snapshot.json'
 if sys.argv[2]=='save': saved.write_text(json.dumps(state))
 else:
@@ -233,6 +234,36 @@ else:
     assert not changed, 'unchanged file metadata changed: '+', '.join(changed)
 PY
 }
+
+# Reapplying matching permissions may change ctime without changing admission.
+(
+  export FIXTURE_CASE=$work/metadata
+  mkdir -p "$FIXTURE_CASE/etc" "$FIXTURE_CASE/lib"
+  target=$FIXTURE_CASE/etc/config
+  printf 'fixture\n' >"$target"
+  chmod 0644 "$target"
+  snapshot save
+  chmod 0644 "$target"
+  snapshot check
+  for fault in content mtime mode missing; do
+    snapshot save
+    case $fault in
+      content) printf 'changed\n' >>"$target" ;;
+      mtime)
+        python3 - "$target" <<'PY'
+import os,sys
+path=sys.argv[1]
+entry=os.stat(path)
+os.utime(path,ns=(entry.st_atime_ns,entry.st_mtime_ns+1000000000))
+PY
+        ;;
+      mode) chmod 0600 "$target" ;;
+      missing) rm -- "$target" ;;
+    esac
+    if snapshot check >/dev/null 2>&1; then fail "snapshot missed $fault drift"; fi
+  done
+  printf 'PASS snapshot-preserves-admission-metadata-contract\n'
+)
 
 for mode in ordinary postgres; do
   export FIXTURE_CASE=$work/$mode FIXTURE_TICK=no FIXTURE_DRIFT=no
