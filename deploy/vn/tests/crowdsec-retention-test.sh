@@ -181,14 +181,17 @@ SQL
   retention_fixture_time
   check_hosted recover-after-fresh-verification recover_retention
 
-  printf 'active\n' >"$retention_fixture/consumer-state"
-  retention_fixture_time 2026-01-02T19:00:00Z
-  touch "$retention_fixture/insert-overdue-before-selection"
-  : >"$retention_fixture/control-log"
-  check_hosted overdue-arrives-before-selection-stops-and-cleans run_retention runtime
-  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5101;') == 0 ]]
-  [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
-  grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+  for with_decision in yes no; do
+    printf 'active\n' >"$retention_fixture/consumer-state"
+    retention_fixture_time 2026-01-02T19:00:00Z
+    printf '%s\n' "$with_decision" >"$retention_fixture/insert-overdue-before-selection"
+    : >"$retention_fixture/control-log"
+    check_hosted "overdue-arrives-before-selection-$with_decision-decision" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5101;') == 0 ]]
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == "$([[ $with_decision == yes ]] && echo 1 || echo 0)" ]]
+    [[ $(grep -cxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log") == 1 ]]
+    check_hosted late-overdue-deleted-before-renewal lease_check
+  done
 
   retention_fixture_time 2026-01-02T19:00:00Z
   touch "$retention_fixture/insert-overdue-after-selection"
@@ -290,12 +293,13 @@ SQL
   fi
   printf 'PASS no-decision-candidate-keeps-consumers\n'
 
-  retention_fixture_sql >/dev/null <<'SQL'
+  expiry_pass=2026-01-02T20:00:00Z
+  retention_fixture_sql -v pass_time="$expiry_pass" >/dev/null <<'SQL'
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (now()-interval '2 hours',now(),now()-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
+VALUES (:'pass_time'::timestamptz-interval '2 hours',:'pass_time',:'pass_time'::timestamptz-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
   : >"$retention_fixture/control-log"
-  retention_fixture_time "$(date -u +%Y-%m-%d)T20:00:00Z"
+  retention_fixture_time "$expiry_pass"
   check_hosted expired-decision-stopped-control-path run_retention runtime
   retention_fixture_time
   [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
@@ -309,12 +313,12 @@ SQL
     touch "$retention_fixture/caddy-stopped"
     printf 'active\n' >"$retention_fixture/consumer-state"
     : >"$retention_fixture/control-log"
-    retention_fixture_sql >/dev/null <<'SQL'
+    retention_fixture_sql -v pass_time="$expiry_pass" >/dev/null <<'SQL'
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (now()-interval '2 hours',now(),now()-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
+VALUES (:'pass_time'::timestamptz-interval '2 hours',:'pass_time',:'pass_time'::timestamptz-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
     check_hosted bouncer-only-current-lease lease_check
-    retention_fixture_time "$(date -u +%Y-%m-%d)T20:00:00Z"
+    retention_fixture_time "$expiry_pass"
     if [[ $rebuild == accepted ]]; then
       check_hosted bouncer-only-valid-rebuild run_retention runtime
       check_hosted bouncer-only-valid-rebuild-renews lease_check

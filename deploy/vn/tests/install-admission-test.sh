@@ -148,7 +148,7 @@ admit() {
 stat() {
   # Map fixture custody to root for production lock validation.
   case $* in
-    *"$FIXTURE_CASE/run"* | *"$FIXTURE_CASE/state"*)
+    *"$FIXTURE_CASE/run"* | *"$FIXTURE_CASE/state"* | *"$FIXTURE_CASE/etc/crowdsec/"*)
       command stat "$@" | sed -E "s/^$FIXTURE_UID:$FIXTURE_GID:/0:0:/;s/^$FIXTURE_UID:/0:/" ;;
     *) command stat "$@" ;;
   esac

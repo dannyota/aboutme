@@ -472,10 +472,10 @@ for line in lines:
     assert (kind=='d' and parent!='0') or (kind!='d' and parent=='0')
 PY
     [[ -s $retention_work/candidates ]] || break
+    # Ingestion can introduce overdue work after the initial batch choice.
+    retention_batch_mode || return 1
     candidates=$(grep -c '^d|' "$retention_work/candidates" || true)
     if ((candidates > 0)); then
-      # Ingestion can make a graph due after the initial batch choice.
-      retention_batch_mode || return 1
       retention_batch=yes
       retention_reconcile 20 || return 1
     fi

@@ -42,7 +42,7 @@ retention_fixture_admin() {
 
 retention_fixture_sql() {
   /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
-    -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
+    -h /run/postgresql -U crowdsec -d crowdsec "$@" 2>/dev/null
 }
 
 retention_fixture_time() {
@@ -427,16 +427,19 @@ trap 'rm -f "$query"' EXIT
 cat >"$query"
 insert_overdue() {
   "$fixture/bin/psql-real" -X -qAt -w -v ON_ERROR_STOP=1 \
-    -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
+    -v with_decision="${1:-yes}" -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
 VALUES (5101,'2026-01-01 17:00Z',now(),now(),now(),'aboutme/http-status');
+\if :with_decision
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
 VALUES (now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.23','crowdsec',5101);
+\endif
 SQL
 }
 if [[ -e $fixture/insert-overdue-before-selection ]] && grep -q 'ORDER BY kind,id LIMIT 1000' "$query"; then
+  with_decision=$(cat "$fixture/insert-overdue-before-selection")
   rm "$fixture/insert-overdue-before-selection"
-  insert_overdue
+  insert_overdue "$with_decision"
 fi
 if grep -q '^COPY selected ' "$query"; then
   printf 'sql-delete\n' >>"$fixture/control-log"

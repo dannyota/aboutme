@@ -216,13 +216,29 @@ install_postgresql_config() { # source-directory reload-or-restart
   fi
 }
 
+install_crowdsec_pending() {
+  local pending=/var/lib/aboutme/crowdsec-engine-pending
+  [[ ! -L $pending ]] || return 1
+  if [[ -e $pending ]]; then
+    [[ -f $pending && $(stat -c '%u:%g:%a:%h' "$pending") == 0:0:600:1 ]] || return 1
+  else
+    install -o root -g root -m 0600 /dev/null "$pending" || return 1
+  fi
+  # Persist activation intent before changing any engine configuration.
+  sync "$pending" /var/lib/aboutme
+}
+
 install_crowdsec_file() { # source destination
-  install --compare --verbose -m 0644 "$1" "$2" >>"$tmp/crowdsec-engine-changed"
+  if [[ ! -f $2 || -L $2 ]] ||
+    [[ $(stat -c '%u:%g:%a' "$2") != 0:0:644 ]] || ! cmp -s "$1" "$2"; then
+    install_crowdsec_pending || return 1
+  fi
+  install --compare -o root -g root -m 0644 "$1" "$2"
 }
 
 install_crowdsec_remove_acquisition() {
   if [[ -e /etc/crowdsec/acquis.d/caddy.yaml || -L /etc/crowdsec/acquis.d/caddy.yaml ]]; then
-    printf 'removed\n' >>"$tmp/crowdsec-engine-changed" || return 1
+    install_crowdsec_pending || return 1
     rm -f /etc/crowdsec/acquis.d/caddy.yaml || return 1
   fi
 }
@@ -257,11 +273,11 @@ install_crowdsec_settled() {
 }
 
 install_crowdsec_activate() {
-  # Helper drift also covers an interrupted install that copied the profile
-  # but never activated it. Keep batching unavailable until the restart joins.
-  if [[ -s $tmp/crowdsec-engine-changed ]] ||
+  local pending=/var/lib/aboutme/crowdsec-engine-pending
+  if [[ -e $pending || -L $pending ]] ||
     ! cmp -s "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"; then
-    if ! timeout --kill-after=1s 15 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1 ||
+    if ! install_crowdsec_pending ||
+      ! timeout --kill-after=1s 15 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1 ||
       ! timeout --kill-after=1s 10 systemctl restart crowdsec.service >/dev/null 2>&1 ||
       ! install_crowdsec_settled; then
       install_admission_revoke
@@ -272,6 +288,12 @@ install_crowdsec_activate() {
     install_admission_revoke
     return 1
   }
+  if [[ -e $pending ]]; then
+    rm -f "$pending" && sync /var/lib/aboutme || {
+      install_admission_revoke
+      return 1
+    }
+  fi
 }
 
 # copy_tree <src> <dest-root>: install every file under src into dest-root,

@@ -129,7 +129,8 @@ SH
   awk '/^edge_restart=\(\)/ {copy=1} copy {print} copy && /^systemd-tmpfiles --create/ {exit}' "$installer"
   sed -n '/^ABOUTME_MIGRATE_BUNDLE_FD=/,/^if ((${#edge_restart/p' "$installer"
   printf 'crowdsec_install_closed=no\nprintf "complete\\n" >>"$CALLS"\n'
-} | sed "s|/etc/crowdsec|$work/config|g" >"$work/install.sh"
+} | sed -e "s|/etc/crowdsec|$work/config|g" \
+  -e 's|/var/lib/aboutme|$FIXTURE_CASE/state|g' >"$work/install.sh"
 [[ $(grep -c '^for package_pin in ' "$work/install.sh") == 1 ]]
 [[ $(grep -c '^edge_restart=()' "$work/install.sh") == 1 ]]
 [[ $(grep -c '^ABOUTME_MIGRATE_BUNDLE_FD=' "$work/install.sh") == 1 ]]
@@ -138,7 +139,7 @@ fail() { printf 'install-packages-test: %s\n' "$*" >&2; exit 1; }
 new_case() {
   export FIXTURE_CASE=$work/case CALLS=$work/calls
   rm -rf -- "$FIXTURE_CASE"
-  mkdir -p "$FIXTURE_CASE/tmp"
+  mkdir -p "$FIXTURE_CASE/tmp" "$FIXTURE_CASE/state"
   cp "$root/deploy/vn/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
   touch "$FIXTURE_CASE/log-mounted"
   : >"$CALLS"

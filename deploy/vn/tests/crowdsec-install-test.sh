@@ -20,13 +20,15 @@ def block(start,end):
 helpers=block('# Serialize service operations with retention and watchdog admission.','# copy_tree')
 early=block('# 2. CrowdSec config','# 3. Packages')
 early=early[early.index('\n'):]
+packages=block('# 3. Packages','chown postgres:postgres')
+packages=packages[packages.index('\n'):]
 config=block('# 4. Configuration files.','# Copy and reload peer policy')
 config=config[config.index('install',config.index('90-aboutme.conf')):]
 scripts='copy_script() {'+block('copy_script() {','for f in "$bundle"/host/bin/')
 activation=block('ABOUTME_MIGRATE_BUNDLE_FD=', 'if ((${#edge_restart[@]}))')
 activation='ABOUTME_MIGRATE_BUNDLE_FD='+activation
 activation=activation.replace('"$lib/crowdsec-migrate.sh"','fixture_migrate')
-body=helpers+early+config+scripts+activation
+body=helpers+early+packages+config+scripts+activation
 body=body.replace(' /etc',' "$FIXTURE_CASE/etc"')
 body=body.replace('"/etc','"$FIXTURE_CASE/etc')
 body=body.replace('/usr/local/lib/aboutme','$FIXTURE_CASE/lib')
@@ -41,8 +43,10 @@ bundle=$FIXTURE_BUNDLE
 lib=$FIXTURE_CASE/lib
 tmp=$FIXTURE_CASE/tmp
 operation_bundle_fd=9
+POSTGRESQL_COMMON_VERSION=fixture
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
 say() { :; }
+install_pinned() { [[ ${FIXTURE_FAULT:-} != package ]]; }
 flock() {
   python3 - "$@" <<'PY'
 import fcntl,sys
@@ -90,6 +94,7 @@ fixture_migrate() {
   if [[ ! -e $FIXTURE_CASE/migrated ]]; then
     [[ -x $lib/crowdsec-retention.sh ]] || return 1
     cp "$FIXTURE_CASE/etc/crowdsec/profiles.yaml" "$FIXTURE_CASE/loaded-profile"
+    cp "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml" "$FIXTURE_CASE/loaded-acquisition"
     printf 'active\n' >"$FIXTURE_CASE/engine"
     touch "$FIXTURE_CASE/migrated"
   fi
@@ -109,6 +114,7 @@ systemctl() {
       printf '42\n' >"$FIXTURE_CASE/engine-job"
       rm -f "$FIXTURE_CASE/healthy"
       cp "$FIXTURE_CASE/etc/crowdsec/profiles.yaml" "$FIXTURE_CASE/loaded-profile"
+      cp "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml" "$FIXTURE_CASE/loaded-acquisition"
       ;;
     show)
       if [[ $unit == crowdsec.service ]]; then
@@ -178,16 +184,17 @@ new_case() {
   [[ -x $FIXTURE_CASE/lib/crowdsec-retention.sh ]] || fail 'fresh install omitted startup helper'
   printf 'lease\n' >"$FIXTURE_CASE/run/crowdsec-retention-ok"
   : >"$FIXTURE_CASE/calls"
-  : >"$FIXTURE_CASE/tmp/crowdsec-engine-changed"
 }
 run_install() {
-  : >"$FIXTURE_CASE/tmp/crowdsec-engine-changed"
+  rm -rf -- "$FIXTURE_CASE/tmp"
+  mkdir "$FIXTURE_CASE/tmp"
   bash "$work/install.sh" >"$work/out" 2>"$work/err"
 }
 expect_activation() {
   [[ $(grep -cxF restart "$FIXTURE_CASE/calls") == 1 ]] || fail 'configuration change did not restart once'
   [[ $(grep -cxF lapi "$FIXTURE_CASE/calls") -ge 2 ]] || fail 'engine readiness was not polled'
   [[ ! -s $FIXTURE_CASE/engine-job ]] || fail 'engine job outlived locks'
+  [[ ! -e $FIXTURE_CASE/state/crowdsec-engine-pending ]] || fail 'successful activation kept pending marker'
   if grep -qE '^(premature-lapi|edge-mutated)$' "$FIXTURE_CASE/calls"; then fail 'engine activation skipped admission or changed Caddy'; fi
   python3 - "$FIXTURE_CASE/calls" <<'PY'
 import pathlib,sys
@@ -273,6 +280,32 @@ run_install || fail 'interrupted upgrade could not activate'
 expect_activation
 printf 'PASS old-helper-requires-activation-even-with-matching-disk-config\n'
 
+new_case
+printf '\n# old acquisition\n' >>"$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml"
+cp "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml" "$FIXTURE_CASE/loaded-acquisition"
+cp "$FIXTURE_CASE/lib/crowdsec-retention.sh" "$work/unchanged-helper"
+if FIXTURE_FAULT=package run_install; then fail 'package interruption was accepted'; fi
+cmp "$work/unchanged-helper" "$FIXTURE_CASE/lib/crowdsec-retention.sh" || fail 'interruption changed helper'
+cmp "$FIXTURE_BUNDLE/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+  "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml" || fail 'interruption preceded configuration copy'
+if cmp -s "$FIXTURE_CASE/loaded-acquisition" "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml"; then
+  fail 'interrupted configuration was already active'
+fi
+pending=$FIXTURE_CASE/state/crowdsec-engine-pending
+[[ -f $pending && ! -L $pending && $(stat -c '%u:%g:%a:%h' "$pending") == "$FIXTURE_UID:$FIXTURE_GID:600:1" ]] ||
+  fail 'configuration interruption lost private pending activation'
+if grep -qxF restart "$FIXTURE_CASE/calls"; then fail 'package interruption reached activation'; fi
+rm -f "$FIXTURE_CASE/health-retried"
+: >"$FIXTURE_CASE/calls"
+run_install || fail 'configuration-only retry refused activation'
+expect_activation
+cmp "$FIXTURE_CASE/loaded-acquisition" "$FIXTURE_CASE/etc/crowdsec/acquis.d/aboutme-http.yaml" || fail 'retry left old acquisition active'
+unlocked || fail 'configuration-only retry leaked locks'
+: >"$FIXTURE_CASE/calls"
+run_install || fail 'activated configuration refused reinstall'
+if grep -qE '^(restart|lapi|closed)$' "$FIXTURE_CASE/calls"; then fail 'activated configuration restarted again'; fi
+printf 'PASS configuration-only-interruption-retries-activation-with-unchanged-helper\n'
+
 for fault in restart state job lapi gate helper; do
   new_case
   printf 'old-profile\n' >"$FIXTURE_CASE/loaded-profile"
@@ -282,6 +315,7 @@ for fault in restart state job lapi gate helper; do
   if FIXTURE_FAULT=$fault run_install; then fail "accepted failed activation: $fault"; fi
   grep -qxF closed "$FIXTURE_CASE/calls" || fail "activation failure stayed open: $fault"
   cmp "$work/old-helper" "$FIXTURE_CASE/lib/crowdsec-retention.sh" || fail 'failed activation enabled batching'
+  [[ -f $FIXTURE_CASE/state/crowdsec-engine-pending ]] || fail 'failed activation lost pending marker'
   unlocked || fail 'failed activation leaked locks'
 done
 printf 'PASS failed-or-unready-engine-closes-before-lock-release-and-keeps-old-helper\n'
