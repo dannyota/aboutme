@@ -28,11 +28,17 @@ import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
 import { withWrappingBody } from './justify-fixture';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
-import { PRINT_FIXTURES, type PrintFixtureId } from './print-fixtures';
+import {
+  ENGLISH_PRINT_FIXTURES,
+  PRINT_FIXTURES,
+  type PrintFixtureId,
+} from './print-fixtures';
 import { loadSampleFixture } from './sample-fixtures';
+import { printProbe, PRINT_PROBES, type PrintProbe } from './print-probes';
 
 type RenderMode = 'continuous' | 'paged' | 'public';
-type FixtureId = 'full' | 'vn-full' | PrintFixtureId;
+type FixtureId = 'full' | 'vn-full' | PrintFixtureId
+  | `print-probe-${PrintProbe}`;
 
 const route = useRoute();
 const queryKeys = Object.keys(route.query);
@@ -87,6 +93,7 @@ let resumeDocument: Resume | undefined;
 let context: RenderContext | undefined;
 let mode: RenderMode | undefined;
 let printFixture = false;
+let selectedProbe: PrintProbe | undefined;
 let printMode = false;
 let requestedZoomValue: number | undefined;
 let sampleLanguage: 'vi' | 'en' | undefined;
@@ -120,7 +127,7 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'invite', 'mode', 'paper', 'print',
+        'align', 'fixture', 'font', 'invite', 'lng', 'mode', 'paper', 'print',
         'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
@@ -170,8 +177,25 @@ if (isCorpus) {
     inviteHref = requestedInvite === 'register' ? '/register' : '/login';
   }
 
-  const printRecord = PRINT_FIXTURES[fixture as PrintFixtureId];
-  if (printRecord !== undefined) {
+  const requestedLanguage = singleton('lng');
+  const probe = PRINT_PROBES.find((name) => fixture === `print-probe-${name}`);
+  if (requestedLanguage !== undefined) {
+    if (requestedLanguage !== 'en' && requestedLanguage !== 'vi') badQuery();
+    if (PRINT_FIXTURES[fixture as PrintFixtureId] === undefined
+      && probe === undefined) badQuery();
+  }
+  const printRecord = requestedLanguage === 'en'
+    ? ENGLISH_PRINT_FIXTURES[fixture as PrintFixtureId]
+    : PRINT_FIXTURES[fixture as PrintFixtureId];
+  if (probe !== undefined) {
+    if (resolvedMode !== 'continuous' || (templateId !== 'modern-sidebar'
+      && templateId !== 'engineer-compact')) badQuery();
+    selectedProbe = probe;
+    sampleLanguage = requestedLanguage === 'en' ? 'en' : 'vi';
+    resumeDocument = printProbe(probe, sampleLanguage,
+      templateId as 'modern-sidebar' | 'engineer-compact');
+    printFixture = true;
+  } else if (printRecord !== undefined) {
     if (
       templateId !== 'modern-sidebar'
       || resolvedMode !== 'continuous'
@@ -180,6 +204,7 @@ if (isCorpus) {
     }
     resumeDocument = structuredClone(printRecord.document);
     printFixture = true;
+    sampleLanguage = requestedLanguage === 'en' ? 'en' : 'vi';
   } else if (fixture === 'full') {
     resumeDocument = structuredClone(fullSource) as Resume;
   } else if (fixture === 'vn-full') {
@@ -226,7 +251,7 @@ if (isCorpus) {
   // reset the one setting a sample may override, its date format
   // (docs/design/vietnam-tech-resumes.md, Dates). Filler and the full/vn-full
   // fixtures have no settings of their own, so they still take the preset.
-  if (!fixture.startsWith('sample-')) {
+  if (!fixture.startsWith('sample-') && selectedProbe === undefined) {
     // The fixture owner already prints on the preset's paper; a template
     // switch keeps the owner's page format.
     resolvedDocument.customization = applyTemplate(
@@ -364,6 +389,21 @@ if (printMode && resumeDocument !== undefined) {
       },
     ],
   });
+}
+
+if (selectedProbe !== undefined
+  && ['heading', 'orphan', 'widow'].includes(selectedProbe)) {
+  // Leave one body line before the A4 content boundary.
+  useHead({ style: [{ textContent: '.harness-paper::before {'
+    + ' content: "BOUNDARY-ANCHOR"; display: block;'
+    + ' height: calc(267mm - 24px); font: 16px/24px "Be Vietnam Pro"; }' }] });
+}
+
+if (selectedProbe === 'breakable-entry') {
+  // Leave room for several lines of the twelve-line entry on page one.
+  useHead({ style: [{ textContent: '.harness-paper::before {'
+    + ' content: "BOUNDARY-ANCHOR"; display: block;'
+    + ' height: calc(267mm - 144px); font: 16px/24px "Be Vietnam Pro"; }' }] });
 }
 
 const fontsSettled = ref(false);

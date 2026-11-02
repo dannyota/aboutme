@@ -93,6 +93,21 @@ assert_web_e2e_rejected unknown-shard web-e2e \
   'WEB_E2E_SHARD must be all, preview-gap, or rest' \
   WEB_E2E_RUN_ID=valid WEB_E2E_SHARD=harness
 
+python3 - "$ROOT" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+makefile = (root / "Makefile").read_text()
+specs = {path.name for path in (root / "apps/web/e2e").glob("print*.spec.ts")}
+harness = re.search(r"^WEB_E2E_HARNESS_SPECS := (.+)$", makefile, re.M)[1].split()
+preview = re.search(r"preview-gap\) harness_specs='([^']+)'", makefile)[1].split()
+excluded = re.search(r"rest\) harness_specs='\$\(filter-out ([^,]+),", makefile)[1].split()
+for selected in [harness, preview, excluded]:
+    assert all(selected.count(spec) == 1 for spec in specs), "Print spec selection drifted"
+PY
+
 # Exercise the public diagnostic collector without a browser or container.
 python3 - "$ROOT/Makefile" "$ROOT/scripts/collect-browser-diagnostics.py" "$WORK" <<'PYTHON'
 import hashlib

@@ -4,52 +4,21 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import { measurePrintRules } from './display-assertions';
+import {
+  attachMembership,
+  checkMembership,
+  EXPECTED_PAGES,
+  pdfMarkerPosition,
+  pdfTextPage,
+  PRINT_CASES as CASES,
+} from './pdf-display';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
   photoCropGeometry,
   waitForImages,
 } from './support';
-
-const LONG_TEMPLATES = [
-  'elegant-serif-two',
-  'engineer-compact',
-  'international-lang',
-  'modern-sidebar',
-  'nordic-muted',
-  'one-page-tight',
-  'executive-band',
-] as const;
-
-interface PrintCase {
-  readonly end: string;
-  readonly fixture: 'print-main-overflow' | 'print-sidebar-overflow';
-  readonly opposite: string;
-  readonly prefix: 'MAIN-ENTRY-' | 'SIDEBAR-ENTRY-';
-  readonly start: string;
-  readonly total: number;
-}
-
-const CASES: readonly PrintCase[] = [
-  {
-    end: 'SIDEBAR-END',
-    fixture: 'print-sidebar-overflow',
-    opposite: 'MAIN-SHORT',
-    prefix: 'SIDEBAR-ENTRY-',
-    start: 'SIDEBAR-START',
-    total: 13,
-  },
-  {
-    end: 'MAIN-END',
-    fixture: 'print-main-overflow',
-    opposite: 'SIDEBAR-SHORT',
-    prefix: 'MAIN-ENTRY-',
-    start: 'MAIN-START',
-    total: 9,
-  },
-];
-
-const EXPECTED_PAGES = 2;
 
 async function compareRaster(
   actual: Buffer,
@@ -132,7 +101,7 @@ async function verifyRaster(
   );
 }
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'default' });
 
 test('wraps an unbroken entry token within its column', async ({ page }) => {
   test.setTimeout(20_000);
@@ -182,6 +151,16 @@ for (const printCase of CASES) {
     expect(external).toEqual([]);
     await page.emulateMedia({ media: 'print' });
     expect(await photoCropGeometry(page)).toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+    expect(await measurePrintRules(page)).toEqual({
+      bodyHeaderAfter: 'avoid',
+      entryInside: 'auto',
+      headerInside: 'avoid',
+      orphans: '2',
+      printColorAdjust: 'exact',
+      sectionAfter: 'avoid',
+      sectionInside: 'auto',
+      widows: '2',
+    });
 
     const pdf = await page.pdf({
       displayHeaderFooter: false,
@@ -200,19 +179,25 @@ for (const printCase of CASES) {
     });
     try {
       const document = await loadingTask.promise;
+      const membershipPages = await Promise.all(
+        Array.from({ length: document.numPages }, async (_, index) =>
+          pdfTextPage(await document.getPage(index + 1)),
+        ),
+      );
+      const membership = await attachMembership(
+        membershipPages, printCase, testInfo,
+      );
+      checkMembership(membership, `${printCase.fixture}-vi-a4-light`);
       expect(document.numPages).toBeGreaterThanOrEqual(2);
       expect(document.numPages).toBe(EXPECTED_PAGES);
-      const pageTexts: string[] = [];
+      const textPages = [];
       for (
         let pageNumber = 1;
         pageNumber <= document.numPages;
         pageNumber += 1
       ) {
         const pdfPage = await document.getPage(pageNumber);
-        const text = await pdfPage.getTextContent();
-        pageTexts.push(text.items
-          .map((item) => ('str' in item ? item.str : ''))
-          .join(' '));
+        textPages.push(await pdfTextPage(pdfPage));
         const viewport = pdfPage.getViewport({ scale: 96 / 72 });
         const canvas = createCanvas(
           Math.ceil(viewport.width),
@@ -233,12 +218,36 @@ for (const printCase of CASES) {
         );
       }
 
-      expect(pageTexts[0]).toContain(printCase.start);
-      expect(pageTexts[1]).toContain(printCase.end);
-      expect(pageTexts[0]).toContain(printCase.opposite);
-      expect(pageTexts[1]).not.toContain(printCase.opposite);
-      const allText = pageTexts.join(' ')
-        .replace(/-\s+(?=ENTRY-\d{2})/g, '-');
+      const lastOnFirst = printCase.fixture === 'print-main-overflow' ? 7 : 11;
+      const pageMarkers = textPages.map((textPage) => textPage.text);
+      for (let number = 1; number <= printCase.total; number += 1) {
+        const marker = `${printCase.prefix}${String(number).padStart(2, '0')}`;
+        const expectedPage = number <= lastOnFirst ? 0 : 1;
+        expect(pageMarkers[expectedPage]).toContain(marker);
+        expect(pageMarkers[1 - expectedPage]).not.toContain(marker);
+      }
+      const firstPosition = pdfMarkerPosition(
+        textPages[0]!, `${printCase.prefix}02`,
+      );
+      const secondPosition = pdfMarkerPosition(
+        textPages[1]!,
+        `${printCase.prefix}${String(lastOnFirst + 1).padStart(2, '0')}`,
+      );
+      expect(firstPosition).not.toBeNull();
+      expect(secondPosition).not.toBeNull();
+      expect(Math.abs(firstPosition!.x - secondPosition!.x))
+        .toBeLessThanOrEqual(1);
+      for (const textPage of textPages) {
+        expect(Math.abs(textPage.width - 595.28)).toBeLessThanOrEqual(1);
+        expect(Math.abs(textPage.height - 841.89)).toBeLessThanOrEqual(1);
+        expect(textPage.items.length).toBeGreaterThan(0);
+      }
+
+      expect(pageMarkers[0]).toContain(printCase.start);
+      expect(pageMarkers[1]).toContain(printCase.end);
+      expect(pageMarkers[0]).toContain(printCase.opposite);
+      expect(pageMarkers[1]).not.toContain(printCase.opposite);
+      const allText = pageMarkers.join(' ');
       let previous = -1;
       for (let number = 1; number <= printCase.total; number += 1) {
         const marker = `${printCase.prefix}${String(number).padStart(2, '0')}`;
@@ -251,110 +260,4 @@ for (const printCase of CASES) {
       await loadingTask.destroy();
     }
   });
-}
-
-function normalizeHeading(text: string | null): string {
-  return (text ?? '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
-}
-
-// A long two-column resume must fragment each column in place across a page
-// break rather than lose a column's content to a later page
-// (docs/design/templates/print.md §5). No page may be blank, and the paged
-// preview must estimate the PDF's page count (§1).
-for (const templateId of LONG_TEMPLATES) {
-  for (const lng of ['en', 'vi'] as const) {
-    test(
-      `long ${templateId} (${lng}) fills page one and prints no blank page`,
-      async ({ page }, testInfo) => {
-        test.setTimeout(30_000);
-        const external = await denyExternalRequests(page);
-        const pagedUrl = `/_harness/render?fixture=sample-${templateId}`
-          + `-${lng}&template=${templateId}&mode=paged&repeat=2`;
-        const pagedResponse = await page.goto(pagedUrl);
-        expect(pagedResponse?.ok()).toBe(true);
-        await expect(
-          page.locator('[data-pagination-settled="true"]'),
-        ).toHaveCount(1);
-        const previewPageCount = await page
-          .locator('.resume-page:not(.pagination-measurement)')
-          .count();
-
-        const continuousUrl = `/_harness/render?fixture=sample-${templateId}`
-          + `-${lng}&template=${templateId}&mode=continuous&print=1`
-          + '&repeat=2';
-        const response = await page.goto(continuousUrl);
-        expect(response?.ok()).toBe(true);
-        await expect(
-          page.locator('[data-fonts-ready="true"]'),
-        ).toHaveCount(1);
-        await waitForImages(page);
-
-        const expectedHeadings = templateId === 'executive-band'
-          ? [
-              await page
-                .locator('.layout-one-column .section-heading')
-                .first()
-                .textContent(),
-            ]
-          : await Promise.all([
-              page
-                .locator('.resume-main .section-heading')
-                .first()
-                .textContent(),
-              page
-                .locator('.resume-sidebar .section-heading')
-                .first()
-                .textContent(),
-            ]);
-
-        await page.emulateMedia({ media: 'print' });
-        const pdf = await page.pdf({
-          displayHeaderFooter: false,
-          margin: { bottom: 0, left: 0, right: 0, top: 0 },
-          preferCSSPageSize: true,
-          printBackground: true,
-          scale: 1,
-        });
-        await writeFile(
-          testInfo.outputPath(`long-${templateId}-${lng}.pdf`),
-          pdf,
-        );
-
-        const loadingTask = getDocument({
-          data: new Uint8Array(pdf),
-          isImageDecoderSupported: false,
-          isOffscreenCanvasSupported: false,
-          useSystemFonts: false,
-        });
-        try {
-          const document = await loadingTask.promise;
-          expect(document.numPages).toBeGreaterThanOrEqual(2);
-          expect(document.numPages).toBe(previewPageCount);
-          const pageTexts: string[] = [];
-          for (
-            let pageNumber = 1;
-            pageNumber <= document.numPages;
-            pageNumber += 1
-          ) {
-            const pdfPage = await document.getPage(pageNumber);
-            const text = await pdfPage.getTextContent();
-            pageTexts.push(text.items
-              .map((item) => ('str' in item ? item.str : ''))
-              .join(' '));
-          }
-          for (const pageText of pageTexts) {
-            expect(normalizeHeading(pageText).length).toBeGreaterThan(0);
-          }
-          const firstPage = normalizeHeading(pageTexts[0]);
-          for (const heading of expectedHeadings) {
-            expect(firstPage).toContain(normalizeHeading(heading));
-          }
-        } finally {
-          await loadingTask.destroy();
-        }
-
-        expect(external).toEqual([]);
-      },
-    );
-  }
 }
