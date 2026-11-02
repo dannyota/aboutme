@@ -63,6 +63,8 @@ lease=lease.replace('/run/aboutme',str(work/'run-placeholder'))
 lease=lease.replace('/usr/local/lib/aboutme/crowdsec-db.sh', '$FIXTURE_CASE/gate.sh')
 lease=lease.replace('entry.st_uid==entry.st_gid==0',
                     'entry.st_uid==os.getuid() and entry.st_gid==os.getgid()')
+# Host command overhead must not age the fixture's lease.
+lease=lease.replace('time.time()', 'float(os.environ["FIXTURE_LEASE_NOW"])')
 (work/'lease-template.sh').write_text(lease)
 proc=work/'proc'
 (proc/'999').mkdir(parents=True)
@@ -210,6 +212,15 @@ timeout() {
   shift
   "$@"
 }
+fixture_lease() {
+  python3 - "$FIXTURE_CASE/run/crowdsec-retention-ok" "$1" <<'PY'
+import os,pathlib,sys
+path=pathlib.Path(sys.argv[1])
+path.write_text(sys.argv[2]+'\n')
+path.chmod(0o600)
+os.utime(path,ns=(1577836800000000000,1577836800000000000))
+PY
+}
 SH
 
 snapshot() {
@@ -267,6 +278,7 @@ PY
 
 for mode in ordinary postgres; do
   export FIXTURE_CASE=$work/$mode FIXTURE_TICK=no FIXTURE_DRIFT=no
+  export FIXTURE_LEASE_NOW=1577836801
   mkdir -p "$FIXTURE_CASE/etc/pgbackrest" "$FIXTURE_CASE/etc/postgresql/18/main" \
     "$FIXTURE_CASE/etc/crowdsec/acquis.d" "$FIXTURE_CASE/lib" \
     "$FIXTURE_CASE/run" "$FIXTURE_CASE/state"
@@ -298,8 +310,7 @@ PY
   source "$FIXTURE_SUPPORT"
   crowdsec_db_epoch=''
   crowdsec_db_ready || fail 'initial database admission failed'
-  printf '%s\n' "$crowdsec_db_epoch" >"$FIXTURE_CASE/run/crowdsec-retention-ok"
-  chmod 0600 "$FIXTURE_CASE/run/crowdsec-retention-ok"
+  fixture_lease "$crowdsec_db_epoch"
   admit initial || fail 'initial lease admission failed'
   : >"$FIXTURE_CASE/reloads"
   bash "$work/$mode.sh" || fail "$mode reinstall tripped authentication admission"
@@ -318,6 +329,13 @@ PY
   if (crowdsec_lease_check); then fail 'lease admitted a reload job'; fi
   : >"$FIXTURE_CASE/job"
   admit calibrated || fail 'calibration did not restore lease admission'
+
+  # Keep the real age predicate, including its exact lower and upper bounds.
+  FIXTURE_LEASE_NOW=1577836800 crowdsec_lease_file || fail 'lease refused its creation time'
+  FIXTURE_LEASE_NOW=1577837160 crowdsec_lease_file || fail 'lease refused its maximum age'
+  if (FIXTURE_LEASE_NOW=1577837161 crowdsec_lease_file); then fail 'lease admitted an expired timestamp'; fi
+  if (FIXTURE_LEASE_NOW=1577836799 crowdsec_lease_file); then fail 'lease admitted a future timestamp'; fi
+  crowdsec_lease_file || fail 'lease clock calibration did not restore admission'
 
   # Real changes still need installation and a settled operation before admission.
   export FIXTURE_TICK=yes FIXTURE_DRIFT=yes
@@ -352,7 +370,7 @@ PY
         # A restart changes the epoch. Existing leases must remain refused.
         if (crowdsec_lease_check); then fail 'restart retained an old lease'; fi
         crowdsec_db_ready || fail 'restarted database did not settle'
-        printf '%s\n' "$crowdsec_db_epoch" >"$FIXTURE_CASE/run/crowdsec-retention-ok"
+        fixture_lease "$crowdsec_db_epoch"
       fi
       admit repaired || fail "$mode $file $fault repair failed lease admission"
     done
