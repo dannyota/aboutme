@@ -77,6 +77,7 @@ import (
     "entgo.io/ent/dialect"
     entsql "entgo.io/ent/dialect/sql"
     "github.com/crowdsecurity/crowdsec/pkg/csconfig"
+    "github.com/crowdsecurity/crowdsec/pkg/csnet"
     "github.com/crowdsecurity/crowdsec/pkg/csprofiles"
     "github.com/crowdsecurity/crowdsec/pkg/database"
     "github.com/crowdsecurity/crowdsec/pkg/database/ent"
@@ -102,14 +103,18 @@ func (d *clockDriver) Query(ctx context.Context, query string, args, value any) 
         var at time.Time
         for _, arg := range args.([]any) { if bound, ok := arg.(time.Time); ok { at = bound } }
         if at.IsZero() { return errors.New("missing_active_cutoff") }
-        _, err := d.db.ExecContext(ctx, "DELETE FROM decisions WHERE alert_decisions=$1", d.parent)
+        // CrowdSec stores signed address bounds, not raw IPv4 integers.
+        rng, err := csnet.NewRange("192.0.2.210")
+        if err != nil { return err }
+        _, err = d.db.ExecContext(ctx, "DELETE FROM decisions WHERE alert_decisions=$1", d.parent)
         if err != nil { return err }
         for _, offset := range d.offsets {
             _, err = d.db.ExecContext(ctx, `INSERT INTO decisions
               (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions,
                start_ip,end_ip,start_suffix,end_suffix,ip_size)
               VALUES ($1,$1,$2,'aboutme/http-status','ban','Ip','192.0.2.210','crowdsec',$3,
-                      3221226194,3221226194,0,0,4)`, at.Add(-time.Hour), at.Add(offset), d.parent)
+                      $4,$5,$6,$7,$8)`, at.Add(-time.Hour), at.Add(offset), d.parent,
+                      rng.Start.Addr, rng.End.Addr, rng.Start.Sfx, rng.End.Sfx, rng.Size())
             if err != nil { return err }
         }
     }
@@ -178,6 +183,9 @@ func main() {
       VALUES (now(),now(),now(),now(),'aboutme/http-status') RETURNING id`).Scan(&parent))
     driver := &clockDriver{Driver: entsql.OpenDB(dialect.Postgres, db), db: db, parent: parent}
     must(exprhelpers.Init(&database.Client{Ent: ent.NewClient(ent.Driver(driver))}))
+    driver.offsets = []time.Duration{time.Hour}
+    count, err := exprhelpers.GetActiveDecisionsCount(ip); must(err)
+    if driver.calls != 1 || count != 1 { panic("active_seed_contract") }
     // Use the actual registered helper, its query predicate and PostgreSQL.
     for _, test := range []struct { offsets []time.Duration; want string; fail bool }{
         {nil, "15m", false}, {[]time.Duration{time.Hour}, "1h", false},
