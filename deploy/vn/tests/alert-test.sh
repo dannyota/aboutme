@@ -114,3 +114,4 @@ expect_rejected duplicate 'Danny from aboutme.vn' 'SMTP_HOST=other.example.test'
 expect_rejected username-newline 'Danny from aboutme.vn' '' 'username\n'
 
 echo "SMTP alert tests passed"
+bash "$repo_root/deploy/vn/tests/telegram-alert-test.sh"

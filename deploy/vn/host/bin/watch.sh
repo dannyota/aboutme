@@ -2,23 +2,33 @@
 # shellcheck source-path=SCRIPTDIR
 # The five-minute host watch (docs/design/vietnam-production.md, "Logs,
 # metrics, and alarms"). Runs as root from aboutme-watch.service and calls
-# alert.sh for alarm conditions; alert.sh sends at most one message per
+# the selected sender for alarm conditions, at most one message per
 # condition per day. Coraza counts stay in the journal. Every check runs even
 # when an earlier one fires.
 set -euo pipefail
+export LC_ALL=C
 
 if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
   ((EUID != 0)) || { echo "watch: test library is forbidden for root" >&2; exit 1; }
   lib=$ABOUTME_WATCH_TEST_LIB
+  transport_file=$lib/alert-transport
 else
   lib=/usr/local/lib/aboutme
+  transport_file=/etc/aboutme/alert-transport
+fi
+sender=$lib/alert.sh
+if [[ -e $transport_file || -L $transport_file ]]; then
+  [[ -f $transport_file && ! -L $transport_file &&
+    $(stat -c '%u:%a' "$transport_file") == "$EUID:600" &&
+    $(<"$transport_file") == telegram ]] || exit 1
+  sender=$lib/alert-telegram.sh
 fi
 disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
 
 alert() { # key subject [detail]
-  printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
+  printf '%s\n' "${3-}" | "$sender" "$1" "$2" || true
 }
 
 watch_crowdsec() (
@@ -85,10 +95,17 @@ for pair in root:/ data:/srv/data; do
   fi
 done
 
-# Failed units: names only.
-failed=$(systemctl list-units --state=failed --no-legend --plain | awk '{ print $1 }' | sort | tr '\n' ' ')
+# Keep the subject count-only and detail below the sender's 2048-byte cap.
+failed=$(systemctl list-units --state=failed --no-legend --plain | awk '{ print $1 }' | sort |
+  awk '
+    NF { count++
+      if (kept < 20 && length($0) <= 80 && $0 ~ /^[A-Za-z0-9@._:\\-]+$/) {
+        names = names $0 "\n"; kept++
+      }
+    }
+    END { if (count) printf "%d\n%somitted units: %d\n", count, names, count-kept }')
 if [[ -n $failed ]]; then
-  alert failed-units "failed units: $failed"
+  alert failed-units "failed units: ${failed%%$'\n'*}" "${failed#*$'\n'}"
 fi
 
 # PostgreSQL over its socket.
