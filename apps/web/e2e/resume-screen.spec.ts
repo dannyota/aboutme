@@ -48,6 +48,12 @@ async function assertFlow(
   await expect(flow.locator('.entry-title')).toHaveText(
     sections.flatMap((index) => [...content.titles[index]!]),
   );
+  for (const heading of await flow.locator('.section-heading h2').all()) {
+    await expect(heading).toBeVisible();
+  }
+  for (const title of await flow.locator('.entry-title').all()) {
+    await expect(title).toBeVisible();
+  }
   const paragraphs = flow.locator('.entry-body p');
   for (const paragraph of await paragraphs.all()) {
     await expect.poll(() => measureTextContainment(paragraph)).toEqual({
@@ -60,6 +66,7 @@ async function assertRenderer(
   page: Page,
   template: string,
   language: keyof typeof CONTENT,
+  justify = false,
 ): Promise<void> {
   const documents = page.locator(
     '.resume-document:not(.pagination-measurement)',
@@ -67,10 +74,17 @@ async function assertRenderer(
   await expect(documents.locator('.resume-name')).toHaveText(
     language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace',
   );
-  const profile = language === 'vi'
-    ? 'Kỹ sư giàu kinh nghiệm, tập trung vào hệ thống phân tán '
-    + 'và sản phẩm dễ sử dụng.'
-    : 'Engineer and mathematician with a focus on analytical engines.';
+  const profile = justify
+    ? 'Kỹ sư giàu kinh nghiệm với hơn mười năm xây dựng hệ thống phân tán '
+    + 'cho ngân hàng, thương mại điện tử và dịch vụ công. Tôi tập trung '
+    + 'vào độ tin cậy, khả năng quan sát và trải nghiệm của nhà phát '
+    + 'triển, đồng thời hướng dẫn đội ngũ áp dụng kiểm thử tự động, '
+    + 'triển khai liên tục và đánh giá thiết kế định kỳ để sản phẩm dễ '
+    + 'sử dụng và dễ bảo trì.'
+    : language === 'vi'
+      ? 'Kỹ sư giàu kinh nghiệm, tập trung vào hệ thống phân tán '
+      + 'và sản phẩm dễ sử dụng.'
+      : 'Engineer and mathematician with a focus on analytical engines.';
   await expect(documents.getByText(profile, { exact: true })).toHaveCount(1);
   await expect(documents.getByText(profile, { exact: true })).toBeVisible();
   if (template === 'modern-sidebar' || template === 'engineer-compact') {
@@ -119,7 +133,8 @@ for (const locale of ['vi', 'en'] as const) {
                 .toHaveCount(1);
             }
             await waitForImages(page);
-            await assertRenderer(page, cell.template, language);
+            await assertRenderer(page, cell.template, language,
+              'align' in cell && cell.align === 'justify');
             expect(external).toEqual([]);
           });
         }
@@ -145,6 +160,25 @@ for (const mutation of ['drop', 'reorder'] as const) {
     await assertClean();
   });
 }
+
+test('renderer rejects a hidden language section', async ({ page }) => {
+  await page.goto('/_harness/render?fixture=vn-full'
+    + '&template=modern-sidebar&mode=continuous');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const assertClean = () => assertRenderer(page, 'modern-sidebar', 'vi');
+  await assertClean();
+  const section = page.locator('.resume-sidebar .resume-section').filter({
+    has: page.getByRole('heading', { name: 'Ngôn ngữ', exact: true }),
+  });
+  await expect(section).toHaveCount(1);
+  await section.evaluate((node) => {
+    (node as HTMLElement).style.display = 'none';
+  });
+  await expect(assertClean()).rejects.toThrow();
+  await page.reload();
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  await assertClean();
+});
 
 const PUBLIC_PAINT = {
   'classic-serif': {
