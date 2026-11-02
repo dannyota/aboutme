@@ -429,18 +429,30 @@ for (const rule of ['orphan', 'widow'] as const) {
     const paragraph = page.locator('.entry-body p');
     await expect(paragraph).toHaveCSS('orphans', '2');
     await expect(paragraph).toHaveCSS('widows', '2');
-    // Natural wrapping exercises line constraints rather than a forced break.
+    // This is a block flow, outside the grid limit in print.md §4.
+    await expect(page.locator('.layout-one-column')).toHaveCount(1);
+    await expect(page.locator('.layout-two-columns')).toHaveCount(0);
+    // Wrap only between the tokens, never at a marker's hyphen.
     await paragraph.evaluate((element, selected) => {
-      element.textContent = `${selected.toUpperCase()}-FIRST `
-        + `${selected.toUpperCase()}-SECOND`;
+      const tokens = ['FIRST', 'SECOND'].map((suffix) => {
+        const token = document.createElement('span');
+        token.textContent = `${selected.toUpperCase()}-${suffix}`;
+        token.style.whiteSpace = 'nowrap';
+        return token;
+      });
+      element.replaceChildren(tokens[0]!, ' ', tokens[1]!);
       (element as HTMLElement).style.width = '12em';
     }, rule);
     const lines = await paragraph.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return [...range.getClientRects()].map((rect) => rect.top);
+      return [...element.children].map((token) => {
+        const range = document.createRange();
+        range.selectNodeContents(token);
+        return [...range.getClientRects()].map(({ top }) => top);
+      });
     });
-    expect(new Set(lines).size).toBe(2);
+    expect(lines.map((part) => part.length)).toEqual([1, 1]);
+    expect(Math.abs(lines[1]![0]! - lines[0]![0]! - 24))
+      .toBeLessThanOrEqual(0.1);
     // Relax the other constraint to prove each rule independently.
     await paragraph.evaluate((element, selected) => {
       const other = selected === 'orphan' ? 'widows' : 'orphans';

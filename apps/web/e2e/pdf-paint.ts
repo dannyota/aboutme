@@ -10,6 +10,10 @@ import {
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
+import { pdfColorMatches, pdfFontWeight } from './pdf-text-style';
+
+export { pdfColorMatches, pdfTextStyleMatches,
+  pdfTextStyleDiagnostic } from './pdf-text-style';
 
 export interface PdfBox {
   readonly left: number;
@@ -36,6 +40,7 @@ export interface PdfInk {
   readonly font: string;
   readonly size: number;
   readonly bold: boolean;
+  readonly weight?: number;
   readonly x: number;
   readonly y: number;
 }
@@ -74,6 +79,7 @@ interface State {
     wordGap: number; unit: number; };
   transparent: boolean;
   bold: boolean;
+  weight: number | undefined;
   type3: Map<string, GlyphProgram> | undefined;
   stroke: Stroke;
 }
@@ -179,13 +185,6 @@ function color(value: unknown): string {
   return value.toLowerCase();
 }
 
-export function pdfColorMatches(actual: string, expected: string): boolean {
-  return [1, 3, 5].every((offset) => Math.abs(
-    parseInt(actual.slice(offset, offset + 2), 16)
-    - parseInt(expected.slice(offset, offset + 2), 16),
-  ) <= 1);
-}
-
 export function pdfBoxMatches(actual: PdfBox, expected: PdfBox): boolean {
   return (['left', 'top', 'right', 'bottom'] as const)
     .every((edge) => Math.abs(actual[edge] - expected[edge]) <= 1);
@@ -225,35 +224,6 @@ export function pdfHasRule(
   expectedColor: string,
 ): boolean {
   return hasPaint(paint, box, expectedColor, true);
-}
-
-export function pdfTextStyleMatches(
-  paint: PdfPaint,
-  value: string,
-  expected: { color: string; size: number; family: string; bold: boolean },
-): boolean {
-  const compact = (text: string) => text.normalize('NFC').replace(/\s+/gu, '');
-  const family = (text: string) => text.replace(/[^a-z\d]/giu, '')
-    .toLowerCase();
-  const text = paint.text.map((run) => compact(run.text)).join('');
-  const needle = compact(value);
-  if (needle === '') return false;
-  for (let start = text.indexOf(needle); start >= 0;
-    start = text.indexOf(needle, start + 1)) {
-    let offset = 0;
-    const matched = paint.text.filter((run) => {
-      const end = offset + compact(run.text).length;
-      const overlaps = end > start && offset < start + needle.length;
-      offset = end;
-      return overlaps;
-    });
-    if (matched.length > 0 && matched.every((run) =>
-      pdfColorMatches(run.color, expected.color)
-      && Math.abs(run.size - expected.size) <= 0.075
-      && family(run.font).includes(family(expected.family))
-      && run.bold === expected.bold)) return true;
-  }
-  return false;
 }
 
 function imageSignature(
@@ -404,7 +374,7 @@ export async function pdfPaintOperators(
     color: '#000000', alpha: 1, font: '', size: 0, textMatrix: identity(),
     textPosition: { x: 0, y: 0, lineX: 0, lineY: 0, leading: 0,
       rise: 0, scale: 1, charGap: 0, wordGap: 0, unit: 0.001 },
-    transparent: false, bold: false, type3: undefined,
+    transparent: false, bold: false, weight: undefined, type3: undefined,
     stroke: { color: '#000000', alpha: 1, transparent: false,
       width: 1, cap: StrokeCap.Butt, join: StrokeJoin.Miter,
       miterLimit: 10, dashed: false } };
@@ -528,7 +498,7 @@ export async function pdfPaintOperators(
       if (box) images.push({ ...box, ...image });
     } else if (op === OPS.setFont) {
       const font = await object(page, args[0]) as {
-        name?: string; bold?: boolean; isType3Font?: boolean;
+        name?: string; bold?: boolean; data?: Uint8Array; isType3Font?: boolean;
         fontMatrix?: number[]; vertical?: boolean;
         charProcOperatorList?: Map<string, GlyphProgram>;
       };
@@ -536,7 +506,10 @@ export async function pdfPaintOperators(
       state.type3 = font.isType3Font ? font.charProcOperatorList : undefined;
       if (font.isType3Font && !(state.type3 instanceof Map)) unsupported();
       state.font = font.name;
-      state.bold = font.bold === true || /bold/iu.test(font.name);
+      state.weight = pdfFontWeight(font.data);
+      state.bold = state.weight === undefined
+        ? font.bold === true || /bold/iu.test(font.name)
+        : state.weight >= 700;
       state.size = numbers([args[1]], 1)[0]!;
       state.textPosition.unit = numbers([font.fontMatrix?.[0] ?? 0.001], 1)[0]!;
     } else if (op === OPS.setTextMatrix || op === OPS.beginText) {
@@ -611,7 +584,8 @@ export async function pdfPaintOperators(
       const y = position.y + position.rise;
       if (state.alpha !== 1 || state.transparent) unsupported();
       text.push({ text: value, font: state.font, color: state.color,
-        bold: state.bold, x: m[4] + m[0] * x + m[2] * y,
+        bold: state.bold, weight: state.weight,
+        x: m[4] + m[0] * x + m[2] * y,
         y: m[5] + m[1] * x + m[3] * y,
         size: Math.abs(state.size) * Math.hypot(m[2], m[3]) });
       for (const glyph of args[0]) {

@@ -29,6 +29,7 @@ import {
   pdfHasRule,
   pdfPaintPage,
   pdfTextStyleMatches,
+  pdfTextStyleDiagnostic,
 } from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
 
@@ -167,9 +168,11 @@ async function assertSampleStyle(
     if (chunk.role === 'heading' && transform === 'capitalize') {
       value = value.replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase());
     }
-    expect(pdfTextStyleMatches(display.paint, value, {
-      color, size: size * 0.75, family, bold,
-    })).toBe(true);
+    const expected = { color, size: size * 0.75, family, bold };
+    const matches = pdfTextStyleMatches(display.paint, value, expected);
+    expect(matches, matches
+      ? undefined
+      : pdfTextStyleDiagnostic(display.paint, value, expected)).toBe(true);
   }
   for (const text of layout.text) {
     if (text.role === 'heading') {
@@ -281,19 +284,12 @@ interface ManifestEntry {
   readonly files: readonly string[];
 }
 
-interface SampleFill {
-  readonly sample: string;
-  readonly pages: number;
-  readonly pinnedPages: number;
-  readonly fill: number;
-}
-
-// Populated in file order under the serial mode below, then written or
-// checked once by the final tests. Page counts and fills are checked there,
-// all at once, so one run reports every sample that misses and an update
-// run still writes every candidate.
-const manifestEntries: ManifestEntry[] = [];
-const fills: SampleFill[] = [];
+// Accepted one-page A4 rasters at 150 DPI. Each cell checks its own output;
+// manifest validation never depends on another test's process or result.
+const manifestEntries: readonly ManifestEntry[] = SAMPLES.map((sample) => ({
+  ...sample, pages: 1, width: 1240, height: 1754,
+  files: [`${sample.templateId}-${sample.lng}-p1.png`],
+}));
 
 function candidateRoot(): string {
   const root = process.env.PLAYWRIGHT_RESULTS_DIR;
@@ -369,7 +365,7 @@ async function verifyPageImage(
   );
 }
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'default' });
 
 for (const { templateId, lng } of SAMPLES) {
   test(`${templateId} (${lng}) rasterizes its PDF pages`, async (
@@ -451,6 +447,10 @@ for (const { templateId, lng } of SAMPLES) {
         `sample fill ${templateId} ${lng}: pages=${document.numPages}`
         + ` first=${firstFill.toFixed(3)} last=${lastFill.toFixed(3)}`,
       );
+      expect.soft(document.numPages).toBe(1);
+      expect.soft(SAMPLE_PAGES[templateId]).toBe(1);
+      expect.soft(firstFill).toBeGreaterThanOrEqual(MIN_FILL);
+      expect.soft(firstFill).toBeLessThanOrEqual(MAX_FILL);
       const files: string[] = [];
       let width = 0;
       let height = 0;
@@ -494,45 +494,24 @@ for (const { templateId, lng } of SAMPLES) {
         }
         files.push(filename);
       }
-      manifestEntries.push({
+      expect({
         templateId,
         lng,
         pages: document.numPages,
         width,
         height,
         files,
-      });
-      fills.push({
-        sample: `${templateId} (${lng})`,
-        pages: document.numPages,
-        pinnedPages: SAMPLE_PAGES[templateId]!,
-        fill: firstFill,
-      });
+      }).toEqual(manifestEntries.find((entry) =>
+        entry.templateId === templateId && entry.lng === lng));
     } finally {
       await loadingTask.destroy();
     }
   });
 }
 
-test('every gallery sample prints one full page', () => {
-  expect(fills).toHaveLength(SAMPLES.length);
-  const misses = fills
-    .filter(({ pages, pinnedPages, fill }) => pages !== 1
-      || pinnedPages !== 1
-      || fill < MIN_FILL
-      || fill > MAX_FILL)
-    .map(({ sample, pages, pinnedPages, fill }) => `${sample}: ${pages}`
-      + ` page(s), pinned ${pinnedPages}, fill ${fill.toFixed(3)}`);
-  expect(misses).toEqual([]);
-});
-
 test('gallery sample page manifest stays current', async () => {
   const testInfo = test.info();
-  expect(manifestEntries).toHaveLength(SAMPLES.length);
-  const ordered = SAMPLES.map(({ templateId, lng }) => manifestEntries.find(
-    (entry) => entry.templateId === templateId && entry.lng === lng,
-  )!);
-  const json = `${JSON.stringify(ordered, null, 2)}\n`;
+  const json = `${JSON.stringify(manifestEntries, null, 2)}\n`;
   if (testInfo.config.updateSnapshots !== 'none') {
     const candidate = resolve(candidateRoot(), 'manifest.json');
     await mkdir(resolve(candidate, '..'), { recursive: true });
