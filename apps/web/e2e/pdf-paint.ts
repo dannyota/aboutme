@@ -110,6 +110,7 @@ const shapes = new WeakMap<PdfFill, {
   path: Path2D; stroke: boolean;
 }>();
 const hitTest = createCanvas(1, 1).getContext('2d');
+let probeFailures = 0;
 
 function numbers(value: unknown, count?: number): number[] {
   if (!Array.isArray(value) && !ArrayBuffer.isView(value)) unsupported();
@@ -241,8 +242,18 @@ function hasPaint(
           visible = visible.map((channel, offset) =>
             channel * (1 - later.alpha) + color[offset]! * later.alpha);
         }
-        return visible.every((channel, offset) =>
+        const matches = visible.every((channel, offset) =>
           Math.abs(channel - expected[offset]!) <= 1);
+        if (!matches && probeFailures < 40) {
+          probeFailures += 1;
+          const later = paint.fills.slice(index + 1).flatMap((part, at) =>
+            contains(part, pointX, pointY)
+              ? [{ index: index + at + 1, ...part }] : []).slice(0, 8);
+          console.log('PAINT-DEBUG', JSON.stringify({
+            box, exposed, fill, index, pointX, pointY, expectedColor,
+            visible, later }));
+        }
+        return matches;
       }));
   });
 }
