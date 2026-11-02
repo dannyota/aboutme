@@ -341,9 +341,7 @@ configured Coraza mode before interpreting a match as a blocked request.
 
 ### Host Telegram setup and rotation draft
 
-Proposed only. Use after owner acceptance and reviewed implementation of the
-[host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts).
-Commands require the proposed helper support.
+[Setup prerequisites](../design/telegram-host-alerts.md#operator-reference).
 
 1. Reuse the bot whose token is `TELEGRAM_BOT` in the ignored local `.env`. Do
    not create a bot. The owner adds it to the existing vMonitor `aboutme-alerts`
@@ -388,7 +386,7 @@ lookup and pipe-only import with `--replace`, and prove membership and receipt.
 Never accept API-suggested destination changes. After restore, verify membership
 and current credentials without displaying values; revoke exposed tokens and
 repeat the same rotation path. Inspect only fixed journal outcomes and local
-DNS/HTTPS reachability. Origin HTTP success does not prove alert delivery.
+DNS/HTTPS reachability.
 
 ## Vulnerability scans
 
