@@ -153,6 +153,67 @@ install_pinned() { # package=version...
   done
 }
 
+# Serialize service operations with retention and watchdog admission.
+install_postgresql_settled() {
+  local state deadline=$((SECONDS + 10))
+  while ((SECONDS < deadline)); do
+    state=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState \
+      --property=Job postgresql@18-main.service) || return 1
+    [[ $(wc -l <<<"$state") == 2 ]] || return 1
+    if grep -qxF ActiveState=active <<<"$state" && grep -qxF Job= <<<"$state"; then return 0; fi
+    sleep 0.1
+  done
+  return 1
+}
+
+install_admission_transition() (
+  set -euo pipefail
+  trap - EXIT
+  umask 077
+  [[ -d /run/aboutme && ! -L /run/aboutme &&
+    $(stat -c '%u:%g:%a' /run/aboutme) == 0:0:755 &&
+    ! -L /run/aboutme/crowdsec-retention.lock ]] || exit 1
+  exec {install_retention_fd}>>/run/aboutme/crowdsec-retention.lock
+  [[ -f /run/aboutme/crowdsec-retention.lock &&
+    $(stat -c '%u:%g:%a:%h' /run/aboutme/crowdsec-retention.lock) == 0:0:600:1 ]] || exit 1
+  flock -x -w 65 "$install_retention_fd" || exit 1
+  # The watcher falls back to admission under the fence when retention is busy.
+  [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock &&
+    $(stat -c '%u:%g:%a:%h' /var/lib/aboutme/fence.lock) =~ ^0:0:(600|644):1$ ]] || exit 1
+  exec {install_fence_fd}>>/var/lib/aboutme/fence.lock
+  flock -x -w 30 "$install_fence_fd" || exit 1
+  install_admission_revoke() {
+    trap '' HUP INT TERM
+    rm -f /run/aboutme/crowdsec-retention-ok
+    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
+    timeout --kill-after=1s 85 systemctl start aboutme-crowdsec-retention-failure.service || true
+  }
+  trap 'install_admission_revoke; exit 1' HUP INT TERM
+  local result=0
+  "$@" || result=$?
+  # Join manager completion before either admission lock closes, even on error.
+  if ! install_postgresql_settled; then
+    install_admission_revoke
+    exit 1
+  fi
+  exit "$result"
+)
+
+install_postgresql_config() { # source-directory reload-or-restart
+  local src=$1 action=$2 changed='' file mode
+  install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d || return 1
+  for file in pg_hba.conf pg_ident.conf conf.d/90-aboutme.conf; do
+    mode=0640
+    [[ $file != conf.d/90-aboutme.conf ]] || mode=0644
+    # GNU install prints only replaced files; matching files keep their mtimes.
+    changed+=$(install --compare --verbose -o postgres -g postgres -m "$mode" \
+      "$src/$file" "/etc/postgresql/18/main/$file") || return 1
+  done
+  if [[ -n $changed ]]; then
+    timeout --kill-after=1s 10 systemctl "$action" postgresql@18-main.service || return 1
+  fi
+}
+
 # copy_tree <src> <dest-root>: install every file under src into dest-root,
 # files 0644 and directories 0755, skipping *.example and the files named in
 # the remaining arguments (paths relative to src).
@@ -194,14 +255,8 @@ if [ "$only" = postgres ]; then
   install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
     "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
   install --compare -m 0644 "$bundle/host/etc/pgbackrest/pgbackrest.conf" /etc/pgbackrest/pgbackrest.conf
-  install --compare -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_hba.conf" \
-    /etc/postgresql/18/main/pg_hba.conf
-  install --compare -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_ident.conf" \
-    /etc/postgresql/18/main/pg_ident.conf
-  install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
-  install --compare -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
-    /etc/postgresql/18/main/conf.d/90-aboutme.conf
-  systemctl restart postgresql@18-main.service
+  install_admission_transition install_postgresql_config \
+    "$bundle/host/etc/postgresql/18/main" restart
   say "PostgreSQL and pgBackRest installed"
   exit 0
 fi
@@ -245,7 +300,7 @@ install --compare -m 0644 "$bundle/host/etc/systemd/system/crowdsec.service.d/90
 install --compare -m 0644 \
   "$bundle/host/etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf" \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf
-systemctl daemon-reload
+install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload
 # Suppress package registration and startup until the migration provisions pgx.
 for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"; do
   if ! package_is_pinned "$package_pin"; then
@@ -276,12 +331,6 @@ copy_tree "$etc" /etc \
   postgresql/18/main/pg_hba.conf \
   postgresql/18/main/pg_ident.conf \
   postgresql/18/main/conf.d/90-aboutme.conf
-# Admission requires peer-file mtimes at or before PostgreSQL's last reload.
-install --compare -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_hba.conf" /etc/postgresql/18/main/pg_hba.conf
-install --compare -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_ident.conf" /etc/postgresql/18/main/pg_ident.conf
-install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
-install --compare -o postgres -g postgres -m 0644 "$etc/postgresql/18/main/conf.d/90-aboutme.conf" \
-  /etc/postgresql/18/main/conf.d/90-aboutme.conf
 
 install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
 install --compare -m 0644 "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
@@ -314,12 +363,12 @@ install --compare -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
 install --compare -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
 
-# Reload peer and logging policy without changing the PostgreSQL process epoch.
-systemctl reload postgresql@18-main.service
+# Copy and reload peer policy under the same exclusion, preserving the epoch.
+install_admission_transition install_postgresql_config "$etc/postgresql/18/main" reload
 [[ $(findmnt -n -o FSTYPE -T /run/aboutme) == tmpfs ]] || die "CrowdSec diagnostics require tmpfs"
 install -d -o root -g root -m 0700 /run/aboutme/crowdsec
 "$lib/crowdsec-window-check.sh"
-systemctl daemon-reload
+install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload
 edge_restart=()
 install -d -o 10001 -g 10001 -m 0750 /run/aboutme/caddy-log
 if ! mountpoint -q /run/aboutme/caddy-log; then
@@ -389,7 +438,7 @@ fi
 install -d -m 0755 /etc/containers/systemd
 install --compare -m 0644 "$bundle/host/quadlet/aboutme.network" /etc/containers/systemd/aboutme.network
 install --compare -m 0644 "$bundle/host/quadlet/aboutme-observer.network" /etc/containers/systemd/aboutme-observer.network
-systemctl daemon-reload
+install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload
 systemctl enable aboutme-observer-firewall.service >/dev/null
 systemctl restart aboutme-observer-firewall.service
 for f in "$bundle"/host/env/*.env; do
@@ -424,7 +473,7 @@ sysctl --system >/dev/null
 # flush moves early-boot entries there.
 systemctl restart systemd-journald
 journalctl --flush
-systemctl daemon-reload
+install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload
 zram_row=$(swapon --bytes --noheadings --show=NAME,SIZE,USED | awk '$1 == "/dev/zram0" { print $2, $3 }')
 if [[ -z $zram_row ]]; then
   systemctl start systemd-zram-setup@zram0.service
