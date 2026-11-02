@@ -64,7 +64,9 @@ function chunk(kind: string, data: Buffer): Buffer {
 beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'template-pages-')));
   pages = join(root, 'apps/web/public/templates/pages');
-  for (const path of sourcePaths(repository)) put(join(root, path), 'input');
+  for (const path of sourcePaths(repository)) {
+    put(join(root, path), readFileSync(join(repository, path)));
+  }
   put(join(root, 'Makefile'), readFileSync(join(repository, 'Makefile')));
   put(join(pages, 'manifest.json'), readFileSync(
     join(committed, 'manifest.json'),
@@ -141,17 +143,180 @@ describe('template page freshness', () => {
     'apps/web/server/utils/cspExternalize.ts',
   ])('rejects changed source %s', (path) => {
     refreshHashes(root);
-    put(join(root, path), 'changed');
+    put(join(root, path), Buffer.concat([
+      readFileSync(join(root, path)), Buffer.from('\n/* changed */'),
+    ]));
     expect(() => validatePages(root)).toThrow(/stale source hash/);
   });
 
-  it('detects new renderer inputs and browser drift', () => {
+  it.each([
+    'app/AppShell.vue',
+    'app/IconButton.vue',
+    'public/JoinInvite.vue',
+    'public/PublicGate.vue',
+    'public/PublicResumeApp.vue',
+  ])('rejects changed styles in imported component %s', (component) => {
+    const path = `apps/web/app/components/${component}`;
+    const original = readFileSync(join(repository, path));
+    put(join(root, path), original);
+    refreshHashes(root);
+    put(join(root, path), Buffer.concat([
+      original, Buffer.from('\n<style>body.resume-print{opacity:.5}</style>'),
+    ]));
+    expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
+  it('ignores changed styles in an unrelated component', () => {
+    const path = join(root, 'apps/web/app/components/resume/Unrelated.vue');
+    put(path, '<template><div /></template>');
     refreshHashes(root);
     const before = sourceFingerprint(root).sha256;
+    put(path, '<style>body.resume-print{opacity:.5}</style>');
+    expect(sourceFingerprint(root).sha256).toBe(before);
+    expect(() => validatePages(root)).not.toThrow();
+  });
+
+  it('follows scripts, barrel exports, aliases and CSS imports once', () => {
+    put(join(root, 'apps/web/app/app.vue'), `<script lang="ts">
+      import './closure';
+    </script><script setup lang="ts">
+      import '@/closure/Widget.vue';
+      // import './missing-comment';
+      const example = "export * from './missing-string'";
+    </script>`);
+    put(join(root, 'apps/web/app/closure/index.ts'),
+      'export { default } from "~/closure/Widget.vue";');
+    put(join(root, 'apps/web/app/closure/Widget.vue'), `<script
+      src="./widget.ts"></script><style src="./widget.css"></style>
+      <style>@import url('./palette.css');</style>`);
+    put(join(root, 'apps/web/app/closure/widget.ts'), 'import "./index";');
+    put(join(root, 'apps/web/app/closure/widget.css'),
+      '@import "./palette.css" layer(theme);');
+    put(join(root, 'apps/web/app/closure/palette.css'),
+      '@import url("./widget.css");');
+    const paths = sourcePaths(root);
+    for (const file of ['index.ts', 'Widget.vue', 'widget.ts',
+      'widget.css', 'palette.css']) {
+      expect(paths).toContain(`apps/web/app/closure/${file}`);
+    }
+    expect(paths).toEqual([...new Set(paths)].sort());
+    refreshHashes(root);
+    put(join(root, 'apps/web/app/closure/palette.css'), 'body{opacity:.5}');
+    expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
+  it('follows loaded plugins, middleware and layouts', () => {
+    put(join(root, 'apps/web/app/app.vue'),
+      '<template><NuxtLayout><NuxtPage /></NuxtLayout></template>');
+    const render = join(root, 'apps/web/app/pages/_harness/render.vue');
+    put(render, readFileSync(render, 'utf8').replace('</script>',
+      'definePageMeta({ middleware: ["print"], layout: "print" });'
+      + '\n</script>'));
+    const config = join(root, 'apps/web/nuxt.config.ts');
+    put(config, readFileSync(config, 'utf8').replace(
+      'export default defineNuxtConfig({',
+      'export default defineNuxtConfig({'
+      + ' plugins: [{ src: "~/configured.ts" }],',
+    ));
+    const entries = [
+      'app/plugins/print.client.ts',
+      'app/plugins/nested/index.ts',
+      'app/middleware/extra.global.ts',
+      'app/middleware/print.ts',
+      'app/layouts/print.vue',
+      'app/configured.ts',
+      'server/plugins/extra.ts',
+      'server/middleware/extra.ts',
+    ];
+    for (const [index, path] of entries.entries()) {
+      const dependency = `apps/web/app/closure/dependency-${index}.css`;
+      const script = `import "~/closure/dependency-${index}.css";`;
+      put(join(root, dependency), 'body{}');
+      put(join(root, `apps/web/${path}`), path.endsWith('.vue')
+        ? `<script setup>${script}</script>`
+        : script);
+    }
+    put(join(root, 'apps/web/app/middleware/unloaded.ts'), 'unrelated');
+    put(join(root, 'apps/web/app/layouts/unloaded.vue'), 'unrelated');
+    const paths = sourcePaths(root);
+    for (const [index, path] of entries.entries()) {
+      expect(paths).toContain(`apps/web/${path}`);
+      expect(paths).toContain(`apps/web/app/closure/dependency-${index}.css`);
+    }
+    expect(paths).not.toContain('apps/web/app/middleware/unloaded.ts');
+    expect(paths).not.toContain('apps/web/app/layouts/unloaded.vue');
+  });
+
+  it('uses configured aliases and referenced Nuxt auto imports', () => {
+    const config = join(root, 'apps/web/nuxt.config.ts');
+    put(config, readFileSync(config, 'utf8').replace(
+      '  alias: {\n    \'#public-render-validator\'',
+      '  alias: {\n    \'@\': \'./app/aliased\',\n'
+      + '    \'#public-render-validator\'',
+    ));
+    put(join(root, 'apps/web/app/app.vue'),
+      '<script setup>import "@/Widget.vue"; useClosure();</script>');
+    put(join(root, 'apps/web/app/aliased/Widget.vue'),
+      '<style>@import "~/closure.css";</style>');
+    put(join(root, 'apps/web/app/closure.css'), 'body{}');
+    put(join(root, 'apps/web/app/composables/useClosure.ts'),
+      'export function useClosure() {}');
+    put(join(root, 'apps/web/app/composables/useUnrelated.ts'),
+      'export function useUnrelated() {}');
+    put(join(root, 'apps/web/app/pages/_harness/render.vue'),
+      '<script setup>import "~/closure.css";</script>');
+    put(join(root, 'apps/web/app/middleware/signed-in.global.ts'),
+      'export default defineNuxtRouteMiddleware(() => {});');
+    const paths = sourcePaths(root);
+    expect(paths).toContain('apps/web/app/aliased/Widget.vue');
+    expect(paths).toContain('apps/web/app/closure.css');
+    expect(paths).toContain('apps/web/app/composables/useClosure.ts');
+    expect(paths).not.toContain('apps/web/app/composables/useUnrelated.ts');
+  });
+
+  it.each([true, false])('uses default layout when enabled: %s', (enabled) => {
+    put(join(root, 'apps/web/app/app.vue'),
+      '<template><NuxtLayout><NuxtPage /></NuxtLayout></template>');
+    put(join(root, 'apps/web/app/layouts/default.vue'),
+      '<style>body{opacity:.5}</style>');
+    if (!enabled) {
+      put(join(root, 'apps/web/app/pages/_harness/render.vue'),
+        '<script setup>definePageMeta({ layout: false });</script>');
+    }
+    expect(sourcePaths(root).includes('apps/web/app/layouts/default.vue'))
+      .toBe(enabled);
+  });
+
+  it.each([
+    './missing', '@/missing.vue', '~/missing.css',
+    '../../../../outside.ts', 'missing-package', '#missing',
+  ])('rejects unresolvable import %s with a fixed diagnostic', (specifier) => {
+    put(join(root, 'apps/web/app/app.vue'),
+      `<script setup>import ${JSON.stringify(specifier)};</script>`);
+    expect(() => sourcePaths(root)).toThrow(
+      /^unresolvable source import$/,
+    );
+  });
+
+  it('rejects an unresolvable CSS import with the fixed diagnostic', () => {
+    put(join(root, 'apps/web/app/app.vue'),
+      '<style>@import url("./missing.css");</style>');
+    expect(() => sourcePaths(root)).toThrow(/^unresolvable source import$/);
+  });
+
+  it('detects new imported renderer inputs and browser drift', () => {
+    refreshHashes(root);
+    const before = sourceFingerprint(root).sha256;
+    const renderer = join(root,
+      'apps/web/app/components/resume/ResumeDocument.vue');
+    const original = readFileSync(renderer, 'utf8');
     put(join(root, 'apps/web/app/components/resume/new.css'), 'input');
+    put(renderer, original.replace('</script>',
+      'import \'./new.css\';\n</script>'));
     expect(sourceFingerprint(root).sha256).not.toBe(before);
     expect(() => validatePages(root)).toThrow(/stale source hash/);
     rmSync(join(root, 'apps/web/app/components/resume/new.css'));
+    put(renderer, original);
     const make = readFileSync(join(root, 'Makefile'), 'utf8');
     put(join(root, 'Makefile'), make.replace(
       /(@sha256:)[0-9a-f]{64}/,
@@ -223,6 +388,10 @@ describe('template page freshness', () => {
 
   it('rejects local state before reading it', () => {
     put(join(root, 'apps/web/app/components/resume/.env.test'), 'sentinel');
+    const renderer = join(root,
+      'apps/web/app/components/resume/ResumeDocument.vue');
+    put(renderer, readFileSync(renderer, 'utf8').replace('</script>',
+      'import \'./.env.test\';\n</script>'));
     expect(() => sourceFingerprint(root)).toThrow(/secret-like source/);
   });
 
