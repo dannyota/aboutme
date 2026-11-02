@@ -86,7 +86,17 @@ for unit in ("crowdsec", "crowdsec-firewall-bouncer"):
         assert reloads==['',pre[2],pre[3],pre[4],'/bin/kill -HUP $MAINPID']
 PY
 grep -qxF '    duration: 15m' "$base/edge/crowdsec/profiles.yaml"
-grep -qF "GetDecisionsCount(Alert.GetValue()) == 1 ? '1h' : '4h'" "$base/edge/crowdsec/profiles.yaml"
+check single-active-count-profile python3 - "$base/edge/crowdsec/profiles.yaml" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+expression = next(line for line in source.splitlines() if line.startswith('duration_expr:'))
+assert expression == 'duration_expr: "let active = GetActiveDecisionsCount(Alert.GetValue()); active == 0 ? \'15m\' : (active == 1 ? \'1h\' : \'4h\')"'
+assert source.count('GetActiveDecisionsCount(') == 1
+assert 'GetDecisionsCount(' not in source
+assert [line for line in source.splitlines() if line.startswith('name:')] == [
+    'name: aboutme_http_remediation', 'name: default_ip_remediation', 'name: default_range_remediation']
+assert source.count('on_success: break') == 3
+PY
 grep -qF '/run/aboutme/caddy-log/crowdsec/serving.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
 grep -qF '/run/aboutme/caddy-log/crowdsec/maintenance.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
 grep -qxF '  type: aboutme-http' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
@@ -107,6 +117,8 @@ grep -qF 'size=64M' \
 grep -qxF 'MemoryMax=1G' \
   "$base/host/etc/systemd/system/postgresql@.service.d/90-aboutme-alert.conf"
 grep -qxF 'OnCalendar=*:0/5' \
+  "$base/host/etc/systemd/system/aboutme-crowdsec-retention.timer"
+grep -qxF 'AccuracySec=1s' \
   "$base/host/etc/systemd/system/aboutme-crowdsec-retention.timer"
 grep -qxF 'Requisite=aboutme-crowdsec-retention-startup.service' \
   "$base/host/etc/systemd/system/aboutme-crowdsec-retention.service"

@@ -170,6 +170,8 @@ install_admission_transition() (
   set -euo pipefail
   trap - EXIT
   umask 077
+  local fence_mode=-x
+  if [[ ${1:-} == --shared-fence ]]; then fence_mode=-s; shift; fi
   [[ -d /run/aboutme && ! -L /run/aboutme &&
     $(stat -c '%u:%g:%a' /run/aboutme) == 0:0:755 &&
     ! -L /run/aboutme/crowdsec-retention.lock ]] || exit 1
@@ -181,7 +183,7 @@ install_admission_transition() (
   [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock &&
     $(stat -c '%u:%g:%a:%h' /var/lib/aboutme/fence.lock) =~ ^0:0:(600|644):1$ ]] || exit 1
   exec {install_fence_fd}>>/var/lib/aboutme/fence.lock
-  flock -x -w 30 "$install_fence_fd" || exit 1
+  flock "$fence_mode" -w 30 "$install_fence_fd" || exit 1
   install_admission_revoke() {
     trap '' HUP INT TERM
     rm -f /run/aboutme/crowdsec-retention-ok
@@ -212,6 +214,64 @@ install_postgresql_config() { # source-directory reload-or-restart
   if [[ -n $changed ]]; then
     timeout --kill-after=1s 10 systemctl "$action" postgresql@18-main.service || return 1
   fi
+}
+
+install_crowdsec_file() { # source destination
+  install --compare --verbose -m 0644 "$1" "$2" >>"$tmp/crowdsec-engine-changed"
+}
+
+install_crowdsec_remove_acquisition() {
+  if [[ -e /etc/crowdsec/acquis.d/caddy.yaml || -L /etc/crowdsec/acquis.d/caddy.yaml ]]; then
+    printf 'removed\n' >>"$tmp/crowdsec-engine-changed" || return 1
+    rm -f /etc/crowdsec/acquis.d/caddy.yaml || return 1
+  fi
+}
+
+install_crowdsec_bootstrap_retention() {
+  [[ ! -L $lib/crowdsec-retention.sh ]] || return 1
+  [[ ! -e $lib/crowdsec-retention.sh ]] || return 0
+  local state
+  state=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState \
+    --property=Job crowdsec.service) || return 1
+  # A first install needs the startup helper before migration can start the
+  # engine. A running engine must keep its old helper until activation.
+  [[ $(wc -l <<<"$state") == 2 ]] &&
+    grep -qxE 'ActiveState=(inactive|failed)' <<<"$state" &&
+    grep -qxF 'Job=' <<<"$state" || return 1
+  install --compare -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
+}
+
+install_crowdsec_settled() {
+  local state deadline=$((SECONDS + 10))
+  while ((SECONDS < deadline)); do
+    state=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState \
+      --property=Job crowdsec.service) || return 1
+    [[ $(wc -l <<<"$state") == 2 ]] || return 1
+    if grep -qxF ActiveState=active <<<"$state" && grep -qxF 'Job=' <<<"$state"; then
+      timeout --kill-after=1s 15 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1 || return 1
+      if timeout --kill-after=1s 1 cscli lapi status >/dev/null 2>&1; then return 0; fi
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+install_crowdsec_activate() {
+  # Helper drift also covers an interrupted install that copied the profile
+  # but never activated it. Keep batching unavailable until the restart joins.
+  if [[ -s $tmp/crowdsec-engine-changed ]] ||
+    ! cmp -s "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"; then
+    if ! timeout --kill-after=1s 15 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1 ||
+      ! timeout --kill-after=1s 10 systemctl restart crowdsec.service >/dev/null 2>&1 ||
+      ! install_crowdsec_settled; then
+      install_admission_revoke
+      return 1
+    fi
+  fi
+  install --compare -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh" || {
+    install_admission_revoke
+    return 1
+  }
 }
 
 # copy_tree <src> <dest-root>: install every file under src into dest-root,
@@ -278,12 +338,12 @@ apt-get update -qq
 # 2. CrowdSec config goes in before the package starts the service, so its
 # local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
-install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
-install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
-install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
-install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
+install_crowdsec_file "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+install_crowdsec_file "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
-rm -f /etc/crowdsec/acquis.d/caddy.yaml
+install_crowdsec_remove_acquisition
 
 # 3. Packages. postgresql-common creates the postgres user; the data
 # directories on the volume are handed to it before postgresql-18 creates the
@@ -339,21 +399,21 @@ copy_tree "$etc" /etc \
   postgresql/18/main/pg_ident.conf \
   postgresql/18/main/conf.d/90-aboutme.conf
 
-install --compare -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
-install --compare -m 0644 "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-install --compare -m 0644 "$bundle/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
-install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install_crowdsec_file "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
+install_crowdsec_file "$bundle/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
+install_crowdsec_file "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
-install --compare -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
-rm -f /etc/crowdsec/acquis.d/caddy.yaml
+install_crowdsec_file "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+install_crowdsec_remove_acquisition
 install -d -m 0755 /etc/crowdsec/parsers/s01-parse /etc/crowdsec/parsers/s02-enrich \
   /etc/crowdsec/scenarios
-install --compare -m 0644 "$bundle/edge/crowdsec/parsers/s01-parse/aboutme-http.yaml" \
+install_crowdsec_file "$bundle/edge/crowdsec/parsers/s01-parse/aboutme-http.yaml" \
   /etc/crowdsec/parsers/s01-parse/aboutme-http.yaml
-install --compare -m 0644 "$bundle/edge/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
+install_crowdsec_file "$bundle/edge/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
   /etc/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml
 for scenario in "$bundle"/edge/crowdsec/scenarios/*.yaml; do
-  install --compare -m 0644 "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
+  install_crowdsec_file "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
 done
 
 # The startup retention gate must run before the first unmasked CrowdSec
@@ -364,11 +424,12 @@ for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-migrate; d
   install --compare -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
 done
 install --compare -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"
-install --compare -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
 install --compare -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
 install --compare -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
 install --compare -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
+crowdsec_install_closed=yes
+install_admission_transition --shared-fence install_crowdsec_bootstrap_retention || die "crowdsec_retention_refused"
 
 # Copy and reload peer policy under the same exclusion, preserving the epoch.
 install_admission_transition install_postgresql_config "$etc/postgresql/18/main" reload
@@ -417,7 +478,6 @@ copy_script "$bundle/scripts/secrets-host.sh"
 copy_script "$bundle/host/telegram-state.sh"
 copy_script "$bundle/host/alert-transport.sh"
 copy_script "$bundle/host/crowdsec-offline.sh"
-copy_script "$bundle/host/crowdsec-retention.sh"
 copy_script "$bundle/host/crowdsec-retention-fail.sh"
 copy_script "$bundle/host/crowdsec-retention-lease-check.sh"
 copy_script "$bundle/host/crowdsec-db.sh"
@@ -472,6 +532,9 @@ fi
 install -d -m 0755 "$lib/crowdsec"
 copy_tree "$bundle/edge/crowdsec" "$lib/crowdsec"
 ABOUTME_MIGRATE_BUNDLE_FD=$operation_bundle_fd "$lib/crowdsec-migrate.sh" || die "crowdsec_migrate_refused"
+# Shared fence custody admits the engine's read-only startup checks while
+# excluding fence writers; exclusive retention custody serializes restarts.
+install_admission_transition --shared-fence install_crowdsec_activate || die "crowdsec_activation_refused"
 if ((${#edge_restart[@]})); then systemctl start "${edge_restart[@]}"; fi
 
 # 7. Apply settings and start units. The job timers start with the first

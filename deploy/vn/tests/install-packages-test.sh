@@ -115,6 +115,9 @@ installer=${1:-$root/deploy/vn/host/install.sh}
   printf '#!/usr/bin/env bash\nset -euo pipefail\nsource "$FIXTURE_SUPPORT"\n'
   sed -n '/^POSTGRESQL_COMMON_VERSION=/,/^CROWDSEC_BOUNCER_VERSION=/p' "$installer"
   sed -n '/^# Installs packages at/,/^# copy_tree/{ /^# copy_tree/d; p; }' "$installer"
+  # This fixture owns package and migration admission; lock behavior has its
+  # own real-lock installer fixture.
+  printf 'install_admission_transition() { [[ $1 != --shared-fence ]] || shift; "$@"; }\n'
   awk '/^crowdsec_install_closed=no$/ {copy=1} copy {print} /^trap cleanup_install EXIT$/ {exit}' "$installer"
   cat <<'SH'
 if [[ ${VERIFY_PACKAGE:-no} == yes ]]; then
@@ -136,6 +139,7 @@ new_case() {
   export FIXTURE_CASE=$work/case CALLS=$work/calls
   rm -rf -- "$FIXTURE_CASE"
   mkdir -p "$FIXTURE_CASE/tmp"
+  cp "$root/deploy/vn/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
   touch "$FIXTURE_CASE/log-mounted"
   : >"$CALLS"
 }

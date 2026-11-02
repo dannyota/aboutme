@@ -6,7 +6,8 @@
 retention_psql() {
   timeout 12 env -i PATH=/usr/bin:/bin PGPASSFILE=/dev/null PGSSLMODE=disable \
     /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
-    -v pass_time="$retention_time" -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
+    -v pass_time="$retention_time" -v verify_time="${retention_verify_time:-$retention_time}" \
+    -v batch="${retention_batch:-no}" -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
 }
 
 retention_gate() {
@@ -20,7 +21,9 @@ SET lock_timeout = '2s';
 SET jit = off;
 SET TIME ZONE 'UTC';
 CREATE TEMP TABLE bounds AS SELECT :'pass_time'::timestamptz AS at,
-  :'pass_time'::timestamptz - interval '23 hours' AS cutoff;
+  :'pass_time'::timestamptz - interval '23 hours' AS cutoff,
+  :'verify_time'::timestamptz - interval '23 hours 30 minutes' AS hard_cutoff,
+  :'batch' = 'yes' AS batch;
 CREATE TEMP VIEW stale_alerts AS
 SELECT a.id FROM public.alerts a, bounds b
 WHERE least(a.created_at,a.updated_at,a.started_at,a.stopped_at) <= b.cutoff
@@ -28,18 +31,54 @@ OR EXISTS (SELECT FROM public.events e WHERE e.alert_events = a.id
   AND least(e.created_at,e.updated_at,e.time) <= b.cutoff)
 OR EXISTS (SELECT FROM public.meta m WHERE m.alert_metas = a.id
   AND least(m.created_at,m.updated_at) <= b.cutoff);
+CREATE TEMP VIEW due_decisions AS
+SELECT d.id FROM public.decisions d, bounds b
+WHERE least(d.created_at,d.updated_at) <= b.cutoff
+OR EXISTS (SELECT FROM stale_alerts a WHERE a.id=d.alert_decisions);
+CREATE TEMP VIEW overdue AS
+SELECT a.id FROM public.alerts a, bounds b
+WHERE least(a.created_at,a.updated_at,a.started_at,a.stopped_at) <= b.hard_cutoff
+UNION ALL SELECT d.id FROM public.decisions d, bounds b
+WHERE least(d.created_at,d.updated_at) <= b.hard_cutoff
+UNION ALL SELECT e.id FROM public.events e, bounds b
+WHERE least(e.created_at,e.updated_at,e.time) <= b.hard_cutoff
+UNION ALL SELECT m.id FROM public.meta m, bounds b
+WHERE least(m.created_at,m.updated_at) <= b.hard_cutoff;
 CREATE TEMP VIEW candidates AS
 SELECT 'a'::text AS kind, a.id, 0::bigint AS alert_id, a.xmin::text AS version
 FROM public.alerts a JOIN stale_alerts s ON s.id=a.id
 UNION ALL
 SELECT 'd', d.id, d.alert_decisions, d.xmin::text FROM public.decisions d, bounds b
-WHERE least(d.created_at,d.updated_at) <= b.cutoff OR d.until <= b.at
-OR EXISTS (SELECT FROM stale_alerts a WHERE a.id=d.alert_decisions)
+WHERE (b.batch AND d.until <= b.at) OR EXISTS (SELECT FROM due_decisions due WHERE due.id=d.id)
 UNION ALL
 SELECT 'e', e.id, 0, e.xmin::text FROM public.events e WHERE e.alert_events IS NULL
 UNION ALL
 SELECT 'm', m.id, 0, m.xmin::text FROM public.meta m WHERE m.alert_metas IS NULL;
 SQL
+}
+
+retention_overdue_alarm() {
+  [[ $retention_overdue_reported != yes ]] || return 0
+  timeout --foreground --kill-after=1s 2 systemctl --no-block start \
+    aboutme-alert@crowdsec_retention_overdue.service >/dev/null 2>&1 || return 1
+  retention_overdue_reported=yes
+}
+
+retention_batch_mode() {
+  local result due expired overdue
+  result=$({ retention_sql; cat <<'SQL'
+SELECT EXISTS (SELECT FROM due_decisions),
+  EXISTS (SELECT FROM public.decisions, bounds WHERE until <= at),
+  EXISTS (SELECT FROM overdue);
+SQL
+  } | retention_psql) || return 1
+  [[ $result =~ ^[tf]\|[tf]\|[tf]$ ]] || return 1
+  IFS='|' read -r due expired overdue <<<"$result"
+  if [[ $overdue == t ]]; then retention_overdue_alarm || return 1; fi
+  if [[ $mode == startup || $due == t ||
+    ( $expired == t && ${retention_time:11:5} > 19:59 && ${retention_time:11:5} < 20:05 ) ]]; then
+    retention_batch=yes
+  fi
 }
 
 retention_select_sql() {
@@ -258,7 +297,8 @@ retention_reconcile() {
 
 retention_delete() {
   retention_gate || return 1
-  {
+  local result
+  result=$({
     retention_sql
     printf '%s\n' 'CREATE TEMP TABLE selected (kind text, id bigint, alert_id bigint, version text, PRIMARY KEY(kind,id));' \
       'COPY selected FROM STDIN WITH (FORMAT text, DELIMITER '\''|'\'');'
@@ -266,7 +306,20 @@ retention_delete() {
     printf '\\.\n'
     cat <<'SQL'
 BEGIN;
-LOCK TABLE public.alerts, public.decisions, public.events, public.meta IN SHARE ROW EXCLUSIVE MODE;
+\set ON_ERROR_STOP off
+LOCK TABLE public.alerts, public.decisions, public.events, public.meta IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+\if :ERROR
+  \set lock_state :SQLSTATE
+  ROLLBACK;
+  SELECT :'lock_state' = '55P03' AS contended \gset
+  \if :contended
+    SELECT 'retry';
+    \quit
+  \else
+    \quit 3
+  \endif
+\endif
+\set ON_ERROR_STOP on
 DO $check$
 BEGIN
   IF EXISTS (SELECT FROM selected s WHERE NOT EXISTS
@@ -283,8 +336,10 @@ DELETE FROM public.events WHERE id IN (SELECT id FROM selected WHERE kind='e');
 DELETE FROM public.meta WHERE id IN (SELECT id FROM selected WHERE kind='m');
 DELETE FROM public.alerts WHERE id IN (SELECT id FROM selected WHERE kind='a');
 COMMIT;
+SELECT 'deleted';
 SQL
-  } | retention_psql >/dev/null
+  } | retention_psql) || return 1
+  case $result in deleted) return 0 ;; retry) return 2 ;; *) return 1 ;; esac
 }
 
 retention_trim_feed() {
@@ -345,24 +400,26 @@ retention_prepare_feed() {
 
 retention_verify() {
   retention_validate || return 1
-  local result
+  local result retention_verify_time
+  retention_verify_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ) || return 1
   result=$({ retention_sql; cat <<'SQL'
 SELECT NOT EXISTS (SELECT FROM candidates)
-AND NOT EXISTS (SELECT FROM public.alerts, bounds WHERE least(created_at,updated_at,started_at,stopped_at) <= at - interval '23 hours 30 minutes')
-AND NOT EXISTS (SELECT FROM public.decisions, bounds WHERE least(created_at,updated_at) <= at - interval '23 hours 30 minutes')
-AND NOT EXISTS (SELECT FROM public.events, bounds WHERE least(created_at,updated_at,time) <= at - interval '23 hours 30 minutes')
-AND NOT EXISTS (SELECT FROM public.meta, bounds WHERE least(created_at,updated_at) <= at - interval '23 hours 30 minutes');
+AND NOT EXISTS (SELECT FROM stale_alerts)
+AND NOT EXISTS (SELECT FROM due_decisions), EXISTS (SELECT FROM overdue);
 SQL
   } | retention_psql) || return 1
-  [[ $result == t ]] && retention_gate
+  if [[ $result == *'|t' ]]; then retention_overdue_alarm || return 1; fi
+  [[ $result == 't|f' ]] && retention_gate
 }
 
 retention_main() {
   set -euo pipefail
   umask 077
   [[ $EUID == 0 && $# == 1 && ( $1 == startup || $1 == runtime ) ]] || return 1
-  local mode=$1 unit state candidates
-  local retention_work retention_time retention_quiescent=no
+  local mode=$1 unit state candidates attempt=0 status
+  local retention_work retention_time retention_quiescent=no retention_batch=no
+  local retention_overdue_reported=no
+  retention_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ) || return 1
   local -a retention_consumers=(aboutme-caddy.service aboutme-maintenance.service \
     crowdsec-firewall-bouncer.service crowdsec.service)
   local -a restart=()
@@ -388,7 +445,6 @@ retention_main() {
   while read -r device _; do
     [[ $device == Filename || $device == /dev/zram* ]] || return 1
   done </proc/swaps
-  retention_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
   if [[ $mode == startup ]]; then
     retention_stopped && retention_clear_firewall && retention_firewall_init || return 1
     retention_quiescent=yes
@@ -401,6 +457,7 @@ retention_main() {
     done
   fi
   retention_validate && retention_trim_feed || return 1
+  retention_batch_mode || return 1
   while :; do
     retention_gate || return 1
     { retention_sql; retention_select_sql; } |
@@ -416,8 +473,19 @@ for line in lines:
 PY
     [[ -s $retention_work/candidates ]] || break
     candidates=$(grep -c '^d|' "$retention_work/candidates" || true)
-    if ((candidates > 0)); then retention_reconcile 20 || return 1; fi
-    retention_delete || return 1
+    if ((candidates > 0)); then
+      # Ingestion can make a graph due after the initial batch choice.
+      retention_batch_mode || return 1
+      retention_batch=yes
+      retention_reconcile 20 || return 1
+    fi
+    status=0
+    retention_delete || status=$?
+    case $status in
+      0) attempt=0 ;;
+      2) attempt=$((attempt + 1)); ((attempt < 3)) || return 1 ;;
+      *) return 1 ;;
+    esac
   done
   retention_verify || return 1
   if [[ $mode == runtime && $retention_quiescent == yes ]]; then

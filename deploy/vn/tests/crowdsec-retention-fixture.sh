@@ -9,6 +9,10 @@ retention_fixture_diagnostics() {
 retention_fixture_report_failure() {
   local status=$?
   trap - EXIT
+  if [[ -n ${retention_proxy_pid:-} ]]; then
+    kill "$retention_proxy_pid" 2>/dev/null || true
+    wait "$retention_proxy_pid" 2>/dev/null || true
+  fi
   if ((status)); then
     printf 'FAIL %s stage=%s\n' "$retention_fixture_case" "${integration_stage:-fixture}" >&"$retention_fixture_error_fd"
   fi
@@ -41,8 +45,167 @@ retention_fixture_sql() {
     -h /run/postgresql -U crowdsec -d crowdsec 2>/dev/null
 }
 
+retention_fixture_time() {
+  rm -f "$retention_fixture/clock" "$retention_fixture/verify-clock" "$retention_fixture/clock-read"
+  [[ -z ${1:-} ]] || printf '%s\n' "$1" >"$retention_fixture/clock"
+  [[ -z ${2:-} ]] || printf '%s\n' "$2" >"$retention_fixture/verify-clock"
+}
+
+# Build outside the isolated network, against the same pinned engine as LAPI.
+retention_fixture_profile_binary() {
+  local go_binary=$1 proof=$retention_fixture/profile-proof
+  mkdir -m 0700 "$proof"
+  cat >"$proof/go.mod" <<'MOD'
+module retention-profile-proof
+
+go 1.27.3
+
+require github.com/crowdsecurity/crowdsec v1.8.1
+MOD
+  cat >"$proof/main.go" <<'GO'
+package main
+
+import (
+    "context"
+    "database/sql"
+    "errors"
+    "fmt"
+    "os"
+    "strings"
+    "time"
+
+    "entgo.io/ent/dialect"
+    entsql "entgo.io/ent/dialect/sql"
+    "github.com/crowdsecurity/crowdsec/pkg/csconfig"
+    "github.com/crowdsecurity/crowdsec/pkg/csprofiles"
+    "github.com/crowdsecurity/crowdsec/pkg/database"
+    "github.com/crowdsecurity/crowdsec/pkg/database/ent"
+    "github.com/crowdsecurity/crowdsec/pkg/exprhelpers"
+    "github.com/crowdsecurity/crowdsec/pkg/models"
+    "github.com/expr-lang/expr"
+    "gopkg.in/yaml.v3"
+)
+
+// Set fixture expiries relative to the real helper's bound evaluation time.
+type clockDriver struct {
+    dialect.Driver
+    db *sql.DB
+    parent int64
+    offsets []time.Duration
+    calls int
+    fail bool
+}
+func (d *clockDriver) Query(ctx context.Context, query string, args, value any) error {
+    if strings.Contains(query, "COUNT(") && strings.Contains(query, `"decisions"`) {
+        d.calls++
+        if d.fail { return errors.New("count_query_failed") }
+        var at time.Time
+        for _, arg := range args.([]any) { if bound, ok := arg.(time.Time); ok { at = bound } }
+        if at.IsZero() { return errors.New("missing_active_cutoff") }
+        _, err := d.db.ExecContext(ctx, "DELETE FROM decisions WHERE alert_decisions=$1", d.parent)
+        if err != nil { return err }
+        for _, offset := range d.offsets {
+            _, err = d.db.ExecContext(ctx, `INSERT INTO decisions
+              (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions,
+               start_ip,end_ip,start_suffix,end_suffix,ip_size)
+              VALUES ($1,$1,$2,'aboutme/http-status','ban','Ip','192.0.2.210','crowdsec',$3,
+                      3221226194,3221226194,0,0,4)`, at.Add(-time.Hour), at.Add(offset), d.parent)
+            if err != nil { return err }
+        }
+    }
+    return d.Driver.Query(ctx, query, args, value)
+}
+
+func must(err error) { if err != nil { panic("profile_proof_failed") } }
+func main() {
+    file, err := os.Open(os.Args[1]); must(err)
+    var cfg csconfig.ProfileCfg
+    must(yaml.NewDecoder(file).Decode(&cfg)); must(file.Close())
+    profiles, err := csprofiles.NewProfile([]*csconfig.ProfileCfg{&cfg}); must(err)
+    profile := profiles[0] // Compile the real registered helper before injecting a clock.
+    ip, scope, scenario := "192.0.2.210", "Ip", "aboutme/http-status"
+    alert := &models.Alert{Source: &models.Source{Value: &ip, Scope: &scope}, Scenario: &scenario}
+    at := time.Date(2026, 1, 2, 8, 0, 0, 0, time.UTC)
+    cases := []struct { name string; expiry []time.Time; want string }{
+        {"zero", nil, "15m"},
+        {"one", []time.Time{at.Add(time.Hour)}, "1h"},
+        {"two", []time.Time{at.Add(time.Hour), at.Add(2*time.Hour)}, "4h"},
+        {"before", []time.Time{at.Add(-time.Nanosecond)}, "15m"},
+        {"equal", []time.Time{at}, "15m"},
+        {"after", []time.Time{at.Add(time.Nanosecond)}, "1h"},
+        {"revoked", []time.Time{at.Add(-time.Minute)}, "15m"},
+        {"mixed", []time.Time{at.Add(-time.Hour), at.Add(time.Hour)}, "1h"},
+    }
+    evaluate := func(name string, until []time.Time, want string, queryError bool) {
+        calls := 0
+        clock := at
+        helper := func(params ...any) (any, error) {
+            calls++
+            if params[0] != ip { return nil, errors.New("wrong_value") }
+            if queryError { return nil, errors.New("count_query_failed") }
+            count := 0
+            for _, expiry := range until { if expiry.After(clock) { count++ } }
+            clock = at.Add(24*time.Hour) // A second call would observe expiry.
+            return count, nil
+        }
+        options := exprhelpers.GetExprOptions(map[string]any{"Alert": alert})
+        options = append(options, expr.Function("GetActiveDecisionsCount", helper))
+        profile.RuntimeDurationExpr, err = expr.Compile(cfg.DurationExpr, options...); must(err)
+        decisions, err := profile.GenerateDecisionFromProfile(alert); must(err)
+        if calls != 1 || len(decisions) != 1 || *decisions[0].Duration != want { panic(name) }
+    }
+    for _, test := range cases {
+        evaluate(test.name, test.expiry, test.want, false)
+        active := []time.Time{}
+        for _, expiry := range test.expiry { if expiry.After(at) { active = append(active, expiry) } }
+        evaluate(test.name+"-after-batch", active, test.want, false)
+    }
+    // Offenses at 08:00, 12:00 and 18:00 have no overlapping active ban.
+    history := []time.Time{}
+    for _, hour := range []int{8, 12, 18} {
+        at = time.Date(2026, 1, 2, hour, 0, 0, 0, time.UTC)
+        evaluate(fmt.Sprint(hour), history, "15m", false)
+        history = append(history, at.Add(15*time.Minute))
+    }
+    evaluate("expiry-between-calls", []time.Time{at.Add(time.Nanosecond)}, "1h", false)
+    evaluate("query-error-fallback", nil, "15m", true)
+
+    db, err := sql.Open("pgx", "host=/run/postgresql user=crowdsec dbname=crowdsec sslmode=disable"); must(err)
+    defer db.Close()
+    db.SetMaxOpenConns(2)
+    var parent int64
+    must(db.QueryRow(`INSERT INTO alerts (created_at,updated_at,started_at,stopped_at,scenario)
+      VALUES (now(),now(),now(),now(),'aboutme/http-status') RETURNING id`).Scan(&parent))
+    driver := &clockDriver{Driver: entsql.OpenDB(dialect.Postgres, db), db: db, parent: parent}
+    must(exprhelpers.Init(&database.Client{Ent: ent.NewClient(ent.Driver(driver))}))
+    // Use the actual registered helper, its query predicate and PostgreSQL.
+    for _, test := range []struct { offsets []time.Duration; want string; fail bool }{
+        {nil, "15m", false}, {[]time.Duration{time.Hour}, "1h", false},
+        {[]time.Duration{time.Hour,time.Hour}, "4h", false},
+        {[]time.Duration{-time.Microsecond}, "15m", false},
+        {[]time.Duration{0}, "15m", false},
+        {[]time.Duration{time.Microsecond}, "1h", false},
+        {[]time.Duration{-time.Minute,time.Hour}, "1h", false},
+        {nil, "15m", true},
+    } {
+        driver.calls, driver.offsets, driver.fail = 0, test.offsets, test.fail
+        profile.RuntimeDurationExpr, err = expr.Compile(cfg.DurationExpr,
+            exprhelpers.GetExprOptions(map[string]any{"Alert": alert})...); must(err)
+        decisions, err := profile.GenerateDecisionFromProfile(alert); must(err)
+        if driver.calls != 1 || len(decisions) != 1 || *decisions[0].Duration != test.want {
+            panic("active_query_contract")
+        }
+    }
+    _, err = db.Exec("DELETE FROM alerts WHERE id=$1", parent); must(err)
+    fmt.Println("PASS pinned-profile-single-count-expiry-and-query-error")
+}
+GO
+  (cd "$proof" && timeout 300 env GOWORK=off "$go_binary" build -mod=mod -o "$retention_fixture/bin/profile-proof" .) \
+    >"$proof/build.log" 2>&1
+}
+
 retention_fixture_candidate_no_jit() {
-  local retention_time plan=$retention_fixture/candidate-plan.json
+  local retention_time retention_batch=no plan=$retention_fixture/candidate-plan.json
   # shellcheck source=deploy/vn/host/crowdsec-retention.sh
   source /usr/local/lib/aboutme/crowdsec-retention.sh || return 1
   retention_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ) || return 1
@@ -184,6 +347,10 @@ if [[ $* == '--no-block start aboutme-alert@aboutme-crowdsec-retention.service' 
   printf 'alarm\n' >>"$fixture/alarms"
   exit 0
 fi
+if [[ $* == '--no-block start aboutme-alert@crowdsec_retention_overdue.service' ]]; then
+  printf 'crowdsec_retention_overdue\n' >>"$fixture/alarms"
+  exit 0
+fi
 if [[ -x $fixture/control && $* != *postgresql@18-main.service* ]]; then
   exec "$fixture/control" "$@"
 fi
@@ -214,6 +381,14 @@ case $1 in
 esac
 SH
   printf '#!/usr/bin/env bash\n[[ ! -e %q/clock-failed ]] && printf "yes\\n"\n' "$retention_fixture" >"$retention_fixture/bin/timedatectl"
+  printf '#!/usr/bin/env bash\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/date"
+  cat >>"$retention_fixture/bin/date" <<'SH'
+if [[ $* == '-u +%Y-%m-%dT%H:%M:%S.%NZ' && -e $fixture/clock ]]; then
+  if [[ -e $fixture/clock-read && -e $fixture/verify-clock ]]; then cat "$fixture/verify-clock"
+  else cat "$fixture/clock"; fi
+  touch "$fixture/clock-read"
+else exec /usr/bin/date "$@"; fi
+SH
   printf '#!/usr/bin/env bash\n[[ $* == "container exists "* ]] && exit 1\nexit 2\n' >"$retention_fixture/bin/podman"
   printf '#!/usr/bin/env bash\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/nft"
   cat >>"$retention_fixture/bin/nft" <<'SH'
@@ -250,6 +425,19 @@ SH
 query=$(mktemp "$fixture/queries/query.XXXXXX")
 trap 'rm -f "$query"' EXIT
 cat >"$query"
+insert_overdue() {
+  "$fixture/bin/psql-real" -X -qAt -w -v ON_ERROR_STOP=1 \
+    -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
+INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
+VALUES (5101,'2026-01-01 17:00Z',now(),now(),now(),'aboutme/http-status');
+INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
+VALUES (now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.23','crowdsec',5101);
+SQL
+}
+if [[ -e $fixture/insert-overdue-before-selection ]] && grep -q 'ORDER BY kind,id LIMIT 1000' "$query"; then
+  rm "$fixture/insert-overdue-before-selection"
+  insert_overdue
+fi
 if grep -q '^COPY selected ' "$query"; then
   printf 'sql-delete\n' >>"$fixture/control-log"
   awk '/^COPY selected / { copy=1; next } /^\\\.$/ { copy=0 } copy { count++ } END { print count+0 }' \
@@ -277,7 +465,24 @@ SQL
   fi
 fi
 status=0
-"$fixture/bin/psql-real" "$@" <"$query" || status=$?
+result=''
+if grep -q '^COPY selected ' "$query"; then
+  "$fixture/bin/psql-real" "$@" <"$query" >"$query.out" || status=$?
+  result=$(cat "$query.out")
+  cat "$query.out"
+else
+  "$fixture/bin/psql-real" "$@" <"$query" || status=$?
+fi
+if [[ $status == 0 && -e $fixture/insert-overdue-after-selection ]] && grep -q 'ORDER BY kind,id LIMIT 1000' "$query"; then
+  rm "$fixture/insert-overdue-after-selection"
+  insert_overdue
+fi
+if [[ $result == retry && -e $fixture/paused-ingestion ]]; then
+  touch "$fixture/ingestion-release"
+  timeout 5 bash -c 'until [[ -e $1/ingestion-done ]]; do sleep 0.05; done' proof "$fixture"
+fi
+if [[ $result == deleted && -e $fixture/stream-held ]]; then touch "$fixture/stream-release"; fi
+rm -f "$query.out"
 exit "$status"
 SH
   chmod 0755 "$retention_fixture/bin/psql" "$retention_fixture/bin/psql-real"
@@ -297,6 +502,49 @@ SH
   # shellcheck disable=SC2034 # The caller's ERR trap reads this fixed case name.
   retention_fixture_case=fixture-postgresql-ready
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
+}
+
+retention_fixture_stream_proxy() {
+  cat >"$retention_fixture/stream-proxy.py" <<'PY'
+import http.server,pathlib,sys,threading,time,urllib.request
+root=pathlib.Path(sys.argv[1])
+guard=threading.Lock()
+opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self,*args): pass
+    def do_GET(self):
+        request=urllib.request.Request('http://127.0.0.1:8095'+self.path,
+                                       headers={'X-Api-Key':self.headers['X-Api-Key']})
+        with opener.open(request,timeout=15) as response:
+            data=response.read(4*1024*1024+1)
+            assert len(data)<=4*1024*1024
+        hold=False
+        with guard:
+            if (root/'stream-hold').exists() and b'192.0.2.52' in data:
+                (root/'stream-hold').unlink()
+                (root/'stream-held').touch()
+                hold=True
+        if hold:
+            deadline=time.monotonic()+65
+            while not (root/'stream-release').exists():
+                assert time.monotonic()<deadline
+                time.sleep(0.05)
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type','application/json')
+            self.send_header('Content-Length',str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError,ConnectionResetError): pass
+        if hold: (root/'stream-released').touch()
+server=http.server.ThreadingHTTPServer(('127.0.0.1',18095),Handler)
+(root/'proxy-ready').touch()
+server.serve_forever()
+PY
+  python3 -I "$retention_fixture/stream-proxy.py" "$retention_fixture" >/dev/null 2>&1 &
+  retention_proxy_pid=$!
+  for _ in {1..50}; do [[ ! -e $retention_fixture/proxy-ready ]] || return 0; sleep 0.1; done
+  return 1
 }
 
 # Only service control is adapted to the namespace. Every consumer and the

@@ -47,7 +47,8 @@ for name,body in [('ordinary',ordinary),('postgres',postgres)]:
     body=body.replace('/run/aboutme','$FIXTURE_CASE/run')
     body=body.replace('/var/lib/aboutme','$FIXTURE_CASE/state')
     (work/(name+'.sh')).write_text(
-        '#!/usr/bin/env bash\nset -euo pipefail\nsource "$FIXTURE_SUPPORT"\n'+copy_tree+body)
+        '#!/usr/bin/env bash\nset -euo pipefail\nsource "$FIXTURE_SUPPORT"\n'
+        'tmp=$(mktemp -d "$FIXTURE_CASE/tmp.XXXXXX")\ntrap \'rm -rf -- "$tmp"\' EXIT\n'+copy_tree+body)
 gate=(root/'deploy/vn/host/crowdsec-db.sh').read_text()
 gate=gate.replace('/etc/postgresql/18/main',str(work/'host-placeholder'))
 gate=gate.replace('getpwnam("postgres").pw_uid','getpwuid(os.getuid()).pw_uid')
@@ -287,6 +288,7 @@ for mode in ordinary postgres; do
   touch "$FIXTURE_CASE/run/crowdsec-retention.lock" "$FIXTURE_CASE/state/fence.lock"
   chmod 0600 "$FIXTURE_CASE/run/crowdsec-retention.lock" "$FIXTURE_CASE/state/fence.lock"
   cp "$FIXTURE_BUNDLE/host/crowdsec-schema-v1.8.1.tsv" "$FIXTURE_CASE/lib/"
+  cp "$FIXTURE_BUNDLE/host/crowdsec-retention.sh" "$FIXTURE_CASE/lib/"
   cp "$work/database-fixture.sh" "$FIXTURE_CASE/"
   sed -e "s|$work/host-placeholder|$FIXTURE_CASE/etc/postgresql/18/main|g" \
     -e "s|$work/lib-placeholder|$FIXTURE_CASE/lib|g" \

@@ -79,6 +79,179 @@ if [[ ${1:-} == postgresql ]]; then
   check_hosted startup-replaces-restarted-epoch run_retention startup
   check_hosted replacement-current-epoch-lease lease_check
 
+  seed_batch_graph() {
+    retention_fixture_sql >/dev/null <<'SQL'
+DELETE FROM public.alerts;
+INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
+VALUES (5100,'2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','aboutme/http-status');
+INSERT INTO public.events (created_at,updated_at,time,serialized,alert_events)
+VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','{}',5100);
+INSERT INTO public.meta (created_at,updated_at,key,value,alert_metas)
+VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','fixed','fixed',5100);
+INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
+VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 18:00Z','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',5100);
+SQL
+    printf 'active\n' >"$retention_fixture/consumer-state"
+    : >"$retention_fixture/control-log"
+  }
+  for boundary in '19:59:59|1|0' '20:00:00|0|1' '20:04:59|0|1' '20:05:00|1|0'; do
+    IFS='|' read -r clock retained stops <<<"$boundary"
+    seed_batch_graph
+    retention_fixture_time "2026-01-02T${clock}Z"
+    check_hosted "nightly-boundary-$clock" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == "$retained" ]]
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == "$stops" ]]
+    check_hosted deferred-or-batched-expiry-renews-lease lease_check
+  done
+  retention_fixture_sql <<<'DELETE FROM public.alerts;' >/dev/null
+  : >"$retention_fixture/control-log"
+  retention_fixture_time 2026-01-02T20:00:00Z
+  check_hosted empty-night-keeps-consumers run_retention runtime
+  [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
+
+  seed_batch_graph
+  retention_fixture_sql <<'SQL' >/dev/null
+UPDATE public.alerts SET created_at='2026-01-02 19:59Z',updated_at='2026-01-02 19:59Z',started_at='2026-01-02 19:59Z',stopped_at='2026-01-02 19:59Z';
+UPDATE public.events SET created_at='2026-01-02 19:59Z',updated_at='2026-01-02 19:59Z',time='2026-01-02 19:59Z';
+UPDATE public.meta SET created_at='2026-01-02 19:59Z',updated_at='2026-01-02 19:59Z';
+UPDATE public.decisions SET created_at='2026-01-02 19:59Z',updated_at='2026-01-02 19:59Z',until='2026-01-02 20:14Z';
+SQL
+  retention_fixture_time 2026-01-02T20:00:00Z
+  check_hosted unexpired-before-night-keeps-consumers run_retention runtime
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 1 ]]
+  [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
+  retention_fixture_time 2026-01-03T18:59:00Z
+  check_hosted missed-night-age-trigger run_retention runtime
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
+
+  for expiry in '2026-01-01 20:15Z' '2026-01-01 21:00Z' '2026-01-02 00:00Z' '2026-01-02 18:00Z'; do
+    seed_batch_graph
+    retention_fixture_sql <<<"UPDATE public.decisions SET created_at='2026-01-01 20:00Z',until='$expiry';" >/dev/null
+    retention_fixture_time 2026-01-02T18:59:59Z
+    check_hosted "deferred-duration-$expiry" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 1 ]]
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
+    retention_fixture_time 2026-01-02T19:00:00Z
+    check_hosted "forced-duration-$expiry" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
+  done
+
+  seed_batch_graph
+  retention_fixture_sql <<'SQL' >/dev/null
+INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
+SELECT created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions FROM public.decisions,generate_series(1,1000);
+UPDATE public.decisions SET until='2026-01-02 20:00Z';
+SQL
+  retention_fixture_time 2026-01-02T20:00:00Z
+  check_hosted thousand-plus-expired-candidates-stop-once run_retention runtime
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
+  [[ $(grep -c '^sql-delete$' "$retention_fixture/control-log") == 2 ]]
+  [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
+  [[ $(grep -c '^nft-init$' "$retention_fixture/control-log") == 1 ]]
+
+  # Each occurrence clock independently makes a graph due, including equality.
+  for field in alerts.created_at alerts.updated_at alerts.started_at alerts.stopped_at \
+    decisions.created_at decisions.updated_at events.created_at events.updated_at events.time meta.created_at meta.updated_at; do
+    seed_batch_graph
+    retention_fixture_sql <<<"UPDATE public.${field%%.*} SET ${field#*.}='2026-01-01 20:00Z';" >/dev/null
+    retention_fixture_time 2026-01-02T19:00:00Z
+    check_hosted "age-target-$field" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
+  done
+  for with_decision in yes no; do
+    seed_batch_graph
+    [[ $with_decision == yes ]] || retention_fixture_sql <<<'DELETE FROM public.decisions;' >/dev/null
+    retention_fixture_sql <<<'UPDATE public.events SET time='\''2026-01-01 17:00Z'\'';' >/dev/null
+    retention_fixture_time 2026-01-02T19:00:00Z
+    check_hosted "overdue-graph-$with_decision-decision" run_retention runtime
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts;') == 0 ]]
+    grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+    check_hosted overdue-deleted-before-renewal lease_check
+    [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == "$([[ $with_decision == yes ]] && echo 1 || echo 0)" ]]
+  done
+  seed_batch_graph
+  retention_fixture_sql <<<'UPDATE public.alerts SET started_at='\''2026-01-01 20:00Z'\'';' >/dev/null
+  retention_fixture_time 2026-01-02T18:59:59Z 2026-01-02T19:30:00Z
+  check_hosted fresh-final-verification-rejects-hard-equality refused run_retention runtime
+  [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
+  grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+  retention_fixture_sql <<<'DELETE FROM public.alerts;' >/dev/null
+  retention_fixture_time
+  check_hosted recover-after-fresh-verification recover_retention
+
+  printf 'active\n' >"$retention_fixture/consumer-state"
+  retention_fixture_time 2026-01-02T19:00:00Z
+  touch "$retention_fixture/insert-overdue-before-selection"
+  : >"$retention_fixture/control-log"
+  check_hosted overdue-arrives-before-selection-stops-and-cleans run_retention runtime
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5101;') == 0 ]]
+  [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
+  grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+
+  retention_fixture_time 2026-01-02T19:00:00Z
+  touch "$retention_fixture/insert-overdue-after-selection"
+  check_hosted overdue-arrives-after-selection-refuses refused run_retention runtime
+  [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5101;') == 1 ]]
+  check_hosted stopped-recovery-deletes-late-overdue recover_retention
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5101;') == 0 ]]
+
+  seed_batch_graph
+  retention_fixture_sql <<<'DELETE FROM public.decisions; UPDATE public.events SET time='\''2026-01-01 17:00Z'\'';' >/dev/null
+  retention_fixture_time 2026-01-02T19:00:00Z
+  touch "$retention_fixture/paused-ingestion"
+  # The writer owns decisions before it inserts its parent, like the engine.
+  retention_fixture_sql >"$retention_fixture/ingestion-ready" <<SQL &
+BEGIN;
+INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin)
+VALUES (5102,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.22','crowdsec');
+SELECT 'ready';
+\! timeout 10 bash -c 'until test -e "$retention_fixture/ingestion-release"; do sleep 0.05; done'
+INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
+VALUES (5102,now(),now(),now(),now(),'aboutme/http-status');
+UPDATE public.decisions SET alert_decisions=5102 WHERE id=5102;
+COMMIT;
+\! touch "$retention_fixture/ingestion-done"
+SQL
+  ingestion_pid=$!
+  for _ in {1..100}; do [[ ! -s $retention_fixture/ingestion-ready ]] || break; sleep 0.05; done
+  [[ -s $retention_fixture/ingestion-ready ]]
+  check_hosted live-contention-rolls-back-before-parent-insert run_retention runtime
+  wait "$ingestion_pid"
+  [[ -e $retention_fixture/ingestion-done ]]
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5100;') == 0 ]]
+  [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions WHERE alert_decisions=5102;') == 1 ]]
+  [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
+  [[ $(grep -c '^sql-delete$' "$retention_fixture/control-log") == 2 ]]
+  rm "$retention_fixture/paused-ingestion"
+
+  for decision in no yes; do
+    seed_batch_graph
+    [[ $decision == yes ]] || retention_fixture_sql <<<'DELETE FROM public.decisions;' >/dev/null
+    retention_fixture_sql <<<'UPDATE public.events SET time='\''2026-01-01 17:00Z'\'';' >/dev/null
+    retention_fixture_time 2026-01-02T19:00:00Z
+    rm -f "$retention_fixture/contention-ready"
+    retention_fixture_sql >"$retention_fixture/contention-ready" <<'SQL' &
+BEGIN;
+LOCK TABLE public.decisions IN ROW EXCLUSIVE MODE;
+SELECT 'ready';
+SELECT pg_sleep(8);
+ROLLBACK;
+SQL
+    contention_pid=$!
+    for _ in {1..100}; do [[ ! -s $retention_fixture/contention-ready ]] || break; sleep 0.05; done
+    [[ -s $retention_fixture/contention-ready ]]
+    check_hosted "three-contended-attempts-$decision-decision-fail-closed" refused run_retention runtime
+    [[ $(grep -c '^sql-delete$' "$retention_fixture/control-log") == 3 ]]
+    [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
+    [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=5100;') == 1 ]]
+    wait "$contention_pid"
+    check_hosted recover-after-contended-attempts recover_retention
+  done
+  retention_fixture_time
+
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.machines (created_at,updated_at,machine_id,password,ip_address)
 VALUES (now(),now(),'retention-fixture','fixed-fixture','');
@@ -122,7 +295,9 @@ INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,va
 VALUES (now()-interval '2 hours',now(),now()-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
   : >"$retention_fixture/control-log"
+  retention_fixture_time "$(date -u +%Y-%m-%d)T20:00:00Z"
   check_hosted expired-decision-stopped-control-path run_retention runtime
+  retention_fixture_time
   [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == 0 ]]
   stop_line=$(grep -n '^stop ' "$retention_fixture/control-log" | head -n1 | cut -d: -f1)
   delete_line=$(grep -n '^sql-delete$' "$retention_fixture/control-log" | head -n1 | cut -d: -f1)
@@ -139,6 +314,7 @@ INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,va
 VALUES (now()-interval '2 hours',now(),now()-interval '1 minute','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
     check_hosted bouncer-only-current-lease lease_check
+    retention_fixture_time "$(date -u +%Y-%m-%d)T20:00:00Z"
     if [[ $rebuild == accepted ]]; then
       check_hosted bouncer-only-valid-rebuild run_retention runtime
       check_hosted bouncer-only-valid-rebuild-renews lease_check
@@ -148,6 +324,7 @@ SQL
       [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
       rm "$retention_fixture/nft-rebuild-mismatch"
     fi
+    retention_fixture_time
     if grep -qE '^start aboutme-(caddy|maintenance)\.service$' "$retention_fixture/control-log"; then
       echo 'FAIL bouncer-only-path-started-caddy'; exit 1
     fi
@@ -413,6 +590,16 @@ assert 'flock -x -w 60 "$retention_lock"' in source
 assert 'deadline=60' in source
 assert 'timeout --signal=TERM --kill-after=2s "$deadline"' in source
 PY
+
+check sourced-firewall-query-needs-no-batch-state bash -euo pipefail -c '
+  source "$1"
+  retention_time=2026-01-02T19:00:00Z
+  unset retention_batch retention_verify_time
+  timeout() {
+    [[ $* == *"-v batch=no"* && $* == *"-v verify_time=2026-01-02T19:00:00Z"* ]]
+  }
+  retention_psql
+' proof "$host/crowdsec-retention.sh"
 
 check alert-service-delivery-budget python3 - "$host/etc/systemd/system/aboutme-alert@.service" <<'PY'
 import configparser, sys

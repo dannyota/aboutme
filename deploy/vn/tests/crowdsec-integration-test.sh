@@ -15,9 +15,13 @@ source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
 # shellcheck disable=SC2034 # The sourced fixture selects idle migration admission.
 retention_fixture_migration=yes
+profile_go=$(readlink -f "$(command -v go)")
 retention_fixture_start "$repo_root"
+retention_fixture_case=pinned-profile-proof-build
+retention_fixture_profile_binary "$profile_go"
 retention_fixture_case=crowdsec-integration
 retention_fixture_consumers
+sed -i 's|api_url http://127.0.0.1:8095|api_url http://127.0.0.1:18095|' "$retention_fixture/Caddyfile"
 # A second real pinned listener exercises maintenance's independent bouncer
 # cache. Process control remains the existing explicit namespace adapter.
 sed -e 's/:18080 {/:18081 {/' -e 's/respond "allowed" 200/respond "maintenance" 503/' \
@@ -122,6 +126,7 @@ integration_body() {
 retention_fixture_case=real-consumer-proof
 export integration_stage=consumers
 retention_fixture_diagnostics
+retention_fixture_stream_proxy
 declare -F crowdsec_assert_postgresql >/dev/null
 ip link set lo up
 # Trace this short-lived CLI only; the service adapter spawns real daemons.
@@ -145,6 +150,7 @@ install -o 10001 -g 10001 -m 0600 /dev/null /run/aboutme/caddy-log/crowdsec/main
 
 /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1
 crowdsec -t >/dev/null 2>&1
+"$retention_fixture/bin/profile-proof" /etc/crowdsec/profiles.yaml
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
 systemctl start crowdsec.service
 systemctl start crowdsec-firewall-bouncer.service aboutme-caddy.service
@@ -673,6 +679,28 @@ remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
   echo "a second HTTP decision does not last one hour" >&2
   exit 1
 }
+append_records "$attack_ip" 404 21 auth
+for _ in {1..30}; do
+  [[ $(sql "SELECT count(*) FROM decisions WHERE value='$attack_ip';") -ge 3 ]] && break
+  sleep 1
+done
+until=$(sql "SELECT until FROM decisions WHERE value='$attack_ip' ORDER BY id DESC LIMIT 1;")
+remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
+((remaining >= 14280 && remaining <= 14400))
+
+# Expired history stays stored but cannot turn a new offense into a longer ban.
+expired_history_ip=192.0.2.46
+sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
+ VALUES (89000,now(),now(),now(),now(),'aboutme/http-status');
+ INSERT INTO decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
+ SELECT now()-interval '2 hours',now(),now()-interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.46','crowdsec',89000 FROM generate_series(1,3);" >/dev/null
+append_records "$expired_history_ip" 404 21 static
+wait_for_decision "$expired_history_ip"
+until=$(sql "SELECT until FROM decisions WHERE value='$expired_history_ip' ORDER BY id DESC LIMIT 1;")
+remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
+((remaining >= 780 && remaining <= 900))
+[[ $(sql "SELECT count(*) FROM decisions WHERE value='$expired_history_ip' AND until<=now();") == 3 ]]
+printf 'PASS retained-expired-history-does-not-escalate\n'
 
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip = '$attack_ip' AND (coalesce(source_country, '') != '' OR coalesce(source_as_number, '') NOT IN ('', '0') OR coalesce(source_as_name, '') != '' OR coalesce(source_latitude, 0.0) != 0.0 OR coalesce(source_longitude, 0.0) != 0.0 OR coalesce(source_range, '') != '');") == 0 ]] || {
   echo "HTTP alert contains network enrichment" >&2
@@ -744,13 +772,30 @@ PY
 nft add table inet retention_unrelated
 credential_digest=$(sql 'SELECT machine_id,password FROM machines ORDER BY id;' | sha256sum)
 bouncer_digest=$(sql 'SELECT name,api_key FROM bouncers ORDER BY id;' | sha256sum)
+# Hold a real response carrying a ban until stopped SQL deletion completes.
+ip addr add 192.0.2.52/32 dev lo
+touch "$retention_fixture/stream-hold"
+append_records 192.0.2.52 404 21 static
+wait_for_decision 192.0.2.52
+for _ in {1..100}; do [[ ! -e $retention_fixture/stream-held ]] || break; sleep 0.2; done
+[[ -e $retention_fixture/stream-held && ! -e $retention_fixture/stream-released ]]
+old_caddy_pid=$(cat "$retention_fixture/pids/aboutme-caddy.service")
+old_maintenance_pid=$(cat "$retention_fixture/pids/aboutme-maintenance.service")
 # Keep decisions active in caches. Stale parents and an old child force the
 # exact candidate fallback rather than natural decision expiry.
 sql "UPDATE alerts SET created_at=now()-interval '23 hours 31 minutes'
- WHERE source_ip IN ('192.0.2.41','192.0.2.42','192.0.2.80','2001:db8::80');
+ WHERE source_ip IN ('192.0.2.41','192.0.2.42','192.0.2.52','192.0.2.80','2001:db8::80');
  UPDATE events SET time=now()-interval '23 hours 31 minutes'
  WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.44');" >/dev/null
 /usr/local/lib/aboutme/crowdsec-retention.sh runtime
+for _ in {1..50}; do [[ ! -e $retention_fixture/stream-released ]] || break; sleep 0.1; done
+[[ -e $retention_fixture/stream-released ]]
+[[ $(cat "$retention_fixture/pids/aboutme-caddy.service") != "$old_caddy_pid" ]]
+[[ $(cat "$retention_fixture/pids/aboutme-maintenance.service") != "$old_maintenance_pid" ]]
+[[ $(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.52';") == 0 ]]
+wait_status 200 192.0.2.52 http://127.0.0.1:18080/
+wait_status 503 192.0.2.52 http://127.0.0.1:18081/
+printf 'PASS delayed-stream-response-cannot-repopulate-retired-caches\n'
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.41','192.0.2.42','192.0.2.44','192.0.2.80','2001:db8::80');") == 0 ]]
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.45';") == 1 ]]
 [[ $(sql 'SELECT machine_id,password FROM machines ORDER BY id;' | sha256sum) == "$credential_digest" ]]
@@ -765,6 +810,66 @@ wait_status timeout 192.0.2.81 http://127.0.0.1:18080/
 wait_status timeout 2001:db8::81 'http://[::1]:18080/'
 wait_status 403 192.0.2.45 http://127.0.0.1:18080/
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
+
+# Natural expiry and an explicit pre-selection revocation stay stream-visible.
+retention_fixture_case=expiry-and-revocation-deferred-until-batch
+systemctl stop aboutme-maintenance.service
+for address in 192.0.2.49 192.0.2.51; do ip addr add "$address/32" dev lo; done
+crowdsec_admitted_cli decisions add --ip 192.0.2.49 --duration 20s >/dev/null 2>&1
+wait_status 403 192.0.2.49 http://127.0.0.1:18080/
+wait_status 200 192.0.2.49 http://127.0.0.1:18080/
+crowdsec_admitted_cli decisions add --ip 192.0.2.51 --duration 1h >/dev/null 2>&1
+wait_status 403 192.0.2.51 http://127.0.0.1:18080/
+crowdsec_admitted_cli decisions delete --ip 192.0.2.51 >/dev/null 2>&1
+wait_status 200 192.0.2.51 http://127.0.0.1:18080/
+[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51') AND until<=now();") == 2 ]]
+: >"$retention_fixture/control-log"
+retention_fixture_time "$(date -u +%Y-%m-%d)T19:00:00Z"
+"$lib/crowdsec-retention.sh" runtime
+retention_fixture_time
+[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');") == 2 ]]
+[[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
+sql "UPDATE alerts SET started_at=now()-interval '23 hours 31 minutes'
+ WHERE id IN (SELECT alert_decisions FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51'));" >/dev/null
+"$lib/crowdsec-retention.sh" runtime
+[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');") == 0 ]]
+wait_status 200 192.0.2.49 http://127.0.0.1:18080/
+wait_status 200 192.0.2.51 http://127.0.0.1:18080/
+wait_status 403 192.0.2.45 http://127.0.0.1:18080/
+systemctl start aboutme-maintenance.service
+printf 'PASS real-expiry-and-revocation-retained-until-stopped-batch\n'
+
+# Replay event time through the pinned engine, without waiting 25 wall hours.
+retention_fixture_case=slow-trickle-old-first-timestamp
+integration_stage=slow-trickle-replay
+python3 -I - "$retention_fixture/trickle.json" <<'PY'
+import datetime,json,pathlib,sys
+end=datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+start=end-datetime.timedelta(hours=25)
+with pathlib.Path(sys.argv[1]).open('w') as stream:
+    for offset in [*range(0,90001,10), *([90000]*21)]:
+        record=dict(ts=(start+datetime.timedelta(seconds=offset)).isoformat().replace('+00:00','Z'),
+                    source_ip='192.0.2.47',method='GET',status=404,
+                    route_class='unknown',probe_class='other',target_path='/unknown/trickle')
+        stream.write(json.dumps(record)+'\n')
+PY
+"$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
+timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" -type aboutme-http -order-event \
+  >"$retention_fixture/replay.log" 2>&1
+[[ $(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=now()-interval '25 hours';") -gt 0 ]]
+[[ $(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;") -le 5 ]]
+[[ $(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';") -gt 0 ]]
+# Copy the replay's actual occurrence clocks into a graph without a decision.
+sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip)
+ SELECT 89001,created_at,updated_at,started_at,stopped_at,scenario,'192.0.2.48'
+ FROM alerts WHERE source_ip='192.0.2.47' ORDER BY id LIMIT 1;" >/dev/null
+: >"$retention_fixture/control-log"
+"$lib/crowdsec-retention.sh" runtime
+[[ $(grep -c '^stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service$' "$retention_fixture/control-log") == 1 ]]
+[[ $(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');") == 0 ]]
+grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+"$lib/crowdsec-retention-lease-check.sh"
+printf 'PASS slow-trickle-overdue-cleanup\n'
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 /usr/local/lib/aboutme/crowdsec-vacuum.sh
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
@@ -813,6 +918,7 @@ printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-d
 echo "CrowdSec 1.8.1 integration tests passed"
 }
 export -f integration_body sql retention_fixture_sql retention_fixture_admin \
+  retention_fixture_time retention_fixture_stream_proxy \
   crowdsec_admitted_cli crowdsec_assert_postgresql retention_fixture_diagnostics retention_fixture_report_failure
 export repo_root edge feed retention_fixture PATH
 unshare --net bash -euo pipefail -c integration_body
