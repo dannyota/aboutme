@@ -273,6 +273,10 @@ for (const mutation of PAINT_MUTATIONS) {
     await waitForImages(page);
     const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
     const layout = await measurePdfLayout(page, margins);
+    const sidebarHeadings = layout.text.filter((item) =>
+      item.role === 'heading'
+      && item.left >= layout.sidebar!.left - 1);
+    expect(sidebarHeadings).toHaveLength(1);
     const baseline = await printedDisplayPages(page);
     expect(baseline).toHaveLength(2);
     const columns = (pages: typeof baseline) => pdfColumnsMatch(
@@ -280,7 +284,10 @@ for (const mutation of PAINT_MUTATIONS) {
     );
     const tint = (pages: typeof baseline, index: number) => pdfSidebarPaint(
       pages[index]!.paint, pages[index]!.text, layout.sidebar!,
-      margins.y, index === 0, '#e3ecf0',
+      margins.y, index === 0, '#e3ecf0', {
+        body: 'Nội dung kiểm tra phân trang',
+        headings: index === 0 ? sidebarHeadings : [],
+      },
     );
     const identity = await fixturePhotoIdentity();
     const photo = (pages: typeof baseline) => {

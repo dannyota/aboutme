@@ -233,16 +233,17 @@ export function pdfSidebarPaint(
   marginY: number,
   firstPage: boolean,
   color: string,
+  expected: { body: string; headings: readonly PdfBox[] },
 ): boolean {
   // Overflow fixtures use full-width level-five bars and heading rules.
-  const foreground = paint.fills.filter((fill) =>
+  const fullWidth = paint.fills.filter((fill) =>
     Math.abs(fill.left - sidebar.left) <= 1
-    && Math.abs(fill.right - sidebar.right) <= 1
-    && (Math.abs(fill.bottom - fill.top - 3) <= 1
-      || Math.abs(fill.bottom - fill.top - 0.75) <= 0.1));
-  if (!foreground.every((fill) => fill.bottom - fill.top > 1
-    ? pdfHasFill(paint, fill, '#0f6b7d')
-    : pdfHasRule(paint, fill, '#8eb8c2'))) return false;
+    && Math.abs(fill.right - sidebar.right) <= 1);
+  const bars = fullWidth.filter((fill) =>
+    Math.abs(fill.bottom - fill.top - 3) <= 1
+    && pdfColorMatches(fill.color, '#0f6b7d'));
+  const rules = fullWidth.filter((fill) =>
+    Math.abs(fill.bottom - fill.top - 0.75) <= 0.1);
   const column = page.items.filter((item) => item.bounds
     && item.bounds.left >= sidebar.left - 1
     && (!firstPage || item.bounds.top >= sidebar.top - 1));
@@ -251,25 +252,41 @@ export function pdfSidebarPaint(
     markers.push('SIDEBAR-SHORT');
   }
   const titles = markers.map((marker) => pdfMarkerPosition(page, marker));
-  const bars = foreground.filter((fill) => fill.bottom - fill.top > 1)
-    .filter((fill, index, fills) => fills.findIndex((other) =>
-      pdfBoxMatches(fill, other)) === index)
-    .sort((a, b) => a.top - b.top);
-  if (bars.length !== titles.length || !bars.every((bar, index) => {
-    const title = titles[index]?.bounds;
-    return title && bar.top >= title.bottom - 1
-      && bar.bottom <= (titles[index + 1]?.bounds?.top
-        ?? page.height - marginY) + 1;
-  }) || foreground.some((fill) => fill.bottom - fill.top <= 1
-    && (!firstPage || !titles[0]?.bounds
-      || fill.bottom > titles[0].bounds.top + 1))) return false;
+  const foreground: PdfBox[] = [];
+  for (const [index, item] of titles.entries()) {
+    const title = item?.bounds;
+    if (!title) continue;
+    const body = pdfMarkerPosition({ ...page,
+      items: column.filter(({ bounds }) => bounds!.top >= title.bottom - 1
+        && bounds!.top < (titles[index + 1]?.bounds?.top
+          ?? page.height - marginY)),
+    }, expected.body)?.bounds;
+    const matches = bars.filter((bar) => body
+      && bar.top >= title.bottom - 1 && bar.bottom <= body.top + 1);
+    if (matches.length === 1 && pdfHasFill(paint, matches[0]!, '#0f6b7d')) {
+      foreground.push(matches[0]!);
+    }
+  }
+  for (const heading of expected.headings) {
+    const top = heading.bottom + 14 * 0.25 * 0.75;
+    const box = { left: sidebar.left, right: sidebar.right,
+      top, bottom: top + 0.75 };
+    const matches = rules.filter((rule) => pdfBoxMatches(rule, box));
+    if (matches.length === 1 && pdfHasRule(paint, matches[0]!, '#8eb8c2')) {
+      foreground.push(matches[0]!);
+    }
+  }
+  const complete = bars.length === titles.length
+    && rules.length === expected.headings.length
+    && new Set(foreground).size === titles.length + expected.headings.length;
   if (column.length === 0 && !firstPage) {
     // A short sidebar still paints alongside the continuing main flow.
     return paint.fills.some((fill) =>
       pdfSurfacePaint(paint, page, fill, color, foreground)
       && Math.abs(fill.left - sidebar.left) <= 1
       && Math.abs(fill.right - sidebar.right) <= 1
-      && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1);
+      && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1)
+    && complete;
   }
   const bottom = Math.max(...column.map((item) => item.bounds!.bottom));
   return paint.fills.some((fill) => Math.abs(fill.left - sidebar.left) <= 1
@@ -277,7 +294,7 @@ export function pdfSidebarPaint(
     && Math.abs(fill.top - (firstPage ? sidebar.top : marginY)) <= 1
     && fill.bottom >= bottom - 1
     && fill.bottom <= page.height - marginY + 1
-    && pdfSurfacePaint(paint, page, fill, color, foreground));
+    && pdfSurfacePaint(paint, page, fill, color, foreground)) && complete;
 }
 
 export function pdfParagraphGeometry(

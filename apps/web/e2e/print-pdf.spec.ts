@@ -235,6 +235,15 @@ for (const printCase of CASES) {
               const layout = await measurePdfLayout(page, margins);
               expect(Math.abs(layout.width - (width * 0.75 - 2 * margins.x)))
                 .toBeLessThanOrEqual(1);
+              const sidebarHeadings = layout.text.filter((item) =>
+                item.role === 'heading'
+                && item.left >= layout.sidebar!.left - 1);
+              expect(sidebarHeadings).toHaveLength(1);
+              const sidebarBody = printCase.fixture === 'print-main-overflow'
+                ? 'SIDEBAR-SHORT'
+                : lng === 'vi'
+                  ? 'Nội dung kiểm tra phân trang'
+                  : 'Pagination test content';
               const photo = await fixturePhotoIdentity();
               expect(document.numPages).toBe(EXPECTED_PAGES);
               const dimensions = paper === 'a4' ? [595.28, 841.89] : [612, 792];
@@ -255,7 +264,10 @@ for (const printCase of CASES) {
                 expect(pdfColumnsMatch(textPage, layout, margins, index === 0))
                   .toBe(true);
                 expect(pdfSidebarPaint(paint, textPage, layout.sidebar!,
-                  margins.y, index === 0, '#e3ecf0')).toBe(true);
+                  margins.y, index === 0, '#e3ecf0', {
+                    body: sidebarBody,
+                    headings: index === 0 ? sidebarHeadings : [],
+                  })).toBe(true);
                 expect(paint.images).toHaveLength(index === 0 ? 1 : 0);
                 if (index === 0) {
                   expect(pdfImageMatches(paint.images[0], photo, layout.photo!),

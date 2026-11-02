@@ -121,6 +121,7 @@ describe('PDF overpaint mutations', () => {
 });
 
 describe('PDF sidebar backgrounds', () => {
+  const expected = { body: 'BODY', headings: [] };
   const proxy = { getViewport: () => ({
     width: 200, height: 200, transform: [1, 0, 0, -1, 0, 200],
   }) } as unknown as PDFPageProxy;
@@ -148,7 +149,7 @@ describe('PDF sidebar backgrounds', () => {
       expect(pdfHasFill(paint, background, '#e3ecf0')).toBe(false);
       expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(true);
       expect(pdfSidebarPaint(paint, text, layout.sidebar,
-        margins.y, firstPage, '#e3ecf0')).toBe(true);
+        margins.y, firstPage, '#e3ecf0', expected)).toBe(true);
       expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [bar]))
         .toBe(true);
     },
@@ -169,10 +170,10 @@ describe('PDF sidebar backgrounds', () => {
     const clean = { ...paint, fills: [paint.fills[0]!] };
     expect(pdfSurfacePaint(clean, text, background, '#e3ecf0')).toBe(true);
     expect(pdfSidebarPaint(clean, text, background,
-      margins.y, true, '#e3ecf0')).toBe(true);
+      margins.y, true, '#e3ecf0', expected)).toBe(true);
     expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(false);
     expect(pdfSidebarPaint(paint, text, background,
-      margins.y, true, '#e3ecf0')).toBe(false);
+      margins.y, true, '#e3ecf0', expected)).toBe(false);
   });
 
   it('rejects overflow bar overpaint between text rows', async () => {
@@ -191,14 +192,83 @@ describe('PDF sidebar backgrounds', () => {
     ]);
     const clean = { ...paint, fills: paint.fills.slice(0, 2) };
     expect(pdfSidebarPaint(clean, text, background,
-      margins.y, true, '#e3ecf0')).toBe(true);
+      margins.y, true, '#e3ecf0', expected)).toBe(true);
     expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(false);
     expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(false);
     expect(pdfSidebarPaint(paint, text, background,
-      margins.y, true, '#e3ecf0')).toBe(false);
+      margins.y, true, '#e3ecf0', expected)).toBe(false);
     expect(pdfSidebarPaint(clean, page([item('TITLE', 140, 60),
       item('BODY', 140, 100)]), background,
-    margins.y, true, '#e3ecf0')).toBe(false);
+    margins.y, true, '#e3ecf0', expected)).toBe(false);
+  });
+
+  it('rejects an overflow bar moved below its entry body', async () => {
+    const background = layout.sidebar;
+    const text = page([item('SIDEBAR-ENTRY-12', 140, 60),
+      item('BODY', 140, 100)]);
+    for (const top of [85, 180]) {
+      const bar = { left: 140, right: 190, top, bottom: top + 3 };
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+        ['#0f6b7d'], [OPS.fill, [rectangle(bar)]],
+      ]);
+      expect(pdfSidebarPaint(paint, text, background,
+        margins.y, true, '#e3ecf0', expected)).toBe(top === 85);
+    }
+  });
+
+  it('rejects extra overflow rules without matching headings', async () => {
+    const background = layout.sidebar;
+    const bar = { left: 140, right: 190, top: 85, bottom: 88 };
+    const text = page([item('SIDEBAR-ENTRY-12', 140, 60),
+      item('BODY', 140, 100)]);
+    const paint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath, OPS.constructPath,
+    ], [
+      ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+      ['#0f6b7d'], [OPS.fill, [rectangle(bar)]], ['#8eb8c2'],
+      [OPS.fill, [rectangle({ ...bar, top: 52, bottom: 52.75 })]],
+      [OPS.fill, [rectangle({ ...bar, top: 55, bottom: 55.75 })]],
+    ]);
+    const clean = { ...paint, fills: paint.fills.slice(0, 2) };
+    expect(pdfSidebarPaint(clean, text, background,
+      margins.y, true, '#e3ecf0', expected)).toBe(true);
+    expect(pdfSidebarPaint(paint, text, background,
+      margins.y, true, '#e3ecf0', expected)).toBe(false);
+  });
+
+  it('requires one rule at the expected heading offset', async () => {
+    const background = layout.sidebar;
+    const heading = item('SKILLS', 140, 50);
+    const text = page([heading, item('SIDEBAR-ENTRY-12', 140, 80),
+      item('BODY', 140, 120)]);
+    const bar = { left: 140, right: 190, top: 105, bottom: 108 };
+    const rule = { left: 140, right: 190, top: 62.625, bottom: 63.375 };
+    const rules = [
+      [rule], [], [rule, rule],
+      [{ ...rule, top: rule.top + 4, bottom: rule.bottom + 4 }],
+      [rule, { ...rule, top: 52, bottom: 52.75 },
+        { ...rule, top: 55, bottom: 55.75 }],
+    ];
+    for (const [index, shapes] of rules.entries()) {
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+        OPS.setFillRGBColor, OPS.constructPath, OPS.setFillRGBColor,
+        ...shapes.map(() => OPS.constructPath),
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+        ['#0f6b7d'], [OPS.fill, [rectangle(bar)]], ['#8eb8c2'],
+        ...shapes.map((shape) => [OPS.fill, [rectangle(shape)]]),
+      ]);
+      expect(pdfSidebarPaint(paint, text, background, margins.y, true,
+        '#e3ecf0', { ...expected, headings: [heading.bounds!] }))
+        .toBe(index === 0);
+    }
   });
 
   it.each([1, 0.99])('rejects surface overpaint with alpha %s',
@@ -215,7 +285,7 @@ describe('PDF sidebar backgrounds', () => {
       expect(pdfSurfacePaint(paint, text, background, '#e3ecf0'))
         .toBe(false);
       expect(pdfSidebarPaint(paint, text, background,
-        margins.y, true, '#e3ecf0')).toBe(false);
+        margins.y, true, '#e3ecf0', expected)).toBe(false);
     });
 
   it('checks surface text beside a separately asserted tag background',
