@@ -11,6 +11,7 @@ import type { Resume } from '@aboutme/schema';
 
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { measurePdfLayout } from './display-assertions';
+import { pdfFontFacesLoaded } from './pdf-fonts';
 import {
   pdfGlyphGeometry,
   pdfParagraphGeometry,
@@ -403,10 +404,11 @@ for (const { templateId, lng } of SAMPLES) {
       x: margins.x * POINTS_PER_MM, y: margins.y * POINTS_PER_MM,
     });
     const [family] = FAMILIES[sample.customization.font.family]!;
-    expect(await page.evaluate((expected) => [400, 700].every((weight) =>
-      Array.from(document.fonts).some((face) => face.status === 'loaded'
-        && face.family.replaceAll('"', '') === expected
-        && face.weight === String(weight))), family)).toBe(true);
+    const faces = await page.evaluate(() => Array.from(document.fonts)
+      .map(({ family, status, weight, style }) => ({
+        family, status, weight, style,
+      })));
+    expect(pdfFontFacesLoaded(faces, family)).toBe(true);
     const sections = sample.customization.layout.sections;
     const visible = [...sections.main, ...sections.sidebar]
       .map((key) => sample.content[key]!)

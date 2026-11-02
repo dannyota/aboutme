@@ -9,11 +9,12 @@ import {
   type PdfWidget,
 } from '../e2e/pdf-display';
 import {
-  fixturePhotoIdentity, pdfGlyphExtents, pdfHasFill, pdfHasRule,
+  fixturePhotoIdentity, pdfHasFill, pdfHasRule,
   pdfImageMatches,
   pdfPaintOperators, pdfTextStyleMatches,
   UNSUPPORTED_PDF_PAINT,
 } from '../e2e/pdf-paint';
+import { pdfGlyphExtents } from '../e2e/pdf-fonts';
 
 const glyph = {
   str: 'A', dir: 'ltr', fontName: 'fixture', hasEOL: false,
@@ -51,12 +52,14 @@ function textPage(
 }
 
 describe('PDF text geometry', () => {
-  it('rejects absent outlines and text absent from the painted glyphs',
+  it('measures absent outlines and text absent from the painted glyphs',
     async () => {
-      await expect(pdfTextPage(textPage([{}], undefined, null)))
-        .rejects.toThrow(UNSUPPORTED_PDF_PAINT);
-      await expect(pdfTextPage(textPage([{ str: 'B' }])))
-        .rejects.toThrow('Unsupported PDF glyph outline.');
+      for (const page of [textPage([{}], undefined, null),
+        textPage([{ str: 'B' }])]) {
+        expect((await pdfTextPage(page)).items[0]!.bounds)
+          .toEqual({ left: 10, right: 30,
+            top: expect.closeTo(12), bottom: expect.closeTo(22) });
+      }
     });
 
   it('transforms each Type3 glyph box instead of using the whole font box',
@@ -74,7 +77,8 @@ describe('PDF text geometry', () => {
             [[{ unicode: 'A', operatorListId: 'A' }]], []],
         }),
       });
-      const metrics = (await pdfGlyphExtents(page)).get('g_font')!.get('A')!;
+      const metrics = (await pdfGlyphExtents(page)).get('g_font')!
+        .glyphs.get('A')!;
       expect(metrics.ascent).toBeCloseTo(0.7);
       expect(metrics.descent).toBeCloseTo(-0.1);
     });
@@ -273,10 +277,12 @@ function paintPage(objects: Readonly<Record<string, unknown>> = {}) {
     getViewport: () => ({
       width: 100, height: 100, transform: [1, 0, 0, -1, 0, 100],
     }),
-    commonObjs: { get: (id: string, resolve: (value: unknown) => void) =>
-      resolve(objects[id]) },
-    objs: { get: (id: string, resolve: (value: unknown) => void) =>
-      resolve(objects[id]) },
+    commonObjs: { has: (id: string) => id in objects,
+      get: (id: string, resolve: (value: unknown) => void) =>
+        resolve(objects[id]) },
+    objs: { has: (id: string) => id in objects,
+      get: (id: string, resolve: (value: unknown) => void) =>
+        resolve(objects[id]) },
   } as unknown as PDFPageProxy;
 }
 
@@ -285,6 +291,33 @@ const rectCommands = new Float32Array([
 ]);
 
 describe('PDF widget evidence', () => {
+  it('requires the visible solid fill for a full bar with an occluded track',
+    async () => {
+      const track = { left: 10, right: 90, top: 30, bottom: 33 };
+      const measured: PdfWidget = { entry: {
+        left: 10, right: 90, top: 10, bottom: 33,
+      }, title: { left: 10, right: 90, top: 10, bottom: 25 },
+      widget: track, track, fill: track, dots: [], size: 11.7,
+      paddingX: 0, paddingY: 0, border: 0, radius: 0 };
+      const colors = { solid: '#0d5a73', track: '#cfdee3',
+        onAccent: '#ffffff', fontSize: 11.7 };
+      const paint = await pdfPaintOperators(paintPage(),
+        [OPS.setFillRGBColor, OPS.constructPath], [
+          ['#0d5a73'], [OPS.fill, [new Float32Array([
+            0, 10, 67, 1, 90, 67, 1, 90, 70, 1, 10, 70, 4,
+          ])]],
+        ]);
+      const page = { paint, text: { width: 100, height: 100,
+        text: '', items: [] } };
+      expect(pdfWidgetMatches(page, measured, 5, 'bar', colors)).toBe(true);
+      expect(pdfWidgetMatches(page, measured, 4, 'bar', colors)).toBe(false);
+      expect(pdfWidgetMatches({ ...page, paint: { ...paint, fills: [] } },
+        measured, 5, 'bar', colors)).toBe(false);
+      expect(pdfWidgetMatches(page, measured, 5, 'bar', {
+        ...colors, solid: '#000000',
+      })).toBe(false);
+    });
+
   it('locates text after advances, line moves, rise and graphics restoration',
     async () => {
       const paint = await pdfPaintOperators(paintPage({

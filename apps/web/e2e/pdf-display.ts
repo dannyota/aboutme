@@ -8,12 +8,12 @@ import { writeFile } from 'node:fs/promises';
 import {
   pdfBoxMatches,
   pdfColorMatches,
-  pdfGlyphExtents,
   pdfHasFill,
   pdfPaintPage,
   type PdfBox,
   type PdfPaint,
 } from './pdf-paint';
+import { pdfGlyphExtents, pdfTextExtents } from './pdf-fonts';
 
 export interface PdfTextItem {
   readonly text: string;
@@ -118,24 +118,8 @@ export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
     if (advance === 0 || style?.vertical) {
       throw new Error('Unsupported PDF glyph geometry.');
     }
-    // Font-wide ascents include ink absent from this string, such as accents.
-    const metrics = glyphs.get(item.fontName);
-    const keys = [...metrics?.keys() ?? []].sort((a, b) => b.length - a.length);
-    let remaining = item.str.normalize('NFD');
-    let ascent = -Infinity;
-    let descent = Infinity;
-    while (remaining.length > 0) {
-      if (/^\s/u.test(remaining)) {
-        remaining = remaining.slice(1);
-        continue;
-      }
-      const key = keys.find((value) => remaining.startsWith(value));
-      if (!key) throw new Error('Unsupported PDF glyph outline.');
-      const extent = metrics!.get(key)!;
-      ascent = Math.max(ascent, extent.ascent);
-      descent = Math.min(descent, extent.descent);
-      remaining = remaining.slice(key.length);
-    }
+    const { ascent, descent } = pdfTextExtents(item.str, style,
+      glyphs.get(item.fontName));
     const corners = [0, item.width / advance].flatMap((end) =>
       [descent, ascent].map((edge) => ({
         x: x! + a! * end + c! * edge,
@@ -488,8 +472,9 @@ export function pdfWidgetMatches(
     const track = measured.track;
     if (!track || Math.abs(track.bottom - track.top - 3) > 1
       || Math.abs(track.left - measured.title.left) > 1
-      || Math.abs(track.right - measured.entry.right) > 1
-      || !pdfHasFill(paint, track, colors.track)) return false;
+      || Math.abs(track.right - measured.entry.right) > 1) return false;
+    // A full solid bar hides its track; Chromium can omit the covered paint.
+    if (level < 5 && !pdfHasFill(paint, track, colors.track)) return false;
     const expected = { ...track,
       right: track.left + (track.right - track.left) * level / 5 };
     return level === 0

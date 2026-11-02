@@ -148,7 +148,7 @@ function clipped(path: Path2D, clip: Path2D): Path2D {
 
 // PDF.js 6 encodes DrawOPS inside constructPath, with the consuming operator
 // in args[0]. Keep this parser narrow and reject every other path encoding.
-function drawing(data: unknown): { path: Path2D; curves: number } {
+export function pdfDrawing(data: unknown): { path: Path2D; curves: number } {
   const commands = numbers(data);
   const path = new Path2D();
   let curves = 0;
@@ -350,60 +350,6 @@ function imageIdentity(value: unknown): Pick<PdfImage,
     signature: imageSignature(rgba, width, height) };
 }
 
-export async function pdfGlyphExtents(page: PDFPageProxy) {
-  const operators = await page.getOperatorList({ intent: 'print' });
-  type Extent = { ascent: number; descent: number };
-  const fonts = new Map<string, Map<string, Extent>>();
-  let fontId = '';
-  const stack: string[] = [];
-  for (const [index, op] of operators.fnArray.entries()) {
-    const args = operators.argsArray[index] ?? [];
-    if (op === OPS.save || op === OPS.paintFormXObjectBegin) stack.push(fontId);
-    else if (op === OPS.restore || op === OPS.paintFormXObjectEnd) {
-      fontId = stack.pop() ?? unsupported(op);
-    } else if (op === OPS.setFont) {
-      if (typeof args[0] !== 'string') unsupported(op);
-      fontId = args[0];
-    } else if (op === OPS.showText) {
-      if (!Array.isArray(args[0])) unsupported(op);
-      const font = await object(page, fontId) as {
-        loadedName: string; isType3Font?: boolean; fontMatrix: number[];
-        charProcOperatorList?: Map<string, GlyphProgram>;
-      };
-      const metrics = fonts.get(fontId) ?? new Map();
-      fonts.set(fontId, metrics);
-      for (const glyph of args[0]) {
-        if (typeof glyph === 'number') continue;
-        if (!glyph || typeof glyph.unicode !== 'string') unsupported(op);
-        const unicode = glyph.unicode.normalize('NFD');
-        if (unicode.trim() === '' || metrics.has(unicode)) continue;
-        let path: Path2D;
-        if (font.isType3Font) {
-          const program = font.charProcOperatorList?.get(glyph.operatorListId);
-          if (program?.fnArray[0] !== OPS.setCharWidthAndBounds) {
-            unsupported(op);
-          }
-          path = transformed(rectangle(numbers(program.argsArray[0], 6)
-            .slice(2)), matrix(font.fontMatrix));
-        } else {
-          if (typeof glyph.fontChar !== 'string' || glyph.accent) {
-            unsupported(op);
-          }
-          const pathId = `${font.loadedName}_path_${glyph.fontChar}`;
-          if (!page.commonObjs.has(pathId)) unsupported(op);
-          const outline = await object(page, pathId) as { path: unknown };
-          path = drawing(outline?.path).path;
-        }
-        const box = bounds(path);
-        if (!box) unsupported(op);
-        metrics.set(unicode, { ascent: box.bottom, descent: box.top });
-      }
-    }
-  }
-  if (stack.length !== 0) unsupported();
-  return fonts;
-}
-
 const textOperators = new Set<number>([
   OPS.dependency, OPS.setRenderingIntent, OPS.setFlatness,
   OPS.beginText, OPS.endText, OPS.setCharSpacing, OPS.setWordSpacing,
@@ -535,7 +481,7 @@ export async function pdfPaintOperators(
       if (!Array.isArray(args[1]) || args[1].length !== 1) unsupported();
       const { path, curves } = args[1][0] === null
         ? { path: new Path2D(), curves: 0 }
-        : drawing(args[1][0]);
+        : pdfDrawing(args[1][0]);
       if ([OPS.closeStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]
         .includes(consume as number)) path.closePath();
       if ([OPS.eoFill, OPS.eoFillStroke, OPS.closeEOFillStroke]
