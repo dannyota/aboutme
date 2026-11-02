@@ -31,6 +31,7 @@ import {
   pdfPaintPage,
   pdfTextStyleMatches,
   pdfTextStyleDiagnostic,
+  type PdfBox,
 } from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
 import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
@@ -120,6 +121,7 @@ async function assertSampleStyle(
   expect(layout.background).toBe('rgb(255, 255, 255)');
   const target = sample.customization.layout.surfaceTarget ?? 'none';
   const accent = colors.accent ?? colors.primary;
+  const foreground: PdfBox[] = [];
   expect(layout.headerAlign).toBe(sample.customization.header?.align ?? 'left');
   for (const gap of layout.entryGaps) {
     expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
@@ -139,6 +141,7 @@ async function assertSampleStyle(
       expect(decoration.ruleStyle).toBe('solid');
       expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
       expect(pdfHasRule(display.paint, decoration.ruleBox, color)).toBe(true);
+      foreground.push(decoration.ruleBox);
     }
   }
   let transform = 'none';
@@ -225,13 +228,6 @@ async function assertSampleStyle(
     expect(Math.abs(layout.sidebar!.right - display.text.width + margins.x))
       .toBeLessThanOrEqual(1);
   } else expect(layout.sidebar).toBeNull();
-  if (target === 'sidebar' || target === 'header') {
-    const box = target === 'sidebar' ? layout.sidebar : layout.header;
-    expect(box).not.toBeNull();
-    expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
-      layout.widgets.flatMap(({ widget }) => widget ? [widget] : [])))
-      .toBe(true);
-  }
   expect(display.paint.images)
     .toHaveLength(sample.personalDetails.photo ? 1 : 0);
   if (sample.personalDetails.photo) {
@@ -253,14 +249,26 @@ async function assertSampleStyle(
     for (const entry of section.entries.filter((entry) => !entry.isHidden)) {
       const widget = layout.widgets.find(({ name }) => name === entry.name);
       expect(widget).toBeDefined();
+      const mode = sectionDisplay[section.sectionType].style;
       expect(pdfWidgetMatches(display, widget!, entry.level,
-        sectionDisplay[section.sectionType].style, {
+        mode, {
           solid: accent,
           track: mixedColor(accent, surface, 0.8),
           onAccent: '#ffffff',
           fontSize: base * 0.9,
         }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
+      if (entry.level !== undefined && mode !== 'text') {
+        foreground.push(...(mode === 'dots'
+          ? widget!.dots
+          : [widget!.widget!]));
+      }
     }
+  }
+  if (target === 'sidebar' || target === 'header') {
+    const box = target === 'sidebar' ? layout.sidebar : layout.header;
+    expect(box).not.toBeNull();
+    expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
+      foreground)).toBe(true);
   }
 }
 

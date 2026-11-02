@@ -149,9 +149,57 @@ describe('PDF sidebar backgrounds', () => {
       expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(true);
       expect(pdfSidebarPaint(paint, text, layout.sidebar,
         margins.y, firstPage, '#e3ecf0')).toBe(true);
-      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(true);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [bar]))
+        .toBe(true);
     },
   );
+
+  it('rejects opaque overpaint in a blank surface region', async () => {
+    const background = layout.sidebar;
+    const blank = { left: 140, right: 190, top: 112, bottom: 185 };
+    const text = page([item('TITLE', 140, 60),
+      item('BODY', 140, 100)]);
+    const paint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath,
+    ], [
+      ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+      ['#ffffff'], [OPS.fill, [rectangle(blank)]],
+    ]);
+    const clean = { ...paint, fills: [paint.fills[0]!] };
+    expect(pdfSurfacePaint(clean, text, background, '#e3ecf0')).toBe(true);
+    expect(pdfSidebarPaint(clean, text, background,
+      margins.y, true, '#e3ecf0')).toBe(true);
+    expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(false);
+    expect(pdfSidebarPaint(paint, text, background,
+      margins.y, true, '#e3ecf0')).toBe(false);
+  });
+
+  it('rejects overflow bar overpaint between text rows', async () => {
+    const background = layout.sidebar;
+    const bar = { left: 140, right: 190, top: 85, bottom: 88 };
+    const text = page([item('SIDEBAR-ENTRY-12', 140, 60),
+      item('BODY', 140, 100)]);
+    const paint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath,
+    ], [
+      ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+      ['#0f6b7d'], [OPS.fill, [rectangle(bar)]],
+      ['#ffffff'], [OPS.fill, [rectangle(bar)]],
+    ]);
+    const clean = { ...paint, fills: paint.fills.slice(0, 2) };
+    expect(pdfSidebarPaint(clean, text, background,
+      margins.y, true, '#e3ecf0')).toBe(true);
+    expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(false);
+    expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(false);
+    expect(pdfSidebarPaint(paint, text, background,
+      margins.y, true, '#e3ecf0')).toBe(false);
+    expect(pdfSidebarPaint(clean, page([item('TITLE', 140, 60),
+      item('BODY', 140, 100)]), background,
+    margins.y, true, '#e3ecf0')).toBe(false);
+  });
 
   it.each([1, 0.99])('rejects surface overpaint with alpha %s',
     async (alpha) => {
@@ -173,7 +221,7 @@ describe('PDF sidebar backgrounds', () => {
   it('checks surface text beside a separately asserted tag background',
     async () => {
       const background = layout.sidebar;
-      const tag = { left: 140, right: 170, top: 80, bottom: 90 };
+      const tag = { left: 140, right: 180, top: 78, bottom: 92 };
       const text = page([item('TITLE', 140, 60), item('4/5', 140, 80)]);
       const paint = await pdfPaintOperators(proxy, [
         OPS.setFillRGBColor, OPS.constructPath,
@@ -184,10 +232,39 @@ describe('PDF sidebar backgrounds', () => {
       ]);
       expect(pdfSurfacePaint(paint, text, background, '#e3ecf0'))
         .toBe(false);
+      expect(pdfHasFill(paint, tag, '#0f6b7d')).toBe(true);
       expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [tag]))
         .toBe(true);
-      expect(pdfHasFill(paint, tag, '#0f6b7d')).toBe(true);
       expect(pdfSurfacePaint(paint, text, background, '#ffffff', [tag]))
         .toBe(false);
+    });
+
+  it('keeps gaps between validated widget shapes in the surface probe',
+    async () => {
+      const background = layout.sidebar;
+      const shapes = [
+        { left: 140, right: 150, top: 80, bottom: 90 },
+        { left: 160, right: 170, top: 80, bottom: 90 },
+      ];
+      const gap = { left: 150, right: 160, top: 80, bottom: 90 };
+      const text = page([item('TITLE', 140, 60), item('BODY', 140, 100)]);
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath, OPS.setFillRGBColor,
+        OPS.constructPath, OPS.constructPath,
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+        ['#0f6b7d'], [OPS.fill, [rectangle(shapes[0]!)]],
+        [OPS.fill, [rectangle(shapes[1]!)]],
+      ]);
+      expect(shapes.every((shape) => pdfHasFill(paint, shape, '#0f6b7d')))
+        .toBe(true);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', shapes))
+        .toBe(true);
+      const overpaint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [['#ffffff'], [OPS.fill, [rectangle(gap)]]]);
+      expect(pdfSurfacePaint({ ...paint,
+        fills: [...paint.fills, ...overpaint.fills] }, text, background,
+      '#e3ecf0', shapes)).toBe(false);
     });
 });

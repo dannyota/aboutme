@@ -9,6 +9,7 @@ import {
   pdfBoxMatches,
   pdfColorMatches,
   pdfHasFill,
+  pdfHasRule,
   pdfPaintPage,
   type PdfBox,
   type PdfPaint,
@@ -201,27 +202,28 @@ export function pdfSurfacePaint(
   page: PdfTextPage,
   box: PdfBox,
   color: string,
-  widgets: readonly PdfBox[] = [],
+  foreground: readonly PdfBox[] = [],
 ): boolean {
-  // Text rows expose the surface between glyphs. Bars, rules and tag
-  // backgrounds have their own paint assertions and occupy other areas.
-  const exposed = page.items.flatMap(({ bounds }) => {
-    if (!bounds || widgets.some((widget) =>
-      bounds.left >= widget.left - 1 && bounds.right <= widget.right + 1
-      && bounds.top >= widget.top - 1 && bounds.bottom <= widget.bottom + 1)) {
-      return [];
-    }
-    const area = {
-      left: Math.max(box.left, bounds.left),
-      right: Math.min(box.right, bounds.right),
-      top: Math.max(box.top, bounds.top),
-      bottom: Math.min(box.bottom, bounds.bottom),
-    };
-    return area.right > area.left && area.bottom > area.top ? [area] : [];
-  });
-  return exposed.length === 0
-    ? pdfHasFill(paint, box, color)
-    : exposed.every((area) => pdfHasFill(paint, box, color, area));
+  // Probe the whole surface except glyphs and independently checked shapes.
+  let exposed = [box];
+  for (const shape of [...page.items.flatMap(({ bounds }) =>
+    bounds ? [bounds] : []), ...foreground]) {
+    exposed = exposed.flatMap((area) => {
+      const left = Math.max(area.left, shape.left);
+      const right = Math.min(area.right, shape.right);
+      const top = Math.max(area.top, shape.top);
+      const bottom = Math.min(area.bottom, shape.bottom);
+      if (right <= left || bottom <= top) return [area];
+      return [
+        { ...area, right: left },
+        { ...area, left: right },
+        { left, right, top: area.top, bottom: top },
+        { left, right, top: bottom, bottom: area.bottom },
+      ].filter((part) => part.right > part.left && part.bottom > part.top);
+    });
+  }
+  return exposed.length > 0
+    && exposed.every((area) => pdfHasFill(paint, box, color, area));
 }
 
 export function pdfSidebarPaint(
@@ -232,12 +234,39 @@ export function pdfSidebarPaint(
   firstPage: boolean,
   color: string,
 ): boolean {
+  // Overflow fixtures use full-width level-five bars and heading rules.
+  const foreground = paint.fills.filter((fill) =>
+    Math.abs(fill.left - sidebar.left) <= 1
+    && Math.abs(fill.right - sidebar.right) <= 1
+    && (Math.abs(fill.bottom - fill.top - 3) <= 1
+      || Math.abs(fill.bottom - fill.top - 0.75) <= 0.1));
+  if (!foreground.every((fill) => fill.bottom - fill.top > 1
+    ? pdfHasFill(paint, fill, '#0f6b7d')
+    : pdfHasRule(paint, fill, '#8eb8c2'))) return false;
   const column = page.items.filter((item) => item.bounds
     && item.bounds.left >= sidebar.left - 1
     && (!firstPage || item.bounds.top >= sidebar.top - 1));
+  const markers = pdfEntryIds([page], 'SIDEBAR');
+  if (markers.length === 0 && pdfMarkerPosition(page, 'SIDEBAR-SHORT')) {
+    markers.push('SIDEBAR-SHORT');
+  }
+  const titles = markers.map((marker) => pdfMarkerPosition(page, marker));
+  const bars = foreground.filter((fill) => fill.bottom - fill.top > 1)
+    .filter((fill, index, fills) => fills.findIndex((other) =>
+      pdfBoxMatches(fill, other)) === index)
+    .sort((a, b) => a.top - b.top);
+  if (bars.length !== titles.length || !bars.every((bar, index) => {
+    const title = titles[index]?.bounds;
+    return title && bar.top >= title.bottom - 1
+      && bar.bottom <= (titles[index + 1]?.bounds?.top
+        ?? page.height - marginY) + 1;
+  }) || foreground.some((fill) => fill.bottom - fill.top <= 1
+    && (!firstPage || !titles[0]?.bounds
+      || fill.bottom > titles[0].bounds.top + 1))) return false;
   if (column.length === 0 && !firstPage) {
     // A short sidebar still paints alongside the continuing main flow.
-    return paint.fills.some((fill) => pdfHasFill(paint, fill, color)
+    return paint.fills.some((fill) =>
+      pdfSurfacePaint(paint, page, fill, color, foreground)
       && Math.abs(fill.left - sidebar.left) <= 1
       && Math.abs(fill.right - sidebar.right) <= 1
       && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1);
@@ -248,7 +277,7 @@ export function pdfSidebarPaint(
     && Math.abs(fill.top - (firstPage ? sidebar.top : marginY)) <= 1
     && fill.bottom >= bottom - 1
     && fill.bottom <= page.height - marginY + 1
-    && pdfSurfacePaint(paint, page, fill, color));
+    && pdfSurfacePaint(paint, page, fill, color, foreground));
 }
 
 export function pdfParagraphGeometry(
