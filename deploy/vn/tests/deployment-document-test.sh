@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+installer=${1:-$root/deploy/vn/host/install.sh}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/observation" "$work/public"
@@ -162,13 +163,50 @@ for setting in 'Type=oneshot' 'RemainAfterExit=yes' 'Before=aboutme-observer.ser
   'ExecStart=/usr/sbin/nft -f /etc/aboutme/observer-firewall.nft' 'WantedBy=multi-user.target'; do
   grep -qxF -- "$setting" "$unit" || fail "observer firewall unit lacks $setting"
 done
-installer=$root/deploy/vn/host/install.sh
-grep -qF 'install -m 0644 "$bundle/host/quadlet/aboutme-observer.network"' "$installer" ||
-  fail 'installer omits the observer network'
-grep -qxF 'systemctl enable aboutme-observer-firewall.service >/dev/null' "$installer" ||
-  fail 'installer does not enable the observer firewall'
-grep -qxF 'systemctl restart aboutme-observer-firewall.service' "$installer" ||
-  fail 'installer does not load the observer firewall'
+# Run the network installation with real copies and an isolated manager boundary.
+export FIXTURE_BUNDLE=$root/deploy/vn FIXTURE_NETWORK_DIR=$work/networks
+export FIXTURE_NETWORK_CALLS=$work/network-calls FIXTURE_INSTALL
+FIXTURE_INSTALL=$(command -v ginstall || command -v install)
+: >"$FIXTURE_NETWORK_CALLS"
+{
+  cat <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+bundle=$FIXTURE_BUNDLE
+install() { "$FIXTURE_INSTALL" "$@"; }
+# Locking has a separate installer regression in install-admission-test.sh.
+install_admission_transition() { "$@"; }
+timeout() {
+  [[ $1 != --kill-after=* ]] || shift
+  shift
+  "$@"
+}
+systemctl() {
+  case $* in
+    daemon-reload)
+      for name in aboutme aboutme-observer; do
+        cmp -s "$bundle/host/quadlet/$name.network" "$FIXTURE_NETWORK_DIR/$name.network" || return 1
+        [[ $(stat -c %a "$FIXTURE_NETWORK_DIR/$name.network") == 644 ]] || return 1
+      done
+      ;;
+    'enable aboutme-observer-firewall.service')
+      grep -qxF daemon-reload "$FIXTURE_NETWORK_CALLS" || return 1
+      ;;
+    'restart aboutme-observer-firewall.service')
+      grep -qxF 'enable aboutme-observer-firewall.service' "$FIXTURE_NETWORK_CALLS" || return 1
+      ;;
+    *) return 2 ;;
+  esac
+  printf '%s\n' "$*" >>"$FIXTURE_NETWORK_CALLS"
+}
+SH
+  awk '/^# The bridge networks/ {copy=1} copy && /^for f in/ {exit} copy {print}' "$installer" |
+    sed 's|/etc/containers/systemd|"$FIXTURE_NETWORK_DIR"|g'
+} >"$work/network-install.sh"
+bash "$work/network-install.sh" || fail 'network installation or firewall ordering is wrong'
+printf '%s\n' daemon-reload 'enable aboutme-observer-firewall.service' \
+  'restart aboutme-observer-firewall.service' >"$work/network-expected"
+cmp -s "$work/network-expected" "$FIXTURE_NETWORK_CALLS" || fail 'installer omits network or firewall activation'
 grep -qxF 'd /var/lib/aboutme/observation 0755 root root -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
 grep -qxF 'd /var/lib/aboutme/deployment 0755 65532 65532 -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
 echo 'deployment document tests passed'
