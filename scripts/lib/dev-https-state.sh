@@ -40,11 +40,18 @@ validate_state_path_integrity() {
   else
     return 0
   fi
-  python3 -I - "$STATE_DIR" "$BIN_DIR" "$CADDY_DIR" "$EUID" <<'PYTHON' || die "state path descendants cannot be inspected safely: $STATE_DIR"
+  python3 -I - "$STATE_DIR" "$BIN_DIR" "$CADDY_DIR" "$EUID" "${1:-0}" <<'PYTHON' || die "state path descendants cannot be inspected safely: $STATE_DIR"
 import os, stat, sys
-root, binaries, caddy, uid = sys.argv[1:]
+root, binaries, caddy, uid, allow_missing = sys.argv[1:]
 def inspect(path):
-    node = os.lstat(path)
+    try:
+        node = os.lstat(path)
+    except FileNotFoundError:
+        # An allowed proof stop can remove files between scandir and lstat.
+        # Present entries and the state root still require full validation.
+        if allow_missing == "1" and path != root:
+            return
+        raise
     mode = stat.S_IMODE(node.st_mode)
     def reject(reason):
         print("state path " + reason + ": " + path, file=sys.stderr)

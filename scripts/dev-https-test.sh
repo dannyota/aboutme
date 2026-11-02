@@ -267,6 +267,25 @@ fi
 exit 1
 EOF
 
+  cat >"$fakebin/ss" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+port=${!#}
+port=${port##*:}
+status=0
+rows=$("${0%/*}/lsof" -nP "-iTCP:$port" -sTCP:LISTEN -Fpn) || status=$?
+if [ "$status" = 1 ]; then exit 0; fi
+[ "$status" = 0 ] || exit "$status"
+pid=
+while IFS= read -r row; do
+  case $row in
+  p[0-9]*) pid=${row#p} ;;
+  n*) printf 'LISTEN 0 4096 %s *:* users:(("fixture",pid=%s,fd=8))\n' "${row#n}" "$pid" ;;
+  *) printf '%s\n' "$row" ;;
+  esac
+done <<<"$rows"
+EOF
+
   cat >"$fakebin/podman" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -1350,10 +1369,14 @@ run_session_recovery_checks() (
 
 # Force stop boundaries inside health inspection without launching a stack.
 run_proof_transition_checks() (
-  local fixture marker scenario allow_stop output token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa old=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  local fixture marker scenario allow_stop output fixture_python token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa old=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   fixture=$(mktemp -d)
   trap 'rm -rf -- "$fixture"' EXIT
-  ROOT=$fixture RUN_DIR=$fixture
+  ROOT=$(cd "$fixture" && pwd -P)
+  DEV_DIR=$ROOT/.dev STATE_DIR=$ROOT/.dev/native-https
+  RUN_DIR=$STATE_DIR/run LOG_DIR=$STATE_DIR/log BIN_DIR=$STATE_DIR/bin
+  MEDIA_DIR=$STATE_DIR/media INPUT_DIR=$STATE_DIR/input CADDY_DIR=$STATE_DIR/caddy
+  mkdir -p "$RUN_DIR"
   marker=$RUN_DIR/proof.abcdefghij
   # shellcheck disable=SC2034 # The sourced health helper reads the service list.
   SERVICES=(server)
@@ -1361,7 +1384,59 @@ run_proof_transition_checks() (
   source "$SOURCE_LIB_DIR/dev-https-session.sh"
   # shellcheck source=lib/dev-https-identity.sh
   source "$SOURCE_LIB_DIR/dev-https-identity.sh"
-  validate_state_path_integrity() { :; }
+  # shellcheck source=lib/dev-https-state.sh
+  source "$SOURCE_LIB_DIR/dev-https-state.sh"
+  die() { fail "$@"; }
+  fixture_python=$(command -v python3)
+  # Delete an enumerated file immediately before the real lstat. The complete
+  # production validator still inspects every surviving entry.
+  python3() {
+    if [ "${3:-}" = "$STATE_DIR" ] && [ -n "${SCAN_VANISH_PATH:-}" ]; then
+      {
+        cat <<'PY'
+import os
+scan_lstat = os.lstat
+def delete_before_stat(path):
+    with open(os.environ["SCAN_AUDIT_PATH"], "a") as audit:
+        audit.write(path + "\n")
+    if path == os.environ["SCAN_VANISH_PATH"]:
+        os.unlink(path)
+    return scan_lstat(path)
+os.lstat = delete_before_stat
+PY
+        cat
+      } | "$fixture_python" "$@"
+    else
+      "$fixture_python" "$@"
+    fi
+  }
+  : >"$marker"
+  : >"$RUN_DIR/survivor.env"
+  SESSION_TOKEN=$token
+  notify_proofs stopped
+  export SCAN_VANISH_PATH=$RUN_DIR/session.ready SCAN_AUDIT_PATH=$ROOT/scan-audit
+  for allow_stop in 1 0; do
+    printf '%s\n' "$token" >"$RUN_DIR/session.ready"
+    if (proof_health "$marker" "$allow_stop") >"$ROOT/scan-output" 2>&1; then
+      [ "$allow_stop" = 1 ] || fail 'unapproved file disappearance passed validation'
+    else
+      [ "$allow_stop" = 0 ] || fail "allowed stop rejected deletion during scan: $(cat "$ROOT/scan-output")"
+    fi
+    [ ! -e "$RUN_DIR/session.ready" ] || fail 'scan did not delete the enumerated file'
+  done
+  assert_log_line "$ROOT/scan-audit" "$RUN_DIR/survivor.env"
+  unset SCAN_VANISH_PATH
+  for scenario in mode symlink hardlink; do
+    case $scenario in
+    mode) : >"$RUN_DIR/unsafe"; chmod 0644 "$RUN_DIR/unsafe" ;;
+    symlink) ln -s missing "$RUN_DIR/unsafe" ;;
+    hardlink) ln "$RUN_DIR/survivor.env" "$RUN_DIR/unsafe" ;;
+    esac
+    if (proof_health "$marker" 1) >"$ROOT/scan-output" 2>&1; then
+      fail "allowed stop accepted unsafe $scenario entry"
+    fi
+    rm -f -- "$RUN_DIR/unsafe"
+  done
   validate_session_anchor() { validate_session_record; }
   validate_service_listeners() {
     case $scenario in
@@ -1409,7 +1484,7 @@ run_proof_transition_checks() (
 
 # A rejected proof must retain its anchor until TERM-resistant children die.
 run_proof_guard_checks() (
-  local fixture status group row pid state
+  local fixture status group row pid state scenario fixture_python
   fixture=$(mktemp -d)
   trap 'if [ -s "$fixture/command-group" ]; then group=$(<"$fixture/command-group"); kill -KILL -- "-$group" 2>/dev/null || true; fi; rm -rf -- "$fixture"' EXIT
   ROOT=$fixture RUN_DIR=$fixture/run
@@ -1419,6 +1494,33 @@ run_proof_guard_checks() (
   source "$SOURCE_LIB_DIR/dev-https-session.sh"
   cmd_status() { :; }
   proof_health() { [ ! -e "$fixture/unhealthy" ]; }
+  fixture_python=$(command -v python3)
+  # Deliver a real signal while the monitor sleeps during cleanup.
+  python3() {
+    if [ "${3:-}" = "$ROOT/scripts/dev-https.sh" ] && [ -n "${PROOF_DRAIN_SIGNAL:-}" ]; then
+      {
+        cat <<'PY'
+import os, pathlib, signal, time
+drain_sleep = time.sleep
+def interrupt_drain(*_):
+    (pathlib.Path(os.environ["PROOF_FIXTURE"]) / "drain-signalled").touch()
+    os.kill(os.getpid(), getattr(signal, "SIG" + os.environ["PROOF_DRAIN_SIGNAL"]))
+def signal_during_drain(seconds):
+    if seconds == 0.2:
+        signal.signal(signal.SIGALRM, interrupt_drain)
+        signal.setitimer(signal.ITIMER_REAL, seconds / 2)
+    try:
+        drain_sleep(seconds)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+time.sleep = signal_during_drain
+PY
+        cat
+      } | "$fixture_python" "$@"
+    else
+      "$fixture_python" "$@"
+    fi
+  }
   cat >"$ROOT/scripts/dev-https.sh" <<'EOF'
 #!/usr/bin/env bash
 [ "$1" = proof-health ] && [ ! -e "$PROOF_FIXTURE/unhealthy" ]
@@ -1447,19 +1549,28 @@ while not (root / "child-ready").exists():
 while True:
     time.sleep(1)
 PY
-  status=0
-  cmd_guard -- python3 -I "$fixture/command.py" "$fixture" >"$fixture/output" 2>&1 || status=$?
-  [ "$status" = 1 ] || fail 'unhealthy proof command passed'
-  [ -s "$fixture/child-pid" ] && [ -e "$fixture/child-ready" ] || fail 'guard cancellation did not reach the child handshake'
-  assert_not_contains "$(cat "$fixture/output")" BrokenPipeError
-  pid=$(<"$fixture/child-pid")
-  for _ in $(seq 1 50); do
-    row=$(platform_process_snapshot "$pid") || break
-    read -r _ _ _ _ _ state _ <<<"$row"
-    [[ $state != [ZX]* ]] || break
-    sleep 0.02
+  for scenario in rejected TERM INT; do
+    rm -f -- "$fixture/unhealthy" "$fixture/child-ready" "$fixture/drain-signalled"
+    export PROOF_DRAIN_SIGNAL=
+    [ "$scenario" = rejected ] || PROOF_DRAIN_SIGNAL=$scenario
+    status=0
+    cmd_guard -- python3 -I "$fixture/command.py" "$fixture" >"$fixture/output" 2>&1 || status=$?
+    [ "$status" = 1 ] || fail "$scenario unhealthy proof command returned $status"
+    [ -s "$fixture/child-pid" ] && [ -e "$fixture/child-ready" ] || fail 'guard cancellation did not reach the child handshake'
+    [ "$scenario" = rejected ] || [ -e "$fixture/drain-signalled" ] || fail "$scenario did not reach cleanup"
+    assert_not_contains "$(cat "$fixture/output")" BrokenPipeError
+    assert_not_contains "$(cat "$fixture/output")" KeyboardInterrupt
+    group=$(<"$fixture/command-group")
+    ! kill -0 "$group" 2>/dev/null || fail "$scenario cleanup left its anchor alive or unjoined"
+    pid=$(<"$fixture/child-pid")
+    for _ in $(seq 1 50); do
+      row=$(platform_process_snapshot "$pid") || break
+      read -r _ _ _ _ _ state _ <<<"$row"
+      [[ $state != [ZX]* ]] || break
+      sleep 0.02
+    done
+    [ -z "$row" ] || [[ $state == [ZX]* ]] || fail "$scenario cleanup left a live TERM-resistant descendant"
   done
-  [ -z "$row" ] || [[ $state == [ZX]* ]] || fail 'proof cleanup left a live TERM-resistant descendant'
 )
 
 run_session_record_failure_checks() (

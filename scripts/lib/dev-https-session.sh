@@ -199,7 +199,7 @@ proof_stop_observed() {
 proof_health() {
   local file=$1 allow_stop=$2 stopped='' ready='' health_marker=''
   [[ ${file##*/} =~ ^proof\.[A-Za-z0-9]{10}$ ]] && [ "${file%/*}" = "$RUN_DIR" ] || return 1
-  validate_state_path_integrity
+  validate_state_path_integrity "$allow_stop"
   [ -f "$file" ] && [ ! -e "$file.failed" ] || return 1
   [ ! -f "$file.stopped" ] || stopped=$(<"$file.stopped")
   if [ -e "$RUN_DIR/session.ready" ]; then
@@ -271,6 +271,8 @@ try:
 except (OSError, KeyboardInterrupt):
     result = 1
 finally:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     if anchor is not None and anchor.poll() is None:
         try:
             if os.getpgid(anchor.pid) == anchor.pid and os.getsid(anchor.pid) == anchor.pid:

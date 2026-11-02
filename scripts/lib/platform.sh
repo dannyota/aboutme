@@ -166,23 +166,29 @@ PY
 
 # Exit 1 means no listeners; exit 2 means inspection could not prove owners.
 platform_listener_pids() {
-  python3 -I - "$1" <<'PY'
-import re, shutil, subprocess, sys
-port = sys.argv[1]
+  local host
+  host=$(uname -s) || return 2
+  python3 -I - "$1" "$host" <<'PY'
+import re, subprocess, sys
+port, host = sys.argv[1:]
 if not port.isdecimal() or not 1 <= int(port) <= 65535:
     sys.exit(2)
+if host == "Linux":
+    args = ["ss", "-H", "-ltnp", "sport = :" + port]
+elif host == "Darwin":
+    args = ["lsof", "-nP", "-iTCP:" + port, "-sTCP:LISTEN", "-Fpn"]
+else:
+    sys.exit(2)
 try:
-    lsof = shutil.which("lsof")
-    args = [lsof, "-nP", "-iTCP:" + port, "-sTCP:LISTEN", "-Fpn"] if lsof else ["ss", "-H", "-ltnp", "sport = :" + port]
     result = subprocess.run(args, capture_output=True, text=True, timeout=1)
-    if result.stderr or result.returncode not in ([0, 1] if lsof else [0]):
+    if result.stderr or result.returncode not in ([0, 1] if host == "Darwin" else [0]):
         sys.exit(2)
     if not result.stdout:
         sys.exit(1)
     if result.returncode:
         sys.exit(2)
     pids = set()
-    if lsof:
+    if host == "Darwin":
         pid, count = None, 0
         for line in result.stdout.splitlines():
             if re.fullmatch(r"p[1-9][0-9]*", line):
