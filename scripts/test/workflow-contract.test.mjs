@@ -913,6 +913,63 @@ test("browser artifacts contain only staged diagnostics and candidate metadata",
   checkBrowserArtifacts(readWorkflow("ci"), readWorkflow("baselines"));
 });
 
+function checkTemplatePages(workflow, ci) {
+  assert.deepEqual(workflow.on, { workflow_dispatch: null });
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  assert.deepEqual(Object.keys(workflow.jobs), ["template-pages"]);
+  const job = workflow.jobs["template-pages"];
+  assert.equal(job["timeout-minutes"], 30);
+  assert.equal(job["continue-on-error"], undefined);
+  assert.equal(job.permissions, undefined);
+  assert.equal(job.steps.length, 4);
+  assert.ok(job.steps.every((step) => !step["continue-on-error"]));
+  assert.ok(job.steps.every((step) => !/\bgit\s+(commit|push)\b/.test(step.run ?? "")));
+  assert.match(job.steps[0].uses, /^actions\/checkout@[a-f0-9]{40}$/);
+  assert.equal(job.steps[2].run, "make web-template-pages");
+  assert.equal(job.steps[2].env.TEMPLATE_PAGES_RUN_ID,
+    "pages-${{ github.run_id }}-${{ github.run_attempt }}");
+  const upload = job.steps[3];
+  assert.equal(upload.if, "success()");
+  assert.match(upload.uses, /^actions\/upload-artifact@[a-f0-9]{40}$/);
+  assert.equal(upload.with.name, "candidate-template-pages");
+  assert.deepEqual(upload.with.path.trim().split("\n"), [
+    ".dev/web-template-pages/*/*/candidate/*.png",
+    ".dev/web-template-pages/*/*/candidate/manifest.json",
+    ".dev/web-template-pages/*/*/candidate/source-metadata.txt",
+  ]);
+  assert.equal(upload.with["retention-days"], 14);
+  assert.equal(upload.with["if-no-files-found"], "error");
+  assert.equal(upload.with["include-hidden-files"], true);
+  const validate = ci.jobs.web.steps.find((step) =>
+    step.run === "node scripts/validate-template-pages.mts --test");
+  assert.ok(validate, "web checks must validate committed product images");
+  assert.equal(validate["working-directory"], "apps/web");
+  assert.equal(validate.if, "${{ !cancelled() }}");
+}
+
+test("product image workflow is manual, read-only, bounded and success-only", () => {
+  checkTemplatePages(readWorkflow("template-pages"), readWorkflow("ci"));
+  for (const mutate of [
+    (w) => { w.on.push = {}; },
+    (w) => { w.permissions.contents = "write"; },
+    (w) => { w.jobs["template-pages"].permissions = { contents: "write" }; },
+    (w) => { w.jobs["template-pages"]["continue-on-error"] = true; },
+    (w) => { w.jobs["template-pages"].steps.push({ run: "git push" }); },
+    (w) => { w.jobs["template-pages"].steps[1].run = "git commit -am unsafe"; },
+    (w) => { w.jobs["template-pages"].steps[3].if = "always()"; },
+    (w) => { w.jobs["template-pages"].steps[3].with.path = ".dev/**"; },
+    (w) => { w.jobs["template-pages"].steps[3].with["retention-days"] = 90; },
+  ]) {
+    const workflow = readWorkflow("template-pages");
+    mutate(workflow);
+    assert.throws(() => checkTemplatePages(workflow, readWorkflow("ci")));
+  }
+  const ci = readWorkflow("ci");
+  ci.jobs.web.steps = ci.jobs.web.steps.filter((step) =>
+    step.run !== "node scripts/validate-template-pages.mts --test");
+  assert.throws(() => checkTemplatePages(readWorkflow("template-pages"), ci));
+});
+
 test("contracts retains sanitized startup evidence when a check fails", () => {
   const steps = readWorkflow("ci").jobs.contracts.steps;
   const start = steps.find((step) => step.name === "Start the dev-https static suite shards");

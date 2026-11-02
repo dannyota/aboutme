@@ -227,6 +227,36 @@ web-no-eval-check: ## Fail if the built client bundle contains a literal eval()
 	  echo 'web-no-eval-check: client bundle contains eval()' >&2; exit 1; \
 	fi
 
+.PHONY: web-template-pages
+web-template-pages: ## Generate review-only product page images in the pinned Linux browser
+	@set -Eeuo pipefail; \
+	run_id=$${TEMPLATE_PAGES_RUN_ID-}; \
+	if [[ ! $$run_id =~ ^[A-Za-z0-9_-]+$$ ]]; then echo 'TEMPLATE_PAGES_RUN_ID must match [A-Za-z0-9_-]+' >&2; exit 64; fi; \
+	test "$$(uname -m)" = x86_64 && test "$$(uname -s)" = Linux || { echo 'web-template-pages requires a native Linux x86_64 host' >&2; exit 1; }; \
+	commit='$(WEB_E2E_COMMIT)'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)" || { echo 'web-template-pages requires a clean worktree and index' >&2; exit 1; }; \
+	bash scripts/generate-web-e2e-source-manifest.sh --check; \
+	result_root=".dev/web-template-pages/$$commit/$$run_id"; \
+	source_tar=".dev/web-e2e-source/$$commit/template-pages-$$run_id.tar"; \
+	if [[ -e $$result_root || -L $$result_root || -e $$source_tar || -L $$source_tar ]]; then echo 'template page result or source tar already exists' >&2; exit 1; fi; \
+	install -d -m 0700 "$$result_root" "$$(dirname "$$source_tar")"; \
+	manifest_sha=$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1); \
+	scripts/web-e2e-source.sh "$$commit" '$(WEB_E2E_MANIFEST)' "$$source_tar" >/dev/null; \
+	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
+	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
+	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
+	  -v "$$PWD/$$source_tar:/candidate.tar:ro" \
+	  -v "$$PWD/$$result_root:/results:rw" \
+	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e TEMPLATE_PAGES_BROWSER_IMAGE='$(WEB_E2E_IMAGE)' \
+	  -e TEMPLATE_PAGES_COMMIT="$$commit" \
+	  -e TEMPLATE_PAGES_MANIFEST_SHA256="$$manifest_sha" \
+	  -e TEMPLATE_PAGES_TAR_SHA256="$$tar_sha" -w /tmp '$(WEB_E2E_IMAGE)' \
+	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$(uname -s)" = Linux; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; NUXT_HARNESS=1 node node_modules/nuxt/bin/nuxt.mjs build; node scripts/generate-template-pages.mts --candidate /results/candidate'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
+
 web-e2e: ## Compare renderer baselines in the pinned AMD64 browser
 	@set -Eeuo pipefail; \
 	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
