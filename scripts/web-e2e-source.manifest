@@ -693,6 +693,8 @@ apps/web/public/templates/pages/nordic-muted-vi-p1.png
 apps/web/public/templates/pages/one-page-tight-en-p1.png
 apps/web/public/templates/pages/one-page-tight-vi-p1.png
 apps/web/public/theme-bootstrap.js
+apps/web/scripts/generate-template-pages.mts
+apps/web/scripts/validate-template-pages.mts
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts

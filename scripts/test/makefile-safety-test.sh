@@ -84,6 +84,8 @@ assert_web_e2e_rejected invalid-run-id web-e2e \
   'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' WEB_E2E_RUN_ID='../bad'
 assert_web_e2e_rejected invalid-update-run-id web-e2e-update \
   'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' WEB_E2E_RUN_ID='bad/value'
+assert_web_e2e_rejected invalid-template-run-id web-template-pages \
+  'TEMPLATE_PAGES_RUN_ID must match [A-Za-z0-9_-]+' TEMPLATE_PAGES_RUN_ID='../bad'
 assert_web_e2e_rejected update-golden-present web-e2e \
   'UPDATE_GOLDEN must be absent' WEB_E2E_RUN_ID=valid UPDATE_GOLDEN=
 assert_web_e2e_rejected playwright-update-present web-e2e \
@@ -239,12 +241,16 @@ def executable(path, text):
     path.write_text(text)
     path.chmod(0o755)
 executable(bin_dir / "git", "#!/bin/bash\nif [ \"$1\" = rev-parse ]; then printf '%s\\n' \"$FIXTURE_COMMIT\"; fi\n")
-executable(bin_dir / "uname", "#!/bin/bash\nprintf 'x86_64\\n'\n")
+executable(bin_dir / "uname", "#!/bin/bash\nif [ \"${1-}\" = -s ]; then printf 'Linux\\n'; else printf 'x86_64\\n'; fi\n")
 executable(repo / "scripts/web-e2e-source.sh", "#!/bin/bash\ncp -- \"$FIXTURE_ARCHIVE\" \"$3\"\n")
+executable(repo / "scripts/generate-web-e2e-source-manifest.sh", "#!/bin/bash\n[ \"$1\" = --check ]\n")
 executable(bin_dir / "podman", """#!/usr/bin/env python3
+import json
 import os
 from pathlib import Path
 import sys
+if os.environ.get("FIXTURE_CALLS"):
+    Path(os.environ["FIXTURE_CALLS"]).write_text(json.dumps(sys.argv[1:]))
 mount = next(arg for arg in sys.argv if arg.endswith(":/results:rw"))
 mode = Path(mount.removesuffix(":/results:rw"))
 artifacts = mode / "harness/artifacts/fixture"
@@ -280,6 +286,29 @@ for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e
         assert candidate_metadata.exists() == (target == "web-e2e-update" and status == 0)
         if candidate_metadata.exists():
             assert candidate_metadata.read_text() == metadata
+for status in [42, 0]:
+    calls = work / f"template-calls-{status}.json"
+    result = subprocess.run(["/usr/bin/make", "--no-print-directory", "web-template-pages"], cwd=repo, env={
+        **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
+        "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
+        "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
+        "FIXTURE_CALLS": str(calls), "TEMPLATE_PAGES_RUN_ID": f"pages-{status}",
+    }, capture_output=True, timeout=10)
+    assert result.returncode == (2 if status else 0), result.stderr
+    args = json.loads(calls.read_text())
+    image = next(line.split(" := ", 1)[1] for line in makefile.read_text().splitlines() if line.startswith("WEB_E2E_IMAGE := "))
+    assert image in args
+    assert "--platform" in args and "linux/amd64" in args
+    mounts = [args[i + 1] for i, arg in enumerate(args) if arg == "-v"]
+    assert len(mounts) == 2
+    assert any(mount.endswith(":/candidate.tar:ro") for mount in mounts)
+    assert any(mount.endswith(":/results:rw") for mount in mounts)
+    assert "TEMPLATE_PAGES_BROWSER_IMAGE=" + image in args
+    command = args[-1]
+    assert "cd /tmp/aboutme/apps/web" in command
+    assert "NUXT_HARNESS=1 node node_modules/nuxt/bin/nuxt.mjs build" in command
+    assert "node scripts/generate-template-pages.mts --candidate /results/candidate" in command
+    assert "playwright test" not in command and "--update-snapshots" not in command
 # Metadata joins only successful, validated candidates.
 mode = work / "update"
 (mode / "candidate-baselines").mkdir(parents=True)
