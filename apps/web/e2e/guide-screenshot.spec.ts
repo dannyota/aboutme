@@ -147,12 +147,12 @@ test('guide flow detects overlapping sections', async ({ page }) => {
     .locator(':scope > header, :scope > section');
   const assertFlow = () => assertGuideFlow(sections);
   await assertFlow();
-  const section = page.getByTestId('guide-can-cannot');
-  const original = await section.evaluate((element) => {
+  const header = page.getByTestId('guide-header');
+  const original = await header.evaluate((element) => {
     const style = (element as HTMLElement).style;
-    const value = style.getPropertyValue('margin-top');
-    const priority = style.getPropertyPriority('margin-top');
-    style.setProperty('margin-top', '-36px', 'important');
+    const value = style.getPropertyValue('transform');
+    const priority = style.getPropertyPriority('transform');
+    style.setProperty('transform', 'translateY(36px)', 'important');
     return { value, priority };
   });
   const gap = await sections.evaluateAll((elements) =>
@@ -160,9 +160,9 @@ test('guide flow detects overlapping sections', async ({ page }) => {
     - elements[0]!.getBoundingClientRect().bottom);
   expect(gap).toBeLessThan(0);
   await expect(assertFlow()).rejects.toThrow();
-  await section.evaluate((element, saved) => {
+  await header.evaluate((element, saved) => {
     (element as HTMLElement).style.setProperty(
-      'margin-top', saved.value, saved.priority,
+      'transform', saved.value, saved.priority,
     );
   }, original);
   await assertFlow();

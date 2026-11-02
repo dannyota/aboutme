@@ -537,7 +537,12 @@ for (const [name, css] of [
     await openCard(page, await renderCardHTML(buildEnvelope(card)));
     const assertCard = () => expectCardDisplay(page, card, 'no-photo-en');
     await assertCard();
-    const mutation = await page.addStyleTag({ content: css });
+    const mutation = await page.evaluateHandle((content) => {
+      const style = document.createElement('style');
+      style.textContent = content;
+      document.head.append(style);
+      return style;
+    }, css);
     if (name === 'band color') {
       await expect(page.locator('.preview-card-band-left'))
         .toHaveCSS('background-color', 'rgb(255, 0, 0)');
