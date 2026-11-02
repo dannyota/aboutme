@@ -136,14 +136,19 @@ install_key() { # committed-key fingerprint outfile
 
 # Installs packages at their pinned versions and proves dpkg holds exactly
 # those versions afterward.
+package_is_pinned() { # package=version
+  local spec=$1 state
+  state=$(dpkg-query -W -f='${Status}\t${Version}' "${spec%%=*}" 2>/dev/null) || return 1
+  [[ $state == $'install ok installed\t'"${spec#*=}" ||
+    $state == $'hold ok installed\t'"${spec#*=}" ]]
+}
+
 install_pinned() { # package=version...
-  local spec pkg want have
+  local spec pkg
   apt-get install -y -qq --allow-downgrades "$@" >/dev/null
   for spec in "$@"; do
     pkg=${spec%%=*}
-    want=${spec#*=}
-    have=$(dpkg-query -W -f='${Version}' "$pkg")
-    [ "$have" = "$want" ] || die "$pkg is $have, not the pinned $want"
+    package_is_pinned "$spec" || die "$pkg is not installed at pinned ${spec#*=}"
     apt-mark hold "$pkg" >/dev/null
   done
 }
@@ -243,8 +248,7 @@ install -m 0644 \
 systemctl daemon-reload
 # Suppress package registration and startup until the migration provisions pgx.
 for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"; do
-  package_state=$(dpkg-query -W -f='${Status}\t${Version}' "${package_pin%%=*}" 2>/dev/null) || package_state=absent
-  if [[ $package_state != $'install ok installed\t'"${package_pin#*=}" ]]; then
+  if ! package_is_pinned "$package_pin"; then
     if [[ $package_pin == crowdsec-firewall-bouncer-nftables=* ]]; then
       install -d -m 0700 /etc/crowdsec/bouncers
       # The package needs a key to skip automatic registration. The migration

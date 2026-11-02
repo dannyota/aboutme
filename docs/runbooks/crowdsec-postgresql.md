@@ -46,6 +46,26 @@ edge service was active, neither starts and `crowdsec_migrate_no_edge` appears
 on stderr; restore the intended edge through its normal guards. Zero exit does
 not prove serving. The switch causes a short edge outage.
 
+## Host bundle reinstall
+
+An exact package pin is installed with either dpkg status `install ok installed`
+or `hold ok installed`. Keep the holds. Checking only the first status can send
+a healthy host through offline package installation, disabling and masking
+CrowdSec. Migration then stops the edge and refuses the occupied catalog with
+`crowdsec_migrate_refused step=fresh-admission`.
+
+Stop rerunning that bundle. Resolve any owned operation, then follow
+[failure recovery](#failure-recovery), including explicit `--reset` and its
+CrowdSec data loss. Run the verification commands. If reset reports
+`crowdsec_migrate_no_edge`, start the intended previously active edge through
+its normal guards, for example `sudo systemctl start aboutme-caddy.service`, and
+confirm readiness. A successful reset alone does not restore serving.
+
+After recovery, copy the reviewed fixed bundle and rerun
+`sudo bash <bundle>/host/install.sh <bundle>`. This completes settings and unit
+activation skipped after the failed migration. Confirm the installer reports
+`install: done`, the intended edge serves, and the timers are active.
+
 ## Engine and hub upgrades
 
 `deploy/vn/edge/crowdsec/config.yaml.local` pins `cscli.hub_branch: master` so
