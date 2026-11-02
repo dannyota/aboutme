@@ -35,6 +35,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CloudFront verification](cloudfront-verification.md)                  | AWS reference migration, parity, tests, and unresolved facts               |
 | 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, storage switch, and abuse detection     |
 | Other   | [CrowdSec privacy notification](crowdsec-privacy-notification.md)      | Notice, email acceptance, activation, and restore denial                   |
+| Other   | [CrowdSec retention batching](crowdsec-retention-batching.md)          | Nightly and age-triggered stopped reconciliation                           |
+| Other   | [CrowdSec retention reload](crowdsec-retention-reload.md)              | Why graceful reload cannot replace stopped reconciliation                  |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
