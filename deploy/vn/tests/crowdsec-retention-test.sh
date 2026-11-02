@@ -15,6 +15,12 @@ if [[ ${1:-} == postgresql ]]; then
   retention_fixture_start "$repo_root"
   : "${retention_fixture:?fixture initialization failed}"
   run_retention() { /usr/local/lib/aboutme/crowdsec-retention.sh "$1"; }
+  recover_retention() {
+    # Independent corruption cases restore fixture admission between assertions.
+    # Production recovery and its provisioning gates use the migration suites.
+    rm -f /run/aboutme/crowdsec-retention-failed
+    run_retention startup
+  }
   lease_check() { /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh; }
   refused() { if "$@" >/dev/null 2>&1; then return 1; fi; }
   check_hosted() {
@@ -26,6 +32,13 @@ if [[ ${1:-} == postgresql ]]; then
   }
 
   check_hosted startup-empty-postgresql run_retention startup
+  touch /run/aboutme/crowdsec-retention-failed
+  check_hosted retained-failure-overrides-valid-lease refused lease_check
+  check_hosted runtime-cannot-clear-retained-failure refused run_retention runtime
+  check_hosted startup-cannot-clear-retained-failure refused run_retention startup
+  [[ -e /run/aboutme/crowdsec-retention-failed && ! -e /run/aboutme/crowdsec-retention-ok ]]
+  rm /run/aboutme/crowdsec-retention-failed
+  check_hosted fixture-startup-admission-restored run_retention startup
   check_hosted candidate-selection-skips-jit retention_fixture_candidate_no_jit
   check_hosted valid-current-epoch-lease lease_check
   touch "$retention_fixture/timer-disabled"
@@ -53,7 +66,7 @@ if [[ ${1:-} == postgresql ]]; then
       echo 'FAIL invalid-firewall-metadata-triggered-initialization'; exit 1
     fi
     rm "$retention_fixture/$fault"
-    check_hosted proven-firewall-absence-allows-startup run_retention startup
+    check_hosted proven-firewall-absence-allows-startup recover_retention
     check_hosted restored-firewall-current-lease lease_check
   done
   printf '22222222222222222222222222222222\n' >"$retention_fixture/invocation"
@@ -140,7 +153,7 @@ SQL
     fi
     rm "$retention_fixture/caddy-stopped"
     printf 'inactive\n' >"$retention_fixture/consumer-state"
-    check_hosted recover-after-bouncer-only-rebuild run_retention startup
+    check_hosted recover-after-bouncer-only-rebuild recover_retention
   done
   printf 'active\n' >"$retention_fixture/consumer-state"
 
@@ -159,7 +172,7 @@ SQL
     retention_fixture_sql >/dev/null <<'SQL'
 DELETE FROM public.alerts WHERE id=3000;
 SQL
-    check_hosted recover-after-child-decision-change run_retention startup
+    check_hosted recover-after-child-decision-change recover_retention
     printf 'active\n' >"$retention_fixture/consumer-state"
   done
 
@@ -188,7 +201,7 @@ SQL
   retention_fixture_sql >/dev/null <<'SQL'
 DELETE FROM public.alerts WHERE id=3000;
 SQL
-  check_hosted recover-after-oversized-decision-graph run_retention startup
+  check_hosted recover-after-oversized-decision-graph recover_retention
   printf 'active\n' >"$retention_fixture/consumer-state"
 
   retention_fixture_sql >/dev/null <<'SQL'
@@ -199,14 +212,14 @@ SQL
   check_hosted changed-candidate-refuses-deletion refused run_retention runtime
   [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts WHERE id=3000;') == 1 ]]
   [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
-  check_hosted recover-after-candidate-change run_retention startup
+  check_hosted recover-after-candidate-change recover_retention
 
   for column in created_at updated_at started_at stopped_at; do
     retention_fixture_sql >/dev/null <<<"UPDATE public.alerts SET $column='infinity' WHERE id=3000;"
     check_hosted nonfinite-alert-time-refuses refused run_retention runtime
     [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
     retention_fixture_sql >/dev/null <<<"UPDATE public.alerts SET $column=now() WHERE id=3000;"
-    check_hosted recover-after-nonfinite-time run_retention startup
+    check_hosted recover-after-nonfinite-time recover_retention
   done
   retention_fixture_sql >/dev/null <<'SQL'
 UPDATE public.alerts SET started_at=NULL WHERE id=3000;
@@ -215,7 +228,7 @@ SQL
   retention_fixture_sql >/dev/null <<'SQL'
 UPDATE public.alerts SET started_at=now() WHERE id=3000;
 SQL
-  check_hosted recover-after-missing-time run_retention startup
+  check_hosted recover-after-missing-time recover_retention
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
@@ -225,7 +238,7 @@ SQL
   retention_fixture_sql >/dev/null <<'SQL'
 DELETE FROM public.decisions;
 SQL
-  check_hosted recover-after-invalid-duration run_retention startup
+  check_hosted recover-after-invalid-duration recover_retention
   retention_fixture_admin >/dev/null <<'SQL'
 ALTER TABLE public.events DISABLE TRIGGER ALL;
 INSERT INTO public.events (created_at,updated_at,time,serialized,alert_events)
@@ -236,7 +249,7 @@ SQL
   retention_fixture_sql >/dev/null <<'SQL'
 DELETE FROM public.events WHERE alert_events=999999;
 SQL
-  check_hosted recover-after-dangling-child run_retention startup
+  check_hosted recover-after-dangling-child recover_retention
 
   for relation in events meta; do
     columns=(created_at updated_at)
@@ -245,7 +258,7 @@ SQL
       retention_fixture_sql >/dev/null <<<"UPDATE public.$relation SET $column='-infinity';"
       check_hosted "nonfinite-$relation-$column-refuses" refused run_retention runtime
       retention_fixture_sql >/dev/null <<<"UPDATE public.$relation SET $column=now();"
-      check_hosted "recover-$relation-$column" run_retention startup
+      check_hosted "recover-$relation-$column" recover_retention
     done
   done
   retention_fixture_sql >/dev/null <<'SQL'
@@ -258,7 +271,7 @@ SQL
     retention_fixture_sql >/dev/null <<'SQL'
 UPDATE public.decisions SET created_at=now(),updated_at=now(),until=now()+interval '1 hour';
 SQL
-    check_hosted "recover-decision-$column" run_retention startup
+    check_hosted "recover-decision-$column" recover_retention
   done
   retention_fixture_sql >/dev/null <<'SQL'
 DELETE FROM public.decisions;
@@ -273,7 +286,7 @@ SQL
   retention_fixture_admin >/dev/null <<'SQL'
 ALTER TABLE public.events RENAME COLUMN unexpected TO serialized;
 SQL
-  check_hosted recover-after-schema-mismatch run_retention startup
+  check_hosted recover-after-schema-mismatch recover_retention
 
   retention_fixture_admin >"$retention_fixture/database-lock-ready" <<'SQL' &
 BEGIN;
@@ -292,7 +305,7 @@ SQL
   check_hosted real-database-lock-timeout-refuses refused run_retention runtime
   ((SECONDS - before_lock_check < 8))
   wait "$database_lock_holder"
-  check_hosted recover-after-database-lock run_retention startup
+  check_hosted recover-after-database-lock recover_retention
 
   check_hosted real-ordinary-vacuum /usr/local/lib/aboutme/crowdsec-vacuum.sh
   [[ $(retention_fixture_sql <<<'SELECT count(*) FROM pg_stats WHERE schemaname='\''public'\'';') == 0 ]]
@@ -308,12 +321,12 @@ SQL
   [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
   flock -u "$held_retention"
   exec {held_retention}>&-
-  check_hosted recover-after-lock-contention run_retention startup
+  check_hosted recover-after-lock-contention recover_retention
   touch "$retention_fixture/clock-failed"
   check_hosted clock-failure-closes-gate refused run_retention runtime
   [[ ! -e /run/aboutme/crowdsec-retention-ok && ! -e /run/aboutme/caddy-log/crowdsec ]]
   rm "$retention_fixture/clock-failed"
-  check_hosted recover-after-clock-failure run_retention startup
+  check_hosted recover-after-clock-failure recover_retention
 
   runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/data" \
     -m fast -w stop >/dev/null 2>&1
@@ -392,9 +405,24 @@ assert re.search(r"(?:MainPID|ControlGroup|cgroup)", source)
 assert re.search(r"\b20(?:s|\b)", source)
 PY
 
+check transition-wait-inside-runtime-deadline python3 - "$host/crowdsec-retention.sh" <<'PY'
+import pathlib
+import sys
+source = pathlib.Path(sys.argv[1]).read_text()
+assert 'flock -x -w 60 "$retention_lock"' in source
+assert 'deadline=60' in source
+assert 'timeout --signal=TERM --kill-after=2s "$deadline"' in source
+PY
+
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$ABOUTME_TEST_SYSTEMCTL"
+if [[ ${ABOUTME_TEST_IGNORE_TERM_VERB:-} == "${1-}" ]]; then
+  trap '' TERM
+  printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
+  while :; do sleep 1; done
+fi
+if [[ ${1-} == stop && ${ABOUTME_TEST_HUNG_STOP:-0} == 1 ]]; then sleep 30; fi
 if [[ ${1-} == show ]]; then
   state=inactive
   [[ ${ABOUTME_TEST_STILL_ACTIVE:-0} != 1 ]] || state=active
@@ -408,6 +436,7 @@ fi
 STUB
 cat >"$work/bin/alert.sh" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${ABOUTME_TEST_HUNG_ALERT:-0} == 1 ]]; then sleep 30; fi
 printf '%s\n' "$*" >>"$ABOUTME_TEST_ALERT"
 STUB
 chmod +x "$work/bin/systemctl" "$work/bin/alert.sh"
@@ -447,6 +476,37 @@ grep -qF 'kill --kill-whom=all --signal=SIGKILL' "$work/systemctl.log" || {
 [[ -s $work/feed/serving.json ]] || {
   echo "FAIL retention-confirms-quiescence-before-feed-removal" >&2; exit 1;
 }
+
+# Shorten only fixture clocks. A stuck manager call must not consume several
+# independent timeout budgets, and SMTP cannot retain watchdog safety locks.
+sed -e 's/--kill-after=2s 58 /--kill-after=0.1s 0.2 /' \
+  -e 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
+  "$host/crowdsec-retention-fail.sh" >"$work/bounded-failure.sh"
+before=$SECONDS
+if ABOUTME_TEST_HUNG_STOP=1 bash "$work/bounded-failure.sh"; then
+  echo 'FAIL stuck-stop-accepted-as-quiescent' >&2; exit 1
+fi
+((SECONDS - before < 3)) || { echo 'FAIL consumer-stop-whole-deadline' >&2; exit 1; }
+[[ -s $work/feed/serving.json ]] || { echo 'FAIL stuck-stop-removed-live-feed' >&2; exit 1; }
+before=$SECONDS
+ABOUTME_TEST_HUNG_ALERT=1 bash "$work/bounded-failure.sh"
+((SECONDS - before < 3)) || { echo 'FAIL unbounded-retention-alert' >&2; exit 1; }
+
+for verb in stop show; do
+  mkdir -p "$work/feed"
+  printf 'retained\n' >"$work/feed/serving.json"
+  exec {failure_guard}>"$work/failure.lock"
+  flock -x "$failure_guard"
+  ABOUTME_TEST_IGNORE_TERM_VERB=$verb ABOUTME_TEST_CLIENT_PID=$work/client-pid \
+    bash "$work/bounded-failure.sh" &
+  response_pid=$!
+  exec {failure_guard}>&-
+  if wait "$response_pid"; then echo "FAIL ignored-TERM-$verb-accepted" >&2; exit 1; fi
+  [[ -s $work/client-pid ]] || { echo "FAIL ignored-TERM-$verb-not-exercised" >&2; exit 1; }
+  flock -n "$work/failure.lock" true || { echo "FAIL ignored-TERM-$verb-retained-lock" >&2; exit 1; }
+  [[ -s $work/feed/serving.json ]] || { echo 'FAIL ignored-TERM-client-removed-live-feed' >&2; exit 1; }
+  rm "$work/client-pid"
+done
 
 ((failures == 0)) || exit 1
 echo "CrowdSec retention tests passed"

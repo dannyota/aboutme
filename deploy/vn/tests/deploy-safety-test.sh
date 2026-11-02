@@ -34,17 +34,40 @@ cat >"$work/systemctl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 state=${ABOUTME_TEST_STATE:?}
+if [[ -e $state/pause-admission && ( $* == *'start aboutme-crowdsec-retention-startup.service'* ||
+  $* == *'is-active --quiet aboutme-crowdsec-retention-startup.service'* ) ]]; then
+  touch "$state/admission-entered"
+  while [[ ! -e $state/admission-release ]]; do sleep 0.01; done
+  if [[ $1 == start ]]; then
+    rm -f "$state/../run/crowdsec-retention-failed"
+    touch "$state/../run/crowdsec-retention-ok"
+    touch "$state/unwanted-startup"
+  fi
+fi
 case $1 in
   is-active)
     [[ ! -e $state/inspection-failure ]] || exit 4
     [[ -e $state/active/${3} ]] ;;
   show)
     [[ ! -e $state/inspection-failure ]] || exit 1
+    [[ ! -e $state/malformed-metadata ]] || { printf 'ActiveState=activating\n'; exit 0; }
     [[ " $* " == *' --all '* ]] || exit 1
-    printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_UNIT_JOB:-}"
+    if [[ " $* " == *' --property=MainPID '* ]]; then
+      unit=${!#}
+      unit=${unit%.service}
+      active=inactive pid=0
+      [[ ! -e $state/active/$unit ]] || { active=active; pid=1; }
+      [[ ! -e $state/transition-persists ]] || active=activating
+      printf 'ActiveState=%s\nJob=\nMainPID=%s\nControlPID=0\n' "$active" "$pid"
+    else
+      printf 'ActiveState=%s\nJob=%s\n' "${NOTICE_UNIT_STATE:-inactive}" "${NOTICE_UNIT_JOB:-}"
+    fi
     ;;
   is-enabled) [[ -e $state/enabled/${3} ]] ;;
   stop)
+    [[ ! -e $state/transition-persists ]] || exit 124
+    if [[ -e $state/timeout-malformed ]]; then touch "$state/malformed-metadata"; exit 124; fi
+    [[ ! -e $state/fail-inspection-after-stop ]] || touch "$state/inspection-failure"
     shift
     for unit in "$@"; do rm -f "$state/active/$unit"; done
     ;;
@@ -66,8 +89,95 @@ STUB
 chmod +x "$work/systemctl"
 export PATH=$work:$PATH
 
-# shellcheck source=../scripts/deploy-safety.sh
-source "$root/deploy/vn/scripts/deploy-safety.sh"
+sed "s|/run/aboutme|$work/run|g" "$root/deploy/vn/scripts/deploy-safety.sh" >"$work/deploy-safety.sh"
+# shellcheck source=/dev/null
+source "$work/deploy-safety.sh"
+
+# Edge mutations must join an admitted retention pass or watchdog tick.
+# Redirect only host paths; execute the production lock and command helper.
+sed -n '/^aboutme_edge_transition() (/,/^)/p' "$root/deploy/vn/scripts/deploy-safety.sh" |
+  sed "s|/run/aboutme|$work/run|g" >"$work/edge-lock.sh"
+mkdir -p "$work/run"
+chmod 0755 "$work/run"
+touch "$work/run/crowdsec-retention.lock"
+chmod 0600 "$work/run/crowdsec-retention.lock"
+# shellcheck source=/dev/null
+source "$work/edge-lock.sh"
+declare -F aboutme_edge_transition >/dev/null || fail 'missing edge serialization'
+for transition in maintenance-up app-down render restore-previous app-up maintenance-down fail-closed; do
+  exec {edge_guard}>"$work/run/crowdsec-retention.lock"
+  flock -x "$edge_guard"
+  (exec {edge_guard}>&-; aboutme_edge_transition touch "$work/$transition") &
+  transition_pid=$!
+  sleep 0.1
+  [[ ! -e $work/$transition ]] || fail "$transition overlapped an admitted retention or watch pass"
+  flock -u "$edge_guard"
+  exec {edge_guard}>&-
+  wait "$transition_pid"
+  [[ -e $work/$transition ]] || fail "$transition did not resume after the pass joined"
+done
+
+touch "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-ok"
+if aboutme_edge_transition true; then fail 'accepted a surviving systemd transition'; fi
+[[ -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok ]] ||
+  fail 'uncertain edge mutation retained startup admission'
+rm "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-failed"
+
+for fault in timeout-malformed fail-inspection-after-stop raw-exit-two; do
+  touch "$work/run/crowdsec-retention-ok"
+  touch "$ABOUTME_TEST_STATE/$fault"
+  if [[ $fault == raw-exit-two ]]; then
+    if aboutme_edge_transition bash -c 'exit 2'; then fail 'accepted raw command exit 2'; fi
+  elif aboutme_edge_transition aboutme_stop_edge aboutme-caddy; then
+    fail "$fault accepted an unproved completed mutation"
+  fi
+  [[ -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok ]] ||
+    fail "$fault bypassed admission revocation"
+  rm -f "$ABOUTME_TEST_STATE/$fault" "$ABOUTME_TEST_STATE/malformed-metadata" \
+    "$ABOUTME_TEST_STATE/inspection-failure" "$work/run/crowdsec-retention-failed"
+done
+
+# Pause deployment at edge admission, then complete watchdog shutdown. Resuming
+# the deployment must neither run startup retention nor remove its failure.
+real_flock=$(command -v flock)
+flock() {
+  if [[ -e $ABOUTME_TEST_STATE/pause-admission && $* == '-x -w 65 '* ]]; then
+    touch "$ABOUTME_TEST_STATE/admission-entered"
+    while [[ ! -e $ABOUTME_TEST_STATE/admission-release ]]; do sleep 0.01; done
+  fi
+  "$real_flock" "$@"
+}
+touch "$ABOUTME_TEST_STATE/pause-admission"
+(
+  if aboutme_edge_start aboutme-maintenance; then echo accepted; else echo refused; fi
+) >"$work/admission-result" &
+admission_pid=$!
+for ((i=0; i<100; i++)); do
+  [[ ! -e $ABOUTME_TEST_STATE/admission-entered ]] || break
+  sleep 0.01
+done
+[[ -e $ABOUTME_TEST_STATE/admission-entered ]] || fail 'edge admission fixture did not pause'
+printf 'retention-failed\n' >"$work/run/crowdsec-retention-failed"
+rm -f "$work/run/crowdsec-retention-ok" "$ABOUTME_TEST_STATE/active/aboutme-maintenance"
+touch "$ABOUTME_TEST_STATE/admission-release"
+wait "$admission_pid"
+[[ $(cat "$work/admission-result") == refused &&
+  -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok &&
+  ! -e $ABOUTME_TEST_STATE/unwanted-startup &&
+  ! -e $ABOUTME_TEST_STATE/active/aboutme-maintenance ]] || fail 'paused deployment reopened after watchdog shutdown'
+unset -f flock
+rm -f "$ABOUTME_TEST_STATE/pause-admission" "$ABOUTME_TEST_STATE/admission-entered" \
+  "$ABOUTME_TEST_STATE/admission-release" "$work/run/crowdsec-retention-failed"
+touch "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-ok"
+if aboutme_edge_transition aboutme_stop_edge aboutme-caddy; then fail 'accepted a timed-out systemctl client'; fi
+[[ -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok ]] ||
+  fail 'timed-out client left retention admission open'
+rm "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-failed"
+
+for helper in step_maintenance_up step_app_down render_all step_app_up step_maintenance_down; do
+  sed -n "/^$helper() {/,/^}/p" "$root/deploy/vn/scripts/deploy-host.sh" |
+    grep -qE 'aboutme_edge_(transition|start)' || fail "$helper lacks edge serialization"
+done
 
 for unit in aboutme-caddy aboutme-server aboutme-web \
   aboutme-job-idempotency-expiry-sweep.timer \
@@ -80,6 +190,14 @@ done
 
 aboutme_fail_closed 1
 aboutme_assert_fail_closed
+
+# Retention failure owns both edge modes, including static maintenance.
+touch "$work/run/crowdsec-retention-failed"
+rm -f "$ABOUTME_TEST_STATE/active/aboutme-maintenance"
+if aboutme_fail_closed 1; then fail 'retention failure reopened maintenance'; fi
+[[ ! -e $ABOUTME_TEST_STATE/active/aboutme-maintenance ]] || fail 'retention failure started maintenance'
+rm "$work/run/crowdsec-retention-failed"
+aboutme_fail_closed 1
 
 for unit in aboutme-caddy aboutme-server aboutme-web \
   aboutme-job-idempotency-expiry-sweep.timer \

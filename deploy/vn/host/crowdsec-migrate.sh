@@ -182,6 +182,9 @@ migrate_main() {
   migrate_at machine "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   cscli machines add -a --force --error || return 1
   chmod 0600 /etc/crowdsec/local_api_credentials.yaml || return 1
+  # Only admitted fresh provisioning or explicit reset can reopen failed startup.
+  # Both have stopped consumers and passed the new catalog and activation gates.
+  migrate_at startup-admission rm -f -- /run/aboutme/crowdsec-retention-failed || return 1
   # Startup retention clears owned cache/firewall state and binds the new lease.
   migrate_at startup-retention systemctl start aboutme-crowdsec-retention-startup.service || return 1
   migrate_at maintenance-timers systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer || return 1
@@ -202,6 +205,8 @@ migrate_main() {
 }
 migrate_failure() {
   if [[ ${migrate_changed:-no} == yes ]]; then
+    rm -f -- /run/aboutme/crowdsec-retention-ok
+    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
     if ! migrate_stop >/dev/null 2>&1; then
       printf 'crowdsec_migrate_stop_failed\n' >&2
       return 1

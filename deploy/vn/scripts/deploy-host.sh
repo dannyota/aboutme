@@ -235,7 +235,7 @@ render_all() { # tag number server web caddy maintenance-image maintenance-tag m
     render_unit "$t" "$units/$name" "$@"
   done
   write_release_json "$@"
-  systemctl daemon-reload
+  aboutme_edge_transition timeout --kill-after=1s 10 systemctl daemon-reload
 }
 
 step_status() {
@@ -332,8 +332,8 @@ step_maintenance_up() { # maintenance-image
   render_unit "$templates/aboutme-maintenance.container.in" "$units/aboutme-maintenance.container" \
     "$mtag" "$mnumber" "-" "-" "-" "$image" "$mtag" "$mnumber"
   jq -n --arg i "$image" --arg t "$mtag" --argjson n "$mnumber" '{image: $i, tag: $t, number: $n}' >"$maintenance_json"
-  systemctl daemon-reload
-  systemctl start aboutme-maintenance
+  aboutme_edge_transition timeout --kill-after=1s 10 systemctl daemon-reload
+  aboutme_edge_start aboutme-maintenance
   sleep 3
   active aboutme-maintenance || die "aboutme-maintenance did not stay up"
   # Both Caddy processes now share 443 with SO_REUSEPORT, or only maintenance
@@ -344,7 +344,8 @@ step_maintenance_up() { # maintenance-image
 
 step_app_down() {
   # On a first deploy neither unit exists yet; the checks below still hold.
-  systemctl stop aboutme-caddy aboutme-server 2>/dev/null || true
+  aboutme_edge_transition aboutme_stop_edge aboutme-caddy aboutme-server 2>/dev/null ||
+    die "could not prove a stable stopped edge"
   wait_stopped aboutme-caddy 60 || die "aboutme-caddy did not stop"
   wait_stopped aboutme-server 60 || die "aboutme-server did not stop"
   ! curl -fsS -o /dev/null -m 3 http://127.0.0.1:8080/healthz 2>/dev/null || die "something still answers on 127.0.0.1:8080"
@@ -466,7 +467,7 @@ step_app_up() {
   # which Caddy takes the connection (docs/design/vietnam-production.md,
   # "Deploy", step 8).
   http_ok http://127.0.0.1:8080/readyz 180 || die "aboutme-server did not become ready"
-  systemctl start aboutme-caddy
+  aboutme_edge_start aboutme-caddy
   sleep 3
   active aboutme-caddy || die "aboutme-caddy did not stay up"
   (($(caddy_listeners 443) >= 1)) || die "no Caddy listens on 443"
@@ -553,7 +554,7 @@ cimd_rollback_check() { # candidate release number
 }
 
 step_maintenance_down() {
-  systemctl stop aboutme-maintenance
+  aboutme_edge_transition timeout --kill-after=1s 10 systemctl stop aboutme-maintenance
   wait_stopped aboutme-maintenance 60 || die "aboutme-maintenance did not stop"
   ! podman container exists aboutme-maintenance || die "the maintenance container still exists"
   say "maintenance down"

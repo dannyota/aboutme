@@ -21,23 +21,58 @@ alert() { # key subject [detail]
   printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
 }
 
-# A scheduled tick waits for completion before entering any failure action.
-# The descriptor remains held through the ordinary checks and failure body.
-# shellcheck source=../crowdsec-db.sh
-source "$lib/crowdsec-db.sh"
-unset crowdsec_db_lock_fd
-[[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || exit 1
-exec {crowdsec_db_lock_fd}</var/lib/aboutme/fence.lock
-flock -s -w 30 "$crowdsec_db_lock_fd" || exit 1
-crowdsec_db_held_lock || exit 1
-# shellcheck source=../crowdsec-retention-lease-check.sh
-source "$lib/crowdsec-retention-lease-check.sh"
+watch_crowdsec() (
+  # Match retention's lock order. Unrelated host checks hold neither lock.
+  [[ -f /run/aboutme/crowdsec-retention.lock && ! -L /run/aboutme/crowdsec-retention.lock ]] || return 1
+  exec {watch_retention_lock}</run/aboutme/crowdsec-retention.lock
+  local admitted=yes
+  flock -s -n "$watch_retention_lock" || admitted=no
+  [[ -f /var/lib/aboutme/fence.lock && ! -L /var/lib/aboutme/fence.lock ]] || return 1
+  exec {crowdsec_db_lock_fd}</var/lib/aboutme/fence.lock
+  flock -s -w 2 "$crowdsec_db_lock_fd" || return 1
+  local result=0 count
+  count=$(timeout --kill-after=1s 20 "$BASH" "$0" --crowdsec-query "$crowdsec_db_lock_fd" "$admitted") || result=$?
+  case $result in
+    0) printf '%s\n' "$count" ;;
+    3 | 124 | 137)
+      # Keep fence admission through shutdown, as the restore contract requires.
+      "$lib/crowdsec-retention-fail.sh" || true
+      echo 0 ;;
+    *) return 1 ;;
+  esac
+)
 
-# The retention timer has its own failure action. This independent lease check
-# also catches a disabled or stuck timer within five minutes.
-if ! crowdsec_lease_check; then
-  "$lib/crowdsec-retention-fail.sh" || true
-fi
+watch_crowdsec_query() {
+  # The parent owns the fence and, when admitted, retention. Validate its fence
+  # descriptor before the bounded admission query.
+  [[ $1 =~ ^[0-9]+$ ]] || return 1
+  # Nested preflight timeouts stay in this bounded child's process group, so
+  # forced termination also closes inherited fence and retention descriptors.
+  timeout() { command timeout --foreground --kill-after=1s "$@"; }
+  crowdsec_db_lock_fd=$1
+  # shellcheck source=../crowdsec-db.sh
+  source "$lib/crowdsec-db.sh"
+  crowdsec_db_held_lock || return 1
+  # shellcheck source=../crowdsec-retention-lease-check.sh
+  source "$lib/crowdsec-retention-lease-check.sh"
+  crowdsec_lease_check || return 3
+  # A stuck retention owner cannot suppress the independent watchdog. On lock
+  # contention inspect admission under the fence, but omit the ordinary query.
+  if [[ $2 != yes ]]; then echo 0; return 0; fi
+  if crowdsec_db_ready; then
+    timeout --kill-after=1s 5 cscli alerts list --since 1h -o json 2>/dev/null |
+      jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0
+  else
+    echo 0
+  fi
+}
+
+if [[ $# == 3 && $1 == --crowdsec-query ]]; then watch_crowdsec_query "$2" "$3"; exit; fi
+(($# == 0)) || exit 2
+
+# The safety query has its own deadline. Shutdown retains its separate stop
+# budget; disk, backup, and journal checks run after both locks close.
+bans=$(watch_crowdsec) || exit 1
 
 # Root and data volume use.
 for pair in root:/ data:/srv/data; do
@@ -73,11 +108,7 @@ elif ((($(date +%s) - newest) / 3600 >= backup_hours)); then
   alert backup-stale "the newest backup is $((($(date +%s) - newest) / 3600)) hours old"
 fi
 
-# CrowdSec decisions in the last hour.
-bans=0
-if crowdsec_db_ready; then
-  bans=$(cscli alerts list --since 1h -o json 2>/dev/null | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
-fi
+# CrowdSec alert count captured under the bounded safety lock.
 ((bans <= crowdsec_bans_per_hour)) || alert crowdsec-bans "CrowdSec raised $bans alerts in the last hour"
 
 # Coraza writes metadata only. Each Caddy process owns one current file and at

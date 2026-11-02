@@ -160,6 +160,9 @@ case $1 in
       touch "$NOTICE_FIXTURE/joined"; printf 'join\n' >>"$NOTICE_FIXTURE/order"
     fi
     case $* in
+      *MainPID*ControlPID*)
+        pid=0; [[ $unit_state != active ]] || pid=1
+        printf 'ActiveState=%s\nJob=%s\nMainPID=%s\nControlPID=0\n' "$unit_state" "$job" "$pid" ;;
       *ActiveState*Job*) printf 'ActiveState=%s\nJob=%s\n' "$unit_state" "$job" ;;
       *ActiveState*) printf '%s\n' "$unit_state" ;;
       *Job*) printf '%s\n' "$job" ;;
@@ -695,7 +698,10 @@ for fault in mv:/usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh sync:/usr
   rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json "$host"
   cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
 done
+touch /run/aboutme/crowdsec-retention-failed
 NOTICE_ADOPTION=1 quiet bash "$adopt" adopt; [[ -f $authority/restore-reconciliation && -f $authority/epoch ]] || fail 'eligible adoption did not establish denial'
+[[ -e /run/aboutme/crowdsec-retention-failed ]] || fail 'legacy adoption cleared modern retention failure'
+rm /run/aboutme/crowdsec-retention-failed
 cmp -s "$authority/epoch" "$authority/initial-epoch" || fail 'adoption anchor mismatch'
 cmp -s "$adopt" "$host" || fail 'adoption canonical helper mismatch'
 jq -e '.notice_authority.state=="adopted" and .minimum_release==4007' /var/lib/aboutme/fence.json >/dev/null || fail 'adoption evidence or floor'

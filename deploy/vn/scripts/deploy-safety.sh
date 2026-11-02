@@ -10,6 +10,85 @@ aboutme_jobs=(
 
 aboutme_active() { systemctl is-active --quiet "$1"; }
 
+aboutme_edges_stable() {
+  local unit result
+  for unit in aboutme-caddy.service aboutme-maintenance.service; do
+    result=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState --property=Job \
+      --property=MainPID --property=ControlPID "$unit") || return 2
+    [[ $(wc -l <<<"$result") == 4 ]] || return 2
+    grep -qxF 'Job=' <<<"$result" && grep -qxF ControlPID=0 <<<"$result" || return 1
+    if grep -qxF ActiveState=active <<<"$result"; then
+      grep -qxE 'MainPID=[1-9][0-9]*' <<<"$result" || return 1
+    else
+      grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" &&
+        grep -qxF MainPID=0 <<<"$result" || return 1
+    fi
+  done
+}
+
+# Take retention before the fence, as retention and the watcher do. Keep app
+# readiness waits outside this lock so overdue cleanup still fails closed.
+aboutme_edge_transition() (
+  umask 077
+  [[ -d /run/aboutme && ! -L /run/aboutme &&
+    $(stat -c '%u:%a' /run/aboutme) == "$EUID:755" &&
+    ! -L /run/aboutme/crowdsec-retention.lock ]] || return 1
+  exec {edge_lock}>/run/aboutme/crowdsec-retention.lock
+  [[ $(stat -c '%u:%a:%h' /run/aboutme/crowdsec-retention.lock) == "$EUID:600:1" ]] || return 1
+  # Join the 60-second pass and its two-second forced termination before changing
+  # either edge mode. This does not extend retention's whole-pass deadline.
+  flock -x -w 65 "$edge_lock" || return 1
+  local result=0
+  aboutme_edges_stable || result=$?
+  # Refuse an unavailable inspection before issuing any manager mutation.
+  ((result != 2)) || return 1
+  if ((result == 0)); then "$@" || result=$?; fi
+  if ((result == 0)); then aboutme_edges_stable || result=$?; fi
+  if ((result != 0)); then
+    # A timed-out systemctl client can leave its manager job running. Revoke
+    # admission before releasing the lock, then request the full stop action.
+    rm -f /run/aboutme/crowdsec-retention-ok
+    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
+    timeout --kill-after=1s 3 systemctl start --no-block aboutme-crowdsec-retention-failure.service || true
+    return 1
+  fi
+)
+
+aboutme_start_edge() {
+  local rc=0
+  [[ ! -e /run/aboutme/crowdsec-retention-failed &&
+    ! -L /run/aboutme/crowdsec-retention-failed ]] || return 1
+  timeout --kill-after=1s 10 systemctl start "$@" || rc=$?
+  if [[ -e /run/aboutme/crowdsec-retention-failed ||
+    -L /run/aboutme/crowdsec-retention-failed ]]; then
+    timeout --kill-after=1s 10 systemctl stop aboutme-caddy aboutme-maintenance || true
+    return 1
+  fi
+  return "$rc"
+}
+
+aboutme_edge_start() {
+  # Admission is checked inside the lock. Deployment cannot renew a failed gate;
+  # provisioning establishes startup before modern edge units need it.
+  aboutme_edge_transition aboutme_start_edge "$@"
+}
+
+aboutme_stop_edge() {
+  # Missing units on first deploy are harmless only with positive stable-state
+  # proof from aboutme_edge_transition after the command returns.
+  local unit result rc=0
+  timeout --kill-after=1s 10 systemctl stop "$@" || rc=$?
+  for unit in "$@"; do
+    result=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState --property=Job "$unit") || {
+      if ((rc == 124 || rc == 137)); then return "$rc"; fi
+      return 2
+    }
+    [[ $(wc -l <<<"$result") == 2 ]] || return 2
+    grep -qxE 'ActiveState=(inactive|failed)' <<<"$result" &&
+      grep -qxF 'Job=' <<<"$result" || return 1
+  done
+}
+
 aboutme_wait_stopped() { # unit seconds
   local unit=$1 seconds=$2 i
   for ((i = 0; i < seconds; i++)); do
@@ -71,11 +150,11 @@ aboutme_assert_cutover_quiescent() {
 aboutme_fail_closed() { # wait seconds
   local seconds=$1 rc=0
   aboutme_stop_jobs "$seconds" || rc=1
-  systemctl stop aboutme-caddy aboutme-server aboutme-web || rc=1
+  aboutme_edge_transition aboutme_stop_edge aboutme-caddy aboutme-server aboutme-web || rc=1
   aboutme_wait_stopped aboutme-caddy 60 || rc=1
   aboutme_wait_stopped aboutme-server 60 || rc=1
   aboutme_wait_stopped aboutme-web 60 || rc=1
-  systemctl start aboutme-maintenance || rc=1
+  aboutme_edge_start aboutme-maintenance || rc=1
   aboutme_assert_fail_closed || rc=1
   return "$rc"
 }

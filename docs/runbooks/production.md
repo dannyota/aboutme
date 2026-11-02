@@ -143,6 +143,12 @@ vMonitor and the uptime backstop keep running during maintenance. Host alarms
 and backup timers also remain active. A deploy can therefore send a site-down
 notification.
 
+Edge changes join the current CrowdSec retention pass or watcher safety check
+under the retention lock. App readiness waits run outside that lock. Retention
+and vacuum timers stay enabled and active; their deadlines and lease checks
+still apply during deploy, rollback, and activation. The watcher releases its
+locks before disk, backup, and journal checks.
+
 Public-page stylesheets and hydration scripts use a build-time content hash.
 Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 
@@ -177,6 +183,28 @@ a migration may have run, the deployer keeps maintenance up with the app and
 jobs stopped. Recover with a forward fix or point-in-time restore. A failed
 recovery retains the operation lock. Inspect units and the host journal before
 retrying.
+
+A CrowdSec retention failure stops both edge modes, including maintenance.
+Deployment recovery must leave them stopped while
+`/run/aboutme/crowdsec-retention-failed` exists. Never remove the failure marker
+or lease, disable safety timers, or repeatedly start Caddy to reopen the site.
+
+For a cancelled Caddy start with a retention failure:
+
+1. Record unit names, states, job IDs, and fixed failure results. Keep raw
+   CrowdSec logs, request feeds, and database rows on the host.
+2. Prove the deploy coordinator, host steps, database commands, and media
+   writers have exited. Inspect the fence and any mutation marker. Recover the
+   owning operation before clearing a retained fence with the procedure below;
+   never delete fence files.
+3. Follow [CrowdSec failure recovery](crowdsec-postgresql.md#failure-recovery).
+   Incomplete startup on an existing catalog requires explicit reset, which
+   discards CrowdSec history and registrations while preserving application
+   data.
+4. Verify CrowdSec and its timers, then redeploy the intended eligible release
+   through the ordinary deployer. Confirm public readiness, security headers,
+   the test ban, and healthy timers. Timing a retry between timer ticks is not a
+   repair.
 
 ## Rollback
 

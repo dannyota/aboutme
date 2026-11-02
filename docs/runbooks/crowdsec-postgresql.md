@@ -105,12 +105,12 @@ step is a fixed code: `arguments`, `lock`, `idle`, `notice`, `stop`,
 `fresh-admission`, `provision`, `activate`, `activate-config`,
 `activate-offline`, `activate-gate`, `activate-config-proof`,
 `activate-detection`, `activate-files`, `discard-sqlite`, `machine`,
-`startup-retention`, `maintenance-timers`, `unmask`, `enable`, `engine`,
-`caddy-register`, `firewall-register`, `firewall-start`, `firewall-ready`,
-`edge-start`, `lapi`, `final-gate`, `lease`, or `watch`. The code identifies the
-failed step without exposing command output. A shutdown that cannot establish
-quiescence reports `crowdsec_migrate_stop_failed`; keep the host closed and
-resolve the remaining process or job before recovery.
+`startup-admission`, `startup-retention`, `maintenance-timers`, `unmask`,
+`enable`, `engine`, `caddy-register`, `firewall-register`, `firewall-start`,
+`firewall-ready`, `edge-start`, `lapi`, `final-gate`, `lease`, or `watch`. The
+code identifies the failed step without exposing command output. A shutdown that
+cannot establish quiescence reports `crowdsec_migrate_stop_failed`; keep the
+host closed and resolve the remaining process or job before recovery.
 
 Correct the cause and rerun before schema initialization. `fresh` requires an
 absent database or a verified empty schema. An occupied catalog with incomplete
@@ -118,6 +118,31 @@ activation refuses with consumers stopped, even when the catalog gate passes.
 Use explicit `--reset` after schema initialization or incomplete startup. Never
 remove an application operation fence or bypass startup guards. A complete no-op
 leaves stopped services stopped; use reset to repeat startup.
+
+Routine startup and runtime retention cannot clear a retained failure marker.
+The admitted migration path clears it only after successful fresh provisioning
+or explicit reset and activation. A later migration failure revokes the lease
+and retains the marker again.
+
+A deploy interrupted during an edge switch can leave the engine stopped and the
+lease invalid while deployment recovery tries to start maintenance. Both edge
+modes must stay closed after retention failure. A plain service restart does not
+complete recovery, and a migration no-op cannot renew an invalid lease.
+
+After proving the deploy has exited and resolving its retained operation fence
+as described in [Failed deploy](production.md#failed-deploy), recover incomplete
+startup with:
+
+```sh
+sudo /usr/local/lib/aboutme/crowdsec-migrate.sh --reset
+```
+
+This discards live CrowdSec alerts, bans, statistics, and registrations. It does
+not rewind PostgreSQL or alter application data. Keep the application stopped,
+run the verification commands above, then redeploy the intended eligible tag
+through the ordinary deployer. If reset reports `crowdsec_migrate_no_edge`, no
+edge service was restored; let the deployer start the intended mode through its
+normal guards. Never clear the failure marker or fabricate a lease by hand.
 
 ## Reset after a cluster restore
 

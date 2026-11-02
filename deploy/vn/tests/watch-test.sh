@@ -7,14 +7,25 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/lib"
 # Only the canonical lock path and wait duration are redirected in this fixture.
-sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" -e 's/flock -s -w 30 /flock -s -w 0 /' "$watch_source" >"$work/watch.sh"
+sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" \
+  -e "s|/run/aboutme/crowdsec-retention.lock|$work/retention.lock|g" \
+  -e 's/flock -s -w 30 /flock -s -w 0 /' \
+  -e 's/timeout --kill-after=1s 5 cscli/timeout --kill-after=1s 0.2 cscli/' \
+  "$watch_source" >"$work/watch.sh"
 chmod +x "$work/watch.sh"
 watch=$work/watch.sh
 : >"$work/fence.lock"
-grep -qF 'flock -s -w 30' "$watch_source"
+: >"$work/retention.lock"
+chmod 0600 "$work/retention.lock"
+grep -qF 'flock -s -n' "$watch_source"
 cat >"$work/lib/crowdsec-db.sh" <<'STUB'
 crowdsec_db_held_lock() { return 0; }
-crowdsec_db_ready() { [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]; }
+crowdsec_db_ready() {
+  if [[ ${WATCH_TEST_IGNORE_TERM_PREFLIGHT:-0} == 1 ]]; then
+    timeout 15 bash -c 'trap "" TERM; : >"$WATCH_TEST_PREFLIGHT_ENTERED"; while :; do sleep 1; done'
+  fi
+  [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
+}
 STUB
 
 cat >"$work/lib/alert.sh" <<'STUB'
@@ -63,7 +74,12 @@ cat >"$work/bin/runuser" <<'STUB'
 case " $* " in
   *' pg_isready '*) exit 0 ;;
   *' psql '*) printf 'f\n' ;;
-  *' pgbackrest '*) printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n' ;;
+  *' pgbackrest '*)
+    if [[ ${WATCH_TEST_HUNG_BACKUP:-0} == 1 ]]; then
+      : >"$WATCH_TEST_BACKUP_ENTERED"
+      while [[ ! -e $WATCH_TEST_BACKUP_RELEASE ]]; do sleep 0.01; done
+    fi
+    printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n' ;;
   *) exit 2 ;;
 esac
 STUB
@@ -73,6 +89,10 @@ cat >"$work/bin/date" <<'STUB'
 STUB
 cat >"$work/bin/cscli" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${WATCH_TEST_HUNG_CSCLI:-0} == 1 ]]; then
+  : >"$WATCH_TEST_CSCLI_ENTERED"
+  sleep 30
+fi
 printf '[]\n'
 STUB
 cat >"$work/bin/find" <<'STUB'
@@ -114,6 +134,54 @@ EOF
 } >"$with_diagnostic"
 
 run_watch "$base" "$work/base.alerts"
+
+# A hung LAPI call must release both locks without waiting for the unit deadline.
+WATCH_TEST_HUNG_CSCLI=1 WATCH_TEST_CSCLI_ENTERED=$work/cscli-entered \
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/hung.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/hung.failures "$watch" >"$work/hung.journal" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do
+  [[ ! -e $work/cscli-entered ]] || break
+  sleep 0.01
+done
+[[ -e $work/cscli-entered ]] || { echo 'hung cscli fixture did not start' >&2; exit 1; }
+if flock -n "$work/retention.lock" true; then
+  echo 'watch query overlapped an edge transition' >&2; exit 1
+fi
+timeout 3 flock -x "$work/fence.lock" true || {
+  echo 'hung watch retained the fence lock' >&2; exit 1;
+}
+wait "$watch_pid"
+flock -n "$work/retention.lock" true
+
+# A nested preflight that ignores TERM must not escape the query's process group
+# and retain either inherited safety descriptor after the whole query deadline.
+sed 's/timeout --kill-after=1s 20 /timeout --kill-after=0.1s 0.5 /' "$watch" >"$work/watch-preflight.sh"
+WATCH_TEST_IGNORE_TERM_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/preflight-entered \
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/preflight.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/preflight.failures \
+  timeout 3 bash "$work/watch-preflight.sh" >"$work/preflight.journal"
+[[ -e $work/preflight-entered ]] || { echo 'TERM-ignoring preflight did not run' >&2; exit 1; }
+grep -qxF 'retention failure' "$work/preflight.failures"
+flock -n "$work/fence.lock" true
+flock -n "$work/retention.lock" true
+
+# An unrelated blocked backup check must not retain either safety lock.
+WATCH_TEST_HUNG_BACKUP=1 WATCH_TEST_BACKUP_ENTERED=$work/backup-entered \
+  WATCH_TEST_BACKUP_RELEASE=$work/backup-release WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/backup.alerts WATCH_TEST_RETENTION_FAILURES=$work/backup.failures \
+  "$watch" >"$work/backup.journal" &
+watch_pid=$!
+for ((i=0; i<100; i++)); do
+  [[ ! -e $work/backup-entered ]] || break
+  sleep 0.01
+done
+[[ -e $work/backup-entered ]] || { echo 'blocked backup fixture did not start' >&2; exit 1; }
+flock -n "$work/fence.lock" true
+flock -n "$work/retention.lock" true
+touch "$work/backup-release"
+wait "$watch_pid"
+
 run_watch "$with_diagnostic" "$work/diagnostic.alerts"
 cmp "$work/base.alerts" "$work/diagnostic.alerts"
 grep -qxF 'coraza-log-invalid|the Coraza match log has 1 unknown records in the last hour' "$work/diagnostic.alerts"
@@ -218,4 +286,27 @@ if WATCH_TEST_ALERTS=$work/admission.alerts WATCH_TEST_RETENTION_FAILURES=$work/
 fi
 [[ ! -s $work/admission.failures ]]
 flock -u "$guard"
+
+# A tick during any edge mutation waits before its safety or failure body.
+for transition in maintenance-up app-down render restore-previous app-up maintenance-down fail-closed; do
+  : >"$work/transition.failures"
+  exec {edge_guard}>"$work/retention.lock"
+  flock -x "$edge_guard"
+  WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/transition.alerts \
+    WATCH_TEST_RETENTION_FAILURES=$work/transition.failures "$watch" >"$work/transition.out" 2>&1
+  [[ ! -s $work/transition.failures ]] || { echo "fresh lease failed during $transition" >&2; exit 1; }
+  flock -u "$edge_guard"
+  exec {edge_guard}>&-
+done
+
+exec {stuck_guard}>"$work/retention.lock"
+flock -x "$stuck_guard"
+touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
+WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/stuck.alerts \
+  WATCH_TEST_RETENTION_FAILURES=$work/stuck.failures "$watch" >"$work/stuck.out" 2>&1
+grep -qxF 'retention failure' "$work/stuck.failures" || {
+  echo 'stuck retention lock suppressed the expired-lease watchdog' >&2; exit 1;
+}
+flock -u "$stuck_guard"
+exec {stuck_guard}>&-
 echo "watch tests passed"

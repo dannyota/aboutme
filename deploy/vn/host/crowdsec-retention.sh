@@ -370,7 +370,11 @@ retention_main() {
   [[ ! -L /run/aboutme/crowdsec-retention.lock ]] || return 1
   exec {retention_lock}>/run/aboutme/crowdsec-retention.lock
   [[ $(stat -c '%u:%g:%a:%h' /run/aboutme/crowdsec-retention.lock) == 0:0:600:1 ]] || return 1
-  flock -x -w 2 "$retention_lock" || return 1
+  # Edge mutations and watchdog checks share this lock. Waiting consumes the
+  # existing outer deadline; it never renews the lease or extends a pass.
+  flock -x -w 60 "$retention_lock" || return 1
+  [[ ! -e /run/aboutme/crowdsec-retention-failed &&
+    ! -L /run/aboutme/crowdsec-retention-failed ]] || return 1
   retention_work=$(mktemp -d /run/aboutme/crowdsec-retention.XXXXXX)
   # Capture the fixed-prefix temporary path before this local leaves scope.
   # shellcheck disable=SC2064
@@ -438,9 +442,10 @@ PY
     retention_verify || return 1
   fi
   retention_gate || return 1
+  [[ ! -e /run/aboutme/crowdsec-retention-failed &&
+    ! -L /run/aboutme/crowdsec-retention-failed ]] || return 1
   install -o root -g root -m 0600 "$retention_work/epoch" "$retention_work/lease"
   mv -fT -- "$retention_work/lease" /run/aboutme/crowdsec-retention-ok
-  rm -f /run/aboutme/crowdsec-retention-failed
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
