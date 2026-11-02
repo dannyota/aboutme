@@ -54,8 +54,29 @@ retention_stop() {
   {
     declare -p systemctl_cmd protected_units
     declare -f retention_quiescent retention_stop_main
+    # Keep the group leader alive until forced termination also kills children.
+    printf 'trap "" TERM\n'
     printf 'retention_stop_main\n'
   } | timeout --signal=TERM --kill-after=2s 58 bash
+}
+
+retention_fail_action() {
+  retention_stop || return 1
+  local failed=0
+  if ((EUID == 0)); then
+    /usr/bin/setpriv --reuid 10001 --regid 10001 --clear-groups \
+      /usr/bin/rm -rf --one-file-system -- "$feed_dir" || failed=1
+    if [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
+      $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 &&
+      $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]]; then
+      /usr/bin/rm -rf --one-file-system -- /run/aboutme/crowdsec || failed=1
+    elif [[ -e /run/aboutme/crowdsec || -L /run/aboutme/crowdsec ]]; then
+      failed=1
+    fi
+  else
+    rm -rf --one-file-system -- "$feed_dir" || failed=1
+  fi
+  return "$failed"
 }
 
 retention_fail_main() {
@@ -86,26 +107,19 @@ retention_fail_main() {
 
   rm -f -- "$success"
   printf 'retention-failed\n' >"$marker"
-  retention_stop || {
-    timeout --kill-after=1s 5 "$alert" crowdsec-retention "CrowdSec retention failed" || true
-    exit 1
-  }
-
+  # Preserve the full stop budget. The outer process group bounds and joins
+  # cleanup too, including descendants in the Caddy-writable feed directory.
   failed=0
-  if ((EUID == 0)); then
-    /usr/bin/setpriv --reuid 10001 --regid 10001 --clear-groups \
-      /usr/bin/rm -rf --one-file-system -- "$feed_dir" || failed=1
-    if [[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
-      $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 &&
-      $(findmnt -n -o FSTYPE -T /run/aboutme/crowdsec) == tmpfs ]]; then
-      /usr/bin/rm -rf --one-file-system -- /run/aboutme/crowdsec || failed=1
-    elif [[ -e /run/aboutme/crowdsec || -L /run/aboutme/crowdsec ]]; then
-      failed=1
-    fi
-  else
-    rm -rf --one-file-system -- "$feed_dir" || failed=1
-  fi
-  timeout --kill-after=1s 5 "$alert" crowdsec-retention "CrowdSec retention failed" || true
+  {
+    declare -p systemctl_cmd protected_units feed_dir
+    declare -f retention_quiescent retention_stop_main retention_stop retention_fail_action
+    printf '%s\n' 'trap "" TERM' 'retention_fail_action'
+  } | timeout --signal=TERM --kill-after=2s 73 bash || failed=1
+  # Alarm even when cleanup exhausted its budget; admission stays revoked.
+  {
+    declare -p alert
+    printf '%s\n' 'trap "" TERM' '"$alert" crowdsec-retention "CrowdSec retention failed"'
+  } | timeout --kill-after=1s 5 bash || true
   exit "$failed"
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then retention_fail_main "$@"; fi

@@ -29,11 +29,12 @@ those services are stopped.
 
 For the first switch, the helper records the active edge service and stops both
 edge modes, CrowdSec, its firewall bouncer, the watcher timer and service, and
-database maintenance scheduling. It joins the stopped services and verifies
-quiescence. It provisions the separate database, applies the pinned catalog
-policy, selects PostgreSQL, and deletes only the three named SQLite database
-files. Old alerts and decisions are discarded. Decisions regenerate from live
-traffic.
+database maintenance scheduling. It joins those trigger sources, then stops and
+joins `aboutme-crowdsec-retention-failure.service` before provisioning or
+clearing startup denial. It provisions the separate database, applies the pinned
+catalog policy, selects PostgreSQL, and deletes only the three named SQLite
+database files. Old alerts and decisions are discarded. Decisions regenerate
+from live traffic.
 
 The helper registers the local machine before starting CrowdSec. Startup
 retention clears owned cache and firewall state and writes a lease for the new
@@ -124,25 +125,38 @@ The admitted migration path clears it only after successful fresh provisioning
 or explicit reset and activation. A later migration failure revokes the lease
 and retains the marker again.
 
-A deploy interrupted during an edge switch can leave the engine stopped and the
-lease invalid while deployment recovery tries to start maintenance. Both edge
-modes must stay closed after retention failure. A plain service restart does not
-complete recovery, and a migration no-op cannot renew an invalid lease.
+### Interrupted deploy
 
-After proving the deploy has exited and resolving its retained operation fence
-as described in [Failed deploy](production.md#failed-deploy), recover incomplete
-startup with:
+A deploy interrupted during an edge switch can leave the engine stopped and the
+lease invalid. Both edge modes, including maintenance, must stay closed while
+`/run/aboutme/crowdsec-retention-failed` exists. Never remove the failure marker
+or lease, disable safety timers, or repeatedly start Caddy to reopen the site.
+
+1. Record unit names, states, job IDs, and fixed failure results. Keep raw
+   CrowdSec logs, request feeds, and database rows on the host.
+2. Prove the deploy coordinator, host steps, database commands, and media
+   writers have exited. Inspect the fence and any mutation marker. Recover the
+   owning operation before
+   [clearing its fence](production.md#passkey-release-fence); never delete fence
+   files.
+3. Recover incomplete startup with explicit reset below. A service restart or
+   migration no-op cannot renew an invalid lease. An existing catalog requires
+   reset, which discards CrowdSec history and registrations.
+4. Run the verification commands above, then redeploy the intended eligible tag
+   through the ordinary deployer. Confirm public readiness, security headers,
+   the test ban, and healthy timers. Timing a retry between timer ticks is not a
+   repair.
 
 ```sh
 sudo /usr/local/lib/aboutme/crowdsec-migrate.sh --reset
 ```
 
-This discards live CrowdSec alerts, bans, statistics, and registrations. It does
-not rewind PostgreSQL or alter application data. Keep the application stopped,
-run the verification commands above, then redeploy the intended eligible tag
-through the ordinary deployer. If reset reports `crowdsec_migrate_no_edge`, no
-edge service was restored; let the deployer start the intended mode through its
-normal guards. Never clear the failure marker or fabricate a lease by hand.
+Reset discards live CrowdSec alerts, bans, statistics, and registrations. It
+preserves application data and recreates the private tmpfs log directory removed
+by failure cleanup. Keep the application stopped until verification completes.
+If reset reports `crowdsec_migrate_no_edge`, no edge service was restored; let
+the deployer start the intended mode through its normal guards. Never fabricate
+a lease by hand.
 
 ## Reset after a cluster restore
 
@@ -170,6 +184,12 @@ verify that no eligible record reaches 23 hours 30 minutes. Decisions last at
 most 22 hours. Every pass uses the database gate and bounded SQL batches. Only a
 complete pass renews the database-bound lease. Both timers must be enabled and
 active; the watchdog rejects missing or stale leases.
+
+Edge changes join the current retention pass or watcher safety check under the
+retention lock. App readiness waits run outside that lock. Retention and vacuum
+timers stay enabled and active; their deadlines and lease checks still apply
+during deploy, rollback, and activation. The watcher releases its locks before
+disk, backup, and journal checks.
 
 Hourly vacuum uses `VACUUM (ANALYZE FALSE)` with its own deadline. Never run
 `ANALYZE` or `VACUUM ANALYZE` against CrowdSec. Statistics contamination

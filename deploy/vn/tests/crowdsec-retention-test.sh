@@ -420,10 +420,13 @@ printf '%s\n' "$*" >>"$ABOUTME_TEST_SYSTEMCTL"
 if [[ ${ABOUTME_TEST_IGNORE_TERM_VERB:-} == "${1-}" ]]; then
   trap '' TERM
   printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
-  while :; do sleep 1; done
+  sleep 30 &
+  printf '%s\n' "$!" >"$ABOUTME_TEST_CLIENT_PID.child"
+  wait
 fi
 if [[ ${1-} == stop && ${ABOUTME_TEST_HUNG_STOP:-0} == 1 ]]; then sleep 30; fi
 if [[ ${1-} == show ]]; then
+  [[ -z ${ABOUTME_TEST_SHOW_DELAY:-} ]] || sleep "$ABOUTME_TEST_SHOW_DELAY"
   state=inactive
   [[ ${ABOUTME_TEST_STILL_ACTIVE:-0} != 1 ]] || state=active
   printf 'ActiveState=%s\nJob=\nMainPID=0\nControlPID=0\nControlGroup=\n' "$state"
@@ -436,7 +439,13 @@ fi
 STUB
 cat >"$work/bin/alert.sh" <<'STUB'
 #!/usr/bin/env bash
-if [[ ${ABOUTME_TEST_HUNG_ALERT:-0} == 1 ]]; then sleep 30; fi
+if [[ ${ABOUTME_TEST_HUNG_ALERT:-0} == 1 ]]; then
+  trap '' TERM
+  printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_CLIENT_PID"
+  sleep 30 &
+  printf '%s\n' "$!" >"$ABOUTME_TEST_CLIENT_PID.child"
+  wait
+fi
 printf '%s\n' "$*" >>"$ABOUTME_TEST_ALERT"
 STUB
 chmod +x "$work/bin/systemctl" "$work/bin/alert.sh"
@@ -488,9 +497,23 @@ if ABOUTME_TEST_HUNG_STOP=1 bash "$work/bounded-failure.sh"; then
 fi
 ((SECONDS - before < 3)) || { echo 'FAIL consumer-stop-whole-deadline' >&2; exit 1; }
 [[ -s $work/feed/serving.json ]] || { echo 'FAIL stuck-stop-removed-live-feed' >&2; exit 1; }
+# A healthy stop keeps its production budget while only SMTP is shortened.
+sed 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
+  "$host/crowdsec-retention-fail.sh" >"$work/bounded-alert.sh"
 before=$SECONDS
-ABOUTME_TEST_HUNG_ALERT=1 bash "$work/bounded-failure.sh"
+exec {failure_guard}>"$work/failure.lock"
+flock -x "$failure_guard"
+ABOUTME_TEST_HUNG_ALERT=1 ABOUTME_TEST_SHOW_DELAY=0.1 ABOUTME_TEST_CLIENT_PID=$work/alert-pid \
+  bash "$work/bounded-alert.sh" &
+response_pid=$!
+exec {failure_guard}>&-
+wait "$response_pid"
 ((SECONDS - before < 3)) || { echo 'FAIL unbounded-retention-alert' >&2; exit 1; }
+flock -n "$work/failure.lock" true || { echo 'FAIL alert-retained-lock' >&2; exit 1; }
+for pid_file in "$work/alert-pid" "$work/alert-pid.child"; do
+  process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+  [[ -z $process_state || $process_state == *Z* ]] || { echo 'FAIL alert-descendant-survived' >&2; exit 1; }
+done
 
 for verb in stop show; do
   mkdir -p "$work/feed"
@@ -505,7 +528,11 @@ for verb in stop show; do
   [[ -s $work/client-pid ]] || { echo "FAIL ignored-TERM-$verb-not-exercised" >&2; exit 1; }
   flock -n "$work/failure.lock" true || { echo "FAIL ignored-TERM-$verb-retained-lock" >&2; exit 1; }
   [[ -s $work/feed/serving.json ]] || { echo 'FAIL ignored-TERM-client-removed-live-feed' >&2; exit 1; }
-  rm "$work/client-pid"
+  for pid_file in "$work/client-pid" "$work/client-pid.child"; do
+    process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+    [[ -z $process_state || $process_state == *Z* ]] || { echo "FAIL ignored-TERM-$verb-descendant-survived" >&2; exit 1; }
+  done
+  rm "$work/client-pid" "$work/client-pid.child"
 done
 
 ((failures == 0)) || exit 1

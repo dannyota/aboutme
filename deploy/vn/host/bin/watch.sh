@@ -43,6 +43,8 @@ watch_crowdsec() (
 )
 
 watch_crowdsec_query() {
+  # Keep the group alive until the outer deadline kills ignored-TERM children.
+  trap '' TERM
   # The parent owns the fence and, when admitted, retention. Validate its fence
   # descriptor before the bounded admission query.
   [[ $1 =~ ^[0-9]+$ ]] || return 1

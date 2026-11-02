@@ -22,7 +22,13 @@ cat >"$work/lib/crowdsec-db.sh" <<'STUB'
 crowdsec_db_held_lock() { return 0; }
 crowdsec_db_ready() {
   if [[ ${WATCH_TEST_IGNORE_TERM_PREFLIGHT:-0} == 1 ]]; then
-    timeout 15 bash -c 'trap "" TERM; : >"$WATCH_TEST_PREFLIGHT_ENTERED"; while :; do sleep 1; done'
+    timeout 15 bash -c '
+      trap "" TERM
+      printf "%s\n" "$BASHPID" >"$WATCH_TEST_PREFLIGHT_ENTERED"
+      sleep 30 &
+      printf "%s\n" "$!" >"$WATCH_TEST_PREFLIGHT_ENTERED.child"
+      wait
+    '
   fi
   [[ ${WATCH_TEST_DATABASE_CHANGED:-0} == 0 && ${WATCH_TEST_DATABASE_RECOVERY:-0} == 0 ]]
 }
@@ -91,7 +97,7 @@ cat >"$work/bin/cscli" <<'STUB'
 #!/usr/bin/env bash
 if [[ ${WATCH_TEST_HUNG_CSCLI:-0} == 1 ]]; then
   : >"$WATCH_TEST_CSCLI_ENTERED"
-  sleep 30
+  exec sleep 30
 fi
 printf '[]\n'
 STUB
@@ -165,6 +171,61 @@ WATCH_TEST_IGNORE_TERM_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/preflight-
 grep -qxF 'retention failure' "$work/preflight.failures"
 flock -n "$work/fence.lock" true
 flock -n "$work/retention.lock" true
+for pid_file in "$work/preflight-entered" "$work/preflight-entered.child"; do
+  process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+  [[ -z $process_state || $process_state == *Z* ]] || { echo 'preflight descendant survived its deadline' >&2; exit 1; }
+done
+
+# Exercise the real failure action with cleanup that ignores TERM and owns a
+# sleeping descendant. Denial and shutdown proof must precede bounded cleanup.
+cp "$work/lib/crowdsec-retention-fail.sh" "$work/failure-stub.sh"
+sed 's/--kill-after=2s 73 /--kill-after=0.1s 3 /' \
+  "$repo_root/deploy/vn/host/crowdsec-retention-fail.sh" >"$work/lib/crowdsec-retention-fail.sh"
+cat >"$work/bin/failure-systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$WATCH_TEST_SHUTDOWN"
+if [[ $1 == show ]]; then
+  printf 'ActiveState=inactive\nJob=\nMainPID=0\nControlPID=0\nControlGroup=\n'
+fi
+STUB
+cat >"$work/bin/rm" <<'STUB'
+#!/usr/bin/env bash
+if [[ ${WATCH_TEST_HUNG_CLEANUP:-0} == 1 && ${!#} == "$ABOUTME_RETENTION_FEED_DIR" ]]; then
+  trap '' TERM
+  printf '%s\n' "$BASHPID" >"$WATCH_TEST_CLEANUP_PID"
+  sleep 30 &
+  printf '%s\n' "$!" >"$WATCH_TEST_CLEANUP_PID.child"
+  wait
+fi
+exec /bin/rm "$@"
+STUB
+chmod +x "$work/bin/failure-systemctl" "$work/bin/rm"
+mkdir "$work/feed"
+printf 'retained\n' >"$work/feed/serving.json"
+touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
+WATCH_TEST_HUNG_CLEANUP=1 WATCH_TEST_CLEANUP_PID=$work/cleanup-pid \
+  WATCH_TEST_SHUTDOWN=$work/shutdown.log ABOUTME_RETENTION_SYSTEMCTL=$work/bin/failure-systemctl \
+  ABOUTME_RETENTION_ALERT=$work/lib/alert.sh ABOUTME_RETENTION_FAILURE_MARKER=$work/failure-marker \
+  ABOUTME_RETENTION_FEED_DIR=$work/feed WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/cleanup.alerts WATCH_TEST_RETENTION_FAILURES=$work/cleanup.failures \
+  timeout 8 "$watch" >"$work/cleanup.journal" </dev/null
+[[ -s $work/cleanup-pid && -s $work/cleanup-pid.child &&
+  -s $work/feed/serving.json && -e $work/failure-marker && ! -e $ABOUTME_RETENTION_SUCCESS_MARKER ]] || {
+  echo 'hung cleanup bypassed denial, shutdown, or the cleanup deadline' >&2; exit 1;
+}
+for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service \
+  crowdsec.service aboutme-crowdsec-retention-startup.service; do
+  grep -q -- "--property=ControlGroup $unit$" "$work/shutdown.log"
+done
+grep -qxF 'crowdsec-retention|CrowdSec retention failed' "$work/cleanup.alerts"
+timeout 2 flock -x "$work/fence.lock" true || { echo 'cleanup retained the fence' >&2; exit 1; }
+timeout 2 flock -x "$work/retention.lock" true || { echo 'cleanup retained retention ownership' >&2; exit 1; }
+for pid_file in "$work/cleanup-pid" "$work/cleanup-pid.child"; do
+  process_state=$(ps -o stat= -p "$(cat "$pid_file")" || true)
+  [[ -z $process_state || $process_state == *Z* ]] || { echo 'cleanup descendant survived its deadline' >&2; exit 1; }
+done
+cp "$work/failure-stub.sh" "$work/lib/crowdsec-retention-fail.sh"
+: >"$ABOUTME_RETENTION_SUCCESS_MARKER"
 
 # An unrelated blocked backup check must not retain either safety lock.
 WATCH_TEST_HUNG_BACKUP=1 WATCH_TEST_BACKUP_ENTERED=$work/backup-entered \

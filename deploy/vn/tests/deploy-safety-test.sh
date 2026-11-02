@@ -73,6 +73,27 @@ case $1 in
     ;;
   start)
     shift
+    if [[ -e $state/signal-transition ]]; then
+      case "$*" in
+        aboutme-caddy)
+          touch "$state/transition-pending" "$state/command-entered"
+          for ((i=0; i<500; i++)); do
+            [[ ! -e $state/command-release ]] || break
+            sleep 0.01
+          done
+          [[ -e $state/command-release ]] || exit 1
+          exit 0 ;;
+        aboutme-crowdsec-retention-failure.service)
+          touch "$state/failure-entered"
+          for ((i=0; i<500; i++)); do
+            [[ ! -e $state/failure-release ]] || break
+            sleep 0.01
+          done
+          [[ -e $state/failure-release ]] || exit 1
+          rm -f "$state/transition-pending"
+          exit 0 ;;
+      esac
+    fi
     for unit in "$@"; do : >"$state/active/$unit"; done
     ;;
   enable)
@@ -115,6 +136,42 @@ for transition in maintenance-up app-down render restore-previous app-up mainten
   exec {edge_guard}>&-
   wait "$transition_pid"
   [[ -e $work/$transition ]] || fail "$transition did not resume after the pass joined"
+done
+
+# Interrupt the lock owner while its client waits on an unfinished manager job.
+# Repeated signals during shutdown must not release ownership before it joins.
+signal_edge_command() {
+  printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_STATE/edge-owner"
+  systemctl start aboutme-caddy
+}
+for signal in HUP TERM; do
+  touch "$ABOUTME_TEST_STATE/signal-transition" "$work/run/crowdsec-retention-ok"
+  aboutme_edge_transition signal_edge_command &
+  transition_pid=$!
+  for ((i=0; i<200; i++)); do
+    [[ ! -e $ABOUTME_TEST_STATE/command-entered ]] || break
+    sleep 0.01
+  done
+  [[ -e $ABOUTME_TEST_STATE/command-entered ]] || fail 'signal fixture did not enter the edge command'
+  kill -s "$signal" "$(cat "$ABOUTME_TEST_STATE/edge-owner")"
+  touch "$ABOUTME_TEST_STATE/command-release"
+  for ((i=0; i<200; i++)); do
+    [[ ! -e $ABOUTME_TEST_STATE/failure-entered ]] || break
+    sleep 0.01
+  done
+  [[ -e $ABOUTME_TEST_STATE/failure-entered &&
+    -e $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok ]] ||
+    fail "$signal bypassed admission revocation and joined shutdown"
+  kill -s "$signal" "$(cat "$ABOUTME_TEST_STATE/edge-owner")"
+  if flock -n "$work/run/crowdsec-retention.lock" true; then
+    fail "$signal released retention ownership during the outstanding transition"
+  fi
+  touch "$ABOUTME_TEST_STATE/failure-release"
+  if wait "$transition_pid"; then fail "$signal accepted the interrupted edge command"; fi
+  [[ ! -e $ABOUTME_TEST_STATE/transition-pending ]] || fail "$signal did not settle the manager job"
+  flock -n "$work/run/crowdsec-retention.lock" true || fail "$signal retained the joined edge lock"
+  rm -f "$ABOUTME_TEST_STATE/"{signal-transition,edge-owner,command-entered,command-release,failure-entered,failure-release} \
+    "$work/run/crowdsec-retention-failed"
 done
 
 touch "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-ok"

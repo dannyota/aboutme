@@ -38,6 +38,15 @@ aboutme_edge_transition() (
   # Join the 60-second pass and its two-second forced termination before changing
   # either edge mode. This does not extend retention's whole-pass deadline.
   flock -x -w 65 "$edge_lock" || return 1
+  aboutme_edge_revoke() {
+    # Ignore further interruption until the failure response has joined. Its
+    # shutdown proof and cleanup settle any surviving manager job under denial.
+    trap '' HUP INT TERM
+    rm -f /run/aboutme/crowdsec-retention-ok
+    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
+    timeout --kill-after=1s 85 systemctl start aboutme-crowdsec-retention-failure.service || true
+  }
+  trap 'aboutme_edge_revoke; exit 1' HUP INT TERM
   local result=0
   aboutme_edges_stable || result=$?
   # Refuse an unavailable inspection before issuing any manager mutation.
@@ -45,11 +54,7 @@ aboutme_edge_transition() (
   if ((result == 0)); then "$@" || result=$?; fi
   if ((result == 0)); then aboutme_edges_stable || result=$?; fi
   if ((result != 0)); then
-    # A timed-out systemctl client can leave its manager job running. Revoke
-    # admission before releasing the lock, then request the full stop action.
-    rm -f /run/aboutme/crowdsec-retention-ok
-    printf 'retention-failed\n' >/run/aboutme/crowdsec-retention-failed
-    timeout --kill-after=1s 3 systemctl start --no-block aboutme-crowdsec-retention-failure.service || true
+    aboutme_edge_revoke
     return 1
   fi
 )

@@ -8,7 +8,8 @@ migrate_consumers=(aboutme-caddy.service aboutme-maintenance.service
   crowdsec-firewall-bouncer.service crowdsec.service
   aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer
   aboutme-crowdsec-retention.service aboutme-crowdsec-vacuum.service
-  aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service)
+  aboutme-crowdsec-retention-startup.service aboutme-watch.timer aboutme-watch.service
+  aboutme-crowdsec-retention-failure.service)
 
 migrate_at() {
   migrate_step=$1
@@ -79,8 +80,14 @@ PY
 migrate_stop() {
   # shellcheck source=crowdsec-retention-fail.sh
   source "$lib/crowdsec-retention-fail.sh"
-  local systemctl_cmd=/usr/bin/systemctl
-  local -a protected_units=("${migrate_consumers[@]}")
+  local systemctl_cmd=/usr/bin/systemctl unit
+  local -a protected_units=()
+  # Stop and join every trigger before cancelling its queued failure response.
+  for unit in "${migrate_consumers[@]}"; do
+    [[ $unit == aboutme-crowdsec-retention-failure.service ]] || protected_units+=("$unit")
+  done
+  retention_stop || return 1
+  protected_units=(aboutme-crowdsec-retention-failure.service)
   retention_stop
 }
 migrate_postgresql_selected() {

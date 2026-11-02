@@ -786,10 +786,16 @@ for unit in aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-
   [[ $(systemctl show --property=ActiveState --value "$unit") == inactive ]]
 done
 [[ ! -e /run/aboutme/crowdsec-retention-ok && ! -e /run/aboutme/caddy-log/crowdsec ]]
+integration_stage=database-loss-runtime-cleared
+[[ ! -e /run/aboutme/crowdsec ]]
 runuser -u postgres -- /usr/lib/postgresql/18/bin/pg_ctl -D "$retention_fixture/data" \
   -l "$retention_fixture/data/server.log" -w start >/dev/null 2>&1
 [[ $(retention_fixture_admin aboutme <<<'SELECT count(*) FROM public.retention_sentinel;') == 1 ]]
+integration_stage=database-loss-reset
 migration_run --reset
+integration_stage=database-loss-runtime-restored
+[[ -d /run/aboutme/crowdsec && ! -L /run/aboutme/crowdsec &&
+  $(stat -c '%u:%g:%a' /run/aboutme/crowdsec) == 0:0:700 ]]
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-database-loss-stops-consumers-and-removes-feeds\n'
 
