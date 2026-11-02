@@ -14,7 +14,7 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # preview-gap holds the slowest harness specs (no normal surface, so it
 # skips that Nuxt build), and rest holds the remaining harness specs plus
 # the whole normal surface.
-WEB_E2E_HARNESS_SPECS := screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
+WEB_E2E_HARNESS_SPECS := screenshot.spec.ts guide-screenshot.spec.ts resume-screen.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
 WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts
 
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser

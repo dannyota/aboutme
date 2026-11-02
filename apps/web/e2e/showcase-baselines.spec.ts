@@ -462,59 +462,58 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-test('showcase assertions detect grid, content, control and color changes',
-  async ({ page }) => {
+const SHOWCASE_MUTATIONS = [
+  ['columns', '.showcase-grid { '
+  + 'grid-template-columns: repeat(2, 1fr) !important; }'],
+  ['row gap', '.showcase-grid > :nth-child(2) { margin-top: 4px !important; }'],
+  ['hidden filter', '[data-action="showcase-filters-open"] '
+  + '{ display: none !important; }'],
+  ['heading color', '[data-testid="showcase-header"] h1 '
+  + '{ color: black !important; }'],
+  ['heading font', '[data-testid="showcase-header"] h1 '
+  + '{ font-family: serif !important; }'],
+  ['clipped heading', '[data-testid="showcase-header"] h1 { '
+  + 'width: 20px !important; overflow: hidden !important; '
+  + 'white-space: nowrap !important; }'],
+] as const;
+
+for (const [name, css] of SHOWCASE_MUTATIONS) {
+  test(`showcase assertions reject ${name}`, async ({ page }) => {
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
       locale: 'vi', theme: 'light', width: 390,
     });
-    const grid = page.locator('.showcase-grid');
-    const tiles = page.locator('[data-showcase-slug]');
-    const filter = page.locator('[data-action="showcase-filters-open"]');
-    const heading = page.getByTestId('showcase-header').locator('h1');
-    expect(await measureShowcaseGrid(grid, 1, 16)).toBe(true);
-    await grid.evaluate((node) => {
-      (node as HTMLElement).style.gridTemplateColumns = 'repeat(2, 1fr)';
-    });
-    expect(await measureShowcaseGrid(grid, 1, 16)).toBe(false);
-    await grid.evaluate((node) => {
-      (node as HTMLElement).style.gridTemplateColumns = '';
-      (node.children[1] as HTMLElement).style.marginTop = '-4px';
-    });
-    expect(await measureShowcaseGrid(grid, 1, 16)).toBe(false);
-    await tiles.nth(1).evaluate((node) => {
-      (node as HTMLElement).style.marginTop = '';
-      node.parentElement!.prepend(node);
-    });
-    expect(await tiles.first().getAttribute('data-showcase-slug'))
-      .not.toBe('resume-0');
-    await tiles.first().evaluate((node) => {
-      node.after(node.cloneNode(true));
-    });
-    expect(await tiles.count()).toBe(13);
-    await filter.evaluate((node) => {
-      (node as HTMLElement).style.display = 'none';
-    });
-    expect(await filter.isVisible()).toBe(false);
-    await heading.evaluate((node) => {
-      (node as HTMLElement).style.color = 'rgb(0, 0, 0)';
-    });
-    expect(await heading.evaluate((node) => getComputedStyle(node).color))
-      .not.toBe('rgb(16, 27, 63)');
-    await heading.evaluate((node) => {
-      node.textContent = 'CV tu cong dong';
-      node.setAttribute('role', 'presentation');
-      (node as HTMLElement).style.fontFamily = 'serif';
-    });
-    expect(await heading.textContent()).not.toBe('CV từ cộng đồng');
-    expect(await page.getByTestId('showcase-header')
-      .getByRole('heading').count()).toBe(0);
-    expect(await heading.evaluate((node) => getComputedStyle(node).fontFamily))
-      .not.toContain('Be Vietnam Pro');
-    await heading.evaluate((node) => {
-      Object.assign((node as HTMLElement).style, {
-        width: '20px', overflow: 'hidden', whiteSpace: 'nowrap',
-      });
-    });
-    expect((await measureTextContainment(heading)).contained).toBe(false);
+    const assertClean = () =>
+      assertShowcase(page, 'filled', 'vi', 'light', 390);
+    await assertClean();
+    const mutation = await page.addStyleTag({ content: css });
+    await expect(assertClean()).rejects.toThrow();
+    await mutation.evaluate((node) => node.remove());
+    await assertClean();
   });
+}
+
+for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
+  test(`showcase assertions reject changed ${name}`, async ({ page }) => {
+    await openShowcase(page, {
+      name: 'filled', path: '/showcase?page=2', body: FILLED,
+      locale: 'vi', theme: 'light', width: 390,
+    });
+    const assertClean = () =>
+      assertShowcase(page, 'filled', 'vi', 'light', 390);
+    await assertClean();
+    await page.evaluate((kind) => {
+      const grid = document.querySelector('.showcase-grid')!;
+      const heading = document.querySelector(
+        '[data-testid="showcase-header"] h1',
+      )!;
+      if (kind === 'order') grid.prepend(grid.children[1]!);
+      if (kind === 'count') grid.append(grid.children[0]!.cloneNode(true));
+      if (kind === 'copy') heading.textContent = 'CV tu cong dong';
+      if (kind === 'heading role') heading.setAttribute('role', 'presentation');
+    }, name);
+    await expect(assertClean()).rejects.toThrow();
+    await page.reload();
+    await assertClean();
+  });
+}

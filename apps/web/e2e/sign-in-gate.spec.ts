@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 import {
   measureTextContainment,
@@ -16,6 +16,15 @@ import {
 // DESIGN.md, "Sign-in gate and join invite"). The gate is the public render
 // worker's own component and inline style. The invite mounts client-side on
 // the public page root, as public-resume.client.ts does.
+
+async function assertTextContained(text: Locator): Promise<void> {
+  await expect.poll(() => measureTextContainment(text))
+    .toEqual({ visible: true, contained: true });
+}
+
+async function assertFlow(items: Locator): Promise<void> {
+  await expect.poll(() => measureVerticalFlow(items)).toBe(true);
+}
 
 type Lng = 'en' | 'vi';
 
@@ -81,14 +90,8 @@ test.describe('sign-in gate', () => {
         .toHaveCSS('color', 'rgb(16, 27, 63)');
       await expect(page.locator('.gate-provider').first())
         .toHaveCSS('height', '44px');
-      await expect.poll(
-        () => measureTextContainment(page.locator('.gate-card')),
-      )
-        .toEqual({ visible: true, contained: true });
-      await expect.poll(
-        () => measureVerticalFlow(page.locator('.gate-provider')),
-      )
-        .toBe(true);
+      await assertTextContained(page.locator('.gate-card'));
+      await assertFlow(page.locator('.gate-provider'));
       await expect(page.locator('.gate-provider')).toHaveCount(
         cell.providers.split(',').length,
       );
@@ -192,36 +195,44 @@ test.describe('join invite', () => {
   }
 });
 
-test('display measurements detect clipped text and '
-  + 'overlapping siblings', async ({
-  page,
-}) => {
-  await page.setContent(`
-    <div id="text" style="width: 100px; height: 20px; overflow: hidden">
-      <span>One line</span>
-    </div>
-    <div id="flow"><div style="height: 20px"></div>`
-    + `<div style="height: 20px"></div></div>
-  `);
-  const text = page.locator('#text');
-  const siblings = page.locator('#flow > div');
-  expect(await measureTextContainment(text))
-    .toEqual({ visible: true, contained: true });
-  expect(await measureVerticalFlow(siblings)).toBe(true);
-  await text.locator('span').evaluate((element) => {
-    element.textContent = 'A deliberately long unbroken line that cannot fit';
-    (element as HTMLElement).style.whiteSpace = 'nowrap';
+for (const kind of ['long text', 'nested clipping', 'overlap'] as const) {
+  test(`display assertions reject ${kind}`, async ({ page }) => {
+    await page.setContent(`
+      <div id="text" style="width: 100px; height: 20px; overflow: hidden">
+        <span>One line</span>
+      </div>
+      <div id="flow"><div style="height: 20px"></div>
+        <div style="height: 20px"></div></div>
+    `);
+    const text = page.locator('#text');
+    const siblings = page.locator('#flow > div');
+    const assertClean = () => kind === 'overlap'
+      ? assertFlow(siblings)
+      : assertTextContained(text);
+    await assertClean();
+    await page.evaluate((name) => {
+      const span = document.querySelector<HTMLElement>('#text span')!;
+      if (name === 'long text') {
+        span.textContent = 'A deliberately long unbroken line that cannot fit';
+        span.style.whiteSpace = 'nowrap';
+      } else if (name === 'nested clipping') {
+        span.textContent = 'Nested clipping';
+        Object.assign(span.style, {
+          display: 'inline-block', width: '20px', overflow: 'hidden',
+        });
+      } else {
+        document.querySelector<HTMLElement>('#flow > :nth-child(2)')!
+          .style.marginTop = '-4px';
+      }
+    }, kind);
+    await expect(assertClean()).rejects.toThrow();
+    await page.setContent(`
+      <div id="text" style="width: 100px; height: 20px; overflow: hidden">
+        <span>One line</span>
+      </div>
+      <div id="flow"><div style="height: 20px"></div>
+        <div style="height: 20px"></div></div>
+    `);
+    await assertClean();
   });
-  expect((await measureTextContainment(text)).contained).toBe(false);
-  await text.locator('span').evaluate((element) => {
-    element.textContent = 'Nested clipping';
-    Object.assign((element as HTMLElement).style, {
-      display: 'inline-block', width: '20px', overflow: 'hidden',
-    });
-  });
-  expect((await measureTextContainment(text)).contained).toBe(false);
-  await siblings.nth(1).evaluate((element) => {
-    (element as HTMLElement).style.marginTop = '-4px';
-  });
-  expect(await measureVerticalFlow(siblings)).toBe(false);
-});
+}

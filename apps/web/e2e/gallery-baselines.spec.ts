@@ -235,6 +235,43 @@ async function assertLibrarySheet(
     .toBeFocused();
   await expect(sheet.locator('[data-action="gallery-filters-apply"]'))
     .toHaveText(locale === 'vi' ? 'Xem 20 mẫu' : 'Show 20 templates');
+  const scrollPositions = await sheet.evaluate((element) =>
+    [element, ...element.querySelectorAll('*')].map((node) => node.scrollTop));
+  const controls = sheet.locator('[data-role], [data-filter], [data-action]');
+  try {
+    for (const control of await controls.all()) {
+      await expect(control).toBeVisible();
+      await control.scrollIntoViewIfNeeded();
+      expect(await control.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const sheet = element.closest('[data-testid="gallery-filter-sheet"]');
+        if (!sheet || box.width <= 0 || box.height <= 0) return false;
+        for (let parent = element.parentElement; parent;
+          parent = parent.parentElement) {
+          const bounds = parent.getBoundingClientRect();
+          const style = getComputedStyle(parent);
+          const clipsX = parent === sheet
+            || /^(auto|scroll|hidden|clip)$/u.test(style.overflowX);
+          const clipsY = parent === sheet
+            || /^(auto|scroll|hidden|clip)$/u.test(style.overflowY);
+          if ((clipsX && (box.left < bounds.left - 1
+            || box.right > bounds.right + 1))
+          || (clipsY && (box.top < bounds.top - 1
+            || box.bottom > bounds.bottom + 1))) {
+            return false;
+          }
+          if (parent === sheet) break;
+        }
+        return true;
+      })).toBe(true);
+    }
+  } finally {
+    await sheet.evaluate((element, positions) => {
+      [element, ...element.querySelectorAll('*')].forEach((node, index) => {
+        node.scrollTop = positions[index] ?? 0;
+      });
+    }, scrollPositions);
+  }
   await expect.poll(() => sheet.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return box.width > 0 && box.height > 0 && box.left >= -1
@@ -281,55 +318,45 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-test('gallery geometry detects changed columns and overlapping cards', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/templates');
-  const grid = page.locator('.gallery-grid');
-  expect((await measureGalleryGrid(grid)).columns).toBe(2);
-  expect((await measureGalleryGrid(grid)).ordered).toBe(true);
-  await grid.evaluate((element) => {
-    (element as HTMLElement).style.gridTemplateColumns = '1fr';
+for (const [name, css] of [
+  ['columns', '.gallery-grid { grid-template-columns: 1fr !important; }'],
+  ['overlap', '.gallery-grid > :nth-child(2) { '
+  + 'transform: translateX(-18px) !important; }'],
+  ['row gap', '.gallery-grid > :nth-child(n+3) { '
+  + 'transform: translateY(4px) !important; }'],
+] as const) {
+  test(`Library assertions reject changed ${name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/templates');
+    const assertClean = () => assertLibrary(page, 'vi', 'light', 390, false);
+    await assertClean();
+    const mutation = await page.addStyleTag({ content: css });
+    await expect(assertClean()).rejects.toThrow();
+    await mutation.evaluate((node) => node.remove());
+    await assertClean();
   });
-  await expect.poll(async () => (await measureGalleryGrid(grid)).columns)
-    .not.toBe(2);
-  await grid.evaluate((element) => {
-    (element as HTMLElement).style.gridTemplateColumns = '';
-    const first = element.children[0]!.getBoundingClientRect();
-    const second = element.children[1] as HTMLElement;
-    const box = second.getBoundingClientRect();
-    second.style.setProperty('transition', 'none', 'important');
-    second.style.marginLeft = `${first.right - box.left - 4}px`;
-  });
-  await expect.poll(() => grid.evaluate((element) => {
-    const first = element.children[0]!.getBoundingClientRect();
-    const second = element.children[1]!.getBoundingClientRect();
-    return first.right - second.left;
-  })).toBeCloseTo(4, 0);
-  await expect.poll(() => grid.evaluate((element) => {
-    const first = element.children[0]!.getBoundingClientRect();
-    const second = element.children[1]!.getBoundingClientRect();
-    return first.height > 0 && second.height > 0
-      && Math.abs(first.top - second.top) <= 1;
-  })).toBe(true);
-  expect((await measureGalleryGrid(grid)).ordered).toBe(false);
-});
+}
 
-test('filter sheet exposes its heading and controls', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/templates');
-  await page.locator('[data-action="gallery-filters-open"]').click();
-  const sheet = page.getByTestId('gallery-filter-sheet');
-  const control = sheet.locator('[data-filter="ats"]');
-  await expect(control).toBeVisible();
-  await expect(sheet.getByRole('heading', { name: 'Bộ lọc' })).toBeVisible();
-  await control.evaluate((element) => {
-    (element as HTMLElement).style.display = 'none';
+for (const name of ['control', 'heading'] as const) {
+  test(`Library sheet rejects a hidden ${name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/templates');
+    await page.locator('[data-action="gallery-filters-open"]').click();
+    const sheet = page.getByTestId('gallery-filter-sheet');
+    const assertSheet = () => assertLibrarySheet(page, 'vi', 'light');
+    const target = name === 'control'
+      ? sheet.locator('[data-filter="ats"]')
+      : sheet.locator('h2').first();
+    await assertSheet();
+    await target.evaluate((element, kind) => {
+      if (kind === 'control') (element as HTMLElement).style.display = 'none';
+      else element.setAttribute('aria-hidden', 'true');
+    }, name);
+    await expect(assertSheet()).rejects.toThrow();
+    await target.evaluate((element, kind) => {
+      if (kind === 'control') (element as HTMLElement).style.display = '';
+      else element.removeAttribute('aria-hidden');
+    }, name);
+    await assertSheet();
   });
-  await expect(control).toBeHidden();
-  await sheet.getByRole('heading', { name: 'Bộ lọc' }).evaluate((element) => {
-    element.setAttribute('aria-hidden', 'true');
-  });
-  await expect(sheet.getByRole('heading', { name: 'Bộ lọc' })).toHaveCount(0);
-});
+}

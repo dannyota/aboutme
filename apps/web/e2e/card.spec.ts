@@ -390,6 +390,13 @@ async function expectCardDisplay(
   await expect(logo.locator('[data-logo-ring]')).toHaveCount(2);
   await expect(logo.locator('[data-logo-part="mark"]')).toHaveCSS(
     'color', 'rgb(204, 38, 73)');
+  const tints: Record<string, readonly [number, number, number]> = {
+    '#1a5ceb': [20.9, 1.7, 46.4],
+    '#2f855a': [22, 1.8, 48.9],
+    '#000000': [18, 1.5, 40],
+  };
+  const shares = tints[card.accent];
+  expect(shares).toBeDefined();
   for (const [selector, x] of [
     ['.preview-card-band-left', 0],
     ['.preview-card-band-right', 915],
@@ -398,8 +405,36 @@ async function expectCardDisplay(
     expect(await band.boundingBox()).toMatchObject({
       height: 630, width: 285, x, y: 0,
     });
-    expect(await band.evaluate((el) => getComputedStyle(el).backgroundImage))
-      .toContain('linear-gradient');
+    const paint = await band.evaluate((el, input) => {
+      const direction = input.left ? 'right' : 'left';
+      const tint = (share: number) =>
+        `color-mix(in srgb-linear, ${input.accent} ${share}%, #fff)`;
+      const expected = document.createElement('span');
+      document.body.append(expected);
+      expected.style.backgroundImage = `linear-gradient(to ${direction}, `
+        + `${tint(input.shares[0])} 0, ${tint(input.shares[1])} 285px)`;
+      const gradient = getComputedStyle(expected).backgroundImage;
+      expected.style.backgroundImage = `radial-gradient(circle, `
+        + `${tint(input.shares[2])} 3px, transparent 3.5px)`;
+      const dots = getComputedStyle(expected).backgroundImage;
+      expected.style.maskImage = `linear-gradient(to ${direction}, `
+        + '#000 0, #000 96px, transparent 285px)';
+      const mask = getComputedStyle(expected).maskImage;
+      expected.remove();
+      const decoration = getComputedStyle(el, '::after');
+      return {
+        gradient: getComputedStyle(el).backgroundImage === gradient,
+        dots: decoration.backgroundImage === dots,
+        mask: decoration.maskImage === mask,
+        size: decoration.backgroundSize,
+        position: decoration.backgroundPosition,
+        content: decoration.content,
+      };
+    }, { accent: card.accent, left: x === 0, shares: shares! });
+    expect(paint).toEqual({
+      gradient: true, dots: true, mask: true, size: '24px 24px',
+      position: x === 0 ? '0px 3px' : '-3px 3px', content: '""',
+    });
   }
   const photo = page.locator('.preview-card-photo');
   if (card.photo === null) {
@@ -485,7 +520,28 @@ test('card crop assertion detects ignored offsets', async ({ page }) => {
     (el as HTMLElement).style.left = '0';
   });
   await expect(expectCardDisplay(page, card, 'long-name-vi')).rejects.toThrow();
+  await image.evaluate((el) => {
+    (el as HTMLElement).style.left = '-12.5%';
+  });
+  await expectCardDisplay(page, card, 'long-name-vi');
 });
+
+for (const [name, css] of [
+  ['band color', '.preview-card-band-left { background: red !important; }'],
+  ['dot paint', '.preview-card-band-right::after { '
+  + 'background-image: none !important; }'],
+] as const) {
+  test(`card display rejects changed ${name}`, async ({ page }) => {
+    const card = CASES[2]!.card;
+    await openCard(page, await renderCardHTML(buildEnvelope(card)));
+    const assertCard = () => expectCardDisplay(page, card, 'no-photo-en');
+    await assertCard();
+    const mutation = await page.addStyleTag({ content: css });
+    await expect(assertCard()).rejects.toThrow();
+    await mutation.evaluate((node) => node.remove());
+    await assertCard();
+  });
+}
 
 // Generates a JPEG data URL of random pixels, backing off the encoder
 // quality until it fits PRINT_PHOTO_MAX_BYTES: random pixels are the

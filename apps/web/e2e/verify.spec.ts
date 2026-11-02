@@ -681,19 +681,21 @@ for (const baseline of BASELINE_STATES) {
   }
 }
 
-test('verify flow assertion detects overlapping cards', async ({ page }) => {
+test('verify display rejects overlapping cards', async ({ page }) => {
   await serveDeployment(page, { fixture: 'verified' });
-  await gotoVerify(page, 'vi');
+  await gotoVerify(page, 'vi', 'light');
   await expect(page.getByTestId('verify-status')).toHaveAttribute(
     'data-state', 'verified');
-  const flow = page.locator(
-    '[data-testid="verify-page"] > :not(.sr-only)',
-  );
-  expect(await measureVerticalFlow(flow)).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  const assertClean = () =>
+    expectVerifyDisplay(page, 'verified', 'vi', 'light');
+  await assertClean();
   const gap = await page.getByTestId('verify-chain').evaluate((el) =>
     Number.parseFloat(getComputedStyle(el.parentElement!).rowGap));
-  await page.addStyleTag({
+  const mutation = await page.addStyleTag({
     content: `[data-testid="verify-chain"] { margin-top: ${-gap - 4}px }`,
   });
-  await expect.poll(() => measureVerticalFlow(flow)).toBe(false);
+  await expect(assertClean()).rejects.toThrow();
+  await mutation.evaluate((node) => node.remove());
+  await assertClean();
 });
