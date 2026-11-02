@@ -103,17 +103,22 @@ export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
     if (!('str' in item) || item.str.trim() === ''
       || (item.width === 0 && item.height === 0)) return [];
     const style = content.styles[item.fontName];
-    const ascent = style?.ascent ?? 0.8;
-    const descent = style?.descent ?? -0.25;
     const [a, b, c, d, x, y] = item.transform as number[];
-    if ([a, b, c, d, x, y, ascent, descent, item.width, item.height]
-      .some((value) => !Number.isFinite(value))) {
-      throw new Error('Unsupported PDF glyph geometry.');
+    for (const [field, value] of Object.entries({
+      a, b, c, d, x, y, width: item.width,
+    })) {
+      if (!Number.isFinite(value)) {
+        throw new Error('Unsupported PDF glyph geometry: '
+          + `non-finite ${field} (font ${item.fontName}).`);
+      }
     }
     const advance = Math.hypot(a!, b!);
     if (advance === 0 || style?.vertical) {
       throw new Error('Unsupported PDF glyph geometry.');
     }
+    // PDF.js uses a 0.8 ascent ratio when font metrics are unavailable.
+    const ascent = Number.isFinite(style?.ascent) ? style!.ascent : 0.8;
+    const descent = Number.isFinite(style?.descent) ? style!.descent : -0.2;
     const corners = [0, item.width / advance].flatMap((end) =>
       [descent, ascent].map((edge) => ({
         x: x! + a! * end + c! * edge,
@@ -125,7 +130,7 @@ export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
       x: item.transform[4]!,
       y: item.transform[5]!,
       width: item.width,
-      height: item.height,
+      height: Number.isFinite(item.height) ? item.height : Math.hypot(c!, d!),
       bounds: {
         left: Math.min(...corners.map((point) => point.x)),
         right: Math.max(...corners.map((point) => point.x)),

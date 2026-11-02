@@ -177,9 +177,10 @@ export function pdfHasFill(
     && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
     && [0.25, 0.5, 0.75].every((x) => [0.25, 0.5, 0.75].every((y) => {
       const path = shapes.get(fill) ?? unsupported();
+      // Edge matching already applies the 1 pt tolerance, even for thin rules.
       return hitTest.isPointInPath(path,
-        box.left + (box.right - box.left) * x,
-        box.top + (box.bottom - box.top) * y);
+        fill.left + (fill.right - fill.left) * x,
+        fill.top + (fill.bottom - fill.top) * y);
     })));
 }
 
