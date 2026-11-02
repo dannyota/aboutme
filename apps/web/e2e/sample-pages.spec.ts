@@ -15,6 +15,7 @@ import { pdfFontFacesLoaded } from './pdf-fonts';
 import {
   pdfGlyphGeometry,
   pdfParagraphGeometry,
+  pdfSurfacePaint,
   pdfTextPage,
   pdfWidgetMatches,
   pdfWidgetDiagnostic,
@@ -26,7 +27,6 @@ import {
   pdfImageMatches,
   pdfImageDiagnostic,
   pdfColorMatches,
-  pdfHasFill,
   pdfHasRule,
   pdfPaintPage,
   pdfTextStyleMatches,
@@ -228,7 +228,9 @@ async function assertSampleStyle(
   if (target === 'sidebar' || target === 'header') {
     const box = target === 'sidebar' ? layout.sidebar : layout.header;
     expect(box).not.toBeNull();
-    expect(pdfHasFill(display.paint, box!, colors.surface!)).toBe(true);
+    expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
+      layout.widgets.flatMap(({ widget }) => widget ? [widget] : [])))
+      .toBe(true);
   }
   expect(display.paint.images)
     .toHaveLength(sample.personalDetails.photo ? 1 : 0);
