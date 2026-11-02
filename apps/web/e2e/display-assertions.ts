@@ -348,7 +348,7 @@ export async function measurePdfLayout(
           ? 'header'
           : parent.closest('.resume-sidebar')
             ? 'sidebar'
-            : 'page',
+            : 'main',
         linked: parent.closest('a') !== null,
         strong: parent.closest('b, strong') !== null,
         color: css.color,

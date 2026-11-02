@@ -33,6 +33,7 @@ import {
   pdfTextStyleDiagnostic,
 } from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
+import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
 import { denyExternalRequests, waitForImages } from './support';
 
 // Every gallery sample's PDF pages, rasterized through the same print path
@@ -143,8 +144,19 @@ async function assertSampleStyle(
   let transform = 'none';
   if (heading.style === 'uppercase') transform = 'uppercase';
   if (heading.style === 'titlecase' && lng === 'en') transform = 'capitalize';
+  const chunks = samplePdfChunks(sample, lng);
+  const content = ({ text, role, region, linked, strong }:
+    typeof chunks[number]) => ({ text, role, region, linked, strong });
+  expect(layout.chunks.map((chunk) => ({
+    text: chunk.text, role: chunk.role, region: chunk.region,
+    linked: chunk.linked, strong: chunk.strong,
+  })), 'Print DOM text and occurrences from sample input.')
+    .toEqual(chunks.map(content));
+  expect(samplePdfContentMatches(display.text, chunks, layout),
+    'PDF sample input content, occurrences and column order.').toBe(true);
   const expectedChunks = [];
-  for (const chunk of layout.chunks) {
+  for (const [index, chunk] of chunks.entries()) {
+    const measured = layout.chunks[index]!;
     const region = target !== 'none' && chunk.region === target;
     const darkHeader = templateId === 'executive-band' && region;
     const isHeading = ['name', 'heading', 'title'].includes(chunk.role!);
@@ -159,20 +171,13 @@ async function assertSampleStyle(
     };
     const size = base * (sizes[chunk.role!] ?? 1);
     const bold = isHeading || chunk.strong;
-    expect(Math.abs(chunk.size - size)).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(measured.size - size)).toBeLessThanOrEqual(0.1);
     let weight = bold ? '700' : '400';
     if (chunk.role === 'title' && chunk.strong) weight = '900';
-    expect(chunk.weight, 'Print DOM text weight.').toBe(weight);
-    expect(pdfColorMatches(cssHex(chunk.color), color)).toBe(true);
-    let value = chunk.text;
-    if (chunk.role === 'heading' && transform === 'uppercase') {
-      value = value.toLocaleUpperCase(lng);
-    }
-    if (chunk.role === 'heading' && transform === 'capitalize') {
-      value = value.replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase());
-    }
+    expect(measured.weight, 'Print DOM text weight.').toBe(weight);
+    expect(pdfColorMatches(cssHex(measured.color), color)).toBe(true);
     const expected = { color, size: size * 0.75, family, bold };
-    expectedChunks.push({ value, expected });
+    expectedChunks.push({ value: chunk.value, expected });
   }
   const paint = pdfVariableTextWeights(display.paint, family,
     expectedChunks.filter(({ expected }) => !expected.bold)
@@ -544,6 +549,8 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
     await page.locator('.resume-headline').evaluate((element, text) => {
       element.textContent = text;
     }, regular);
+    sample.personalDetails.fullName = heading;
+    sample.personalDetails.headline = regular;
     const layout = await measurePdfLayout(page, inset);
     const baseline = await printedDisplayPages(page);
     expect(baseline).toHaveLength(1);

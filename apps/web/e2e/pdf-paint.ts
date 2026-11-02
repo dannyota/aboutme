@@ -201,8 +201,20 @@ function hasPaint(
   box: PdfBox,
   expectedColor: string,
   allowStroke: boolean,
+  exposed: PdfBox = box,
 ): boolean {
-  return paint.fills.some((fill) => {
+  const channels = (color: string) => [1, 3, 5].map((offset) =>
+    parseInt(color.slice(offset, offset + 2), 16));
+  const expected = channels(expectedColor);
+  const contains = (fill: PdfFill, x: number, y: number) => {
+    const { path } = shapes.get(fill) ?? unsupported();
+    return hitTest.isPointInPath(path, x, y,
+      path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
+  };
+  if (exposed.right <= exposed.left || exposed.bottom <= exposed.top
+    || exposed.left < box.left || exposed.right > box.right
+    || exposed.top < box.top || exposed.bottom > box.bottom) return false;
+  return paint.fills.some((fill, index) => {
     const { path, stroke } = shapes.get(fill) ?? unsupported();
     return (allowStroke || !stroke) && fill.alpha >= 0.99
       && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
@@ -212,6 +224,25 @@ function hasPaint(
           fill.left + (fill.right - fill.left) * x,
           fill.top + (fill.bottom - fill.top) * y,
           path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
+      })) && [0.25, 0.5, 0.75].every((x) =>
+      [0.25, 0.5, 0.75].every((y) => {
+        // Probe the final source-over color, including later clipped paths.
+        const pointX = fill.left + (fill.right - fill.left)
+          * (exposed.left - box.left + (exposed.right - exposed.left) * x)
+          / (box.right - box.left);
+        const pointY = fill.top + (fill.bottom - fill.top)
+          * (exposed.top - box.top + (exposed.bottom - exposed.top) * y)
+          / (box.bottom - box.top);
+        if (!contains(fill, pointX, pointY)) return false;
+        let visible = channels(fill.color);
+        for (const later of paint.fills.slice(index + 1)) {
+          if (!contains(later, pointX, pointY)) continue;
+          const color = channels(later.color);
+          visible = visible.map((channel, offset) =>
+            channel * (1 - later.alpha) + color[offset]! * later.alpha);
+        }
+        return visible.every((channel, offset) =>
+          Math.abs(channel - expected[offset]!) <= 1);
       }));
   });
 }
@@ -220,8 +251,9 @@ export function pdfHasFill(
   paint: PdfPaint,
   box: PdfBox,
   expectedColor: string,
+  exposed?: PdfBox,
 ): boolean {
-  return hasPaint(paint, box, expectedColor, false);
+  return hasPaint(paint, box, expectedColor, false, exposed);
 }
 
 export function pdfHasRule(

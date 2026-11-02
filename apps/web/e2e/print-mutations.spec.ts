@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import type { Resume } from '@aboutme/schema';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import { measurePdfLayout } from './display-assertions';
 import {
@@ -6,6 +9,7 @@ import {
   EXPECTED_PAGES,
   pdfEntryIds,
   pdfColumnsMatch,
+  pdfGlyphGeometry,
   pdfMembership,
   pdfSidebarPaint,
   pdfWidgetMatches,
@@ -18,6 +22,129 @@ import {
   fixturePhotoIdentity, pdfImageDiagnostic, pdfImageMatches,
 } from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
+import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
+
+for (const mutation of ['accents', 'replacement', 'reorder'] as const) {
+  test(`sample PDF input expectations detect ${mutation}`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    const sample: Resume = JSON.parse(await readFile(resolve(
+      import.meta.dirname,
+      '../../../packages/schema/samples/modern-sidebar.vi.json',
+    ), 'utf8'));
+    const margin = sample.customization.spacing.pageMargin!;
+    const margins = { x: margin.x * 72 / 25.4, y: margin.y * 72 / 25.4 };
+    await page.setViewportSize({
+      width: Math.round((210 - 2 * margin.x) * 96 / 25.4), height: 1123,
+    });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const layout = await measurePdfLayout(page, margins);
+    const expected = samplePdfChunks(sample, 'vi');
+    const baseline = await printedTextPages(page);
+    expect(baseline).toHaveLength(1);
+    expect(samplePdfContentMatches(baseline[0]!, expected, layout)).toBe(true);
+    const section = page.locator('.resume-main .resume-section').nth(1);
+    await expect(section.locator('.entry')).toHaveCount(3);
+    await section.evaluate((element, change) => {
+      const first = element.querySelector('.entry')!;
+      if (change === 'reorder') first.before(first.nextElementSibling!);
+      else {
+        const body = first.querySelector('.entry-body')!;
+        if (change === 'replacement') body.textContent = 'Nội dung thay thế.';
+        else {
+          const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {
+            const node = walker.currentNode;
+            node.textContent = node.textContent!.normalize('NFD')
+              .replace(/\p{M}/gu, '').replace(/đ/gu, 'd').replace(/Đ/gu, 'D');
+          }
+        }
+      }
+    }, mutation);
+    const altered = await printedTextPages(page);
+    expect(altered).toHaveLength(1);
+    expect(samplePdfContentMatches(altered[0]!, expected, layout)).toBe(false);
+    expect(external).toEqual([]);
+  });
+}
+
+test('PDF columns reject a main entry moved into the page-two sidebar',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({
+      width: Math.round((210 - 28) * 96 / 25.4), height: 1123,
+    });
+    expect((await page.goto('/_harness/render?fixture=print-main-overflow'
+      + '&template=modern-sidebar&mode=continuous&lng=en&paper=a4'))?.ok())
+      .toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
+    const layout = await measurePdfLayout(page, margins);
+    const baseline = await printedTextPages(page);
+    expect(baseline).toHaveLength(2);
+    expect(pdfColumnsMatch(baseline[1]!, layout, margins, false)).toBe(true);
+    const last = page.locator('.resume-main .entry').last();
+    await expect(last).toContainText('MAIN-ENTRY-09');
+    const shift = (layout.sidebar!.left - margins.x) / 0.75;
+    await last.evaluate((entry, offset) => {
+      Object.assign((entry as HTMLElement).style, {
+        transform: `translateX(${offset}px)`, width: '100px',
+      });
+    }, shift);
+    const altered = await printedTextPages(page);
+    expect(altered).toHaveLength(2);
+    expect(altered[1]!.text).toContain('MAIN-ENTRY-09');
+    expect(pdfMembership(altered, CASES[1]!))
+      .toEqual(pdfMembership(baseline, CASES[1]!));
+    expect(pdfColumnsMatch(altered[1]!, layout, margins, false)).toBe(false);
+    expect(external).toEqual([]);
+  });
+
+for (const mutation of ['coincident text', 'cross-column collision'] as const) {
+  test(`PDF glyph bounds reject ${mutation}`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({
+      width: Math.round((210 - 28) * 96 / 25.4), height: 1123,
+    });
+    expect((await page.goto('/_harness/render?fixture=print-main-overflow'
+      + '&template=modern-sidebar&mode=continuous&lng=en&paper=a4'))?.ok())
+      .toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
+    const baseline = await printedTextPages(page);
+    expect(baseline).toHaveLength(2);
+    expect(pdfGlyphGeometry(baseline[0]!, margins).separated).toBe(true);
+    const title = page.locator('.resume-main .entry-title').first();
+    if (mutation === 'coincident text') {
+      await title.evaluate((element) => {
+        const clone = element.cloneNode(true) as HTMLElement;
+        Object.assign(clone.style, { position: 'absolute', inset: '0' });
+        (element as HTMLElement).style.position = 'relative';
+        element.append(clone);
+      });
+    } else {
+      const target = await title.boundingBox();
+      expect(target).not.toBeNull();
+      await page.locator('.resume-sidebar .entry-title').first()
+        .evaluate((element, point) => {
+          const origin = element.getBoundingClientRect();
+          (element as HTMLElement).style.transform
+            = `translate(${point!.x - origin.x}px, ${point!.y - origin.y}px)`;
+        }, target);
+    }
+    const altered = await printedTextPages(page);
+    expect(altered).toHaveLength(2);
+    expect(pdfGlyphGeometry(altered[0]!, margins).separated).toBe(false);
+    expect(external).toEqual([]);
+  });
+}
 
 test('PDF content measurements detect entry and accent mutations', async ({
   page,
@@ -207,14 +334,15 @@ for (const mutation of PAINT_MUTATIONS) {
   });
 }
 
-for (const mode of ['bar', 'dots', 'tag'] as const) {
-  test(`PDF ${mode} detects a level-four mutation`, async ({ page }) => {
+for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
+  test(`PDF ${mutation} detects a level-four mutation`, async ({ page }) => {
     test.setTimeout(30_000);
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     await page.setViewportSize({
       width: Math.round((210 - 28) * 96 / 25.4), height: 1123,
     });
+    const mode = mutation === 'overpaint' ? 'bar' : mutation;
     expect((await page.goto('/_harness/render?template=modern-sidebar'
       + `&mode=continuous&paper=a4&fixture=print-probe-widgets-${mode}`))?.ok())
       .toBe(true);
@@ -233,7 +361,11 @@ for (const mode of ['bar', 'dots', 'tag'] as const) {
     );
     expect(correct(baseline), pdfWidgetDiagnostic(baseline[0]!, widget!))
       .toBe(true);
-    if (mode === 'bar') {
+    if (mutation === 'overpaint') {
+      await page.addStyleTag({ content: '.level-track { position: relative; }'
+        + '.level-track::after { content: ""; position: absolute; inset: 0;'
+        + ' background: rgb(255 255 255 / 99%); }' });
+    } else if (mode === 'bar') {
       await page.addStyleTag({
         content: '.level-fill { width: 20% !important; }',
       });
