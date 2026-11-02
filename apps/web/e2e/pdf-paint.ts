@@ -8,7 +8,6 @@ import {
   StrokeJoin,
 } from '@napi-rs/canvas';
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { createHash } from 'node:crypto';
 
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 
@@ -28,7 +27,7 @@ export interface PdfFill extends PdfBox {
 export interface PdfImage extends PdfBox {
   readonly width: number;
   readonly height: number;
-  readonly rgbaHash: string;
+  readonly signature: readonly number[];
 }
 
 export interface PdfInk {
@@ -37,6 +36,8 @@ export interface PdfInk {
   readonly font: string;
   readonly size: number;
   readonly bold: boolean;
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface PdfPaint {
@@ -68,6 +69,9 @@ interface State {
   font: string;
   size: number;
   textMatrix: Matrix;
+  textPosition: { x: number; y: number; lineX: number; lineY: number;
+    leading: number; rise: number; scale: number; charGap: number;
+    wordGap: number; unit: number; };
   transparent: boolean;
   bold: boolean;
   type3: Map<string, GlyphProgram> | undefined;
@@ -252,17 +256,70 @@ export function pdfTextStyleMatches(
   return false;
 }
 
-export async function fixturePhotoIdentity(): Promise<{
-  width: number; height: number; rgbaHash: string;
-}> {
+function imageSignature(
+  rgba: ArrayLike<number>, width: number, height: number,
+): number[] {
+  const signature: number[] = [];
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 4; column += 1) {
+      const startX = Math.floor(column * width / 4);
+      const startY = Math.floor(row * height / 4);
+      const endX = Math.max(startX + 1, Math.floor((column + 1) * width / 4));
+      const endY = Math.max(startY + 1, Math.floor((row + 1) * height / 4));
+      const means = [0, 0, 0, 0];
+      for (let y = startY; y < endY; y += 1) {
+        for (let x = startX; x < endX; x += 1) {
+          for (let channel = 0; channel < 4; channel += 1) {
+            means[channel]! += rgba[(y * width + x) * 4 + channel]!;
+          }
+        }
+      }
+      signature.push(...means.map((sum) => sum / ((endX - startX)
+        * (endY - startY))));
+    }
+  }
+  return signature;
+}
+
+export function pdfImageMatches(
+  image: PdfImage | undefined,
+  expected: Pick<PdfImage, 'width' | 'height' | 'signature'>,
+  box: PdfBox,
+): boolean {
+  // Each 4 by 4 cell allows 8/255 channel drift from PDF image encoding.
+  return image !== undefined && image.width === expected.width
+    && image.height === expected.height && pdfBoxMatches(image, box)
+    && image.signature.length === 64 && expected.signature.length === 64
+    && image.signature.every((value, index) =>
+      Math.abs(value - expected.signature[index]!) <= 8);
+}
+
+export function pdfImageDiagnostic(
+  image: PdfImage | undefined,
+  expected: Pick<PdfImage, 'width' | 'height' | 'signature'>,
+  box: PdfBox,
+): string {
+  return 'PDF photo measurements: ' + JSON.stringify({
+    actual: image && { width: image.width, height: image.height,
+      left: image.left, top: image.top,
+      right: image.right, bottom: image.bottom },
+    expected: { width: expected.width, height: expected.height, ...box },
+    maximumChannelDelta: image && Math.max(...image.signature.map(
+      (value, index) => Math.abs(value - expected.signature[index]!),
+    )),
+  });
+}
+
+export async function fixturePhotoIdentity(): Promise<Pick<PdfImage,
+  'width' | 'height' | 'signature'>> {
   const image = await loadImage(FIXED_PHOTO_DATA_URL);
   const canvas = createCanvas(image.width, image.height);
   const context = canvas.getContext('2d');
   context.drawImage(image, 0, 0);
   return { width: image.width, height: image.height,
-    rgbaHash: createHash('sha256').update(context.getImageData(
+    signature: imageSignature(context.getImageData(
       0, 0, image.width, image.height,
-    ).data).digest('hex') };
+    ).data, image.width, image.height) };
 }
 
 async function object(page: PDFPageProxy, id: unknown): Promise<unknown> {
@@ -272,7 +329,7 @@ async function object(page: PDFPageProxy, id: unknown): Promise<unknown> {
 }
 
 function imageIdentity(value: unknown): Pick<PdfImage,
-  'width' | 'height' | 'rgbaHash'> {
+  'width' | 'height' | 'signature'> {
   if (value === null || typeof value !== 'object') unsupported();
   const image = value as {
     width: number; height: number; kind: number; data: Uint8Array;
@@ -290,7 +347,61 @@ function imageIdentity(value: unknown): Pick<PdfImage,
     rgba[pixel * 4 + 3] = channels === 4 ? data[pixel * 4 + 3]! : 255;
   }
   return { width, height,
-    rgbaHash: createHash('sha256').update(rgba).digest('hex') };
+    signature: imageSignature(rgba, width, height) };
+}
+
+export async function pdfGlyphExtents(page: PDFPageProxy) {
+  const operators = await page.getOperatorList({ intent: 'print' });
+  type Extent = { ascent: number; descent: number };
+  const fonts = new Map<string, Map<string, Extent>>();
+  let fontId = '';
+  const stack: string[] = [];
+  for (const [index, op] of operators.fnArray.entries()) {
+    const args = operators.argsArray[index] ?? [];
+    if (op === OPS.save || op === OPS.paintFormXObjectBegin) stack.push(fontId);
+    else if (op === OPS.restore || op === OPS.paintFormXObjectEnd) {
+      fontId = stack.pop() ?? unsupported(op);
+    } else if (op === OPS.setFont) {
+      if (typeof args[0] !== 'string') unsupported(op);
+      fontId = args[0];
+    } else if (op === OPS.showText) {
+      if (!Array.isArray(args[0])) unsupported(op);
+      const font = await object(page, fontId) as {
+        loadedName: string; isType3Font?: boolean; fontMatrix: number[];
+        charProcOperatorList?: Map<string, GlyphProgram>;
+      };
+      const metrics = fonts.get(fontId) ?? new Map();
+      fonts.set(fontId, metrics);
+      for (const glyph of args[0]) {
+        if (typeof glyph === 'number') continue;
+        if (!glyph || typeof glyph.unicode !== 'string') unsupported(op);
+        const unicode = glyph.unicode.normalize('NFD');
+        if (unicode.trim() === '' || metrics.has(unicode)) continue;
+        let path: Path2D;
+        if (font.isType3Font) {
+          const program = font.charProcOperatorList?.get(glyph.operatorListId);
+          if (program?.fnArray[0] !== OPS.setCharWidthAndBounds) {
+            unsupported(op);
+          }
+          path = transformed(rectangle(numbers(program.argsArray[0], 6)
+            .slice(2)), matrix(font.fontMatrix));
+        } else {
+          if (typeof glyph.fontChar !== 'string' || glyph.accent) {
+            unsupported(op);
+          }
+          const pathId = `${font.loadedName}_path_${glyph.fontChar}`;
+          if (!page.commonObjs.has(pathId)) unsupported(op);
+          const outline = await object(page, pathId) as { path: unknown };
+          path = drawing(outline?.path).path;
+        }
+        const box = bounds(path);
+        if (!box) unsupported(op);
+        metrics.set(unicode, { ascent: box.bottom, descent: box.top });
+      }
+    }
+  }
+  if (stack.length !== 0) unsupported();
+  return fonts;
 }
 
 const textOperators = new Set<number>([
@@ -345,6 +456,8 @@ export async function pdfPaintOperators(
   let state: State = { matrix: matrix(viewport.transform),
     clip: rectangle([0, 0, viewport.width, viewport.height]),
     color: '#000000', alpha: 1, font: '', size: 0, textMatrix: identity(),
+    textPosition: { x: 0, y: 0, lineX: 0, lineY: 0, leading: 0,
+      rise: 0, scale: 1, charGap: 0, wordGap: 0, unit: 0.001 },
     transparent: false, bold: false, type3: undefined,
     stroke: { color: '#000000', alpha: 1, transparent: false,
       width: 1, cap: StrokeCap.Butt, join: StrokeJoin.Miter,
@@ -355,7 +468,8 @@ export async function pdfPaintOperators(
   const text: PdfInk[] = [];
   const checkedGlyphs = new WeakSet<GlyphProgram>();
   let pendingClip: FillType | undefined;
-  const save = () => stack.push({ ...state, stroke: { ...state.stroke } });
+  const save = () => stack.push({ ...state, stroke: { ...state.stroke },
+    textPosition: { ...state.textPosition } });
   const restore = () => {
     state = stack.pop() ?? unsupported();
   };
@@ -469,16 +583,42 @@ export async function pdfPaintOperators(
     } else if (op === OPS.setFont) {
       const font = await object(page, args[0]) as {
         name?: string; bold?: boolean; isType3Font?: boolean;
+        fontMatrix?: number[]; vertical?: boolean;
         charProcOperatorList?: Map<string, GlyphProgram>;
       };
-      if (typeof font.name !== 'string') unsupported();
+      if (typeof font.name !== 'string' || font.vertical) unsupported();
       state.type3 = font.isType3Font ? font.charProcOperatorList : undefined;
       if (font.isType3Font && !(state.type3 instanceof Map)) unsupported();
       state.font = font.name;
       state.bold = font.bold === true || /bold/iu.test(font.name);
       state.size = numbers([args[1]], 1)[0]!;
-    } else if (op === OPS.setTextMatrix) state.textMatrix = matrix(args[0]);
-    else if (op === OPS.beginMarkedContentProps) {
+      state.textPosition.unit = numbers([font.fontMatrix?.[0] ?? 0.001], 1)[0]!;
+    } else if (op === OPS.setTextMatrix || op === OPS.beginText) {
+      state.textMatrix = op === OPS.beginText ? identity() : matrix(args[0]);
+      Object.assign(state.textPosition, { x: 0, y: 0, lineX: 0, lineY: 0 });
+    } else if ([OPS.moveText, OPS.setLeadingMoveText, OPS.nextLine]
+      .includes(op)) {
+      const position = state.textPosition;
+      const [x, y] = op === OPS.nextLine
+        ? [0, -position.leading]
+        : numbers(args, 2);
+      if (op === OPS.setLeadingMoveText) position.leading = -y!;
+      position.lineX += x!;
+      position.lineY += y!;
+      position.x = position.lineX;
+      position.y = position.lineY;
+    } else if ([OPS.setLeading, OPS.setTextRise, OPS.setHScale,
+      OPS.setCharSpacing, OPS.setWordSpacing].includes(op)) {
+      const value = numbers(args, 1)[0]!;
+      const key = op === OPS.setLeading
+        ? 'leading'
+        : op === OPS.setTextRise
+          ? 'rise'
+          : op === OPS.setHScale
+            ? 'scale'
+            : op === OPS.setCharSpacing ? 'charGap' : 'wordGap';
+      state.textPosition[key] = op === OPS.setHScale ? value / 100 : value;
+    } else if (op === OPS.beginMarkedContentProps) {
       if (args[0] === 'OC') unsupported();
     } else if (op === OPS.setTextRenderingMode) {
       if (args[0] !== 0) unsupported();
@@ -516,10 +656,27 @@ export async function pdfPaintOperators(
         return glyph.unicode;
       }).join('').normalize('NFC');
       const m = multiply(state.matrix, state.textMatrix);
+      const position = state.textPosition;
+      let x = position.x;
+      for (const glyph of args[0]) {
+        if (typeof glyph !== 'number') break;
+        x -= glyph * state.size / 1000 * position.scale;
+      }
+      const y = position.y + position.rise;
       if (state.alpha !== 1 || state.transparent) unsupported();
       text.push({ text: value, font: state.font, color: state.color,
-        bold: state.bold,
+        bold: state.bold, x: m[4] + m[0] * x + m[2] * y,
+        y: m[5] + m[1] * x + m[3] * y,
         size: Math.abs(state.size) * Math.hypot(m[2], m[3]) });
+      for (const glyph of args[0]) {
+        const direction = Math.sign(state.size);
+        const advance = typeof glyph === 'number'
+          ? -glyph * Math.abs(state.size) / 1000
+          : numbers([glyph.width], 1)[0]! * Math.abs(state.size) * position.unit
+            + direction * (position.charGap
+              + (glyph.isSpace ? position.wordGap : 0));
+        position.x += advance * position.scale * direction;
+      }
     } else if (!textOperators.has(op)) unsupported();
   };
   for (let index = 0; index < functions.length; index += 1) {

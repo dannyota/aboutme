@@ -9,11 +9,14 @@ import {
   pdfMembership,
   pdfSidebarPaint,
   pdfWidgetMatches,
+  pdfWidgetDiagnostic,
   printedDisplayPages,
   printedTextPages,
   PRINT_CASES as CASES,
 } from './pdf-display';
-import { fixturePhotoIdentity, pdfBoxMatches } from './pdf-paint';
+import {
+  fixturePhotoIdentity, pdfImageDiagnostic, pdfImageMatches,
+} from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
 
 test('PDF content measurements detect entry and accent mutations', async ({
@@ -126,7 +129,7 @@ test('PDF membership detects unbreakable entries', async ({ page }) => {
 });
 
 const PAINT_MUTATIONS = [
-  'sidebar position', 'continuation tint', 'photo',
+  'sidebar position', 'continuation tint', 'photo', 'substituted photo',
 ] as const;
 for (const mutation of PAINT_MUTATIONS) {
   test(`PDF measurements detect a changed ${mutation}`, async ({ page }) => {
@@ -155,13 +158,14 @@ for (const mutation of PAINT_MUTATIONS) {
     const identity = await fixturePhotoIdentity();
     const photo = (pages: typeof baseline) => {
       const images = pages[0]!.paint.images;
-      return images.length === 1 && images[0]!.rgbaHash === identity.rgbaHash
-        && pdfBoxMatches(images[0]!, layout.photo!);
+      return images.length === 1
+        && pdfImageMatches(images[0], identity, layout.photo!);
     };
     expect(columns(baseline)).toBe(true);
     expect(tint(baseline, 0)).toBe(true);
     expect(tint(baseline, 1)).toBe(true);
-    expect(photo(baseline)).toBe(true);
+    expect(photo(baseline), pdfImageDiagnostic(baseline[0]!.paint.images[0],
+      identity, layout.photo!)).toBe(true);
     if (mutation === 'sidebar position') {
       await page.addStyleTag({ content: '.resume-sidebar '
         + '.entry:nth-of-type(n+12)'
@@ -175,9 +179,21 @@ for (const mutation of PAINT_MUTATIONS) {
         + ` top: 0; left: 0; width: 100%; height: ${firstHeight}px;`
         + ' background: #e3ecf0; }'
         + '.resume-sidebar .resume-section { position: relative; }' });
-    } else {
+    } else if (mutation === 'photo') {
       await page.locator('.resume-photo img').evaluate((image) => {
         (image as HTMLElement).style.visibility = 'hidden';
+      });
+    } else {
+      await page.locator('.resume-photo img').evaluate(async (element) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 192;
+        canvas.height = 192;
+        const context = canvas.getContext('2d')!;
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, 192, 192);
+        const image = element as HTMLImageElement;
+        image.src = canvas.toDataURL();
+        await image.decode();
       });
     }
     const altered = await printedDisplayPages(page);
@@ -200,7 +216,7 @@ for (const mode of ['bar', 'dots', 'tag'] as const) {
       width: Math.round((210 - 28) * 96 / 25.4), height: 1123,
     });
     expect((await page.goto('/_harness/render?template=modern-sidebar'
-      + `&mode=continuous&fixture=print-probe-widgets-${mode}`))?.ok())
+      + `&mode=continuous&paper=a4&fixture=print-probe-widgets-${mode}`))?.ok())
       .toBe(true);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
@@ -215,7 +231,8 @@ for (const mode of ['bar', 'dots', 'tag'] as const) {
         fontSize: 14 * 0.9,
       },
     );
-    expect(correct(baseline)).toBe(true);
+    expect(correct(baseline), pdfWidgetDiagnostic(baseline[0]!, widget!))
+      .toBe(true);
     if (mode === 'bar') {
       await page.addStyleTag({
         content: '.level-fill { width: 20% !important; }',
@@ -229,7 +246,8 @@ for (const mode of ['bar', 'dots', 'tag'] as const) {
     }
     const altered = await printedDisplayPages(page);
     expect(altered).toHaveLength(1);
-    expect(correct(altered)).toBe(false);
+    expect(correct(altered), pdfWidgetDiagnostic(altered[0]!, widget!))
+      .toBe(false);
     expect(external).toEqual([]);
   });
 }

@@ -1,11 +1,17 @@
 // @vitest-environment node
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { createHash } from 'node:crypto';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { describe, expect, it } from 'vitest';
 
-import { checkMembership, pdfTextPage } from '../e2e/pdf-display';
+import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import {
-  pdfHasFill, pdfHasRule, pdfPaintOperators, pdfTextStyleMatches,
+  checkMembership, pdfGlyphGeometry, pdfTextPage, pdfWidgetMatches,
+  type PdfWidget,
+} from '../e2e/pdf-display';
+import {
+  fixturePhotoIdentity, pdfGlyphExtents, pdfHasFill, pdfHasRule,
+  pdfImageMatches,
+  pdfPaintOperators, pdfTextStyleMatches,
   UNSUPPORTED_PDF_PAINT,
 } from '../e2e/pdf-paint';
 
@@ -18,10 +24,25 @@ function textPage(
   items: readonly Partial<typeof glyph>[],
   style: Partial<{ ascent: number; descent: number; vertical: boolean }>
     | null = { ascent: 0.8, descent: -0.2, vertical: false },
+  outline: number[] | null = [
+    0, 0, -0.2, 1, 1, -0.2, 1, 1, 0.8, 1, 0, 0.8, 4,
+  ],
 ): PDFPageProxy {
+  const objects = {
+    has: (id: string) => id === 'fixture' || outline !== null,
+    get: (id: string, resolve: (value: unknown) => void) => resolve(
+      id === 'fixture' ? { loadedName: 'fixture' } : { path: outline },
+    ),
+  };
   return {
     view: [0, 0, 100, 100],
     getViewport: () => ({ width: 100, height: 100 }),
+    getOperatorList: async () => ({
+      fnArray: [OPS.setFont, OPS.showText],
+      argsArray: [['fixture', 10], [[{ unicode: 'A', fontChar: 'A' }]]],
+    }),
+    commonObjs: objects,
+    objs: objects,
     getTextContent: async () => ({
       items: items.map((item) => ({ ...glyph, ...item })),
       styles: style === null ? {} : { fixture: style },
@@ -30,6 +51,47 @@ function textPage(
 }
 
 describe('PDF text geometry', () => {
+  it('rejects absent outlines and text absent from the painted glyphs',
+    async () => {
+      await expect(pdfTextPage(textPage([{}], undefined, null)))
+        .rejects.toThrow(UNSUPPORTED_PDF_PAINT);
+      await expect(pdfTextPage(textPage([{ str: 'B' }])))
+        .rejects.toThrow('Unsupported PDF glyph outline.');
+    });
+
+  it('transforms each Type3 glyph box instead of using the whole font box',
+    async () => {
+      const font = { loadedName: 'g_font', isType3Font: true,
+        fontMatrix: [0.001, 0, 0, 0.001, 0, 0],
+        charProcOperatorList: new Map([['A', {
+          fnArray: [OPS.setCharWidthAndBounds],
+          argsArray: [[500, 0, 0, -100, 500, 700]],
+        }]]) };
+      const page = Object.assign(paintPage({ g_font: font }), {
+        getOperatorList: async () => ({
+          fnArray: [OPS.save, OPS.setFont, OPS.showText, OPS.restore],
+          argsArray: [[], ['g_font', 10],
+            [[{ unicode: 'A', operatorListId: 'A' }]], []],
+        }),
+      });
+      const metrics = (await pdfGlyphExtents(page)).get('g_font')!.get('A')!;
+      expect(metrics.ascent).toBeCloseTo(0.7);
+      expect(metrics.descent).toBeCloseTo(-0.1);
+    });
+
+  it('uses the embedded glyph outline instead of a font-wide ascent',
+    async () => {
+      const page = await pdfTextPage(textPage([
+        { transform: [10, 0, 0, 10, 10, 82] },
+      ], { ascent: 1.2, descent: -0.5 }));
+      expect(page.items[0]!.bounds)
+        .toEqual({ left: 10, right: 30,
+          top: expect.closeTo(10), bottom: expect.closeTo(20) });
+      expect(pdfGlyphGeometry(page, { x: 10, y: 10 }).contained).toBe(true);
+      expect(pdfGlyphGeometry(page, { x: 10, y: 11.01 }).contained)
+        .toBe(false);
+    });
+
   it('skips empty and whitespace items before measuring their geometry',
     async () => {
       const page = await pdfTextPage(textPage([
@@ -49,19 +111,21 @@ describe('PDF text geometry', () => {
     expect(page.items).toHaveLength(1);
   });
 
-  it('measures visible zero-height text from its transform and font metrics',
+  it('measures visible zero-height text from its transform and glyph outline',
     async () => {
       const page = await pdfTextPage(textPage([{ height: 0 }]));
       expect(page.items).toEqual([{
         text: 'A', x: 10, y: 80, width: 20, height: 0,
-        bounds: { left: 10, right: 30, top: 12, bottom: 22 },
+        bounds: { left: 10, right: 30,
+          top: expect.closeTo(12), bottom: expect.closeTo(22) },
       }]);
     });
 
-  it('measures text without a font style from the transform', async () => {
+  it('measures text without a font style from the outline', async () => {
     const page = await pdfTextPage(textPage([{}], null));
     expect(page.items[0]!.bounds)
-      .toEqual({ left: 10, right: 30, top: 12, bottom: 22 });
+      .toEqual({ left: 10, right: 30,
+        top: expect.closeTo(12), bottom: expect.closeTo(22) });
   });
 
   it.each([
@@ -70,10 +134,11 @@ describe('PDF text geometry', () => {
     { name: 'NaN descent', style: { ascent: 0.8, descent: NaN } },
     { name: 'infinite descent', style: { ascent: 0.8, descent: -Infinity } },
     { name: 'missing metrics', style: {} },
-  ])('uses transform bounds for $name', async ({ style }) => {
+  ])('uses glyph outlines for $name', async ({ style }) => {
     const page = await pdfTextPage(textPage([{ height: 0 }], style));
     expect(page.items[0]!.bounds)
-      .toEqual({ left: 10, right: 30, top: 12, bottom: 22 });
+      .toEqual({ left: 10, right: 30,
+        top: expect.closeTo(12), bottom: expect.closeTo(22) });
   });
 
   it('measures rotated text with unavailable ascent from its transform',
@@ -82,7 +147,8 @@ describe('PDF text geometry', () => {
         { transform: [0, 10, -10, 0, 30, 60] },
       ], { ascent: NaN, descent: -0.2 }));
       expect(page.items[0]!.bounds)
-        .toEqual({ left: 22, right: 32, top: 20, bottom: 40 });
+        .toEqual({ left: expect.closeTo(22), right: expect.closeTo(32),
+          top: 20, bottom: 40 });
     });
 
   it('uses the transform font size when item height is non-finite',
@@ -90,7 +156,8 @@ describe('PDF text geometry', () => {
       const page = await pdfTextPage(textPage([{ height: NaN }]));
       expect(page.items[0]!.height).toBe(10);
       expect(page.items[0]!.bounds)
-        .toEqual({ left: 10, right: 30, top: 12, bottom: 22 });
+        .toEqual({ left: 10, right: 30,
+          top: expect.closeTo(12), bottom: expect.closeTo(22) });
     });
 
   it('names the non-finite field and font without including glyph text',
@@ -154,6 +221,53 @@ describe('approved PDF membership', () => {
   }
 });
 
+describe('PDF photo content', () => {
+  it('accepts bounded channel drift and rejects missing or substituted photos',
+    async () => {
+      const expected = await fixturePhotoIdentity();
+      const source = await loadImage(FIXED_PHOTO_DATA_URL);
+      const context = createCanvas(source.width, source.height)
+        .getContext('2d');
+      context.drawImage(source, 0, 0);
+      const original = context.getImageData(0, 0, source.width, source.height);
+      const box = { left: 0, top: 0, right: 1, bottom: 1 };
+      const read = async (data: Uint8Array) => (await pdfPaintOperators(
+        paintPage(), [OPS.paintInlineImageXObject], [[{
+          width: source.width, height: source.height, kind: 3, data,
+        }]],
+      )).images[0]!;
+      const shifted = Uint8Array.from(original.data, (value, index) =>
+        index % 4 === 3 ? value : Math.min(255, value + 2));
+      expect(pdfImageMatches(await read(shifted), expected,
+        { ...box, top: 99, bottom: 100 })).toBe(true);
+      expect(pdfImageMatches(undefined, expected, box)).toBe(false);
+      const blank = await read(new Uint8Array(original.data.length).fill(255));
+      expect(pdfImageMatches(blank, expected, blank)).toBe(false);
+      const patterned = Uint8Array.from(original.data, (_, index) =>
+        index % 4 === 3 ? 255 : index < original.data.length / 2 ? 20 : 220);
+      const reference = await read(patterned);
+      const swapped = new Uint8Array(original.data.length);
+      for (let pixel = 0; pixel < source.width * source.height; pixel += 1) {
+        swapped.set(patterned.subarray(pixel * 4, pixel * 4 + 4),
+          swapped.length - pixel * 4 - 4);
+      }
+      const reversed = await read(swapped);
+      expect(pdfImageMatches(reversed, reference, reversed)).toBe(false);
+      const baseline = await read(new Uint8Array(original.data));
+      expect(pdfImageMatches({ ...baseline, width: 191 }, expected, baseline))
+        .toBe(false);
+      expect(pdfImageMatches(baseline, expected,
+        { ...baseline, left: baseline.left + 1.01 })).toBe(false);
+      const changed = [...baseline.signature];
+      changed[0] = changed[0]! + 8;
+      expect(pdfImageMatches({ ...baseline, signature: changed }, expected,
+        baseline)).toBe(true);
+      changed[0] = changed[0]! + 0.01;
+      expect(pdfImageMatches({ ...baseline, signature: changed }, expected,
+        baseline)).toBe(false);
+    });
+});
+
 function paintPage(objects: Readonly<Record<string, unknown>> = {}) {
   return {
     getViewport: () => ({
@@ -170,6 +284,65 @@ const rectCommands = new Float32Array([
   0, 0, 0, 1, 10, 0, 1, 10, 10, 1, 0, 10, 4,
 ]);
 
+describe('PDF widget evidence', () => {
+  it('locates text after advances, line moves, rise and graphics restoration',
+    async () => {
+      const paint = await pdfPaintOperators(paintPage({
+        g_font: { name: 'Fixture' },
+      }), [OPS.setFont, OPS.beginText, OPS.setTextMatrix,
+        OPS.showText, OPS.showText, OPS.setLeadingMoveText, OPS.showText,
+        OPS.save, OPS.setTextRise, OPS.setHScale, OPS.setCharSpacing,
+        OPS.showText, OPS.showText, OPS.restore, OPS.nextLine, OPS.showText], [
+        ['g_font', 10], [], [[1, 0, 0, 1, 10, 80]],
+        [[{ unicode: 'A', width: 500 }]],
+        [[100, { unicode: 'B', width: 500 }]],
+        [0, -12], [[{ unicode: 'C', width: 500 }]],
+        [], [2], [50], [1], [[{ unicode: 'D', width: 500 }]],
+        [[{ unicode: 'E', width: 500 }]], [], [],
+        [[{ unicode: 'F', width: 500 }]],
+      ]);
+      expect(paint.text.map(({ text, x, y }) => ({ text, x, y })))
+        .toEqual([
+          { text: 'A', x: 10, y: 20 }, { text: 'B', x: 14, y: 20 },
+          { text: 'C', x: 10, y: 32 }, { text: 'D', x: 15, y: 30 },
+          { text: 'E', x: 18, y: 30 }, { text: 'F', x: 10, y: 44 },
+        ]);
+    });
+
+  it('matches a tag split across text operators and rejects a changed label',
+    async () => {
+      const widget = { left: 10, right: 40, top: 25, bottom: 45 };
+      const measured: PdfWidget = {
+        entry: { left: 10, right: 90, top: 10, bottom: 50 },
+        title: { left: 10, right: 90, top: 10, bottom: 20 },
+        widget, track: null, dots: [], size: 12.6,
+        paddingX: 6.3, paddingY: 1.89, border: 0, radius: 3,
+      };
+      const paint = await pdfPaintOperators(paintPage({
+        g_font: { name: 'Fixture', bold: false },
+      }), [OPS.setFillRGBColor, OPS.constructPath, OPS.setFillRGBColor,
+        OPS.setFont, OPS.setTextMatrix, OPS.showText, OPS.showText], [
+        ['#0f6b7d'], [OPS.fill, [new Float32Array([
+          0, 10, 55, 1, 40, 55, 1, 40, 75, 1, 10, 75, 4,
+        ])]], ['#ffffff'], ['g_font', 9.45], [[1, 0, 0, 1, 15, 65]],
+        [[{ unicode: '4', width: 500 }]], [[{ unicode: '/5', width: 1000 }]],
+      ]);
+      const page = { paint, text: { width: 100, height: 100, text: '4/5',
+        items: [{ text: '4/5', x: 15, y: 65, width: 20, height: 10,
+          bounds: { left: 15, right: 35, top: 28, bottom: 38 } }] } };
+      const colors = { solid: '#0f6b7d', track: '#cfe1e5',
+        onAccent: '#ffffff', fontSize: 12.6 };
+      expect(pdfWidgetMatches(page, measured, 4, 'tag', colors)).toBe(true);
+      expect(pdfWidgetMatches(page, measured, 3, 'tag', colors)).toBe(false);
+      expect(pdfWidgetMatches({ ...page, paint: { ...paint,
+        text: paint.text.map((run) => ({ ...run, color: '#000000' })),
+      } }, measured, 4, 'tag', colors)).toBe(false);
+      expect(pdfWidgetMatches({ ...page, paint: { ...paint,
+        text: paint.text.map((run) => ({ ...run, x: 80 })),
+      } }, measured, 4, 'tag', colors)).toBe(false);
+    });
+});
+
 describe('PDF operator forms', () => {
   it('reads uncolored Type3 glyph programs without treating them as regions',
     async () => {
@@ -185,7 +358,7 @@ describe('PDF operator forms', () => {
         OPS.setFont, OPS.setTextMatrix, OPS.showText,
       ], [
         ['g_font', 10], [new Float32Array([1, 0, 0, 1, 0, 0])],
-        [[{ unicode: 'A', operatorListId: 'A' }]],
+        [[{ unicode: 'A', operatorListId: 'A', width: 500 }]],
       ]);
       expect(paint.fills).toEqual([]);
       expect(pdfTextStyleMatches(paint, 'A', {
@@ -235,12 +408,13 @@ describe('PDF operator forms', () => {
         [20, 0, 0, 10, 0, 0], [form === 'paintImageXObject' ? 'image' : image],
         [], [OPS.fill, [rectCommands], [0, 0, 10, 10]],
       ]);
-      expect(paint.images).toEqual([{
+      expect(paint.images).toMatchObject([{
         left: 10, right: 30, top: 70, bottom: 90, width: 2, height: 1,
-        rgbaHash: createHash('sha256').update(new Uint8Array([
-          255, 0, 0, 255, 0, 255, 0, 255,
-        ])).digest('hex'),
       }]);
+      const row = [255, 0, 0, 255, 255, 0, 0, 255,
+        0, 255, 0, 255, 0, 255, 0, 255];
+      expect(paint.images[0]!.signature)
+        .toEqual([...row, ...row, ...row, ...row]);
       expect(pdfHasFill(paint, {
         left: 0, right: 10, top: 90, bottom: 100,
       }, '#000000')).toBe(true);

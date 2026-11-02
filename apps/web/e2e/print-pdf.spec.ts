@@ -22,6 +22,7 @@ import {
   pdfSidebarPaint,
   pdfTextPage,
   pdfWidgetMatches,
+  pdfWidgetDiagnostic,
   printedDisplayPages,
   printedTextPages,
   PRINT_CASES as CASES,
@@ -30,7 +31,8 @@ import {
 } from './pdf-display';
 import {
   fixturePhotoIdentity,
-  pdfBoxMatches,
+  pdfImageMatches,
+  pdfImageDiagnostic,
   pdfPaintOperators,
   pdfPaintPage,
   UNSUPPORTED_PDF_PAINT,
@@ -256,8 +258,8 @@ for (const printCase of CASES) {
                   margins.y, index === 0, '#e3ecf0')).toBe(true);
                 expect(paint.images).toHaveLength(index === 0 ? 1 : 0);
                 if (index === 0) {
-                  expect(paint.images[0]).toMatchObject(photo);
-                  expect(pdfBoxMatches(paint.images[0]!, layout.photo!))
+                  expect(pdfImageMatches(paint.images[0], photo, layout.photo!),
+                    pdfImageDiagnostic(paint.images[0], photo, layout.photo!))
                     .toBe(true);
                 }
               }
@@ -353,7 +355,7 @@ for (const template of ['modern-sidebar', 'engineer-compact'] as const) {
               : '#cfdee3',
             onAccent: '#ffffff',
             fontSize: (modern ? 14 : 13) * 0.9,
-          })).toBe(true);
+          }), pdfWidgetDiagnostic(pages[0]!, widget)).toBe(true);
         }
         expect(pdfGlyphGeometry(pages[0]!.text, margins))
           .toEqual({ contained: true, separated: true });
@@ -427,6 +429,18 @@ for (const rule of ['orphan', 'widow'] as const) {
     const paragraph = page.locator('.entry-body p');
     await expect(paragraph).toHaveCSS('orphans', '2');
     await expect(paragraph).toHaveCSS('widows', '2');
+    // Natural wrapping exercises line constraints rather than a forced break.
+    await paragraph.evaluate((element, selected) => {
+      element.textContent = `${selected.toUpperCase()}-FIRST `
+        + `${selected.toUpperCase()}-SECOND`;
+      (element as HTMLElement).style.width = '12em';
+    }, rule);
+    const lines = await paragraph.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return [...range.getClientRects()].map((rect) => rect.top);
+    });
+    expect(new Set(lines).size).toBe(2);
     // Relax the other constraint to prove each rule independently.
     await paragraph.evaluate((element, selected) => {
       const other = selected === 'orphan' ? 'widows' : 'orphans';

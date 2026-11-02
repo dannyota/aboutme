@@ -420,7 +420,8 @@ export async function measurePdfLayout(
           name: entry.querySelector('.entry-title')?.textContent?.trim() ?? '',
           entry: box(entry),
           title: regionForTitle(entry),
-          widget: widget ? box(widget) : null,
+          // The bar's inline wrapper includes empty line fragments.
+          widget: track ? box(track) : widget ? box(widget) : null,
           size: css ? parseFloat(css.fontSize) : 0,
           paddingX: css ? parseFloat(css.paddingLeft) : 0,
           paddingY: css ? parseFloat(css.paddingTop) : 0,

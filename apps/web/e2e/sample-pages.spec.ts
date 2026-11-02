@@ -16,11 +16,13 @@ import {
   pdfParagraphGeometry,
   pdfTextPage,
   pdfWidgetMatches,
+  pdfWidgetDiagnostic,
   type PdfDisplayPage,
 } from './pdf-display';
 import {
   fixturePhotoIdentity,
-  pdfBoxMatches,
+  pdfImageMatches,
+  pdfImageDiagnostic,
   pdfColorMatches,
   pdfHasFill,
   pdfHasRule,
@@ -213,8 +215,10 @@ async function assertSampleStyle(
   expect(display.paint.images)
     .toHaveLength(sample.personalDetails.photo ? 1 : 0);
   if (sample.personalDetails.photo) {
-    expect(display.paint.images[0]).toMatchObject(await fixturePhotoIdentity());
-    expect(pdfBoxMatches(display.paint.images[0]!, layout.photo!)).toBe(true);
+    const identity = await fixturePhotoIdentity();
+    expect(pdfImageMatches(display.paint.images[0], identity, layout.photo!),
+      pdfImageDiagnostic(display.paint.images[0], identity, layout.photo!))
+      .toBe(true);
   }
   const sections = Object.values(sample.content);
   for (const section of sections) {
@@ -235,7 +239,7 @@ async function assertSampleStyle(
           track: mixedColor(accent, surface, 0.8),
           onAccent: '#ffffff',
           fontSize: base * 0.9,
-        })).toBe(true);
+        }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
     }
   }
 }

@@ -8,6 +8,7 @@ import { writeFile } from 'node:fs/promises';
 import {
   pdfBoxMatches,
   pdfColorMatches,
+  pdfGlyphExtents,
   pdfHasFill,
   pdfPaintPage,
   type PdfBox,
@@ -99,6 +100,7 @@ export function pdfMembership(
 
 export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
   const content = await page.getTextContent();
+  const glyphs = await pdfGlyphExtents(page);
   const items = content.items.flatMap((item): PdfTextItem[] => {
     if (!('str' in item) || item.str.trim() === ''
       || (item.width === 0 && item.height === 0)) return [];
@@ -116,9 +118,24 @@ export async function pdfTextPage(page: PDFPageProxy): Promise<PdfTextPage> {
     if (advance === 0 || style?.vertical) {
       throw new Error('Unsupported PDF glyph geometry.');
     }
-    // PDF.js uses a 0.8 ascent ratio when font metrics are unavailable.
-    const ascent = Number.isFinite(style?.ascent) ? style!.ascent : 0.8;
-    const descent = Number.isFinite(style?.descent) ? style!.descent : -0.2;
+    // Font-wide ascents include ink absent from this string, such as accents.
+    const metrics = glyphs.get(item.fontName);
+    const keys = [...metrics?.keys() ?? []].sort((a, b) => b.length - a.length);
+    let remaining = item.str.normalize('NFD');
+    let ascent = -Infinity;
+    let descent = Infinity;
+    while (remaining.length > 0) {
+      if (/^\s/u.test(remaining)) {
+        remaining = remaining.slice(1);
+        continue;
+      }
+      const key = keys.find((value) => remaining.startsWith(value));
+      if (!key) throw new Error('Unsupported PDF glyph outline.');
+      const extent = metrics!.get(key)!;
+      ascent = Math.max(ascent, extent.ascent);
+      descent = Math.min(descent, extent.descent);
+      remaining = remaining.slice(key.length);
+    }
     const corners = [0, item.width / advance].flatMap((end) =>
       [descent, ascent].map((edge) => ({
         x: x! + a! * end + c! * edge,
@@ -435,6 +452,7 @@ export interface PdfWidget {
   readonly title: PdfBox | null;
   readonly widget: PdfBox | null;
   readonly track: PdfBox | null;
+  readonly fill?: PdfBox | null;
   readonly dots: readonly PdfBox[];
   readonly size: number;
   readonly paddingX: number;
@@ -503,8 +521,34 @@ export function pdfWidgetMatches(
     || Math.abs(measured.radius - 3) > 0.1) return false;
   const items = text.items.filter((item) => item.bounds
     && inside(item.bounds, widget));
+  const ink = paint.text.filter((run) => inside({
+    left: run.x, right: run.x, top: run.y, bottom: run.y,
+  }, widget));
   return items.map((item) => item.text).join('').trim() === `${level}/5`
     && items.length > 0 && pdfHasFill(paint, widget, colors.solid)
-    && paint.text.some((run) => run.text === `${level}/5`
-      && pdfColorMatches(run.color, colors.onAccent));
+    && ink.map((run) => run.text).join('').trim() === `${level}/5`
+    && ink.every((run) => pdfColorMatches(run.color, colors.onAccent)
+      && Math.abs(run.size - colors.fontSize * 0.75) <= 0.075);
+}
+
+export function pdfWidgetDiagnostic(
+  page: PdfDisplayPage, measured: PdfWidget,
+): string {
+  const intersects = (box: PdfBox) => box.left <= measured.entry.right + 1
+    && box.right >= measured.entry.left - 1
+    && box.top <= measured.entry.bottom + 1
+    && box.bottom >= measured.entry.top - 1;
+  return 'PDF widget measurements: ' + JSON.stringify({
+    entry: measured.entry, title: measured.title, widget: measured.widget,
+    track: measured.track, fill: measured.fill, dots: measured.dots,
+    size: measured.size, paddingX: measured.paddingX,
+    paddingY: measured.paddingY, border: measured.border,
+    radius: measured.radius,
+    fills: page.paint.fills.filter(intersects),
+    glyphs: page.text.items.flatMap(({ bounds }) =>
+      bounds && intersects(bounds) ? [bounds] : []),
+    ink: page.paint.text.filter((run) => intersects({
+      left: run.x, right: run.x, top: run.y, bottom: run.y,
+    })).map(({ x, y, color, size }) => ({ x, y, color, size })),
+  });
 }
