@@ -2,9 +2,10 @@
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { describe, expect, it } from 'vitest';
 
-import { pdfColumnsMatch, pdfGlyphGeometry,
+import { pdfColumnsMatch, pdfGlyphGeometry, pdfSidebarPaint, pdfSurfacePaint,
   type PdfTextItem, type PdfTextPage } from '../e2e/pdf-display';
-import { pdfHasFill, pdfPaintOperators } from '../e2e/pdf-paint';
+import { pdfHasFill, pdfPaintOperators,
+  type PdfBox } from '../e2e/pdf-paint';
 
 const margins = { x: 10, y: 10 };
 const layout = {
@@ -117,4 +118,76 @@ describe('PDF overpaint mutations', () => {
     expect(pdfHasFill(paint, box, '#cfe1e5')).toBe(false);
     expect(pdfHasFill(paint, { ...box, right: 74 }, '#0f6b7d')).toBe(true);
   });
+});
+
+describe('PDF sidebar backgrounds', () => {
+  const proxy = { getViewport: () => ({
+    width: 200, height: 200, transform: [1, 0, 0, -1, 0, 200],
+  }) } as unknown as PDFPageProxy;
+  const rectangle = (box: PdfBox) => new Float32Array([
+    0, box.left, 200 - box.bottom, 1, box.right, 200 - box.bottom,
+    1, box.right, 200 - box.top, 1, box.left, 200 - box.top, 4,
+  ]);
+
+  it.each([true, false])(
+    'accepts tint behind a level bar on first page %s',
+    async (firstPage) => {
+      const background = { ...layout.sidebar, top: firstPage ? 50 : 10 };
+      // A three-point full-width level bar crosses the first probe row.
+      const bar = { ...background,
+        top: firstPage ? 85 : 55, bottom: firstPage ? 88 : 58 };
+      const text = page([item('SIDEBAR-ENTRY-12', 140,
+        firstPage ? 60 : 20), item('BODY', 140, 100)]);
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+        ['#0f6b7d'], [OPS.fill, [rectangle(bar)]],
+      ]);
+      expect(pdfHasFill(paint, background, '#e3ecf0')).toBe(false);
+      expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(true);
+      expect(pdfSidebarPaint(paint, text, layout.sidebar,
+        margins.y, firstPage, '#e3ecf0')).toBe(true);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0')).toBe(true);
+    },
+  );
+
+  it.each([1, 0.99])('rejects surface overpaint with alpha %s',
+    async (alpha) => {
+      const background = layout.sidebar;
+      const text = page([item('SIDEBAR-ENTRY-12', 140, 60)]);
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath, OPS.setFillRGBColor,
+        OPS.setGState, OPS.constructPath,
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]], ['#ffffff'],
+        [[['ca', alpha]]], [OPS.fill, [rectangle(background)]],
+      ]);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0'))
+        .toBe(false);
+      expect(pdfSidebarPaint(paint, text, background,
+        margins.y, true, '#e3ecf0')).toBe(false);
+    });
+
+  it('checks surface text beside a separately asserted tag background',
+    async () => {
+      const background = layout.sidebar;
+      const tag = { left: 140, right: 170, top: 80, bottom: 90 };
+      const text = page([item('TITLE', 140, 60), item('4/5', 140, 80)]);
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [
+        ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+        ['#0f6b7d'], [OPS.fill, [rectangle(tag)]],
+      ]);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0'))
+        .toBe(false);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [tag]))
+        .toBe(true);
+      expect(pdfHasFill(paint, tag, '#0f6b7d')).toBe(true);
+      expect(pdfSurfacePaint(paint, text, background, '#ffffff', [tag]))
+        .toBe(false);
+    });
 });

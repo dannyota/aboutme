@@ -196,6 +196,34 @@ export function pdfColumnsMatch(
   });
 }
 
+export function pdfSurfacePaint(
+  paint: PdfPaint,
+  page: PdfTextPage,
+  box: PdfBox,
+  color: string,
+  widgets: readonly PdfBox[] = [],
+): boolean {
+  // Text rows expose the surface between glyphs. Bars, rules and tag
+  // backgrounds have their own paint assertions and occupy other areas.
+  const exposed = page.items.flatMap(({ bounds }) => {
+    if (!bounds || widgets.some((widget) =>
+      bounds.left >= widget.left - 1 && bounds.right <= widget.right + 1
+      && bounds.top >= widget.top - 1 && bounds.bottom <= widget.bottom + 1)) {
+      return [];
+    }
+    const area = {
+      left: Math.max(box.left, bounds.left),
+      right: Math.min(box.right, bounds.right),
+      top: Math.max(box.top, bounds.top),
+      bottom: Math.min(box.bottom, bounds.bottom),
+    };
+    return area.right > area.left && area.bottom > area.top ? [area] : [];
+  });
+  return exposed.length === 0
+    ? pdfHasFill(paint, box, color)
+    : exposed.every((area) => pdfHasFill(paint, box, color, area));
+}
+
 export function pdfSidebarPaint(
   paint: PdfPaint,
   page: PdfTextPage,
@@ -215,12 +243,12 @@ export function pdfSidebarPaint(
       && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1);
   }
   const bottom = Math.max(...column.map((item) => item.bounds!.bottom));
-  return paint.fills.some((fill) => pdfHasFill(paint, fill, color)
-    && Math.abs(fill.left - sidebar.left) <= 1
+  return paint.fills.some((fill) => Math.abs(fill.left - sidebar.left) <= 1
     && Math.abs(fill.right - sidebar.right) <= 1
     && Math.abs(fill.top - (firstPage ? sidebar.top : marginY)) <= 1
     && fill.bottom >= bottom - 1
-    && fill.bottom <= page.height - marginY + 1);
+    && fill.bottom <= page.height - marginY + 1
+    && pdfSurfacePaint(paint, page, fill, color));
 }
 
 export function pdfParagraphGeometry(
