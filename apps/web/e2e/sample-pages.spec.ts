@@ -6,10 +6,26 @@ import {
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { loadSample, SAMPLES } from '@aboutme/schema/samples';
+import { SAMPLES } from '@aboutme/schema/samples';
+import type { Resume } from '@aboutme/schema';
 
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
-import { pdfTextPage } from './pdf-display';
+import { measurePdfLayout } from './display-assertions';
+import {
+  pdfGlyphGeometry,
+  pdfParagraphGeometry,
+  pdfTextPage,
+  pdfWidgetMatches,
+  type PdfDisplayPage,
+} from './pdf-display';
+import {
+  fixturePhotoIdentity,
+  pdfBoxMatches,
+  pdfColorMatches,
+  pdfHasFill,
+  pdfPaintPage,
+  pdfTextStyleMatches,
+} from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
 
 // Every gallery sample's PDF pages, rasterized through the same print path
@@ -38,6 +54,178 @@ const MAX_FILL = 0.98;
 // pdf.js reports no descent for Type 3 fonts; a quarter em is close to the
 // descent of every catalog face.
 const FALLBACK_DESCENT = -0.25;
+
+const FAMILIES: Readonly<Record<string, readonly [string, string]>> = {
+  'be-vietnam-pro': ['Be Vietnam Pro', 'Noto Sans'],
+  'source-sans-3': ['Source Sans 3', 'Noto Sans'],
+  'inter': ['Inter', 'Noto Sans'],
+  'alegreya': ['Alegreya', 'Noto Serif'],
+};
+const META_COLORS: Readonly<Record<string, readonly [string, string]>> = {
+  'ats-plain': ['#404040', '#404040'],
+  'consulting-formal': ['#666a6e', '#666a6e'],
+  'creative-accent': ['#575351', '#57504c'],
+  'elegant-serif-two': ['#605c59', '#5d5751'],
+  'engineer-compact': ['#53575b', '#53575b'],
+  'executive-band': ['#575f69', '#808ea2'],
+  'graduate-friendly': ['#635f5c', '#615a53'],
+  'international-lang': ['#5f5d5b', '#5c5955'],
+  'minimal-air': ['#5b5d61', '#5b5d61'],
+  'modern-sidebar': ['#556066', '#4e5b62'],
+  'mono-print': ['#404040', '#404040'],
+  'nordic-muted': ['#666b71', '#63686f'],
+  'one-page-tight': ['#55595c', '#55595c'],
+};
+
+function cssHex(color: string): string {
+  const channels = color.match(/[\d.]+/gu);
+  if (!channels || channels.length !== 3) {
+    throw new Error('Unsupported sample color.');
+  }
+  return '#' + channels.map((channel) => Number(channel)
+    .toString(16).padStart(2, '0')).join('');
+}
+
+function mixedColor(accent: string, surface: string, share: number): string {
+  return '#' + [1, 3, 5].map((offset) => Math.round(
+    parseInt(accent.slice(offset, offset + 2), 16) * (1 - share)
+    + parseInt(surface.slice(offset, offset + 2), 16) * share,
+  ).toString(16).padStart(2, '0')).join('');
+}
+
+async function assertSampleStyle(
+  sample: Resume,
+  templateId: string,
+  lng: 'en' | 'vi',
+  layout: Awaited<ReturnType<typeof measurePdfLayout>>,
+  display: PdfDisplayPage,
+): Promise<void> {
+  const { font, spacing, colors, heading, sectionDisplay }
+    = sample.customization;
+  const base = font.baseSizePx;
+  const [family, fallback] = FAMILIES[font.family]!;
+  expect(layout.family.replaceAll('"', '')).toBe(`${family}, ${fallback}`);
+  expect(layout.synthesis).toBe('none');
+  expect(Math.abs(layout.size - base)).toBeLessThanOrEqual(0.1);
+  expect(Math.abs(layout.lineHeight - base * spacing.lineHeight))
+    .toBeLessThanOrEqual(0.1);
+  expect(layout.background).toBe('rgb(255, 255, 255)');
+  const target = sample.customization.layout.surfaceTarget ?? 'none';
+  const accent = colors.accent ?? colors.primary;
+  expect(layout.headerAlign).toBe(sample.customization.header?.align ?? 'left');
+  for (const gap of layout.entryGaps) {
+    expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
+  }
+  for (const gap of layout.sectionGaps) {
+    expect(Math.abs(gap - spacing.sectionGap)).toBeLessThanOrEqual(1);
+  }
+  for (const decoration of layout.headings) {
+    const surface = target === 'sidebar' && decoration.sidebar
+      ? colors.surface!
+      : '#ffffff';
+    expect(decoration.rule).toBe(heading.showRule ? 1 : 0);
+    expect(Math.abs(decoration.gap - spacing.sectionGap * 0.4))
+      .toBeLessThanOrEqual(1);
+    if (heading.showRule) {
+      const color = mixedColor(accent, surface, 0.6);
+      expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
+      expect(pdfHasFill(display.paint, { ...decoration,
+        top: decoration.bottom - 0.75 }, color)).toBe(true);
+    }
+  }
+  let transform = 'none';
+  if (heading.style === 'uppercase') transform = 'uppercase';
+  if (heading.style === 'titlecase' && lng === 'en') transform = 'capitalize';
+  for (const chunk of layout.chunks) {
+    const region = target !== 'none' && chunk.region === target;
+    const darkHeader = templateId === 'executive-band' && region;
+    const isHeading = ['name', 'heading', 'title'].includes(chunk.role!);
+    let color = darkHeader ? '#e3e5e8' : colors.text;
+    if (chunk.role === 'meta') {
+      color = META_COLORS[templateId]![region ? 1 : 0];
+    }
+    if (isHeading) color = darkHeader ? '#ffffff' : colors.primary;
+    if (chunk.linked) color = darkHeader ? '#b6834a' : accent;
+    const sizes: Readonly<Record<string, number>> = {
+      name: 2, headline: 1.15, heading: 1.1, meta: 0.9,
+    };
+    const size = base * (sizes[chunk.role!] ?? 1);
+    const bold = isHeading || chunk.strong;
+    expect(Math.abs(chunk.size - size)).toBeLessThanOrEqual(0.1);
+    let weight = bold ? '700' : '400';
+    if (chunk.role === 'title' && chunk.strong) weight = '900';
+    expect(chunk.weight).toBe(weight);
+    expect(pdfColorMatches(cssHex(chunk.color), color)).toBe(true);
+    let value = chunk.text;
+    if (chunk.role === 'heading' && transform === 'uppercase') {
+      value = value.toLocaleUpperCase(lng);
+    }
+    if (chunk.role === 'heading' && transform === 'capitalize') {
+      value = value.replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase());
+    }
+    expect(pdfTextStyleMatches(display.paint, value, {
+      color, size: size * 0.75, family, bold,
+    })).toBe(true);
+  }
+  for (const text of layout.text) {
+    if (text.role === 'heading') {
+      expect(text.transform).toBe(transform);
+      expect(Math.abs(text.spacing - (transform === 'uppercase'
+        ? base * 1.1 * 0.06
+        : 0))).toBeLessThanOrEqual(0.1);
+      expect(Math.abs(text.lineHeight - base * 1.1 * 1.2))
+        .toBeLessThanOrEqual(0.1);
+    }
+    if (text.role === 'body') expect(text.align).toBe(font.textAlign ?? 'left');
+  }
+  const inset = spacing.pageMargin ?? { x: 15, y: 15 };
+  const margins = { x: inset.x * POINTS_PER_MM, y: inset.y * POINTS_PER_MM };
+  expect(pdfGlyphGeometry(display.text, margins))
+    .toEqual({ contained: true, separated: true });
+  expect(pdfParagraphGeometry(display.text, layout.paragraphs.map((part) => ({
+    ...part, pitch: base * spacing.lineHeight * 0.75,
+  })))).toBe(true);
+  if (sample.customization.layout.columns === 2) {
+    expect(layout.sidebar).not.toBeNull();
+    expect(Math.abs(layout.sidebar!.right - layout.sidebar!.left
+      - layout.width * 0.32)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.sidebar!.right - display.text.width + margins.x))
+      .toBeLessThanOrEqual(1);
+  } else expect(layout.sidebar).toBeNull();
+  if (target === 'sidebar' || target === 'header') {
+    const box = target === 'sidebar' ? layout.sidebar : layout.header;
+    expect(box).not.toBeNull();
+    expect(pdfHasFill(display.paint, box!, colors.surface!)).toBe(true);
+  }
+  expect(display.paint.images)
+    .toHaveLength(sample.personalDetails.photo ? 1 : 0);
+  if (sample.personalDetails.photo) {
+    expect(display.paint.images[0]).toMatchObject(await fixturePhotoIdentity());
+    expect(pdfBoxMatches(display.paint.images[0]!, layout.photo!)).toBe(true);
+  }
+  const sections = Object.values(sample.content);
+  for (const section of sections) {
+    if (section.sectionType !== 'skill' && section.sectionType !== 'language') {
+      continue;
+    }
+    const sidebar = sample.customization.layout.sections.sidebar
+      .some((key) => sample.content[key] === section);
+    const surface = target === 'sidebar' && sidebar
+      ? colors.surface!
+      : '#ffffff';
+    for (const entry of section.entries.filter((entry) => !entry.isHidden)) {
+      const widget = layout.widgets.find(({ name }) => name === entry.name);
+      expect(widget).toBeDefined();
+      expect(pdfWidgetMatches(display, widget!, entry.level,
+        sectionDisplay[section.sectionType].style, {
+          solid: accent,
+          track: mixedColor(accent, surface, 0.8),
+          onAccent: '#ffffff',
+          fontSize: base * 0.9,
+        })).toBe(true);
+    }
+  }
+}
 
 /**
  * How far down a PDF page its text reaches: the lowest glyph bottom below
@@ -176,9 +364,10 @@ for (const { templateId, lng } of SAMPLES) {
       + `&template=${templateId}&mode=continuous&print=1`,
     );
     expect(response?.ok()).toBe(true);
-    const sample = await loadSample(templateId, lng);
-    expect(sample).toBeDefined();
-    const fullName = sample?.personalDetails.fullName;
+    const samplePath = resolve(import.meta.dirname,
+      '../../../packages/schema/samples', `${templateId}.${lng}.json`);
+    const sample = JSON.parse(await readFile(samplePath, 'utf8')) as Resume;
+    const fullName = sample.personalDetails.fullName;
     expect(fullName).toBeTruthy();
     await expect(
       page.locator('[data-render-mode="continuous"]'),
@@ -188,16 +377,31 @@ for (const { templateId, lng } of SAMPLES) {
     await waitForImages(page);
     expect(external).toEqual([]);
 
-    const margins = await page.locator('.resume-document').evaluate(
-      (article) => {
-        const style = getComputedStyle(article);
-        return {
-          x: Number.parseFloat(style.getPropertyValue('--page-margin-x')),
-          y: Number.parseFloat(style.getPropertyValue('--page-margin-y')),
-        };
-      },
+    const margins = sample.customization.spacing.pageMargin ?? { x: 15, y: 15 };
+    await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+    await page.setViewportSize({
+      width: Math.round((210 - 2 * margins.x) * 96 / 25.4), height: 1123,
+    });
+    const layout = await measurePdfLayout(page, {
+      x: margins.x * POINTS_PER_MM, y: margins.y * POINTS_PER_MM,
+    });
+    const [family] = FAMILIES[sample.customization.font.family]!;
+    expect(await page.evaluate((expected) => [400, 700].every((weight) =>
+      Array.from(document.fonts).some((face) => face.status === 'loaded'
+        && face.family.replaceAll('"', '') === expected
+        && face.weight === String(weight))), family)).toBe(true);
+    const sections = sample.customization.layout.sections;
+    const visible = [...sections.main, ...sections.sidebar]
+      .map((key) => sample.content[key]!)
+      .filter((section) => section.entries.some((entry) => !entry.isHidden));
+    await expect(page.locator('.resume-section')).toHaveCount(visible.length);
+    await expect(page.locator('.section-heading h2')).toHaveText(
+      visible.map((section) => section.displayName ?? ''),
     );
-    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('.entry')).toHaveCount(visible.reduce(
+      (total, section) => total + section.entries
+        .filter((entry) => !entry.isHidden).length, 0,
+    ));
 
     const pdf = await page.pdf({
       displayHeaderFooter: false,
@@ -237,6 +441,10 @@ for (const { templateId, lng } of SAMPLES) {
         pageNumber += 1
       ) {
         const pdfPage = await document.getPage(pageNumber);
+        const textPage = await pdfTextPage(pdfPage);
+        await assertSampleStyle(sample, templateId, lng, layout, {
+          text: textPage, paint: await pdfPaintPage(pdfPage),
+        });
         const viewport = pdfPage.getViewport({ scale: RASTER_DPI / 72 });
         width = Math.ceil(viewport.width);
         height = Math.ceil(viewport.height);
@@ -251,7 +459,6 @@ for (const { templateId, lng } of SAMPLES) {
         }).promise;
         const filename = `${templateId}-${lng}-p${pageNumber}.png`;
         await verifyPageImage(canvas.toBuffer('image/png'), filename, testInfo);
-        const textPage = await pdfTextPage(pdfPage);
         expect(Math.abs(textPage.width - 595.28)).toBeLessThanOrEqual(1);
         expect(Math.abs(textPage.height - 841.89)).toBeLessThanOrEqual(1);
         expect(textPage.items.length).toBeGreaterThan(0);

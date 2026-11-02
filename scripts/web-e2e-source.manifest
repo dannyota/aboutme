@@ -434,6 +434,7 @@ apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
+apps/web/app/pages/_harness/print-probes.ts
 apps/web/app/pages/_harness/render.vue
 apps/web/app/pages/_harness/sample-fixtures.ts
 apps/web/app/pages/app/import/linkedin.vue
@@ -607,6 +608,7 @@ apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
 apps/web/e2e/normal-csp.spec.ts
 apps/web/e2e/pdf-display.ts
+apps/web/e2e/pdf-paint.ts
 apps/web/e2e/playwright.config.ts
 apps/web/e2e/preview-gap-expected.json
 apps/web/e2e/preview-gap.spec.ts
@@ -614,6 +616,8 @@ apps/web/e2e/print-baselines/print-main-overflow-p1.png
 apps/web/e2e/print-baselines/print-main-overflow-p2.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
+apps/web/e2e/print-mutations.spec.ts
+apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print.spec.ts
 apps/web/e2e/sample-pages.spec.ts
 apps/web/e2e/samples.spec.ts

@@ -305,3 +305,133 @@ export async function measurePrintRules(
     };
   });
 }
+
+// --- sample-pages.spec.ts ---
+export async function measurePdfLayout(
+  page: Page,
+  margins: { x: number; y: number },
+) {
+  return page.locator('.resume-document').evaluate((root, inset) => {
+    const origin = root.getBoundingClientRect();
+    const box = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: (rect.left - origin.left) * 0.75 + inset.x,
+        right: (rect.right - origin.left) * 0.75 + inset.x,
+        top: (rect.top - origin.top) * 0.75 + inset.y,
+        bottom: (rect.bottom - origin.top) * 0.75 + inset.y,
+      };
+    };
+    const region = (selector: string) => {
+      const element = root.querySelector(selector);
+      return element ? box(element) : null;
+    };
+    const style = getComputedStyle(root);
+    const chunks = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const parent = node.parentElement;
+      const text = node.textContent?.normalize('NFC').trim();
+      if (!parent || !text || parent.closest('.level-widget')) continue;
+      const css = getComputedStyle(parent);
+      const roles = [
+        ['.resume-name', 'name'], ['.resume-headline', 'headline'],
+        ['.section-heading', 'heading'], ['.entry-title', 'title'],
+        ['.entry-subtitle', 'subtitle'], ['.entry-meta', 'meta'],
+      ];
+      chunks.push({
+        text,
+        role: roles.find(([selector]) => parent.closest(selector!))?.[1]
+          ?? 'body',
+        region: parent.closest('.resume-header')
+          ? 'header'
+          : parent.closest('.resume-sidebar')
+            ? 'sidebar'
+            : 'page',
+        linked: parent.closest('a') !== null,
+        strong: parent.closest('b, strong') !== null,
+        color: css.color,
+        size: parseFloat(css.fontSize),
+        weight: css.fontWeight,
+      });
+    }
+    return {
+      width: origin.width * 0.75,
+      family: style.fontFamily,
+      synthesis: style.fontSynthesis,
+      size: parseFloat(style.fontSize),
+      lineHeight: parseFloat(style.lineHeight),
+      background: style.backgroundColor,
+      chunks,
+      header: region('.resume-header'),
+      sidebar: region('.resume-sidebar'),
+      photo: region('.resume-photo'),
+      text: Array.from(root.querySelectorAll(
+        '.resume-name, .resume-headline, .section-heading h2, '
+        + '.entry-title, .entry-subtitle, .entry-meta, .entry-body p',
+      ), (element) => {
+        const css = getComputedStyle(element);
+        return {
+          role: element.matches('h2')
+            ? 'heading'
+            : element.matches('.entry-body p')
+              ? 'body'
+              : element.className,
+          text: element.textContent?.normalize('NFC').trim() ?? '',
+          ...box(element),
+          color: css.color,
+          size: parseFloat(css.fontSize),
+          weight: css.fontWeight,
+          transform: css.textTransform,
+          spacing: parseFloat(css.letterSpacing) || 0,
+          align: css.textAlign,
+          lineHeight: parseFloat(css.lineHeight),
+        };
+      }),
+      paragraphs: Array.from(root.querySelectorAll('.entry-body p'),
+        (element) => ({ text: element.textContent?.normalize('NFC') ?? '' })),
+      headings: Array.from(root.querySelectorAll('.section-heading'),
+        (element) => {
+          const css = getComputedStyle(element);
+          return { ...box(element),
+            sidebar: element.closest('.resume-sidebar') !== null,
+            rule: parseFloat(css.borderBottomWidth),
+            color: css.borderBottomColor,
+            gap: parseFloat(css.marginBottom),
+          };
+        }),
+      entryGaps: Array.from(root.querySelectorAll('.entry'), (element) =>
+        parseFloat(getComputedStyle(element).marginBottom)),
+      sectionGaps: Array.from(root.querySelectorAll('.resume-section'),
+        (element) => parseFloat(getComputedStyle(element).marginBottom)),
+      headerAlign: getComputedStyle(root.querySelector('.resume-header')!)
+        .textAlign,
+      widgets: Array.from(root.querySelectorAll('.entry'), (entry) => {
+        const widget = entry.querySelector('.level-widget');
+        const css = widget ? getComputedStyle(widget) : null;
+        const track = entry.querySelector('.level-track');
+        const fill = entry.querySelector('.level-fill');
+        return {
+          name: entry.querySelector('.entry-title')?.textContent?.trim() ?? '',
+          entry: box(entry),
+          title: regionForTitle(entry),
+          widget: widget ? box(widget) : null,
+          size: css ? parseFloat(css.fontSize) : 0,
+          paddingX: css ? parseFloat(css.paddingLeft) : 0,
+          paddingY: css ? parseFloat(css.paddingTop) : 0,
+          border: css ? parseFloat(css.borderLeftWidth) : 0,
+          radius: css ? parseFloat(css.borderTopLeftRadius) : 0,
+          label: widget?.textContent?.trim() ?? '',
+          track: track ? box(track) : null,
+          fill: fill ? box(fill) : null,
+          dots: Array.from(entry.querySelectorAll('.level-dot'), box),
+        };
+      }),
+    };
+    function regionForTitle(entry: Element) {
+      const title = entry.querySelector('.entry-title');
+      return title ? box(title) : null;
+    }
+  }, margins);
+}

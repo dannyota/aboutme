@@ -14,7 +14,7 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # preview-gap holds the slowest harness specs (no normal surface, so it
 # skips that Nuxt build), and rest holds the remaining harness specs plus
 # the whole normal surface.
-WEB_E2E_HARNESS_SPECS := screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
+WEB_E2E_HARNESS_SPECS := screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
 WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts
 
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
@@ -235,8 +235,8 @@ web-e2e: ## Compare renderer baselines in the pinned AMD64 browser
 	if [[ ! $$run_id =~ ^[A-Za-z0-9_-]+$$ ]]; then echo 'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' >&2; exit 64; fi; \
 	case $${WEB_E2E_SHARD-all} in \
 	all) harness_specs='$(WEB_E2E_HARNESS_SPECS)'; normal_specs='$(WEB_E2E_NORMAL_SPECS)' ;; \
-	preview-gap) harness_specs='preview-gap.spec.ts corpus.spec.ts print.spec.ts samples.spec.ts sample-pages.spec.ts'; normal_specs='' ;; \
-	rest) harness_specs='$(filter-out preview-gap.spec.ts corpus.spec.ts print.spec.ts samples.spec.ts sample-pages.spec.ts,$(WEB_E2E_HARNESS_SPECS))'; normal_specs='$(WEB_E2E_NORMAL_SPECS)' ;; \
+	preview-gap) harness_specs='preview-gap.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts'; normal_specs='' ;; \
+	rest) harness_specs='$(filter-out preview-gap.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts,$(WEB_E2E_HARNESS_SPECS))'; normal_specs='$(WEB_E2E_NORMAL_SPECS)' ;; \
 	*) echo 'WEB_E2E_SHARD must be all, preview-gap, or rest' >&2; exit 64 ;; \
 	esac; \
 	test "$$(uname -m)" = x86_64 || { echo 'web-e2e requires a native x86_64 host' >&2; exit 1; }; \

@@ -77,6 +77,8 @@ export default defineConfig({
         'fonts-offline.spec.ts',
         'corpus.spec.ts',
         'print.spec.ts',
+        'print-pdf.spec.ts',
+        'print-mutations.spec.ts',
         'samples.spec.ts',
         'sample-pages.spec.ts',
         'preview-gap.spec.ts',
