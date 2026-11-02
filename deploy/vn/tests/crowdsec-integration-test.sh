@@ -841,6 +841,16 @@ printf 'PASS real-expiry-and-revocation-retained-until-stopped-batch\n'
 
 # Replay event time through the pinned engine, without waiting 25 wall hours.
 retention_fixture_case=slow-trickle-old-first-timestamp
+trickle_assert_count() {
+  local assertion=$1 actual=$2 comparison=$3 expected=$4
+  if [[ $actual =~ ^[0-9]+$ ]] && test "$actual" "$comparison" "$expected"; then return 0; fi
+  printf 'FAIL slow-trickle assertion=%s expected=%s:%s actual=%s\n' \
+    "$assertion" "$comparison" "$expected" "$actual" >&2
+  return 1
+}
+integration_stage=slow-trickle-empty
+trickle_assert_count initial-alerts \
+  "$(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');")" -eq 0
 integration_stage=slow-trickle-replay
 python3 -I - "$retention_fixture/trickle.json" <<'PY'
 import datetime,json,pathlib,sys
@@ -854,20 +864,36 @@ with pathlib.Path(sys.argv[1]).open('w') as stream:
         stream.write(json.dumps(record)+'\n')
 PY
 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
-timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" -type aboutme-http -order-event \
-  >"$retention_fixture/replay.log" 2>&1
-[[ $(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=now()-interval '25 hours';") -gt 0 ]]
-[[ $(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;") -le 5 ]]
-[[ $(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';") -gt 0 ]]
+replay_status=0
+# DSN replay uses CLI labels instead of the serving acquisition's labels.
+timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" \
+  -type aboutme-http -label feed_mode:serving -order-event \
+  >"$retention_fixture/replay.log" 2>&1 || replay_status=$?
+trickle_assert_count replay-status "$replay_status" -eq 0
+integration_stage=slow-trickle-graph
+trickle_assert_count old-first-timestamp \
+  "$(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=now()-interval '25 hours';")" -gt 0
+trickle_assert_count bucket-event-count \
+  "$(sql "SELECT coalesce(max(events_count),0) FROM alerts WHERE source_ip='192.0.2.47';")" -gt 9000
+trickle_assert_count cached-samples \
+  "$(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;")" -le 5
+trickle_assert_count decisions \
+  "$(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';")" -gt 0
 # Copy the replay's actual occurrence clocks into a graph without a decision.
+integration_stage=slow-trickle-copy
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip)
  SELECT 89001,created_at,updated_at,started_at,stopped_at,scenario,'192.0.2.48'
  FROM alerts WHERE source_ip='192.0.2.47' ORDER BY id LIMIT 1;" >/dev/null
 : >"$retention_fixture/control-log"
+integration_stage=slow-trickle-retention
 "$lib/crowdsec-retention.sh" runtime
-[[ $(grep -c '^stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service$' "$retention_fixture/control-log") == 1 ]]
-[[ $(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');") == 0 ]]
-grep -qxF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log"
+integration_stage=slow-trickle-verify
+trickle_assert_count consumer-stops \
+  "$(grep -c '^stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service$' "$retention_fixture/control-log" || true)" -eq 1
+trickle_assert_count remaining-alerts \
+  "$(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');")" -eq 0
+trickle_assert_count overdue-alarms \
+  "$(grep -xcF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log" || true)" -eq 1
 "$lib/crowdsec-retention-lease-check.sh"
 printf 'PASS slow-trickle-overdue-cleanup\n'
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
