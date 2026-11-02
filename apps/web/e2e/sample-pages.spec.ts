@@ -23,6 +23,7 @@ import {
   pdfBoxMatches,
   pdfColorMatches,
   pdfHasFill,
+  pdfHasRule,
   pdfPaintPage,
   pdfTextStyleMatches,
 } from './pdf-paint';
@@ -130,7 +131,7 @@ async function assertSampleStyle(
       const color = mixedColor(accent, surface, 0.6);
       expect(decoration.ruleStyle).toBe('solid');
       expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
-      expect(pdfHasFill(display.paint, decoration.ruleBox, color)).toBe(true);
+      expect(pdfHasRule(display.paint, decoration.ruleBox, color)).toBe(true);
     }
   }
   let transform = 'none';
@@ -180,7 +181,19 @@ async function assertSampleStyle(
   }
   const inset = spacing.pageMargin ?? { x: 15, y: 15 };
   const margins = { x: inset.x * POINTS_PER_MM, y: inset.y * POINTS_PER_MM };
-  expect(pdfGlyphGeometry(display.text, margins))
+  const boxes = display.text.items.flatMap(({ bounds }) => bounds
+    ? [bounds]
+    : []);
+  const overflow = {
+    left: Math.max(0, ...boxes.map((box) => margins.x - box.left)),
+    right: Math.max(0, ...boxes.map((box) => box.right
+      - display.text.width + margins.x)),
+    top: Math.max(0, ...boxes.map((box) => margins.y - box.top)),
+    bottom: Math.max(0, ...boxes.map((box) => box.bottom
+      - display.text.height + margins.y)),
+  };
+  expect(pdfGlyphGeometry(display.text, margins),
+    `PDF glyph overflow in points: ${JSON.stringify(overflow)}`)
     .toEqual({ contained: true, separated: true });
   expect(pdfParagraphGeometry(display.text, layout.paragraphs.map((part) => ({
     ...part, pitch: base * spacing.lineHeight * 0.75,

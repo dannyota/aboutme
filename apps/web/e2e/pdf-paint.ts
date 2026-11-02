@@ -46,6 +46,10 @@ export interface PdfPaint {
 }
 
 type Matrix = [number, number, number, number, number, number];
+interface GlyphProgram {
+  fnArray: readonly number[];
+  argsArray: readonly (readonly unknown[] | null | undefined)[];
+}
 interface Stroke {
   color: string;
   alpha: number;
@@ -66,15 +70,29 @@ interface State {
   textMatrix: Matrix;
   transparent: boolean;
   bold: boolean;
+  type3: Map<string, GlyphProgram> | undefined;
   stroke: Stroke;
 }
 
 export const UNSUPPORTED_PDF_PAINT = 'Unsupported PDF paint evidence.';
-function unsupported(): never {
-  throw new Error(UNSUPPORTED_PDF_PAINT);
+const operatorNames = new Map(Object.entries(OPS).map(([name, op]) =>
+  [op, name]));
+class UnsupportedPaint extends Error {
+  readonly operator: number | undefined;
+
+  constructor(operator?: number) {
+    super(`${UNSUPPORTED_PDF_PAINT} Operator: `
+      + `${operatorNames.get(operator ?? -1) ?? 'unknown'}.`);
+    this.operator = operator;
+  }
+}
+function unsupported(op?: number): never {
+  throw new UnsupportedPaint(op);
 }
 const identity = (): Matrix => [1, 0, 0, 1, 0, 0];
-const shapes = new WeakMap<PdfFill, Path2D>();
+const shapes = new WeakMap<PdfFill, {
+  path: Path2D; stroke: boolean;
+}>();
 const hitTest = createCanvas(1, 1).getContext('2d');
 
 function numbers(value: unknown, count?: number): number[] {
@@ -103,6 +121,7 @@ function transformed(path: Path2D, m: Matrix): Path2D {
   const result = new Path2D();
   result.addPath(path, { a: m[0], b: m[1], c: m[2], d: m[3],
     e: m[4], f: m[5] });
+  result.setFillType(path.getFillType());
   return result;
 }
 
@@ -168,20 +187,40 @@ export function pdfBoxMatches(actual: PdfBox, expected: PdfBox): boolean {
     .every((edge) => Math.abs(actual[edge] - expected[edge]) <= 1);
 }
 
+function hasPaint(
+  paint: PdfPaint,
+  box: PdfBox,
+  expectedColor: string,
+  allowStroke: boolean,
+): boolean {
+  return paint.fills.some((fill) => {
+    const { path, stroke } = shapes.get(fill) ?? unsupported();
+    return (allowStroke || !stroke) && fill.alpha >= 0.99
+      && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
+      && [0.25, 0.5, 0.75].every((x) => [0.25, 0.5, 0.75].every((y) => {
+        // Edge matching applies the 1 pt tolerance, even for thin rules.
+        return hitTest.isPointInPath(path,
+          fill.left + (fill.right - fill.left) * x,
+          fill.top + (fill.bottom - fill.top) * y,
+          path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
+      }));
+  });
+}
+
 export function pdfHasFill(
   paint: PdfPaint,
   box: PdfBox,
   expectedColor: string,
 ): boolean {
-  return paint.fills.some((fill) => fill.alpha >= 0.99
-    && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
-    && [0.25, 0.5, 0.75].every((x) => [0.25, 0.5, 0.75].every((y) => {
-      const path = shapes.get(fill) ?? unsupported();
-      // Edge matching already applies the 1 pt tolerance, even for thin rules.
-      return hitTest.isPointInPath(path,
-        fill.left + (fill.right - fill.left) * x,
-        fill.top + (fill.bottom - fill.top) * y);
-    })));
+  return hasPaint(paint, box, expectedColor, false);
+}
+
+export function pdfHasRule(
+  paint: PdfPaint,
+  box: PdfBox,
+  expectedColor: string,
+): boolean {
+  return hasPaint(paint, box, expectedColor, true);
 }
 
 export function pdfTextStyleMatches(
@@ -299,13 +338,14 @@ export async function pdfPaintOperators(
   page: PDFPageProxy,
   functions: readonly number[],
   argumentsList: readonly (readonly unknown[] | null | undefined)[],
+  type3Glyph = false,
 ): Promise<PdfPaint> {
   if (functions.length !== argumentsList.length) unsupported();
   const viewport = page.getViewport({ scale: 1 });
   let state: State = { matrix: matrix(viewport.transform),
     clip: rectangle([0, 0, viewport.width, viewport.height]),
     color: '#000000', alpha: 1, font: '', size: 0, textMatrix: identity(),
-    transparent: false, bold: false,
+    transparent: false, bold: false, type3: undefined,
     stroke: { color: '#000000', alpha: 1, transparent: false,
       width: 1, cap: StrokeCap.Butt, join: StrokeJoin.Miter,
       miterLimit: 10, dashed: false } };
@@ -313,6 +353,7 @@ export async function pdfPaintOperators(
   const fills: PdfFill[] = [];
   const images: PdfImage[] = [];
   const text: PdfInk[] = [];
+  const checkedGlyphs = new WeakSet<GlyphProgram>();
   let pendingClip: FillType | undefined;
   const save = () => stack.push({ ...state, stroke: { ...state.stroke } });
   const restore = () => {
@@ -320,17 +361,22 @@ export async function pdfPaintOperators(
   };
   const record = (
     path: Path2D, color: string, alpha: number, curves: number,
+    stroke = false,
   ) => {
     const visible = clipped(transformed(path, state.matrix), state.clip);
     const box = bounds(visible);
     if (!box || alpha <= 0) return;
     const fill = { ...box, color, alpha, curves };
-    shapes.set(fill, visible);
+    shapes.set(fill, { path: visible, stroke });
     fills.push(fill);
   };
-  for (let index = 0; index < functions.length; index += 1) {
-    const op = functions[index]!;
-    const args = argumentsList[index] ?? [];
+  const visit = async (op: number, args: readonly unknown[]) => {
+    // Uncolored Type3 glyphs inherit the text ink. Their paths must never
+    // become candidates for page regions, rules or level widgets.
+    if (type3Glyph && [OPS.setFillRGBColor, OPS.setStrokeRGBColor,
+      OPS.setFillTransparent, OPS.setStrokeTransparent, OPS.setFont,
+      OPS.showText, OPS.paintImageXObject, OPS.paintInlineImageXObject]
+      .includes(op)) unsupported();
     if (op === OPS.save) save();
     else if (op === OPS.restore) restore();
     else if (op === OPS.transform) {
@@ -352,9 +398,11 @@ export async function pdfPaintOperators(
       for (const [key, value] of args[0] as [string, unknown][]) {
         if (key === 'ca') {
           state.alpha = numbers([value], 1)[0]!;
-          if (state.alpha < 0 || state.alpha > 1) unsupported();
+          if (state.alpha < 0 || state.alpha > 1
+            || (type3Glyph && state.alpha !== 1)) unsupported();
         } else if (['LW', 'LC', 'LJ', 'ML', 'D', 'CA'].includes(key)) {
           strokeSetting(state.stroke, key, value);
+          if (type3Glyph && state.stroke.alpha !== 1) unsupported();
         } else if (key === 'BM' && value === 'source-over') continue;
         else if ((key === 'SMask' && !value) || (key === 'TR'
           && value === null)) continue;
@@ -362,6 +410,12 @@ export async function pdfPaintOperators(
       }
     } else if (op === OPS.clip || op === OPS.eoClip) {
       pendingClip = op === OPS.clip ? FillType.Winding : FillType.EvenOdd;
+    } else if (op === OPS.setCharWidthAndBounds && type3Glyph) {
+      const [, , x1, y1, x2, y2] = numbers(args, 6) as Matrix;
+      state.clip = clipped(transformed(rectangle([
+        Math.min(x1, x2), Math.min(y1, y2),
+        Math.max(x1, x2), Math.max(y1, y2),
+      ]), state.matrix), state.clip);
     } else if (op === OPS.constructPath) {
       const consume = args[0];
       if (!Array.isArray(args[1]) || args[1].length !== 1) unsupported();
@@ -384,7 +438,7 @@ export async function pdfPaintOperators(
         const stroke = state.stroke;
         if (stroke.width === 0 || stroke.dashed) unsupported();
         record(new Path2D(path).stroke(stroke), stroke.color,
-          stroke.alpha, curves);
+          stroke.alpha, curves, true);
       }
       if (pendingClip !== undefined) {
         path.setFillType(pendingClip);
@@ -415,8 +469,11 @@ export async function pdfPaintOperators(
     } else if (op === OPS.setFont) {
       const font = await object(page, args[0]) as {
         name?: string; bold?: boolean; isType3Font?: boolean;
+        charProcOperatorList?: Map<string, GlyphProgram>;
       };
-      if (typeof font.name !== 'string' || font.isType3Font) unsupported();
+      if (typeof font.name !== 'string') unsupported();
+      state.type3 = font.isType3Font ? font.charProcOperatorList : undefined;
+      if (font.isType3Font && !(state.type3 instanceof Map)) unsupported();
       state.font = font.name;
       state.bold = font.bold === true || /bold/iu.test(font.name);
       state.size = numbers([args[1]], 1)[0]!;
@@ -427,6 +484,29 @@ export async function pdfPaintOperators(
       if (args[0] !== 0) unsupported();
     } else if (op === OPS.showText) {
       if (!Array.isArray(args[0])) unsupported();
+      if (state.type3) {
+        for (const glyph of args[0] as unknown[]) {
+          if (typeof glyph === 'number') continue;
+          if (!glyph || typeof glyph !== 'object'
+            || !('operatorListId' in glyph)
+            || typeof glyph.operatorListId !== 'string') unsupported();
+          const program = state.type3.get(glyph.operatorListId);
+          if (!program) unsupported();
+          if (!checkedGlyphs.has(program)) {
+            if (program.fnArray.length > 0
+              && program.fnArray[0] !== OPS.setCharWidthAndBounds) {
+              unsupported(program.fnArray[0]);
+            }
+            const ink = await pdfPaintOperators(page,
+              program.fnArray, program.argsArray, true);
+            if (ink.fills.some((fill) => fill.alpha !== 1)) unsupported();
+            checkedGlyphs.add(program);
+          }
+          if (program.fnArray.length === 0 && 'unicode' in glyph
+            && typeof glyph.unicode === 'string'
+            && glyph.unicode.trim() !== '') unsupported();
+        }
+      }
       const value = (args[0] as unknown[]).map((glyph) => {
         if (typeof glyph === 'number') return '';
         if (glyph === null || typeof glyph !== 'object'
@@ -441,6 +521,17 @@ export async function pdfPaintOperators(
         bold: state.bold,
         size: Math.abs(state.size) * Math.hypot(m[2], m[3]) });
     } else if (!textOperators.has(op)) unsupported();
+  };
+  for (let index = 0; index < functions.length; index += 1) {
+    const op = functions[index]!;
+    try {
+      await visit(op, argumentsList[index] ?? []);
+    } catch (error) {
+      if (error instanceof UnsupportedPaint && error.operator !== undefined) {
+        throw error;
+      }
+      unsupported(op);
+    }
   }
   if (stack.length !== 0 || pendingClip !== undefined) unsupported();
   return { fills, images, text };

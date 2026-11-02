@@ -1,9 +1,13 @@
 // @vitest-environment node
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { pdfTextPage } from '../e2e/pdf-display';
-import { pdfHasFill, pdfPaintOperators } from '../e2e/pdf-paint';
+import { checkMembership, pdfTextPage } from '../e2e/pdf-display';
+import {
+  pdfHasFill, pdfHasRule, pdfPaintOperators, pdfTextStyleMatches,
+  UNSUPPORTED_PDF_PAINT,
+} from '../e2e/pdf-paint';
 
 const glyph = {
   str: 'A', dir: 'ltr', fontName: 'fixture', hasEOL: false,
@@ -108,6 +112,171 @@ describe('PDF text geometry', () => {
     });
 });
 
+describe('approved PDF membership', () => {
+  for (const column of ['main', 'sidebar'] as const) {
+    for (const language of ['en', 'vi'] as const) {
+      for (const paper of ['a4', 'letter'] as const) {
+        for (const scheme of ['light', 'dark'] as const) {
+          const base = `${column}-overflow-${language}` as const;
+          const key = `print-${base}-${paper}-${scheme}` as const;
+          it(`requires the approved boundaries for ${key}`, () => {
+            const shorter = language === 'vi' && paper === 'letter';
+            const last = column === 'main'
+              ? (shorter ? 6 : 7)
+              : (shorter ? 10 : 11);
+            const total = column === 'main' ? 9 : 13;
+            const id = (index: number) => `${column.toUpperCase()}-ENTRY-`
+              + String(index).padStart(2, '0');
+            const membership = { pageCount: 2, pages: [
+              { main: { first: null, last: null },
+                sidebar: { first: null, last: null },
+                [column]: { first: id(1), last: id(last) },
+                start: true, end: false, opposite: true },
+              { main: { first: null, last: null },
+                sidebar: { first: null, last: null },
+                [column]: { first: id(last + 1), last: id(total) },
+                start: false, end: true, opposite: false },
+            ] };
+            expect(() => checkMembership(membership, key)).not.toThrow();
+            expect(() => checkMembership({ ...membership,
+              pageCount: 3,
+            }, key)).toThrow();
+            expect(() => checkMembership({ ...membership,
+              pages: [...membership.pages].reverse(),
+            }, key)).toThrow();
+            expect(() => checkMembership({ ...membership,
+              unapproved: undefined,
+            } as typeof membership, key)).toThrow();
+          });
+        }
+      }
+    }
+  }
+});
+
+function paintPage(objects: Readonly<Record<string, unknown>> = {}) {
+  return {
+    getViewport: () => ({
+      width: 100, height: 100, transform: [1, 0, 0, -1, 0, 100],
+    }),
+    commonObjs: { get: (id: string, resolve: (value: unknown) => void) =>
+      resolve(objects[id]) },
+    objs: { get: (id: string, resolve: (value: unknown) => void) =>
+      resolve(objects[id]) },
+  } as unknown as PDFPageProxy;
+}
+
+const rectCommands = new Float32Array([
+  0, 0, 0, 1, 10, 0, 1, 10, 10, 1, 0, 10, 4,
+]);
+
+describe('PDF operator forms', () => {
+  it('reads uncolored Type3 glyph programs without treating them as regions',
+    async () => {
+      const font = { name: 'Fixture-Bold', isType3Font: true,
+        charProcOperatorList: new Map<string, {
+          fnArray: number[]; argsArray: unknown[][];
+        }>([['A', {
+          fnArray: [OPS.setCharWidthAndBounds, OPS.constructPath],
+          argsArray: [[10, 0, 0, 0, 10, 10],
+            [OPS.fill, [rectCommands], [0, 0, 10, 10]]],
+        }]]) };
+      const paint = await pdfPaintOperators(paintPage({ g_font: font }), [
+        OPS.setFont, OPS.setTextMatrix, OPS.showText,
+      ], [
+        ['g_font', 10], [new Float32Array([1, 0, 0, 1, 0, 0])],
+        [[{ unicode: 'A', operatorListId: 'A' }]],
+      ]);
+      expect(paint.fills).toEqual([]);
+      expect(pdfTextStyleMatches(paint, 'A', {
+        color: '#000000', size: 10, family: 'Fixture', bold: true,
+      })).toBe(true);
+      font.charProcOperatorList.clear();
+      await expect(pdfPaintOperators(paintPage({ g_font: font }), [
+        OPS.setFont, OPS.showText,
+      ], [['g_font', 10], [[{ unicode: 'PRIVATE', operatorListId: 'A' }]]]))
+        .rejects.toThrow(`${UNSUPPORTED_PDF_PAINT} Operator: showText.`);
+      font.charProcOperatorList.set('A', {
+        fnArray: [OPS.setCharWidthAndBounds, OPS.shadingFill],
+        argsArray: [[10, 0, 0, 0, 10, 10], ['PRIVATE-SHADING']],
+      });
+      await expect(pdfPaintOperators(paintPage({ g_font: font }), [
+        OPS.setFont, OPS.showText,
+      ], [['g_font', 10], [[{ unicode: 'PRIVATE', operatorListId: 'A' }]]]))
+        .rejects.toThrow(`${UNSUPPORTED_PDF_PAINT} Operator: shadingFill.`);
+      font.charProcOperatorList.set('A', {
+        fnArray: [OPS.setCharWidthAndBounds, OPS.setGState, OPS.constructPath],
+        argsArray: [[10, 0, 0, 0, 10, 10], [[['ca', 0]]],
+          [OPS.fill, [rectCommands], [0, 0, 10, 10]]],
+      });
+      await expect(pdfPaintOperators(paintPage({ g_font: font }), [
+        OPS.setFont, OPS.showText,
+      ], [['g_font', 10], [[{ unicode: 'PRIVATE', operatorListId: 'A' }]]]))
+        .rejects.toThrow(`${UNSUPPORTED_PDF_PAINT} Operator: setGState.`);
+    });
+
+  it.each([
+    { form: 'paintImageXObject', kind: 2 },
+    { form: 'paintImageXObject', kind: 3 },
+    { form: 'paintInlineImageXObject', kind: 2 },
+    { form: 'paintInlineImageXObject', kind: 3 },
+  ] as const)(
+    'measures $form kind $kind in a transformed, clipped Form XObject',
+    async ({ form, kind }) => {
+      const data = new Uint8Array(kind === 2
+        ? [255, 0, 0, 0, 255, 0]
+        : [255, 0, 0, 255, 0, 255, 0, 255]);
+      const image = { width: 2, height: 1, kind, data };
+      const paint = await pdfPaintOperators(paintPage({ image }), [
+        OPS.paintFormXObjectBegin, OPS.transform, OPS[form],
+        OPS.paintFormXObjectEnd, OPS.constructPath,
+      ], [
+        [[2, 0, 0, 2, 10, 10], [0, 0, 10, 10]],
+        [20, 0, 0, 10, 0, 0], [form === 'paintImageXObject' ? 'image' : image],
+        [], [OPS.fill, [rectCommands], [0, 0, 10, 10]],
+      ]);
+      expect(paint.images).toEqual([{
+        left: 10, right: 30, top: 70, bottom: 90, width: 2, height: 1,
+        rgbaHash: createHash('sha256').update(new Uint8Array([
+          255, 0, 0, 255, 0, 255, 0, 255,
+        ])).digest('hex'),
+      }]);
+      expect(pdfHasFill(paint, {
+        left: 0, right: 10, top: 90, bottom: 100,
+      }, '#000000')).toBe(true);
+    },
+  );
+
+  it('retains gs opacity and restores opaque region evidence', async () => {
+    const paint = await pdfPaintOperators(paintPage(), [
+      OPS.save, OPS.setGState, OPS.constructPath, OPS.restore,
+      OPS.constructPath,
+    ], [
+      [], [[['ca', 0.5], ['CA', 0.25], ['BM', 'source-over']]],
+      [OPS.fill, [rectCommands], [0, 0, 10, 10]], [],
+      [OPS.fill, [rectCommands], [0, 0, 10, 10]],
+    ]);
+    const box = { left: 0, right: 10, top: 90, bottom: 100 };
+    expect(paint.fills.map(({ alpha }) => alpha)).toEqual([0.5, 1]);
+    expect(pdfHasFill({ ...paint, fills: [paint.fills[0]!] }, box, '#000000'))
+      .toBe(false);
+    expect(pdfHasFill(paint, box, '#000000')).toBe(true);
+  });
+
+  it.each([
+    { name: 'shadingFill', args: ['PRIVATE-CONTENT'] },
+    { name: 'paintImageMaskXObject', args: ['PRIVATE-CONTENT'] },
+    { name: 'constructPath', args: [OPS.fill, [[99]], [0, 0, 1, 1]] },
+    { name: 'setGState', args: [[['PRIVATE-KEY', 'PRIVATE-VALUE']]] },
+  ] as const)('names unsupported $name without operand content',
+    async ({ name, args }) => {
+      await expect(pdfPaintOperators(paintPage(), [OPS[name]], [args]))
+        .rejects.toMatchObject({
+          message: `${UNSUPPORTED_PDF_PAINT} Operator: ${name}.`,
+        });
+    });
+});
+
 describe('PDF border paint', () => {
   it.each(['fill', 'stroke'] as const)(
     'matches a one-pixel %s border after CSS scale and page origin flips',
@@ -134,18 +303,19 @@ describe('PDF border paint', () => {
         left: 15, right: 135, top: 29.25, bottom: 30,
       });
       const expected = { left: 15, right: 135, top: 29.25, bottom: 30 };
-      expect(pdfHasFill(paint, expected, '#999999')).toBe(true);
+      expect(pdfHasFill(paint, expected, '#999999')).toBe(form === 'fill');
+      expect(pdfHasRule(paint, expected, '#999999')).toBe(true);
       for (const delta of [-1, -0.5, 0.5, 1]) {
-        expect(pdfHasFill(paint, { ...expected,
+        expect(pdfHasRule(paint, { ...expected,
           top: expected.top + delta, bottom: expected.bottom + delta,
         }, '#999999')).toBe(true);
       }
       for (const delta of [-1.01, 1.01]) {
-        expect(pdfHasFill(paint, { ...expected,
+        expect(pdfHasRule(paint, { ...expected,
           top: expected.top + delta, bottom: expected.bottom + delta,
         }, '#999999')).toBe(false);
       }
-      expect(pdfHasFill(paint, expected, '#000000')).toBe(false);
+      expect(pdfHasRule(paint, expected, '#000000')).toBe(false);
     },
   );
 
@@ -167,7 +337,28 @@ describe('PDF border paint', () => {
       expect(pdfHasFill(paint, {
         left: 10, right: 90, top: 10, bottom: 90,
       }, '#999999')).toBe(false);
+      expect(pdfHasRule(paint, {
+        left: 10, right: 90, top: 10, bottom: 90,
+      }, '#999999')).toBe(false);
     });
+
+  it('matches a region with nested nonzero fill contours', async () => {
+    const page = { getViewport: () => ({
+      width: 100, height: 100, transform: [1, 0, 0, -1, 0, 100],
+    }) } as unknown as PDFPageProxy;
+    const paint = await pdfPaintOperators(page, [
+      OPS.setFillRGBColor, OPS.constructPath,
+    ], [
+      ['#999999'],
+      [OPS.fill, [new Float32Array([
+        0, 10, 10, 1, 90, 10, 1, 90, 90, 1, 10, 90, 4,
+        0, 11, 11, 1, 89, 11, 1, 89, 89, 1, 11, 89, 4,
+      ])], [10, 10, 90, 90]],
+    ]);
+    expect(pdfHasFill(paint, {
+      left: 10, right: 90, top: 10, bottom: 90,
+    }, '#999999')).toBe(true);
+  });
 
   it('measures a stroked rule through transforms, clipping and state restore',
     async () => {
@@ -188,13 +379,13 @@ describe('PDF border paint', () => {
         [OPS.stroke, [new Float32Array([0, 40, 40, 1, 60, 40])],
           [40, 40, 60, 40]],
       ]);
-      expect(pdfHasFill(paint, {
+      expect(pdfHasRule(paint, {
         left: 10, right: 30, top: 79, bottom: 81,
       }, '#999999')).toBe(true);
-      expect(pdfHasFill(paint, {
+      expect(pdfHasRule(paint, {
         left: 40, right: 60, top: 59, bottom: 61,
       }, '#404040')).toBe(true);
-      expect(pdfHasFill(paint, {
+      expect(pdfHasRule(paint, {
         left: 10, right: 30, top: 77, bottom: 81,
       }, '#999999')).toBe(false);
     });

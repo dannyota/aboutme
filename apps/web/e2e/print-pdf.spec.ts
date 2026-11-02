@@ -51,7 +51,8 @@ const LONG_TEMPLATES = [
   'one-page-tight',
   'executive-band',
 ] as const;
-const PROBE_ROUTE = '/_harness/render?template=modern-sidebar&mode=continuous'
+const PROBE_ROUTE = '/_harness/render?template=modern-sidebar&paper=a4'
+  + '&mode=continuous'
   + '&fixture=print-probe-';
 
 test('PDF paint applies transforms, clips and graphics-state restoration',
@@ -332,7 +333,7 @@ for (const template of ['modern-sidebar', 'engineer-compact'] as const) {
           width: Math.round((210 - 2 * margin[0]!) * 96 / 25.4), height: 1123,
         });
         const url = `/_harness/render?fixture=print-probe-widgets-${mode}`
-          + `&mode=continuous&lng=${lng}&template=${template}`;
+          + `&mode=continuous&lng=${lng}&template=${template}&paper=a4`;
         expect((await page.goto(url))?.ok()).toBe(true);
         await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
         const layout = await measurePdfLayout(page, margins);

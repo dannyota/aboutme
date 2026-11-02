@@ -297,26 +297,56 @@ type PrintScheme = 'light' | 'dark';
 type MembershipSuffix = `${PrintLanguage}-${PrintPaper}-${PrintScheme}`;
 type MembershipKey = `${PrintCase['fixture']}-${MembershipSuffix}`;
 
-const EXPECTED_MEMBERSHIP: Partial<
-  Record<MembershipKey, PdfMembership | undefined>
-> = {
-  // approved after review
-  'print-main-overflow-en-a4-light': undefined,
-  'print-main-overflow-en-a4-dark': undefined,
-  'print-main-overflow-en-letter-light': undefined,
-  'print-main-overflow-en-letter-dark': undefined,
-  'print-main-overflow-vi-a4-light': undefined,
-  'print-main-overflow-vi-a4-dark': undefined,
-  'print-main-overflow-vi-letter-light': undefined,
-  'print-main-overflow-vi-letter-dark': undefined,
-  'print-sidebar-overflow-en-a4-light': undefined,
-  'print-sidebar-overflow-en-a4-dark': undefined,
-  'print-sidebar-overflow-en-letter-light': undefined,
-  'print-sidebar-overflow-en-letter-dark': undefined,
-  'print-sidebar-overflow-vi-a4-light': undefined,
-  'print-sidebar-overflow-vi-a4-dark': undefined,
-  'print-sidebar-overflow-vi-letter-light': undefined,
-  'print-sidebar-overflow-vi-letter-dark': undefined,
+const MAIN_MEMBERSHIP: PdfMembership = { pageCount: 2, pages: [
+  { main: { first: 'MAIN-ENTRY-01', last: 'MAIN-ENTRY-07' },
+    sidebar: { first: null, last: null },
+    start: true, end: false, opposite: true },
+  { main: { first: 'MAIN-ENTRY-08', last: 'MAIN-ENTRY-09' },
+    sidebar: { first: null, last: null },
+    start: false, end: true, opposite: false },
+] };
+const MAIN_LETTER_VI_MEMBERSHIP: PdfMembership = { pageCount: 2, pages: [
+  { main: { first: 'MAIN-ENTRY-01', last: 'MAIN-ENTRY-06' },
+    sidebar: { first: null, last: null },
+    start: true, end: false, opposite: true },
+  { main: { first: 'MAIN-ENTRY-07', last: 'MAIN-ENTRY-09' },
+    sidebar: { first: null, last: null },
+    start: false, end: true, opposite: false },
+] };
+const SIDEBAR_MEMBERSHIP: PdfMembership = { pageCount: 2, pages: [
+  { main: { first: null, last: null },
+    sidebar: { first: 'SIDEBAR-ENTRY-01', last: 'SIDEBAR-ENTRY-11' },
+    start: true, end: false, opposite: true },
+  { main: { first: null, last: null },
+    sidebar: { first: 'SIDEBAR-ENTRY-12', last: 'SIDEBAR-ENTRY-13' },
+    start: false, end: true, opposite: false },
+] };
+const SIDEBAR_LETTER_VI_MEMBERSHIP: PdfMembership = { pageCount: 2, pages: [
+  { main: { first: null, last: null },
+    sidebar: { first: 'SIDEBAR-ENTRY-01', last: 'SIDEBAR-ENTRY-10' },
+    start: true, end: false, opposite: true },
+  { main: { first: null, last: null },
+    sidebar: { first: 'SIDEBAR-ENTRY-11', last: 'SIDEBAR-ENTRY-13' },
+    start: false, end: true, opposite: false },
+] };
+
+const EXPECTED_MEMBERSHIP: Record<MembershipKey, PdfMembership> = {
+  'print-main-overflow-en-a4-light': MAIN_MEMBERSHIP,
+  'print-main-overflow-en-a4-dark': MAIN_MEMBERSHIP,
+  'print-main-overflow-en-letter-light': MAIN_MEMBERSHIP,
+  'print-main-overflow-en-letter-dark': MAIN_MEMBERSHIP,
+  'print-main-overflow-vi-a4-light': MAIN_MEMBERSHIP,
+  'print-main-overflow-vi-a4-dark': MAIN_MEMBERSHIP,
+  'print-main-overflow-vi-letter-light': MAIN_LETTER_VI_MEMBERSHIP,
+  'print-main-overflow-vi-letter-dark': MAIN_LETTER_VI_MEMBERSHIP,
+  'print-sidebar-overflow-en-a4-light': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-en-a4-dark': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-en-letter-light': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-en-letter-dark': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-vi-a4-light': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-vi-a4-dark': SIDEBAR_MEMBERSHIP,
+  'print-sidebar-overflow-vi-letter-light': SIDEBAR_LETTER_VI_MEMBERSHIP,
+  'print-sidebar-overflow-vi-letter-dark': SIDEBAR_LETTER_VI_MEMBERSHIP,
 };
 
 export async function attachMembership(
@@ -336,7 +366,7 @@ export async function attachMembership(
 export function checkMembership(
   membership: PdfMembership,
   key: MembershipKey,
-  approvals: typeof EXPECTED_MEMBERSHIP = EXPECTED_MEMBERSHIP,
+  approvals: Partial<typeof EXPECTED_MEMBERSHIP> = EXPECTED_MEMBERSHIP,
 ): void {
   const expected = approvals[key];
   if (expected === undefined) {
@@ -345,7 +375,7 @@ export function checkMembership(
       + JSON.stringify(membership),
     );
   }
-  expect(membership).toEqual(expected);
+  expect(membership).toStrictEqual(expected);
 }
 
 export function expectedEntryIds(printCase: PrintCase): string[] {
