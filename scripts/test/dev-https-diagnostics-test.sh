@@ -119,4 +119,110 @@ BREAK_DIAGNOSTICS=1 DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" FIXTURE=$work 
   BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
   bash "$work/dev-https.sh" up >"$work/output" 2>&1 || fail 'diagnostic write failure changed exit 0'
 ! grep -Fq 'startup failure status=' "$work/output" || fail 'write failure reported a successful startup as failed'
+
+# Guard rejection must survive fixture cleanup without exposing its output.
+cat >"$work/dev-https.sh" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+source "$SESSION_LIBRARY"
+cmd_status() { validate_service_listeners; }
+validate_service_listeners() {
+  printf 'synthetic-private-value\n' >&2
+  [ "${FAIL_ADMISSION:-}" != exit ] || exit 7
+  return 7
+}
+cmd_guard -- bash -c 'touch "$FIXTURE/unexpected-command"'
+EOF
+SESSION_LIBRARY=$root/scripts/lib/dev-https-session.sh FIXTURE=$work \
+  DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
+  BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
+  bash "$work/dev-https.sh" guard >"$work/guard-output" 2>&1 &
+guard_pid=$!
+source "$root/scripts/dev-https-test-diagnostics.sh"
+status=0
+DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR=$work/admission-artifacts \
+  dev_https_test_wait_for_admission "$work" "$guard_pid" >"$work/admission-output" 2>&1 || status=$?
+[ "$status" = 1 ] || fail 'early guard rejection was not distinguished from startup'
+grep -Fq 'state=rejected guard_status=1' "$work/admission-output" || fail 'guard exit status was lost'
+grep -Eq '^check=validate_service_listeners status=7 elapsed=[0-9]+s$' "$work/diagnostics/admission.$guard_pid.log" ||
+  fail 'explicit return status was not captured'
+grep -Fq 'check=validate_service_listeners status=7' "$work/admission-output" || fail 'rejecting check was lost'
+[ ! -e "$work/unexpected-command" ] || fail 'rejected guard launched its command'
+! grep -Fq 'synthetic-private-value' "$work/admission-output" || fail 'admission exposed guard output'
+rm "$work/diagnostics/admission.$guard_pid.log"
+grep -Fq 'check=validate_service_listeners status=7' "$work/admission-artifacts/admission.$guard_pid.rejected.txt" ||
+  fail 'cleanup lost sanitized admission evidence'
+! grep -Fq 'synthetic-private-value' "$work/admission-artifacts/admission.$guard_pid.rejected.txt" ||
+  fail 'artifact exposed guard output'
+
+# Fatal validators do not return through the RETURN trap.
+FAIL_ADMISSION=exit SESSION_LIBRARY=$root/scripts/lib/dev-https-session.sh FIXTURE=$work \
+  DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
+  BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
+  bash "$work/dev-https.sh" guard >"$work/guard-output" 2>&1 &
+guard_pid=$!
+status=0
+dev_https_test_wait_for_admission "$work" "$guard_pid" >"$work/admission-output" 2>&1 || status=$?
+[ "$status" = 1 ] || fail 'fatal admission check was not rejected'
+grep -Fq 'state=rejected guard_status=7' "$work/admission-output" || fail 'fatal guard exit status was lost'
+grep -Fq 'check=validate_service_listeners status=7' "$work/admission-output" || fail 'fatal rejecting check was lost'
+
+# Explicit success overrides a failed command; implicit failure keeps its status.
+cat >"$work/dev-https.sh" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+validate_service_listeners() {
+  case $RETURN_STYLE in
+  explicit) false || return 0 ;;
+  implicit) bash -c 'exit 9' ;;
+  esac
+}
+validate_service_listeners || exit "$?"
+EOF
+for result in explicit:0 implicit:9; do
+  status=0
+  RETURN_STYLE=${result%:*} DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
+    BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
+    bash "$work/dev-https.sh" guard >"$work/guard-output" 2>&1 &
+  guard_pid=$!
+  wait "$guard_pid" || status=$?
+  [ "$status" = "${result#*:}" ] || fail 'admission tracing changed the check status'
+  grep -Eq "^check=validate_service_listeners status=${result#*:} elapsed=[0-9]+s$" \
+    "$work/diagnostics/admission.$guard_pid.log" || fail "admission lost ${result%:*} return status"
+done
+
+# Advance an injected clock past ten seconds while admission makes progress.
+(
+  SECONDS=0
+  sleep() {
+    SECONDS=$((SECONDS + 1))
+    printf 'check=session_health status=0 elapsed=%ss\n' "$SECONDS" >"$work/diagnostics/admission.$$.log"
+    [ "$SECONDS" -lt 11 ] || touch "$work/proof-started"
+  }
+  dev_https_test_wait_for_admission "$work" "$$" >"$work/admission-output" 2>&1 || fail 'progressing admission was rejected'
+  grep -Fq 'state=admitted guard_status=running' "$work/admission-output" || fail 'command handshake was lost'
+)
+rm "$work/proof-started"
+(
+  SECONDS=0
+  sleep() { SECONDS=$((SECONDS + 1)); }
+  status=0
+  dev_https_test_wait_for_admission "$work" "$$" >"$work/admission-output" 2>&1 || status=$?
+  [ "$status" = 2 ] || fail 'stalled admission was not distinguished from rejection'
+  grep -Fq 'state=still-starting guard_status=running' "$work/admission-output" || fail 'startup state was lost'
+  [ "$SECONDS" -le 11 ] || fail 'stalled admission exceeded its progress deadline'
+)
+(
+  SECONDS=0
+  sleep() {
+    SECONDS=$((SECONDS + 1))
+    printf 'check=session_health status=0 elapsed=%ss\n' "$SECONDS" >"$work/diagnostics/admission.$$.log"
+  }
+  status=0
+  dev_https_test_wait_for_admission "$work" "$$" >"$work/admission-output" 2>&1 || status=$?
+  [ "$status" = 2 ] && [ "$SECONDS" -le 61 ] || fail 'progressing admission exceeded its total deadline'
+)
+printf 'synthetic-private-value /outside-fixture\n' >>"$work/diagnostics/admission.$$.log"
+dev_https_test_admission_report "$work" "$$" still-starting running 60 >"$work/admission-output" 2>&1
+! grep -Eq 'synthetic-private-value|/outside-fixture' "$work/admission-output" || fail 'admission evidence accepted unsafe fields'
 printf 'dev-https diagnostics tests: PASS\n'

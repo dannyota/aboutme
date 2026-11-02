@@ -2,6 +2,100 @@
 # BASH_ENV instrumentation for hermetic startup fixtures. Record locations,
 # never commands or environments, because startup commands handle secrets.
 
+# These helpers also serve the parent fixture, which owns and joins the guard.
+dev_https_test_admission_report() {
+  local fixture=$1 pid=$2 state=$3 status=$4 elapsed=$5 report
+  case $state in admitted | rejected | still-starting | exited) ;; *) return 1 ;; esac
+  [[ $pid =~ ^[1-9][0-9]*$ && $elapsed =~ ^[0-9]+$ ]] || return 1
+  [[ $status = running || $status =~ ^[0-9]+$ ]] || return 1
+  report=$fixture/diagnostics/admission-report.$pid.txt
+  {
+    printf 'dev-https-test: admission state=%s guard_status=%s elapsed=%ss\n' "$state" "$status" "$elapsed"
+    if [ -f "$fixture/diagnostics/admission.$pid.log" ]; then
+      # Accept only closed check names and numeric fields, even in a fixture.
+      awk '
+        /^check=(cmd_status|load_source_digests|validate_state_path_integrity|session_health|session_ready|service_pid|validate_session_record|validate_session_anchor|validate_service_listeners|platform_process_snapshot|platform_listener_pids|probe_https|generate_caddyfile|validate_effective_config) status=[0-9]+ elapsed=[0-9]+s$/ {
+          if ($2 != "status=0" && !seen[$0]++) print
+          last=$0
+        }
+        END { if (last ~ / status=0 /) print last }
+      ' "$fixture/diagnostics/admission.$pid.log"
+    fi
+  } >"$report"
+  cat -- "$report" >&2
+  if [ -n "${DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR:-}" ]; then
+    mkdir -p -- "$DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR" || return 0
+    cp -- "$report" "$DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR/admission.$pid.$state.txt" || true
+  fi
+}
+
+dev_https_test_wait_for_admission() {
+  local fixture=$1 pid=$2 start=$SECONDS progress='' previous='' status=0
+  local idle_deadline=$((SECONDS + 10)) deadline=$((SECONDS + 60))
+  # Status performs several ownership passes and TLS/manifest validation.
+  # Bound both a check that stops reporting progress and the whole admission.
+  while :; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" || status=$?
+      dev_https_test_admission_report "$fixture" "$pid" rejected "$status" "$((SECONDS - start))"
+      return 1
+    fi
+    if [ -e "$fixture/proof-started" ]; then
+      dev_https_test_admission_report "$fixture" "$pid" admitted running "$((SECONDS - start))"
+      return 0
+    fi
+    if [ -f "$fixture/diagnostics/admission.$pid.log" ]; then
+      progress=$(tail -n 1 -- "$fixture/diagnostics/admission.$pid.log")
+    fi
+    if [ -n "$progress" ] && [ "$progress" != "$previous" ]; then
+      idle_deadline=$((SECONDS + 10))
+      previous=$progress
+    fi
+    if [ "$SECONDS" -ge "$idle_deadline" ] || [ "$SECONDS" -ge "$deadline" ]; then
+      dev_https_test_admission_report "$fixture" "$pid" still-starting running "$((SECONDS - start))"
+      return 2
+    fi
+    sleep 0.1
+  done
+}
+
+if [[ ${0##*/} = dev-https.sh && ${1-} = guard && -d ${DEV_HTTPS_DIAGNOSTICS_DIR:-} ]]; then
+  DEV_HTTPS_ADMISSION_START=$SECONDS
+  DEV_HTTPS_ADMISSION_DONE=0
+  dev_https_test_admission_trace() {
+    local status=$1 check=$2
+    [ "$DEV_HTTPS_ADMISSION_DONE" = 0 ] || return 0
+    # RETURN sees the previous command's status before an explicit return.
+    # Decode only literal numeric arguments; never evaluate command text.
+    if [[ ${3:-} =~ ^return[[:space:]]+([0-9]{1,3})$ ]]; then
+      status=$((10#${BASH_REMATCH[1]} % 256))
+    fi
+    case $check in
+    cmd_status | load_source_digests | validate_state_path_integrity | session_health | session_ready | service_pid | validate_session_record | validate_session_anchor | validate_service_listeners | platform_process_snapshot | platform_listener_pids | probe_https | generate_caddyfile | validate_effective_config)
+      printf 'check=%s status=%s elapsed=%ss\n' "$check" "$status" "$((SECONDS - DEV_HTTPS_ADMISSION_START))" \
+        >>"$DEV_HTTPS_DIAGNOSTICS_DIR/admission.$$.log" || true
+      ;;
+    esac
+    [ "$check" != cmd_status ] || DEV_HTTPS_ADMISSION_DONE=1
+    return 0
+  }
+  set -T
+  trap 'dev_https_test_admission_trace "$?" "${FUNCNAME[0]:-main}" "$BASH_COMMAND"' RETURN
+  dev_https_test_admission_exit() {
+    local status=$1 check
+    shift
+    if [ "$status" != 0 ] && [ "$DEV_HTTPS_ADMISSION_DONE" = 0 ]; then
+      for check in "$@"; do dev_https_test_admission_trace "$status" "$check"; done
+    fi
+    printf 'guard_status=%s elapsed=%ss\n' "$status" "$((SECONDS - DEV_HTTPS_ADMISSION_START))" \
+      >>"$DEV_HTTPS_DIAGNOSTICS_DIR/admission.$$.log" || true
+  }
+  # The parent obtains the exit status with wait; this fixed line also survives
+  # a later fixture failure without forwarding guard stdout or stderr.
+  trap 'dev_https_test_admission_exit "$?" "${FUNCNAME[@]:-}"' EXIT
+  return 0
+fi
+
 if [[ ${0##*/} != dev-https.sh || ${1-} != up || ! -d ${DEV_HTTPS_DIAGNOSTICS_DIR:-} ]]; then
   return 0
 fi

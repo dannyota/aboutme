@@ -9,6 +9,8 @@ readonly SOURCE_ROOT=$(pwd -P)
 readonly SOURCE_SCRIPT=$SOURCE_ROOT/scripts/dev-https.sh
 readonly SOURCE_LIB_DIR=$SOURCE_ROOT/scripts/lib
 source "$SOURCE_LIB_DIR/platform.sh"
+# shellcheck source=scripts/dev-https-test-diagnostics.sh
+source "$SOURCE_ROOT/scripts/dev-https-test-diagnostics.sh"
 readonly FIXTURE_PATH=$PATH
 readonly FIXTURE_BASH=$(command -v bash)
 
@@ -33,10 +35,14 @@ assert_log_line() {
 }
 
 cleanup_fixture() {
-  local fixture=$1 pid pgid
+  local fixture=$1 pid pgid status=0
   if [ -n "${guard_pid:-}" ]; then
     kill -TERM "$guard_pid" 2>/dev/null || true
-    wait "$guard_pid" 2>/dev/null || true
+    wait "$guard_pid" 2>/dev/null || status=$?
+    if [ -f "$fixture/diagnostics/admission-report.$guard_pid.txt" ]; then
+      dev_https_test_admission_report "$fixture" "$guard_pid" exited "$status" "$((SECONDS - ${admission_start:-SECONDS}))"
+    fi
+    guard_pid=
   fi
   if [ -s "$fixture/repo/.dev/native-https/run/session" ]; then
     pid=$(sed -n 's/^pgid=//p' "$fixture/repo/.dev/native-https/run/session")
@@ -1058,7 +1064,7 @@ run_totp_enrollment_flag_check() (
 )
 
 run_missing_tool_check() (
-  local fixture output
+  local fixture output tool
   fixture=$(new_fixture)
   trap 'cleanup_fixture "$fixture"' EXIT
   fixture_env "$fixture"
@@ -1069,6 +1075,20 @@ run_missing_tool_check() (
   fi
   assert_contains "$output" 'caddy is not on PATH'
   [ ! -s "$FAKE_MUTATIONS" ] || fail "missing-tool rejection performed a mutation"
+
+  write_fake_tools "$fixture"
+  for tool in bash dirname make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head python3 uname realpath date; do
+    [ -e "$fixture/fakebin/$tool" ] || ln -s "$(command -v "$tool")" "$fixture/fakebin/$tool"
+  done
+  rm "$fixture/fakebin/ss" "$fixture/fakebin/uname"
+  printf '#!/bin/sh\nprintf "Linux\\n"\n' >"$fixture/fakebin/uname"
+  chmod 0700 "$fixture/fakebin/uname"
+  if output=$(PATH="$fixture/fakebin" "$FIXTURE_BASH" scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted Linux without ss'
+  fi
+  assert_contains "$output" 'ss is not on PATH'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'missing ss performed a stack mutation'
+  [ ! -e .dev ] || fail 'missing ss created stack state'
 )
 
 run_browser_staging_checks() (
@@ -1152,7 +1172,7 @@ run_browser_staging_checks() (
 
 # All five service exits must remain failures even when probes return success.
 run_session_monitor_checks() (
-  local fixture service pid output guard_pid
+  local fixture service pid output guard_pid status admission_start
   for service in mock-oauth mail-capture server web caddy; do
     fixture=$(new_fixture)
     trap 'cleanup_fixture "$fixture"' EXIT
@@ -1161,10 +1181,13 @@ run_session_monitor_checks() (
     bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "monitor setup: $(cat "$fixture/up")"
     pid=$(<".dev/native-https/run/$service.pid")
     # A running proof must abort while its command is still sleeping.
+    admission_start=$SECONDS
     bash scripts/dev-https.sh guard -- bash -c 'echo started >"$1"; sleep 120; echo unsafe >"$2"' proof "$fixture/proof-started" "$fixture/proof-completed" >"$fixture/guard" 2>&1 &
     guard_pid=$!
-    for _ in $(seq 1 100); do [ -e "$fixture/proof-started" ] && break; sleep 0.1; done
-    [ -e "$fixture/proof-started" ] || fail 'guard did not admit healthy proof'
+    status=0
+    dev_https_test_wait_for_admission "$fixture" "$guard_pid" || status=$?
+    [ "$status" != 1 ] || fail 'guard rejected proof admission'
+    [ "$status" = 0 ] || fail 'guard is still starting at the admission deadline'
     kill -TERM "$pid"
     for _ in $(seq 1 60); do
       [ -s .dev/native-https/run/session.failed ] && break
@@ -1173,7 +1196,10 @@ run_session_monitor_checks() (
     [ -s .dev/native-https/run/session.failed ] || fail "$service exit was not latched"
     for _ in $(seq 1 100); do ! kill -0 "$guard_pid" 2>/dev/null && break; sleep 0.1; done
     ! kill -0 "$guard_pid" 2>/dev/null || fail 'proof did not abort after service exit'
-    if wait "$guard_pid"; then fail 'aborted proof passed'; fi
+    status=0
+    wait "$guard_pid" || status=$?
+    dev_https_test_admission_report "$fixture" "$guard_pid" exited "$status" "$((SECONDS - admission_start))"
+    [ "$status" != 0 ] || fail 'aborted proof passed'
     guard_pid=
     [ ! -e "$fixture/proof-completed" ] || fail 'unhealthy proof reached completion'
     if output=$(bash scripts/dev-https.sh status 2>&1); then fail "$service exit admitted status"; fi
@@ -1709,6 +1735,7 @@ main() {
   secret-mode) run_secret_mode_check; return ;;
   passkey-flag) run_passkey_enrollment_flag_check; return ;;
   totp-flag) run_totp_enrollment_flag_check; return ;;
+  missing-tool) run_missing_tool_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
