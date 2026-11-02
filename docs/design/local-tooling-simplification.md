@@ -64,10 +64,10 @@ shorter listener substitutions. Partial startup uses the same cleanup.
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `platform_process_snapshot` | Normalize wide `ps` to PID, PPID, PGID, UID and command; Python `os.getsid(pid)` supplies numeric sessions on both OSes. Disappearance fails inspection.                          |
 | `platform_group_members`    | BSD `ps -g PGID` may select a group; GNU uses a full snapshot filtered by numeric PGID. Cross-check membership.                                                                   |
-| `platform_listener_pids`    | macOS uses `lsof -nP -iTCP:PORT -sTCP:LISTEN -Fpn`; Linux may use it or parsed `ss -ltnp`. Check every IPv4/IPv6 listener/PID. Ownerless `netstat` evidence cannot admit a stack. |
+| `platform_listener_pids`    | Darwin requires `lsof -nP -iTCP:PORT -sTCP:LISTEN -Fpn`; Linux requires parsed `ss -ltnp`. Check every IPv4/IPv6 listener/PID. Ownerless `netstat` evidence cannot admit a stack. |
 | `platform_signal_group`     | Validate the anchor before TERM/KILL; signal with Bash `kill -TERM -- -PGID` or `kill -KILL -- -PGID`. Reject zero, one, negative input and caller's own group.                   |
 
-Preflight selects platform tools, not mandatory Linux `ss`/`setsid`. Missing
+Linux requires `ss`, Darwin `lsof`; `setsid` has a portable fallback. Missing
 tools, hidden owners, malformed/truncated output or parse errors fail closed.
 Anchor validation requires PID=PGID, current UID and the entire expected
 supervisor command, canonical path and final token. Parse numeric columns only;
