@@ -18,6 +18,7 @@
 #
 # Environment: DEPLOY_HOST (the host address, required).
 set -euo pipefail
+set +xv
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=ssh-lib.sh
@@ -58,7 +59,10 @@ case "${1-}:$#" in
     [[ $# == 2 || $3 == --replace ]] || usage
     [[ ! -t 0 ]] || say "reading $2 from the terminal; end with Ctrl-D (the value is not echoed by this script)"
     on_host import "$2" ${3:+"$3"}
-    on_host podman-sync </dev/null
+    case $2 in
+      telegram-bot-token | telegram-chat-id) ;;
+      *) on_host podman-sync </dev/null ;;
+    esac
     ;;
   import-s3:2 | import-s3:3)
     [[ $2 == media || $2 == backups ]] || usage

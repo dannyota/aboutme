@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mails one alert to the support mailbox through Bizfly SMTP with msmtp
+# Routes confirmed Telegram alerts, otherwise mails through Bizfly with msmtp
 # (docs/design/vietnam-production.md, "Logs, metrics, and alarms"). Runs as
 # root, from aboutme-alert@.service (every unit's OnFailure=) and watch.sh.
 #
@@ -11,6 +11,7 @@
 # the support mailbox, so it carries unit names, counts, and percentages only,
 # never log lines or personal data.
 set -euo pipefail
+set +xv
 
 if [[ -n ${ABOUTME_ALERT_TEST_ROOT:-} ]]; then
   ((EUID != 0)) || {
@@ -20,10 +21,21 @@ if [[ -n ${ABOUTME_ALERT_TEST_ROOT:-} ]]; then
   secrets=$ABOUTME_ALERT_TEST_ROOT/secrets
   stamps=$ABOUTME_ALERT_TEST_ROOT/alerts
   smtp_env=$ABOUTME_ALERT_TEST_ROOT/smtp.env
+  transport_file=$ABOUTME_ALERT_TEST_ROOT/alert-transport
 else
   secrets=/etc/aboutme/secrets
   stamps=/var/lib/aboutme/alerts
   smtp_env=/etc/aboutme/smtp.env
+  transport_file=/etc/aboutme/alert-transport
+fi
+
+# Direct retention and vacuum callers share the same explicit cutover as the
+# watcher and systemd unit. Delivery failure never selects another transport.
+if [[ -e $transport_file || -L $transport_file ]]; then
+  [[ -f $transport_file && ! -L $transport_file &&
+    $(stat -c '%u:%a' "$transport_file") == "$EUID:600" &&
+    $(<"$transport_file") == telegram ]] || exit 1
+  exec "$(dirname "${BASH_SOURCE[0]}")/alert-telegram.sh" "$@"
 fi
 
 die() {

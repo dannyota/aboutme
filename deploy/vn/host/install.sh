@@ -167,10 +167,17 @@ copy_tree() {
 # 1. Keys and apt repositories.
 install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
-# age encrypts the secrets copy; msmtp sends alert.sh's mail; catatonit is
+# age encrypts the secrets copy; msmtp sends staged SMTP alerts; catatonit is
 # the init process for units run with --init. All come from
 # the Ubuntu archive.
-apt-get install -y -qq ca-certificates curl gnupg age msmtp python3-yaml catatonit openssl >/dev/null
+alert_packages=(msmtp)
+if [[ -e /etc/aboutme/alert-transport || -L /etc/aboutme/alert-transport ]]; then
+  [[ -f /etc/aboutme/alert-transport && ! -L /etc/aboutme/alert-transport &&
+    $(stat -c '%u:%a' /etc/aboutme/alert-transport) == 0:600 &&
+    $(</etc/aboutme/alert-transport) == telegram ]] || die "unsafe alert transport"
+  alert_packages=()
+fi
+apt-get install -y -qq ca-certificates curl gnupg age "${alert_packages[@]}" python3-yaml catatonit openssl >/dev/null
 
 install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
@@ -353,6 +360,8 @@ copy_script "$bundle/scripts/fence.sh"
 copy_script "$bundle/scripts/deploy-host.sh"
 copy_script "$bundle/scripts/deploy-safety.sh"
 copy_script "$bundle/scripts/secrets-host.sh"
+copy_script "$bundle/host/telegram-state.sh"
+copy_script "$bundle/host/alert-transport.sh"
 copy_script "$bundle/host/crowdsec-offline.sh"
 copy_script "$bundle/host/crowdsec-retention.sh"
 copy_script "$bundle/host/crowdsec-retention-fail.sh"
