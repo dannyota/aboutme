@@ -151,6 +151,12 @@ test('guide flow detects overlapping sections', async ({ page }) => {
     content: '[data-testid="guide-can-cannot"] '
       + '{ margin-top: -36px !important; }',
   });
+  const debugBoxes = await sections.evaluateAll((elements) => elements.map(
+    (el) => {
+      const box = el.getBoundingClientRect();
+      return [el.tagName, el.getAttribute('data-testid'), box.top, box.bottom];
+    }));
+  console.log('GUIDE-DEBUG', JSON.stringify(debugBoxes));
   await expect(assertFlow()).rejects.toThrow();
   await mutation.evaluate((element) => element.remove());
   await assertFlow();

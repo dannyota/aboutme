@@ -426,6 +426,10 @@ async function expectCardDisplay(
         gradient: getComputedStyle(el).backgroundImage === gradient,
         dots: decoration.backgroundImage === dots,
         mask: decoration.maskImage === mask,
+        actualMask: decoration.maskImage.slice(0, 300),
+        expectedMask: mask.slice(0, 300),
+        webkitMask: decoration.getPropertyValue('-webkit-mask-image')
+          .slice(0, 300),
         size: decoration.backgroundSize,
         position: decoration.backgroundPosition,
         content: decoration.content,
