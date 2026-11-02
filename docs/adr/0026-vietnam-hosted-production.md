@@ -109,6 +109,49 @@ no data protection impact assessment (DPIA) or cross-border dossier
   writes would be a new transfer abroad, so recovery after that is forward only.
 - No AWS test environment remains deployed.
 
+## Amendment: Host alerts through Telegram (2026-11-02)
+
+Status: Proposed. Requires owner acceptance; host SMTP remains in force until
+cutover. This does not amend application authentication mail.
+
+Replace the host timer and unit-failure mail sender with one Bot API HTTPS
+`sendMessage` request per alert, using existing curl and jq. Preserve metadata
+limits and per-key daily suppression. Choose Telegram only, with no automatic
+SMTP fallback: one transport is simpler, but blocking or provider failure can
+lose host notifications. vMonitor checks remain external; their Telegram
+notifications share that delivery risk. The slower GitHub uptime backstop stays.
+
+This proposes an explicit exception to the Vietnam-only consequence above for
+the owner's Telegram chat ID (personal data), host source IP, and operational
+alert metadata sent to Telegram. It permits no resume, account, or raw log data.
+Telegram location/retention and the owner's required transfer obligations remain
+unverified; this amendment makes no legal compliance claim. The owner must
+accept that boundary before activation.
+
+The
+[host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts)
+owns transport, custody, authorization, limits, failures, and verification.
+Permitted token storage is the ignored local `.env` key `TELEGRAM_BOT`, the host
+secret, and any age-encrypted backup copy. The chat ID may reside in its host
+secret and encrypted backup. Imports use pipes only; no plaintext staging.
+Telegram receives the token in the HTTPS request URL for authentication,
+separately from the bounded alert content. Neither token nor chat ID belongs in
+alert text. The owner can revoke the token. The benefit is one alert destination
+without a new service or dependency. SMTP fallback offers delivery diversity at
+the cost of a second maintained transport; keeping SMTP alone would avoid this
+new provider but not meet the requested move. No app contract or stored-data
+migration is required. Cutover needs an actual receipt proof; rollback restores
+the reviewed mail sender and verifies receipt without reverting unrelated host
+safety changes.
+
+### Proposed amendment history
+
+2026-11-02: Proposed replacing host alert email and accepting the bounded
+Telegram transfer because the owner requested the same destination as vMonitor.
+Token custody names the approved local source, host secrets, and encrypted
+backups; authentication transfer is distinct from alert content. Acceptance and
+production cutover are not recorded.
+
 ## Amendment: Anonymous-approval pull deployment (2026-11-01)
 
 Status: Accepted with conditions (2026-11-01), by the owner after the

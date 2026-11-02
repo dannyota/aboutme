@@ -3,9 +3,8 @@
 Production serves `https://aboutme.vn` on one GreenNode host in Vietnam under
 [ADR 0026](../adr/0026-vietnam-hosted-production.md). The
 [Vietnam production design](../design/vietnam-production.md) owns the topology.
-Cutover completed on 2026-10-11 with release v0.7.3. The AWS production stack
-and its state bootstrap were destroyed that day. Nothing from `deploy/aws/` is
-deployed; the code remains for a possible AWS ECS or Kubernetes path.
+Cutover completed on 2026-10-11 with v0.7.3. Nothing from `deploy/aws/` is
+deployed.
 
 ## Access and state
 
@@ -273,11 +272,10 @@ each send increments the synthetic usage counter's Telegram count.
 | -------------------- | --------- | -------------------------------- |
 | Synthetic Test Basic | 10 checks | 2026-12-01T06:54:54Z             |
 
-The approved [renewal design](../design/vmonitor-quota-renewal.md) starts with
-manual dispatch before enabling scheduled Synthetic renewal. Implementation is
-pending. Until rollout completes, renew each month in the last seven days; the
-next window is 2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z. Follow the design's
-hold procedure before manual renewal once the workflow exists:
+The [renewal workflow](../design/vmonitor-quota-renewal.md) supports dispatch;
+due-renewal proof and scheduling remain pending. Renew each month in the last
+seven days; the next window is 2026-11-24T06:54:54Z to 2026-12-01T06:54:54Z.
+Follow the design's existing hold procedure before any manual renewal:
 
 1. Open the vMonitor console, then **Quota & Usage**.
 2. Select **Synthetic test** and renew the free Basic quota. The pinned
@@ -340,6 +338,57 @@ Coraza counts rule-match records, not distinct requests. Its metadata lives in
 maintenance logs. Summarize timestamps, levels, message kinds, and rule IDs;
 these records do not establish response status or successful access. Check the
 configured Coraza mode before interpreting a match as a blocked request.
+
+### Host Telegram setup and rotation draft
+
+Proposed only. Use after owner acceptance and reviewed implementation of the
+[host alert contract](../design/vietnam-production.md#proposed-host-telegram-alerts).
+Commands require the proposed helper support.
+
+1. Reuse the bot whose token is `TELEGRAM_BOT` in the ignored local `.env`. Do
+   not create a bot. The owner adds it to the existing vMonitor `aboutme-alerts`
+   supergroup with send permission before any test. vMonitor uses VNG's own bot;
+   leave that bot and its notification configuration intact.
+2. Install reviewed secret-helper support with SMTP still active. On the trusted
+   owner machine, parse only the literal `TELEGRAM_BOT` value without sourcing
+   `.env`; pipe it without a newline directly into
+   `bash deploy/vn/scripts/secrets.sh import telegram-bot-token` stdin.
+3. Pipe `vngcloud monitor list-channels --output json` into a filter selecting
+   `.Items[]` with `Name == "aboutme-alerts"`. Require exactly one Telegram
+   channel and a valid numeric supergroup `.Address`; pipe that address without
+   a newline directly into
+   `bash deploy/vn/scripts/secrets.sh import telegram-chat-id` stdin. Fail
+   closed on missing, duplicate, malformed, or unexpected results.
+4. Use existing `DEPLOY_HOST`. Both pipelines must suppress value-bearing errors
+   and fail on any stage error. Never print, inspect, tee, or save values or raw
+   responses; no temporary input files, shell tracing, or terminal recording.
+   Check secret names and permissions only. Refresh the age-encrypted copy by
+   pipe, with no plaintext intermediate. Telegram secrets never enter Podman.
+5. Stage `/usr/local/lib/aboutme/alert-telegram.sh` beside SMTP `alert.sh`;
+   `watch.sh` and `aboutme-alert@.service` must still call SMTP `alert.sh`. Run
+   the staged sender with `--test` as the host administrator. Require exit 0 and
+   owner confirmation of the fixed message in the intended supergroup. Record
+   only UTC receipt time and success/failure, never values or screenshots.
+6. Only after that receipt, switch both automatic callers to `alert-telegram.sh`
+   and reload the systemd unit. Preserve daily stamps. Then remove host-alert
+   `ALERT_TO` and the msmtp requirement; keep application SMTP credentials and
+   settings. Failed staging or proof leaves SMTP active and cutover incomplete.
+   For rollback after switching, restore both SMTP caller paths and reviewed
+   mail configuration/package, reload systemd, and prove mail with a fresh
+   synthetic key. Preserve other host safety changes and stamps; do not restart
+   the app.
+
+For rotation, revoke the existing bot's token in BotFather and update only
+`TELEGRAM_BOT` in the ignored local `.env`. Repeat its pipe-only import with
+`--replace`, refresh the encrypted copy by pipe, and repeat the staged sender's
+`--test` with owner receipt. Coordinate other senders using this bot; sends may
+fail during rotation. No app restart is needed. To replace the destination,
+require owner approval of the vMonitor channel change, repeat the same channel
+lookup and pipe-only import with `--replace`, and prove membership and receipt.
+Never accept API-suggested destination changes. After restore, verify membership
+and current credentials without displaying values; revoke exposed tokens and
+repeat the same rotation path. Inspect only fixed journal outcomes and local
+DNS/HTTPS reachability. Origin HTTP success does not prove alert delivery.
 
 ## Vulnerability scans
 
