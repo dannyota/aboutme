@@ -210,7 +210,7 @@ function contains(fill: PdfFill, x: number, y: number): boolean {
 }
 
 export function pdfShapePaintMatches(
-  paint: PdfPaint, fill: PdfFill, surfaceColor: string,
+  paint: PdfPaint, fill: PdfFill, surfaceColor: string, inkColor: string,
   parts: readonly PdfFill[],
 ): boolean {
   const layers = paint.fills.filter((layer) =>
@@ -226,9 +226,9 @@ export function pdfShapePaintMatches(
     const py = top + (Math.min(area.bottom, fill.bottom) - top) * y;
     onPath ||= contains(fill, px, py);
     // Separate strokes of the same ink may form one icon.
-    const ink = parts.some((part) => part.color === fill.color
+    const ink = parts.some((part) => pdfColorMatches(part.color, inkColor)
       && contains(part, px, py));
-    const expected = channels(ink ? fill.color : surfaceColor);
+    const expected = channels(ink ? inkColor : surfaceColor);
     let visible = [255, 255, 255];
     for (const layer of layers) {
       if (!contains(layer, px, py)) continue;
@@ -241,18 +241,18 @@ export function pdfShapePaintMatches(
   }))) && onPath;
 }
 
-function hasPaint(
+export function pdfPaintMatch(
   paint: PdfPaint,
   box: PdfBox,
   expectedColor: string,
-  allowStroke: boolean,
+  allowStroke = false,
   exposed: PdfBox = box,
-): boolean {
+): PdfFill | undefined {
   const expected = channels(expectedColor);
   if (exposed.right <= exposed.left || exposed.bottom <= exposed.top
     || exposed.left < box.left || exposed.right > box.right
-    || exposed.top < box.top || exposed.bottom > box.bottom) return false;
-  return paint.fills.some((fill, index) => {
+    || exposed.top < box.top || exposed.bottom > box.bottom) return undefined;
+  return paint.fills.find((fill, index) => {
     const { path, stroke } = shapes.get(fill) ?? unsupported();
     return (allowStroke || !stroke) && fill.alpha >= 0.99
       && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
@@ -291,7 +291,7 @@ export function pdfHasFill(
   expectedColor: string,
   exposed?: PdfBox,
 ): boolean {
-  return hasPaint(paint, box, expectedColor, false, exposed);
+  return Boolean(pdfPaintMatch(paint, box, expectedColor, false, exposed));
 }
 
 export function pdfHasRule(
@@ -299,7 +299,7 @@ export function pdfHasRule(
   box: PdfBox,
   expectedColor: string,
 ): boolean {
-  return hasPaint(paint, box, expectedColor, true);
+  return Boolean(pdfPaintMatch(paint, box, expectedColor, true));
 }
 
 function imageSignature(

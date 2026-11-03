@@ -326,6 +326,30 @@ export async function measurePdfLayout(
       const element = root.querySelector(selector);
       return element ? box(element) : null;
     };
+    const icons = (container: Element) => Array.from(
+      container.querySelectorAll<SVGGraphicsElement>(
+        '.resume-icon path, .resume-icon circle, .resume-icon rect, '
+        + '.resume-icon line, .resume-icon polyline, .resume-icon polygon, '
+        + '.resume-icon ellipse',
+      ),
+    ).flatMap((element) => {
+      const css = getComputedStyle(element);
+      const matrix = element.getScreenCTM()!;
+      return [false, true].flatMap((stroke) => {
+        const resolved = stroke ? css.stroke : css.fill;
+        if (resolved === 'none') return [];
+        const channels = resolved.match(/[\d.]+/gu);
+        if (channels?.length !== 3) throw new Error('Unsupported icon ink.');
+        const color = '#' + channels.map((channel) => Number(channel)
+          .toString(16).padStart(2, '0')).join('');
+        const width = stroke ? parseFloat(css.strokeWidth) / 2 : 0;
+        const dx = width * Math.hypot(matrix.a, matrix.c) * 0.75;
+        const dy = width * Math.hypot(matrix.b, matrix.d) * 0.75;
+        const bounds = box(element);
+        return [{ left: bounds.left - dx, right: bounds.right + dx,
+          top: bounds.top - dy, bottom: bounds.bottom + dy, color, stroke }];
+      });
+    });
     const style = getComputedStyle(root);
     const chunks = [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -367,6 +391,7 @@ export async function measurePdfLayout(
       header: region('.resume-header'),
       sidebar: region('.resume-sidebar'),
       photo: region('.resume-photo'),
+      icons: icons(root),
       text: Array.from(root.querySelectorAll(
         '.resume-name, .resume-headline, .section-heading h2, '
         + '.entry-title, .entry-subtitle, .entry-meta, .entry-body p',
@@ -380,6 +405,7 @@ export async function measurePdfLayout(
               : element.className,
           text: element.textContent?.normalize('NFC').trim() ?? '',
           ...box(element),
+          icons: element.matches('h2') ? icons(element.parentElement!) : [],
           color: css.color,
           size: parseFloat(css.fontSize),
           weight: css.fontWeight,

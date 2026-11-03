@@ -27,11 +27,12 @@ import {
   pdfImageMatches,
   pdfImageDiagnostic,
   pdfColorMatches,
-  pdfHasRule,
+  pdfPaintMatch,
   pdfPaintPage,
   pdfTextStyleMatches,
   pdfTextStyleDiagnostic,
   type PdfBox,
+  type PdfFill,
 } from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
 import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
@@ -121,7 +122,7 @@ async function assertSampleStyle(
   expect(layout.background).toBe('rgb(255, 255, 255)');
   const target = sample.customization.layout.surfaceTarget ?? 'none';
   const accent = colors.accent ?? colors.primary;
-  const foreground: PdfBox[] = [];
+  const foreground: PdfFill[] = [];
   expect(layout.headerAlign).toBe(sample.customization.header?.align ?? 'left');
   for (const gap of layout.entryGaps) {
     expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
@@ -140,8 +141,10 @@ async function assertSampleStyle(
       const color = mixedColor(accent, surface, 0.6);
       expect(decoration.ruleStyle).toBe('solid');
       expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
-      expect(pdfHasRule(display.paint, decoration.ruleBox, color)).toBe(true);
-      foreground.push(decoration.ruleBox);
+      const fill = pdfPaintMatch(display.paint, decoration.ruleBox,
+        color, true);
+      expect(fill).toBeDefined();
+      foreground.push(fill!);
     }
   }
   let transform = 'none';
@@ -258,9 +261,25 @@ async function assertSampleStyle(
           fontSize: base * 0.9,
         }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
       if (entry.level !== undefined && mode !== 'text') {
-        foreground.push(...(mode === 'dots'
-          ? widget!.dots
-          : [widget!.widget!]));
+        const match = (box: PdfBox, color: string, exposed?: PdfBox) => {
+          const fill = pdfPaintMatch(display.paint, box, color,
+            false, exposed);
+          expect(fill).toBeDefined();
+          foreground.push(fill!);
+        };
+        if (mode === 'dots') {
+          widget!.dots.forEach((dot, index) => match(dot,
+            index < entry.level! ? accent : mixedColor(accent, surface, 0.8)));
+        } else if (mode === 'bar') {
+          const track = widget!.track!;
+          const fill = { ...track,
+            right: track.left + (track.right - track.left) * entry.level / 5 };
+          if (entry.level < 5) {
+            match(track, mixedColor(accent, surface, 0.8),
+              { ...track, left: fill.right });
+          }
+          if (entry.level > 0) match(fill, accent);
+        } else match(widget!.widget!, accent);
       }
     }
   }
@@ -268,7 +287,7 @@ async function assertSampleStyle(
     const box = target === 'sidebar' ? layout.sidebar : layout.header;
     expect(box).not.toBeNull();
     expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
-      foreground)).toBe(true);
+      foreground, layout.icons)).toBe(true);
   }
 }
 

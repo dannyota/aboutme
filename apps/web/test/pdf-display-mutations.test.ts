@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { pdfColumnsMatch, pdfGlyphGeometry, pdfSidebarPaint, pdfSurfacePaint,
   type PdfTextItem, type PdfTextPage } from '../e2e/pdf-display';
-import { pdfHasFill, pdfPaintOperators,
+import { pdfHasFill, pdfPaintMatch, pdfPaintOperators,
   type PdfBox } from '../e2e/pdf-paint';
 
 const margins = { x: 10, y: 10 };
@@ -150,7 +150,8 @@ describe('PDF sidebar backgrounds', () => {
       expect(pdfHasFill(paint, bar, '#0f6b7d')).toBe(true);
       expect(pdfSidebarPaint(paint, text, layout.sidebar,
         margins.y, firstPage, '#e3ecf0', expected)).toBe(true);
-      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [bar]))
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0',
+        [pdfPaintMatch(paint, bar, '#0f6b7d')!]))
         .toBe(true);
     },
   );
@@ -303,9 +304,10 @@ describe('PDF sidebar backgrounds', () => {
       expect(pdfSurfacePaint(paint, text, background, '#e3ecf0'))
         .toBe(false);
       expect(pdfHasFill(paint, tag, '#0f6b7d')).toBe(true);
-      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [tag]))
+      const foreground = [pdfPaintMatch(paint, tag, '#0f6b7d')!];
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', foreground))
         .toBe(true);
-      expect(pdfSurfacePaint(paint, text, background, '#ffffff', [tag]))
+      expect(pdfSurfacePaint(paint, text, background, '#ffffff', foreground))
         .toBe(false);
     });
 
@@ -328,14 +330,16 @@ describe('PDF sidebar backgrounds', () => {
       ]);
       expect(shapes.every((shape) => pdfHasFill(paint, shape, '#0f6b7d')))
         .toBe(true);
-      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', shapes))
+      const foreground = shapes.map((shape) =>
+        pdfPaintMatch(paint, shape, '#0f6b7d')!);
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', foreground))
         .toBe(true);
       const overpaint = await pdfPaintOperators(proxy, [
         OPS.setFillRGBColor, OPS.constructPath,
       ], [['#ffffff'], [OPS.fill, [rectangle(gap)]]]);
       expect(pdfSurfacePaint({ ...paint,
         fills: [...paint.fills, ...overpaint.fills] }, text, background,
-      '#e3ecf0', shapes)).toBe(false);
+      '#e3ecf0', foreground)).toBe(false);
     });
 });
 
@@ -392,7 +396,18 @@ describe('PDF surface decorations', () => {
         [shape.color], [OPS.fill, [rectangle(background)]], [shape.ink],
         [shape.width], [1], ...paths.map((path) => [OPS.stroke, [path]]),
       ]);
-      expect(pdfSurfacePaint(paint, text, measured, shape.color)).toBe(true);
+      const icons = [
+        { left: shape.dotX - shape.width / 2,
+          right: shape.dotX + shape.width * 4 / 7 + shape.width / 2,
+          top: shape.dotY - shape.width / 2,
+          bottom: shape.dotY + shape.width / 2 },
+        { left: shape.lineX - shape.width / 2,
+          right: shape.lineX + shape.length + shape.width / 2,
+          top: shape.lineY - shape.width / 2,
+          bottom: shape.lineY + shape.width / 2 },
+      ].map((box) => ({ ...box, color: shape.ink, stroke: true }));
+      expect(pdfSurfacePaint(paint, text, measured, shape.color, [], icons))
+        .toBe(true);
       const gap = { left: shape.dotX, right: shape.dotX + 0.3,
         top: shape.dotY + shape.width / 2 + 0.05,
         bottom: shape.lineY - shape.width / 2 - 0.05 };
@@ -401,7 +416,7 @@ describe('PDF surface decorations', () => {
       ], [['#ffffff'], [OPS.fill, [rectangle(gap)]]]);
       expect(pdfSurfacePaint({ ...paint,
         fills: [...paint.fills, ...patch.fills] }, text, measured,
-      shape.color)).toBe(false);
+      shape.color, [], icons)).toBe(false);
     });
 
   it('uses native bounds for a separately validated heading rule',
@@ -425,8 +440,19 @@ describe('PDF surface decorations', () => {
         ['#bc9d9c'], [OPS.fill, [rectangle(rule)]],
       ]);
       expect(pdfHasFill(paint, expected, '#bc9d9c')).toBe(true);
-      expect(pdfSurfacePaint(paint, text, measured, '#f2ebdf', [expected]))
+      const foreground = [pdfPaintMatch(paint, expected, '#bc9d9c')!];
+      expect(pdfSurfacePaint(paint, text, measured, '#f2ebdf', foreground))
         .toBe(true);
+      const stripe = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [['#0000ff'], [OPS.fill, [rectangle({ ...rule,
+        top: 175.6, bottom: 177.1 })]]]);
+      expect(pdfHasFill({ ...paint,
+        fills: [...paint.fills, ...stripe.fills] }, expected, '#bc9d9c'))
+        .toBe(true);
+      expect(pdfSurfacePaint({ ...paint,
+        fills: [...paint.fills, ...stripe.fills] }, text, measured,
+      '#f2ebdf', foreground)).toBe(false);
     });
 
   it.each(['outline', 'filled'])(
@@ -495,8 +521,36 @@ describe('PDF surface decorations', () => {
         [1], [1], [isOutline ? OPS.stroke : OPS.fill,
           [isOutline ? outline : filled]], [],
       ]);
-      expect(pdfSurfacePaint(paint, text, background, '#f7e8d9')).toBe(true);
+      const icons = [{
+        left: x + (isOutline ? 2 - 1.75 / 2 : 0) * scale,
+        right: x + (isOutline ? 22 + 1.75 / 2 : 448) * scale,
+        top: y + (isOutline ? 4 - 1.75 / 2 : 32) * scale,
+        bottom: y + (isOutline ? 20 + 1.75 / 2 : 480) * scale,
+        color: '#615a53', stroke: isOutline,
+      }];
+      expect(pdfSurfacePaint(paint, text, background, '#f7e8d9', [], icons))
+        .toBe(true);
+      for (const expected of [
+        { ...icons[0]!, color: '#0000ff' },
+        { ...icons[0]!, left: icons[0]!.left + 4,
+          right: icons[0]!.right + 4 },
+        { ...icons[0]!, right: icons[0]!.right - 4 },
+      ]) {
+        expect(pdfSurfacePaint(paint, text, background, '#f7e8d9', [],
+          [expected])).toBe(false);
+      }
       const icon = paint.fills[1]!;
+      if (!isOutline) {
+        expect(pdfSurfacePaint(paint, text, background, '#f7e8d9'))
+          .toBe(false);
+        const extra = await pdfPaintOperators(proxy, [
+          OPS.setFillRGBColor, OPS.constructPath,
+        ], [['#0000ff'], [OPS.fill, [rectangle({ left: 82.5, right: 85,
+          top: 177, bottom: 184 })]]]);
+        expect(pdfSurfacePaint({ ...paint,
+          fills: [...paint.fills, ...extra.fills] }, text, background,
+        '#f7e8d9', [], icons)).toBe(false);
+      }
       for (const patch of [icon,
         { left: 75, right: 75.5, top: isOutline ? 119 : 179,
           bottom: isOutline ? 119.5 : 179.5 },
@@ -507,7 +561,8 @@ describe('PDF surface decorations', () => {
           ], [[color], [OPS.fill, [rectangle(patch)]]]);
           expect(pdfSurfacePaint({ ...paint,
             fills: [...paint.fills, ...overpaint.fills] }, text, background,
-          '#f7e8d9'), JSON.stringify({ kind, color, patch })).toBe(false);
+          '#f7e8d9', [], icons), JSON.stringify({ kind, color, patch }))
+            .toBe(false);
         }
       }
     });
@@ -541,7 +596,18 @@ describe('PDF surface decorations', () => {
         [0.765625], [1], [1],
         ...strokes.map((path) => [OPS.stroke, [path]]),
       ]);
-      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [rule]))
+      const foreground = [pdfPaintMatch(paint, rule, '#8eb8c2')!];
+      const icons = strokes.map((path) => {
+        const x = Array.from(path).filter((_, index) => index % 3 === 1);
+        const y = Array.from(path).filter((_, index) => index % 3 === 2);
+        return { left: Math.min(...x) - 0.765625 / 2,
+          right: Math.max(...x) + 0.765625 / 2,
+          top: Math.min(...y) - 0.765625 / 2,
+          bottom: Math.max(...y) + 0.765625 / 2,
+          color: '#4e5b62', stroke: true };
+      });
+      expect(pdfSurfacePaint(paint, text, background, '#e3ecf0',
+        foreground, icons))
         .toBe(true);
       if (variant.endsWith('patched')) {
         const box = variant === 'gap-patched'
@@ -552,7 +618,7 @@ describe('PDF surface decorations', () => {
         ], [['#ffffff'], [OPS.fill, [rectangle(box)]]]);
         expect(pdfSurfacePaint({ ...paint,
           fills: [...paint.fills, ...patch.fills] }, text, background,
-        '#e3ecf0', [rule])).toBe(false);
+        '#e3ecf0', foreground, icons)).toBe(false);
       }
       const overpaint = await pdfPaintOperators(proxy, [
         OPS.setFillRGBColor, OPS.constructPath,
@@ -560,7 +626,7 @@ describe('PDF surface decorations', () => {
         top: 500, bottom: 780 })]]]);
       expect(pdfSurfacePaint({ ...paint,
         fills: [...paint.fills, ...overpaint.fills] }, text, background,
-      '#e3ecf0', [rule])).toBe(false);
+      '#e3ecf0', foreground, icons)).toBe(false);
     },
   );
 
