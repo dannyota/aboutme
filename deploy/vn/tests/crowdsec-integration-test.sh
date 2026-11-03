@@ -16,6 +16,7 @@ source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
 # shellcheck disable=SC2034 # The sourced fixture selects idle migration admission.
 retention_fixture_migration=yes
 profile_go=$(readlink -f "$(command -v go)")
+retention_fixture_now=$(/usr/bin/date -u +%Y-%m-%dT%H:%M:%S.%NZ)
 retention_fixture_start "$repo_root"
 retention_fixture_case=pinned-profile-proof-build
 retention_fixture_profile_binary "$profile_go"
@@ -164,6 +165,15 @@ wait_status() {
     [[ $result != "$want" ]] || return 0
     sleep 1
   done
+  printf 'FAIL %s stage=%s expected=http:%s actual=%s source=%s url=%s\n' \
+    "$retention_fixture_case" "$integration_stage" "$want" "$result" "$source" "$url" >&2
+  return 1
+}
+integration_assert_count() {
+  local assertion=$1 actual=$2 comparison=$3 expected=$4
+  if [[ $actual =~ ^[0-9]+$ ]] && test "$actual" "$comparison" "$expected"; then return 0; fi
+  printf 'FAIL %s assertion=%s expected=%s:%s actual=%s\n' \
+    "$retention_fixture_case" "$assertion" "$comparison" "$expected" "$actual" >&2
   return 1
 }
 ip addr add 192.0.2.41/32 dev lo >/dev/null 2>&1
@@ -385,7 +395,7 @@ integration_stage=migration-sqlite-files
 for suffix in '' -shm -wal; do [[ -f /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
 integration_stage=migration-switch
 # Cached data older than the vendor's shelf life must not require the hub.
-find /var/lib/crowdsec/data -type f ! -name 'crowdsec.db*' -exec touch -d '8 days ago' {} +
+find /var/lib/crowdsec/data -type f ! -name 'crowdsec.db*' -exec touch -d "$retention_fixture_now - 8 days" {} +
 migration_run
 integration_stage=migration-switch-order
 migration_order
@@ -410,7 +420,7 @@ retention_fixture_case=real-migration-reset
 integration_stage=reset-attack-row
 # A live row and collected statistics distinguish recreation from cleanup.
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip,source_scope,source_value,capacity,events_count,leak_speed,simulated)
- VALUES (99000,now(),now(),now(),now(),'crowdsecurity/ssh-bf','192.0.2.90','Ip','192.0.2.90',1,1,'1s',false);" >/dev/null
+ VALUES (99000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','192.0.2.90','Ip','192.0.2.90',1,1,'1s',false);" >/dev/null
 integration_stage=reset-catalog-before
 catalog_before=$(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';")
 integration_stage=reset-statistics
@@ -477,6 +487,13 @@ migration_noop
 printf 'PASS real-migration-failure-requires-explicit-reset\n'
 
 # Detection and retention proofs start with only the serving edge active.
+# Capture one clock for feed records, SQL fixtures and retention verification.
+# Nightly selection has separate boundary proofs; this proof needs a live pass.
+retention_fixture_now=$(/usr/bin/date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+if [[ ${retention_fixture_now:11:5} > 19:59 && ${retention_fixture_now:11:5} < 20:05 ]]; then
+  retention_fixture_now=$(/usr/bin/date -u -d "$retention_fixture_now - 5 minutes" +%Y-%m-%dT%H:%M:%S.%NZ)
+fi
+retention_fixture_time
 retention_fixture_case=real-consumer-proof
 integration_stage=consumers
 systemctl stop aboutme-maintenance.service
@@ -486,7 +503,7 @@ append_records() { # ip status count route [method] [probe] [target]
   [[ $route != maintenance ]] || destination=/run/aboutme/caddy-log/crowdsec/maintenance.json
   target_json=$(jq -cn --arg value "$target" '$value')
   for ((i = 0; i < count; i++)); do
-    ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+    ts=$retention_fixture_now
     printf '{"ts":"%s","source_ip":"%s","method":"%s","status":%s,"route_class":"%s","probe_class":"%s","target_path":%s}\n' \
       "$ts" "$ip" "$method" "$status" "$route" "$probe" "$target_json" >>"$destination"
   done
@@ -542,7 +559,7 @@ rejection_filters=(
 for index in "${!rejection_filters[@]}"; do
   ip=192.0.2.$((100 + index))
   rejected_ips+=("$ip")
-  ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+  ts=$retention_fixture_now
   record=$(jq -cn --arg ts "$ts" --arg ip "$ip" \
     '{ts:$ts,source_ip:$ip,method:"GET",status:404,route_class:"unknown",probe_class:"other",target_path:"/unknown/sample"}' |
     jq -c "${rejection_filters[$index]}")
@@ -553,7 +570,7 @@ done
 duplicate_ip=192.0.2.149
 rejected_ips+=("$duplicate_ip")
 for _ in $(seq 21); do
-  ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+  ts=$retention_fixture_now
   printf '{"ts":"%s","source_ip":"%s","method":"GET","status":404,"route_class":"unknown","probe_class":"other","target_path":"/unknown/sample","target_path":"/unknown/duplicate"}\n' \
     "$ts" "$duplicate_ip" >>"$feed"
 done
@@ -657,15 +674,12 @@ append_records "$attack_ip" 404 21 static
 wait_for_decision "$attack_ip" || { echo "status scenario created no decision" >&2; exit 1; }
 denied=$(sql "SELECT count(*) FROM decisions WHERE value = '$shared_ip';")
 [[ $denied == 0 ]] || { echo "401, 403, or 429 responses created a decision" >&2; exit 1; }
-until=$(sql "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")
-[[ -n $until ]] || { echo "HTTP decision expiry is missing" >&2; exit 1; }
-now_epoch=$(date +%s)
-until_epoch=$(date -d "$until" +%s)
-remaining=$((until_epoch - now_epoch))
-((remaining >= 780 && remaining <= 900)) || {
-  echo "a first HTTP decision does not last 15 minutes" >&2
-  exit 1
+decision_duration() {
+  sql "SELECT extract(epoch FROM (d.until-a.stopped_at))::integer
+    FROM decisions d JOIN alerts a ON a.id=d.alert_decisions
+    WHERE d.value='$1' AND d.scenario='aboutme/http-status' ORDER BY d.id DESC LIMIT 1;"
 }
+integration_assert_count first-duration "$(decision_duration "$attack_ip")" -eq 900
 # A second offense from the same address escalates to one hour. It comes
 # from another route class: the first bucket is blackholed for five minutes.
 append_records "$attack_ip" 404 21 public
@@ -673,33 +687,26 @@ for _ in $(seq 60); do
   [[ $(sql "SELECT count(*) FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status';") -ge 2 ]] && break
   sleep 1
 done
-until=$(sql "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")
-remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
-((remaining >= 3480 && remaining <= 3600)) || {
-  echo "a second HTTP decision does not last one hour" >&2
-  exit 1
-}
+integration_assert_count second-duration "$(decision_duration "$attack_ip")" -eq 3600
+
 append_records "$attack_ip" 404 21 auth
 for _ in {1..30}; do
   [[ $(sql "SELECT count(*) FROM decisions WHERE value='$attack_ip';") -ge 3 ]] && break
   sleep 1
 done
-until=$(sql "SELECT until FROM decisions WHERE value='$attack_ip' ORDER BY id DESC LIMIT 1;")
-remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
-((remaining >= 14280 && remaining <= 14400))
+integration_assert_count third-duration "$(decision_duration "$attack_ip")" -eq 14400
 
 # Expired history stays stored but cannot turn a new offense into a longer ban.
 expired_history_ip=192.0.2.46
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
- VALUES (89000,now(),now(),now(),now(),'aboutme/http-status');
+ VALUES (89000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
  INSERT INTO decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
- SELECT now()-interval '2 hours',now(),now()-interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.46','crowdsec',89000 FROM generate_series(1,3);" >/dev/null
+ SELECT :'fixture_time'::timestamptz-interval '2 hours',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz-interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.46','crowdsec',89000 FROM generate_series(1,3);" >/dev/null
 append_records "$expired_history_ip" 404 21 static
 wait_for_decision "$expired_history_ip"
-until=$(sql "SELECT until FROM decisions WHERE value='$expired_history_ip' ORDER BY id DESC LIMIT 1;")
-remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
-((remaining >= 780 && remaining <= 900))
-[[ $(sql "SELECT count(*) FROM decisions WHERE value='$expired_history_ip' AND until<=now();") == 3 ]]
+integration_assert_count expired-history-duration "$(decision_duration "$expired_history_ip")" -eq 900
+
+[[ $(sql "SELECT count(*) FROM decisions WHERE value='$expired_history_ip' AND until<=:'fixture_time'::timestamptz;") == 3 ]]
 printf 'PASS retained-expired-history-does-not-escalate\n'
 
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip = '$attack_ip' AND (coalesce(source_country, '') != '' OR coalesce(source_as_number, '') NOT IN ('', '0') OR coalesce(source_as_name, '') != '' OR coalesce(source_latitude, 0.0) != 0.0 OR coalesce(source_longitude, 0.0) != 0.0 OR coalesce(source_range, '') != '');") == 0 ]] || {
@@ -748,15 +755,15 @@ systemctl start aboutme-maintenance.service
 wait_status 403 192.0.2.41 http://127.0.0.1:18081/
 wait_status 403 192.0.2.45 http://127.0.0.1:18081/
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip,source_scope,source_value,capacity,events_count,leak_speed,simulated) VALUES
- (90000,now(),now(),now(),now(),'crowdsecurity/ssh-bf','192.0.2.80','Ip','192.0.2.80',1,1,'1s',false),
- (90001,now(),now(),now(),now(),'crowdsecurity/ssh-bf','2001:db8::80','Ip','2001:db8::80',1,1,'1s',false),
- (90002,now(),now(),now(),now(),'crowdsecurity/ssh-bf','192.0.2.81','Ip','192.0.2.81',1,1,'1s',false),
- (90003,now(),now(),now(),now(),'crowdsecurity/ssh-bf','2001:db8::81','Ip','2001:db8::81',1,1,'1s',false);
+ (90000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','192.0.2.80','Ip','192.0.2.80',1,1,'1s',false),
+ (90001,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','2001:db8::80','Ip','2001:db8::80',1,1,'1s',false),
+ (90002,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','192.0.2.81','Ip','192.0.2.81',1,1,'1s',false),
+ (90003,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','2001:db8::81','Ip','2001:db8::81',1,1,'1s',false);
  INSERT INTO decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions,simulated) VALUES
- (now(),now(),now()+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','192.0.2.80','crowdsec',90000,false),
- (now(),now(),now()+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','2001:db8::80','crowdsec',90001,false),
- (now(),now(),now()+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','192.0.2.81','crowdsec',90002,false),
- (now(),now(),now()+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','2001:db8::81','crowdsec',90003,false);" >/dev/null
+ (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','192.0.2.80','crowdsec',90000,false),
+ (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','2001:db8::80','crowdsec',90001,false),
+ (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','192.0.2.81','crowdsec',90002,false),
+ (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','crowdsecurity/ssh-bf','ban','Ip','2001:db8::81','crowdsec',90003,false);" >/dev/null
 wait_status timeout 192.0.2.80 http://127.0.0.1:18080/
 wait_status timeout 2001:db8::80 'http://[::1]:18080/'
 wait_status timeout 192.0.2.81 http://127.0.0.1:18080/
@@ -783,9 +790,9 @@ old_caddy_pid=$(cat "$retention_fixture/pids/aboutme-caddy.service")
 old_maintenance_pid=$(cat "$retention_fixture/pids/aboutme-maintenance.service")
 # Keep decisions active in caches. Stale parents and an old child force the
 # exact candidate fallback rather than natural decision expiry.
-sql "UPDATE alerts SET created_at=now()-interval '23 hours 31 minutes'
+sql "UPDATE alerts SET created_at=:'fixture_time'::timestamptz-interval '23 hours 31 minutes'
  WHERE source_ip IN ('192.0.2.41','192.0.2.42','192.0.2.52','192.0.2.80','2001:db8::80');
- UPDATE events SET time=now()-interval '23 hours 31 minutes'
+ UPDATE events SET time=:'fixture_time'::timestamptz-interval '23 hours 31 minutes'
  WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.44');" >/dev/null
 /usr/local/lib/aboutme/crowdsec-retention.sh runtime
 for _ in {1..50}; do [[ ! -e $retention_fixture/stream-released ]] || break; sleep 0.1; done
@@ -813,26 +820,56 @@ wait_status 403 192.0.2.45 http://127.0.0.1:18080/
 
 # Natural expiry and an explicit pre-selection revocation stay stream-visible.
 retention_fixture_case=expiry-and-revocation-deferred-until-batch
+integration_stage=expiry-setup
 systemctl stop aboutme-maintenance.service
 for address in 192.0.2.49 192.0.2.51; do ip addr add "$address/32" dev lo; done
 crowdsec_admitted_cli decisions add --ip 192.0.2.49 --duration 20s >/dev/null 2>&1
+integration_stage=expiry-ban-visible
 wait_status 403 192.0.2.49 http://127.0.0.1:18080/
+# Start the stream-removal check after expiry, not when the ban first arrives.
+integration_stage=expiry-database-clock
+expired=0
+for _ in {1..20}; do
+  sleep 1
+  expired=$(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.49' AND until<=clock_timestamp();")
+  [[ $expired == 0 ]] || break
+done
+integration_assert_count naturally-expired "$expired" -eq 1
+integration_stage=expiry-stream-removal
 wait_status 200 192.0.2.49 http://127.0.0.1:18080/
+integration_stage=revocation-add
 crowdsec_admitted_cli decisions add --ip 192.0.2.51 --duration 1h >/dev/null 2>&1
 wait_status 403 192.0.2.51 http://127.0.0.1:18080/
+integration_stage=revocation-delete
 crowdsec_admitted_cli decisions delete --ip 192.0.2.51 >/dev/null 2>&1
 wait_status 200 192.0.2.51 http://127.0.0.1:18080/
-[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51') AND until<=now();") == 2 ]]
+integration_assert_count expired-before-retention \
+  "$(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51') AND until<=clock_timestamp();")" -eq 2
+# Preserve both row histories and durations on the controlled retention clock.
+integration_stage=expiry-clock-translation
+sql "BEGIN;
+ CREATE TEMP TABLE clock_shift AS SELECT :'fixture_time'::timestamptz-clock_timestamp() AS delta;
+ UPDATE alerts SET created_at=created_at+delta,updated_at=updated_at+delta,
+   started_at=started_at+delta,stopped_at=stopped_at+delta FROM clock_shift
+ WHERE id IN (SELECT alert_decisions FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51'));
+ UPDATE decisions SET created_at=created_at+delta,updated_at=updated_at+delta,until=until+delta
+ FROM clock_shift WHERE value IN ('192.0.2.49','192.0.2.51');
+ COMMIT;" >/dev/null
+integration_assert_count expired-at-controlled-clock \
+  "$(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51') AND until<=:'fixture_time'::timestamptz;")" -eq 2
 : >"$retention_fixture/control-log"
-retention_fixture_time "$(date -u +%Y-%m-%d)T19:00:00Z"
+integration_stage=expiry-live-retention
 "$lib/crowdsec-retention.sh" runtime
-retention_fixture_time
-[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');") == 2 ]]
-[[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == 0 ]]
-sql "UPDATE alerts SET started_at=now()-interval '23 hours 31 minutes'
+integration_assert_count retained-expired \
+  "$(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');")" -eq 2
+integration_assert_count live-consumer-stops "$(grep -c '^stop ' "$retention_fixture/control-log" || true)" -eq 0
+integration_stage=expiry-age-trigger
+sql "UPDATE alerts SET started_at=:'fixture_time'::timestamptz-interval '23 hours 31 minutes'
  WHERE id IN (SELECT alert_decisions FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51'));" >/dev/null
 "$lib/crowdsec-retention.sh" runtime
-[[ $(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');") == 0 ]]
+integration_assert_count removed-after-batch \
+  "$(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51');")" -eq 0
+integration_stage=expiry-rebuilt-consumers
 wait_status 200 192.0.2.49 http://127.0.0.1:18080/
 wait_status 200 192.0.2.51 http://127.0.0.1:18080/
 wait_status 403 192.0.2.45 http://127.0.0.1:18080/
@@ -841,20 +878,13 @@ printf 'PASS real-expiry-and-revocation-retained-until-stopped-batch\n'
 
 # Replay event time through the pinned engine, without waiting 25 wall hours.
 retention_fixture_case=slow-trickle-old-first-timestamp
-trickle_assert_count() {
-  local assertion=$1 actual=$2 comparison=$3 expected=$4
-  if [[ $actual =~ ^[0-9]+$ ]] && test "$actual" "$comparison" "$expected"; then return 0; fi
-  printf 'FAIL slow-trickle assertion=%s expected=%s:%s actual=%s\n' \
-    "$assertion" "$comparison" "$expected" "$actual" >&2
-  return 1
-}
 integration_stage=slow-trickle-empty
-trickle_assert_count initial-alerts \
+integration_assert_count initial-alerts \
   "$(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');")" -eq 0
 integration_stage=slow-trickle-replay
-python3 -I - "$retention_fixture/trickle.json" <<'PY'
+python3 -I - "$retention_fixture/trickle.json" "$retention_fixture_now" <<'PY'
 import datetime,json,pathlib,sys
-end=datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+end=datetime.datetime.fromisoformat(sys.argv[2].replace('Z','+00:00')).replace(microsecond=0)
 start=end-datetime.timedelta(hours=25)
 with pathlib.Path(sys.argv[1]).open('w') as stream:
     for offset in [*range(0,90001,10), *([90000]*21)]:
@@ -869,15 +899,15 @@ replay_status=0
 timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" \
   -type aboutme-http -label feed_mode:serving -order-event \
   >"$retention_fixture/replay.log" 2>&1 || replay_status=$?
-trickle_assert_count replay-status "$replay_status" -eq 0
+integration_assert_count replay-status "$replay_status" -eq 0
 integration_stage=slow-trickle-graph
-trickle_assert_count old-first-timestamp \
-  "$(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=now()-interval '25 hours';")" -gt 0
-trickle_assert_count bucket-event-count \
+integration_assert_count old-first-timestamp \
+  "$(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=:'fixture_time'::timestamptz-interval '25 hours';")" -gt 0
+integration_assert_count bucket-event-count \
   "$(sql "SELECT coalesce(max(events_count),0) FROM alerts WHERE source_ip='192.0.2.47';")" -gt 9000
-trickle_assert_count cached-samples \
+integration_assert_count cached-samples \
   "$(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;")" -le 5
-trickle_assert_count decisions \
+integration_assert_count decisions \
   "$(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';")" -gt 0
 # Copy the replay's actual occurrence clocks into a graph without a decision.
 integration_stage=slow-trickle-copy
@@ -888,11 +918,11 @@ sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario
 integration_stage=slow-trickle-retention
 "$lib/crowdsec-retention.sh" runtime
 integration_stage=slow-trickle-verify
-trickle_assert_count consumer-stops \
+integration_assert_count consumer-stops \
   "$(grep -c '^stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service$' "$retention_fixture/control-log" || true)" -eq 1
-trickle_assert_count remaining-alerts \
+integration_assert_count remaining-alerts \
   "$(sql "SELECT count(*) FROM alerts WHERE source_ip IN ('192.0.2.47','192.0.2.48');")" -eq 0
-trickle_assert_count overdue-alarms \
+integration_assert_count overdue-alarms \
   "$(grep -xcF -- '--no-block start aboutme-alert@crowdsec_retention_overdue.service' "$retention_fixture/control-log" || true)" -eq 1
 "$lib/crowdsec-retention-lease-check.sh"
 printf 'PASS slow-trickle-overdue-cleanup\n'
@@ -901,7 +931,7 @@ printf 'PASS slow-trickle-overdue-cleanup\n'
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 # A genuine lease is accepted before independent failures remove authorization.
 systemctl stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service
-sql "UPDATE alerts SET created_at=now()-interval '23 hours 31 minutes' WHERE source_ip='192.0.2.45';" >/dev/null
+sql "UPDATE alerts SET created_at=:'fixture_time'::timestamptz-interval '23 hours 31 minutes' WHERE source_ip='192.0.2.45';" >/dev/null
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
 [[ $(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.45';") == 0 ]]
 [[ $(sql 'SELECT count(*) FROM machines;') -gt 0 ]]
@@ -946,5 +976,5 @@ echo "CrowdSec 1.8.1 integration tests passed"
 export -f integration_body sql retention_fixture_sql retention_fixture_admin \
   retention_fixture_time retention_fixture_stream_proxy \
   crowdsec_admitted_cli crowdsec_assert_postgresql retention_fixture_diagnostics retention_fixture_report_failure
-export repo_root edge feed retention_fixture PATH
+export repo_root edge feed retention_fixture retention_fixture_now PATH
 unshare --net bash -euo pipefail -c integration_body

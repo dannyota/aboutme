@@ -37,17 +37,19 @@ retention_fixture_pid_for() {
 
 retention_fixture_admin() {
   runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w \
-    -v ON_ERROR_STOP=1 -h /run/postgresql -U postgres -d "${1:-crowdsec}" 2>/dev/null
+    -v ON_ERROR_STOP=1 -v fixture_time="$(cat "$retention_fixture/clock")" \
+    -h /run/postgresql -U postgres -d "${1:-crowdsec}" 2>/dev/null
 }
 
 retention_fixture_sql() {
   /usr/lib/postgresql/18/bin/psql -X -qAt -w -v ON_ERROR_STOP=1 \
+    -v fixture_time="$(cat "$retention_fixture/clock")" \
     -h /run/postgresql -U crowdsec -d crowdsec "$@" 2>/dev/null
 }
 
 retention_fixture_time() {
   rm -f "$retention_fixture/clock" "$retention_fixture/verify-clock" "$retention_fixture/clock-read"
-  [[ -z ${1:-} ]] || printf '%s\n' "$1" >"$retention_fixture/clock"
+  printf '%s\n' "${1:-$retention_fixture_now}" >"$retention_fixture/clock"
   [[ -z ${2:-} ]] || printf '%s\n' "$2" >"$retention_fixture/verify-clock"
 }
 
@@ -216,7 +218,7 @@ retention_fixture_candidate_no_jit() {
   local retention_time retention_batch=no plan=$retention_fixture/candidate-plan.json
   # shellcheck source=deploy/vn/host/crowdsec-retention.sh
   source /usr/local/lib/aboutme/crowdsec-retention.sh || return 1
-  retention_time=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ) || return 1
+  retention_time=$(cat "$retention_fixture/clock") || return 1
   install -m 0600 /dev/null "$plan" || return 1
   {
     printf 'SET jit = on;\n'
@@ -273,6 +275,8 @@ retention_fixture_start() {
   retention_fixture=$(mktemp -d /run/crowdsec-retention-fixture.XXXXXX)
   mount -t tmpfs -o size=512m,mode=0755 tmpfs "$retention_fixture"
   trap retention_fixture_cleanup EXIT
+  retention_fixture_now=${retention_fixture_now:-2026-01-02T19:00:00Z}
+  retention_fixture_time "$retention_fixture_now"
   install -d -o postgres -g postgres -m 0700 "$retention_fixture/data"
   install -d -m 0755 "$retention_fixture/bin" "$retention_fixture/lib" "$retention_fixture/pgconfig"
   install -d -o root -g postgres -m 2770 "$retention_fixture/queries"
@@ -435,12 +439,13 @@ trap 'rm -f "$query"' EXIT
 cat >"$query"
 insert_overdue() {
   "$fixture/bin/psql-real" -X -qAt -w -v ON_ERROR_STOP=1 \
-    -v with_decision="${1:-yes}" -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
+    -v with_decision="${1:-yes}" -v fixture_time="$(cat "$fixture/clock")" \
+    -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (5101,'2026-01-01 17:00Z',now(),now(),now(),'aboutme/http-status');
+VALUES (5101,:'fixture_time'::timestamptz-interval '26 hours',:'fixture_time',:'fixture_time',:'fixture_time','aboutme/http-status');
 \if :with_decision
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.23','crowdsec',5101);
+VALUES (:'fixture_time',:'fixture_time',:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.23','crowdsec',5101);
 \endif
 SQL
 }
@@ -456,8 +461,8 @@ if grep -q '^COPY selected ' "$query"; then
   if [[ -e $fixture/change-candidate ]]; then
     rm "$fixture/change-candidate"
     "$fixture/bin/psql-real" -X -qAt -w -v ON_ERROR_STOP=1 \
-      -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
-UPDATE public.alerts SET created_at=now(),updated_at=now(),started_at=now(),stopped_at=now() WHERE id=3000;
+      -v fixture_time="$(cat "$fixture/clock")" -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
+UPDATE public.alerts SET created_at=:'fixture_time',updated_at=:'fixture_time',started_at=:'fixture_time',stopped_at=:'fixture_time' WHERE id=3000;
 SQL
   fi
   if [[ -e $fixture/add-child-decision || -e $fixture/replace-child-decision ]]; then
@@ -469,9 +474,9 @@ SQL
     fi
     rm -f "$fixture/add-child-decision" "$fixture/replace-child-decision"
     "$fixture/bin/psql-real" -X -qAt -w -v ON_ERROR_STOP=1 \
-      -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
+      -v fixture_time="$(cat "$fixture/clock")" -h /run/postgresql -U crowdsec -d crowdsec >/dev/null 2>&1 <<'SQL'
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (9002,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.21','crowdsec',3000);
+VALUES (9002,:'fixture_time',:'fixture_time',:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.21','crowdsec',3000);
 SQL
   fi
 fi

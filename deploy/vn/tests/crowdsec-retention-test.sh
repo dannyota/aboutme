@@ -80,16 +80,16 @@ if [[ ${1:-} == postgresql ]]; then
   check_hosted replacement-current-epoch-lease lease_check
 
   seed_batch_graph() {
-    retention_fixture_sql >/dev/null <<'SQL'
+    retention_fixture_sql -v graph_time="${1:-2026-01-02T17:00:00Z}" >/dev/null <<'SQL'
 DELETE FROM public.alerts;
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (5100,'2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','aboutme/http-status');
+VALUES (5100,:'graph_time',:'graph_time',:'graph_time',:'graph_time','aboutme/http-status');
 INSERT INTO public.events (created_at,updated_at,time,serialized,alert_events)
-VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 17:00Z','{}',5100);
+VALUES (:'graph_time',:'graph_time',:'graph_time','{}',5100);
 INSERT INTO public.meta (created_at,updated_at,key,value,alert_metas)
-VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','fixed','fixed',5100);
+VALUES (:'graph_time',:'graph_time','fixed','fixed',5100);
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES ('2026-01-02 17:00Z','2026-01-02 17:00Z','2026-01-02 18:00Z','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',5100);
+VALUES (:'graph_time',:'graph_time',:'graph_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',5100);
 SQL
     printf 'active\n' >"$retention_fixture/consumer-state"
     : >"$retention_fixture/control-log"
@@ -102,6 +102,18 @@ SQL
     [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == "$retained" ]]
     [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == "$stops" ]]
     check_hosted deferred-or-batched-expiry-renews-lease lease_check
+  done
+  for clock in 2026-01-02T16:59:59Z 2026-01-02T17:00:00Z 2026-01-02T23:59:59Z 2026-01-03T00:00:00Z; do
+    for age in 2 23; do
+      seed_batch_graph "$(date -u -d "$clock - $age hours" +%Y-%m-%dT%H:%M:%SZ)"
+      retention_fixture_time "$clock"
+      check_hosted "midnight-age-$age-$clock" run_retention runtime
+      retained=1 stops=0
+      if [[ $age == 23 ]]; then retained=0 stops=1; fi
+      [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.decisions;') == "$retained" ]]
+      [[ $(grep -c '^stop ' "$retention_fixture/control-log" || true) == "$stops" ]]
+      check_hosted midnight-age-renews-lease lease_check
+    done
   done
   retention_fixture_sql <<<'DELETE FROM public.alerts;' >/dev/null
   : >"$retention_fixture/control-log"
@@ -209,11 +221,11 @@ SQL
   retention_fixture_sql >"$retention_fixture/ingestion-ready" <<SQL &
 BEGIN;
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin)
-VALUES (5102,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.22','crowdsec');
+VALUES (5102,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.22','crowdsec');
 SELECT 'ready';
 \! timeout 10 bash -c 'until test -e "$retention_fixture/ingestion-release"; do sleep 0.05; done'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (5102,now(),now(),now(),now(),'aboutme/http-status');
+VALUES (5102,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 UPDATE public.decisions SET alert_decisions=5102 WHERE id=5102;
 COMMIT;
 \! touch "$retention_fixture/ingestion-done"
@@ -257,19 +269,19 @@ SQL
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.machines (created_at,updated_at,machine_id,password,ip_address)
-VALUES (now(),now(),'retention-fixture','fixed-fixture','');
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'retention-fixture','fixed-fixture','');
 INSERT INTO public.bouncers (created_at,updated_at,name,api_key,revoked)
-VALUES (now(),now(),'retention-fixture','fixed-fixture',false);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'retention-fixture','fixed-fixture',false);
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-SELECT id,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status' FROM generate_series(1,1001) id;
+SELECT id,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status' FROM generate_series(1,1001) id;
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (2000,now(),now(),now(),now(),'aboutme/http-rate'),
-       (3000,now(),now(),now(),now(),'crowdsecurity/ssh-bf');
+VALUES (2000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-rate'),
+       (3000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf');
 INSERT INTO public.events (created_at,updated_at,time,serialized,alert_events)
-VALUES (now(),now(),now()-interval '23 hours 31 minutes','{}',3000),
-       (now(),now(),now(),'{}',2000),(now(),now(),now(),'{}',NULL);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz-interval '23 hours 31 minutes','{}',3000),
+       (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'{}',2000),(:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'{}',NULL);
 INSERT INTO public.meta (created_at,updated_at,key,value,alert_metas)
-VALUES (now(),now(),'fixed','fixed',2000),(now(),now(),'fixed','fixed',NULL);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'fixed','fixed',2000),(:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'fixed','fixed',NULL);
 SQL
   check_hosted bounded-postgresql-batch-removal run_retention startup
   [[ $(retention_fixture_sql <<<'SELECT count(*) FROM public.alerts;') == 1 ]]
@@ -283,7 +295,7 @@ SQL
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (3000,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status');
+VALUES (3000,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 SQL
   printf 'active\n' >"$retention_fixture/consumer-state"
   : >"$retention_fixture/control-log"
@@ -341,9 +353,9 @@ SQL
   for interleave in add replace; do
     retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (3000,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status');
+VALUES (3000,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (9001,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000);
+VALUES (9001,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000);
 SQL
     touch "$retention_fixture/$interleave-child-decision"
     check_hosted "$interleave-child-decision-refuses-deletion" refused run_retention runtime
@@ -359,9 +371,9 @@ SQL
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (3000,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status');
+VALUES (3000,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-SELECT id,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000
+SELECT id,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000
 FROM generate_series(9001,9999) id;
 SQL
   check_hosted exact-thousand-graph-includes-every-decision run_retention runtime
@@ -371,9 +383,9 @@ SQL
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (3000,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status');
+VALUES (3000,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-SELECT id,now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000
+SELECT id,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',3000
 FROM generate_series(9001,10000) id;
 SQL
   check_hosted oversized-decision-graph-refuses refused run_retention runtime
@@ -387,7 +399,7 @@ SQL
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
-VALUES (3000,now()-interval '23 hours 31 minutes',now(),now(),now(),'aboutme/http-status');
+VALUES (3000,:'fixture_time'::timestamptz-interval '23 hours 31 minutes',:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
 SQL
   touch "$retention_fixture/change-candidate"
   check_hosted changed-candidate-refuses-deletion refused run_retention runtime
@@ -399,7 +411,7 @@ SQL
     retention_fixture_sql >/dev/null <<<"UPDATE public.alerts SET $column='infinity' WHERE id=3000;"
     check_hosted nonfinite-alert-time-refuses refused run_retention runtime
     [[ ! -e /run/aboutme/crowdsec-retention-ok ]]
-    retention_fixture_sql >/dev/null <<<"UPDATE public.alerts SET $column=now() WHERE id=3000;"
+    retention_fixture_sql >/dev/null <<<"UPDATE public.alerts SET $column=:'fixture_time'::timestamptz WHERE id=3000;"
     check_hosted recover-after-nonfinite-time recover_retention
   done
   retention_fixture_sql >/dev/null <<'SQL'
@@ -407,13 +419,13 @@ UPDATE public.alerts SET started_at=NULL WHERE id=3000;
 SQL
   check_hosted missing-time-refuses refused run_retention runtime
   retention_fixture_sql >/dev/null <<'SQL'
-UPDATE public.alerts SET started_at=now() WHERE id=3000;
+UPDATE public.alerts SET started_at=:'fixture_time'::timestamptz WHERE id=3000;
 SQL
   check_hosted recover-after-missing-time recover_retention
 
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (now(),now(),now()+interval '23 hours','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '23 hours','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
   check_hosted excessive-decision-duration-refuses refused run_retention runtime
   retention_fixture_sql >/dev/null <<'SQL'
@@ -423,7 +435,7 @@ SQL
   retention_fixture_admin >/dev/null <<'SQL'
 ALTER TABLE public.events DISABLE TRIGGER ALL;
 INSERT INTO public.events (created_at,updated_at,time,serialized,alert_events)
-VALUES (now(),now(),now(),'{}',999999);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'{}',999999);
 ALTER TABLE public.events ENABLE TRIGGER ALL;
 SQL
   check_hosted dangling-child-refuses refused run_retention runtime
@@ -438,19 +450,19 @@ SQL
     for column in "${columns[@]}"; do
       retention_fixture_sql >/dev/null <<<"UPDATE public.$relation SET $column='-infinity';"
       check_hosted "nonfinite-$relation-$column-refuses" refused run_retention runtime
-      retention_fixture_sql >/dev/null <<<"UPDATE public.$relation SET $column=now();"
+      retention_fixture_sql >/dev/null <<<"UPDATE public.$relation SET $column=:'fixture_time'::timestamptz;"
       check_hosted "recover-$relation-$column" recover_retention
     done
   done
   retention_fixture_sql >/dev/null <<'SQL'
 INSERT INTO public.decisions (created_at,updated_at,until,scenario,type,scope,value,origin,alert_decisions)
-VALUES (now(),now(),now()+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
+VALUES (:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz+interval '1 hour','aboutme/http-status','ban','Ip','192.0.2.20','crowdsec',2000);
 SQL
   for column in created_at updated_at until; do
     retention_fixture_sql >/dev/null <<<"UPDATE public.decisions SET $column='infinity';"
     check_hosted "nonfinite-decision-$column-refuses" refused run_retention runtime
     retention_fixture_sql >/dev/null <<'SQL'
-UPDATE public.decisions SET created_at=now(),updated_at=now(),until=now()+interval '1 hour';
+UPDATE public.decisions SET created_at=:'fixture_time'::timestamptz,updated_at=:'fixture_time'::timestamptz,until=:'fixture_time'::timestamptz+interval '1 hour';
 SQL
     check_hosted "recover-decision-$column" recover_retention
   done
