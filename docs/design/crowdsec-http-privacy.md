@@ -98,8 +98,10 @@ wrong keys, types, classes, bounds, escapes, or combinations: `none` requires an
 ineligible request and empty path; `invalid` and `oversized` require eligibility
 and an empty path; other classes require an eligible valid path and matching
 fixed classification. Never reconstruct a missing path. Scenarios group by
-source address and coarse fields, never by target text; HTTP and SSH windows
-last at most 30 minutes, and maintenance 503 is neutral.
+source address and coarse fields, never by target text; maintenance 503 is
+neutral. The configured 30-minute scenario check does not cap bucket lifetime;
+[history assumptions and overdue graphs](crowdsec-retention-batching.md#deadline-arithmetic)
+define the retention response.
 
 No GeoIP, autonomous-system, reverse-DNS, or intelligence enrichment exists.
 CrowdSec persists alert samples, not the request feed or an access log; samples
@@ -173,7 +175,8 @@ database attack records have a 24-hour logical retention and access bound;
 backup copies have the separate lifetime below. Attack data never enters release
 artifacts, support bundles, or diagnostic copies. Decisions last at most 22
 hours, including SSH and manual tests. HTTP bans start at 15 minutes, then one
-hour and four hours for repeat offenses while prior decisions remain, limiting
+hour and four hours for repeat offenses under the
+[active-decision count](crowdsec-retention-batching.md#escalation), limiting
 harm to shared addresses. The status scenario counts 400, 404, 405, and
 unknown-route scanner signals; rate detection excludes static assets and health
 checks; the HTTP profile precedes and stops catch-all evaluation. The host
@@ -188,12 +191,14 @@ Startup requires the data mount, synchronized clock, and
 `postgresql@18-main.service`; consumers stay stopped during cleanup and require
 a successful gate, not unit ordering alone. PostgreSQL restart or recovery
 invalidates the gate and lease; restart needs a fresh pass, not saved success.
-After preflight, runtime selects an exact bounded candidate set and reconciles
-its decisions with every active bouncer before SQL physically removes stale
-graphs, expired decisions, and orphan events or metadata. Only stopped-consumer
-cleanup may use `cscli alerts flush --max-age 23h --max-items 5000`, after its
-preflight; startup uses SQL without the engine or local API. Missing schema
-never renews the lease or triggers initialization.
+The owner accepted batching stopped reconciliation on 2026-11-02. The proposed
+[batch schedule and arithmetic](crowdsec-retention-batching.md) use 03:00 ICT
+plus forced age cleanup; one nightly batch alone cannot meet the bounds. Every
+five-minute pass still deletes stale graphs without decisions and orphan
+events/metadata live, trims feeds, validates state, and checks the lease.
+Expired decisions remain stream-visible until a stopped batch; the 23-hour
+target also uses older parent/event/metadata times. Startup keeps full stopped
+cleanup. Missing schema never renews the lease or triggers initialization.
 
 Serialize passes with a host lock. Use fixed SQL identifiers, UTC cutoffs, short
 transactions, and at most 1,000 candidates per batch; statement timeout is 10
@@ -204,22 +209,16 @@ dangling links, and excessive decision duration. Verification finds no record
 aged 23 hours 30 minutes or more while fresh records and registrations remain.
 Never interpolate request text or accept an exit code as cleanup proof.
 
-Natural expiries and supported explicit revocations first travel through the
-LAPI/bouncer stream. Allow at most 20 seconds within the runtime deadline for
-consumer acknowledgement that each candidate left all active Caddy caches and
-the SSH nftables set; prove that mechanism against the pinned consumers, since a
-stream response or `last_pull` alone does not establish applied deletion.
-Recheck the same candidate IDs and eligibility before deletion; never expand the
-set or run a blanket flush while consumers serve. No unreconciled decision means
-no routine Caddy restart. Missed polls, unavailable acknowledgement, early
-revocation, or invalid active decisions still unreconciled at the deadline close
-the gate: stop both Caddy modes, the firewall bouncer, and the engine; prove
-quiescence, clear in-memory caches and the bouncer-owned nftables state, then
-physically delete; verify and rebuild from current decisions before reopening,
-leaving unrelated firewall rules intact. This fallback is mandatory if the
-pinned consumers expose no sufficient acknowledgement. SQL targets the pinned
-schema, not a vendor API. Retention never waits for SQLite, checkpoints, forced
-vacuum, or WAL archival.
+Natural expiry and supported explicit revocation travel through the stream;
+neither proves applied cache deletion. Before physically deleting any decision,
+stop both Caddy modes, the firewall bouncer, and the engine; prove quiescence,
+clear caches and owned nftables state, recheck exact candidates, delete, verify,
+and rebuild previously active consumers. Leave unrelated firewall rules intact.
+Keep bounded 20-second reconciliation/rebuild interfaces within the whole-pass
+deadline. [Reload alone is insufficient](crowdsec-retention-reload.md). Batching
+owns the SQL contention rule and deferred-expiry verification change; it
+provides no new cache acknowledgement or concurrent-Caddy stream isolation. SQL
+targets the pinned schema, without SQLite, forced vacuum, or WAL waits.
 
 Bounds: runtime interval 300 seconds, runtime whole-pass deadline 60 seconds,
 startup whole-pass deadline 300 seconds, lease maximum age 360 seconds, watchdog
