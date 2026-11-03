@@ -18,6 +18,7 @@ import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import type { PrintCardEnvelope } from '../server/utils/print/envelope';
 import { PRINT_CONTENT_SECURITY_POLICY } from '../server/utils/print/protocol';
 import { measureCardCrop } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import { denyExternalRequests, verifyScreenshot } from './support';
 
 // The harness Nitro output directory (apps/web/nuxt.config.ts sets
@@ -517,43 +518,30 @@ test('card crop assertion detects ignored offsets', async ({ page }) => {
   await openCard(page, await renderCardHTML(buildEnvelope(card)));
   const image = page.locator('.preview-card-photo-image');
   await expectCardDisplay(page, card, 'long-name-vi');
-  await image.evaluate((el) => {
-    (el as HTMLElement).style.left = '0';
-  });
+  const restore = await applyStyleMutation(image, { left: '0px' });
   await expect(expectCardDisplay(page, card, 'long-name-vi')).rejects.toThrow();
-  await image.evaluate((el) => {
-    (el as HTMLElement).style.left = '-12.5%';
-  });
+  await restore();
   await expectCardDisplay(page, card, 'long-name-vi');
 });
 
-for (const [name, css] of [
-  ['band color', '.preview-card-band-left { background: red !important; }'],
-  ['dot paint', '.preview-card-band-right::after { '
-  + 'background-image: none !important; }'],
+for (const [name, selector, styles, pseudo] of [
+  ['band color', '.preview-card-band-left', {
+    'background-color': 'rgb(255, 0, 0)',
+  }, undefined],
+  ['dot paint', '.preview-card-band-right', {
+    'background-image': 'none',
+  }, '::after'],
 ] as const) {
   test(`card display rejects changed ${name}`, async ({ page }) => {
     const card = CASES[2]!.card;
     await openCard(page, await renderCardHTML(buildEnvelope(card)));
     const assertCard = () => expectCardDisplay(page, card, 'no-photo-en');
     await assertCard();
-    const mutation = await page.evaluateHandle((content) => {
-      const style = document.createElement('style');
-      style.textContent = content;
-      document.head.append(style);
-      return style;
-    }, css);
-    if (name === 'band color') {
-      await expect(page.locator('.preview-card-band-left'))
-        .toHaveCSS('background-color', 'rgb(255, 0, 0)');
-    } else {
-      const dots = await page.locator('.preview-card-band-right')
-        .evaluate((element) =>
-          getComputedStyle(element, '::after').backgroundImage);
-      expect(dots).toBe('none');
-    }
+    const restore = await applyStyleMutation(
+      page.locator(selector), styles, pseudo,
+    );
     await expect(assertCard()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertCard();
   });
 }

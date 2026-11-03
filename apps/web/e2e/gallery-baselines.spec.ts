@@ -8,6 +8,7 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
@@ -318,21 +319,25 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-for (const [name, css] of [
-  ['columns', '.gallery-grid { grid-template-columns: 1fr !important; }'],
-  ['overlap', '.gallery-grid > :nth-child(2) { '
-  + 'transform: translateX(-18px) !important; }'],
-  ['row gap', '.gallery-grid > :nth-child(n+3) { '
-  + 'transform: translateY(4px) !important; }'],
+for (const [name, selector, styles] of [
+  ['columns', '.gallery-grid', {
+    'grid-template-columns': ['1fr', /^\d+(?:\.\d+)?px$/u],
+  }],
+  ['overlap', '.gallery-grid > :nth-child(2)', {
+    transform: ['translateX(-18px)', 'matrix(1, 0, 0, 1, -18, 0)'],
+  }],
+  ['row gap', '.gallery-grid > :nth-child(n+3)', {
+    transform: ['translateY(4px)', 'matrix(1, 0, 0, 1, 0, 4)'],
+  }],
 ] as const) {
   test(`Library assertions reject changed ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
     const assertClean = () => assertLibrary(page, 'vi', 'light', 390, false);
     await assertClean();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(page.locator(selector), styles);
     await expect(assertClean()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertClean();
   });
 }
@@ -348,15 +353,18 @@ for (const name of ['control', 'heading'] as const) {
       ? sheet.locator('[data-filter="ats"]')
       : sheet.locator('h2').first();
     await assertSheet();
-    await target.evaluate((element, kind) => {
-      if (kind === 'control') (element as HTMLElement).style.display = 'none';
-      else element.setAttribute('aria-hidden', 'true');
-    }, name);
+    const restore = name === 'control'
+      ? await applyStyleMutation(target, { display: 'none' })
+      : async () => {
+        await target.evaluate((element) =>
+          element.removeAttribute('aria-hidden'));
+      };
+    if (name === 'heading') {
+      await target.evaluate((element) =>
+        element.setAttribute('aria-hidden', 'true'));
+    }
     await expect(assertSheet()).rejects.toThrow();
-    await target.evaluate((element, kind) => {
-      if (kind === 'control') (element as HTMLElement).style.display = '';
-      else element.removeAttribute('aria-hidden');
-    }, name);
+    await restore();
     await assertSheet();
   });
 }

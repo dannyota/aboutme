@@ -16,6 +16,7 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 
 import {
   CHROME_PIXEL_TOLERANCE,
@@ -372,21 +373,23 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-for (const [name, css] of [
-  ['sheet alignment', '[data-testid="landing-sheet"] { '
-  + 'transform: translateX(4px) scale(var(--sheet-zoom)) !important; }'],
-  ['columns', '[data-testid="landing-template-grid"] '
-  + '{ grid-template-columns: 1fr !important; }'],
-  ['card overlap', '[data-testid="landing-template-grid"] '
-  + '> :nth-child(2) { transform: translateX(-20px) !important; }'],
-  ['row gap', '[data-testid="landing-template-grid"] '
-  + '> :nth-child(n+3) { transform: translateY(4px) !important; }'],
-  ['title clipping', '[data-testid="landing-title"] '
-  + '{ height: 20px !important; overflow: hidden !important; '
-  + 'white-space: nowrap !important; }'],
-  ['body color', 'body { color: rgb(1, 2, 3) !important; }'],
-  ['body font size', 'body { font-size: 17px !important; }'],
-  ['navigation', 'nav a[href="/templates"] { display: none !important; }'],
+for (const [name, selector, styles] of [
+  ['sheet alignment', '[data-testid="landing-sheet"]', { translate: '4px' }],
+  ['columns', '[data-testid="landing-template-grid"]', {
+    'grid-template-columns': ['1fr', /^\d+(?:\.\d+)?px$/u],
+  }],
+  ['card overlap', '[data-testid="landing-template-grid"] > :nth-child(2)', {
+    transform: ['translateX(-20px)', 'matrix(1, 0, 0, 1, -20, 0)'],
+  }],
+  ['row gap', '[data-testid="landing-template-grid"] > :nth-child(n+3)', {
+    transform: ['translateY(4px)', 'matrix(1, 0, 0, 1, 0, 4)'],
+  }],
+  ['title clipping', '[data-testid="landing-title"]', {
+    'height': '20px', 'overflow': 'hidden', 'white-space': 'nowrap',
+  }],
+  ['body color', 'body', { color: 'rgb(1, 2, 3)' }],
+  ['body font size', 'body', { 'font-size': '17px' }],
+  ['navigation', 'nav a[href="/templates"]', { display: 'none' }],
 ] as const) {
   test(`chrome assertions reject changed ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
@@ -394,9 +397,9 @@ for (const [name, css] of [
     await page.evaluate(() => document.fonts.ready);
     const assertClean = () => expectChrome(page, 'home', 'vi', 'light', 390);
     await assertClean();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(page.locator(selector), styles);
     await expect(assertClean()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertClean();
   });
 }
@@ -413,12 +416,11 @@ for (const path of ['/', '/templates'] as const) {
         page, path === '/' ? 'home' : 'templates', 'vi', 'light', 1440,
       );
       await assertClean();
-      const mutation = await page.addStyleTag({
-        content: `h1 { height: 20px !important; `
-          + `overflow: ${overflow} !important; }`,
+      const restore = await applyStyleMutation(page.locator('h1'), {
+        height: '20px', overflow,
       });
       await expect(assertClean()).rejects.toThrow();
-      await mutation.evaluate((node) => node.remove());
+      await restore();
       await assertClean();
     });
   }

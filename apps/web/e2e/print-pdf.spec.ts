@@ -7,6 +7,7 @@ import {
 import { writeFile } from 'node:fs/promises';
 
 import { measurePdfLayout } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   attachMembership,
   checkMembership,
@@ -452,12 +453,18 @@ for (const rule of ['orphan', 'widow'] as const) {
       const tokens = ['FIRST', 'SECOND'].map((suffix) => {
         const token = document.createElement('span');
         token.textContent = `${selected.toUpperCase()}-${suffix}`;
-        token.style.whiteSpace = 'nowrap';
         return token;
       });
       element.replaceChildren(tokens[0]!, ' ', tokens[1]!);
-      (element as HTMLElement).style.width = '12em';
     }, rule);
+    await applyStyleMutation(paragraph.locator('span'), {
+      'white-space': 'nowrap',
+    });
+    const fontSize = await paragraph.evaluate((element) =>
+      parseFloat(getComputedStyle(element).fontSize));
+    await applyStyleMutation(paragraph, {
+      width: ['12em', `${fontSize * 12}px`],
+    });
     const lines = await paragraph.evaluate((element) => {
       return [...element.children].map((token) => {
         const range = document.createRange();
@@ -470,9 +477,7 @@ for (const rule of ['orphan', 'widow'] as const) {
       .toBeLessThanOrEqual(0.1);
     // print.md §4 requires both constraints for the two-line widow fixture.
     if (rule === 'orphan') {
-      await paragraph.evaluate((element) => {
-        (element as HTMLElement).style.widows = '1';
-      });
+      await applyStyleMutation(paragraph, { widows: '1' });
     }
     const pages = await printedTextPages(page);
     expect(pages).toHaveLength(2);
@@ -483,32 +488,29 @@ for (const rule of ['orphan', 'widow'] as const) {
       text: `${rule.toUpperCase()}-FIRST ${rule.toUpperCase()}-SECOND`,
       pitch: 18,
     }])).toBe(true);
-    await paragraph.evaluate((element) => {
-      Object.assign((element as HTMLElement).style, {
-        orphans: '1', widows: '1',
-      });
-    });
+    await applyStyleMutation(paragraph, { orphans: '1', widows: '1' });
     const split = await printedTextPages(page);
     expect(split).toHaveLength(2);
     expect(split[0]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
     expect(split[1]!.text).toContain(`${rule.toUpperCase()}-SECOND`);
     if (rule === 'widow') {
       // Four lines permit a 2/2 split, so widows can be isolated from orphans.
-      await page.addStyleTag({ content: '.harness-paper::before {'
-        + ' height: calc(267mm - 72px) !important; }' });
+      await applyStyleMutation(page.locator('.harness-paper'), {
+        height: ['calc(267mm - 72px)', /^\d+(?:\.\d+)?px$/u],
+      }, '::before');
       const markers = ['FIRST', 'SECOND', 'THIRD', 'FOURTH']
         .map((suffix) => `WIDOW-${suffix}`);
       await paragraph.evaluate((element, values) => {
         element.replaceChildren(...values.flatMap((value, index) => {
           const token = document.createElement('span');
           token.textContent = value;
-          token.style.whiteSpace = 'nowrap';
           return index === 0 ? [token] : [' ', token];
         }));
-        Object.assign((element as HTMLElement).style, {
-          orphans: '2', widows: '2',
-        });
       }, markers);
+      await applyStyleMutation(paragraph.locator('span'), {
+        'white-space': 'nowrap',
+      });
+      await applyStyleMutation(paragraph, { orphans: '2', widows: '2' });
       const positions = await paragraph.evaluate((element) =>
         [...element.children].map((token) =>
           token.getBoundingClientRect().top));
@@ -529,9 +531,7 @@ for (const rule of ['orphan', 'widow'] as const) {
           text: markers.slice(index * 2, index * 2 + 2).join(' '), pitch: 18,
         }])).toBe(true);
       }
-      await paragraph.evaluate((element) => {
-        (element as HTMLElement).style.widows = '1';
-      });
+      await applyStyleMutation(paragraph, { widows: '1' });
       await expect(paragraph).toHaveCSS('orphans', '2');
       const relaxed = await printedTextPages(page);
       expect(relaxed).toHaveLength(2);

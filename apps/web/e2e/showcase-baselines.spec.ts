@@ -7,6 +7,7 @@ import {
   measureShowcaseSheet,
   measureTextContainment,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 
 import {
   CHROME_PIXEL_TOLERANCE,
@@ -463,21 +464,27 @@ for (const locale of ['vi', 'en'] as const) {
 }
 
 const SHOWCASE_MUTATIONS = [
-  ['columns', '.showcase-grid { '
-  + 'grid-template-columns: repeat(2, 1fr) !important; }'],
-  ['row gap', '.showcase-grid > :nth-child(2) { margin-top: 4px !important; }'],
-  ['hidden filter', '[data-action="showcase-filters-open"] '
-  + '{ display: none !important; }'],
-  ['heading color', '[data-testid="showcase-header"] h1 '
-  + '{ color: black !important; }'],
-  ['heading font', '[data-testid="showcase-header"] h1 '
-  + '{ font-family: serif !important; }'],
-  ['clipped heading', '[data-testid="showcase-header"] h1 { '
-  + 'width: 20px !important; overflow: hidden !important; '
-  + 'white-space: nowrap !important; }'],
+  ['columns', '.showcase-grid', {
+    'grid-template-columns': [
+      'repeat(2, 1fr)', /^\d+(?:\.\d+)?px \d+(?:\.\d+)?px$/u,
+    ],
+  }],
+  ['row gap', '.showcase-grid > :nth-child(2)', { 'margin-top': '4px' }],
+  ['hidden filter', '[data-action="showcase-filters-open"]', {
+    display: 'none',
+  }],
+  ['heading color', '[data-testid="showcase-header"] h1', {
+    color: 'rgb(0, 0, 0)',
+  }],
+  ['heading font', '[data-testid="showcase-header"] h1', {
+    'font-family': 'serif',
+  }],
+  ['clipped heading', '[data-testid="showcase-header"] h1', {
+    'width': '20px', 'overflow': 'hidden', 'white-space': 'nowrap',
+  }],
 ] as const;
 
-for (const [name, css] of SHOWCASE_MUTATIONS) {
+for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
   test(`showcase assertions reject ${name}`, async ({ page }) => {
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
@@ -486,9 +493,9 @@ for (const [name, css] of SHOWCASE_MUTATIONS) {
     const assertClean = () =>
       assertShowcase(page, 'filled', 'vi', 'light', 390);
     await assertClean();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(page.locator(selector), styles);
     await expect(assertClean()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertClean();
   });
 }

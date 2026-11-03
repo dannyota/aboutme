@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { measureVerticalFlow } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
@@ -137,6 +138,54 @@ test.describe('guide page pixel baselines', () => {
   }
 });
 
+test('style mutations disable motion and restore inline styles', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <style>
+      @keyframes fade { from { opacity: 0.5; } to { opacity: 0.5; } }
+    </style>
+    <div id="target" style="transition: all 60s !important;
+      animation: fade 60s infinite; transform: translateY(0px)">Target</div>
+  `);
+  const target = page.locator('#target');
+  await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  const transitioning = await target.evaluate((element) => {
+    (element as HTMLElement).style.setProperty(
+      'transform', 'translateY(36px)', 'important',
+    );
+    return getComputedStyle(element).transform;
+  });
+  expect(transitioning).not.toBe('matrix(1, 0, 0, 1, 0, 36)');
+  const original = await target.getAttribute('style');
+  const restore = await applyStyleMutation(target, {
+    transform: ['translateY(72px)', 'matrix(1, 0, 0, 1, 0, 72)'],
+    opacity: '0',
+  });
+  await expect(target).toHaveCSS('transition-property', 'none');
+  await expect(target).toHaveCSS('animation-name', 'none');
+  await expect(target).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 72)');
+  await expect(target).toHaveCSS('opacity', '0');
+  await restore();
+  await expect(target).toHaveAttribute('style', original!);
+});
+
+test('style mutations verify and restore pseudo-elements', async ({ page }) => {
+  await page.setContent('<div id="target">Target</div>');
+  const target = page.locator('#target');
+  const original = await target.evaluate((element) =>
+    getComputedStyle(element, '::after').content);
+  const restore = await applyStyleMutation(target, {
+    'content': '"mutated"', 'background-color': 'rgb(255, 0, 0)',
+  }, '::after');
+  expect(await target.evaluate((element) =>
+    getComputedStyle(element, '::after').content)).toBe('"mutated"');
+  await restore();
+  expect(await target.evaluate((element) =>
+    getComputedStyle(element, '::after').content)).toBe(original);
+  await expect(target).not.toHaveAttribute('data-e2e-style-mutation');
+});
+
 test('guide flow detects overlapping sections', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await mockSignedOutSession(page);
@@ -148,39 +197,15 @@ test('guide flow detects overlapping sections', async ({ page }) => {
   const assertFlow = () => assertGuideFlow(sections);
   await assertFlow();
   const header = page.getByTestId('guide-header');
-  const headerHandle = await header.elementHandle();
-  const original = await header.evaluate((element) => {
-    const style = (element as HTMLElement).style;
-    return {
-      value: style.getPropertyValue('transform'),
-      priority: style.getPropertyPriority('transform'),
-    };
+  const restore = await applyStyleMutation(header, {
+    transform: ['translateY(36px)', 'matrix(1, 0, 0, 1, 0, 36)'],
   });
-  await expect.poll(async () => {
-    const state = await header.evaluate((element, savedHeader) => {
-      const current = element as HTMLElement;
-      current.style.setProperty('transform', 'translateY(36px)', 'important');
-      const bottom = current.getBoundingClientRect().bottom;
-      const nextTop = current.parentElement!
-        .querySelector(':scope > section')!.getBoundingClientRect().top;
-      return {
-        sameHeader: current === savedHeader,
-        inline: current.style.transform,
-        computed: getComputedStyle(current).transform,
-        bottom,
-        nextTop,
-        gap: nextTop - bottom,
-      };
-    }, headerHandle);
-    if (state.gap >= 0) console.log(`guide overlap: ${JSON.stringify(state)}`);
-    return state.gap;
-  }, { timeout: 5000 }).toBeLessThan(0);
+  const gap = await header.evaluate((element) =>
+    element.parentElement!.querySelector(':scope > section')!
+      .getBoundingClientRect().top - element.getBoundingClientRect().bottom);
+  expect(gap).toBeLessThan(0);
   await expect(assertFlow()).rejects.toThrow();
-  await header.evaluate((element, saved) => {
-    (element as HTMLElement).style.setProperty(
-      'transform', saved.value, saved.priority,
-    );
-  }, original);
+  await restore();
   await assertFlow();
 });
 

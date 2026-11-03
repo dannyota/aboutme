@@ -11,6 +11,7 @@ import type { Resume } from '@aboutme/schema';
 
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { measurePdfLayout } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import { pdfFontFacesLoaded } from './pdf-fonts';
 import {
   pdfGlyphGeometry,
@@ -591,9 +592,7 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
       [regular]);
     expect(pdfTextStyleMatches(correct, heading, expected),
       pdfTextStyleDiagnostic(correct, heading, expected)).toBe(true);
-    await name.evaluate((element) => {
-      (element as HTMLElement).style.fontWeight = '400';
-    });
+    const restore = await applyStyleMutation(name, { 'font-weight': '400' });
     const alteredLayout = await measurePdfLayout(page, inset);
     expect(alteredLayout.chunks.find(({ role }) => role === 'name')?.weight)
       .toBe('400');
@@ -610,9 +609,7 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
     expect(measurements.found.advanceWeight.shared).toBeGreaterThanOrEqual(3);
     expect(pdfTextStyleMatches(dropped, heading, expected), diagnostic)
       .toBe(false);
-    await name.evaluate((element) => {
-      (element as HTMLElement).style.removeProperty('font-weight');
-    });
+    await restore();
     await assertSampleStyle(sample, 'minimal-air', 'en',
       await measurePdfLayout(page, inset), baseline[0]!);
     expect(external).toEqual([]);

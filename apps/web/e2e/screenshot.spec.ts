@@ -3,6 +3,7 @@ import { TEMPLATES } from '@aboutme/schema/templates';
 
 import { measureTextContainment } from './display-assertions';
 
+import { applyStyleMutation } from './style-mutation';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -196,19 +197,17 @@ test('renderer text containment detects clipping', async ({ page }) => {
   const paragraph = page.locator('.resume-document .entry-body p').first();
   const assertContained = () => assertRendererText(paragraph);
   await assertContained();
-  const mutation = await page.addStyleTag({
-    content: '.entry-body p { height: 1px !important; '
-      + 'overflow: hidden !important; }',
+  const restore = await applyStyleMutation(page.locator('.entry-body p'), {
+    height: '1px', overflow: 'hidden',
   });
   await expect(assertContained()).rejects.toThrow();
-  await mutation.evaluate((element) => element.remove());
+  await restore();
   await assertContained();
 });
 
-for (const [name, css] of [
-  ['clipping', '.entry-body { height: 1px !important; '
-  + 'overflow: hidden !important; }'],
-  ['opacity', '.entry-body { opacity: 0 !important; }'],
+for (const [name, styles] of [
+  ['clipping', { height: '1px', overflow: 'hidden' }],
+  ['opacity', { opacity: '0' }],
 ] as const) {
   test(`renderer text containment detects ancestor ${name}`, async ({
     page,
@@ -222,9 +221,11 @@ for (const [name, css] of [
     const paragraph = page.locator('.resume-document .entry-body p').first();
     const assertContained = () => assertRendererText(paragraph);
     await assertContained();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(
+      page.locator('.entry-body'), styles,
+    );
     await expect(assertContained()).rejects.toThrow();
-    await mutation.evaluate((element) => element.remove());
+    await restore();
     await assertContained();
   });
 }

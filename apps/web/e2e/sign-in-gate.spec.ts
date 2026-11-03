@@ -4,6 +4,7 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 
 import {
   denyExternalRequests,
@@ -210,22 +211,21 @@ for (const kind of ['long text', 'nested clipping', 'overlap'] as const) {
       ? assertFlow(siblings)
       : assertTextContained(text);
     await assertClean();
-    await page.evaluate((name) => {
-      const span = document.querySelector<HTMLElement>('#text span')!;
-      if (name === 'long text') {
-        span.textContent = 'A deliberately long unbroken line that cannot fit';
-        span.style.whiteSpace = 'nowrap';
-      } else if (name === 'nested clipping') {
-        span.textContent = 'Nested clipping';
-        Object.assign(span.style, {
-          display: 'inline-block', width: '20px', overflow: 'hidden',
-        });
-      } else {
-        document.querySelector<HTMLElement>('#flow > :nth-child(2)')!
-          .style.marginTop = '-4px';
-      }
-    }, kind);
+    const span = page.locator('#text span');
+    if (kind !== 'overlap') {
+      await span.evaluate((element, name) => {
+        element.textContent = name === 'long text'
+          ? 'A deliberately long unbroken line that cannot fit'
+          : 'Nested clipping';
+      }, kind);
+    }
+    const restore = kind === 'overlap'
+      ? await applyStyleMutation(siblings.nth(1), { 'margin-top': '-4px' })
+      : await applyStyleMutation(span, kind === 'long text'
+          ? { 'white-space': 'nowrap' }
+          : { display: 'inline-block', width: '20px', overflow: 'hidden' });
     await expect(assertClean()).rejects.toThrow();
+    await restore();
     await page.setContent(`
       <div id="text" style="width: 100px; height: 20px; overflow: hidden">
         <span>One line</span>

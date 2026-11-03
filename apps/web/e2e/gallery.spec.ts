@@ -9,6 +9,7 @@ import {
   measureGalleryGrid,
   measureTextContainment,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
@@ -1050,11 +1051,13 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
-for (const [name, css] of [
-  ['displacement', '.template-detail__info { '
-  + 'transform: translateX(4px) !important; }'],
-  ['clipped ATS text', '[data-ats-text] { height: 24px !important; '
-  + 'overflow: hidden !important; }'],
+for (const [name, selector, styles] of [
+  ['displacement', '.template-detail__info', {
+    transform: ['translateX(4px)', 'matrix(1, 0, 0, 1, 4, 0)'],
+  }],
+  ['clipped ATS text', '[data-ats-text]', {
+    height: '24px', overflow: 'hidden',
+  }],
 ] as const) {
   test(`template detail assertions reject ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -1063,9 +1066,9 @@ for (const [name, css] of [
     await page.evaluate(() => document.fonts.ready);
     const assertClean = () => assertGalleryDetail(page, 'vi', 1440, 'ats');
     await assertClean();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(page.locator(selector), styles);
     await expect(assertClean()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertClean();
   });
 }

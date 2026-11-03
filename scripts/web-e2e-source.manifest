@@ -630,6 +630,7 @@ apps/web/e2e/screenshot.spec.ts
 apps/web/e2e/showcase-baselines.spec.ts
 apps/web/e2e/showcase.spec.ts
 apps/web/e2e/sign-in-gate.spec.ts
+apps/web/e2e/style-mutation.ts
 apps/web/e2e/support.ts
 apps/web/e2e/verify-support.ts
 apps/web/e2e/verify.spec.ts

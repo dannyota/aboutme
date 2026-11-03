@@ -4,6 +4,7 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
@@ -692,10 +693,10 @@ test('verify display rejects overlapping cards', async ({ page }) => {
   await assertClean();
   const gap = await page.getByTestId('verify-chain').evaluate((el) =>
     Number.parseFloat(getComputedStyle(el.parentElement!).rowGap));
-  const mutation = await page.addStyleTag({
-    content: `[data-testid="verify-chain"] { margin-top: ${-gap - 4}px }`,
+  const restore = await applyStyleMutation(page.getByTestId('verify-chain'), {
+    'margin-top': `${-gap - 4}px`,
   });
   await expect(assertClean()).rejects.toThrow();
-  await mutation.evaluate((node) => node.remove());
+  await restore();
   await assertClean();
 });

@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import { measureTextContainment } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import { denyExternalRequests, waitForImages } from './support';
 
 const CELLS = [
@@ -165,12 +166,9 @@ test('renderer rejects a hidden language section', async ({ page }) => {
     has: page.getByRole('heading', { name: 'Ngôn ngữ', exact: true }),
   });
   await expect(section).toHaveCount(1);
-  await section.evaluate((node) => {
-    (node as HTMLElement).style.display = 'none';
-  });
+  const restore = await applyStyleMutation(section, { display: 'none' });
   await expect(assertClean()).rejects.toThrow();
-  await page.reload();
-  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  await restore();
   await assertClean();
 });
 
@@ -184,13 +182,9 @@ test('renderer rejects a transparent language section', async ({ page }) => {
     has: page.getByRole('heading', { name: 'Ngôn ngữ', exact: true }),
   });
   await expect(section).toHaveCount(1);
-  await section.evaluate((node) => {
-    (node as HTMLElement).style.opacity = '0';
-  });
+  const restore = await applyStyleMutation(section, { opacity: '0' });
   await expect(assertClean()).rejects.toThrow();
-  await section.evaluate((node) => {
-    (node as HTMLElement).style.removeProperty('opacity');
-  });
+  await restore();
   await assertClean();
 });
 
@@ -354,10 +348,14 @@ for (const language of ['vi', 'en'] as const) {
   });
 }
 
-for (const [name, css] of [
-  ['article ground', '.resume-document { background: red !important; }'],
-  ['sidebar ground', '.resume-sidebar { background: red !important; }'],
-  ['foreground', '.resume-document { color: red !important; }'],
+for (const [name, selector, styles] of [
+  ['article ground', '.resume-document', {
+    'background-color': 'rgb(255, 0, 0)',
+  }],
+  ['sidebar ground', '.resume-sidebar', {
+    'background-color': 'rgb(255, 0, 0)',
+  }],
+  ['foreground', '.resume-document', { color: 'rgb(255, 0, 0)' }],
 ] as const) {
   test(`public paint rejects changed ${name}`, async ({ page }) => {
     const response = await page.goto(
@@ -368,9 +366,9 @@ for (const [name, css] of [
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     const assertClean = () => assertPublicPaint(page, 'modern-sidebar', true);
     await assertClean();
-    const mutation = await page.addStyleTag({ content: css });
+    const restore = await applyStyleMutation(page.locator(selector), styles);
     await expect(assertClean()).rejects.toThrow();
-    await mutation.evaluate((node) => node.remove());
+    await restore();
     await assertClean();
   });
 }

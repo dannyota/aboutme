@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { measurePdfLayout } from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 import {
   expectedEntryIds,
   EXPECTED_PAGES,
@@ -90,12 +91,11 @@ test('PDF columns reject a main entry moved into the page-two sidebar',
     expect(pdfColumnsMatch(baseline[1]!, layout, margins, false)).toBe(true);
     const last = page.locator('.resume-main .entry').last();
     await expect(last).toContainText('MAIN-ENTRY-09');
-    const shift = (layout.sidebar!.left - margins.x) / 0.75;
-    await last.evaluate((entry, offset) => {
-      Object.assign((entry as HTMLElement).style, {
-        transform: `translateX(${offset}px)`, width: '100px',
-      });
-    }, shift);
+    const shift = Math.round((layout.sidebar!.left - margins.x) / 0.75);
+    await applyStyleMutation(last, {
+      transform: [`translateX(${shift}px)`, `matrix(1, 0, 0, 1, ${shift}, 0)`],
+      width: '100px',
+    });
     const altered = await printedTextPages(page);
     expect(altered).toHaveLength(2);
     expect(altered[1]!.text).toContain('MAIN-ENTRY-09');
@@ -125,19 +125,25 @@ for (const mutation of ['coincident text', 'cross-column collision'] as const) {
     if (mutation === 'coincident text') {
       await title.evaluate((element) => {
         const clone = element.cloneNode(true) as HTMLElement;
-        Object.assign(clone.style, { position: 'absolute', inset: '0' });
-        (element as HTMLElement).style.position = 'relative';
+        clone.dataset.overlapProbe = 'true';
         element.append(clone);
+      });
+      await applyStyleMutation(title, { position: 'relative' });
+      await applyStyleMutation(title.locator('[data-overlap-probe]'), {
+        position: 'absolute', inset: '0px',
       });
     } else {
       const target = await title.boundingBox();
       expect(target).not.toBeNull();
-      await page.locator('.resume-sidebar .entry-title').first()
-        .evaluate((element, point) => {
-          const origin = element.getBoundingClientRect();
-          (element as HTMLElement).style.transform
-            = `translate(${point!.x - origin.x}px, ${point!.y - origin.y}px)`;
-        }, target);
+      const sidebar = page.locator('.resume-sidebar .entry-title').first();
+      const origin = await sidebar.boundingBox();
+      expect(origin).not.toBeNull();
+      const x = Math.round(target!.x - origin!.x);
+      const y = Math.round(target!.y - origin!.y);
+      await applyStyleMutation(sidebar, {
+        transform: [`translate(${x}px, ${y}px)`,
+          `matrix(1, 0, 0, 1, ${x}, ${y})`],
+      });
     }
     const altered = await printedTextPages(page);
     expect(altered).toHaveLength(2);
@@ -168,9 +174,11 @@ test('PDF content measurements detect entry and accent mutations', async ({
       .toContain('Nội dung kiểm tra phân trang bản in');
     const entries = page.locator('.resume-main .entry');
     await expect(entries).toHaveCount(printCase.total);
+    if (mutation === 'hide') {
+      await applyStyleMutation(entries.first(), { display: 'none' });
+    }
     await entries.first().evaluate((first, change) => {
       const next = first.nextElementSibling;
-      if (change === 'hide') (first as HTMLElement).style.display = 'none';
       if (change === 'duplicate') first.after(first.cloneNode(true));
       if (change === 'reorder' && next !== null) first.before(next);
       if (change === 'accents') {
@@ -209,9 +217,7 @@ test('PDF membership detects forced break', async ({ page }) => {
   expect(baseline.pageCount).toBe(EXPECTED_PAGES);
   const entries = page.locator('.resume-main .entry');
   await expect(entries).toHaveCount(printCase.total);
-  await entries.nth(3).evaluate((entry) => {
-    (entry as HTMLElement).style.breakBefore = 'page';
-  });
+  await applyStyleMutation(entries.nth(3), { 'break-before': 'page' });
   const altered = pdfMembership(await printedTextPages(page), printCase);
   expect(altered).not.toEqual(baseline);
   expect(external).toEqual([]);
@@ -236,8 +242,8 @@ test('PDF membership detects unbreakable entries', async ({ page }) => {
   expect(pdfEntryIds(baselinePages, 'MAIN'))
     .toEqual(['MAIN-ENTRY-01', 'MAIN-ENTRY-02']);
   const baseline = pdfMembership(baselinePages, CASES[1]!);
-  await page.addStyleTag({
-    content: '.entry { break-inside: avoid !important; }',
+  await applyStyleMutation(page.locator('.entry'), {
+    'break-inside': 'avoid',
   });
   await expect(entries.first()).toHaveCSS('break-inside', 'avoid');
   const alteredPages = await printedTextPages(page);
@@ -301,21 +307,32 @@ for (const mutation of PAINT_MUTATIONS) {
     expect(photo(baseline), pdfImageDiagnostic(baseline[0]!.paint.images[0],
       identity, layout.photo!)).toBe(true);
     if (mutation === 'sidebar position') {
-      await page.addStyleTag({ content: '.resume-sidebar '
-        + '.entry:nth-of-type(n+12)'
-        + ' { transform: translateX(-300px) !important; }' });
+      await applyStyleMutation(
+        page.locator('.resume-sidebar .entry:nth-of-type(n+12)'), {
+          transform: ['translateX(-300px)', 'matrix(1, 0, 0, 1, -300, 0)'],
+        },
+      );
     } else if (mutation === 'continuation tint') {
       const firstHeight = (baseline[0]!.text.height - margins.y
         - layout.sidebar!.top) / 0.75;
-      await page.addStyleTag({ content: '.resume-sidebar {'
-        + ' background: transparent !important; position: relative; }'
-        + '.resume-sidebar::before { content: ""; position: absolute;'
-        + ` top: 0; left: 0; width: 100%; height: ${firstHeight}px;`
-        + ' background: #e3ecf0; }'
-        + '.resume-sidebar .resume-section { position: relative; }' });
+      const sidebar = page.locator('.resume-sidebar');
+      await applyStyleMutation(sidebar, {
+        'background-color': 'rgba(0, 0, 0, 0)', 'position': 'relative',
+      });
+      const width = await sidebar.evaluate((element) =>
+        getComputedStyle(element).width);
+      await applyStyleMutation(sidebar, {
+        'content': '""', 'position': 'absolute', 'top': '0px', 'left': '0px',
+        'width': ['100%', width],
+        'height': [`${firstHeight}px`, /^\d+(?:\.\d+)?px$/u],
+        'background-color': 'rgb(227, 236, 240)',
+      }, '::before');
+      await applyStyleMutation(sidebar.locator('.resume-section'), {
+        position: 'relative',
+      });
     } else if (mutation === 'photo') {
-      await page.locator('.resume-photo img').evaluate((image) => {
-        (image as HTMLElement).style.visibility = 'hidden';
+      await applyStyleMutation(page.locator('.resume-photo img'), {
+        visibility: 'hidden',
       });
     } else {
       await page.locator('.resume-photo img').evaluate(async (element) => {
@@ -369,16 +386,25 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
     expect(correct(baseline), pdfWidgetDiagnostic(baseline[0]!, widget!))
       .toBe(true);
     if (mutation === 'overpaint') {
-      await page.addStyleTag({ content: '.level-track { position: relative; }'
-        + '.level-track::after { content: ""; position: absolute; inset: 0;'
-        + ' background: rgb(255 255 255 / 99%); }' });
+      const track = page.locator('.level-track');
+      await applyStyleMutation(track, { position: 'relative' });
+      await applyStyleMutation(track, {
+        'content': '""', 'position': 'absolute', 'inset': '0px',
+        'background-color': 'rgba(255, 255, 255, 0.99)',
+      }, '::after');
     } else if (mode === 'bar') {
-      await page.addStyleTag({
-        content: '.level-fill { width: 20% !important; }',
+      const fill = page.locator('.level-fill');
+      await applyStyleMutation(fill, {
+        width: ['20%', /^\d+(?:\.\d+)?px$/u],
       });
+      expect(await fill.evaluateAll((elements) => elements.every((element) =>
+        Math.abs(element.getBoundingClientRect().width
+          - element.parentElement!.getBoundingClientRect().width * 0.2) <= 1),
+      )).toBe(true);
     } else if (mode === 'dots') {
-      await page.addStyleTag({ content: '.level-dot {'
-        + ' background: #0f6b7d !important; }' });
+      await applyStyleMutation(page.locator('.level-dot'), {
+        'background-color': 'rgb(15, 107, 125)',
+      });
     } else {
       await page.getByRole('img', { name: 'SKILL-4: 4 of 5', exact: true })
         .locator('span').evaluate((label) => { label.textContent = '3/5'; });
