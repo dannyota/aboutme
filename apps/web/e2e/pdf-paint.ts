@@ -196,6 +196,10 @@ export function pdfBoxMatches(actual: PdfBox, expected: PdfBox): boolean {
     .every((edge) => Math.abs(actual[edge] - expected[edge]) <= 1);
 }
 
+export function pdfIsStroke(fill: PdfFill): boolean {
+  return (shapes.get(fill) ?? unsupported()).stroke;
+}
+
 function hasPaint(
   paint: PdfPaint,
   box: PdfBox,

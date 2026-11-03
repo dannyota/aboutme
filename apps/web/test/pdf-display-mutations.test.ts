@@ -338,3 +338,80 @@ describe('PDF sidebar backgrounds', () => {
       '#e3ecf0', shapes)).toBe(false);
     });
 });
+
+describe('PDF surface decorations', () => {
+  const height = 841.91998;
+  const proxy = { getViewport: () => ({ width: 595.43999, height,
+    transform: [1, 0, 0, 1, 0, 0],
+  }) } as unknown as PDFPageProxy;
+  const rectangle = (box: PdfBox) => new Float32Array([
+    0, box.left, box.top, 1, box.right, box.top,
+    1, box.right, box.bottom, 1, box.left, box.bottom, 4,
+  ]);
+  const textPage = (bounds: PdfBox, size: number, baseline: number) => ({
+    width: 595.43999, height, text: 'TEXT', items: [{
+      text: 'TEXT', x: bounds.left, y: height - baseline,
+      width: bounds.right - bounds.left, height: size, bounds,
+    }],
+  });
+
+  it('accepts inline chevron strokes beside a sidebar heading', async () => {
+    const background = { left: 390.7499694824219,
+      right: 555.66796875, top: 243.74998474121094, bottom: 804.94921875 };
+    const text = textPage({ left: 404.8007681333006,
+      right: 450.1021858805565, top: 245.58748955906253,
+      bottom: 254.36548940421255 }, 11.549999218750012, 254.24998940625);
+    const chevron = new Float32Array([
+      0, 397.75, 247.875, 1, 400.375, 250.5, 1, 397.75, 253.125,
+    ]);
+    const rule = { ...background, top: 260.25, bottom: 261 };
+    const paint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath, OPS.setStrokeRGBColor,
+      OPS.setLineWidth, OPS.setLineCap, OPS.setLineJoin, OPS.constructPath,
+    ], [
+      ['#e3ecf0'], [OPS.fill, [rectangle(background)]],
+      ['#8eb8c2'], [OPS.fill, [rectangle(rule)]], ['#4e5b62'],
+      [0.765625], [1], [1], [OPS.stroke, [chevron]],
+    ]);
+    expect(pdfSurfacePaint(paint, text, background, '#e3ecf0', [rule]))
+      .toBe(true);
+    const overpaint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+    ], [['#ffffff'], [OPS.fill, [rectangle({ ...background,
+      top: 500, bottom: 780 })]]]);
+    expect(pdfSurfacePaint({ ...paint,
+      fills: [...paint.fills, ...overpaint.fills] }, text, background,
+    '#e3ecf0', [rule])).toBe(false);
+  });
+
+  it('accepts a partial link underline below its extracted text', async () => {
+    const background = { left: 62.25, right: 532.81640625,
+      top: 51, bottom: 164.24998474121094 };
+    const phone = textPage({ left: 245.41405227441405,
+      right: 354.6500998479119, top: 120.99096175558475,
+      bottom: 129.13500629234818 }, 11.24999953125, 128.999994625);
+    const next = textPage({ left: 269.4374887734375,
+      right: 315.9288769862962, top: 140.4909609430847,
+      bottom: 148.6350054798482 }, 11.24999953125, 148.4999938125);
+    const text = { ...phone, items: [...phone.items, ...next.items] };
+    const underline = { left: 280.8046569824219, right: 354.6562194824219,
+      top: 131.24998474121094, bottom: 131.99998474121094 };
+    const paint = await pdfPaintOperators(proxy, [
+      OPS.setFillRGBColor, OPS.constructPath,
+      OPS.setFillRGBColor, OPS.constructPath,
+    ], [
+      ['#fff0eb'], [OPS.fill, [rectangle(background)]],
+      ['#c23a14'], [OPS.fill, [rectangle(underline)]],
+    ]);
+    const linked = { ...paint, text: [{ text: 'LINK', color: '#c23a14',
+      x: underline.left, y: 128.999994625, size: 11.24999953125,
+      font: 'Test', bold: false }] };
+    expect(pdfSurfacePaint(linked, text, background, '#fff0eb')).toBe(true);
+    expect(pdfSurfacePaint(paint, text, background, '#fff0eb')).toBe(false);
+    const detached = { ...text, items: text.items.map((item) => ({ ...item,
+      y: item.y + 10 })) };
+    expect(pdfSurfacePaint(linked, detached, background, '#fff0eb'))
+      .toBe(false);
+  });
+});

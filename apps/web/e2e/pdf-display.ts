@@ -10,6 +10,7 @@ import {
   pdfColorMatches,
   pdfHasFill,
   pdfHasRule,
+  pdfIsStroke,
   pdfPaintPage,
   type PdfBox,
   type PdfPaint,
@@ -197,6 +198,34 @@ export function pdfColumnsMatch(
   });
 }
 
+function inlineDecorations(paint: PdfPaint, page: PdfTextPage): PdfBox[] {
+  return paint.fills.filter((fill) => fill.alpha >= 0.99
+    && !pdfColorMatches(fill.color, '#ffffff')
+    && page.items.some((item) => {
+      const bounds = item.bounds;
+      if (!bounds) return false;
+      const size = item.height;
+      if (pdfIsStroke(fill)) {
+        // Inline SVG strokes occupy at most one em before their text row.
+        return fill.right - fill.left <= size + 1
+          && fill.bottom - fill.top <= size + 1
+          && fill.left >= bounds.left - size * 1.5 - 1
+          && fill.right <= bounds.left + 1
+          && fill.top >= bounds.top - size * 0.25 - 1
+          && fill.bottom <= bounds.bottom + size * 0.25 + 1;
+      }
+      // A link may cover only part of an extracted text item, after a label.
+      const baseline = page.height - item.y;
+      return fill.bottom - fill.top <= 1
+        && fill.left >= bounds.left - 1 && fill.right <= bounds.right + 1
+        && fill.top >= baseline - 1
+        && fill.bottom <= baseline + size * 0.3 + 1
+        && paint.text.some((ink) => pdfColorMatches(ink.color, fill.color)
+          && ink.x >= fill.left - 1 && ink.x < fill.right
+          && Math.abs(ink.y - baseline) <= 1);
+    }));
+}
+
 export function pdfSurfacePaint(
   paint: PdfPaint,
   page: PdfTextPage,
@@ -204,10 +233,11 @@ export function pdfSurfacePaint(
   color: string,
   foreground: readonly PdfBox[] = [],
 ): boolean {
-  // Probe the whole surface except glyphs and independently checked shapes.
+  // Probe blank regions too, excluding checked shapes and inline decoration.
+  const exclusions = [...page.items.flatMap(({ bounds }) =>
+    bounds ? [bounds] : []), ...foreground, ...inlineDecorations(paint, page)];
   let exposed = [box];
-  for (const shape of [...page.items.flatMap(({ bounds }) =>
-    bounds ? [bounds] : []), ...foreground]) {
+  for (const shape of exclusions) {
     exposed = exposed.flatMap((area) => {
       const left = Math.max(area.left, shape.left);
       const right = Math.min(area.right, shape.right);
