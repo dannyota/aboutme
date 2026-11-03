@@ -1,6 +1,7 @@
 import type { Resume, Section } from '@aboutme/schema';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import fullSource from '../../../../../packages/schema/fixtures/full.json';
 import vnFullSource from '../../../../../packages/schema/fixtures/vn-full.json';
 import { applyTemplate } from '../../components/resume/applyTemplate';
 
@@ -28,11 +29,11 @@ const uuid = (flow: 'main' | 'sidebar', index: number): string =>
   `00000000-0000-4000-${flow === 'main' ? '9' : '8'}000-`
   + String(index).padStart(12, '0');
 
-function baseDocument(): Resume {
-  return structuredClone(vnFullSource) as Resume;
+function baseDocument(lng: 'en' | 'vi'): Resume {
+  return structuredClone(lng === 'en' ? fullSource : vnFullSource) as Resume;
 }
 
-function applyModernSidebar(document: Resume): Resume {
+function applyModernSidebar(document: Resume, lng: 'en' | 'vi'): Resume {
   // The fixture owner already prints on the preset's paper; a template switch
   // keeps the owner's page format.
   document.customization = applyTemplate(
@@ -42,13 +43,13 @@ function applyModernSidebar(document: Resume): Resume {
     },
     modernSidebar,
     document.content,
-    'vi',
+    lng,
   );
   return document;
 }
 
-function sidebarOverflow(): Resume {
-  const document = baseDocument();
+function sidebarOverflow(lng: 'en' | 'vi'): Resume {
+  const document = baseDocument(lng);
   const profile = structuredClone(document.content.profile) as Section;
   const skill = structuredClone(document.content.skill) as Section;
   if (profile.sectionType !== 'profile' || skill.sectionType !== 'skill') {
@@ -80,7 +81,9 @@ function sidebarOverflow(): Resume {
       ]
         .filter(Boolean)
         .join(' '),
-      infoHtml: `<p>Nội dung kiểm tra phân trang ${number}.</p>`,
+      infoHtml: lng === 'vi'
+        ? `<p>Nội dung kiểm tra phân trang ${number}.</p>`
+        : `<p>Pagination test content ${number}.</p>`,
     };
   });
   document.content = { profile, skill };
@@ -88,11 +91,11 @@ function sidebarOverflow(): Resume {
     main: ['profile'],
     sidebar: ['skill'],
   };
-  return applyModernSidebar(document);
+  return applyModernSidebar(document, lng);
 }
 
-function mainOverflow(): Resume {
-  const document = baseDocument();
+function mainOverflow(lng: 'en' | 'vi'): Resume {
+  const document = baseDocument(lng);
   const work = structuredClone(document.content.work) as Section;
   const skill = structuredClone(document.content.skill) as Section;
   if (work.sectionType !== 'work' || skill.sectionType !== 'skill') {
@@ -117,7 +120,9 @@ function mainOverflow(): Resume {
       ]
         .filter(Boolean)
         .join(' '),
-      description: `<p>Nội dung kiểm tra phân trang bản in ${number}.</p>`,
+      description: lng === 'vi'
+        ? `<p>Nội dung kiểm tra phân trang bản in ${number}.</p>`
+        : `<p>Print pagination test content ${number}.</p>`,
     };
   });
   const skillTemplate = skill.entries[0];
@@ -138,17 +143,30 @@ function mainOverflow(): Resume {
     main: ['work'],
     sidebar: ['skill'],
   };
-  return applyModernSidebar(document);
+  return applyModernSidebar(document, lng);
 }
 
 export const PRINT_FIXTURES: Readonly<Record<PrintFixtureId, PrintFixture>>
   = Object.freeze({
     'print-main-overflow': Object.freeze({
-      document: mainOverflow(),
+      document: mainOverflow('vi'),
       overflowingFlow: 'main',
     }),
     'print-sidebar-overflow': Object.freeze({
-      document: sidebarOverflow(),
+      document: sidebarOverflow('vi'),
       overflowingFlow: 'sidebar',
     }),
   });
+
+export const ENGLISH_PRINT_FIXTURES: Readonly<
+  Record<PrintFixtureId, PrintFixture>
+> = Object.freeze({
+  'print-main-overflow': Object.freeze({
+    document: mainOverflow('en'),
+    overflowingFlow: 'main',
+  }),
+  'print-sidebar-overflow': Object.freeze({
+    document: sidebarOverflow('en'),
+    overflowingFlow: 'sidebar',
+  }),
+});

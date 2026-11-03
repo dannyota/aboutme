@@ -22,6 +22,7 @@ mkdir -p \
   "$REPO/apps/web/app/assets/fonts/tools" \
   "$REPO/apps/web/e2e" \
   "$REPO/apps/web/public" \
+  "$REPO/apps/web/scripts" \
   "$REPO/apps/web/server" \
   "$REPO/apps/web/test/sanitizer" \
   "$REPO/apps/web/test/unit" \
@@ -46,6 +47,9 @@ for path in \
   apps/web/package-lock.json \
   apps/web/package.json \
   apps/web/public/theme-bootstrap.js \
+  apps/web/scripts/generate-template-pages.mts \
+  apps/web/scripts/validate-template-pages.mts \
+  apps/web/scripts/unrelated.mts \
   apps/web/server/route.ts \
   apps/web/server/AGENTS.md \
   apps/web/server/CLAUDE.md \
@@ -88,6 +92,8 @@ apps/web/nuxt.config.ts
 apps/web/package-lock.json
 apps/web/package.json
 apps/web/public/theme-bootstrap.js
+apps/web/scripts/generate-template-pages.mts
+apps/web/scripts/validate-template-pages.mts
 apps/web/server/route.ts
 apps/web/test/sanitizer/neutralization.ts
 apps/web/tsconfig.json

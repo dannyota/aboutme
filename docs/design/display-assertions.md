@@ -205,6 +205,11 @@ expected layouts, skip Mac PDFs, widen tolerance to a line/page, or accept
 missing fonts. Resolve reproducible failures before cutover. Keep production
 browser pins and same-environment output determinism rules unchanged.
 
+Chromium may embed variable fonts under the `-Regular` instance name, so PDF
+weight evidence is advisory and rejects only contradictions supported by at
+least three shared glyphs. Print-emulated DOM computed weight stays strict in
+every cell, alongside strict PDF family, size and color checks.
+
 These assertions miss subtle kerning, glyph raster defects, optical balance,
 fine SVG errors, and unasserted shadows or decorations. PDF text may exist while
 paint is wrong. Narrow paint checks reduce that gap but cannot eliminate it.

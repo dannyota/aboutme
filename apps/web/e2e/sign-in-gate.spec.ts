@@ -1,4 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
+
+import {
+  measureTextContainment,
+  measureVerticalFlow,
+} from './display-assertions';
+import { applyStyleMutation } from './style-mutation';
 
 import {
   denyExternalRequests,
@@ -11,6 +17,15 @@ import {
 // DESIGN.md, "Sign-in gate and join invite"). The gate is the public render
 // worker's own component and inline style. The invite mounts client-side on
 // the public page root, as public-resume.client.ts does.
+
+async function assertTextContained(text: Locator): Promise<void> {
+  await expect.poll(() => measureTextContainment(text))
+    .toEqual({ visible: true, contained: true });
+}
+
+async function assertFlow(items: Locator): Promise<void> {
+  await expect.poll(() => measureVerticalFlow(items)).toBe(true);
+}
 
 type Lng = 'en' | 'vi';
 
@@ -49,6 +64,35 @@ test.describe('sign-in gate', () => {
       expect(external).toEqual([]);
 
       await expect(page.locator('html')).toHaveAttribute('lang', cell.lng);
+      const labels = cell.providers.split(',').map((provider) => {
+        const name = provider === 'google' ? 'Google' : 'LinkedIn';
+        return cell.lng === 'vi'
+          ? `Tiếp tục với ${name}`
+          : `Continue with ${name}`;
+      });
+      await expect(page.locator('.gate-provider')).toHaveText(labels);
+      await expect(page.locator('.gate-providers')).toMatchAriaSnapshot(
+        labels.map((label) => `- link "${label}"`).join('\n'),
+      );
+      await expect(page.locator('.gate-text strong')).toHaveText(
+        cell.lng === 'vi'
+          ? 'Đăng nhập để xem CV này.'
+          : 'Sign in to view this resume.',
+      );
+      if (cell.message === 'failed') {
+        await expect(page.locator('.gate-message')).toHaveText(cell.lng === 'vi'
+          ? 'Chúng tôi không thể xác minh đăng nhập của bạn. Vui lòng thử lại.'
+          : 'We could not verify your sign-in. Please try again.');
+      }
+      await expect(page.locator('.resume-document')).toHaveCount(0);
+      await expect(page.locator('.gate-card'))
+        .toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      await expect(page.locator('.gate-text'))
+        .toHaveCSS('color', 'rgb(16, 27, 63)');
+      await expect(page.locator('.gate-provider').first())
+        .toHaveCSS('height', '44px');
+      await assertTextContained(page.locator('.gate-card'));
+      await assertFlow(page.locator('.gate-provider'));
       await expect(page.locator('.gate-provider')).toHaveCount(
         cell.providers.split(',').length,
       );
@@ -151,3 +195,44 @@ test.describe('join invite', () => {
     });
   }
 });
+
+for (const kind of ['long text', 'nested clipping', 'overlap'] as const) {
+  test(`display assertions reject ${kind}`, async ({ page }) => {
+    await page.setContent(`
+      <div id="text" style="width: 100px; height: 20px; overflow: hidden">
+        <span>One line</span>
+      </div>
+      <div id="flow"><div style="height: 20px"></div>
+        <div style="height: 20px"></div></div>
+    `);
+    const text = page.locator('#text');
+    const siblings = page.locator('#flow > div');
+    const assertClean = () => kind === 'overlap'
+      ? assertFlow(siblings)
+      : assertTextContained(text);
+    await assertClean();
+    const span = page.locator('#text span');
+    if (kind !== 'overlap') {
+      await span.evaluate((element, name) => {
+        element.textContent = name === 'long text'
+          ? 'A deliberately long unbroken line that cannot fit'
+          : 'Nested clipping';
+      }, kind);
+    }
+    const restore = kind === 'overlap'
+      ? await applyStyleMutation(siblings.nth(1), { 'margin-top': '-4px' })
+      : await applyStyleMutation(span, kind === 'long text'
+          ? { 'white-space': 'nowrap' }
+          : { display: 'inline-block', width: '20px', overflow: 'hidden' });
+    await expect(assertClean()).rejects.toThrow();
+    await restore();
+    await page.setContent(`
+      <div id="text" style="width: 100px; height: 20px; overflow: hidden">
+        <span>One line</span>
+      </div>
+      <div id="flow"><div style="height: 20px"></div>
+        <div style="height: 20px"></div></div>
+    `);
+    await assertClean();
+  });
+}

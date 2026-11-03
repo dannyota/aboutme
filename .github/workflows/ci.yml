@@ -576,6 +576,10 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make web-test
       - if: ${{ !cancelled() }}
+        name: Validate product page image freshness
+        run: node scripts/validate-template-pages.mts --test
+        working-directory: apps/web
+      - if: ${{ !cancelled() }}
         run: make web-build
       - if: ${{ !cancelled() }}
         run: make web-no-eval-check

@@ -36,6 +36,8 @@ source_roots=(
   apps/web/package-lock.json
   apps/web/package.json
   apps/web/public
+  apps/web/scripts/generate-template-pages.mts
+  apps/web/scripts/validate-template-pages.mts
   apps/web/server
   apps/web/test/sanitizer/neutralization.ts
   apps/web/tsconfig.json
@@ -54,6 +56,8 @@ required_files=(
   apps/web/nuxt.config.ts
   apps/web/package-lock.json
   apps/web/package.json
+  apps/web/scripts/generate-template-pages.mts
+  apps/web/scripts/validate-template-pages.mts
   apps/web/test/sanitizer/neutralization.ts
   apps/web/tsconfig.json
   docs/api/openapi.yaml

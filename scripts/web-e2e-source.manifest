@@ -434,6 +434,7 @@ apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
+apps/web/app/pages/_harness/print-probes.ts
 apps/web/app/pages/_harness/render.vue
 apps/web/app/pages/_harness/sample-fixtures.ts
 apps/web/app/pages/app/import/linkedin.vue
@@ -592,6 +593,7 @@ apps/web/e2e/baselines/verify--verified--light--390.png
 apps/web/e2e/card.spec.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
+apps/web/e2e/display-assertions.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
 apps/web/e2e/fixtures/deployment/mismatch-missing.json
 apps/web/e2e/fixtures/deployment/mismatch-not-found.json
@@ -604,7 +606,12 @@ apps/web/e2e/fixtures/deployment/verified.json
 apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery-baselines.spec.ts
 apps/web/e2e/gallery.spec.ts
+apps/web/e2e/guide-screenshot.spec.ts
 apps/web/e2e/normal-csp.spec.ts
+apps/web/e2e/pdf-display.ts
+apps/web/e2e/pdf-fonts.ts
+apps/web/e2e/pdf-paint.ts
+apps/web/e2e/pdf-text-style.ts
 apps/web/e2e/playwright.config.ts
 apps/web/e2e/preview-gap-expected.json
 apps/web/e2e/preview-gap.spec.ts
@@ -612,13 +619,18 @@ apps/web/e2e/print-baselines/print-main-overflow-p1.png
 apps/web/e2e/print-baselines/print-main-overflow-p2.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
+apps/web/e2e/print-mutations.spec.ts
+apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print.spec.ts
+apps/web/e2e/resume-screen.spec.ts
 apps/web/e2e/sample-pages.spec.ts
+apps/web/e2e/sample-pdf-content.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
 apps/web/e2e/showcase-baselines.spec.ts
 apps/web/e2e/showcase.spec.ts
 apps/web/e2e/sign-in-gate.spec.ts
+apps/web/e2e/style-mutation.ts
 apps/web/e2e/support.ts
 apps/web/e2e/verify-support.ts
 apps/web/e2e/verify.spec.ts
@@ -691,6 +703,8 @@ apps/web/public/templates/pages/nordic-muted-vi-p1.png
 apps/web/public/templates/pages/one-page-tight-en-p1.png
 apps/web/public/templates/pages/one-page-tight-vi-p1.png
 apps/web/public/theme-bootstrap.js
+apps/web/scripts/generate-template-pages.mts
+apps/web/scripts/validate-template-pages.mts
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts
