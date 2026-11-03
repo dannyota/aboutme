@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import {
   getDocument,
   type PDFPageProxy,
@@ -492,6 +492,10 @@ async function withPrintedPdf<T>(
     printBackground: true,
     scale: 1,
   });
+    if (/changed sidebar position/u.test(test.info().title)) {
+      console.log('PDF-CAPTURE', JSON.stringify(test.info().title),
+        Buffer.from(pdf).toString('base64'));
+    }
   const loadingTask = getDocument({
     data: new Uint8Array(pdf),
     isImageDecoderSupported: false,

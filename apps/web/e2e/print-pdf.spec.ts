@@ -204,6 +204,10 @@ for (const printCase of CASES) {
               printBackground: true,
               scale: 1,
             });
+    if (/overflow en a4 light/u.test(test.info().title)) {
+      console.log('PDF-CAPTURE', JSON.stringify(test.info().title),
+        Buffer.from(pdf).toString('base64'));
+    }
             const loadingTask = getDocument({
               data: new Uint8Array(pdf),
               isImageDecoderSupported: false,
