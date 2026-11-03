@@ -896,10 +896,37 @@ PY
 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
 replay_status=0
 # DSN replay uses CLI labels instead of the serving acquisition's labels.
-timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" \
+timeout 120 crowdsec -info -no-api -dsn "file://$retention_fixture/trickle.json" \
   -type aboutme-http -label feed_mode:serving -order-event \
   >"$retention_fixture/replay.log" 2>&1 || replay_status=$?
 integration_assert_count replay-status "$replay_status" -eq 0
+integration_stage=slow-trickle-diagnostics
+sql "SELECT json_build_object(
+ 'alerts',count(*),
+ 'old_alerts',count(*) FILTER (WHERE started_at<=:'fixture_time'::timestamptz-interval '25 hours'),
+ 'first_age_seconds',extract(epoch FROM (:'fixture_time'::timestamptz-min(started_at))),
+ 'last_age_seconds',extract(epoch FROM (:'fixture_time'::timestamptz-max(stopped_at))),
+ 'maximum_events',coalesce(max(events_count),0),
+ 'wall_clock_offset_seconds',extract(epoch FROM (clock_timestamp()-:'fixture_time'::timestamptz)),
+ 'decisions',(SELECT count(*) FROM decisions WHERE value='192.0.2.47'))
+ FROM alerts WHERE source_ip='192.0.2.47';" >"$retention_fixture/replay-counts.json"
+python3 -I - "$retention_fixture/replay.log" "$retention_fixture/replay-counts.json" \
+  /dev/stdout <<'PYDIAGNOSTIC'
+import json,pathlib,re,sys
+lines=pathlib.Path(sys.argv[1]).read_text().splitlines()
+result=json.loads(pathlib.Path(sys.argv[2]).read_text())
+patterns={
+    'garbage_collections':'Starting buckets garbage collection',
+    'collected_buckets':r'Cleaned [1-9][0-9]* buckets',
+    'http_overflows':r"performed 'aboutme/http-status'",
+    'missing_event_times':'Trying to process event without evt.StrTime',
+    'alert_push_errors':'while pushing',
+    'replay_errors':r'level=error',
+}
+result['replay']={name:sum(bool(re.search(pattern,line)) for line in lines)
+                  for name,pattern in patterns.items()}
+print('SLOW-TRICKLE-DEBUG', json.dumps(result,sort_keys=True), flush=True)
+PYDIAGNOSTIC
 integration_stage=slow-trickle-graph
 integration_assert_count old-first-timestamp \
   "$(sql "SELECT count(*) FROM alerts WHERE source_ip='192.0.2.47' AND started_at<=:'fixture_time'::timestamptz-interval '25 hours';")" -gt 0
