@@ -909,7 +909,7 @@ integration_assert_count old-first-timestamp \
 integration_assert_count bucket-event-count \
   "$(sql "SELECT coalesce(max(events_count),0) FROM alerts WHERE source_ip='192.0.2.47';")" -gt 9000
 integration_assert_count cached-samples \
-  "$(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;")" -le 5
+  "$(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;")" -le 6
 integration_assert_count decisions \
   "$(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';")" -gt 0
 # Copy the replay's actual occurrence clocks into a graph without a decision.

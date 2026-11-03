@@ -157,6 +157,19 @@ grep -qF "evt.Meta.route_class == 'unknown'" \
   "$base/edge/crowdsec/scenarios/aboutme-http-status.yaml"
 grep -qxF 'groupby: evt.Meta.source_ip' \
   "$base/edge/crowdsec/scenarios/aboutme-http-rate.yaml"
+check bounded-http-alert-samples python3 - "$base" <<'PY'
+import pathlib, re, sys
+base = pathlib.Path(sys.argv[1])
+sample_limit = 6
+for scenario in ('rate', 'status'):
+    source = (base / f'edge/crowdsec/scenarios/aboutme-http-{scenario}.yaml').read_text()
+    assert re.findall(r'(?m)^cache_size: ([0-9]+)$', source) == [str(sample_limit - 1)], scenario
+    capacity = re.findall(r'(?m)^capacity: ([0-9]+)$', source)
+    assert len(capacity) == 1 and int(capacity[0]) >= sample_limit - 1, scenario
+integration = (base / 'tests/crowdsec-integration-test.sh').read_text()
+bounds = re.findall(r'(?m)^integration_assert_count cached-samples \\\n[^\n]+ -le ([0-9]+)$', integration)
+assert bounds == [str(sample_limit)]
+PY
 grep -qxF 'StandardOutput=null' \
   "$base/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf"
 grep -qxF 'LimitCORE=0' "$base/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf"
