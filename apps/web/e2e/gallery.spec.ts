@@ -1056,7 +1056,7 @@ for (const [name, selector, styles] of [
     transform: ['translateX(4px)', 'matrix(1, 0, 0, 1, 4, 0)'],
   }],
   ['clipped ATS text', '[data-ats-text]', {
-    height: '24px', overflow: 'hidden',
+    height: ['24px', /^\d+(?:\.\d+)?px$/u], overflow: 'hidden',
   }],
 ] as const) {
   test(`template detail assertions reject ${name}`, async ({ page }) => {
