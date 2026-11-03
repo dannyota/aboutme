@@ -204,6 +204,11 @@ export function pdfSurfacePaint(
   color: string,
   foreground: readonly PdfBox[] = [],
 ): boolean {
+  if (/overflow en a4 light|^(modern-sidebar \(vi\)|creative-accent \(en\)) rasterizes|changed sidebar position/u.test(test.info().title)) {
+    console.log('PDF-ARGS', JSON.stringify({ fn: 'pdfSurfacePaint',
+      title: test.info().title, pageHeight: page.height,
+      box, color, foreground }));
+  }
   // Probe the whole surface except glyphs and independently checked shapes.
   let exposed = [box];
   for (const shape of [...page.items.flatMap(({ bounds }) =>
@@ -235,6 +240,11 @@ export function pdfSidebarPaint(
   color: string,
   expected: { body: string; headings: readonly PdfBox[] },
 ): boolean {
+  if (/overflow en a4 light|^(modern-sidebar \(vi\)|creative-accent \(en\)) rasterizes|changed sidebar position/u.test(test.info().title)) {
+    console.log('PDF-ARGS', JSON.stringify({ fn: 'pdfSidebarPaint',
+      title: test.info().title, pageHeight: page.height,
+      sidebar, marginY, firstPage, color, expected }));
+  }
   // Overflow fixtures use full-width level-five bars and heading rules.
   const fullWidth = paint.fills.filter((fill) =>
     Math.abs(fill.left - sidebar.left) <= 1
