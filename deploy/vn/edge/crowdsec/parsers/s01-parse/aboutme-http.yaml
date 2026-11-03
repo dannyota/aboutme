@@ -83,6 +83,9 @@ onsuccess: next_stage
 statics:
   - target: evt.StrTime
     expression: evt.Unmarshaled.aboutme.ts
+  # The feed timestamp is validated UTC RFC 3339; buckets read MarshaledTime.
+  - target: evt.MarshaledTime
+    expression: evt.Unmarshaled.aboutme.ts
   - parsed: aboutme_source_ip
     expression: evt.Unmarshaled.aboutme.source_ip
   - meta: service

@@ -4,6 +4,58 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 base=$repo_root/deploy/vn
 
+if [[ ${1:-} == parser ]]; then
+  [[ ${GITHUB_ACTIONS:-} == true && $EUID == 0 ]] || exit 1
+  # Parse synthetic Caddy encoder output with the installed production config.
+  # Keep dumps private and remove them instead of uploading raw parser state.
+  umask 077
+  work=$(mktemp -d /run/aboutme/crowdsec-parser-proof.XXXXXX)
+  trap 'rm -rf -- "$work"' EXIT
+  for mode in serving maintenance; do
+    mkdir "$work/$mode"
+    python3 -I - "$base/edge/crowdsec/acquis.d/aboutme-http.yaml" "$work/$mode" "$mode" <<'PY'
+import json, pathlib, sys, yaml
+acquis, root, mode = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+labels = next(item['labels'] for item in yaml.safe_load_all(acquis.read_text())
+              if item['labels']['feed_mode'] == mode)
+(root / 'labels').write_text(','.join(f'{key}:{value}' for key, value in labels.items()))
+with (root / 'feed.json').open('w') as stream:
+    for ts in ('2026-10-10T01:09:10Z', '2026-10-10T01:09:10.1Z',
+               '2026-10-10T01:09:10.123456Z', '2026-10-10T01:09:10.123456789Z'):
+        record = dict(ts=ts, source_ip='192.0.2.211', method='GET',
+                      status=503 if mode == 'maintenance' else 404,
+                      route_class='maintenance' if mode == 'maintenance' else 'unknown',
+                      probe_class='none' if mode == 'maintenance' else 'other',
+                      target_path='' if mode == 'maintenance' else '/unknown/time')
+        stream.write(json.dumps(record, separators=(',', ':')) + '\n')
+PY
+    "$base/host/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
+    if ! timeout 30 crowdsec -no-api -dsn "file://$work/$mode/feed.json" \
+      -type aboutme-http -label "$(<"$work/$mode/labels")" -order-event \
+      -dump-data "$work/$mode" >"$work/$mode/replay.log" 2>&1; then
+      printf 'FAIL caddy-event-time mode=%s stage=parse\n' "$mode" >&2
+      exit 1
+    fi
+    python3 -I - "$work/$mode" "$mode" <<'PY'
+import json, pathlib, sys, yaml
+root, mode = pathlib.Path(sys.argv[1]), sys.argv[2]
+records = [json.loads(line) for line in (root / 'feed.json').read_text().splitlines()]
+dump = yaml.safe_load((root / 'parser-dump.yaml').read_text())
+results = dump['s02-enrich']['aboutme/http-source']
+assert len(results) == len(records), 'event_count'
+expected = sorted(record['ts'] for record in records)
+assert all(result['success'] for result in results), 'parser_success'
+events = [result['evt'] for result in results]
+assert sorted(event.get('StrTime', '') for event in events) == expected, 'string_time'
+assert sorted(event.get('MarshaledTime', '') for event in events) == expected, 'event_time'
+assert all(event['Meta']['source_ip'] == '192.0.2.211' and
+           event['Meta']['feed_mode'] == mode for event in events), 'acquisition_labels'
+PY
+  done
+  echo 'PASS caddy-event-time-whole-and-fractional-utc'
+  exit 0
+fi
+
 failures=0
 check() {
   local label=$1

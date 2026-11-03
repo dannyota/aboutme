@@ -155,6 +155,9 @@ crowdsec -t >/dev/null 2>&1
 /usr/local/lib/aboutme/crowdsec-retention.sh startup
 systemctl start crowdsec.service
 systemctl start crowdsec-firewall-bouncer.service aboutme-caddy.service
+integration_stage=parser-event-time
+bash "$repo_root/deploy/vn/tests/crowdsec-config-test.sh" parser
+integration_stage=consumers
 
 # These are real HTTP and kernel checks, not stream or last-pull assertions.
 http_status() { curl --noproxy '*' -s -o /dev/null -w '%{http_code}' --max-time 2 --interface "$1" "$2"; }
