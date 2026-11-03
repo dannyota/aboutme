@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import {
   getDocument,
   type PDFPageProxy,
@@ -235,6 +235,11 @@ export function pdfSurfacePaint(
   color: string,
   foreground: readonly PdfBox[] = [],
 ): boolean {
+  if (/^(elegant-serif-two|graduate-friendly|nordic-muted) \((en|vi)\) rasterizes/u.test(test.info().title)) {
+    console.log('PDF-ARGS', JSON.stringify({ fn: 'pdfSurfacePaint',
+      title: test.info().title, pageHeight: page.height,
+      box, color, foreground }));
+  }
   const decorations = inlineDecorations(paint, page).filter((fill) =>
     fill.left < box.right && fill.right > box.left
     && fill.top < box.bottom && fill.bottom > box.top);

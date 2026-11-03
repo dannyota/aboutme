@@ -454,6 +454,10 @@ for (const { templateId, lng } of SAMPLES) {
       pdf,
     );
 
+    if (/^(elegant-serif-two|graduate-friendly|nordic-muted) \((en|vi)\) rasterizes/u.test(test.info().title)) {
+      console.log('PDF-CAPTURE', JSON.stringify(test.info().title),
+        Buffer.from(pdf).toString('base64'));
+    }
     const loadingTask = getDocument({
       data: new Uint8Array(pdf),
       isImageDecoderSupported: false,
