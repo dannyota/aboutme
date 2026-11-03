@@ -527,6 +527,7 @@ test('card crop assertion detects ignored offsets', async ({ page }) => {
 for (const [name, selector, styles, pseudo] of [
   ['band color', '.preview-card-band-left', {
     'background-color': 'rgb(255, 0, 0)',
+    'background-image': 'none',
   }, undefined],
   ['dot paint', '.preview-card-band-right', {
     'background-image': 'none',

@@ -318,6 +318,7 @@ for (const mutation of PAINT_MUTATIONS) {
       const sidebar = page.locator('.resume-sidebar');
       await applyStyleMutation(sidebar, {
         'background-color': 'rgba(0, 0, 0, 0)', 'position': 'relative',
+        'background-image': 'none',
       });
       const width = await sidebar.evaluate((element) =>
         getComputedStyle(element).width);
@@ -326,6 +327,7 @@ for (const mutation of PAINT_MUTATIONS) {
         'width': ['100%', width],
         'height': [`${firstHeight}px`, /^\d+(?:\.\d+)?px$/u],
         'background-color': 'rgb(227, 236, 240)',
+        'background-image': 'none',
       }, '::before');
       await applyStyleMutation(sidebar.locator('.resume-section'), {
         position: 'relative',
@@ -391,6 +393,7 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
       await applyStyleMutation(track, {
         'content': '""', 'position': 'absolute', 'inset': '0px',
         'background-color': 'rgba(255, 255, 255, 0.99)',
+        'background-image': 'none',
       }, '::after');
     } else if (mode === 'bar') {
       const fill = page.locator('.level-fill');
@@ -404,6 +407,7 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
     } else if (mode === 'dots') {
       await applyStyleMutation(page.locator('.level-dot'), {
         'background-color': 'rgb(15, 107, 125)',
+        'background-image': 'none',
       });
     } else {
       await page.getByRole('img', { name: 'SKILL-4: 4 of 5', exact: true })

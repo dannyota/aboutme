@@ -351,9 +351,11 @@ for (const language of ['vi', 'en'] as const) {
 for (const [name, selector, styles] of [
   ['article ground', '.resume-document', {
     'background-color': 'rgb(255, 0, 0)',
+    'background-image': 'none',
   }],
   ['sidebar ground', '.resume-sidebar', {
     'background-color': 'rgb(255, 0, 0)',
+    'background-image': 'none',
   }],
   ['foreground', '.resume-document', { color: 'rgb(255, 0, 0)' }],
 ] as const) {
