@@ -12,7 +12,9 @@ import {
   pdfHasRule,
   pdfIsStroke,
   pdfPaintPage,
+  pdfShapePaintMatches,
   type PdfBox,
+  type PdfFill,
   type PdfPaint,
 } from './pdf-paint';
 import { pdfGlyphExtents, pdfTextExtents } from './pdf-fonts';
@@ -198,7 +200,7 @@ export function pdfColumnsMatch(
   });
 }
 
-function inlineDecorations(paint: PdfPaint, page: PdfTextPage): PdfBox[] {
+function inlineDecorations(paint: PdfPaint, page: PdfTextPage): PdfFill[] {
   return paint.fills.filter((fill) => fill.alpha >= 0.99
     && !pdfColorMatches(fill.color, '#ffffff')
     && page.items.some((item) => {
@@ -233,9 +235,14 @@ export function pdfSurfacePaint(
   color: string,
   foreground: readonly PdfBox[] = [],
 ): boolean {
-  // Probe blank regions too, excluding checked shapes and inline decoration.
+  const decorations = inlineDecorations(paint, page).filter((fill) =>
+    fill.left < box.right && fill.right > box.left
+    && fill.top < box.bottom && fill.bottom > box.top);
+  if (!decorations.every((fill) =>
+    pdfShapePaintMatches(paint, fill, color, decorations))) return false;
+  // Probe blank regions too, excluding only validated decoration bounds.
   const exclusions = [...page.items.flatMap(({ bounds }) =>
-    bounds ? [bounds] : []), ...foreground, ...inlineDecorations(paint, page)];
+    bounds ? [bounds] : []), ...foreground, ...decorations];
   let exposed = [box];
   for (const shape of exclusions) {
     exposed = exposed.flatMap((area) => {
