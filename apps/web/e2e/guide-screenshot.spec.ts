@@ -148,17 +148,33 @@ test('guide flow detects overlapping sections', async ({ page }) => {
   const assertFlow = () => assertGuideFlow(sections);
   await assertFlow();
   const header = page.getByTestId('guide-header');
+  const headerHandle = await header.elementHandle();
   const original = await header.evaluate((element) => {
     const style = (element as HTMLElement).style;
-    const value = style.getPropertyValue('transform');
-    const priority = style.getPropertyPriority('transform');
-    style.setProperty('transform', 'translateY(36px)', 'important');
-    return { value, priority };
+    return {
+      value: style.getPropertyValue('transform'),
+      priority: style.getPropertyPriority('transform'),
+    };
   });
-  const gap = await sections.evaluateAll((elements) =>
-    elements[1]!.getBoundingClientRect().top
-    - elements[0]!.getBoundingClientRect().bottom);
-  expect(gap).toBeLessThan(0);
+  await expect.poll(async () => {
+    const state = await header.evaluate((element, savedHeader) => {
+      const current = element as HTMLElement;
+      current.style.setProperty('transform', 'translateY(36px)', 'important');
+      const bottom = current.getBoundingClientRect().bottom;
+      const nextTop = current.parentElement!
+        .querySelector(':scope > section')!.getBoundingClientRect().top;
+      return {
+        sameHeader: current === savedHeader,
+        inline: current.style.transform,
+        computed: getComputedStyle(current).transform,
+        bottom,
+        nextTop,
+        gap: nextTop - bottom,
+      };
+    }, headerHandle);
+    if (state.gap >= 0) console.log(`guide overlap: ${JSON.stringify(state)}`);
+    return state.gap;
+  }, { timeout: 5000 }).toBeLessThan(0);
   await expect(assertFlow()).rejects.toThrow();
   await header.evaluate((element, saved) => {
     (element as HTMLElement).style.setProperty(
