@@ -9,8 +9,12 @@ import {
   pdfBoxMatches,
   pdfColorMatches,
   pdfHasFill,
+  pdfIsStroke,
+  pdfPaintMatch,
   pdfPaintPage,
+  pdfShapePaintMatches,
   type PdfBox,
+  type PdfFill,
   type PdfPaint,
 } from './pdf-paint';
 import { pdfGlyphExtents, pdfTextExtents } from './pdf-fonts';
@@ -196,6 +200,91 @@ export function pdfColumnsMatch(
   });
 }
 
+export interface PdfDecoration extends PdfBox {
+  readonly color: string;
+  readonly stroke: boolean;
+}
+
+function linkUnderlines(paint: PdfPaint, page: PdfTextPage): PdfFill[] {
+  return paint.fills.filter((fill) => fill.alpha >= 0.99
+    && !pdfColorMatches(fill.color, '#ffffff')
+    && page.items.some((item) => {
+      const bounds = item.bounds;
+      if (!bounds) return false;
+      const size = item.height;
+      if (pdfIsStroke(fill)) return false;
+      // A link may cover only part of an extracted text item, after a label.
+      const baseline = page.height - item.y;
+      return fill.bottom - fill.top <= 1
+        && fill.left >= bounds.left - 1 && fill.right <= bounds.right + 1
+        && fill.top >= baseline - 1
+        && fill.bottom <= baseline + size * 0.3 + 1
+        && paint.text.some((ink) => pdfColorMatches(ink.color, fill.color)
+          && ink.x >= fill.left - 1 && ink.x < fill.right
+          && Math.abs(ink.y - baseline) <= 1);
+    }));
+}
+
+export function pdfSurfacePaint(
+  paint: PdfPaint,
+  page: PdfTextPage,
+  box: PdfBox,
+  color: string,
+  foreground: readonly PdfFill[] = [],
+  icons: readonly PdfDecoration[] = [],
+): boolean {
+  const surface = paint.fills.find((fill) => fill.alpha >= 0.99
+    && !pdfIsStroke(fill) && pdfColorMatches(fill.color, color)
+    && pdfBoxMatches(fill, box));
+  if (!surface) return false;
+  if (foreground.some((fill) => !paint.fills.includes(fill))) return false;
+  const decorations = linkUnderlines(paint, page).filter((fill) =>
+    fill.left < box.right && fill.right > box.left
+    && fill.top < box.bottom && fill.bottom > box.top);
+  const ink = new Map(decorations.map((fill) => [fill, fill.color]));
+  for (const icon of icons.filter((icon) => icon.left < box.right
+    && icon.right > box.left && icon.top < box.bottom
+    && icon.bottom > box.top)) {
+    const fill = paint.fills.find((fill) => !decorations.includes(fill)
+      && fill.alpha >= 0.99 && pdfIsStroke(fill) === icon.stroke
+      && pdfColorMatches(fill.color, icon.color) && pdfBoxMatches(fill, icon));
+    if (!fill) return false;
+    decorations.push(fill);
+    ink.set(fill, icon.color);
+  }
+  if (!decorations.every((fill) => pdfShapePaintMatches(paint, fill, color,
+    ink.get(fill)!, decorations))) return false;
+  // Partition native bounds so DOM edge tolerance cannot move gap probes.
+  const exclusions = [...page.items.flatMap(({ bounds }) =>
+    bounds ? [bounds] : []), ...foreground, ...decorations];
+  let exposed: PdfBox[] = [surface];
+  for (const shape of exclusions) {
+    exposed = exposed.flatMap((area) => {
+      const left = Math.max(area.left, shape.left);
+      const right = Math.min(area.right, shape.right);
+      const top = Math.max(area.top, shape.top);
+      const bottom = Math.min(area.bottom, shape.bottom);
+      if (right <= left || bottom <= top) return [area];
+      return [
+        { ...area, right: left },
+        { ...area, left: right },
+        { left, right, top: area.top, bottom: top },
+        { left, right, top: bottom, bottom: area.bottom },
+      ].filter((part) => part.right > part.left && part.bottom > part.top);
+    });
+  }
+  // Probe unknown paint bounds even when a patch misses a large area's grid.
+  return exposed.length > 0 && exposed.every((area) => {
+    const probes = [area, ...paint.fills.map((fill) => ({
+      left: Math.max(area.left, fill.left),
+      right: Math.min(area.right, fill.right),
+      top: Math.max(area.top, fill.top),
+      bottom: Math.min(area.bottom, fill.bottom),
+    })).filter((part) => part.right > part.left && part.bottom > part.top)];
+    return probes.every((probe) => pdfHasFill(paint, surface, color, probe));
+  });
+}
+
 export function pdfSidebarPaint(
   paint: PdfPaint,
   page: PdfTextPage,
@@ -203,24 +292,78 @@ export function pdfSidebarPaint(
   marginY: number,
   firstPage: boolean,
   color: string,
+  expected: { body: string; headings: readonly (PdfBox & {
+    icons?: readonly PdfDecoration[];
+  })[]; },
 ): boolean {
+  // Overflow fixtures use full-width level-five bars and heading rules.
+  const fullWidth = paint.fills.filter((fill) =>
+    Math.abs(fill.left - sidebar.left) <= 1
+    && Math.abs(fill.right - sidebar.right) <= 1);
+  const bars = fullWidth.filter((fill) =>
+    Math.abs(fill.bottom - fill.top - 3) <= 1
+    && pdfColorMatches(fill.color, '#0f6b7d'));
+  const rules = fullWidth.filter((fill) =>
+    Math.abs(fill.bottom - fill.top - 0.75) <= 0.1);
   const column = page.items.filter((item) => item.bounds
     && item.bounds.left >= sidebar.left - 1
     && (!firstPage || item.bounds.top >= sidebar.top - 1));
+  const markers = pdfEntryIds([page], 'SIDEBAR');
+  if (markers.length === 0 && pdfMarkerPosition(page, 'SIDEBAR-SHORT')) {
+    markers.push('SIDEBAR-SHORT');
+  }
+  const titles = markers.map((marker) => pdfMarkerPosition(page, marker));
+  const foreground: PdfFill[] = [];
+  for (const [index, item] of titles.entries()) {
+    const title = item?.bounds;
+    if (!title) continue;
+    const body = pdfMarkerPosition({ ...page,
+      items: column.filter(({ bounds }) => bounds!.top >= title.bottom - 1
+        && bounds!.top < (titles[index + 1]?.bounds?.top
+          ?? page.height - marginY)),
+    }, expected.body)?.bounds;
+    const matches = bars.filter((bar) => body
+      && bar.top >= title.bottom - 1 && bar.bottom <= body.top + 1);
+    const fill = matches.length === 1
+      ? pdfPaintMatch(paint, matches[0]!, '#0f6b7d')
+      : undefined;
+    if (fill) {
+      foreground.push(fill);
+    }
+  }
+  for (const heading of expected.headings) {
+    const top = heading.bottom + 14 * 0.25 * 0.75;
+    const box = { left: sidebar.left, right: sidebar.right,
+      top, bottom: top + 0.75 };
+    const matches = rules.filter((rule) => pdfBoxMatches(rule, box));
+    const fill = matches.length === 1
+      ? pdfPaintMatch(paint, matches[0]!, '#8eb8c2', true)
+      : undefined;
+    if (fill) {
+      foreground.push(fill);
+    }
+  }
+  const complete = bars.length === titles.length
+    && rules.length === expected.headings.length
+    && new Set(foreground).size === titles.length + expected.headings.length;
+  const icons = expected.headings.flatMap((heading) => heading.icons ?? []);
   if (column.length === 0 && !firstPage) {
     // A short sidebar still paints alongside the continuing main flow.
-    return paint.fills.some((fill) => pdfHasFill(paint, fill, color)
+    return paint.fills.some((fill) =>
+      pdfSurfacePaint(paint, page, fill, color, foreground, icons)
       && Math.abs(fill.left - sidebar.left) <= 1
       && Math.abs(fill.right - sidebar.right) <= 1
-      && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1);
+      && Math.abs(fill.top - marginY) <= 1 && fill.bottom > marginY + 1)
+    && complete;
   }
   const bottom = Math.max(...column.map((item) => item.bounds!.bottom));
-  return paint.fills.some((fill) => pdfHasFill(paint, fill, color)
-    && Math.abs(fill.left - sidebar.left) <= 1
+  return paint.fills.some((fill) => Math.abs(fill.left - sidebar.left) <= 1
     && Math.abs(fill.right - sidebar.right) <= 1
     && Math.abs(fill.top - (firstPage ? sidebar.top : marginY)) <= 1
     && fill.bottom >= bottom - 1
-    && fill.bottom <= page.height - marginY + 1);
+    && fill.bottom <= page.height - marginY + 1
+    && pdfSurfacePaint(paint, page, fill, color, foreground, icons))
+  && complete;
 }
 
 export function pdfParagraphGeometry(

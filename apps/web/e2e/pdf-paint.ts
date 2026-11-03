@@ -196,25 +196,63 @@ export function pdfBoxMatches(actual: PdfBox, expected: PdfBox): boolean {
     .every((edge) => Math.abs(actual[edge] - expected[edge]) <= 1);
 }
 
-function hasPaint(
+export function pdfIsStroke(fill: PdfFill): boolean {
+  return (shapes.get(fill) ?? unsupported()).stroke;
+}
+
+const channels = (color: string) => [1, 3, 5].map((offset) =>
+  parseInt(color.slice(offset, offset + 2), 16));
+
+function contains(fill: PdfFill, x: number, y: number): boolean {
+  const { path } = shapes.get(fill) ?? unsupported();
+  return hitTest.isPointInPath(path, x, y,
+    path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
+}
+
+export function pdfShapePaintMatches(
+  paint: PdfPaint, fill: PdfFill, surfaceColor: string, inkColor: string,
+  parts: readonly PdfFill[],
+): boolean {
+  const layers = paint.fills.filter((layer) =>
+    layer.left < fill.right && layer.right > fill.left
+    && layer.top < fill.bottom && layer.bottom > fill.top);
+  const probes = [1, 2, 4, 6, 8, 10, 12, 14, 15].map((step) => step / 16);
+  let onPath = false;
+  // Include narrow outlines and small later patches at overlapping bounds.
+  return layers.every((area) => probes.every((x) => probes.every((y) => {
+    const left = Math.max(area.left, fill.left);
+    const top = Math.max(area.top, fill.top);
+    const px = left + (Math.min(area.right, fill.right) - left) * x;
+    const py = top + (Math.min(area.bottom, fill.bottom) - top) * y;
+    onPath ||= contains(fill, px, py);
+    // Separate strokes of the same ink may form one icon.
+    const ink = parts.some((part) => pdfColorMatches(part.color, inkColor)
+      && contains(part, px, py));
+    const expected = channels(ink ? inkColor : surfaceColor);
+    let visible = [255, 255, 255];
+    for (const layer of layers) {
+      if (!contains(layer, px, py)) continue;
+      const color = channels(layer.color);
+      visible = visible.map((channel, offset) =>
+        channel * (1 - layer.alpha) + color[offset]! * layer.alpha);
+    }
+    return visible.every((channel, offset) =>
+      Math.abs(channel - expected[offset]!) <= 1);
+  }))) && onPath;
+}
+
+export function pdfPaintMatch(
   paint: PdfPaint,
   box: PdfBox,
   expectedColor: string,
-  allowStroke: boolean,
+  allowStroke = false,
   exposed: PdfBox = box,
-): boolean {
-  const channels = (color: string) => [1, 3, 5].map((offset) =>
-    parseInt(color.slice(offset, offset + 2), 16));
+): PdfFill | undefined {
   const expected = channels(expectedColor);
-  const contains = (fill: PdfFill, x: number, y: number) => {
-    const { path } = shapes.get(fill) ?? unsupported();
-    return hitTest.isPointInPath(path, x, y,
-      path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
-  };
   if (exposed.right <= exposed.left || exposed.bottom <= exposed.top
     || exposed.left < box.left || exposed.right > box.right
-    || exposed.top < box.top || exposed.bottom > box.bottom) return false;
-  return paint.fills.some((fill, index) => {
+    || exposed.top < box.top || exposed.bottom > box.bottom) return undefined;
+  return paint.fills.find((fill, index) => {
     const { path, stroke } = shapes.get(fill) ?? unsupported();
     return (allowStroke || !stroke) && fill.alpha >= 0.99
       && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
@@ -253,7 +291,7 @@ export function pdfHasFill(
   expectedColor: string,
   exposed?: PdfBox,
 ): boolean {
-  return hasPaint(paint, box, expectedColor, false, exposed);
+  return Boolean(pdfPaintMatch(paint, box, expectedColor, false, exposed));
 }
 
 export function pdfHasRule(
@@ -261,7 +299,7 @@ export function pdfHasRule(
   box: PdfBox,
   expectedColor: string,
 ): boolean {
-  return hasPaint(paint, box, expectedColor, true);
+  return Boolean(pdfPaintMatch(paint, box, expectedColor, true));
 }
 
 function imageSignature(
