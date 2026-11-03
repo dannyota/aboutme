@@ -207,15 +207,14 @@ function inlineDecorations(paint: PdfPaint, page: PdfTextPage): PdfFill[] {
       const bounds = item.bounds;
       if (!bounds) return false;
       const size = item.height;
-      if (pdfIsStroke(fill)) {
-        // Inline SVG strokes occupy at most one em before their text row.
-        return fill.right - fill.left <= size + 1
-          && fill.bottom - fill.top <= size + 1
-          && fill.left >= bounds.left - size * 1.5 - 1
-          && fill.right <= bounds.left + 1
-          && fill.top >= bounds.top - size * 0.25 - 1
-          && fill.bottom <= bounds.bottom + size * 0.25 + 1;
-      }
+      // Inline SVG paint occupies at most one em before its text row.
+      if (fill.right - fill.left <= size + 1
+        && fill.bottom - fill.top <= size + 1
+        && fill.left >= bounds.left - size * 1.5 - 1
+        && fill.right <= bounds.left + 1
+        && fill.top >= bounds.top - size * 0.25 - 1
+        && fill.bottom <= bounds.bottom + size * 0.25 + 1) return true;
+      if (pdfIsStroke(fill)) return false;
       // A link may cover only part of an extracted text item, after a label.
       const baseline = page.height - item.y;
       return fill.bottom - fill.top <= 1
@@ -235,15 +234,20 @@ export function pdfSurfacePaint(
   color: string,
   foreground: readonly PdfBox[] = [],
 ): boolean {
+  const surface = paint.fills.find((fill) => fill.alpha >= 0.99
+    && !pdfIsStroke(fill) && pdfColorMatches(fill.color, color)
+    && pdfBoxMatches(fill, box));
+  if (!surface) return false;
   const decorations = inlineDecorations(paint, page).filter((fill) =>
     fill.left < box.right && fill.right > box.left
     && fill.top < box.bottom && fill.bottom > box.top);
   if (!decorations.every((fill) =>
     pdfShapePaintMatches(paint, fill, color, decorations))) return false;
-  // Probe blank regions too, excluding only validated decoration bounds.
+  // Partition native bounds so DOM edge tolerance cannot move gap probes.
   const exclusions = [...page.items.flatMap(({ bounds }) =>
-    bounds ? [bounds] : []), ...foreground, ...decorations];
-  let exposed = [box];
+    bounds ? [bounds] : []), ...foreground.flatMap((shape) =>
+    paint.fills.filter((fill) => pdfBoxMatches(fill, shape))), ...decorations];
+  let exposed: PdfBox[] = [surface];
   for (const shape of exclusions) {
     exposed = exposed.flatMap((area) => {
       const left = Math.max(area.left, shape.left);
@@ -259,8 +263,16 @@ export function pdfSurfacePaint(
       ].filter((part) => part.right > part.left && part.bottom > part.top);
     });
   }
-  return exposed.length > 0
-    && exposed.every((area) => pdfHasFill(paint, box, color, area));
+  // Probe unknown paint bounds even when a patch misses a large area's grid.
+  return exposed.length > 0 && exposed.every((area) => {
+    const probes = [area, ...paint.fills.map((fill) => ({
+      left: Math.max(area.left, fill.left),
+      right: Math.min(area.right, fill.right),
+      top: Math.max(area.top, fill.top),
+      bottom: Math.min(area.bottom, fill.bottom),
+    })).filter((part) => part.right > part.left && part.bottom > part.top)];
+    return probes.every((probe) => pdfHasFill(paint, surface, color, probe));
+  });
 }
 
 export function pdfSidebarPaint(

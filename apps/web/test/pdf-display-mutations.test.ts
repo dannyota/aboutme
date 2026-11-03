@@ -355,6 +355,163 @@ describe('PDF surface decorations', () => {
     }],
   });
 
+  it.each([
+    { color: '#f2ebdf', ink: '#5d5751', top: 158.25,
+      bottom: 755.2499389648438, measuredTop: 158.88558070866142,
+      measuredBottom: 755.5105807086615, size: 11.549999218750012,
+      heading: { left: 400.7577958017578, right: 452.5770507702223,
+        top: 503.25488645228575, bottom: 513.544424330513 },
+      dotX: 389.3125, dotY: 502.625, width: 0.765625,
+      lineX: 387.125, lineY: 503.9375, length: 5.25 },
+    { color: '#f1f3f5', ink: '#63686f', top: 132.75,
+      bottom: 783.7499389648438, measuredTop: 133.09261195866142,
+      measuredBottom: 783.9871432086615, size: 10.724999703124993,
+      heading: { left: 399.74998334375, right: 462.22207202414626,
+        top: 376.1279139158936, bottom: 383.3786951559221 },
+      dotX: 389.09375, dotY: 376.5625, width: 0.7109375,
+      lineX: 387.0625, lineY: 377.78125, length: 4.875 },
+  ])('keeps native icon gaps when surface edges differ for $color',
+    async (shape) => {
+      const background = { left: 386.2499694824219, right: 544.23046875,
+        top: shape.top, bottom: shape.bottom };
+      const measured = { left: 386.6134657972441, right: 544.5236220472441,
+        top: shape.measuredTop, bottom: shape.measuredBottom };
+      const text = textPage(shape.heading, shape.size,
+        shape.heading.bottom);
+      const paths = [
+        new Float32Array([0, shape.dotX, shape.dotY,
+          1, shape.dotX + shape.width * 4 / 7, shape.dotY]),
+        new Float32Array([0, shape.lineX, shape.lineY,
+          1, shape.lineX + shape.length, shape.lineY]),
+      ];
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath, OPS.setStrokeRGBColor,
+        OPS.setLineWidth, OPS.setLineCap,
+        OPS.constructPath, OPS.constructPath,
+      ], [
+        [shape.color], [OPS.fill, [rectangle(background)]], [shape.ink],
+        [shape.width], [1], ...paths.map((path) => [OPS.stroke, [path]]),
+      ]);
+      expect(pdfSurfacePaint(paint, text, measured, shape.color)).toBe(true);
+      const gap = { left: shape.dotX, right: shape.dotX + 0.3,
+        top: shape.dotY + shape.width / 2 + 0.05,
+        bottom: shape.lineY - shape.width / 2 - 0.05 };
+      const patch = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [['#ffffff'], [OPS.fill, [rectangle(gap)]]]);
+      expect(pdfSurfacePaint({ ...paint,
+        fills: [...paint.fills, ...patch.fills] }, text, measured,
+      shape.color)).toBe(false);
+    });
+
+  it('uses native bounds for a separately validated heading rule',
+    async () => {
+      const background = { left: 386.2499694824219, right: 544.23046875,
+        top: 158.25, bottom: 755.2499389648438 };
+      const measured = { left: 386.6134657972441, right: 544.5236220472441,
+        top: 158.88558070866142, bottom: 755.5105807086615 };
+      const rule = { ...background, top: 174.74998474121094,
+        bottom: 175.49998474121094 };
+      const expected = { ...measured, top: 175.37386195866142,
+        bottom: 176.12386195866142 };
+      const text = textPage({ left: 400.7577958017578,
+        right: 467.074871916146, top: 160.17772792358403,
+        bottom: 168.88860494362712 }, 11.549999218750012, 168.75);
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath,
+        OPS.setFillRGBColor, OPS.constructPath,
+      ], [
+        ['#f2ebdf'], [OPS.fill, [rectangle(background)]],
+        ['#bc9d9c'], [OPS.fill, [rectangle(rule)]],
+      ]);
+      expect(pdfHasFill(paint, expected, '#bc9d9c')).toBe(true);
+      expect(pdfSurfacePaint(paint, text, measured, '#f2ebdf', [expected]))
+        .toBe(true);
+    });
+
+  it.each(['outline', 'filled'])(
+    'validates final ink and holes in a captured %s contact icon',
+    async (kind) => {
+      const background = { left: 57, right: 538.91015625,
+        top: 45, bottom: 200.24998474121094 };
+      const outline = new Float32Array([
+        0, 4, 4, 1, 20, 4,
+        2, 20.552284, 4, 21.023689, 4.195262, 21.414213, 4.585786,
+        2, 21.804737, 4.976311, 22, 5.447715, 22, 6, 1, 22, 18,
+        2, 22, 18.552284, 21.804737, 19.023689, 21.414213, 19.414213,
+        2, 21.023689, 19.804737, 20.552284, 20, 20, 20, 1, 4, 20,
+        2, 3.447715, 20, 2.976310, 19.804737, 2.585786, 19.414213,
+        2, 2.195262, 19.023689, 2, 18.552284, 2, 18, 1, 2, 6,
+        2, 2, 5.447715, 2.195262, 4.976311, 2.585786, 4.585786,
+        2, 2.976310, 4.195262, 3.447715, 4, 4, 4, 4,
+      ]);
+      const filled = new Float32Array([
+        0, 416, 32, 1, 31.9, 32, 2, 14.3, 32, 0, 46.5, 0, 64.3,
+        1, 0, 447.7, 2, 0, 465.5, 14.3, 480, 31.9, 480, 1, 416, 480,
+        2, 433.6, 480, 448, 465.5, 448, 447.7, 1, 448, 64.3,
+        2, 448, 46.5, 433.6, 32, 416, 32, 4,
+        0, 135.4, 416, 1, 69, 416, 1, 69, 202.2, 1, 135.5, 202.2,
+        1, 135.5, 416, 1, 135.4, 416, 4,
+        0, 102.2, 96,
+        2, 112.831474, 96, 121.906006, 99.758797, 129.423599, 107.276382,
+        2, 136.941193, 114.793976, 140.699982, 123.868515, 140.7, 134.5,
+        2, 140.699982, 145.131470, 136.941193, 154.206009, 129.423599,
+        161.723602,
+        2, 121.906006, 169.241196, 112.831474, 173, 102.2, 173,
+        2, 91.568512, 173, 82.493973, 169.241196, 74.976379, 161.723602,
+        2, 67.458786, 154.206009, 63.699989, 145.131470, 63.7, 134.5,
+        2, 63.699989, 123.868515, 67.458786, 114.793976, 74.976379,
+        107.276382,
+        2, 82.493973, 99.758797, 91.568512, 96, 102.2, 96, 4,
+        0, 384.3, 416, 1, 317.9, 416, 1, 317.9, 312,
+        2, 317.9, 287.2, 317.4, 255.3, 283.4, 255.3,
+        2, 248.8, 255.3, 243.5, 282.3, 243.5, 310.2,
+        1, 243.5, 416, 1, 177.1, 416, 1, 177.1, 202.2,
+        1, 240.8, 202.2, 1, 240.8, 231.4, 1, 241.7, 231.4,
+        2, 250.6, 214.6, 272.3, 196.9, 304.6, 196.9,
+        2, 371.8, 196.9, 384.3, 241.2, 384.3, 298.8, 1, 384.3, 416, 4,
+      ]);
+      const isOutline = kind === 'outline';
+      const contact = textPage({ left: 85.6874964296875,
+        right: isOutline ? 194.835736781844 : 203.5995533166849,
+        top: isOutline ? 115.74096197433482 : 175.74095947433477,
+        bottom: isOutline ? 126.26998375242238 : 186.26998125242233 },
+      11.24999953125, isOutline ? 123.75 : 183.75);
+      const headline = textPage({ left: 71.06249703906249,
+        right: 395.40690084971163, top: 89.78960807517251,
+        bottom: 101.89798311997322 }, 12.9374994609375, 99);
+      const text = { ...contact,
+        items: [...headline.items, ...contact.items] };
+      const scale = isOutline ? 0.46875 : 0.02363445357523106;
+      const x = isOutline ? 71.24999703125 : 71.5808754174634;
+      const y = isOutline ? 113.99999525 : 173.574573568883;
+      const paint = await pdfPaintOperators(proxy, [
+        OPS.setFillRGBColor, OPS.constructPath, OPS.save, OPS.transform,
+        OPS.setStrokeRGBColor, OPS.setFillRGBColor, OPS.setLineWidth,
+        OPS.setLineCap, OPS.setLineJoin, OPS.constructPath, OPS.restore,
+      ], [
+        ['#f7e8d9'], [OPS.fill, [rectangle(background)]], [],
+        [scale, 0, 0, scale, x, y], ['#615a53'], ['#615a53'], [1.75],
+        [1], [1], [isOutline ? OPS.stroke : OPS.fill,
+          [isOutline ? outline : filled]], [],
+      ]);
+      expect(pdfSurfacePaint(paint, text, background, '#f7e8d9')).toBe(true);
+      const icon = paint.fills[1]!;
+      for (const patch of [icon,
+        { left: 75, right: 75.5, top: isOutline ? 119 : 179,
+          bottom: isOutline ? 119.5 : 179.5 },
+        { left: 100, right: 500, top: 190, bottom: 198 }]) {
+        for (const color of ['#ffffff', '#0000ff']) {
+          const overpaint = await pdfPaintOperators(proxy, [
+            OPS.setFillRGBColor, OPS.constructPath,
+          ], [[color], [OPS.fill, [rectangle(patch)]]]);
+          expect(pdfSurfacePaint({ ...paint,
+            fills: [...paint.fills, ...overpaint.fills] }, text, background,
+          '#f7e8d9'), JSON.stringify({ kind, color, patch })).toBe(false);
+        }
+      }
+    });
+
   it.each(['single', 'overlapping', 'patched', 'gap-patched'])(
     'checks inline chevron paint with %s strokes',
     async (variant) => {

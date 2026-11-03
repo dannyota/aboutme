@@ -216,9 +216,9 @@ export function pdfShapePaintMatches(
   const layers = paint.fills.filter((layer) =>
     layer.left < fill.right && layer.right > fill.left
     && layer.top < fill.bottom && layer.bottom > fill.top);
-  const probes = [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
+  const probes = [1, 2, 4, 6, 8, 10, 12, 14, 15].map((step) => step / 16);
   let onPath = false;
-  // Probe each overlapping paint bound to include small later patches.
+  // Include narrow outlines and small later patches at overlapping bounds.
   return layers.every((area) => probes.every((x) => probes.every((y) => {
     const left = Math.max(area.left, fill.left);
     const top = Math.max(area.top, fill.top);
