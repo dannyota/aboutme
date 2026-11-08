@@ -99,7 +99,7 @@ account_container() { # intent server arguments...
   rm -f "$result"
   (umask 077; : >"$result")
   # Creation is an effect with a durable intent. No network/media credential.
-  podman create --name "$name" --network none --entrypoint /usr/local/bin/server \
+  podman create --no-healthcheck --name "$name" --network none --entrypoint /usr/local/bin/server \
     --memory 256m --memory-swap 256m --log-driver none --ulimit core=0:0 \
     --cap-drop ALL --security-opt no-new-privileges --read-only --restart no \
     --volume /run/postgresql:/run/postgresql --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
