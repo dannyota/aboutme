@@ -20,6 +20,7 @@ test_direct_maintenance_log_isolation() {
     "$image" >/dev/null
   wait_started "$name-maint"
   check_unprivileged "$name-maint" "0050 01BB" 0000000000000400
+  assert_http_stdlib_logging_private "$name-maint" maintenance
   for _ in $(seq 1 20); do
     maintenance_ca=$(podman exec "$name-maint" cat /data/caddy/pki/authorities/local/root.crt 2>/dev/null || true)
     [[ -n $maintenance_ca ]] && break
