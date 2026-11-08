@@ -117,7 +117,7 @@ log direct_unmatched_$1 {
 	format crowdsec_feed $1
 }
 log direct_errors_$1 {
-	include http.log.error.crowdsec_$1
+	include http.log.error.crowdsec_$1 http.stdlib
 	output stderr
 	format safe_metadata http_error
 }
@@ -132,7 +132,7 @@ EOF
 write_default_log_excludes() {
   case $seen in
     *,direct,*)
-      printf 'exclude http.handlers.waf crowdsec http.handlers.crowdsec http.log.error.crowdsec_serving http.log.error.crowdsec_maintenance http.log.access tls\n' \
+      printf 'exclude http.handlers.waf crowdsec http.handlers.crowdsec http.log.error.crowdsec_serving http.log.error.crowdsec_maintenance http.stdlib http.log.access tls\n' \
         > /run/caddy/default-log-excludes.caddy ;;
     *)
       printf 'exclude http.handlers.waf\n' > /run/caddy/default-log-excludes.caddy ;;
