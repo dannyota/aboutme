@@ -91,17 +91,88 @@ for (const [from, to] of [
   changed.runs.steps[0].run = packageStep.run.replace(from, to);
   assert.throws(() => checkPackage(changed), undefined, "ci-tools: reject unpinned package or unsafe login");
 }
-function checkPackagePermissions(doc) {
+const ciTools = "./.github/actions/ci-tools";
+const toolInstaller = /^\.\/\.github\/actions\/install-(?:caddy|opentofu)$/;
+const localActions = new Map(hosted.filter((file) => file.startsWith(".github/actions/")).map((file) => [
+  `./${file.replace(/\/action\.yml$/, "")}`, load(file),
+]));
+function expandSteps(list, actions, parents = []) {
+  return list.flatMap((step) => {
+    if (step.uses === ciTools || toolInstaller.test(step.uses ?? "")) return [step];
+    const action = actions.get(step.uses);
+    if (action?.runs?.using !== "composite") return [step];
+    assert.ok(!parents.includes(step.uses), `${step.uses}: composite action cycle`);
+    return expandSteps(action.runs.steps, actions, [...parents, step.uses]);
+  });
+}
+function checkPackageSteps(list, label) {
+  const loaders = list.filter((step) => step.uses === ciTools);
+  assert.ok(loaders.length <= 1, `${label}: load ci-tools only once`);
+  const packageIndex = list.findIndex((step) => step.uses === ciTools);
+  for (const [index, step] of list.entries()) {
+    if (toolInstaller.test(step.uses ?? "")) {
+      assert.ok(packageIndex >= 0 && packageIndex < index, `${label}: load ci-tools before ${step.uses}`);
+    }
+  }
+  for (const loader of loaders) {
+    assert.equal(loader["continue-on-error"], true, `${label}: allow verified cache or release fallback`);
+  }
+  return loaders.length > 0;
+}
+function checkPackagePermissions(doc, actions = localActions, label = "workflow") {
   for (const [id, job] of Object.entries(doc.jobs ?? {})) {
-    if (!(job.steps ?? []).some((s) => s.uses === "./.github/actions/ci-tools") && job.uses !== "./.github/workflows/vn-infra.yml") continue;
+    const packaged = checkPackageSteps(expandSteps(job.steps ?? [], actions), `${label}:${id}`);
+    if (!packaged && job.uses !== "./.github/workflows/vn-infra.yml") continue;
     assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${id}: explicit read-only package permissions`);
   }
 }
+const loader = { uses: ciTools, "continue-on-error": true };
+for (const tool of ["caddy", "opentofu"]) {
+  const installer = { uses: `./.github/actions/install-${tool}` };
+  checkPackageSteps([loader, installer], tool);
+  for (const invalid of [
+    [installer],
+    [installer, loader],
+    [loader, loader, installer],
+    [{ uses: ciTools }, installer],
+    [{ ...loader, "continue-on-error": false }, installer],
+  ]) {
+    assert.throws(() => checkPackageSteps(invalid, tool), /ci-tools|fallback/, `${tool}: reject missing, late, duplicate, or blocking loader`);
+  }
+  const wrapper = "./.github/actions/fixture-wrapper";
+  const nested = "./.github/actions/fixture-nested";
+  const fixtureActions = new Map([
+    [wrapper, { runs: { using: "composite", steps: [{ uses: nested }] } }],
+    [nested, { runs: { using: "composite", steps: [loader, installer] } }],
+  ]);
+  const fixture = { jobs: { proof: { permissions: { contents: "read", packages: "read" }, steps: [{ uses: wrapper }] } } };
+  checkPackagePermissions(fixture, fixtureActions);
+  for (const permission of ["contents", "packages"]) {
+    const changed = structuredClone(fixture);
+    delete changed.jobs.proof.permissions[permission];
+    assert.throws(() => checkPackagePermissions(changed, fixtureActions), /package permissions/, `${tool}: nested caller requires ${permission}`);
+  }
+  const missing = structuredClone(fixtureActions);
+  missing.get(nested).runs.steps.shift();
+  assert.throws(() => checkPackagePermissions(fixture, missing), /load ci-tools before/, `${tool}: nested installer requires a preceding loader`);
+  const duplicate = structuredClone(fixture);
+  duplicate.jobs.proof.steps.unshift(loader);
+  assert.throws(() => checkPackagePermissions(duplicate, fixtureActions), /only once/, `${tool}: reject loaders in both caller and composite`);
+  const separate = { jobs: {
+    load: { permissions: { contents: "read", packages: "read" }, steps: [loader] },
+    install: { permissions: { contents: "read", packages: "read" }, steps: [installer] },
+  } };
+  assert.throws(() => checkPackagePermissions(separate), /load ci-tools before/, `${tool}: a loader in another job does not provide tools`);
+}
+for (const [name, action] of localActions) {
+  if (action.runs?.using !== "composite") continue;
+  checkPackageSteps(expandSteps(action.runs.steps, localActions), name);
+}
 for (const file of hosted.filter((path) => path.startsWith(".github/workflows/"))) {
   const doc = load(file);
-  checkPackagePermissions(doc);
+  checkPackagePermissions(doc, localActions, file);
   for (const [id, job] of Object.entries(doc.jobs ?? {})) {
-    if (!(job.steps ?? []).some((s) => s.uses === "./.github/actions/ci-tools") && job.uses !== "./.github/workflows/vn-infra.yml") continue;
+    if (!expandSteps(job.steps ?? [], localActions).some((s) => s.uses === ciTools) && job.uses !== "./.github/workflows/vn-infra.yml") continue;
     for (const permission of ["contents", "packages"]) {
       const changed = structuredClone(doc);
       delete changed.jobs[id].permissions[permission];
@@ -260,13 +331,6 @@ for (const file of ["ci", "vn-infra"]) {
   const list = steps(doc);
   assert.equal(list.filter((step) => step.uses === "./.github/actions/install-opentofu").length, 1, `${file}: verified OpenTofu installer`);
   assert.ok(!list.some((step) => step.uses?.startsWith("opentofu/setup-opentofu@")), `${file}: no separate unprotected OpenTofu download`);
-  for (const job of Object.values(doc.jobs)) {
-    const installer = (job.steps ?? []).findIndex((s) => /\.\/\.github\/actions\/install-(?:caddy|opentofu)$/.test(s.uses ?? ""));
-    if (installer < 0) continue;
-    const packageIndex = job.steps.findIndex((s) => s.uses === "./.github/actions/ci-tools");
-    assert.ok(packageIndex >= 0 && packageIndex < installer, `${file}: package before installer`);
-    assert.equal(job.steps[packageIndex]["continue-on-error"], true, `${file}: allow verified cache or release fallback`);
-  }
   const job = doc.jobs[file === "ci" ? "contracts" : "check"];
   const mirror = job.steps.find((s) => s.name === "Configure the provider mirror");
   assert.ok(mirror, `${file}: provider mirror configuration`);

@@ -676,6 +676,9 @@ jobs:
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       # Each TOTP group runs its listed shards as parallel tests against one
