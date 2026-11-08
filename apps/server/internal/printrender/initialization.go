@@ -125,6 +125,37 @@ func (b *boundedInitializationOutput) Write(value []byte) (int, error) {
 	return len(value), nil
 }
 
+func checkBrowserVersion(ctx context.Context, executable string, probe func(context.Context, string) (string, error)) error {
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return diagnoseInitialization(ctx, ErrInvalidConfig, "version-probe", err, nil, 0)
+		}
+		started := time.Now()
+		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		version, err := probe(probeCtx, executable)
+		if err != nil || probeCtx.Err() != nil || ctx.Err() != nil {
+			failure := diagnoseInitialization(probeCtx, ErrInvalidConfig, "version-probe", err, nil, time.Since(started))
+			if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+				failure.stage, failure.reason = "version-probe", "operation canceled"
+			}
+			// The probe joins its browser before a fresh attempt can start.
+			retry := attempt == 0 && failure.stage == "timeout" && ctx.Err() == nil
+			cancel()
+			if retry {
+				continue
+			}
+			return failure
+		}
+		cancel()
+		if !hasExactBrowserVersion(version) {
+			failure := initializationFailure(ErrInvalidConfig, "version-probe", "browser version mismatch")
+			failure.exitStatus, failure.elapsed = 0, time.Since(started)
+			return failure
+		}
+		return nil
+	}
+}
+
 func probeBrowserVersion(ctx context.Context, executable string, supervisor supervisorCommand) (string, error) {
 	started := time.Now()
 	// executable is the configured absolute browser path that New checked and never request data
