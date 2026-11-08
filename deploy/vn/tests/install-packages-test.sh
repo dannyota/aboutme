@@ -34,8 +34,40 @@ dpkg-query() {
     *) return 2 ;;
   esac
 }
-apt-get() { printf 'apt %s\n' "$*" >>"$CALLS"; }
-apt-mark() { printf 'mark %s\n' "$*" >>"$CALLS"; }
+apt-get() {
+  printf 'apt %s\n' "$*" >>"$CALLS"
+  [[ ${FIXTURE_APT_INSTALL:-no} == yes ]] || return 0
+  [[ " $* " == *' --allow-change-held-packages '* ]] || return 100
+  [[ ${FIXTURE_APT_FAIL:-no} != yes ]] || return 100
+  [[ ${!#} == "crowdsec=$CROWDSEC_VERSION" ]] || return 2
+  ENGINE_STATE='install ok installed'
+  printf '%s\n' "$ENGINE_STATE" >"$FIXTURE_CASE/unpacked-state"
+  printf '%s\n' "$ENGINE_STATE" >"$FIXTURE_CASE/engine-state"
+  [[ ${FIXTURE_APT_FAIL:-no} != unpacked ]] || return 100
+  [[ ${FIXTURE_APT_WRONG_VERSION:-no} == yes ]] || ENGINE_VERSION=$CROWDSEC_VERSION
+  return 0
+}
+apt-mark() {
+  local package
+  printf 'mark %s\n' "$*" >>"$CALLS"
+  case $1 in
+    showhold)
+      [[ $ENGINE_STATE != hold\ * ]] || printf 'crowdsec\n'
+      [[ $BOUNCER_STATE != hold\ * ]] || printf 'crowdsec-firewall-bouncer-nftables\n'
+      ;;
+    hold)
+      shift
+      for package in "$@"; do
+        if [[ $package == crowdsec ]]; then
+          ENGINE_STATE="hold ${ENGINE_STATE#* }"
+          printf '%s\n' "$ENGINE_STATE" >"$FIXTURE_CASE/engine-state"
+        fi
+      done
+      ;;
+    *) return 2 ;;
+  esac
+  return 0
+}
 install() { printf 'install %s\n' "$*" >>"$CALLS"; }
 systemd-tmpfiles() { :; }
 mountpoint() { [[ -e $FIXTURE_CASE/log-mounted ]]; }
@@ -57,12 +89,13 @@ systemctl() {
     stop) touch "$FIXTURE_CASE/stopped" ;;
   esac
 }
-crowdsec_install_offline() {
+crowdsec_install_offline() (
+  trap - EXIT
   printf 'offline\n' >>"$CALLS"
   systemctl stop crowdsec.service crowdsec-firewall-bouncer.service
   systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service
   "$@"
-}
+)
 stat() { printf '0:0:600\n'; }
 python3() { cat >/dev/null; printf 'fixture-machine'; }
 cscli() {
@@ -120,8 +153,14 @@ installer=${1:-$root/deploy/vn/host/install.sh}
   printf 'install_admission_transition() { [[ $1 != --shared-fence ]] || shift; "$@"; }\n'
   awk '/^crowdsec_install_closed=no$/ {copy=1} copy {print} /^trap cleanup_install EXIT$/ {exit}' "$installer"
   cat <<'SH'
-if [[ ${VERIFY_PACKAGE:-no} == yes ]]; then
-  install_pinned "crowdsec=$CROWDSEC_VERSION"
+if [[ ${VERIFY_PACKAGE:-no} != no ]]; then
+  if [[ $VERIFY_PACKAGE == offline ]]; then
+    crowdsec_install_closed=yes
+    crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" || die "crowdsec_package_refused"
+  else
+    install_pinned "crowdsec=$CROWDSEC_VERSION"
+  fi
+  crowdsec_install_closed=no
   exit 0
 fi
 SH
@@ -208,3 +247,55 @@ for ENGINE_STATE in 'install ok installed' 'hold ok installed' 'hold ok unpacked
   fi
 done
 printf 'PASS post-install-check-requires-installed-pin-with-either-selection\n'
+
+export FIXTURE_APT_INSTALL=yes
+for package_state in missing unheld held-older held-exact; do
+  new_case
+  export ENGINE_VERSION=1.8.0
+  case $package_state in
+    missing) export ENGINE_STATE=missing ;;
+    unheld) export ENGINE_STATE='install ok installed' ;;
+    held-older) export ENGINE_STATE='hold ok installed' ;;
+    held-exact) export ENGINE_STATE='hold ok installed' ENGINE_VERSION=1.8.1 ;;
+  esac
+  bash "$work/install.sh" >"$work/out" 2>"$work/err" || fail "pinned install refused $package_state package"
+  [[ ! -s $work/out && ! -s $work/err ]] || fail 'pinned install printed diagnostics'
+  expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.1\nmark hold crowdsec'
+  [[ $(<"$CALLS") == "$expected" ]] || fail 'pinned install changed apt arguments or hold order'
+done
+printf 'PASS pinned-install-and-held-upgrade-apply-hold-after-exact-version-check\n'
+
+for VERIFY_PACKAGE in yes offline; do
+  export VERIFY_PACKAGE
+  for fault in apt unpacked version; do
+    new_case
+    export ENGINE_STATE='hold ok installed' ENGINE_VERSION=1.8.0
+    export FIXTURE_APT_FAIL=no FIXTURE_APT_WRONG_VERSION=no
+    case $fault in
+      apt) FIXTURE_APT_FAIL=yes ;;
+      unpacked) FIXTURE_APT_FAIL=unpacked ;;
+      version) FIXTURE_APT_WRONG_VERSION=yes ;;
+    esac
+    status=0
+    bash "$work/install.sh" >"$work/out" 2>"$work/err" || status=$?
+    expected_status=1
+    if [[ $VERIFY_PACKAGE == yes && $fault != version ]]; then expected_status=100; fi
+    [[ $status == "$expected_status" ]] || fail "$fault failure lost its status through $VERIFY_PACKAGE"
+    expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.1\nmark hold crowdsec'
+    if [[ $VERIFY_PACKAGE == offline ]]; then
+      expected=$'offline\nunit stop crowdsec.service crowdsec-firewall-bouncer.service\nunit mask --runtime crowdsec.service crowdsec-firewall-bouncer.service\n'"$expected"$'\nclose'
+    fi
+    [[ $(<"$CALLS") == "$expected" ]] || fail "$fault failure did not restore only the requested hold after apt"
+    [[ $(<"$FIXTURE_CASE/engine-state") == 'hold ok installed' ]] || fail "$fault failure left the engine unheld"
+    if [[ $fault != apt ]]; then
+      [[ $(<"$FIXTURE_CASE/unpacked-state") == 'install ok installed' ]] || fail "$fault fixture did not change the selection"
+    fi
+    if [[ $fault == version ]]; then
+      grep -qxF 'install: crowdsec is not installed at pinned 1.8.1' "$work/err" || fail 'version failure lost its diagnostic'
+      if [[ $VERIFY_PACKAGE == offline ]]; then
+        grep -qxF 'install: crowdsec_package_refused' "$work/err" || fail 'offline install lost its refusal'
+      fi
+    fi
+  done
+done
+printf 'PASS failed-held-upgrades-restore-holds-before-refusing\n'

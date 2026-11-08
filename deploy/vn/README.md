@@ -316,6 +316,18 @@ CrowdSec publishes no key fingerprint; the committed key is the one
 packagecloud.io served on 2026-10-10. apt holds every pinned package, and
 unattended-upgrades installs only Ubuntu security updates.
 
+The installer supports pin raises for the PostgreSQL packages and pgBackRest.
+Edit their version constants in `host/install.sh` and rerun the reviewed
+installer bundle. It restores existing holds if installation or version checks
+fail and holds each package after verifying its version.
+
+A CrowdSec engine or bouncer pin raise needs a reviewed catalog transition:
+`host/crowdsec-schema-v<version>.tsv` and `host/crowdsec-db.sh` compare the
+catalog exactly. Follow the
+[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md#engine-and-hub-upgrades);
+changing a version constant and rerunning the installer is not a supported
+CrowdSec upgrade procedure.
+
 ## Contracts with other lanes
 
 These contracts match the server and Caddy images:
