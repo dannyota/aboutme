@@ -84,6 +84,33 @@ func TestSafeMetadataEncoderDropsMalformedEntries(t *testing.T) {
 	}
 }
 
+func TestSafeMetadataEncoder_DropsHTTPStdlibPanicValues(t *testing.T) {
+	t.Parallel()
+
+	for _, address := range []string{"203.0.113.9:49152", "[2001:db8::9]:49152"} {
+		encoded, err := newSafeMetadataEncoder(safeMetadataHTTPError).EncodeEntry(zapcore.Entry{
+			Time:       time.Date(2026, 10, 10, 1, 2, 3, 4, time.UTC),
+			Level:      zapcore.ErrorLevel,
+			LoggerName: "http.stdlib",
+			Message: "http: panic serving " + address + ": panicmarker-4b8f\n" +
+				"goroutine 42 [running]:\nstackmarker-2d6a.handler()\n\t/private/request.go:123\n",
+			Stack: "stackfieldmarker-7c1e",
+		}, []zapcore.Field{
+			zap.String("remote_addr", address),
+			zap.String("panic", "panicfieldmarker-9f3c"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		line := encoded.String()
+		encoded.Free()
+		const want = "{\"ts\":\"2026-10-10T01:02:03.000000004Z\",\"level\":\"error\",\"msg\":\"http_error\"}\n"
+		if line != want {
+			t.Fatal("recovered HTTP panic did not produce only fixed metadata")
+		}
+	}
+}
+
 func TestSafeMetadataEncoderDropsACMEChallengeValues(t *testing.T) {
 	t.Parallel()
 

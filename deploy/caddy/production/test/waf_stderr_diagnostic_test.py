@@ -26,6 +26,7 @@ CLEAN_LINES = (
     'rule_id=941100.1 chain_rule_id=949110ms other_rule_id=941100',
     '{"client_ip_headers":["X-Forwarded-For"],"other_remote_ip":"benign"}',
     '{"logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}',
+    '{"ts":"2026-10-10T01:02:03.000000004Z","level":"error","msg":"http_error"}',
     'Coraza: engine initialized',
     json.dumps({"msg": '{"ts":1791966300.949110,"duration":"941100ms"}'}),
 )
@@ -221,6 +222,27 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(json.loads(result.stderr)["pattern"], "probe-marker")
         self.assertNotIn("maintmarker6e4d", result.stderr)
+
+    def test_shell_gate_rejects_http_stdlib_panics_with_fixed_diagnostics(self):
+        for mode in ("serving", "maintenance"):
+            for address in ("203.0.113.9:49152", "[2001:db8::9]:49152"):
+                with self.subTest(mode=mode, address=address):
+                    line = json.dumps({
+                        "ts": "2026-10-10T01:02:03.000000004Z",
+                        "level": "error",
+                        "logger": "http.stdlib",
+                        "msg": f"http: panic serving {address}: panicmarker4b8f\n"
+                               "goroutine 42 [running]:\nstackmarker2d6a.handler()\n"
+                               "\t/private/request.go:123\n",
+                    })
+                    result = self.run_gate(mode, "", line)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(json.loads(result.stderr), {
+                        "stream": "stderr", "line": 1,
+                        "pattern": "http-stdlib-panic", "logger": "http.stdlib",
+                        "message_kind": "http-stdlib-panic",
+                    })
 
     def test_shell_gate_redacts_container_log_errors(self):
         result = self.run_gate("serving", "", "tokenmarker3f8a", log_status=125)

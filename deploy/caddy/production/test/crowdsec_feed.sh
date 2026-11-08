@@ -29,9 +29,37 @@ assert_private_log_has_no_markers() { # text
   done
 }
 
+assert_http_stdlib_logging_private() { # container mode
+  local config adapted
+  case $2 in
+    serving) config=Caddyfile ;;
+    maintenance) config=Caddyfile.maintenance ;;
+    *) echo 'HTTP stdlib: unknown logging mode' >&2; exit 1 ;;
+  esac
+  adapted=$(podman exec "$1" caddy adapt --config "/etc/caddy/$config" 2>/dev/null) ||
+    { echo 'HTTP stdlib: could not adapt logging configuration' >&2; exit 1; }
+  python3 -c '
+import json
+import sys
+
+logs = json.load(sys.stdin)["logging"]["logs"]
+if "http.stdlib" not in logs["default"].get("exclude", []):
+    sys.exit("HTTP stdlib: raw default output is enabled")
+routes = [log for log in logs.values() if "http.stdlib" in log.get("include", [])]
+if len(routes) != 1:
+    sys.exit("HTTP stdlib: expected one private logger")
+route = routes[0]
+if route.get("writer") != {"output": "stderr"} or route.get("encoder") != {
+    "format": "safe_metadata", "marker": "http_error"
+}:
+    sys.exit("HTTP stdlib: logger does not use fixed error metadata")
+' <<<"$adapted" || exit 1
+}
+
 test_direct_crowdsec_feed() {
   local feed=/var/log/caddy/crowdsec/serving.json before want feed_text logs adapted
 
+  assert_http_stdlib_logging_private "$name" serving
   [[ $(podman exec "$name" stat -c %a:%u "$feed") == 600:10001 ]] ||
     { echo "CrowdSec feed is not private to uid 10001" >&2; exit 1; }
   adapted=$(podman exec "$name" caddy adapt --config /etc/caddy/Caddyfile 2>/dev/null)
