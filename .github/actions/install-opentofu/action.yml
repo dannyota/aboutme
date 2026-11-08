@@ -1,0 +1,35 @@
+name: Install OpenTofu
+description: >-
+  Installs the pinned Linux amd64 OpenTofu release without a wrapper. Packaged,
+  cached, and downloaded archives must pass the pinned SHA-256 before extraction.
+runs:
+  using: composite
+  steps:
+    - id: archive
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tofu.zip
+        key: opentofu-1.12.6-linux-amd64-sha256-5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
+    - name: Select OpenTofu archive
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.archive.outputs.cache-hit }}
+      run: |
+        if [ -f "$RUNNER_TEMP/ci-tools/tofu_1.12.6_linux_amd64.zip" ]; then
+          cp "$RUNNER_TEMP/ci-tools/tofu_1.12.6_linux_amd64.zip" "$RUNNER_TEMP/tofu.zip"
+        elif [ "$CACHE_HIT" != true ]; then
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 \
+            -o "$RUNNER_TEMP/tofu.zip" https://github.com/opentofu/opentofu/releases/download/v1.12.6/tofu_1.12.6_linux_amd64.zip
+        fi
+    - name: Verify and install OpenTofu
+      shell: bash
+      run: |
+        echo "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8  $RUNNER_TEMP/tofu.zip" | sha256sum -c -
+        mkdir -p "$RUNNER_TEMP/opentofu"
+        unzip -q "$RUNNER_TEMP/tofu.zip" tofu -d "$RUNNER_TEMP/opentofu"
+        echo "$RUNNER_TEMP/opentofu" >> "$GITHUB_PATH"
+    - if: ${{ github.ref == 'refs/heads/main' && steps.archive.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tofu.zip
+        key: ${{ steps.archive.outputs.cache-primary-key }}
