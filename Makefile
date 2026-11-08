@@ -51,6 +51,13 @@ scan: ## Scan secrets over full Git history with gitleaks
 tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="ci", "scan", "dev", or tool names)
 	bash scripts/check-tool-versions.sh $(ARGS)
 
+.PHONY: codex-agents codex-agents-check
+codex-agents: ## Render Codex roles from the shared preamble and role fragments
+	bash scripts/generate-codex-agents.sh
+
+codex-agents-check: ## Check committed Codex roles match their sources
+	bash scripts/generate-codex-agents.sh --check
+
 # Split into four lanes so hosted CI can run them in parallel: the dev-https
 # static suite alone was 185s of a 284s sequential total, deploy_test.sh 38s,
 # and the browser-image/MCP-owner-workflow suites 25s and 23s. Each lane keeps
@@ -99,6 +106,10 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	scripts/test/deployment-document-check-test.sh
 	scripts/test/npm-audit-test.sh
 	scripts/test/codex-agent-test.sh
+	bash -n scripts/generate-codex-agents.sh
+	bash -n scripts/test/codex-agents-test.sh
+	$(MAKE) codex-agents-check
+	bash scripts/test/codex-agents-test.sh
 	scripts/generate-web-e2e-source-manifest-test.sh
 	scripts/web-e2e-source-test.sh
 
