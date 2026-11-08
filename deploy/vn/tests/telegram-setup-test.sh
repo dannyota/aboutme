@@ -130,6 +130,18 @@ grep -qF '"$bundle/host/telegram-state.sh"' "$repo/deploy/vn/host/install.sh"
 grep -qF '"$bundle/host/alert-transport.sh"' "$repo/deploy/vn/host/install.sh"
 grep -qxF 'ExecStart=/usr/local/lib/aboutme/alert.sh unit-%i "unit %i failed"' \
   "$repo/deploy/vn/host/etc/systemd/system/aboutme-alert@.service"
+python3 -I - "$repo/deploy/vn/host/etc/systemd/system/aboutme-alert@.service" <<'PY'
+import configparser, sys
+unit = configparser.ConfigParser(interpolation=None)
+unit.read(sys.argv[1])
+assert unit["Unit"].get("Wants", "").split() == ["network-online.target"]
+assert unit["Unit"].get("After", "").split() == ["network-online.target"]
+for dependency in ("Before", "Requires", "BindsTo", "PartOf"):
+    assert dependency not in unit["Unit"], "alert couples network wait to another unit"
+assert "Restart" not in unit["Service"], "alert automatically repeats a completed attempt"
+# Allow the credential lock, three bounded requests, two waits, and cleanup.
+assert 85 < int(unit["Service"]["TimeoutStartSec"].removesuffix("s")) <= 120
+PY
 # Missing rotation confirmation leaves automatic delivery disabled.
 python3 -I - "$repo/docs/runbooks/production.md" <<'PY'
 import pathlib, sys

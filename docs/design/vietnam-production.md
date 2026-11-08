@@ -316,6 +316,8 @@ limits and daily suppression. Mail remains current until the receipt-gated
 cutover; application SMTP stays unchanged. The design owns transport, custody,
 authorization, failures, verification, and rollout.
 
+See [unit-failure retries](telegram-host-alerts.md#unit-failure-retries).
+
 ## Infrastructure code and state
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21) covers servers, volumes,

@@ -5,6 +5,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 watch_source=$repo_root/deploy/vn/host/bin/watch.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+export WATCH_TEST_REAL_SLEEP
+WATCH_TEST_REAL_SLEEP=$(command -v sleep)
 mkdir -p "$work/bin" "$work/lib"
 # Only the canonical lock path and wait duration are redirected in this fixture.
 sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" \
@@ -65,7 +67,11 @@ modified=$(stat -c %Y "$lease")
 STUB
 cat >"$work/bin/df" <<'STUB'
 #!/usr/bin/env bash
-printf 'Use%%\n10%%\n'
+if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then
+  printf 'Use%%\n90%%\n'
+else
+  printf 'Use%%\n10%%\n'
+fi
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
@@ -88,13 +94,18 @@ cat >"$work/bin/runuser" <<'STUB'
 #!/usr/bin/env bash
 case " $* " in
   *' pg_isready '*) exit 0 ;;
-  *' psql '*) printf 'f\n' ;;
+  *' psql '*)
+    if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then printf 't\n'; else printf 'f\n'; fi ;;
   *' pgbackrest '*)
     if [[ ${WATCH_TEST_HUNG_BACKUP:-0} == 1 ]]; then
       : >"$WATCH_TEST_BACKUP_ENTERED"
       while [[ ! -e $WATCH_TEST_BACKUP_RELEASE ]]; do sleep 0.01; done
     fi
-    printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n' ;;
+    if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then
+      printf '[]\n'
+    else
+      printf '[{"backup":[{"timestamp":{"stop":2000000000}}]}]\n'
+    fi ;;
   *) exit 2 ;;
 esac
 STUB
@@ -114,7 +125,13 @@ if [[ ${WATCH_TEST_HUNG_CSCLI:-0} == 1 ]]; then
   : >"$WATCH_TEST_CSCLI_ENTERED"
   exec sleep 30
 fi
-printf '[]\n'
+if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then
+  printf '[{}'
+  for ((i=0; i<50; i++)); do printf ',{}'; done
+  printf ']\n'
+else
+  printf '[]\n'
+fi
 STUB
 cat >"$work/bin/find" <<'STUB'
 #!/usr/bin/env bash
@@ -124,7 +141,19 @@ fi
 STUB
 cat >"$work/bin/journalctl" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then
+  printf 'read\n' >>"$WATCH_TEST_TOTP_READS"
+  printf 'totp_unavailable\n'
+fi
 exit 0
+STUB
+cat >"$work/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+if [[ ${WATCH_TEST_TRANSPORT_FAILS:-0} == 1 && $# == 1 && $1 == 10 ]]; then
+  printf '10\n' >>"$WATCH_TEST_RETRY_DELAYS"
+  exit 0
+fi
+exec "$WATCH_TEST_REAL_SLEEP" "$@"
 STUB
 chmod +x "$work/bin/"* "$work/lib/"*.sh
 export PATH=$work/bin:$PATH ABOUTME_WATCH_TEST_LIB=$work/lib
@@ -189,6 +218,16 @@ cat >"$WATCH_TEST_MESSAGE"
 STUB
 cat >"$work/bin/curl" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${WATCH_TEST_TRANSPORT_FAILS:-0} == 1 ]]; then
+  cat >/dev/null
+  printf 'attempt\n' >>"$WATCH_TEST_TRANSPORT_ATTEMPTS"
+  while (($#)); do
+    if [[ $1 == --output ]]; then : >"$2"; break; fi
+    shift
+  done
+  printf 'http:000\nupload:0\nrequest:0\n'
+  exit 7
+fi
 cat >"$WATCH_TEST_MESSAGE"
 while (($#)); do
   if [[ $1 == --output ]]; then printf '{"ok":true}' >"$2"; break; fi
@@ -214,6 +253,26 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-mess
   WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
 grep -qF 'failed units: 101' "$work/telegram-message"
 grep -qF 'omitted units: 81' "$work/telegram-message"
+
+# Every condition keeps its single-attempt budget during a transport outage.
+rm -f "$work/alert-state/alerts/failed-units."*
+: >"$work/transport-attempts"
+: >"$work/retry-delays"
+: >"$work/totp-reads"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_ALERT_FAILURES=1 WATCH_TEST_TRANSPORT_FAILS=1 \
+  WATCH_TEST_TRANSPORT_ATTEMPTS=$work/transport-attempts WATCH_TEST_RETRY_DELAYS=$work/retry-delays \
+  WATCH_TEST_TOTP_READS=$work/totp-reads WATCH_TEST_FAILED_UNITS=$work/failed-units \
+  run_watch "$base" "$work/outage.alerts" 2>"$work/outage.err"
+for key in disk-root disk-data failed-units archive-failing backup-missing crowdsec-bans coraza-log-invalid totp-unavailable; do
+  grep -qxF "alert-telegram: transport_failed $key" "$work/outage.err"
+  [[ ! -e $work/alert-state/alerts/$key.2030-01-02 ]] || { echo 'failed watcher alert retained a stamp' >&2; exit 1; }
+done
+[[ $(wc -l <"$work/transport-attempts") == 8 && $(wc -l <"$work/outage.err") == 8 && ! -s $work/retry-delays ]] || {
+  echo 'watcher alerts retried or waited during a transport outage' >&2; exit 1;
+}
+grep -qxF 'coraza counts in the last hour: matches=1 unparsed=1' "$work/outage.alerts.journal"
+[[ $(wc -l <"$work/totp-reads") == 1 ]] || { echo 'transport outage skipped the final TOTP check' >&2; exit 1; }
+
 # Pause after the watcher selected Telegram, then roll back and replace chat.
 rm -f "$work/alert-state/alerts/failed-units."*
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/after-rollback-message \
