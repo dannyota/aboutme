@@ -25,11 +25,7 @@ CLEAN_LINES = (
     '{"rule_id":"949110ms"}',
     'rule_id=941100.1 chain_rule_id=949110ms other_rule_id=941100',
     '{"client_ip_headers":["X-Forwarded-For"],"other_remote_ip":"benign"}',
-<<<<<<< HEAD
-=======
-    '{"logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}',
     '{"ts":"2026-10-10T01:02:03.000000004Z","level":"error","msg":"http_error"}',
->>>>>>> origin/main
     'Coraza: engine initialized',
     json.dumps({"msg": '{"ts":1791966300.949110,"duration":"941100ms"}'}),
 )
