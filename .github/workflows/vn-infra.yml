@@ -15,12 +15,30 @@ jobs:
     name: Infrastructure contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with:
-          tofu_version: 1.12.6
-          tofu_wrapper: false
+      - id: ci-tools
+        uses: ./.github/actions/ci-tools
+        continue-on-error: true
+      - name: Configure the provider mirror
+        if: ${{ steps.ci-tools.outcome == 'success' }}
+        run: |
+          cat >"$RUNNER_TEMP/ci-tools.tfrc" <<EOF
+          provider_installation {
+            filesystem_mirror {
+              path = "$RUNNER_TEMP/ci-tools/providers"
+              include = ["registry.opentofu.org/*/*"]
+            }
+            direct {
+              exclude = ["registry.opentofu.org/*/*"]
+            }
+          }
+          EOF
+          echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/ci-tools.tfrc" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/install-opentofu
       - run: tofu fmt -check -recursive deploy/vn
       - name: Validate the root
         run: |

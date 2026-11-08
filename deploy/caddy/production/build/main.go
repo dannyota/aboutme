@@ -1,14 +1,8 @@
-// Command caddy builds the production Caddy binary from source instead of
-// using the upstream release binary. The upstream caddy:2.11.4-alpine image
-// ships a binary built with an older Go toolchain and older module versions
-// than this repository pins (.tool-versions: golang 1.27.3), so it carries
-// stdlib and dependency vulnerabilities that this module's pinned, newer
-// versions fix. It mirrors upstream's own cmd/caddy/main.go for v2.11.4 with
-// the standard module set, plus the two plugins and private log encoders the
-// direct edge uses (docs/design/vietnam-production.md, "Edge"):
-// the Coraza web application firewall and the CrowdSec bouncer's HTTP handler.
-// This file and go.mod are what `xcaddy build --with` generates, kept in the
-// repository so go.sum pins every module.
+// Command caddy builds production Caddy 2.11.9 with the Go toolchain in
+// .tool-versions and the dependencies pinned by go.mod and go.sum.
+// It mirrors upstream cmd/caddy/main.go for v2.11.9 with the standard modules,
+// Coraza web application firewall, CrowdSec HTTP bouncer, and private log
+// encoders used by the direct edge (docs/design/vietnam-production.md, "Edge").
 package main
 
 import (
