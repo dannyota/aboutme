@@ -130,7 +130,7 @@ the exact API, storage, mail, mixed-version, bounds, and release rules. The
 ring, rotation, and key failures. The shared rules are in
 [second-factor authentication](../design/second-factor-authentication.md).
 
-## Alternatives
+## Alternatives rejected
 
 - HMAC-SHA-256 or eight digits would strengthen TOTP but reduce authenticator
   compatibility. Zero skew rejects ordinary phone clock drift; two steps widen

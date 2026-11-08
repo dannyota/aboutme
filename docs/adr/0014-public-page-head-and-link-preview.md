@@ -82,14 +82,19 @@ The stored card is keyed by content, not by public generation. An autosave that
 does not touch a card input leaves the version and the stored bytes unchanged,
 so a crawler gets the card from one row read instead of a Chromium render.
 
-| Option                 | Result                                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Render on request      | 1 to 2 s first byte on most crawler fetches; renders compete with owner PDF exports                                          |
-| PostgreSQL row, chosen | Deleted by the same transaction as unpublish and by cascade on delete; no cleanup ledger; moves with the database to Vietnam |
-| Private object storage | Needs a deletion ledger entry per change and a sweep, like photos; a second copy to keep consistent with the live state      |
-| Edge long-TTL cache    | Breaks ADR 0010: an edge copy would outlive unpublish until an eventually consistent invalidation                            |
-
 A card is at most 512 KiB and one row exists per live resume.
+
+PostgreSQL storage needs no cleanup ledger and moves with the database to
+Vietnam.
+
+## Alternatives rejected
+
+| Option                 | Result                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Resume screenshot      | Slow to render, unreadable at thumbnail size, and exposes contact details                                               |
+| Render on request      | 1 to 2 s first byte on most crawler fetches; renders compete with owner PDF exports                                     |
+| Private object storage | Needs a deletion ledger entry per change and a sweep, like photos; a second copy to keep consistent with the live state |
+| Edge long-TTL cache    | Breaks ADR 0010: an edge copy would outlive unpublish until an eventually consistent invalidation                       |
 
 ## Consequences
 

@@ -6,7 +6,9 @@ in [`../design/`](../design/README.md), and the
 [decision status](../design/decisions.md) page maps each record to the design
 pages that apply it.
 
-Each record states the decisions in force for one topic. Its History section
+Each record states the decisions in force for one topic, with Context, Decision,
+Alternatives rejected, Consequences, and History sections. Alternatives rejected
+names each option considered and why it lost, one line each. Its History section
 names the former records it replaces and why each changed. To change a decision
 in force, edit its record with the owner's approval and add a History line
 naming what changed and why. A new record is only for a new topic. A proposed

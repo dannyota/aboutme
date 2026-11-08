@@ -93,9 +93,11 @@ of that work; do not start repository-wide sweeps. Cite files, commands, and
 uncertainty, and claim only checks that ran. Reviews check these rules on the
 files a change touches.
 
-ADRs are one record per topic. To change a decision in force, edit its topic
-record with the owner's approval and add a line to its History section naming
-what changed and why; open a new ADR only for a new topic.
+ADRs are one record per topic, with Context, Decision, Alternatives rejected,
+Consequences, and History sections. Give each rejected alternative and why it
+lost in one line. To change a decision in force, edit its topic record with the
+owner's approval and add a line to its History section naming what changed and
+why; open a new ADR only for a new topic.
 
 ## Plans and records
 

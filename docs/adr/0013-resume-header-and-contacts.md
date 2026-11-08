@@ -98,6 +98,13 @@ the name, a project subtitle, and justified body text.
   with no header gets the default header (`left`, `inline`, `outline`) plus the
   kept position.
 
+## Alternatives rejected
+
+- Container queries for side photos change shrink-to-fit print and harness
+  sizing.
+- Default labels beside typed icons duplicate the type already named by the
+  icon.
+
 ## Consequences
 
 - The renderer's own `https://` re-check is defense in depth against a document

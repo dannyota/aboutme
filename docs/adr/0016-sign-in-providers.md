@@ -127,7 +127,7 @@ The residual exposure is a code taken from the victim's device or network path
 before delivery, for example by a malicious browser extension, which can often
 take the resulting session cookie as well.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Hide the buttons only.** Leaves redirect surfaces reachable and lets the web
   and server disagree.
