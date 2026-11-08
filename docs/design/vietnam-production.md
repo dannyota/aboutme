@@ -71,13 +71,25 @@ Three host-level controls replace AWS WAF:
   callback. An exact allowlist of fixed engine and connector diagnostics,
   including the missing-key macro warning, body processing errors, and the
   connector's interruption summary, emits `msg=waf_engine_diagnostic`.
-  Diagnostics have only `ts`, `level`, `logger`, and `msg`, no `rule_id` or raw
-  fields; the watcher excludes them from rule counts. WAF records carry no raw
-  fields or personal data and stay on tmpfs. Only aggregate match and unparsed
-  counts reach the journal. Files cap at 5 MiB plus two rolls; one-day expiry
-  applies only to rolled files, so a low-volume active file persists until
-  rotation or reboot. After two weeks, devops reviews matches, excludes false
-  positives on resume writes, and enables blocking.
+  Diagnostics have exactly `ts`, `level`, `logger`, `msg`, and `kind`, no
+  `rule_id` or raw fields. Each allowlisted message maps to one literal `kind`:
+  `macro_key_missing`, `serial_log_writer_error`, `audit_log_init_error`,
+  `audit_log_write_error`, `request_length_invalid`,
+  `setvar_collection_not_map`, `setvar_collection_nil`, `invalid_value`,
+  `invalid_range`, `invalid_status`, `invalid_audit_log_part`, `unknown_toggle`,
+  `invalid_limit`, `invalid_rule_id`, `invalid_log_level`,
+  `regex_collection_unsupported`, `string_collection_unsupported`,
+  `request_headers_repeated`, `request_headers_interrupted`,
+  `request_body_interrupted`, `request_body_error`, `response_headers_repeated`,
+  `response_headers_interrupted`, `response_body_interrupted`,
+  `response_body_error`, `transaction_close_error`, or `interruption_summary`.
+  Unknown messages stay unparsed without `kind`. The watcher excludes
+  diagnostics from rule counts. WAF records carry no raw fields or personal data
+  and stay on tmpfs. Only aggregate match, unparsed, and diagnostic counts reach
+  the journal. Files cap at 5 MiB plus two rolls; one-day expiry applies only to
+  rolled files, so a low-volume active file persists until rotation or reboot.
+  After two weeks, devops reviews matches, excludes false positives on resume
+  writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -301,9 +313,9 @@ pending. Its renew-only account is GitHub's approved cloud-credential exception.
 | Mail     | Bizfly delivery logs; see the email runbook                      |
 | Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
 
-Coraza match and unparsed counts do not trigger mail (owner, 2026-10-14). Each
-watcher run writes one journal line with both counts for the preceding hour,
-including zero counts. `coraza-log-invalid` still mails malformed logs or
+Coraza counts do not trigger mail (owner, 2026-10-14). Each watcher run writes
+one journal line with match, unparsed, and diagnostic totals for the preceding
+hour, including zero counts. `coraza-log-invalid` still mails malformed logs or
 unknown record kinds. Rule-match counts are callback records, not distinct
 requests or blocked responses. The connector's interruption summary is an engine
 diagnostic because an interruption can also come from a body limit.
