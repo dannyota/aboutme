@@ -6,10 +6,31 @@ description: >-
 runs:
   using: composite
   steps:
-    - shell: bash
+    - id: archive
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/caddy.tar.gz
+        key: caddy-2.11.4-linux-amd64-sha512-8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9
+    - name: Select Caddy archive
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.archive.outputs.cache-hit }}
       run: |
-        curl -fsSL -o "$RUNNER_TEMP/caddy.tar.gz" https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+        if [ -f "$RUNNER_TEMP/ci-tools/caddy_2.11.4_linux_amd64.tar.gz" ]; then
+          cp "$RUNNER_TEMP/ci-tools/caddy_2.11.4_linux_amd64.tar.gz" "$RUNNER_TEMP/caddy.tar.gz"
+        elif [ "$CACHE_HIT" != true ]; then
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 \
+            -o "$RUNNER_TEMP/caddy.tar.gz" https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+        fi
+    - name: Verify and install Caddy
+      shell: bash
+      run: |
         echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  $RUNNER_TEMP/caddy.tar.gz" | sha512sum -c -
         mkdir -p "$RUNNER_TEMP/caddy"
         tar -xzf "$RUNNER_TEMP/caddy.tar.gz" -C "$RUNNER_TEMP/caddy" caddy
         echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+    - if: ${{ github.ref == 'refs/heads/main' && steps.archive.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/caddy.tar.gz
+        key: ${{ steps.archive.outputs.cache-primary-key }}

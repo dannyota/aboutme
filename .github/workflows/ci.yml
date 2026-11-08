@@ -102,6 +102,9 @@ jobs:
     name: VN infrastructure
     needs: [preflight]
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/vn-infra.yml
 
   # Checks needing no database, browser, or Go test run: gitleaks,
@@ -118,6 +121,9 @@ jobs:
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -192,10 +198,26 @@ jobs:
       - if: ${{ !cancelled() }}
         run: gitleaks detect --redact --no-banner
       - if: ${{ !cancelled() }}
-        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with:
-          tofu_version: 1.12.6
-          tofu_wrapper: false
+        id: ci-tools
+        uses: ./.github/actions/ci-tools
+        continue-on-error: true
+      - name: Configure the provider mirror
+        if: ${{ !cancelled() && steps.ci-tools.outcome == 'success' }}
+        run: |
+          cat >"$RUNNER_TEMP/ci-tools.tfrc" <<EOF
+          provider_installation {
+            filesystem_mirror {
+              path = "$RUNNER_TEMP/ci-tools/providers"
+              include = ["registry.opentofu.org/*/*"]
+            }
+            direct {
+              exclude = ["registry.opentofu.org/*/*"]
+            }
+          }
+          EOF
+          echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/ci-tools.tfrc" >> "$GITHUB_ENV"
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/install-opentofu
       - if: ${{ !cancelled() }}
         run: tofu fmt -check -recursive deploy/aws
       - if: ${{ !cancelled() }}
@@ -271,6 +293,9 @@ jobs:
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: go
@@ -329,6 +354,9 @@ jobs:
       # through a live caddy process fronting stub backends. Needs a caddy
       # binary but no database; pinned to 2.11.4 to match
       # deploy/compose.yml's caddy image tag.
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/ci-tools
+        continue-on-error: true
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/install-caddy
       - if: ${{ !cancelled() }}
