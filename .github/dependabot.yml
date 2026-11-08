@@ -45,9 +45,6 @@ updates:
       # Caddy mirrors .tool-versions and deploy/compose.yml, checked by
       # scripts/check-tool-versions.sh; production build/main.go mirrors it too.
       - dependency-name: github.com/caddyserver/caddy/v2
-      # Caddy 2.11.4 cannot build with cel-go >= 0.29; see ci.yml's server job.
-      - dependency-name: github.com/google/cel-go
-        versions: [">= 0.29.0"]
   - package-ecosystem: npm
     directories:
       - "/"

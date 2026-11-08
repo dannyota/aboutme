@@ -19,7 +19,7 @@ Local first-party source establishes these boundaries:
 | Bouncer `internal/bouncer/stream.go:51`, `internal/core/core.go:194`                         | The new stream starts with `startup=true`, asynchronously.                                   |
 | Bouncer `crowdsec/crowdsec.go:301`, `internal/core/decisions.go:104`                         | Start does not wait for the snapshot. Empty-cache lookups allow requests before bans arrive. |
 | Bouncer `crowdsec/crowdsec.go:286`, `internal/core/core.go:209`                              | Cleanup cancels and joins workers, but does not clear the old store.                         |
-| Caddy `caddy.go:369`, `modules/caddyhttp/app.go:774`                                         | New apps start before old apps stop; reload does not wait for old HTTP requests to drain.    |
+| Caddy `caddy.go:362`, `modules/caddyhttp/app.go:853`                                         | New apps start before old apps stop; reload does not wait for old HTTP requests to drain.    |
 
 Consequently, reload success proves neither enforcement readiness nor absence
 from every old cache. Long requests may retain old handlers and stores. Forcing
@@ -65,5 +65,5 @@ not runtime verification. No secondary-source claim supports this decision.
 - [Stream](https://github.com/hslatman/caddy-crowdsec-bouncer/blob/ffdcb7c6f861/internal/bouncer/stream.go)
 - [Lifecycle](https://github.com/hslatman/caddy-crowdsec-bouncer/blob/ffdcb7c6f861/crowdsec/crowdsec.go)
 - [Admin API](https://github.com/hslatman/caddy-crowdsec-bouncer/blob/ffdcb7c6f861/crowdsec/adminapi.go)
-- [Caddy 2.11.4 configuration lifecycle](https://github.com/caddyserver/caddy/blob/v2.11.4/caddy.go)
-- [Caddy HTTP shutdown](https://github.com/caddyserver/caddy/blob/v2.11.4/modules/caddyhttp/app.go)
+- [Caddy 2.11.9 configuration lifecycle](https://github.com/caddyserver/caddy/blob/v2.11.9/caddy.go#L362-L375)
+- [Caddy HTTP shutdown](https://github.com/caddyserver/caddy/blob/v2.11.9/modules/caddyhttp/app.go#L853-L876)
