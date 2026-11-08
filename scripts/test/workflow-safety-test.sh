@@ -17,7 +17,7 @@ fail() {
   exit 1
 }
 
-# A cached or downloaded tool must pass its pinned checksum before extraction.
+# Packaged, cached, and downloaded tools must pass pinned checksums.
 node --input-type=module - "$ROOT" "$WORK" <<'NODE'
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -58,10 +58,61 @@ for (const flag of ["-fsSL", "--retry 5", "--retry-delay 5", "--retry-all-errors
   assert.throws(() => checkRetries(validCurl.replace(flag, "")), /tool curl/);
 }
 assert.throws(() => checkRetries(validCurl.replace("--retry 5", "--retry 50")), /tool curl/);
+const packageImage = "ghcr.io/dannyota/ci-tools@sha256:59c35433850477a6c1a7e2d94b0c257e686d04dbad8ea4bcc8fbe2964a31e07a";
+const packageArchives = [
+  ["caddy_2.11.4_linux_amd64.tar.gz", "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9"],
+  ["tofu_1.12.6_linux_amd64.zip", "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8"],
+  ["providers/registry.opentofu.org/hashicorp/aws/terraform-provider-aws_6.64.0_linux_amd64.zip", "d7e9cc87ada1314e6d8ecc5849385a8f8f45757bd2c145b8657f015c65e5078d"],
+  ["providers/registry.opentofu.org/cloudflare/cloudflare/terraform-provider-cloudflare_5.27.0_linux_amd64.zip", "ae47a9f29594d57e634cc0b5b96a18da5a364f43cbd735622ce5fe808728065f"],
+  ["providers/registry.opentofu.org/vngcloud/vngcloud/terraform-provider-vngcloud_1.3.21_linux_amd64.zip", "d0f8ae399a3c7a8a6d8d2b569542e977426498270062f8d286a202923ffa8fc1"],
+];
+function checkPackage(action) {
+  const step = action.runs.steps.find((s) => /podman login/.test(s.run ?? ""));
+  assert.ok(step, "ci-tools: authenticated package pull");
+  assert.equal(step.env.GHCR_USER, "${{ github.actor }}");
+  assert.equal(step.env.GHCR_TOKEN, "${{ github.token }}");
+  assert.ok(step.run.includes(`podman create --name ci-tools ${packageImage} /bin/true`), "ci-tools: create the digest-pinned scratch image without running it");
+  assert.deepEqual(step.run.match(/ghcr\.io\/dannyota\/ci-tools[^\s]*/g), [packageImage], "ci-tools: no mutable image tag");
+  assert.match(step.run, /podman login ghcr\.io --username "\$GHCR_USER" --password-stdin <<<"\$GHCR_TOKEN"/, "ci-tools: token goes to stdin");
+  assert.ok(!/\b(?:echo|printf)\b[^\n]*GHCR_TOKEN/.test(step.run), "ci-tools: never print the token");
+  for (const [path, digest] of packageArchives) {
+    assert.ok(step.run.includes(`${digest}  ${path}`), `ci-tools: pin ${path}`);
+  }
+  return step;
+}
+const packageAction = load(".github/actions/ci-tools/action.yml");
+const packageStep = checkPackage(packageAction);
+for (const [from, to] of [
+  [packageImage, "ghcr.io/dannyota/ci-tools:2026-11-08"],
+  ["--password-stdin", "--password"],
+  ...packageArchives.map(([, digest]) => [digest, "0".repeat(64)]),
+]) {
+  const changed = structuredClone(packageAction);
+  changed.runs.steps[0].run = packageStep.run.replace(from, to);
+  assert.throws(() => checkPackage(changed), undefined, "ci-tools: reject unpinned package or unsafe login");
+}
+function checkPackagePermissions(doc) {
+  for (const [id, job] of Object.entries(doc.jobs ?? {})) {
+    if (!(job.steps ?? []).some((s) => s.uses === "./.github/actions/ci-tools") && job.uses !== "./.github/workflows/vn-infra.yml") continue;
+    assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${id}: explicit read-only package permissions`);
+  }
+}
+for (const file of hosted.filter((path) => path.startsWith(".github/workflows/"))) {
+  const doc = load(file);
+  checkPackagePermissions(doc);
+  for (const [id, job] of Object.entries(doc.jobs ?? {})) {
+    if (!(job.steps ?? []).some((s) => s.uses === "./.github/actions/ci-tools") && job.uses !== "./.github/workflows/vn-infra.yml") continue;
+    for (const permission of ["contents", "packages"]) {
+      const changed = structuredClone(doc);
+      delete changed.jobs[id].permissions[permission];
+      assert.throws(() => checkPackagePermissions(changed), undefined, `${id}: reject missing ${permission} permission`);
+    }
+  }
+}
 const cachePin = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const tools = [
-  { name: "caddy", version: "2.11.4", hash: "sha512", digest: "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9", archive: "caddy.tar.gz", binary: "caddy", extract: "tar -xzf" },
-  { name: "opentofu", version: "1.12.6", hash: "sha256", digest: "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8", archive: "tofu.zip", binary: "tofu", extract: "unzip -q" },
+  { name: "caddy", version: "2.11.4", hash: "sha512", digest: "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9", archive: "caddy.tar.gz", packaged: "caddy_2.11.4_linux_amd64.tar.gz", binary: "caddy", extract: "tar -xzf" },
+  { name: "opentofu", version: "1.12.6", hash: "sha256", digest: "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8", archive: "tofu.zip", packaged: "tofu_1.12.6_linux_amd64.zip", binary: "tofu", extract: "unzip -q" },
 ];
 function checkInstaller(action, tool) {
   const list = action.runs.steps;
@@ -72,7 +123,8 @@ function checkInstaller(action, tool) {
   assert.ok(restore.with.key.includes(tool.version) && restore.with.key.includes(tool.digest), `${tool.name}: version and digest cache key`);
   assert.equal(restore.with["restore-keys"], undefined, `${tool.name}: exact archive cache only`);
   const download = list.find((step) => /\bcurl\b/.test(step.run ?? ""));
-  assert.equal(download.if, `\${{ steps.${restore.id}.outputs.cache-hit != 'true' }}`, `${tool.name}: download only cache misses`);
+  assert.equal(download.if, undefined, `${tool.name}: select package before cache or download`);
+  assert.equal(download.env.CACHE_HIT, `\${{ steps.${restore.id}.outputs.cache-hit }}`, `${tool.name}: preserve cache hit result`);
   checkRetries(download.run);
   const install = list.find((step) => (step.run ?? "").includes(tool.extract));
   assert.equal(install.if, undefined, `${tool.name}: verify hits and misses`);
@@ -87,6 +139,64 @@ function checkInstaller(action, tool) {
 function run(command, args, env = {}) {
   return spawnSync(command, args, { encoding: "utf8", env: { ...process.env, ...env } });
 }
+const podmanBin = join(work, "podman-bin");
+mkdirSync(podmanBin);
+writeFileSync(join(podmanBin, "podman"), `#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+  login)
+    [ "$*" = 'login ghcr.io --username fixture --password-stdin' ]
+    IFS= read -r token
+    [ "$token" = "$CI_TOOLS_TEST_TOKEN" ]
+    printf 'fixture auth' >"$REGISTRY_AUTH_FILE"
+    ;;
+  create) [ "$*" = 'create --name ci-tools ${packageImage} /bin/true' ] ;;
+  cp)
+    [ "$2" = 'ci-tools:/tools' ]
+    [ "$CI_TOOLS_TEST_SCENARIO" != copy-failure ]
+    cp -R "$CI_TOOLS_TEST_SOURCE" "$3"
+    ;;
+  rm) ;;
+  *) exit 1 ;;
+esac
+`);
+chmodSync(join(podmanBin, "podman"), 0o755);
+for (const scenario of ["valid", "corrupt-archive", "corrupt-manifest", "copy-failure"]) {
+  const temp = join(work, `package-${scenario}`);
+  const source = join(work, `package-source-${scenario}`);
+  mkdirSync(temp);
+  mkdirSync(source);
+  let command = packageStep.run;
+  const manifest = [];
+  for (const [path, pin] of packageArchives) {
+    const file = join(source, path);
+    mkdirSync(join(file, ".."), { recursive: true });
+    const content = `verified ${path}\n`;
+    writeFileSync(file, content);
+    const hash = createHash("sha256").update(content).digest("hex");
+    command = command.replace(pin, hash);
+    manifest.push(`${hash}  ${path}`);
+  }
+  if (scenario === "corrupt-archive") {
+    writeFileSync(join(source, packageArchives[0][0]), "changed archive");
+    manifest[0] = `${createHash("sha256").update("changed archive").digest("hex")}  ${packageArchives[0][0]}`;
+  }
+  writeFileSync(join(source, "SHA256SUMS"), scenario === "corrupt-manifest" ? "invalid manifest\n" : `${manifest.join("\n")}\n`);
+  const result = run("bash", ["-e", "-o", "pipefail", "-c", command], {
+    PATH: `${podmanBin}:${process.env.PATH}`, RUNNER_TEMP: temp,
+    GHCR_USER: "fixture", GHCR_TOKEN: "fixture-token", CI_TOOLS_TEST_TOKEN: "fixture-token",
+    CI_TOOLS_TEST_SOURCE: source, CI_TOOLS_TEST_SCENARIO: scenario,
+  });
+  if (scenario === "valid") {
+    assert.equal(result.status, 0, result.stderr);
+    for (const [path] of packageArchives) assert.equal(readFileSync(join(temp, "ci-tools", path), "utf8"), `verified ${path}\n`);
+  } else {
+    assert.notEqual(result.status, 0, `ci-tools: reject ${scenario}`);
+    assert.ok(!existsSync(join(temp, "ci-tools")), `ci-tools: ${scenario} never exposes unverified tools`);
+  }
+  assert.ok(!readdirSync(temp).some((name) => name.startsWith("ci-tools.")), "ci-tools: remove staging and registry credentials");
+  assert.ok(!`${result.stdout}${result.stderr}`.includes("fixture-token"), "ci-tools: token stays out of logs");
+}
 for (const tool of tools) {
   const action = load(`.github/actions/install-${tool.name}/action.yml`);
   const { download, install } = checkInstaller(action, tool);
@@ -94,7 +204,7 @@ for (const tool of tools) {
     (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/save@")).if = "${{ true }}"; },
     (a) => { a.runs.steps.find((s) => s.run?.includes(tool.extract)).if = "${{ false }}"; },
     (a) => { const s = a.runs.steps.find((s) => s.run?.includes(tool.extract)); s.run = s.run.replace(`${tool.hash}sum -c -`, "true"); },
-    (a) => { delete a.runs.steps.find((s) => s.run?.includes("curl")).if; },
+    (a) => { delete a.runs.steps.find((s) => s.run?.includes("curl")).env.CACHE_HIT; },
     (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/restore@")).with.key = tool.version; },
   ]) {
     const changed = structuredClone(action);
@@ -131,12 +241,50 @@ for (const tool of tools) {
   mkdirSync(fakeBin);
   writeFileSync(join(fakeBin, "curl"), "#!/bin/sh\nexit 22\n");
   chmodSync(join(fakeBin, "curl"), 0o755);
-  assert.notEqual(run("bash", ["-e", "-o", "pipefail", "-c", download.run], { PATH: `${fakeBin}:${process.env.PATH}`, RUNNER_TEMP: fixture }).status, 0, `${tool.name}: exhausted download fails`);
+  const selectEnv = { PATH: `${fakeBin}:${process.env.PATH}`, RUNNER_TEMP: fixture, CACHE_HIT: "false" };
+  assert.notEqual(run("bash", ["-e", "-o", "pipefail", "-c", download.run], selectEnv).status, 0, `${tool.name}: exhausted download fails`);
+  writeFileSync(join(fixture, tool.archive), "cached archive");
+  assert.equal(run("bash", ["-e", "-o", "pipefail", "-c", download.run], { ...selectEnv, CACHE_HIT: "true" }).status, 0, `${tool.name}: cache hit avoids download`);
+  assert.equal(readFileSync(join(fixture, tool.archive), "utf8"), "cached archive");
+  mkdirSync(join(fixture, "ci-tools"));
+  writeFileSync(join(fixture, "ci-tools", tool.packaged), readFileSync(archive));
+  for (const cacheHit of ["true", "false"]) {
+    writeFileSync(join(fixture, tool.archive), "cached archive");
+    const result = run("bash", ["-e", "-o", "pipefail", "-c", download.run], { ...selectEnv, CACHE_HIT: cacheHit });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readFileSync(join(fixture, tool.archive)), readFileSync(archive), `${tool.name}: package wins over cache and failed download`);
+  }
 }
 for (const file of ["ci", "vn-infra"]) {
-  const list = steps(load(`.github/workflows/${file}.yml`));
+  const doc = load(`.github/workflows/${file}.yml`);
+  const list = steps(doc);
   assert.equal(list.filter((step) => step.uses === "./.github/actions/install-opentofu").length, 1, `${file}: verified OpenTofu installer`);
   assert.ok(!list.some((step) => step.uses?.startsWith("opentofu/setup-opentofu@")), `${file}: no separate unprotected OpenTofu download`);
+  for (const job of Object.values(doc.jobs)) {
+    const installer = (job.steps ?? []).findIndex((s) => /\.\/\.github\/actions\/install-(?:caddy|opentofu)$/.test(s.uses ?? ""));
+    if (installer < 0) continue;
+    const packageIndex = job.steps.findIndex((s) => s.uses === "./.github/actions/ci-tools");
+    assert.ok(packageIndex >= 0 && packageIndex < installer, `${file}: package before installer`);
+    assert.equal(job.steps[packageIndex]["continue-on-error"], true, `${file}: allow verified cache or release fallback`);
+  }
+  const job = doc.jobs[file === "ci" ? "contracts" : "check"];
+  const mirror = job.steps.find((s) => s.name === "Configure the provider mirror");
+  assert.ok(mirror, `${file}: provider mirror configuration`);
+  assert.ok(mirror.if.includes("steps.ci-tools.outcome == 'success'"), `${file}: mirror requires a verified package`);
+  const packageIndex = job.steps.findIndex((s) => s.id === "ci-tools" && s.uses === "./.github/actions/ci-tools");
+  assert.ok(packageIndex >= 0 && packageIndex < job.steps.indexOf(mirror), `${file}: verify package before mirror setup`);
+  assert.ok(job.steps.indexOf(mirror) < job.steps.findIndex((s) => /\btofu\b[^\n]*\binit\b/.test(s.run ?? "")), `${file}: mirror before every init`);
+  const temp = join(work, `mirror-${file}`);
+  mkdirSync(temp);
+  const envFile = join(temp, "env");
+  const result = run("bash", ["-e", "-o", "pipefail", "-c", mirror.run], { RUNNER_TEMP: temp, GITHUB_ENV: envFile });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(envFile, "utf8"), `TF_CLI_CONFIG_FILE=${temp}/ci-tools.tfrc\n`);
+  const config = readFileSync(join(temp, "ci-tools.tfrc"), "utf8");
+  assert.match(config, /provider_installation\s*\{/);
+  assert.ok(config.includes(`path = "${temp}/ci-tools/providers"`));
+  assert.match(config, /filesystem_mirror\s*\{[^}]*include = \["registry\.opentofu\.org\/\*\/\*"\]/);
+  assert.match(config, /direct\s*\{\s*exclude = \["registry\.opentofu\.org\/\*\/\*"\]/);
 }
 NODE
 
