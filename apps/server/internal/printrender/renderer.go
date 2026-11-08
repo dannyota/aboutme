@@ -100,17 +100,11 @@ func New(config Config) (*Renderer, error) {
 	if !hooks.sandboxSupported() {
 		return nil, initializationFailure(ErrInvalidConfig, "sandbox", "user namespaces are unavailable")
 	}
-	started := time.Now()
-	checkCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	version, versionErr := hooks.version(checkCtx, executable)
-	if versionErr != nil || checkCtx.Err() != nil {
-		return nil, diagnoseInitialization(checkCtx, ErrInvalidConfig, "version-probe", versionErr, nil, time.Since(started))
-	}
-	if !hasExactBrowserVersion(version) {
-		failure := initializationFailure(ErrInvalidConfig, "version-probe", "browser version mismatch")
-		failure.exitStatus, failure.elapsed = 0, time.Since(started)
-		return nil, failure
+	checkCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	versionErr := checkBrowserVersion(checkCtx, executable, hooks.version)
+	cancel()
+	if versionErr != nil {
+		return nil, versionErr
 	}
 	logger := config.Logger
 	if logger == nil {

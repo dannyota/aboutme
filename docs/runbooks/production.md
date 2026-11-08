@@ -430,10 +430,11 @@ release record and observer unit to choose those versions before dispatching.
 ## Reboot
 
 Use the GreenNode API to reboot the server. An in-guest `systemctl reboot` hung
-once. Readiness stayed failed once after a hard reset until `aboutme-server`
-restarted. The cause remains open. If the same failure occurs, inspect the
-journal and fence before restarting the server unit, then check public readiness
-again.
+once. On 2026-11-08, Chromium's two-second version probe timed out at boot;
+startup allows one timeout retry in a four-second probe budget, plus joined
+teardown. An older reset's readiness failure remains unexplained. Inspect the
+journal and fence before restarting `aboutme-server`, then check public
+readiness.
 
 ## Healthy state
 
