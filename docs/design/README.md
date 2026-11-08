@@ -38,6 +38,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CrowdSec retention batching](crowdsec-retention-batching.md)          | Nightly and age-triggered stopped reconciliation                           |
 | Other   | [CrowdSec retention reload](crowdsec-retention-reload.md)              | Why graceful reload cannot replace stopped reconciliation                  |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
+| Other   | [Host hardening](host-hardening.md)                                    | Proposed host controls, private inputs, risks, and staged rollout          |
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
 | Other   | [Telegram host alerts](telegram-host-alerts.md)                        | Host alert transport, custody, limits, and rollout                         |
