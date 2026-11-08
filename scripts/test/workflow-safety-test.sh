@@ -58,9 +58,9 @@ for (const flag of ["-fsSL", "--retry 5", "--retry-delay 5", "--retry-all-errors
   assert.throws(() => checkRetries(validCurl.replace(flag, "")), /tool curl/);
 }
 assert.throws(() => checkRetries(validCurl.replace("--retry 5", "--retry 50")), /tool curl/);
-const packageImage = "ghcr.io/dannyota/ci-tools@sha256:59c35433850477a6c1a7e2d94b0c257e686d04dbad8ea4bcc8fbe2964a31e07a";
+const packageImage = "ghcr.io/dannyota/ci-tools@sha256:89b209b970088035112da16c3355b3cad0e930bee8e3cba0778f1788a4e881a6";
 const packageArchives = [
-  ["caddy_2.11.4_linux_amd64.tar.gz", "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9"],
+  ["caddy_2.11.9_linux_amd64.tar.gz", "5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb"],
   ["tofu_1.12.6_linux_amd64.zip", "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8"],
   ["providers/registry.opentofu.org/hashicorp/aws/terraform-provider-aws_6.64.0_linux_amd64.zip", "d7e9cc87ada1314e6d8ecc5849385a8f8f45757bd2c145b8657f015c65e5078d"],
   ["providers/registry.opentofu.org/cloudflare/cloudflare/terraform-provider-cloudflare_5.27.0_linux_amd64.zip", "ae47a9f29594d57e634cc0b5b96a18da5a364f43cbd735622ce5fe808728065f"],
@@ -182,7 +182,7 @@ for (const file of hosted.filter((path) => path.startsWith(".github/workflows/")
 }
 const cachePin = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const tools = [
-  { name: "caddy", version: "2.11.4", hash: "sha512", digest: "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9", archive: "caddy.tar.gz", packaged: "caddy_2.11.4_linux_amd64.tar.gz", binary: "caddy", extract: "tar -xzf" },
+  { name: "caddy", version: "2.11.9", hash: "sha512", digest: "0e85544340290a16ce4bfb76fe7d65e9de1bf3a6e67f5ccfff30b30d27ea4c73e078077b7bf3e58ae60b6b12e44327705287059c775bca5782e8ee85ea7edd75", archive: "caddy.tar.gz", packaged: "caddy_2.11.9_linux_amd64.tar.gz", binary: "caddy", extract: "tar -xzf" },
   { name: "opentofu", version: "1.12.6", hash: "sha256", digest: "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8", archive: "tofu.zip", packaged: "tofu_1.12.6_linux_amd64.zip", binary: "tofu", extract: "unzip -q" },
 ];
 function checkInstaller(action, tool) {
