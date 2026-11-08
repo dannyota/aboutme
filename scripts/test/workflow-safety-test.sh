@@ -17,6 +17,129 @@ fail() {
   exit 1
 }
 
+# A cached or downloaded tool must pass its pinned checksum before extraction.
+node --input-type=module - "$ROOT" "$WORK" <<'NODE'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+const [root, work] = process.argv.slice(2);
+const require = createRequire(join(root, "scripts/test/workflow-contract.test.mjs"));
+const { parseDocument } = require("yaml");
+const load = (path) => {
+  const doc = parseDocument(readFileSync(join(root, path), "utf8"));
+  assert.equal(doc.errors.length, 0, `${path}: valid YAML`);
+  return doc.toJS();
+};
+const steps = (doc) => doc.runs?.steps ?? Object.values(doc.jobs ?? {}).flatMap((job) => job.steps ?? []);
+const hosted = [
+  ...readdirSync(join(root, ".github/workflows")).filter((file) => file.endsWith(".yml")).map((file) => `.github/workflows/${file}`),
+  ...readdirSync(join(root, ".github/actions"), { recursive: true }).filter((file) => file.endsWith("/action.yml")).map((file) => `.github/actions/${file}`),
+];
+function checkRetries(command) {
+  assert.match(command, /(?:^|\s)(?:-\w*f\w*|--fail)(?=\s|$)/, "tool curl fails on HTTP errors");
+  for (const flag of ["--retry 5", "--retry-delay 5", "--retry-all-errors", "--retry-max-time 120"]) {
+    assert.match(command, new RegExp(`(?:^|\\s)${flag.replaceAll(" ", "\\s+")}(?=\\s|$)`), `tool curl requires ${flag}`);
+  }
+}
+for (const file of hosted) {
+  for (const step of steps(load(file))) {
+    for (const command of (step.run ?? "").replace(/\\\r?\n\s*/g, " ").split("\n")) {
+      if (/\bcurl\b/.test(command) && /https:\/\/(?:github\.com\/[^/]+\/[^/]+\/releases\/download\/|api\.github\.com|ghcr\.io|(?:[^/]+\.)?pkg\.github\.com)/.test(command)) {
+        checkRetries(command);
+      }
+    }
+  }
+}
+const validCurl = "curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 -o tool.zip https://github.com/owner/tool/releases/download/v1/tool.zip";
+for (const flag of ["-fsSL", "--retry 5", "--retry-delay 5", "--retry-all-errors", "--retry-max-time 120"]) {
+  assert.throws(() => checkRetries(validCurl.replace(flag, "")), /tool curl/);
+}
+assert.throws(() => checkRetries(validCurl.replace("--retry 5", "--retry 50")), /tool curl/);
+const cachePin = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+const tools = [
+  { name: "caddy", version: "2.11.4", hash: "sha512", digest: "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9", archive: "caddy.tar.gz", binary: "caddy", extract: "tar -xzf" },
+  { name: "opentofu", version: "1.12.6", hash: "sha256", digest: "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8", archive: "tofu.zip", binary: "tofu", extract: "unzip -q" },
+];
+function checkInstaller(action, tool) {
+  const list = action.runs.steps;
+  const restore = list.find((step) => step.uses === `actions/cache/restore@${cachePin}`);
+  const save = list.find((step) => step.uses === `actions/cache/save@${cachePin}`);
+  assert.ok(restore && save, `${tool.name}: separate cache restore and save`);
+  assert.equal(restore.with.path, `\${{ runner.temp }}/${tool.archive}`);
+  assert.ok(restore.with.key.includes(tool.version) && restore.with.key.includes(tool.digest), `${tool.name}: version and digest cache key`);
+  assert.equal(restore.with["restore-keys"], undefined, `${tool.name}: exact archive cache only`);
+  const download = list.find((step) => /\bcurl\b/.test(step.run ?? ""));
+  assert.equal(download.if, `\${{ steps.${restore.id}.outputs.cache-hit != 'true' }}`, `${tool.name}: download only cache misses`);
+  checkRetries(download.run);
+  const install = list.find((step) => (step.run ?? "").includes(tool.extract));
+  assert.equal(install.if, undefined, `${tool.name}: verify hits and misses`);
+  assert.ok(install.run.includes(tool.digest), `${tool.name}: pinned checksum`);
+  assert.ok(install.run.indexOf(`${tool.hash}sum -c -`) < install.run.indexOf(tool.extract) && install.run.includes(`${tool.hash}sum -c -`), `${tool.name}: verify before extraction`);
+  assert.equal(save.if, `\${{ github.ref == 'refs/heads/main' && steps.${restore.id}.outputs.cache-hit != 'true' }}`, `${tool.name}: only main saves misses`);
+  assert.equal(save.with.path, restore.with.path);
+  assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`);
+  assert.ok(list.indexOf(restore) < list.indexOf(download) && list.indexOf(download) < list.indexOf(install) && list.indexOf(install) < list.indexOf(save), `${tool.name}: cache only verified archives`);
+  return { download, install };
+}
+function run(command, args, env = {}) {
+  return spawnSync(command, args, { encoding: "utf8", env: { ...process.env, ...env } });
+}
+for (const tool of tools) {
+  const action = load(`.github/actions/install-${tool.name}/action.yml`);
+  const { download, install } = checkInstaller(action, tool);
+  for (const mutate of [
+    (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/save@")).if = "${{ true }}"; },
+    (a) => { a.runs.steps.find((s) => s.run?.includes(tool.extract)).if = "${{ false }}"; },
+    (a) => { const s = a.runs.steps.find((s) => s.run?.includes(tool.extract)); s.run = s.run.replace(`${tool.hash}sum -c -`, "true"); },
+    (a) => { delete a.runs.steps.find((s) => s.run?.includes("curl")).if; },
+    (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/restore@")).with.key = tool.version; },
+  ]) {
+    const changed = structuredClone(action);
+    mutate(changed);
+    assert.throws(() => checkInstaller(changed, tool), undefined, `${tool.name}: reject unsafe cache drift`);
+  }
+  const fixture = join(work, `${tool.name}-fixture`);
+  mkdirSync(fixture);
+  writeFileSync(join(fixture, tool.binary), "#!/bin/sh\nprintf 'verified-tool\\n'\n");
+  chmodSync(join(fixture, tool.binary), 0o755);
+  const archive = join(work, tool.archive);
+  const packed = tool.name === "caddy"
+    ? run("tar", ["-czf", archive, "-C", fixture, tool.binary])
+    : run("python3", ["-c", "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'w'); z.write(sys.argv[2], 'tofu'); z.close()", archive, join(fixture, tool.binary)]);
+  assert.equal(packed.status, 0, packed.stderr);
+  const fixtureHash = createHash(tool.hash).update(readFileSync(archive)).digest("hex");
+  for (const corrupt of [false, true]) {
+    const temp = join(work, `${tool.name}-${corrupt ? "corrupt" : "valid"}`);
+    mkdirSync(temp);
+    writeFileSync(join(temp, tool.archive), corrupt ? "corrupt archive" : readFileSync(archive));
+    const pathFile = join(temp, "path");
+    const result = run("bash", ["-e", "-o", "pipefail", "-c", install.run.replace(tool.digest, fixtureHash)], { RUNNER_TEMP: temp, GITHUB_PATH: pathFile });
+    if (corrupt) {
+      assert.notEqual(result.status, 0, `${tool.name}: corrupt cached archive fails`);
+      assert.ok(!existsSync(pathFile), `${tool.name}: corrupt archive never reaches PATH`);
+      assert.ok(!existsSync(join(temp, tool.name, tool.binary)), `${tool.name}: corrupt archive never extracts`);
+    } else {
+      assert.equal(result.status, 0, result.stderr);
+      const binary = join(readFileSync(pathFile, "utf8").trim(), tool.binary);
+      assert.equal(run(binary, []).stdout, "verified-tool\n", `${tool.name}: verified binary reaches PATH`);
+    }
+  }
+  const fakeBin = join(fixture, "bin");
+  mkdirSync(fakeBin);
+  writeFileSync(join(fakeBin, "curl"), "#!/bin/sh\nexit 22\n");
+  chmodSync(join(fakeBin, "curl"), 0o755);
+  assert.notEqual(run("bash", ["-e", "-o", "pipefail", "-c", download.run], { PATH: `${fakeBin}:${process.env.PATH}`, RUNNER_TEMP: fixture }).status, 0, `${tool.name}: exhausted download fails`);
+}
+for (const file of ["ci", "vn-infra"]) {
+  const list = steps(load(`.github/workflows/${file}.yml`));
+  assert.equal(list.filter((step) => step.uses === "./.github/actions/install-opentofu").length, 1, `${file}: verified OpenTofu installer`);
+  assert.ok(!list.some((step) => step.uses?.startsWith("opentofu/setup-opentofu@")), `${file}: no separate unprotected OpenTofu download`);
+}
+NODE
+
 if grep -Fq 'changed=$(git diff --name-status' "$WORKFLOW"; then
   fail "a hosted append-only job still filters git diff before checking its status"
 fi
