@@ -106,7 +106,7 @@ send() (
   curl_config | curl -q --silent --connect-timeout 5 --max-time 15 \
     --proto "$protocol" --proto-redir '=https' --max-redirs 0 --retry 0 \
     --proxy '' --noproxy '*' --request POST --header 'Content-Type: application/json' \
-    --config - --write-out 'http:%{http_code}\n' --output >(
+    --config - --write-out 'http:%{http_code}\nupload:%{size_upload}\nrequest:%{size_request}\n' --output >(
       {
         head -c 16384
         # Count, but never retain, one extra byte. This also detects oversized
@@ -114,18 +114,31 @@ send() (
         extra=$(head -c 1 | wc -c)
         if ((extra != 0)); then printf 'oversized\n' >&"$reply_status_fd"; fi
       } | jq -Rrs '
-        try (fromjson | if type == "object" and .ok == true then "body:sent"
-                        else "body:invalid_response" end) catch "body:invalid_response"' 2>/dev/null
+        if length == 0 then "body:empty"
+        else try (fromjson | if type == "object" and .ok == true then "body:sent"
+                            else "body:invalid_response" end) catch "body:invalid_response" end' 2>/dev/null
     ) 2>/dev/null
   results=("${PIPESTATUS[@]}")
   printf 'curl:%s:%s\n' "${results[0]}" "${results[1]}"
 )
-result=$(send)
-result=$'\n'$result$'\n'
-[[ $result != *$'\noversized\n'* ]] || fail invalid_response
-[[ $result == *$'\ncurl:0:0\n'* ]] || fail transport_failed
-[[ $result == *$'\nhttp:200\n'* ]] || fail rejected
-[[ $result == *$'\nbody:sent\n'* ]] || fail invalid_response
+for attempt in 1 2 3; do
+  result=$(send)
+  result=$'\n'$result$'\n'
+  [[ $result != *$'\noversized\n'* ]] || fail invalid_response
+  if [[ $result == *$'\ncurl:0:0\n'* ]]; then
+    [[ $result == *$'\nhttp:200\n'* ]] || fail rejected
+    [[ $result == *$'\nbody:sent\n'* ]] || fail invalid_response
+    break
+  fi
+  # Unit-failure alerts can wait independently; other callers get one attempt.
+  # Any request bytes or response make delivery uncertain, including partial success.
+  [[ $key == unit-* && $attempt != 3 && $result == *$'\nhttp:000\n'* &&
+    $result == *$'\nupload:0\n'* && $result == *$'\nrequest:0\n'* &&
+    $result == *$'\nbody:empty\n'* &&
+    ( $result == *$'\ncurl:0:6\n'* || $result == *$'\ncurl:0:7\n'* ||
+      $result == *$'\ncurl:0:28\n'* ) ]] || fail transport_failed
+  sleep 10 || fail transport_failed
+done
 if [[ $test_mode == yes ]]; then
   proof=$(mktemp "$telegram_base/.telegram-proof.XXXXXX")
   printf '%s\n' "$identity" >"$proof"

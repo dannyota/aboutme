@@ -31,10 +31,11 @@ printf '%s' '-1001234567890' >"$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/"*
 export ABOUTME_ALERT_TEST_ROOT=$work/state
 export ABOUTME_ALERT_TEST_ENDPOINT=http://127.0.0.1:20983
-export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM
+export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM TG_REAL_SLEEP
 TG_REAL_CURL=$(command -v curl) || fail 'curl is unavailable'
 TG_REAL_STAT=$(command -v stat) || fail 'stat is unavailable'
 TG_REAL_SHA256SUM=$(command -v sha256sum) || fail 'sha256sum is unavailable'
+TG_REAL_SLEEP=$(command -v sleep) || fail 'sleep is unavailable'
 cat >"$work/bin/sha256sum" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >>"$TG_FIXTURE/hash-argv"
@@ -64,20 +65,64 @@ printf '%s\n' "$@" >>"$TG_FIXTURE/argv"
 if env | grep -E 'synthetic_BOT-token|-1001234567890' >/dev/null; then
   echo 'Telegram credential reached the curl environment' >&2; exit 1
 fi
-case $(<"$TG_FIXTURE/scenario") in
-  dns) cat >/dev/null; echo 'synthetic_BOT-token provider diagnostic' >&2; exit 6 ;;
-  tls) cat >/dev/null; echo 'synthetic_BOT-token provider diagnostic' >&2; exit 60 ;;
-  partial-success)
+reply() {
+  local body=$1
+  shift
+  while (($#)); do
+    if [[ $1 == --output ]]; then printf '%s' "$body" >"$2"; break; fi
+    shift
+  done
+}
+mode=$(<"$TG_FIXTURE/scenario")
+if [[ $mode == *-then-success ]]; then
+  failures=0
+  [[ ! -e $TG_FIXTURE/failures ]] || failures=$(<"$TG_FIXTURE/failures")
+  if ((failures < ${TG_FAILURES_BEFORE_SUCCESS:-1})); then
+    printf '%s\n' "$((failures + 1))" >"$TG_FIXTURE/failures"
+    mode=${mode%-then-success}
+  else
+    mode=success
+  fi
+fi
+printf '%s\n' "$mode" >>"$TG_FIXTURE/attempts"
+case $mode in
+  dns | connect | preupload-timeout)
     cat >/dev/null
-    while (($#)); do
-      if [[ $1 == --output ]]; then printf '{"ok":true}' >"$2"; break; fi
-      shift
-    done
-    printf 'http:200\n'
-    exit 18 ;;
+    reply '' "$@"
+    printf 'http:000\nupload:0\nrequest:0\n'
+    echo 'synthetic_BOT-token provider diagnostic' >&2
+    case $mode in dns) exit 6 ;; connect) exit 7 ;; *) exit 28 ;; esac ;;
+  headers-timeout | unknown-timeout)
+    cat >/dev/null
+    reply '' "$@"
+    if [[ $mode == headers-timeout ]]; then printf 'http:000\nupload:0\nrequest:200\n'; fi
+    exit 28 ;;
+  tls) cat >/dev/null; echo 'synthetic_BOT-token provider diagnostic' >&2; exit 60 ;;
+  partial-success | connect-with-response)
+    cat >/dev/null
+    reply '{"ok":true}' "$@"
+    printf 'http:200\nupload:100\nrequest:200\n'
+    [[ $mode != partial-success ]] || exit 18
+    exit 7 ;;
   timeout) exec "$TG_REAL_CURL" "$@" --max-time 0.2 ;;
   *) exec "$TG_REAL_CURL" "$@" ;;
 esac
+STUB
+cat >"$work/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+if [[ $# == 1 && $1 == 10 ]]; then
+  printf '10\n' >>"$TG_FIXTURE/retry-delays"
+  if [[ ${TG_RETRY_PAUSE:-0} == 1 ]]; then
+    : >"$TG_FIXTURE/retry-waiting"
+    for ((i=0; i<500; i++)); do
+      [[ ! -e $TG_FIXTURE/retry-release ]] || exit 0
+      "$TG_REAL_SLEEP" 0.01
+    done
+    exit 1
+  fi
+  exit 0
+fi
+exec "$TG_REAL_SLEEP" "$@"
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
@@ -121,7 +166,7 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
         status = int(mode) if mode.isdigit() else 200
         bodies = {"false": b'{"ok":false,"description":"synthetic_BOT-token"}',
                   "string": b'{"ok":"true"}', "array": b'[{"ok":true}]',
-                  "malformed": b'not JSON synthetic_BOT-token',
+                  "malformed": b'not JSON synthetic_BOT-token', "empty": b'',
                   "multiple": b'{"ok":true}\n{"ok":true}',
                   "boundary": b'{"ok":true}' + b' ' * (16384 - 11),
                   "oversized": b'{"ok":true}' + b' ' * 65536}
@@ -149,6 +194,8 @@ for ((i=0; i<100; i++)); do [[ ! -e $work/ready ]] || break; sleep 0.01; done
 
 run_sender() { bash "$sender" "$@" >"$work/out" 2>"$work/err"; }
 count_requests() { if [[ -f $work/requests ]]; then wc -l <"$work/requests"; else echo 0; fi; }
+count_attempts() { if [[ -f $work/attempts ]]; then wc -l <"$work/attempts"; else echo 0; fi; }
+count_delays() { if [[ -f $work/retry-delays ]]; then wc -l <"$work/retry-delays"; else echo 0; fi; }
 private_output() {
   if grep -qE 'synthetic_BOT-token|-1001234567890|/bot123456:' \
     "$work/out" "$work/err" "$work/argv" "$work/hash-argv" "$work/cutover.out"; then
@@ -176,12 +223,16 @@ grep -qxF 'alert-telegram: invalid_secret missing-selector' "$work/err" || fail 
 mv "$work/selector" "$work/state/alert-transport"
 : >"$work/requests"
 : >"$work/argv"
+attempts_before=$(count_attempts)
+delays_before=$(count_delays)
 printf 'approved detail\n' | run_sender host-check 'host diagnostic' || fail 'approved host delivery failed'
 grep -qxF 'alert-telegram: sent host-check' "$work/err" || fail 'host delivery did not report sent'
 [[ $(count_requests) == 1 ]] || fail 'host delivery did not send exactly once'
+[[ $(count_attempts) == $((attempts_before + 1)) && $(count_delays) == "$delays_before" ]] || fail 'successful delivery retried or waited'
 run_sender host-check 'host diagnostic' </dev/null || fail 'duplicate host delivery failed'
 grep -qxF 'alert-telegram: suppressed host-check' "$work/err" || fail 'duplicate host delivery did not report suppressed'
 [[ $(count_requests) == 1 ]] || fail 'duplicate host delivery sent another request'
+[[ $(count_attempts) == $((attempts_before + 1)) && $(count_delays) == "$delays_before" ]] || fail 'suppressed delivery attempted transport or waited'
 private_output
 python3 -I - "$work/requests" <<'PY' || fail 'Telegram request validation failed'
 import json, sys
@@ -215,6 +266,7 @@ for flag, value in {"--connect-timeout": "5", "--max-time": "15",
     assert flag in args, "curl safety option missing"
     index = args.index(flag) + 1
     assert index < len(args) and args[index] == value, "curl safety option value changed"
+assert args[args.index("--write-out") + 1] == r"http:%{http_code}\nupload:%{size_upload}\nrequest:%{size_request}\n", "curl delivery evidence missing"
 PY
 for option in --connect-timeout --max-time --proto --proto-redir --max-redirs --retry --proxy --noproxy; do
   grep -qxF -- "$option" "$work/argv" || fail 'curl safety option missing'
@@ -283,22 +335,71 @@ for shape in directory symlink mode content; do
   rm -rf -- "$bad_stamp"
 done
 
-for mode in 201 400 401 403 429 500 503 301 302 307 308 false string array malformed multiple oversized dns tls timeout partial-success; do
+for mode in dns connect preupload-timeout; do
   printf '%s' "$mode" >"$work/scenario"
   before=$(count_requests)
-  if run_sender "failure-$mode" diagnostic </dev/null; then fail 'failed Telegram response was accepted'; fi
-  if compgen -G "$work/state/alerts/failure-$mode.*" >/dev/null; then fail 'failed delivery retained a stamp'; fi
+  attempts_before=$(count_attempts)
+  delays_before=$(count_delays)
+  if run_sender "ordinary-$mode" diagnostic </dev/null; then fail 'ordinary transport failure was accepted'; fi
+  grep -qxF "alert-telegram: transport_failed ordinary-$mode" "$work/err" || fail 'ordinary transport failure outcome missing'
+  [[ $(count_requests) == "$before" && $(count_attempts) == $((attempts_before + 1)) &&
+    $(count_delays) == "$delays_before" ]] || fail 'ordinary alert retried or waited'
+  [[ ! -e $work/state/alerts/ordinary-$mode.2030-01-02 ]] || fail 'ordinary failure retained its stamp'
+  if run_sender --test </dev/null; then fail 'test transport failure was accepted'; fi
+  grep -qxF 'alert-telegram: transport_failed' "$work/err" || fail 'test transport failure outcome missing'
+  [[ $(count_attempts) == $((attempts_before + 2)) && $(count_delays) == "$delays_before" &&
+    ! -e $work/state/telegram-test-passed ]] || fail 'test alert retried, waited, or retained its proof'
+  private_output
+done
+printf success >"$work/scenario"
+attempts_before=$(count_attempts)
+delays_before=$(count_delays)
+run_sender unit-first-attempt diagnostic </dev/null || fail 'first unit alert attempt failed'
+[[ $(count_attempts) == $((attempts_before + 1)) && $(count_delays) == "$delays_before" ]] || fail 'successful unit alert retried or waited'
+
+for mode in dns connect preupload-timeout; do
+  printf '%s-then-success' "$mode" >"$work/scenario"
+  rm -f "$work/failures"
+  before=$(count_requests)
+  attempts_before=$(count_attempts)
+  delays_before=$(count_delays)
+  run_sender "unit-transient-$mode" diagnostic </dev/null || fail 'transient transport failure did not recover'
+  grep -qxF "alert-telegram: sent unit-transient-$mode" "$work/err" || fail 'transport recovery did not report sent'
+  [[ $(count_requests) == $((before + 1)) && $(count_attempts) == $((attempts_before + 2)) &&
+    $(count_delays) == $((delays_before + 1)) ]] || fail 'transient failure did not retry once before success'
+  [[ -e $work/state/alerts/unit-transient-$mode.2030-01-02 ]] || fail 'transport recovery did not retain its stamp'
+  run_sender "unit-transient-$mode" diagnostic </dev/null || fail 'recovered delivery suppression failed'
+  [[ $(count_attempts) == $((attempts_before + 2)) && $(count_delays) == $((delays_before + 1)) ]] || fail 'recovered delivery was sent again'
+  private_output
+done
+printf dns-then-success >"$work/scenario"
+rm -f "$work/failures"
+attempts_before=$(count_attempts)
+delays_before=$(count_delays)
+TG_FAILURES_BEFORE_SUCCESS=2 run_sender unit-third-attempt diagnostic </dev/null || fail 'third transport attempt did not recover'
+[[ $(count_attempts) == $((attempts_before + 3)) && $(count_delays) == $((delays_before + 2)) ]] || fail 'third-attempt recovery exceeded its attempt or wait budget'
+
+for mode in 201 400 401 403 429 500 503 301 302 307 308 false string array malformed empty multiple oversized dns connect preupload-timeout headers-timeout unknown-timeout tls timeout partial-success connect-with-response; do
+  printf '%s' "$mode" >"$work/scenario"
+  before=$(count_requests)
+  attempts_before=$(count_attempts)
+  delays_before=$(count_delays)
+  if run_sender "unit-failure-$mode" diagnostic </dev/null; then fail 'failed Telegram response was accepted'; fi
+  if compgen -G "$work/state/alerts/unit-failure-$mode.*" >/dev/null; then fail 'failed delivery retained a stamp'; fi
   case $mode in
-    dns | tls | timeout | partial-success) grep -qxF "alert-telegram: transport_failed failure-$mode" "$work/err" || fail 'transport failure outcome missing' ;;
-    oversized) grep -qxE "alert-telegram: (invalid_response|transport_failed) failure-$mode" "$work/err" || fail 'oversized response failure outcome missing' ;;
-    [2345]*) grep -qxF "alert-telegram: rejected failure-$mode" "$work/err" || fail 'HTTP rejection outcome missing' ;;
-    *) grep -qxF "alert-telegram: invalid_response failure-$mode" "$work/err" || fail 'invalid response outcome missing' ;;
+    dns | connect | preupload-timeout | headers-timeout | unknown-timeout | tls | timeout | partial-success | connect-with-response) grep -qxF "alert-telegram: transport_failed unit-failure-$mode" "$work/err" || fail 'transport failure outcome missing' ;;
+    oversized) grep -qxE "alert-telegram: (invalid_response|transport_failed) unit-failure-$mode" "$work/err" || fail 'oversized response failure outcome missing' ;;
+    [2345]*) grep -qxF "alert-telegram: rejected unit-failure-$mode" "$work/err" || fail 'HTTP rejection outcome missing' ;;
+    *) grep -qxF "alert-telegram: invalid_response unit-failure-$mode" "$work/err" || fail 'invalid response outcome missing' ;;
   esac
+  attempts=1 delays=0
+  case $mode in dns | connect | preupload-timeout) attempts=3 delays=2 ;; esac
+  [[ $(count_attempts) == $((attempts_before + attempts)) && $(count_delays) == $((delays_before + delays)) ]] || fail 'failed delivery exceeded or skipped its retry budget'
   after=$(count_requests)
   ((after - before <= 1)) || { echo 'sender retried or followed a redirect' >&2; exit 1; }
   private_output
   printf success >"$work/scenario"
-  run_sender "failure-$mode" diagnostic </dev/null || fail 'delivery after a failed response did not recover'
+  run_sender "unit-failure-$mode" diagnostic </dev/null || fail 'delivery after a failed response did not recover'
 done
 printf boundary >"$work/scenario"
 run_sender reply-boundary diagnostic </dev/null || fail 'response at the size limit was rejected'
@@ -387,6 +488,25 @@ before=$(count_requests)
 run_sender restored-approved diagnostic </dev/null || fail 'restored credentials lost approval'
 grep -qxF 'alert-telegram: sent restored-approved' "$work/err" || fail 'restored credentials did not report sent'
 [[ $(count_requests) == $((before + 1)) && -e $work/state/alerts/restored-approved.2030-01-02 ]] || fail 'restored credentials did not send and create a stamp'
+private_output
+
+printf dns-then-success >"$work/scenario"
+rm -f "$work/failures"
+before=$(count_requests)
+attempts_before=$(count_attempts)
+delays_before=$(count_delays)
+TG_RETRY_PAUSE=1 run_sender unit-retry-concurrent diagnostic </dev/null &
+first=$!
+for ((i=0; i<100; i++)); do [[ ! -e $work/retry-waiting ]] || break; sleep 0.01; done
+[[ -e $work/retry-waiting && -e $work/state/alerts/unit-retry-concurrent.2030-01-02 ]] || fail 'retry did not wait while retaining its stamp'
+run_sender unit-retry-concurrent diagnostic </dev/null || fail 'duplicate during a retry wait failed'
+grep -qxF 'alert-telegram: suppressed unit-retry-concurrent' "$work/err" || fail 'duplicate during a retry wait was not suppressed'
+[[ $(count_requests) == "$before" && $(count_attempts) == $((attempts_before + 1)) &&
+  $(count_delays) == $((delays_before + 1)) ]] || fail 'duplicate during a retry wait attempted transport'
+touch "$work/retry-release"
+wait "$first" || fail 'retrying concurrent sender did not recover'
+[[ $(count_requests) == $((before + 1)) && $(count_attempts) == $((attempts_before + 2)) &&
+  $(count_delays) == $((delays_before + 1)) && -e $work/state/alerts/unit-retry-concurrent.2030-01-02 ]] || fail 'retrying concurrent sender did not send once and retain its stamp'
 private_output
 
 printf slow >"$work/scenario"
