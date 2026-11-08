@@ -50,6 +50,8 @@ runs:
           bash -c 'cd apps/web && npm ci && npx playwright install chromium'
     - id: go
       uses: ./.github/actions/setup-go
+    - uses: ./.github/actions/ci-tools
+      continue-on-error: true
     - uses: ./.github/actions/install-caddy
     - name: Wait for web dependencies and the pinned Chromium
       shell: bash

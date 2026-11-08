@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject WAF leaks and print only redacted line categories."""
+"""Reject WAF and HTTP panic leaks with redacted line categories."""
 
 import argparse
 import json
@@ -12,7 +12,7 @@ class JSONObject(list):
 
 
 LOGGERS = frozenset({
-    "admin", "http", "http.auto_https", "http.handlers.waf", "tls",
+    "admin", "http", "http.auto_https", "http.handlers.waf", "http.stdlib", "tls",
     "tls.cache.maintenance", "tls.obtain", "tls.renew", "pki.ca.local",
 })
 DIAGNOSTIC_FIELDS = frozenset({"ts", "level", "logger", "msg", "kind"})
@@ -77,6 +77,8 @@ def single_field(value, key):
 
 
 def message_kind(message):
+    if "http: panic serving" in message:
+        return "http-stdlib-panic"
     if RULE_MESSAGE.search(message) or CORAZA_MATCH.search(message):
         return "coraza-rule-match"
     return MESSAGE_KINDS.get(message, "other")
@@ -96,6 +98,8 @@ def diagnose(lines, mode, stream):
                 patterns.append(pattern)
         if CLIENT_TEXT.search(line):
             patterns.append("client-address-text")
+        if "http: panic serving" in line:
+            patterns.append("http-stdlib-panic")
         if mode == "maintenance" and "maintmarker6e4d" in line:
             patterns.append("probe-marker")
 
