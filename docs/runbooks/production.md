@@ -429,12 +429,10 @@ release record and observer unit to choose those versions before dispatching.
 
 ## Reboot
 
-Use the GreenNode API to reboot the server. An in-guest `systemctl reboot` hung
-once. On 2026-11-08, Chromium's two-second version probe timed out at boot;
-startup allows one timeout retry in a four-second probe budget, plus joined
-teardown. An older reset's readiness failure remains unexplained. Inspect the
-journal and fence before restarting `aboutme-server`, then check public
-readiness.
+Use the GreenNode API to reboot the server. Chromium's two-second version probe
+timed out at boot; startup allows one timeout retry in a four-second probe
+budget, plus joined teardown. Inspect the journal and fence before restarting
+`aboutme-server`, then check public readiness.
 
 ## Healthy state
 
