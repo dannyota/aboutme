@@ -1,0 +1,33 @@
+name: Load CI tools
+description: Copies checksum-pinned Linux amd64 tool archives from the pinned GHCR package.
+runs:
+  using: composite
+  steps:
+    - name: Load pinned CI tools
+      shell: bash
+      env:
+        GHCR_USER: ${{ github.actor }}
+        GHCR_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        stage=$(mktemp -d "$RUNNER_TEMP/ci-tools.XXXXXX")
+        export REGISTRY_AUTH_FILE="$stage/auth.json"
+        trap 'podman rm -f ci-tools >/dev/null 2>&1 || true; rm -rf "$stage"' EXIT
+        rm -rf "$RUNNER_TEMP/ci-tools"
+        podman login ghcr.io --username "$GHCR_USER" --password-stdin <<<"$GHCR_TOKEN"
+        podman create --name ci-tools ghcr.io/dannyota/ci-tools@sha256:89b209b970088035112da16c3355b3cad0e930bee8e3cba0778f1788a4e881a6 /bin/true >/dev/null
+        podman cp ci-tools:/tools "$stage/tools"
+        podman rm ci-tools >/dev/null
+        cat >"$stage/SHA256SUMS" <<'SUMS'
+        5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb  caddy_2.11.9_linux_amd64.tar.gz
+        5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8  tofu_1.12.6_linux_amd64.zip
+        d7e9cc87ada1314e6d8ecc5849385a8f8f45757bd2c145b8657f015c65e5078d  providers/registry.opentofu.org/hashicorp/aws/terraform-provider-aws_6.64.0_linux_amd64.zip
+        ae47a9f29594d57e634cc0b5b96a18da5a364f43cbd735622ce5fe808728065f  providers/registry.opentofu.org/cloudflare/cloudflare/terraform-provider-cloudflare_5.27.0_linux_amd64.zip
+        d0f8ae399a3c7a8a6d8d2b569542e977426498270062f8d286a202923ffa8fc1  providers/registry.opentofu.org/vngcloud/vngcloud/terraform-provider-vngcloud_1.3.21_linux_amd64.zip
+        SUMS
+        (
+          cd "$stage/tools"
+          sha256sum -c "$stage/SHA256SUMS"
+          sha256sum -c SHA256SUMS
+        )
+        mv "$stage/tools" "$RUNNER_TEMP/ci-tools"

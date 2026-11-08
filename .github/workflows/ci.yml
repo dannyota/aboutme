@@ -33,7 +33,7 @@ concurrency:
 jobs:
   preflight:
     name: CI preflight
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       base_sha: ${{ steps.comparison.outputs.base_sha }}
@@ -102,6 +102,9 @@ jobs:
     name: VN infrastructure
     needs: [preflight]
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/vn-infra.yml
 
   # Checks needing no database, browser, or Go test run: gitleaks,
@@ -116,8 +119,11 @@ jobs:
   contracts:
     name: Repository contracts
     needs: [preflight]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -192,10 +198,26 @@ jobs:
       - if: ${{ !cancelled() }}
         run: gitleaks detect --redact --no-banner
       - if: ${{ !cancelled() }}
-        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with:
-          tofu_version: 1.12.6
-          tofu_wrapper: false
+        id: ci-tools
+        uses: ./.github/actions/ci-tools
+        continue-on-error: true
+      - name: Configure the provider mirror
+        if: ${{ !cancelled() && steps.ci-tools.outcome == 'success' }}
+        run: |
+          cat >"$RUNNER_TEMP/ci-tools.tfrc" <<EOF
+          provider_installation {
+            filesystem_mirror {
+              path = "$RUNNER_TEMP/ci-tools/providers"
+              include = ["registry.opentofu.org/*/*"]
+            }
+            direct {
+              exclude = ["registry.opentofu.org/*/*"]
+            }
+          }
+          EOF
+          echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/ci-tools.tfrc" >> "$GITHUB_ENV"
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/install-opentofu
       - if: ${{ !cancelled() }}
         run: tofu fmt -check -recursive deploy/aws
       - if: ${{ !cancelled() }}
@@ -258,19 +280,20 @@ jobs:
   # not on every dependency with a known advisory. The Caddy build module and
   # the observer module live outside go.work (the former pins its own Caddy
   # version; the latter is a standalone deployment tool), so both need
-  # GOWORK=off or govulncheck would refuse to run there at all. Two
-  # module-level advisories are known and not reachable: GO-2026-6094
-  # (cel-go 0.28.1; Caddy 2.11.4 cannot build against cel-go >= 0.29) and
-  # GO-2026-5932 (x/crypto/openpgp; no fix exists). If either ever reports as
-  # reachable, this job fails and the trace must be investigated, not
-  # suppressed. Revisit by 2026-12-31: check for a Caddy release that builds
-  # with cel-go >= 0.30, and for x/crypto dropping openpgp.
+  # GOWORK=off or govulncheck would refuse to run there at all. The
+  # module-level advisory GO-2026-5932 (x/crypto/openpgp; no fix exists) is
+  # known and not reachable. If it reports as reachable, this job fails and
+  # the trace must be investigated, not suppressed. Revisit by 2026-12-31:
+  # check for x/crypto dropping openpgp.
   server:
     name: Server checks
     needs: [preflight]
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: go
@@ -327,8 +350,11 @@ jobs:
         run: make sqlc-check
       # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005)
       # through a live caddy process fronting stub backends. Needs a caddy
-      # binary but no database; pinned to 2.11.4 to match
+      # binary but no database; pinned to 2.11.9 to match
       # deploy/compose.yml's caddy image tag.
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/ci-tools
+        continue-on-error: true
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/install-caddy
       - if: ${{ !cancelled() }}
@@ -556,7 +582,7 @@ jobs:
     name: Web checks
     needs: [preflight]
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -648,6 +674,9 @@ jobs:
     if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       # Each TOTP group runs its listed shards as parallel tests against one
@@ -767,7 +796,7 @@ jobs:
       - web
       - web-e2e
       - dev-https-proofs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - if: ${{ needs.dev-https-proofs.result == 'success' }}
