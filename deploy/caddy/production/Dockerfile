@@ -1,9 +1,9 @@
 # Production Caddy image. Build context is the repository root.
 
-# Caddy 2.11.4 built from source with our pinned Go toolchain (.tool-versions)
-# and patched modules instead of the upstream release binary, which lags
-# behind both; see deploy/caddy/production/build/main.go. Multi-architecture
-# index digest, so the same pin builds amd64 and arm64.
+# Caddy 2.11.9 built from source with our pinned Go toolchain (.tool-versions),
+# dependencies, and direct-edge plugins; see
+# deploy/caddy/production/build/main.go. The Go image digest pins the
+# multi-architecture index for amd64 and arm64.
 FROM docker.io/library/golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS caddy-build
 WORKDIR /src
 COPY deploy/caddy/production/build/ ./
@@ -26,10 +26,10 @@ COPY deploy/caddy/production/maintenance-render.sh /maintenance-render.sh
 COPY deploy/caddy/production/maintenance.html /maintenance.html
 RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 
-# Same base and packages the upstream caddy:2.11.4-alpine image runs on, minus
-# curl and libcap: curl is not used by our entrypoint or config, and the
-# image grants no capability. The CloudFront edge binds only port 8443; the
-# direct edge binds 80 and 443, so its container is given
+# Runtime for Caddy 2.11.9 with ca-certificates and mailcap. curl is not used
+# by our entrypoint or config, and the image sets no file capabilities.
+# The CloudFront edge binds only port 8443; the direct edge binds 80 and 443,
+# so its container is given
 # CAP_NET_BIND_SERVICE and nothing else (see deploy/caddy/production/test.sh).
 #
 # Caddy runs as uid and gid 10001, which no other image on the host uses. The

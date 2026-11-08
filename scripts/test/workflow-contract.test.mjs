@@ -1350,7 +1350,6 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
         ignore: [
           { "dependency-name": "github.com/caddyserver/caddy/v2" },
-          { "dependency-name": "github.com/google/cel-go", versions: [">= 0.29.0"] },
         ],
       },
       {
@@ -1502,7 +1501,6 @@ function checkDependabot(config) {
     ]],
     ["gomod", ["/deploy/caddy/production/build"], [
       { "dependency-name": "github.com/caddyserver/caddy/v2" },
-      { "dependency-name": "github.com/google/cel-go", versions: [">= 0.29.0"] },
     ]],
     ["npm", ["/", "/packages/schema"], []],
     ["npm", ["/apps/web"], [...browserPackages, { "dependency-name": "typescript" }, { "dependency-name": "pdfjs-dist" }]],
