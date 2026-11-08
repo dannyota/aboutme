@@ -42,6 +42,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
 | Other   | [Telegram host alerts](telegram-host-alerts.md)                        | Host alert transport, custody, limits, and rollout                         |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                  |
+| Other   | [Server code layout](server-code-layout.md)                            | Proposed Go splits, reuse boundaries, style rules, and length limits       |
 | Other   | [CI path selection](ci-path-selection.md)                              | Pull request prose allowlist and required gate behavior                    |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                 |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks                |
