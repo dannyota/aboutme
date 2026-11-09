@@ -23,7 +23,8 @@ concurrency:
 # Job layout: macOS proves the local watchdog and static pre-push wrapper.
 # Other jobs run Linux contracts, application checks, infrastructure, scans,
 # browser shards, and proof groups, followed by the aggregate ci gate.
-# Allowlisted prose pull requests retain preflight, all contracts, and ci.
+# Allowlisted prose pull requests retain preflight, all three contracts jobs
+# (contracts, operational, dev-https-static), and ci.
 # See docs/design/ci-path-selection.md for the selection contract.
 # Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
@@ -108,9 +109,10 @@ jobs:
     uses: ./.github/workflows/vn-infra.yml
 
   # Checks needing no database, browser, or Go test run: gitleaks,
-  # schema/API/Tofu contract gates, docs lint, operational static tests, and
-  # `npm audit`. Full history supports gitleaks and docs links. The dev-https
-  # static suite (two shards) and deploy-script tests run in the background.
+  # schema/API/Tofu contract gates, docs lint, and `npm audit`. Full history
+  # supports gitleaks and docs links. The operational static tests and the
+  # dev-https static suite run in the operational and dev-https-static jobs
+  # below, in parallel with this one.
   # `npm audit` needs no install: every manifest ships a package-lock.json,
   # and npm reads it directly. It fails on a high or critical advisory in a
   # production dependency, unless .github/npm-audit-exceptions.json lists it
@@ -128,16 +130,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # Started before Node is set up, in the environment the suite was
-      # written for.
-      - name: Start the dev-https static suite shards
-        env:
-          DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR: ${{ runner.temp }}/dev-https-startup-diagnostics
-        run: |
-          for shard in 0 1; do
-            bash scripts/ci-background.sh start "dev-https-static-$shard" \
-              make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$shard/2"
-          done
       - if: ${{ !cancelled() }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -148,9 +140,6 @@ jobs:
             apps/web/package-lock.json
             packages/schema/package-lock.json
             deploy/dev-https-browser/package-lock.json
-      - if: ${{ !cancelled() }}
-        name: Start the deploy-script static tests
-        run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
       # This job's own Go work is small (building/vetting/testing one
       # generated schema module, and `go install`-ing gitleaks), so it uses
       # its own light-scoped cache instead of the full shared build/module
@@ -173,8 +162,6 @@ jobs:
         run: make docs-links-check
       - if: ${{ !cancelled() }}
         run: make lengths-check
-      - if: ${{ !cancelled() }}
-        run: make operational-test-fast
       - if: ${{ !cancelled() }}
         run: make schema-check
       - if: ${{ !cancelled() }}
@@ -228,11 +215,6 @@ jobs:
             tofu -chdir="$root" validate
           done
       - if: ${{ !cancelled() }}
-        run: npm ci
-        working-directory: deploy/dev-https-browser
-      - if: ${{ !cancelled() }}
-        run: make operational-test-browser
-      - if: ${{ !cancelled() }}
         name: npm audit (repository root)
         run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
@@ -244,28 +226,90 @@ jobs:
       - if: ${{ !cancelled() }}
         name: npm audit (deploy/dev-https-browser)
         run: bash scripts/npm-audit.sh deploy/dev-https-browser
-      - if: ${{ !cancelled() }}
-        name: Wait for the deploy-script static tests
-        run: bash scripts/ci-background.sh wait deploy-tests
-      - if: ${{ !cancelled() }}
-        name: Wait for dev-https static suite shard 0
-        run: bash scripts/ci-background.sh wait dev-https-static-0
-      - if: ${{ !cancelled() }}
-        name: Wait for dev-https static suite shard 1
-        run: bash scripts/ci-background.sh wait dev-https-static-1
-      - name: Upload dev-https startup diagnostics
-        if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: dev-https-startup-diagnostics
-          path: ${{ runner.temp }}/dev-https-startup-diagnostics/*.txt
-          if-no-files-found: ignore
-          retention-days: 14
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
           cache-key: ${{ steps.go.outputs.cache-key }}
           toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
+
+  # The operational static tests (Makefile operational-test-fast,
+  # operational-test-browser, and operational-test-deploy), with the same
+  # setup they had in contracts. The deploy-script tests run in the
+  # background beside the others. Like contracts, this job runs for every
+  # selection.
+  operational:
+    name: Operational tests
+    needs: [preflight]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.2
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            deploy/dev-https-browser/package-lock.json
+      - if: ${{ !cancelled() }}
+        name: Start the deploy-script static tests
+        run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
+      - if: ${{ !cancelled() }}
+        id: go
+        uses: ./.github/actions/setup-go
+        with:
+          light: "true"
+      - if: ${{ !cancelled() }}
+        run: npm ci
+      - if: ${{ !cancelled() }}
+        run: make operational-test-fast
+      - if: ${{ !cancelled() }}
+        run: npm ci
+        working-directory: deploy/dev-https-browser
+      - if: ${{ !cancelled() }}
+        run: make operational-test-browser
+      - if: ${{ !cancelled() }}
+        name: Wait for the deploy-script static tests
+        run: bash scripts/ci-background.sh wait deploy-tests
+      - uses: ./.github/actions/save-go-cache
+        with:
+          cache-hit: ${{ steps.go.outputs.cache-hit }}
+          cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
+
+  # The dev-https static suite as four shards (DEV_HTTPS_TEST_SHARD=i/4), one
+  # per runner. The suite runs check i of its CHECKS list in shard i mod 4, so
+  # the matrix covers every check exactly once. Each shard runs right after
+  # checkout, with no Node or Go setup, in the environment the suite was
+  # written for. Like contracts, this job runs for every selection.
+  dev-https-static:
+    name: Dev HTTPS static (${{ matrix.shard }})
+    needs: [preflight]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Run the dev-https static suite shard
+        env:
+          DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR: ${{ runner.temp }}/dev-https-startup-diagnostics
+          SHARD: ${{ matrix.shard }}
+        run: make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$SHARD/4"
+      - name: Upload dev-https startup diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-https-startup-diagnostics-${{ matrix.shard }}
+          path: ${{ runner.temp }}/dev-https-startup-diagnostics/*.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
   # The Go build/vet/test/lint gate, the sqlc-drift and route-table gates,
   # govulncheck, the media package's slow normalization corpus test (which
@@ -610,9 +654,10 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make web-no-eval-check
 
-  # The pinned-browser renderer baselines, as two shards that together run
-  # every spec once (Makefile WEB_E2E_SHARD). Each shard builds the Nuxt
-  # surfaces it tests from the source manifest inside the pinned image.
+  # The pinned-browser renderer baselines, as four shards that together run
+  # every spec once (Makefile WEB_E2E_SHARD), balanced by measured spec and
+  # diagnostics time. Each shard builds the Nuxt surfaces it tests from the
+  # source manifest inside the pinned image.
   web-e2e:
     name: Web E2E (${{ matrix.shard }})
     needs: [preflight]
@@ -622,7 +667,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [preview-gap, rest]
+        shard: [preview-gap, rest-1, rest-2, rest-3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Ignore local E2E result roots
@@ -789,6 +834,8 @@ jobs:
       - preflight
       - vn-infra
       - contracts
+      - operational
+      - dev-https-static
       - macos-tooling
       - server
       - server-integration
@@ -835,9 +882,10 @@ jobs:
         run: |
           if ! printf '%s\n' "$NEEDS_JSON" | jq -e \
             --arg event "$GITHUB_EVENT_NAME" '
-              keys == (["preflight", "contracts", "macos-tooling", "vn-infra",
-                "server", "server-integration", "server-resumeapi", "web",
-                "web-e2e", "dev-https-proofs"] | sort)
+              keys == (["preflight", "contracts", "operational",
+                "dev-https-static", "macos-tooling", "vn-infra", "server",
+                "server-integration", "server-resumeapi", "web", "web-e2e",
+                "dev-https-proofs"] | sort)
               and .preflight.result == "success"
               and (.preflight.outputs.selection as $selection
                 | ($selection == "full" or ($selection == "prose" and $event == "pull_request"))
