@@ -652,7 +652,9 @@ for index in "${!valid_targets[@]}"; do
   IFS='|' read -r probe target <<<"${valid_targets[$index]}"
   append_records "$ip" 404 21 unknown GET "$probe" "$target"
   wait_for_decision "$ip" >/dev/null || {
-    ( umask 022
+    # Best effort: collection never changes the verdict or its message. The
+    # file is made readable for the unprivileged artifact upload.
+    ( set +e; trap - ERR
       printf 'valid_target_index=%s\n' "$index"
       printf 'fixture_time=%s\n' "$retention_fixture_now"
       printf 'failure_time=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -668,6 +670,7 @@ for line in open(sys.argv[1]):
         pass
 print(count)
 PYDIAG
+      [[ $? -eq 0 ]] || printf 'unavailable\n'
       printf 'alert_count='
       sql "SELECT count(*) FROM alerts WHERE source_ip='$ip';" || printf 'unavailable\n'
       printf 'decision_count='
@@ -684,7 +687,8 @@ PYDIAG
         if systemctl is-active --quiet "$unit"; then state=active; else state=inactive; fi
         printf '%s=%s\n' "$unit" "$state"
       done
-    ) > /tmp/aboutme-crowdsec-probe-diagnostic.txt
+    ) > /tmp/aboutme-crowdsec-probe-diagnostic.txt 2>/dev/null || true
+    chmod 0644 /tmp/aboutme-crowdsec-probe-diagnostic.txt 2>/dev/null || true
     echo "valid-probe-rejected" >&2
     exit 1
   }
