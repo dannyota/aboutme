@@ -134,8 +134,13 @@ closed until verified recovery; stopping is not deletion.
 
 CrowdSec, firewall-bouncer, and Caddy bouncer logs that can contain an HTTP
 source address or event stay on tmpfs under the feed's retention bound; journals
-hold fixed operational messages only. Caddy and CrowdSec disable core dumps; the
-host uses zram and has no disk swap.
+hold fixed operational messages only. Caddy writes its `crowdsec` and
+`http.handlers.crowdsec` loggers only to the private bouncer file through
+`safe_metadata`, which keeps the time, level, and fixed `crowdsec_event` marker;
+that covers the
+[pinned bouncer's](crowdsec-retention-reload.md#pinned-bouncer-behavior) retry,
+warning, and populated lines. Caddy and CrowdSec disable core dumps; the host
+uses zram and has no disk swap.
 
 PostgreSQL errors, parameters, rows, and context must not leak attack values to
 durable logs; `log_statement = none` alone is insufficient. Before any CrowdSec
