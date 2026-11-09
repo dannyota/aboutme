@@ -24,7 +24,8 @@ export PATH="$WORK/bin:$PATH"
 cat >"$WORK/bin/codex" <<'SH'
 #!/usr/bin/env bash
 printf '%s\0' "$@" >"$CALL_LOG"
-python3 -c 'import json, os, sys; json.dump(dict(os.environ), open(sys.argv[1], "w"))' "$ENV_LOG"
+# Record PATH as bash sees it: a pyenv python3 shim prepends its own bin.
+python3 -c 'import json, os, sys; e = dict(os.environ); e["PATH"] = sys.argv[2]; json.dump(e, open(sys.argv[1], "w"))' "$ENV_LOG" "$PATH"
 cat >"$STDIN_LOG"
 exit "${CODEX_STATUS:-0}"
 SH
