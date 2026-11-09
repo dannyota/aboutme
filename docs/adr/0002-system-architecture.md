@@ -1,10 +1,10 @@
 # 0002: Go API, one Vue renderer, HTTP autosave, and SSE refresh
 
-Status: Accepted (2026-08-01).
+Status: Accepted (2026-08-01, 2026-11-10).
 
 ## Context
 
-The resume layout must render identically in three places: the editor's live
+The resume layout must render the same way in three places: the editor's live
 preview, the public page that search engines and AI crawlers read, and the PDF.
 Two renderers (for example Go templates and Vue components) guarantee drift.
 
@@ -56,8 +56,13 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 ## Consequences
 
 - Node runs in production beside Go (two app services and Caddy).
-- Preview, public page, and PDF match by construction; golden snapshots and
-  screenshot diffs protect this.
+- Preview, public page, and PDF share one renderer, so content and structure
+  match, and preview page breaks match the PDF. Text measurement still differs
+  slightly: a word within about 0.4 px of a line edge can wrap differently, so
+  the editor preview may differ from the PDF by up to two line breaks in the
+  cases `apps/web/e2e/preview-gap-expected.json` lists. Chromium print is
+  authoritative. Golden snapshots, display checks, and the preview-gap ceilings
+  protect this.
 - No bidirectional channel exists. Collaborative editing (CRDT or OT) would be a
   new decision.
 - SSE streams need heartbeats, connection caps, and slow-client eviction; the
@@ -69,12 +74,6 @@ Consolidates former ADRs 0002 (renderer split), 0003 (SSE and HTTP autosave),
 and 0007 (unversioned health endpoints), all accepted 2026-08-01 and unchanged
 in substance.
 
-### Amendment: Preview line breaks (2026-11-10)
-
-Accepted by the owner: one renderer still produces the preview, the public
-page, and the PDF, but a word that ends within about 0.4 px of the line edge
-can wrap differently in the editor preview than in the PDF. The preview may
-differ from the PDF by at most two such line breaks, and only in the cases
-`apps/web/e2e/preview-gap-expected.json` lists. Page breaks, missing words, and
-extra words stay at zero. Chromium print is authoritative, and the preview-gap
-gate enforces these ceilings.
+On 2026-11-10 the owner accepted up to two preview line breaks that differ from
+the PDF, because no shared renderer change removed the measured drift; Context
+and Consequences now say "the same way" instead of "identically".

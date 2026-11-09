@@ -1,6 +1,6 @@
 # 0019: Tailwind and shadcn-vue as the application UI toolkit
 
-Status: Accepted (2026-09-02, 2026-09-24, 2026-11-01), by the owner.
+Status: Accepted (2026-09-02, 2026-09-24, 2026-11-01, 2026-11-10), by the owner.
 
 ## Context
 
@@ -11,8 +11,9 @@ intents as Set, Clear, and Remove buttons under every field. It was dense,
 inconsistent between pages, and expensive to change.
 
 The resume renderer has the opposite requirement. The same document must render
-the same pixels in the editor preview, the public page, and the print browser,
-so nothing the chrome loads may leak into it.
+the same way in the editor preview, the public page, and the print browser, so
+nothing the chrome loads may leak into it. Only the line-break drift that
+[ADR 0002](0002-system-architecture.md#consequences) accepts may differ.
 
 ## Decision
 
@@ -119,10 +120,5 @@ only after the contract's Linux and macOS coverage and mutation proofs pass.
 - Former ADR 0052 (2026-09-24): guarded token edits to generated primitives,
   replacing 0029's "never hand-styled" rule. Former ADR 0065 added the
   `destructive` variant to the guarded edits.
-
-### Amendment: Preview line breaks (2026-11-10)
-
-Accepted by the owner: "the same pixels" requires renderer isolation, not
-identical text measurement. The editor preview may wrap a few words differently
-from the PDF within the limits of
-[ADR 0002](0002-system-architecture.md#amendment-preview-line-breaks-2026-11-10).
+- 2026-11-10, owner: Context says "the same way" instead of "the same pixels",
+  allowing the preview line-break drift that ADR 0002 accepts.
