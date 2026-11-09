@@ -3,8 +3,8 @@
 ## Claude Code specifics
 
 - The primary session runs as `manager` in `.claude/settings.json`; its duties are in AGENTS.md "AI agent definitions".
-- The owner chooses the primary session's model; workers and subagents never run on Sonnet or Opus.
-- Claude runs only the primary session. Follow [workflow](instructions/workflow.md#models-and-ownership) for model routing and independent reviews.
+- The owner chooses the primary session's model; workers and subagents never run on Sonnet. Use the latest Opus for Claude subagents when a job needs one.
+- Follow [workflow](instructions/workflow.md#models-and-ownership) for Claude subagents, model routing, and independent reviews.
 - Run Codex: `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`. The script loads model, effort, sandbox, and developer instructions from `<worktree>/.codex/agents/<role>.toml` and redirects stdin from `/dev/null`.
 - Codex sandboxes have no network and no user systemd bus. Prefetch dependencies before workers need them. The primary runs `make pre-push` and approved bounded checks under [resources](instructions/resources.md); reviewers read the output and exact-commit CI evidence.
 - Codex sandboxes mount `.codex/` read-only, so workers cannot edit `.codex/agents/*.toml`; the primary applies those edits.
