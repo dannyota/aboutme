@@ -345,6 +345,18 @@ grep -qi '^x-content-type-options: *nosniff' <<<"$headers" || {
   say "smoke: nosniff header missing"
   exit 1
 }
+# Read only the ticker from the running edge configuration, not the API key.
+# shellcheck disable=SC2016
+ticker=$(ssh "${ssh_opts[@]}" "$admin@$host" \
+  'sudo podman exec aboutme-caddy awk '\''$1 == "ticker_interval" {print $2}'\'' /run/caddy/crowdsec.global') || {
+  say "smoke: could not read the CrowdSec decision-stream ticker"
+  exit 1
+}
+[[ $ticker =~ ^([1-9][0-9]{0,2})s$ ]] || {
+  say "smoke: invalid CrowdSec decision-stream ticker"
+  exit 1
+}
+ticker_seconds=${BASH_REMATCH[1]}
 me=$(ssh "${ssh_opts[@]}" "$admin@$host" 'printf %s "${SSH_CLIENT%% *}"')
 banned() { [[ $(curl -s -o /dev/null -m 10 -w '%{http_code}' "$site/") == 403 ]]; }
 step ban-test add "$me"
@@ -355,5 +367,11 @@ else
   say "smoke: CrowdSec did not answer 403 for a banned address"
   exit 1
 fi
+# Wait at least two stream ticks plus five seconds after deleting the ban.
+edge_attempts=$(((2 * ticker_seconds + 9) / 5 + 1))
+retry "$edge_attempts" 5 status_ok / || {
+  say "smoke: / did not answer 200 after deleting the CrowdSec test ban"
+  exit 1
+}
 phase=finished
 say "deployed $tag"
