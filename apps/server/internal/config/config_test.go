@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 // env builds a lookup function for config.Load from a map, so tests never

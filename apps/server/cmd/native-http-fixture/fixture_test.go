@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 // frozenDSN is the exact loopback-only, fixture-scoped DSN the command

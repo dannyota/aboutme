@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {

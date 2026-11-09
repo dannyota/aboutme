@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // 00003 adds the public page title and emoji favicon. The checks bound

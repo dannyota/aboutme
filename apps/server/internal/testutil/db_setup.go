@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 var migratedTestDatabaseSetup = newTestDatabaseSetupCache(prepareMigratedTestDatabase)

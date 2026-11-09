@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/password"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/password"
 )
 
 // Password route paths. The mux serves every API route under /api/v1; these

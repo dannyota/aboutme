@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 var presetIDPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)

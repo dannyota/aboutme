@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 // RequireTestS3 returns the media.S3Config described by the TEST_S3_*

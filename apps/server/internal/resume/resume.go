@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // MaxTitleCharacters is the budgets.md resume-title limit. It is measured in

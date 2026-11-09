@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 func TestHealthz_AlwaysReturns200AndNeverTouchesDB(t *testing.T) {

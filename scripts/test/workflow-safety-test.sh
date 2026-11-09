@@ -1120,16 +1120,13 @@ grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.sp
 # Scheduled scans need a contract checked by pull-request CI.
 assert_observer_scan() { # govulncheck job-body
   awk '
-    function finish_step() { if (scan && directory && off) found = 1 }
+    function finish_step() { if (scan && directory) found = 1 }
     /^      - / {
       finish_step()
-      scan = directory = off = in_env = 0
+      scan = directory = 0
     }
-    /^        [^ ]/ { in_env = 0 }
     $0 == "        run: govulncheck ./..." { scan = 1 }
     $0 == "        working-directory: deploy/observer" { directory = 1 }
-    $0 == "        env:" { in_env = 1 }
-    in_env && $0 == "          GOWORK: \"off\"" { off = 1 }
     END { finish_step(); exit !found }
   ' <<<"$1" || fail "$observer_diagnostic"
 }
@@ -1167,7 +1164,7 @@ assert_image_scan() { # image-scan job-body
 
 SECURITY_GO_JOB=$(awk '/^  govulncheck:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$SECURITY_WORKFLOW")
 SECURITY_IMAGE_JOB=$(awk '/^  image-scan:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$SECURITY_WORKFLOW")
-observer_diagnostic='security-scan govulncheck must run govulncheck ./... in deploy/observer with env GOWORK: "off" in the same step'
+observer_diagnostic='security-scan govulncheck must run govulncheck ./... in deploy/observer in the same step'
 image_command_diagnostic='security-scan Scan released images must pass the Trivy binary, reports directory, release tag, and observer release tag to weekly-scan'
 assert_observer_scan "$SECURITY_GO_JOB"
 assert_image_scan "$SECURITY_IMAGE_JOB"
@@ -1183,9 +1180,7 @@ expect_security_drift() { # validator job-body diagnostic
 for drift in \
   's/working-directory: deploy\/observer/working-directory: apps\/server/' \
   's/run: govulncheck .\/\.\.\./run: go version/' \
-  's/GOWORK: "off"/GOWORK: "on"/' \
-  '/working-directory: deploy\/observer/a\      - name: unrelated' \
-  '/        env:/d'; do
+  '/working-directory: deploy\/observer/i\      - name: unrelated'; do
   expect_security_drift assert_observer_scan \
     "$(sed "$drift" <<<"$SECURITY_GO_JOB")" "$observer_diagnostic"
 done

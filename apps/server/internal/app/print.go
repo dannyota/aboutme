@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/printapi"
-	"github.com/dannyota/aboutme/apps/server/internal/printrender"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/printapi"
+	"danny.vn/aboutme/apps/server/internal/printrender"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 // NewPrint builds the private print runtime. On linux it creates the

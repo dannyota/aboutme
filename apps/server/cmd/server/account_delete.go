@@ -15,11 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/accountapi"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // The account-delete command answers a report against a showcase listing: the

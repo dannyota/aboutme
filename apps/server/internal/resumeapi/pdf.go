@@ -12,12 +12,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/media"
-	"github.com/dannyota/aboutme/apps/server/internal/pdfname"
-	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/pdfname"
+	"danny.vn/aboutme/apps/server/internal/printsnapshot"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 const (

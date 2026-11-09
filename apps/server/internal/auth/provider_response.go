@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // finishProviderLogin ends a successful provider login. An unenrolled account

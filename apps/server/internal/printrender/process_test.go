@@ -16,7 +16,7 @@ import (
 
 	"github.com/chromedp/cdproto/target"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderprocess"
+	"danny.vn/aboutme/apps/server/internal/renderprocess"
 )
 
 func TestOwnedProcessStateCurrentProcess(t *testing.T) {

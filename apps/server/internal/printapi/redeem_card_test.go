@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/printsnapshot"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func validCardSnapshot(t *testing.T) renderjob.Snapshot {

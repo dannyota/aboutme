@@ -149,5 +149,5 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/dannyota/aboutme/deploy/observer
+        - danny.vn/aboutme/deploy/observer
 

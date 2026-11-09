@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/app"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/mediacleanup"
-	"github.com/dannyota/aboutme/apps/server/internal/privacyretention"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/app"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/mediacleanup"
+	"danny.vn/aboutme/apps/server/internal/privacyretention"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const (

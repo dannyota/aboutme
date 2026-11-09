@@ -18,9 +18,9 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth/oidctest"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // linkedinDiscoverySnapshot is LinkedIn's public discovery document as served

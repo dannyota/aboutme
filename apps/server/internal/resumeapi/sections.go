@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 func sectionRoutes() []routeSpec {

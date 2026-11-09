@@ -11,9 +11,7 @@ updates:
           - "*"
   - package-ecosystem: gomod
     directories:
-      - /apps/server
-      - /packages/schema/gen/go
-      - /deploy/observer
+      - /
     schedule:
       interval: weekly
     open-pull-requests-limit: 2

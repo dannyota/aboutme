@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
+	"danny.vn/aboutme/apps/server/internal/accountemail"
 )
 
 // Kind names a closed transactional-email type. It is the single authority for

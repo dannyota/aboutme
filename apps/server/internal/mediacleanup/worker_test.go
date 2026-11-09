@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 func TestRetryDelayStartsAtOneMinuteAndCapsAtSixHours(t *testing.T) {

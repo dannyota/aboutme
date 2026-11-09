@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/printrender"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/printrender"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 func TestOwnerPDFWithDisabledPrintQueue(t *testing.T) {

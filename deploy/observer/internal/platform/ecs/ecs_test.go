@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
 // fixture reads a recorded-shape awsJson1_1 response body from testdata.

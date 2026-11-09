@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently is a

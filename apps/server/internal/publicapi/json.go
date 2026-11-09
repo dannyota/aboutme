@@ -3,7 +3,7 @@ package publicapi
 import (
 	"encoding/json"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // NewPublicJSON encodes resume in the public JSON envelope.

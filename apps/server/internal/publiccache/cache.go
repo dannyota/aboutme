@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
 const maxBodyBytes = 32 * 1024 * 1024

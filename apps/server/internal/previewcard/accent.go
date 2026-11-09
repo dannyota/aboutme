@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // accentContrast is the contrast the card accent keeps against the white

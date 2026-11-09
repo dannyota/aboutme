@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 func TestMarkdownFullHostileGolden(t *testing.T) {

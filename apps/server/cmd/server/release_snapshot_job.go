@@ -9,7 +9,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 
-	"github.com/dannyota/aboutme/apps/server/internal/releasesnapshots"
+	"danny.vn/aboutme/apps/server/internal/releasesnapshots"
 )
 
 // runReleaseSnapshotSweep deletes deploy.sh release snapshots older than

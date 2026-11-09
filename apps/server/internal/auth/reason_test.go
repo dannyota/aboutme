@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth/oidctest"
 )
 
 // reasonTokenPattern permits stable snake_case log grouping keys only.

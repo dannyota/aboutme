@@ -1,4 +1,4 @@
-module github.com/dannyota/aboutme/deploy/caddy/production/build
+module danny.vn/aboutme/deploy/caddy/production/build
 
 go 1.27.3
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/accountemail"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // Password route rate budgets. These constants are the single source of the

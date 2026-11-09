@@ -21,11 +21,11 @@ import (
 	"slices"
 	"testing"
 
-	schemav1 "github.com/dannyota/aboutme/packages/schema/gen/go/v1"
-	schemav2 "github.com/dannyota/aboutme/packages/schema/gen/go/v2"
-	schemav3 "github.com/dannyota/aboutme/packages/schema/gen/go/v3"
-	schemav4 "github.com/dannyota/aboutme/packages/schema/gen/go/v4"
-	schemav5 "github.com/dannyota/aboutme/packages/schema/gen/go/v5"
+	schemav1 "danny.vn/aboutme/packages/schema/gen/go/v1"
+	schemav2 "danny.vn/aboutme/packages/schema/gen/go/v2"
+	schemav3 "danny.vn/aboutme/packages/schema/gen/go/v3"
+	schemav4 "danny.vn/aboutme/packages/schema/gen/go/v4"
+	schemav5 "danny.vn/aboutme/packages/schema/gen/go/v5"
 )
 
 func TestReleasedVersions_ContainsExactlyVersionsOneToFive(t *testing.T) {

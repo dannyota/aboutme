@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/document"
 )
 
 func TestFilePublisherAtomicReplace(t *testing.T) {

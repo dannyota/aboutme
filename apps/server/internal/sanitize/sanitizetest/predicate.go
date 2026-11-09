@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schemagen "danny.vn/aboutme/packages/schema/gen/go"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 var errCreateIntent = errors.New("create_intent_invalid")

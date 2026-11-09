@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 func TestParseConfigRequiresClosedLocalPaths(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
+	"danny.vn/aboutme/apps/server/internal/privacynotice"
 )
 
 type privacyNoticeExitError struct{ code int }

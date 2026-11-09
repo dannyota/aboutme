@@ -1,6 +1,6 @@
 // Embeds a schema file's exact bytes into a generated Go source constant.
 // resume.schema.json (and each released version's schema) is outside gen/go's
-// module, so go:embed cannot reach it — this is the substitute.
+// package directory, so go:embed cannot reach it; this is the substitute.
 
 import { generatedHeader, writeGenerated } from "./generatePaths.mjs";
 
@@ -47,7 +47,7 @@ ${literal}\t""
 
 // RawSchema is ${sourceName}'s exact byte content, decoded once at
 // package init from rawSchemaBase64 above. ${sourceName} lives outside
-// this module (gen/go/go.mod), so go:embed cannot reach it directly — this
+// this package's directory, so go:embed cannot reach it directly; this
 // generated constant is the substitute. ${verifiedBy}
 var RawSchema = mustDecodeRawSchemaBase64()
 

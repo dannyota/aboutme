@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
 type publicRoute uint8

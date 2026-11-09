@@ -11,7 +11,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // passwordAcceptedBody is the fixed 202 body shared by register and forgot.

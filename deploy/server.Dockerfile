@@ -1,29 +1,27 @@
-# Go server image. The repository-root build context includes apps/server and
-# its packages/schema/gen/go workspace dependency.
+# Go server image. The repository-root build context includes the root Go
+# module's go.mod and go.sum, apps/server, and packages/schema/gen/go.
 
 # ---- build ----
-# Match the exact Go version declared by apps/server/go.mod. Digest pins the
+# Match the exact Go version declared by the root go.mod. Digest pins the
 # multi-arch index so the same reference resolves on amd64 and arm64.
 FROM docker.io/library/golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS build
 
 WORKDIR /src
 
 # Copy manifests first so source edits retain the dependency layer.
-COPY go.work ./
-COPY apps/server/go.mod apps/server/go.sum ./apps/server/
-COPY packages/schema/gen/go/go.mod ./packages/schema/gen/go/
+COPY go.mod go.sum ./
 
 # Retry proxy transport failures without changing module checksum verification.
 RUN for attempt in 1 2 3; do \
-      go -C apps/server mod download && exit 0; \
+      go mod download && exit 0; \
       status=$?; \
       if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
       echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
       sleep "$((attempt * 5))" || exit $?; \
     done
 
-# Migrations are embedded in cmd/migrate. Generated schema sources are a real
-# module dependency, not build-time input only.
+# Migrations are embedded in cmd/migrate. Generated schema sources are real
+# packages of the same module, not build-time input only.
 COPY apps/server/cmd/ ./apps/server/cmd/
 COPY apps/server/internal/ ./apps/server/internal/
 COPY apps/server/migrations/ ./apps/server/migrations/

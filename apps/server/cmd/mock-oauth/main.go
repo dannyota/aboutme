@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/uatmock"
+	"danny.vn/aboutme/apps/server/internal/uatmock"
 )
 
 const (

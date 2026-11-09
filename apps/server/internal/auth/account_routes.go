@@ -3,7 +3,7 @@ package auth
 import (
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // SetAccountDeleteHandler installs the account service's protected deletion

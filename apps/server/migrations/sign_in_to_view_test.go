@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 func insertViewTransaction(ctx context.Context, sp pgx.Tx, purpose string, resumeID *uuid.UUID, linkingUserID *uuid.UUID) error {

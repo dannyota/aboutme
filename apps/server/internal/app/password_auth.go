@@ -17,14 +17,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/mailcapture"
-	"github.com/dannyota/aboutme/apps/server/internal/password"
-	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/mailcapture"
+	"danny.vn/aboutme/apps/server/internal/password"
+	"danny.vn/aboutme/apps/server/internal/privacynotice"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // PasswordAuth is the fully-composed password service and its mail worker.

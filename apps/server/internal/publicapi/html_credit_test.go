@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicformat"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // Every public page carries exactly one "Built with aboutme.vn" credit in its

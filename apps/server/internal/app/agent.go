@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/mcpapi"
-	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/mcpapi"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // agentRouteHandlers holds one handler per agent-access route. Every field is

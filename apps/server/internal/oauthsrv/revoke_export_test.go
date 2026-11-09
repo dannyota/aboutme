@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // RevokeRoutingFixture exposes the database fixture to external-package tests

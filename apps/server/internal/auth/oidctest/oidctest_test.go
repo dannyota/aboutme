@@ -15,7 +15,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
+	"danny.vn/aboutme/apps/server/internal/auth/oidctest"
 )
 
 func ptrTrue() *bool {

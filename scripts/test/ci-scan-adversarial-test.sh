@@ -47,8 +47,8 @@ setup_ci_fixture() {
     "$repo/packages/schema/gen/go" "$repo/deploy/caddy/production/build" "$fake_bin"
   cp "$ROOT/scripts/ci.sh" "$repo/scripts/ci.sh"
   cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
-  : >"$repo/apps/server/go.mod"
-  : >"$repo/apps/server/go.sum"
+  : >"$repo/go.mod"
+  : >"$repo/go.sum"
   : >"$calls"
 
   make_logging_stub "$fake_bin/make" make

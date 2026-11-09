@@ -35,7 +35,7 @@ fails gofmt && printf "%s\n" "${@: -1}"
 exit 0'
 stub golangci-lint "$stub_lib"'
 if [[ $1 == version ]]; then echo "${STUB_GOLANGCI_VERSION:-2.15.0}"; exit 0; fi
-log "golangci-lint $* (in ${PWD##*/}, GOWORK=${GOWORK:-unset})"
+log "golangci-lint $* (in ${PWD##*/})"
 ! fails golangci-lint'
 stub shellcheck "$stub_lib"'
 log "shellcheck $*"
@@ -102,19 +102,14 @@ LOCK
   printf 'export const a = 1;\n' >"$repo/apps/web/app/a.ts"
   printf 'package foo\n' >"$repo/apps/server/internal/foo/foo.go"
   printf 'package gone\n' >"$repo/apps/server/internal/gone/gone.go"
-  printf 'module test/server\n\ngo 1.21\n' >"$repo/apps/server/go.mod"
+  # One root module holds every Go directory, like the real repository.
+  printf 'module test\n\ngo 1.21\n' >"$repo/go.mod"
   printf 'test config\n' >"$repo/apps/server/.golangci.yml"
-  # go.work puts apps/server and the generated schema module in the
-  # workspace; deploy/observer stays outside it, like the real repo.
-  printf 'go 1.21\n\nuse (\n\t./apps/server\n\t./packages/schema/gen/go\n)\n' \
-    >"$repo/go.work"
   printf 'package foo\n' >"$repo/deploy/observer/internal/foo/foo.go"
-  printf 'module test/observer\n\ngo 1.21\n' >"$repo/deploy/observer/go.mod"
   printf 'test config\n' >"$repo/deploy/observer/.golangci.yml"
-  # packages/schema/gen/go is in the workspace but carries no .golangci.yml,
-  # so it stays gofmt-only, like the real generated schema module.
+  # packages/schema/gen/go carries no .golangci.yml, so it stays gofmt-only,
+  # like the real generated schema packages.
   printf 'package bar\n' >"$repo/packages/schema/gen/go/internal/bar/bar.go"
-  printf 'module test/schema\n\ngo 1.21\n' >"$repo/packages/schema/gen/go/go.mod"
   printf '# Doc\n' >"$repo/docs/a.md"
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email test@example.invalid
@@ -246,20 +241,18 @@ rm -rf "$REPO/instructions" "$REPO/AGENTS.md" "$REPO/CLAUDE.md" \
   "$REPO/apps/web/AGENTS.md" "$REPO/apps/web/CLAUDE.md" "$REPO/docs/component"
 git -C "$REPO" checkout -q -- docs/a.md
 
-# Go: gofmt sees changed files across every Go module (found from go.mod,
-# not a hardcoded list); golangci-lint lints only a module with its own
-# .golangci.yml, from that module's directory, with GOWORK=off outside
-# go.work's use list (deploy/observer) and unset inside it (apps/server).
-# packages/schema/gen/go is in the workspace but has no .golangci.yml, so it
-# reaches gofmt only, like the real generated schema module.
+# Go: gofmt sees every changed Go file; golangci-lint lints only a directory
+# with its own .golangci.yml (found from the tree, not a hardcoded list), from
+# that directory. packages/schema/gen/go has no .golangci.yml, so it reaches
+# gofmt only, like the real generated schema packages.
 printf 'package foo\n\nvar X = 1\n' >"$REPO/apps/server/internal/foo/foo.go"
 git -C "$REPO" rm -q apps/server/internal/gone/gone.go
 printf 'package foo\n\nvar Y = 1\n' >"$REPO/deploy/observer/internal/foo/foo.go"
 printf 'package bar\n\nvar Z = 1\n' >"$REPO/packages/schema/gen/go/internal/bar/bar.go"
 check "$REPO" 0
 has_call "gofmt -l apps/server/internal/foo/foo.go deploy/observer/internal/foo/foo.go packages/schema/gen/go/internal/bar/bar.go"
-has_call "golangci-lint run --concurrency=2 ./internal/foo (in server, GOWORK=unset)"
-has_call "golangci-lint run --concurrency=2 ./internal/foo (in observer, GOWORK=off)"
+has_call "golangci-lint run --concurrency=2 ./internal/foo (in server)"
+has_call "golangci-lint run --concurrency=2 ./internal/foo (in observer)"
 has_line 'golangci-lint +pass +apps/server: 1 package'
 has_line 'golangci-lint +pass +deploy/observer: 1 package'
 no_call "./internal/gone"

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 func TestClock_NowReturnsStartUntilAdvanced(t *testing.T) {

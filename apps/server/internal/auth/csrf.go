@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // CSRFHeaderName is the header carrying a mutating request's CSRF token:

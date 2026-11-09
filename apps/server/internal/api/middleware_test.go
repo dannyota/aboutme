@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 func TestRequestID_SetsResponseHeaderAndContext(t *testing.T) {

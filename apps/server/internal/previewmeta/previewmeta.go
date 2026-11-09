@@ -8,9 +8,9 @@ package previewmeta
 import (
 	"strings"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // SiteName is the og:site_name value and the host shown in fallback text.

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
 func privacyNoticeKeyRing(getenv func(string) string) (*authmail.KeyRing, error) {

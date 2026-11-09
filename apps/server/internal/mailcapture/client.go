@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
 // Client is an authmail.Sender that POSTs messages to a local capture server

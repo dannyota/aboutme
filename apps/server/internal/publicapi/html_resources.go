@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/dannyota/aboutme/apps/server/internal/contactlink"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/contactlink"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // resumeStylesheet reports whether href is one of the self-hosted stylesheets

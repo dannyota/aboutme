@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // statusLockFreeTimeout bounds this test's context: generous relative to

@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
-	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/realtime"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/previewcard"
+	"danny.vn/aboutme/apps/server/internal/publicapi"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/realtime"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // PreviewCards is the stored link-preview card wiring

@@ -17,7 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
+	"danny.vn/aboutme/apps/server/internal/accountemail"
 )
 
 const (

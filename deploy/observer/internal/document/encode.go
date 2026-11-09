@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dannyota/aboutme/deploy/observer/schema"
+	"danny.vn/aboutme/deploy/observer/schema"
 )
 
 // MaxBytes is the largest document the observer writes.

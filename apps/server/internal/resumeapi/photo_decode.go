@@ -11,9 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 func requirePhotoMultipartContentType(header http.Header) *clientError {

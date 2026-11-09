@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 // Sentinel credential values: unique strings that must never surface in any
