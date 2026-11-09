@@ -111,7 +111,7 @@ func (h *harness) remainingInMail(userID uuid.UUID) int {
 	}
 	sealed := authmail.Sealed{KeyID: keyID, Ciphertext: ciphertext}
 	copy(sealed.Nonce[:], nonce)
-	payload, err := h.ring.Open(jobID, authmail.KindRecoveryCodeUsed, sealed)
+	payload, err := h.ring.Open(jobID, authmail.KindRecoveryCodeUsed, authmail.JobScope{UserID: &userID}, sealed)
 	if err != nil || payload.RemainingRecoveryCodes == nil {
 		h.t.Fatalf("open recovery mail = %+v, %v", payload, err)
 	}

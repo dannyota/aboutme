@@ -91,12 +91,9 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return tx.Commit(ctx)
 	}
 
-	// Decrypt the sealed payload. The AAD binds job ID, kind, and key ID, so
-	// ciphertext copied from another job or a changed kind or key ID fails
-	// authentication here; the token digest is checked above, and the user ID
-	// is not bound. A failed open terminates the job without a send and commits
-	// that state. Plaintext never reaches a log.
-	payload, err := w.ring.Open(leased.ID, Kind(leased.Kind), sealedFromJob(leased))
+	// Authenticate the leased row's identity, scope, and token authority before
+	// sending. A failed open commits terminal state without exposing plaintext.
+	payload, err := w.ring.Open(leased.ID, Kind(leased.Kind), scopeFromJob(leased), sealedFromJob(leased))
 	if err != nil {
 		w.logger.Warn("authmail: decrypt failed", "job", leased.ID)
 		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
@@ -223,4 +220,9 @@ func sealedFromJob(job store.AuthEmailJob) Sealed {
 		keyID = *job.KeyID
 	}
 	return Sealed{KeyID: keyID, Nonce: nonce, Ciphertext: job.Ciphertext}
+}
+
+func scopeFromJob(job store.AuthEmailJob) JobScope {
+	return JobScope{UserID: job.UserID, RegistrationID: job.RegistrationID,
+		ResetTokenID: job.ResetTokenID, TokenDigest: job.TokenDigest}
 }

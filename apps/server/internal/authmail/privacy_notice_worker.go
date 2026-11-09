@@ -87,7 +87,7 @@ func (w *Worker) sendNoticeJob(ctx context.Context, claimed store.AuthEmailJob) 
 	if job.Kind != string(KindPrivacyNotice) || job.UserID == nil || *job.UserID != user.ID || job.RegistrationID != nil || job.ResetTokenID != nil || job.TokenDigest != nil {
 		return finishFailure("payload_invalid")
 	}
-	payload, err := w.ring.Open(job.ID, KindPrivacyNotice, sealedFromJob(job))
+	payload, err := w.ring.Open(job.ID, KindPrivacyNotice, scopeFromJob(job), sealedFromJob(job))
 	if err != nil || payload.UserID != user.ID.String() || payload.To != user.Email || payload.NoticeID != PrivacyNoticeID || payload.Generation != recipient.Generation {
 		return finishFailure("payload_invalid")
 	}
