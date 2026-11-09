@@ -7,11 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/viewcount"
 )
 
 const (
@@ -43,47 +41,93 @@ var (
 
 // Config supplies the retention worker's fixed dependencies.
 type Config struct {
-	Pool   *store.Pool
+	// Pool supplies the connection that holds each sweep's advisory lock.
+	Pool *store.Pool
+	// Logger receives one result record per sweep.
 	Logger *slog.Logger
-	Now    func() time.Time
+	// Now returns the reference time for each sweep's cutoffs.
+	Now func() time.Time
 }
 
 // Result is the fixed, identifier-free signal surface shared by both sweep
 // commands. Fields irrelevant to one command remain zero.
 type Result struct {
+	// Successes is 1 when the sweep completed and released its advisory lock.
 	Successes int64 `json:"successes"`
-	Failures  int64 `json:"failures"`
-	Skipped   int64 `json:"overlapSkipped"`
-	Pages     int64 `json:"pages"`
+	// Failures is 1 when the sweep or its unlock failed.
+	Failures int64 `json:"failures"`
+	// Skipped is 1 when another run held the sweep's advisory lock.
+	Skipped int64 `json:"overlapSkipped"`
+	// Pages counts the non-empty pages the sweep processed.
+	Pages int64 `json:"pages"`
 
-	IdempotencyRecordsDeleted       int64 `json:"idempotencyRecordsDeleted"`
-	IdempotencyBytesReleased        int64 `json:"idempotencyBytesReleased"`
-	IdempotencyBacklog              int64 `json:"idempotencyBacklog"`
+	// IdempotencyRecordsDeleted counts expired replay records deleted.
+	IdempotencyRecordsDeleted int64 `json:"idempotencyRecordsDeleted"`
+	// IdempotencyBytesReleased counts stored response bytes released from usage.
+	IdempotencyBytesReleased int64 `json:"idempotencyBytesReleased"`
+	// IdempotencyBacklog counts expired replay records left after the run.
+	IdempotencyBacklog int64 `json:"idempotencyBacklog"`
+	// IdempotencyOldestExpiredSeconds is how long the oldest remaining
+	// expired record has been past its expiry, in seconds.
 	IdempotencyOldestExpiredSeconds int64 `json:"idempotencyOldestExpiredSeconds"`
 
-	SessionMetadataRedacted                   int64 `json:"sessionMetadataRedacted"`
-	SessionMetadataBacklog                    int64 `json:"sessionMetadataBacklog"`
-	SessionOldestAgeSeconds                   int64 `json:"sessionOldestAgeSeconds"`
-	LifecycleAuditDeleted                     int64 `json:"lifecycleAuditDeleted"`
-	LifecycleAuditBacklog                     int64 `json:"lifecycleAuditBacklog"`
-	LifecycleAuditOldestSeconds               int64 `json:"lifecycleAuditOldestSeconds"`
-	CompletedMediaJobsDeleted                 int64 `json:"completedMediaJobsDeleted"`
-	CompletedMediaJobsBacklog                 int64 `json:"completedMediaJobsBacklog"`
-	CompletedMediaOldestSeconds               int64 `json:"completedMediaOldestSeconds"`
-	AuthenticationSecurityEventsDeleted       int64 `json:"authenticationSecurityEventsDeleted"`
-	AuthenticationSecurityEventsBacklog       int64 `json:"authenticationSecurityEventsBacklog"`
+	// SessionMetadataRedacted counts sessions whose IP and user agent were cleared.
+	SessionMetadataRedacted int64 `json:"sessionMetadataRedacted"`
+	// SessionMetadataBacklog counts sessions still due for redaction.
+	SessionMetadataBacklog int64 `json:"sessionMetadataBacklog"`
+	// SessionOldestAgeSeconds is the time since sign-in of the oldest
+	// session still due for redaction, in seconds.
+	SessionOldestAgeSeconds int64 `json:"sessionOldestAgeSeconds"`
+	// LifecycleAuditDeleted counts lifecycle audit events deleted past retention.
+	LifecycleAuditDeleted int64 `json:"lifecycleAuditDeleted"`
+	// LifecycleAuditBacklog counts lifecycle audit events left past retention.
+	LifecycleAuditBacklog int64 `json:"lifecycleAuditBacklog"`
+	// LifecycleAuditOldestSeconds is the age of the oldest such event, in seconds.
+	LifecycleAuditOldestSeconds int64 `json:"lifecycleAuditOldestSeconds"`
+	// CompletedMediaJobsDeleted counts completed media deletion jobs deleted
+	// past retention.
+	CompletedMediaJobsDeleted int64 `json:"completedMediaJobsDeleted"`
+	// CompletedMediaJobsBacklog counts completed media deletion jobs left
+	// past retention.
+	CompletedMediaJobsBacklog int64 `json:"completedMediaJobsBacklog"`
+	// CompletedMediaOldestSeconds is the time since completion of the oldest
+	// such job, in seconds.
+	CompletedMediaOldestSeconds int64 `json:"completedMediaOldestSeconds"`
+	// AuthenticationSecurityEventsDeleted counts authentication security
+	// events deleted past retention.
+	AuthenticationSecurityEventsDeleted int64 `json:"authenticationSecurityEventsDeleted"`
+	// AuthenticationSecurityEventsBacklog counts authentication security
+	// events left past retention.
+	AuthenticationSecurityEventsBacklog int64 `json:"authenticationSecurityEventsBacklog"`
+	// AuthenticationSecurityEventsOldestSeconds is the age of the oldest such
+	// event, in seconds.
 	AuthenticationSecurityEventsOldestSeconds int64 `json:"authenticationSecurityEventsOldestSeconds"`
-	SlugTombstonesDeleted                     int64 `json:"slugTombstonesDeleted"`
-	SlugTombstonesBacklog                     int64 `json:"slugTombstonesBacklog"`
-	SlugTombstonesOldestSeconds               int64 `json:"slugTombstonesOldestSeconds"`
-	ViewCountDaysDeleted                      int64 `json:"viewCountDaysDeleted"`
-	ShareSignalDaysDeleted                    int64 `json:"shareSignalDaysDeleted"`
+	// SlugTombstonesDeleted counts slug tombstones deleted after their
+	// reservation period.
+	SlugTombstonesDeleted int64 `json:"slugTombstonesDeleted"`
+	// SlugTombstonesBacklog counts slug tombstones left past their
+	// reservation period.
+	SlugTombstonesBacklog int64 `json:"slugTombstonesBacklog"`
+	// SlugTombstonesOldestSeconds is the time since release of the oldest
+	// such tombstone, in seconds.
+	SlugTombstonesOldestSeconds int64 `json:"slugTombstonesOldestSeconds"`
+	// ViewCountDaysDeleted counts daily view-count rows deleted past their
+	// keep period.
+	ViewCountDaysDeleted int64 `json:"viewCountDaysDeleted"`
+	// ShareSignalDaysDeleted counts daily share-signal rows deleted past
+	// their keep period.
+	ShareSignalDaysDeleted int64 `json:"shareSignalDaysDeleted"`
 
-	OAuthTransactionsDeleted       int64 `json:"oauthTransactionsDeleted"`
+	// OAuthTransactionsDeleted counts expired OAuth transactions deleted.
+	OAuthTransactionsDeleted int64 `json:"oauthTransactionsDeleted"`
+	// OAuthAuthorizationCodesDeleted counts expired authorization codes deleted.
 	OAuthAuthorizationCodesDeleted int64 `json:"oauthAuthorizationCodesDeleted"`
-	OAuthTokensDeleted             int64 `json:"oauthTokensDeleted"`
-	OAuthClientsDeleted            int64 `json:"oauthClientsDeleted"`
+	// OAuthTokensDeleted counts terminal OAuth tokens deleted.
+	OAuthTokensDeleted int64 `json:"oauthTokensDeleted"`
+	// OAuthClientsDeleted counts idle OAuth clients deleted.
+	OAuthClientsDeleted int64 `json:"oauthClientsDeleted"`
 
+	// DurationMilliseconds is the sweep's wall-clock duration.
 	DurationMilliseconds int64 `json:"durationMilliseconds"`
 }
 
@@ -110,359 +154,6 @@ func New(config Config) (*Worker, error) {
 		return nil, ErrInvalidConfig
 	}
 	return &Worker{pool: config.Pool, logger: config.Logger, now: config.Now}, nil
-}
-
-// ExpireIdempotency deletes expired replay records under the same user-first
-// lock order used by writers and releases exact retained usage in each page's
-// transaction.
-func (w *Worker) ExpireIdempotency(ctx context.Context) (result Result, returnErr error) {
-	started := time.Now()
-	defer func() {
-		result.DurationMilliseconds = time.Since(started).Milliseconds()
-		w.logResult(ctx, "idempotency-expiry-sweep", result)
-	}()
-
-	runCtx, cancel := context.WithTimeout(ctx, maxRunDuration)
-	defer cancel()
-	conn, err := w.pool.Acquire(runCtx)
-	if err != nil {
-		result.Failures = 1
-		return result, ErrSweepFailed
-	}
-	defer conn.Release()
-	q := store.New(conn)
-	locked, err := q.TryLockIdempotencyExpirySweep(runCtx)
-	if err != nil {
-		result.Failures = 1
-		return result, ErrSweepFailed
-	}
-	if !locked {
-		result.Skipped = 1
-		return result, nil
-	}
-	defer func() {
-		if unlockErr := w.unlockIdempotency(ctx, conn, q); unlockErr != nil {
-			result.Successes = 0
-			result.Failures = 1
-			if returnErr == nil {
-				returnErr = ErrSweepFailed
-			}
-		}
-	}()
-	if w.hooks.afterIdempotencyLock != nil {
-		w.hooks.afterIdempotencyLock()
-	}
-
-	now := w.now()
-	for result.IdempotencyRecordsDeleted < maxRowsPerRun {
-		deleted, deletedBytes, pageErr := w.expireIdempotencyPage(runCtx, conn, now, pageSize)
-		if pageErr != nil {
-			result.Failures = 1
-			return result, ErrSweepFailed
-		}
-		if deleted == 0 {
-			break
-		}
-		result.Pages++
-		result.IdempotencyRecordsDeleted += deleted
-		result.IdempotencyBytesReleased += deletedBytes
-		if deleted < int64(pageSize) {
-			break
-		}
-	}
-	backlog, err := q.GetIdempotencyExpiryBacklog(runCtx, now)
-	if err != nil {
-		result.Failures = 1
-		return result, ErrSweepFailed
-	}
-	result.IdempotencyBacklog = backlog.Backlog
-	result.IdempotencyOldestExpiredSeconds = backlog.OldestAgeSeconds
-	result.Successes = 1
-	return result, nil
-}
-
-func (w *Worker) expireIdempotencyPage(ctx context.Context, conn *pgxpool.Conn, cutoff time.Time, limit int32) (deleted, deletedBytes int64, returnErr error) {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer func() {
-		if rollbackErr := rollbackBounded(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && returnErr == nil {
-			returnErr = rollbackErr
-		}
-	}()
-	row, err := store.New(tx).ExpireIdempotencyPage(ctx, store.ExpireIdempotencyPageParams{
-		Cutoff: cutoff, LimitRows: limit,
-	})
-	if err != nil {
-		return 0, 0, err
-	}
-	if row.DeletedRecords != row.ReleasedRecords || row.DeletedBytes != row.ReleasedBytes {
-		return 0, 0, ErrSweepFailed
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, 0, err
-	}
-	return row.DeletedRecords, row.DeletedBytes, nil
-}
-
-// Retain redacts or deletes the daily privacy categories and performs one
-// existing 200-row OAuth cleanup pass. Password and auth-mail cleanup remains
-// owned by authmail.Worker.
-func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
-	started := time.Now()
-	defer func() {
-		result.DurationMilliseconds = time.Since(started).Milliseconds()
-		w.logResult(ctx, "privacy-retention-sweep", result)
-	}()
-
-	runCtx, cancel := context.WithTimeout(ctx, maxRunDuration)
-	defer cancel()
-	conn, err := w.pool.Acquire(runCtx)
-	if err != nil {
-		result.Failures = 1
-		return result, ErrSweepFailed
-	}
-	defer conn.Release()
-	q := store.New(conn)
-	locked, err := q.TryLockPrivacyRetentionSweep(runCtx)
-	if err != nil {
-		result.Failures = 1
-		return result, ErrSweepFailed
-	}
-	if !locked {
-		result.Skipped = 1
-		return result, nil
-	}
-	defer func() {
-		if unlockErr := w.unlockRetention(ctx, conn, q); unlockErr != nil {
-			result.Successes = 0
-			result.Failures = 1
-			if returnErr == nil {
-				returnErr = ErrSweepFailed
-			}
-		}
-	}()
-	if w.hooks.afterRetentionLock != nil {
-		w.hooks.afterRetentionLock()
-	}
-
-	now := w.now()
-	result.SessionMetadataRedacted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.RedactSessionMetadataPage(ctx, store.RedactSessionMetadataPageParams{Cutoff: now.Add(sessionRedactionLead), LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-	result.LifecycleAuditDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteLifecycleAuditPage(ctx, store.DeleteLifecycleAuditPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-	result.CompletedMediaJobsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteCompletedMediaJobsPage(ctx, store.DeleteCompletedMediaJobsPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-	result.AuthenticationSecurityEventsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteAuthenticationSecurityEventsPage(ctx, store.DeleteAuthenticationSecurityEventsPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-	result.SlugTombstonesDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteExpiredSlugTombstonesPage(ctx, store.DeleteExpiredSlugTombstonesPageParams{Cutoff: now.Add(-slugReservation), LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-
-	viewCutoff := viewcount.Date(viewcount.Day(now).AddDate(0, 0, -viewCountDays))
-	result.ViewCountDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteOldResumeViewDaysPage(ctx, store.DeleteOldResumeViewDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-	result.ShareSignalDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.DeleteOldResumeShareSignalDaysPage(ctx, store.DeleteOldResumeShareSignalDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
-	})
-	if err != nil {
-		return w.failed(result)
-	}
-
-	if err := w.cleanupOAuth(runCtx, conn, q, now, &result); err != nil {
-		return w.failed(result)
-	}
-	if err := w.loadRetentionBacklog(runCtx, q, now, &result); err != nil {
-		return w.failed(result)
-	}
-	result.Successes = 1
-	return result, nil
-}
-
-func runPages(ctx context.Context, pages int64, run func(context.Context, int32) (int64, error)) (total, updatedPages int64, err error) {
-	updatedPages = pages
-	for total < maxRowsPerRun {
-		count, runErr := run(ctx, pageSize)
-		if runErr != nil {
-			return total, updatedPages, runErr
-		}
-		if count == 0 {
-			return total, updatedPages, nil
-		}
-		total += count
-		updatedPages++
-		if count < int64(pageSize) {
-			return total, updatedPages, nil
-		}
-	}
-	return total, updatedPages, nil
-}
-
-func (w *Worker) cleanupOAuth(ctx context.Context, conn *pgxpool.Conn, q *store.Queries, now time.Time, result *Result) (returnErr error) {
-	var err error
-	result.OAuthTransactionsDeleted, err = q.DeleteExpiredOAuthTransactions(ctx, store.DeleteExpiredOAuthTransactionsParams{
-		Cutoff: now, MaxRows: oauthCleanupBatch,
-	})
-	if err != nil {
-		return err
-	}
-	result.OAuthAuthorizationCodesDeleted, err = q.DeleteExpiredOAuthAuthorizationCodes(ctx, store.DeleteExpiredOAuthAuthorizationCodesParams{
-		Cutoff: now, LimitRows: oauthCleanupBatch,
-	})
-	if err != nil {
-		return err
-	}
-	result.OAuthTokensDeleted, err = q.DeleteTerminalOAuthTokens(ctx, store.DeleteTerminalOAuthTokensParams{
-		Cutoff: now, LimitRows: oauthCleanupBatch,
-	})
-	if err != nil {
-		return err
-	}
-
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		rollbackErr := rollbackBounded(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && returnErr == nil {
-			returnErr = rollbackErr
-		}
-	}()
-	txq := store.New(tx)
-	ids, err := txq.ListIdleOAuthClientCandidates(ctx, store.ListIdleOAuthClientCandidatesParams{
-		IdleBefore: now.Add(-oauthClientIdle), Now: now, LimitRows: oauthCleanupBatch,
-	})
-	if err != nil {
-		return err
-	}
-	if len(ids) > oauthCleanupBatch {
-		return ErrSweepFailed
-	}
-	if len(ids) > 0 {
-		result.OAuthClientsDeleted, err = txq.DeleteOAuthClients(ctx, ids)
-		if err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (w *Worker) unlockIdempotency(ctx context.Context, conn *pgxpool.Conn, q *store.Queries) error {
-	return unlockOrDiscard(ctx, conn, func(unlockCtx context.Context) (bool, error) {
-		if w.hooks.unlockIdempotency != nil {
-			return w.hooks.unlockIdempotency(unlockCtx, conn, q)
-		}
-		return q.UnlockIdempotencyExpirySweep(unlockCtx)
-	})
-}
-
-func (w *Worker) unlockRetention(ctx context.Context, conn *pgxpool.Conn, q *store.Queries) error {
-	return unlockOrDiscard(ctx, conn, func(unlockCtx context.Context) (bool, error) {
-		if w.hooks.unlockRetention != nil {
-			return w.hooks.unlockRetention(unlockCtx, conn, q)
-		}
-		return q.UnlockPrivacyRetentionSweep(unlockCtx)
-	})
-}
-
-func unlockOrDiscard(ctx context.Context, conn *pgxpool.Conn, unlock func(context.Context) (bool, error)) error {
-	unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-	defer cancel()
-	unlocked, err := unlock(unlockCtx)
-	if err == nil && unlocked {
-		return nil
-	}
-
-	raw := conn.Hijack()
-	closeCtx, closeCancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-	defer closeCancel()
-	if closeErr := raw.Close(closeCtx); closeErr != nil {
-		return ErrSweepFailed
-	}
-	return ErrSweepFailed
-}
-
-func rollbackBounded(ctx context.Context, tx pgx.Tx) error {
-	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-	defer cancel()
-	return tx.Rollback(rollbackCtx)
-}
-
-func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now time.Time, result *Result) error {
-	sessions, err := q.GetSessionMetadataBacklog(ctx, store.GetSessionMetadataBacklogParams{
-		Now: now, Cutoff: now.Add(sessionRedactionLead),
-	})
-	if err != nil {
-		return err
-	}
-	audits, err := q.GetLifecycleAuditBacklog(ctx, store.GetLifecycleAuditBacklogParams{
-		Now: now, Cutoff: now.Add(-auditRetention),
-	})
-	if err != nil {
-		return err
-	}
-	media, err := q.GetCompletedMediaJobsBacklog(ctx, store.GetCompletedMediaJobsBacklogParams{
-		Now: now, Cutoff: now.Add(-auditRetention),
-	})
-	if err != nil {
-		return err
-	}
-	events, err := q.GetAuthenticationSecurityEventsBacklog(ctx, store.GetAuthenticationSecurityEventsBacklogParams{
-		Now: now, Cutoff: now.Add(-auditRetention),
-	})
-	if err != nil {
-		return err
-	}
-	tombstones, err := q.GetExpiredSlugTombstonesBacklog(ctx, store.GetExpiredSlugTombstonesBacklogParams{
-		Now: now, Cutoff: now.Add(-slugReservation),
-	})
-	if err != nil {
-		return err
-	}
-	result.SessionMetadataBacklog = sessions.Backlog
-	result.SessionOldestAgeSeconds = sessions.OldestAgeSeconds
-	result.LifecycleAuditBacklog = audits.Backlog
-	result.LifecycleAuditOldestSeconds = audits.OldestAgeSeconds
-	result.CompletedMediaJobsBacklog = media.Backlog
-	result.CompletedMediaOldestSeconds = media.OldestAgeSeconds
-	result.AuthenticationSecurityEventsBacklog = events.Backlog
-	result.AuthenticationSecurityEventsOldestSeconds = events.OldestAgeSeconds
-	result.SlugTombstonesBacklog = tombstones.Backlog
-	result.SlugTombstonesOldestSeconds = tombstones.OldestAgeSeconds
-	return nil
-}
-
-func (w *Worker) failed(result Result) (Result, error) {
-	result.Failures = 1
-	return result, ErrSweepFailed
 }
 
 func (w *Worker) logResult(ctx context.Context, command string, result Result) {
