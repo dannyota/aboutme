@@ -89,12 +89,21 @@ func (s *Service) revokeLineagePartners(ctx context.Context, row store.Session, 
 // sessionDeviceEntry preserves null user-agent/IP values. Times are normalized
 // to UTC before assignment.
 type sessionDeviceEntry struct {
-	ID         string    `json:"id"`
-	CreatedAt  time.Time `json:"createdAt"`
+	// ID is the session's UUID.
+	ID string `json:"id"`
+	// CreatedAt is when the session was issued, in UTC.
+	CreatedAt time.Time `json:"createdAt"`
+	// LastSeenAt is when the session was last used, in UTC.
 	LastSeenAt time.Time `json:"lastSeenAt"`
-	UA         *string   `json:"ua"`
-	IP         *string   `json:"ip"`
-	Current    bool      `json:"current"`
+	// UA is the User-Agent header recorded when the session was issued, or
+	// nil when none was sent.
+	UA *string `json:"ua"`
+	// IP is the client address recorded when the session was issued, or nil
+	// when none could be determined.
+	IP *string `json:"ip"`
+	// Current reports whether this is the session that authenticated the
+	// request.
+	Current bool `json:"current"`
 }
 
 // handleSessionsCollection rejects unsupported methods before authentication.

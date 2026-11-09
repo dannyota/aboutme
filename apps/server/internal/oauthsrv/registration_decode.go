@@ -19,18 +19,37 @@ var (
 	errRegisterRequestInvalid  = errors.New("oauth registration request invalid")
 )
 
+// registrationInput is a decoded RFC 7591 registration request. Each Set field
+// reports whether the request named that optional member.
 type registrationInput struct {
-	ClientName              string
-	RedirectURIs            []string
+	// ClientName is the required client_name member, before ValidateClientName
+	// checks it.
+	ClientName string
+	// RedirectURIs is the required redirect_uris member, before HandleRegister
+	// checks its count and each URI.
+	RedirectURIs []string
+	// TokenEndpointAuthMethod is the token_endpoint_auth_method member: "none"
+	// when present, empty when omitted.
 	TokenEndpointAuthMethod string
-	ApplicationType         string
-	ApplicationTypeSet      bool
-	GrantTypes              []string
-	GrantTypesSet           bool
-	ResponseTypes           []string
-	ResponseTypesSet        bool
-	Scope                   string
-	ScopeSet                bool
+	// ApplicationType is the application_type member; HandleRegister accepts
+	// only native or web.
+	ApplicationType string
+	// ApplicationTypeSet reports whether the request named application_type.
+	ApplicationTypeSet bool
+	// GrantTypes is the grant_types member, checked by validGrantTypesSet.
+	GrantTypes []string
+	// GrantTypesSet reports whether the request named grant_types.
+	GrantTypesSet bool
+	// ResponseTypes is the response_types member, checked by
+	// validResponseTypesSet.
+	ResponseTypes []string
+	// ResponseTypesSet reports whether the request named response_types.
+	ResponseTypesSet bool
+	// Scope is the scope member, checked by ParseScopes. It grants nothing at
+	// registration; consent decides.
+	Scope string
+	// ScopeSet reports whether the request named scope.
+	ScopeSet bool
 }
 
 // nativeLoopbackHosts is the set of loopback hosts an application_type
@@ -52,7 +71,7 @@ func nativeLoopbackRedirect(raw string) bool {
 }
 
 // webRedirect reports whether raw is an https redirect, the application_type
-// web requirement of docs/design/mcp-client-compatibility.md rule 2.
+// web requirement of docs/design/mcp-client-compatibility.md rule 3.
 func webRedirect(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "https"

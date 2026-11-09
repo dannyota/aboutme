@@ -136,12 +136,21 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// registerResponse is the 201 body of a successful registration.
 type registerResponse struct {
-	ClientID                string   `json:"client_id"`
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	ApplicationType         string   `json:"application_type,omitempty"`
+	// ClientID is the issued client_id, the new client row's UUID.
+	ClientID string `json:"client_id"`
+	// ClientName is the canonical client name ValidateClientName returned, as
+	// stored.
+	ClientName string `json:"client_name"`
+	// RedirectURIs echoes the registered redirect URIs in request order.
+	RedirectURIs []string `json:"redirect_uris"`
+	// TokenEndpointAuthMethod is always "none": every registered client is
+	// public.
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	// ApplicationType echoes the request's application_type and is omitted
+	// when the request did not name it.
+	ApplicationType string `json:"application_type,omitempty"`
 }
 
 func exactJSONContentType(header http.Header) bool {

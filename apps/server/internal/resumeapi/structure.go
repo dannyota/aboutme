@@ -38,6 +38,8 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 		return boundedInput{}, requestInvalid("resume id is not a UUID")
 	}
 	var body struct {
+		// Commands holds the raw commands, decoded one by one in request
+		// order.
 		Commands []json.RawMessage `json:"commands"`
 	}
 	input, err := decodeJSONBody(r, &body)
@@ -61,6 +63,7 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 
 func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 	var discriminator struct {
+		// Op names the command and selects its strict shape.
 		Op string `json:"op"`
 	}
 	if err := json.Unmarshal(raw, &discriminator); err != nil || discriminator.Op == "" {
@@ -69,13 +72,23 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 	switch discriminator.Op {
 	case "createSection":
 		var command struct {
-			Op          string          `json:"op"`
-			Key         *string         `json:"key"`
-			SectionType *string         `json:"sectionType"`
+			// Op is createSection.
+			Op string `json:"op"`
+			// Key is the required key of the new section.
+			Key *string `json:"key"`
+			// SectionType is the required type of the new section.
+			SectionType *string `json:"sectionType"`
+			// DisplayName is the optional display name, kept raw so a null
+			// value is rejected.
 			DisplayName json.RawMessage `json:"displayName"`
-			IconKey     json.RawMessage `json:"iconKey"`
-			Column      *string         `json:"column"`
-			Index       json.RawMessage `json:"index"`
+			// IconKey is the optional icon key, kept raw so an omitted member
+			// stays distinct from a present one.
+			IconKey json.RawMessage `json:"iconKey"`
+			// Column is the required target layout column.
+			Column *string `json:"column"`
+			// Index is the required zero-based target position, kept raw for
+			// decodeStructureIndex.
+			Index json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil || command.SectionType == nil || command.Column == nil || len(command.Index) == 0 {
 			return structureCommand{}, requestInvalid("createSection command does not match its contract")
@@ -105,7 +118,9 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return result, nil
 	case "deleteSection":
 		var command struct {
-			Op  string  `json:"op"`
+			// Op is deleteSection.
+			Op string `json:"op"`
+			// Key is the required key of the section to delete.
 			Key *string `json:"key"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil {
@@ -114,10 +129,15 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return structureCommand{Op: discriminator.Op, Key: *command.Key}, nil
 	case "moveSection":
 		var command struct {
-			Op     string          `json:"op"`
-			Key    *string         `json:"key"`
-			Column *string         `json:"column"`
-			Index  json.RawMessage `json:"index"`
+			// Op is moveSection.
+			Op string `json:"op"`
+			// Key is the required key of the section to move.
+			Key *string `json:"key"`
+			// Column is the required target layout column.
+			Column *string `json:"column"`
+			// Index is the required zero-based target position, kept raw for
+			// decodeStructureIndex.
+			Index json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil || command.Column == nil || len(command.Index) == 0 {
 			return structureCommand{}, requestInvalid("moveSection command does not match its contract")
@@ -129,9 +149,12 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return structureCommand{Op: discriminator.Op, Key: *command.Key, Column: *command.Column, Index: index, HasIndex: true, IndexOutside: outside}, nil
 	case "reorderColumn":
 		var command struct {
-			Op     string    `json:"op"`
-			Column *string   `json:"column"`
-			Keys   *[]string `json:"keys"`
+			// Op is reorderColumn.
+			Op string `json:"op"`
+			// Column is the required layout column to reorder.
+			Column *string `json:"column"`
+			// Keys is the required section order for Column.
+			Keys *[]string `json:"keys"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Column == nil || command.Keys == nil {
 			return structureCommand{}, requestInvalid("reorderColumn command does not match its contract")

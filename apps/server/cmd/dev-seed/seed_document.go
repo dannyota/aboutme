@@ -11,10 +11,16 @@ import (
 // document and confirms the schema version.
 func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte, err error) {
 	var doc struct {
-		SchemaVersion   int             `json:"schemaVersion"`
+		// SchemaVersion is the fixture's document schema version; only 5 is
+		// accepted.
+		SchemaVersion int `json:"schemaVersion"`
+		// PersonalDetails is the personal details object, seeded without its
+		// photo member.
 		PersonalDetails json.RawMessage `json:"personalDetails"`
-		Content         json.RawMessage `json:"content"`
-		Customization   json.RawMessage `json:"customization"`
+		// Content is the content object, seeded unchanged.
+		Content json.RawMessage `json:"content"`
+		// Customization is the customization object, seeded unchanged.
+		Customization json.RawMessage `json:"customization"`
 	}
 	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
 		return nil, nil, nil, fmt.Errorf("decode full.json: %w", unmarshalErr)

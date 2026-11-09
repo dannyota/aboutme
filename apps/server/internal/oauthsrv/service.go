@@ -19,12 +19,27 @@ import (
 // It uses the canonical Caddy client address; this service neither reads
 // cookies nor derives an address itself.
 type registerAdmission interface {
+	// AdmitRegister reports whether a registration request at the given time
+	// is admitted and, when it is not, the whole seconds to wait before
+	// retrying.
 	AdmitRegister(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
 }
 
+// tokenAdmission is the narrow rate-admission boundary for the token endpoint:
+// a per-address request budget and a per-grant failure budget.
 type tokenAdmission interface {
+	// AdmitToken reports whether a token request at the given time is
+	// admitted and, when it is not, the whole seconds to wait before
+	// retrying.
 	AdmitToken(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
+	// AdmitGrant reserves one failed-grant slot for the grant ID at the given
+	// time before the request is processed. It returns the reservation,
+	// whether the grant is admitted, and, when it is not, the whole seconds to
+	// wait before retrying.
 	AdmitGrant(uuid.UUID, time.Time) (grantAttempt, bool, int)
+	// FinishGrant resolves one admitted reservation with the request's
+	// outcome: a failure keeps one failure, a release frees only the
+	// reservation, and a success clears a tracked grant's failure window.
 	FinishGrant(grantAttempt, grantAttemptResult)
 }
 

@@ -73,6 +73,9 @@ type RateDecision struct {
 // (a fixed-window counter) and the admission limiters (ADR 0007 token buckets)
 // can be composed behind the same policy object.
 type admissionLimiter interface {
+	// Admit returns the admission decision for one request under the key at
+	// the given time. An admitted request spends one unit of the key's
+	// budget; a refused one spends nothing.
 	Admit(time.Time, string) RateDecision
 }
 

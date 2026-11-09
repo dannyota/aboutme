@@ -66,10 +66,16 @@ func (s *Service) exportDocument(row store.ListAccountExportResumesRow) (json.Ra
 		return nil, nil, fmt.Errorf("marshal portable personal details: %w", err)
 	}
 	document, err := json.Marshal(struct {
-		Content         json.RawMessage `json:"content"`
-		Customization   json.RawMessage `json:"customization"`
+		// Content is the projected content object.
+		Content json.RawMessage `json:"content"`
+		// Customization is the projected customization object.
+		Customization json.RawMessage `json:"customization"`
+		// PersonalDetails is the projected personal details without the photo
+		// member; the portable photo is exported beside the document.
 		PersonalDetails json.RawMessage `json:"personalDetails"`
-		SchemaVersion   int32           `json:"schemaVersion"`
+		// SchemaVersion is the current schema version the parts were projected
+		// to.
+		SchemaVersion int32 `json:"schemaVersion"`
 	}{
 		Content: content, Customization: customization, PersonalDetails: personalDetails,
 		SchemaVersion: s.projector.CurrentVersion(),
