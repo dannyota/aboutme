@@ -18,7 +18,7 @@ file, the line, and how the change fails; skip style the linters already check.
   a test prints.
 - Code, comments, tests, and living docs never cite plans, phases, tasks, or
   review findings; they cite a design doc, an ADR, or an `AC-*` ID.
-- US spelling. Markdown files stay at or under 450 lines, non-test Go under
+- US spelling. Markdown files stay at or under 400 lines, non-test Go under
   `apps/server` at or under 400, and other non-test code at or under 700
   (`scripts/check-lengths.sh`). Tests are exempt, and so are generated files
   with a `Code generated ... DO NOT EDIT` or `@generated` header in their first

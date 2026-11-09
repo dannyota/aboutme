@@ -111,8 +111,9 @@ Use relative links inside `docs/` and Mermaid for diagrams.
 `scripts/check-lengths.sh` enforces three limits in CI, `make check`, and the
 pre-commit hook:
 
-- Markdown files: at most 450 lines. Split a larger document into a directory
-  with a `README.md` index and focused pages, or trim it.
+- Markdown files: at most 400 lines. Split a larger document by topic into
+  focused pages linked from the original page or a directory `README.md`,
+  keeping each inbound anchor as a short link, or trim it.
 - Non-test Go under `apps/server`: at most 400 lines.
 - Other non-test code (Go, TypeScript, Vue, JavaScript, shell): at most 700
   lines.

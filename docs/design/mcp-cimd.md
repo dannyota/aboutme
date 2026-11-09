@@ -18,7 +18,9 @@ client registration (DCR) stays, unchanged, as
 [MCP client compatibility](mcp-client-compatibility.md) defines it.
 
 The design covers [metadata fetching](mcp-cimd-fetch.md),
-[authorization](mcp-cimd-authorization.md), and
+[authorization](mcp-cimd-authorization.md),
+[revocation](mcp-cimd-revocation.md),
+[failed-grant admission](mcp-cimd-grant-admission.md), and
 [verification](mcp-cimd-verification.md).
 
 ## Why

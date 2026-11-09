@@ -19,7 +19,8 @@ Current behavior lives in code, deployment configuration, and
 | 4       | [API](api.md)                                                          | HTTP conventions, endpoints, photo intake, and write safety                |
 | 5       | [Web and rendering](web.md)                                            | Web surfaces, UI toolkit, renderer, templates, and print                   |
 | 5a      | [Localization](localization.md)                                        | Vietnamese and English interface, separate from resume text                |
-| 5b      | [Security](security.md)                                                | Identity, sessions, CSRF, agent OAuth, limits, and content                 |
+| 5b      | [Security](security.md)                                                | Sessions, CSRF, agent OAuth, limits, print authority, and content          |
+| Other   | [Sign-in security](security-sign-in.md)                                | Provider identity, password authentication, and OAuth transaction          |
 | 5c      | [Second-factor authentication](second-factor-authentication.md)        | Shared passkey, TOTP, recovery, and epoch rules                            |
 | 5d      | [Passkey contract](passkey-second-factor-contract.md)                  | Pending, WebAuthn, recovery, mail, and passkey storage shapes              |
 | 5e      | [Authenticator-app contract](totp-second-factor-contract.md)           | TOTP routes, failure budget, and storage                                   |
@@ -33,31 +34,43 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CloudFront origin](cloudfront-origin.md)                              | AWS reference origin access, certificates, and client-address trust        |
 | Other   | [CloudFront delivery](cloudfront-delivery.md)                          | AWS reference TLS, DNS, forwarding, caching, headers, WAF, and operations  |
 | Other   | [CloudFront verification](cloudfront-verification.md)                  | AWS reference migration, parity, tests, and unresolved facts               |
-| 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, storage switch, and abuse detection     |
-| Other   | [CrowdSec privacy notification](crowdsec-privacy-notification.md)      | Notice, email acceptance, activation, and restore denial                   |
+| 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Storage, authorization, retention, log privacy, backups, and notice        |
+| Other   | [CrowdSec request feed](crowdsec-request-feed.md)                      | Feed fields, route and probe classes, target samples, and detection        |
+| Other   | [CrowdSec storage migration](crowdsec-storage-migration.md)            | SQLite to PostgreSQL switch, approved loss, reset, and release order       |
+| Other   | [CrowdSec privacy notification](crowdsec-privacy-notification.md)      | Notice cutoff, durable state, email delivery, message, and proof           |
+| Other   | [CrowdSec notice commands](crowdsec-privacy-notification-commands.md)  | Send authority, restore fence, activation, abort, and wire contract        |
 | Other   | [CrowdSec retention batching](crowdsec-retention-batching.md)          | Nightly and age-triggered stopped reconciliation                           |
 | Other   | [CrowdSec retention reload](crowdsec-retention-reload.md)              | Why graceful reload cannot replace stopped reconciliation                  |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
-| Other   | [Host hardening](host-hardening.md)                                    | Proposed host controls, private inputs, risks, and staged rollout          |
+| Other   | [Host hardening](host-hardening.md)                                    | Proposed host controls, evidence, risks, and staged rollout                |
+| Other   | [Host hardening: access](host-hardening-access.md)                     | Proposed SSH, security group, and private-value controls                   |
+| Other   | [Host hardening: confinement](host-hardening-confinement.md)           | Proposed container, Chromium, and host service confinement                 |
 | 6g      | [Restore drill networking](restore-drill-networking.md)                | Temporary outbound access for the backup restore drill                     |
 | Other   | [vMonitor quota renewal](vmonitor-quota-renewal.md)                    | Scheduled free alarm quota renewal, trust boundaries, and failure rules    |
+| Other   | [vMonitor renewal CLI](vmonitor-quota-renewal-cli.md)                  | Pinned CLI evidence, script reads, and renewal output contract             |
 | Other   | [Telegram host alerts](telegram-host-alerts.md)                        | Host alert transport, custody, limits, and rollout                         |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                                  |
 | Other   | [Server code layout](server-code-layout.md)                            | Proposed Go splits, reuse boundaries, style rules, and length limits       |
 | Other   | [CI path selection](ci-path-selection.md)                              | Pull request prose allowlist and required gate behavior                    |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                                 |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks                |
-| 9a      | [Vietnam host operations](vietnam-host-operations.md)                  | Account deletion, key rotation, recovery, and verification                 |
-| Other   | [Host operations delivery](vietnam-host-operations-delivery.md)        | Wire protocol, proof transport, and hosted checks                          |
+| 9a      | [Vietnam host operations](vietnam-host-operations.md)                  | Release split, operator interface, fence, deletion, and audit              |
+| Other   | [Host key operations](vietnam-host-operations-keys.md)                 | Secret custody, TOTP rotation, and view-pass rotation                      |
+| Other   | [Host operations delivery](vietnam-host-operations-delivery.md)        | Host protocol, wire schemas, file map, tests, and shipping docs            |
+| Other   | [Host operations recovery](vietnam-host-operations-recovery.md)        | Quiescent repair and recovery archive                                      |
+| Other   | [Host operations proofs](vietnam-host-operations-proofs.md)            | Deletion checks and production browser proofs                              |
 | 10      | [Decision status](decisions.md)                                        | ADR index, open gates, and change process                                  |
 | Other   | [Numeric budgets](budgets.md)                                          | Hard limits, rate policies, SLOs, and benchmark protocol                   |
 | Other   | [Vietnam tech resumes](vietnam-tech-resumes.md)                        | Resume language and writing rules for developers in Vietnam                |
+| Other   | [Vietnam tech resume entries](vietnam-tech-resumes-entries.md)         | Dates, locations, employers, scores, education, and certificates           |
 | Other   | [Font catalog](fonts.md)                                               | Font license gate, provenance, coverage, and fallback                      |
 | Other   | [MCP owner workflow](mcp-owner-workflow.md)                            | Official-SDK client run that copies one resume into Vietnamese             |
 | Other   | [MCP client compatibility](mcp-client-compatibility.md)                | OAuth rules Claude and TypeScript SDK clients need                         |
 | Other   | [MCP Client ID Metadata Documents](mcp-cimd.md)                        | Motivation, sources, release, and owner decisions                          |
 | Other   | [MCP CIMD metadata fetching](mcp-cimd-fetch.md)                        | URL validation, fetch, SSRF, documents, cache, and limits                  |
 | Other   | [MCP CIMD authorization](mcp-cimd-authorization.md)                    | Consent, stored clients, errors, privacy, and compatibility                |
+| Other   | [MCP CIMD revocation](mcp-cimd-revocation.md)                          | Token revocation form, authority, and response equality                    |
+| Other   | [MCP CIMD failed-grant admission](mcp-cimd-grant-admission.md)         | Grant-keyed failed-grant limits and refusal responses                      |
 | Other   | [MCP CIMD verification](mcp-cimd-verification.md)                      | Abuse cases and acceptance checks                                          |
 | Other   | [MCP guide](mcp-guide.md)                                              | Public page on connecting an AI assistant through MCP                      |
 | Other   | [MCP guide copy](mcp-guide-copy.md)                                    | Vietnamese and English text of the MCP guide                               |
@@ -73,7 +86,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [LinkedIn import verification](linkedin-import-verification.md)        | Fixtures, test cases, compatibility, and open facts                        |
 | Other   | [LinkedIn import page](linkedin-import-ui.md)                          | Import page states, layout, accessibility, and copy                        |
 | Other   | [Viewer analytics](viewer-analytics/README.md)                         | View counts and sign in to view, with no viewer data kept                  |
-| Other   | [Public page bar and theme](public-page-theme.md)                      | Page bar, owner color scheme, and the dark palette rule                    |
+| Other   | [Public page bar and theme](public-page-theme.md)                      | Owner decisions, color scheme setting, and the dark palette rule           |
+| Other   | [Public page bar](public-page-bar.md)                                  | Bar structure, copy, tokens, size, and behavior                            |
 | Other   | [Community showcase](showcase.md)                                      | Showcase product scope, decisions, and approvals                           |
 | Other   | [Showcase contract](showcase-contract.md)                              | Listing fields, filters, delivery, revocation, and compatibility           |
 | Other   | [Showcase copy](showcase-copy.md)                                      | Approved bilingual interface and legal text                                |
@@ -89,7 +103,8 @@ Current behavior lives in code, deployment configuration, and
 
 ## Accepted tooling transition
 
-[Local tooling](local-tooling-simplification.md) and
+[Local tooling](local-tooling-simplification.md), its
+[native runner](local-tooling-native-runner.md), and
 [display assertions](display-assertions.md) were accepted on 2026-11-01. Their
 ADR amendments are recorded; implementation and runtime acceptance remain
 pending. Existing commands and pixel gates remain until their replacements land.

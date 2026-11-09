@@ -15,7 +15,10 @@ can support setup while leaving key rotation open.
 | [Authentication email](email.md)                      | Supported                           | Operate Bizfly SMTP and the Google Workspace mailbox                       |
 | [CrowdSec privacy notice](crowdsec-privacy-notice.md) | Supported                           | First adoption, initial reconciliation, notification, and activation       |
 | [CrowdSec PostgreSQL](crowdsec-postgresql.md)         | Supported                           | Ordinary storage migration, retention failure, and explicit database reset |
-| [Production](production.md)                           | Supported                           | Deploy, rollback, access, edge settings, and secrets                       |
+| [Production](production.md)                           | Supported                           | Access, edge settings, host operations, backups, and alarms                |
+| [Production secrets](secrets.md)                      | Supported                           | Secret files, imports, rotations, flags, and the mail sender               |
+| [Production deploy](deploy.md)                        | Supported                           | Eligibility, deploy steps, failed deploys, rollback, and the release fence |
+| [Vulnerability scans](vulnerability-scans.md)         | Supported                           | Weekly security scan and explicit release dispatch                         |
 | [DNS](dns.md)                                         | Supported                           | Cloudflare DNS-only records and DNSSEC                                     |
 | [CloudFront](cloudfront.md)                           | Reference                           | Certificates and edge checks for the undeployed AWS path                   |
 | [Deployment observer](observer.md)                    | Supported                           | Operate the Vietnam host reporter and observer                             |

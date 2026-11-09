@@ -1,10 +1,12 @@
 # Vietnam host operations delivery and proofs
 
 The [operations design](vietnam-host-operations.md) owns behavior,
-authorization, recovery and release order. This companion owns recovery archive
-and repair details, proof transport, implementation ownership, tests, and
-shipping documentation. The combined contract exceeds 450 lines, so proofs and
-delivery have a separate home.
+authorization, recovery and release order. This companion owns implementation
+ownership, tests, and shipping documentation;
+[recovery](vietnam-host-operations-recovery.md) owns recovery archive and repair
+details, and [proofs](vietnam-host-operations-proofs.md) owns proof transport.
+The combined contract exceeds 400 lines, so proofs and delivery have a separate
+home.
 
 ## Host protocol details
 
@@ -25,10 +27,11 @@ are `pending`, `complete`, `refused`, `unknown`, `absent_after_unknown`,
 `aborted`, `suspended`, and `unverified`. Account deletion tracks write outcome,
 public verification and physical cleanup separately, so pending cleanup cannot
 turn into a second delete. State includes `schemaVersion:1`; unknown versions
-refuse mutation. Proof phases are the subset defined below. Terminal duplicates
-return saved results. A suspended TOTP request alone may leave `closed` through
-explicit resume after checks; rebind updates its saved release while suspended.
-An aborted or completed request never restarts.
+refuse mutation. Proof phases are the subset defined in
+[proofs](vietnam-host-operations-proofs.md). Terminal duplicates return saved
+results. A suspended TOTP request alone may leave `closed` through explicit
+resume after checks; rebind updates its saved release while suspended. An
+aborted or completed request never restarts.
 
 Store a proof reply under the request flock, at most once per nonce, with the
 same fsync/rename discipline. Reject mismatched request/digest/phase, unknown or
@@ -48,122 +51,13 @@ commit outcomes use a separate read attempt after old backends disappear.
 
 ## Quiescent repair
 
-This is a privileged host procedure for a rotation that cannot serve, not a new
-public command or ordinary `rebind`. It ships with TOTP rotation and applies to
-view-pass rotation when that feature ships. The operator runs a reviewed repair
-bundle from clean, current reviewed `main` over pinned SSH as `aboutme-admin`
-with sudo, independently of the broken runner. The repair may replace only the
-reviewed operation helpers/units and bind a compatible forward image. It must
-support the saved version-1 protocol and existing database schema; no migration,
-DB restore, key generation, credential reset, or general installer runs here.
-
-1. Verify the repair bundle's exact hashes, independent review and green CI;
-   verify any image's normal tag eligibility, provenance and amd64 digests. The
-   image must meet every current floor and enabled flag, and the tested rotation
-   contract allowlist. No healthy live release or successful suspension is an
-   entry condition. Unknown/malformed state requires a separately reviewed
-   recovery; this path never guesses a missing key or marker owner.
-2. Stop the old request unit before taking its flock; never treat stop success
-   as quiescence. Take the request flock and fence as its same owner, drain
-   jobs, then take the workload lock. Stop serving units and all matching
-   containers; prove all matching operation and serving DB backends absent. Keep
-   timers stopped and prove external maintenance 503. Take a root-only
-   checkpoint of request state, fence, marker, flags and key metadata. Preserve
-   key bytes, staging, archives and recovery receipts in place, without emitting
-   values. Retain the key marker, or create one for this request before code or
-   binding changes. Keep it through repair; ordinary starts and installation
-   stay blocked.
-3. Fsync a repair intent in the request with old/new release records, bundle
-   hashes, reason, UTC and stage (`installing|bound|verified`). Retain attempt
-   history, target rotation, fence owner, markers, flags and release floors.
-   Install only the reviewed files while quiescent; verify all installed hashes
-   before running any repaired helper. Interrupted installation stays fenced.
-4. If the image changes, reconcile the request, fence tag and existing marker's
-   release binding to the new record under that intent. Partial binding blocks
-   every start; recovery uses the intent to finish the same binding, never clear
-   ownership. Keep the old record as evidence. Invalidate proof nonces and zero
-   snapshots and restart the TOTP wait. A bundle-only repair keeps the image.
-5. The repaired owning runner resumes the saved rotation forward with the same
-   keys and target ring. Only its normal file/secret/unit consistency checks may
-   remove a key marker. Then use `reload-live` and fresh readiness, ring and
-   external serving checks. No repair step bypasses a marker to start an image.
-
-The operator records `verified` only after installed hashes and running digests
-match the repair intent, configuration matches the intended ring/key, and fresh
-action-specific serving proof passes (or view-pass closes `unverified` under its
-lost-witness rule). TOTP re-encryption, zero snapshots, wait and retirement
-still finish through normal resume/retire. Repair success never implies rotation
-completion. Failure retains maintenance and the fence; a retry adopts the same
-intent after quiescence. No automatic rollback, fence clear or state deletion.
+[Host operations recovery](vietnam-host-operations-recovery.md#quiescent-repair)
+owns the privileged repair of a rotation that cannot serve.
 
 ## Recovery archive
 
-TOTP rotation ships this versioned format; deletion needs no archive or age
-recipient. `operation-copy` normalizes only TOTP and view keys from current
-files, staging and archives into an age-encrypted, uncompressed tar. Plaintext
-contains exactly `manifest.json` and the regular files it lists, no host paths,
-other credentials, database, request audit or identity. Key files contain
-exactly 43 ASCII base64url bytes without a newline. Directories are implicit.
-Limit the manifest to 1 MiB, keys to 4096 entries, and decrypted tar to 8 MiB;
-refuse export overflow without pruning keys. Manifest JSON has exactly these
-required fields:
-
-| Field                       | Contract                                                                                                                                             |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion`             | Integer 1. Unknown versions refuse restore.                                                                                                          |
-| `requestId`, `kind`         | Existing request grammar; kind is `totp-rotate` or `view-pass-rotate`.                                                                               |
-| `createdAt`, `purpose`      | UTC RFC3339; `switch` or `retire` (TOTP only).                                                                                                       |
-| `release`, `minimumRelease` | Closed saved release-json; nonnegative integer host floor at export.                                                                                 |
-| `totpBefore`, `totpAfter`   | Each exactly `{active,previous}`; active is `{slot,keyId}`, previous is that shape or null. Slot is `a` or `b`; ID uses the TOTP derived-ID grammar. |
-| `viewKeys`                  | Array of exactly `{sha256,restoreState}`; state is always `retired`. Includes current, staged and archived view keys.                                |
-| `files`                     | Array of exactly `{path,sha256}`; digests are 64 lowercase hex over the normalized file bytes.                                                       |
-
-TOTP paths are exactly `keys/totp/<derived-id>`; view paths are exactly
-`keys/view/<sha256>`. Sort files by path and `viewKeys` by digest; reject
-duplicates. Every ring/view reference must name a file; every view file needs a
-`viewKeys` entry. Unreferenced TOTP files are historical keys, never implicit
-active slots. For a TOTP switch, `totpBefore` is the saved old-only ring and
-`totpAfter` is staged active plus old previous. For retirement, before is the
-two-key ring and after removes previous. View rotation keeps both TOTP ring
-records identical. Slot and ID must be distinct within a ring; the union
-contains at most two TOTP IDs, each mapped to the same slot across both rings.
-The manifest describes intent, not proof of activation. `restoreState:retired`
-forbids loading any exported view key on restore, even if still live or staged
-when exported. Activation itself continues to use the original request state.
-Export validates this contract against the saved request, release and staged key
-ID before encryption. Every `sha256` field uses 64 lowercase hex characters.
-
-Restore is an operator-run, reviewed host recovery under maintenance. Decrypt
-through a process using the separately held age identity, never through model
-context, logs or the repository. Use a fresh root-only destination and validate
-the complete archive before installing anything: age authentication, closed JSON
-without unknown or duplicate fields, sizes, canonical encoding, digests, derived
-TOTP IDs, ring transitions and exact file set. Reject links, special files,
-absolute/traversal paths, duplicate tar entries and unlisted/trailing content;
-never extract over live files. Restore modes are directories 0700, keys 0400.
-
-Inventory distinct key IDs from **all** restored TOTP credential and enrollment
-rows, including expired enrollments, without printing row data. Select a
-retained manifest whose before/after union covers that inventory; timestamps and
-current slot filenames never establish precedence. Install `totpAfter.active`,
-including its staged bytes when activation was partial, and map the union's
-other key as previous in its recorded slot. This deliberately retains both keys
-even for a retirement export. A pre-switch DB can also move forward through this
-ring. More than two row IDs, missing keys or no matching manifest stops
-recovery; historical TOTP files require their matching retained manifest, not a
-guessed mapping. Do not merge conflicting manifests or rewrite factors to make
-them fit.
-
-Generate a fresh view key on the restored host; every historical view key stays
-retired. The manifest never overwrites surviving request state, markers, flags
-or floors, and never authorizes replay of an interrupted request. Resolve those
-under the reviewed recovery before serving. Use an eligible schema-compatible
-image at or above the current host floor, manifest floor and all enabled-flag
-floors; loss of current floor authority requires reviewed reconstruction before
-serving, not adoption of the archived floor. Start a fresh ten-minute wait when
-the restored ring becomes active; reboot restarts it. Prove normal
-re-encryption, both zero snapshots and TOTP sign-in before retiring the previous
-key. Require readiness and external serving proofs; retain both keys on failure.
+[Host operations recovery](vietnam-host-operations-recovery.md#recovery-archive)
+owns the key archive format, validation, and restore.
 
 ## Wire schemas
 
@@ -240,77 +134,8 @@ remain unchanged except the expanded account-delete usage.
 
 ## External proofs
 
-New `scripts/host-operations-proof.sh <id>` reads the saved action over SSH.
-Account deletion uses bounded HTTPS requests only, with a 10-second request
-limit and five-minute total limit; no login or browser dependency. It checks
-known slugs and discovery/showcase membership, discards bodies, and forwards
-only fixed outcomes. No screenshots or content artifacts are saved. The host
-publishes a `serving` challenge for this check after resolving deletion.
-
-Rotation uses the pinned production Playwright image and a named fictional
-account/resume supplied by the primary. The wrapper requires the
-[local memory watchdog](../../instructions/resources.md), the shared local-check
-lock, no active local stack, the browser container limits, and a 60-minute
-timeout. It stages only allowlisted sources; no host dependency install. Modes
-are `hostops-prod-totp` and `hostops-prod-view-pass`. The origin is exactly
-`https://aboutme.vn`. These proofs are run by the primary, not a worker or
-public CI.
-
-Owner-only 0600 `request.json` contains `requestId`, `action`, `digest`,
-`slugs`, and view-pass `witnessSlug`. Rotation `account.env` contains only the
-named fictional account's inputs: TOTP `ABOUTME_TEST_EMAIL` and
-`ABOUTME_TEST_PASSWORD`; view-pass `PROVIDER` (`google|linkedin`),
-`PROVIDER_USERNAME`, `PROVIDER_PASSWORD`. The wrapper checks metadata and mounts
-these read-only; only the browser process reads values. Missing inputs or a
-provider challenge blocks. Never create accounts/resumes or use the owner's
-account. Precheck the witness has sign-in-to-view, photo and PDF enabled.
-
-The browser runs in laptop tmpfs with a 0700 `control/` directory mounted
-read-only and `reply/` writable. Wrapper `control/phase.json` and browser
-`reply/result.json` are atomically renamed, at most 1 KiB each. Closed fields
-are `requestId`, `digest`, `phase`, `nonce` (32-byte random base64url); replies
-add `result` (`pass|fail`). Reject symlinks, unknown fields, wrong tuple, stale
-nonce and duplicate advance. Poll once per second, one outstanding challenge.
-Forward valid replies through the private host `proof` verb. Host challenges
-expire after five minutes; timeout/exit/failure never advances an effect. The
-host unit can exit at its durable waiting phase; resume challenges again.
-
-Disable traces, screenshots, video, downloads, raw browser output, and assertion
-value dumps. No SSH agent/key, Podman socket, host directory or recovery archive
-is mounted. Browser memory holds cookies, TOTP setup seed, recovery codes, and
-provider session only. Its finalizer removes only its own proof factor, logs
-out, and deletes profiles/channel files. Failed cleanup is explicit, not
-success. Existing unrelated factors must never be removed.
-
-| Challenge            | What passes                                                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepared` TOTP      | Refuse an existing TOTP factor; enroll a temporary one under the old active key and prove sign-in.                                                        |
-| `prepared` view-pass | Obtain a pass, prove it admits every protected route and no-pass requests are gated; retain exact cookie plus decoded resume ID, epoch, expiry in memory. |
-| `maintenance`        | TLS verified; public origin returns 503 with `aboutme:maintenance` after Go and serving Caddy stop.                                                       |
-| `serving` TOTP       | Public readiness/reads and sign-in with the prepared factor succeed after re-encryption.                                                                  |
-| `serving` view-pass  | Old-cookie/fresh-cookie comparison below succeeds.                                                                                                        |
-| `retired` TOTP       | Sign-in succeeds with only new active mapped; public readiness/reads succeed.                                                                             |
-
-A lost TOTP browser can permanently lose the fictional account if every factor
-and recovery code was lost
-([ADR 0017](../adr/0017-second-factor-authentication.md)). It never authorizes
-an operator reset. Resume can use another named factorless fictional account
-under the current ring. Keep prior switch evidence: before activation repeat
-`prepared`; after activation repeat `serving`/`retired` without rewinding keys.
-A replacement witness alone does not prove old rows decrypt; the successful
-re-encryption result and both zero snapshots remain required.
-
-For view-pass, obtain a fresh provider pass in a separate browser context after
-reload. Require the same resume ID and epoch, unchanged live/gated state and
-slug, and old expiry at least 60 seconds later than server HTTP `Date`
-throughout the comparison. Replay the exact old cookie in an isolated context
-without the fresh cookie. HTML must gate; JSON, photo, PDF, live stream and view
-start must return the uniform 404. The fresh cookie must admit the same routes.
-Check
-[discovery and preview exceptions](viewer-analytics/sign-in-to-view.md#gated-routes),
-readiness and ordinary public reads. Do not toggle publish state to simplify the
-proof. Lost/expired witness, changed epoch/ID, provider challenge or ambiguous
-state follows the main design's `unverified` outcome, never a false pass.
+[Host operations proofs](vietnam-host-operations-proofs.md) owns the HTTPS
+deletion checks, the production browser proof channel, and challenge rules.
 
 ## Implementation file map
 
@@ -390,23 +215,23 @@ Update each item in its feature's implementation release, not ahead of code:
 
 - **Account deletion:** `docs/runbooks/account-delete.md` Run it, Steps, Audit
   and failures; `docs/runbooks/production.md` Access and state, a Host
-  operations section, Passkey release fence, Alarms; `deploy/vn/README.md`
-  operator command and bundle installation instructions. Update
-  `docs/design/showcase.md`'s open host-audit paragraph and
+  operations section, Alarms; `docs/runbooks/deploy.md` Passkey release fence;
+  `deploy/vn/README.md` operator command and bundle installation instructions.
+  Update `docs/design/showcase.md`'s open host-audit paragraph and
   `showcase-contract.md`'s audit store wording to link to the root-only 180-day
   record. Add the operations link in `docs/design/README.md`. Remove exactly the
   backlog item "Add and review a host procedure for abuse account deletion."
 - **TOTP:** `docs/runbooks/totp-keys.md` Key rotation, TOTP unavailable,
-  Production proofs, Forward fix; production Secrets, Failed deploy, Rollback,
-  Passkey release fence, Backups and restore, Reboot; host README secret import
-  guards, quiescent repair steps and recovery archive validation/restore
-  examples. Replace open-procedure text with links in
-  `docs/design/totp-key-management.md` and `passkey-release-fence.md`; update
-  `vietnam-production.md` Secrets and host identity and Release fence marker
-  rules. Remove exactly "Add and review a host procedure for TOTP key
-  re-encryption."
+  Production proofs, Forward fix; `docs/runbooks/secrets.md`;
+  `docs/runbooks/deploy.md` Failed deploy, Rollback, Passkey release fence;
+  production Backups and restore, Reboot; host README secret import guards,
+  quiescent repair steps and recovery archive validation/restore examples.
+  Replace open-procedure text with links in `docs/design/totp-key-management.md`
+  and `passkey-release-fence.md`; update `vietnam-production.md` Secrets and
+  host identity and Release fence marker rules. Remove exactly "Add and review a
+  host procedure for TOTP key re-encryption."
 - **View-pass:** `docs/runbooks/sign-in-to-view.md` Key rotation and Rollback;
-  production Secrets and Backups and restore; host README and
+  `docs/runbooks/secrets.md` and production Backups and restore; host README and
   `docs/design/viewer-analytics/sign-in-to-view.md` key-rotation link. Remove
   exactly "Add and review a host procedure for rotating the sign-in-to-view
   key." Keep other backlog items.
