@@ -21,6 +21,7 @@ import {
   pinEnglish,
   signInWithGoogle,
   startLinkedInAuthorize,
+  WAIT_WARM_MS,
   waitForHydration,
 } from './harness-lib';
 import {
@@ -28,6 +29,7 @@ import {
   httpFailureStatus,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedAnonymousMeConsole,
 } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
@@ -362,9 +364,14 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   // document itself expected.
   let deleted = false;
   // Gated routes answer 404 to an anonymous fetch on purpose, so the
-  // browser's own console line for those exact reads is expected.
+  // browser's own console line for those exact reads is expected. So is the
+  // 401 the signed-out viewer's /api/v1/me read gets on /guide/mcp, the
+  // application page these reads run from.
   const attach = pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) => {
+      if (isExpectedAnonymousMeConsole(message.text(), message.location().url)) {
+        return false;
+      }
       if (httpFailureStatus(message.text()) !== 404) return true;
       let path = '';
       try {
@@ -487,7 +494,15 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.gate = true;
 
   stage('view-gated-routes');
+  // The page's shell reads /api/v1/me once it hydrates, after goto returns.
+  // Waiting for that read keeps its console line inside this visit on every
+  // run, instead of racing the next navigation away from the page.
+  const meRead = anon.waitForResponse(
+    (response) => response.url() === `${ORIGIN}/api/v1/me`,
+    { timeout: WAIT_WARM_MS },
+  );
   await anon.goto(`${ORIGIN}/guide/mcp`);
+  expect((await meRead).status()).toBe(401);
   expect(await gatedStatuses(anon, slug, true)).toEqual({
     json: 404,
     pdf: 404,
