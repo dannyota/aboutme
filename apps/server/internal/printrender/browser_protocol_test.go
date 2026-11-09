@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	jsonv2 "github.com/chromedp/cdproto/cdp/jsonv2"
@@ -87,6 +88,45 @@ exit 7
 	}
 	if _, statErr := os.Lstat(profiles[0]); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("profile after teardown: %v, want removed", statErr)
+	}
+}
+
+func TestBrowserProfileRemovalFailureFailsTheAttemptWithoutPrivateText(t *testing.T) {
+	supervisor := testSupervisorCommand(t)
+	supervisor.removeProfile = func(profile string) error {
+		if err := os.RemoveAll(profile); err != nil {
+			return err
+		}
+		return &os.PathError{Op: "unlinkat", Path: "/private/path/TOKEN=private-value", Err: syscall.EACCES}
+	}
+	for _, test := range []struct {
+		name     string
+		diagnose bool
+		runErr   error
+		want     error
+		stage    string
+	}{
+		{"successful render", false, nil, ErrRenderFailed, "profile-cleanup"},
+		{"successful readiness", true, nil, ErrUnavailable, "profile-cleanup"},
+		{"earlier render error", false, ErrOutputTooLarge, ErrOutputTooLarge, ""},
+		{"earlier readiness error", true, errors.New("private-value document-text"), ErrUnavailable, "launch"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := withBrowser(t.Context(), "/bin/true", "http://127.0.0.1:20030", supervisor, test.diagnose, func(context.Context) error {
+				return test.runErr
+			})
+			if test.stage == "" {
+				if !errors.Is(err, test.want) || strings.Contains(err.Error(), "profile-cleanup") {
+					t.Fatalf("error = %v, want the earlier %v", err, test.want)
+				}
+				return
+			}
+			detail := "permission denied"
+			if test.stage == "launch" {
+				detail = "detail redacted"
+			}
+			assertInitializationError(t, err, test.want, test.stage, detail)
+		})
 	}
 }
 

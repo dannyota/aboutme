@@ -103,6 +103,9 @@ func controlledBrowserArguments(executable string, arguments ...string) []string
 type supervisorCommand struct {
 	path   string
 	prefix []string
+	// removeProfile removes the browser profile after joined teardown. Nil
+	// means os.RemoveAll; tests inject removal failures.
+	removeProfile func(string) error
 }
 
 type browserJoinProof struct {
@@ -224,6 +227,10 @@ func ignoreProcessError(error) {}
 
 func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, diagnose bool, run func(context.Context) error) (resultErr error) {
 	started := time.Now()
+	removeProfile := supervisor.removeProfile
+	if removeProfile == nil {
+		removeProfile = os.RemoveAll
+	}
 	profile, err := os.MkdirTemp("", browserProfilePrefix)
 	if err != nil {
 		if diagnose {
@@ -240,8 +247,13 @@ func withBrowser(ctx context.Context, executable, proxyURL string, supervisor su
 		proof.completeIfNotStarted()
 		proof.wait()
 		// The proof completes only after every browser process is terminal, so
-		// no browser process can still write to the profile.
-		ignoreProcessError(os.RemoveAll(profile))
+		// no browser process can still write to the profile. A profile left
+		// behind fails the attempt unless an earlier error already does.
+		if removeErr := removeProfile(profile); removeErr != nil && resultErr == nil {
+			failure := initializationFailure(ErrRenderFailed, "profile-cleanup", initializationReason(removeErr))
+			failure.elapsed = time.Since(started)
+			resultErr = failure
+		}
 		if diagnose && resultErr != nil {
 			proof.mu.Lock()
 			var state *os.ProcessState
