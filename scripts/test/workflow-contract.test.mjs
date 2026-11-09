@@ -79,6 +79,7 @@ test("approval probe rejects trigger, authority, gate, and execution drift", () 
 });
 
 const proseJobs = ["macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"];
+const contractJobs = ["contracts", "operational", "dev-https-static"];
 const selectionCondition = "github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'";
 
 function checkSelection(ci) {
@@ -95,7 +96,10 @@ function checkSelection(ci) {
     assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
     assert.equal(ci.jobs[name].if, selectionCondition, `${name}: exact selection condition`);
   }
-  assert.equal(ci.jobs.contracts.if, undefined, "all contracts always run");
+  for (const name of contractJobs) {
+    assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
+    assert.equal(ci.jobs[name].if, undefined, `${name}: all contracts always run`);
+  }
   const expression = selectionCondition.replace("needs.preflight.outputs.selection", "selection");
   for (const event of ["pull_request", "push", "workflow_dispatch"]) {
     for (const selection of ["prose", "full", "", undefined, "unknown"]) {
@@ -124,6 +128,11 @@ test("selection retains guards, all contracts, and explicit PR omissions", () =>
       mutate(ci.jobs[name]);
       assert.throws(() => checkSelection(ci), /selection condition|required preflight/);
     }
+  }
+  for (const name of contractJobs) {
+    const ci = readWorkflow("ci");
+    ci.jobs[name].if = selectionCondition;
+    assert.throws(() => checkSelection(ci), /all contracts always run/, name);
   }
 });
 
@@ -1043,17 +1052,75 @@ test("product image uploads reject other commit and run directories", () => {
   assert.throws(() => checkTemplatePages(workflow, readWorkflow("ci")));
 });
 
-test("contracts retains sanitized startup evidence when a check fails", () => {
-  const steps = readWorkflow("ci").jobs.contracts.steps;
-  const start = steps.find((step) => step.name === "Start the dev-https static suite shards");
-  assert.equal(start.env.DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR, "${{ runner.temp }}/dev-https-startup-diagnostics");
-  const upload = steps.find((step) => step.with?.name === "dev-https-startup-diagnostics");
-  assert.ok(upload, "contracts needs startup evidence after fixture cleanup");
+test("dev-https static shards retain sanitized startup evidence when a check fails", () => {
+  const steps = readWorkflow("ci").jobs["dev-https-static"].steps;
+  const run = steps.find((step) => step.name === "Run the dev-https static suite shard");
+  assert.equal(run.env.DEV_HTTPS_DIAGNOSTICS_ARTIFACT_DIR, "${{ runner.temp }}/dev-https-startup-diagnostics");
+  const upload = steps.find((step) => step.with?.name === "dev-https-startup-diagnostics-${{ matrix.shard }}");
+  assert.ok(upload, "each shard needs its own startup evidence after fixture cleanup");
+  assert.ok(steps.indexOf(run) < steps.indexOf(upload), "upload follows the suite");
   assert.equal(upload.if, "${{ failure() && !cancelled() }}");
   assert.equal(upload.with.path, "${{ runner.temp }}/dev-https-startup-diagnostics/*.txt");
   assert.equal(upload.with["retention-days"], 14);
   assert.equal(upload.with["if-no-files-found"], "ignore");
   assert.ok(!upload["continue-on-error"]);
+});
+
+// Every operational suite that left contracts still runs once, in a job that
+// no selection can skip, and the dev-https shards cover every check.
+function checkOperationalJobs(ci) {
+  const commands = (name) => (ci.jobs[name].steps ?? []).map((step) => step.run ?? "");
+  const runs = (target) => Object.keys(ci.jobs).flatMap((name) => commands(name)
+    .filter((run) => run.split(/\s+/).includes(target)).map(() => name));
+  assert.deepEqual(runs("operational-test-fast"), ["operational"], "operational-test-fast runs once");
+  assert.deepEqual(runs("operational-test-browser"), ["operational"], "operational-test-browser runs once");
+  assert.deepEqual(runs("operational-test-deploy"), ["operational"], "operational-test-deploy runs once");
+  assert.deepEqual(runs("operational-test-dev-https"), ["dev-https-static"], "operational-test-dev-https runs in its shards");
+  const operational = ci.jobs.operational.steps;
+  const start = operational.findIndex((step) => step.run === "bash scripts/ci-background.sh start deploy-tests make operational-test-deploy");
+  const wait = operational.findIndex((step) => step.run === "bash scripts/ci-background.sh wait deploy-tests");
+  assert.ok(start >= 0 && wait > start, "operational waits for the deploy-script tests it starts");
+  assert.equal(operational[wait].if, "${{ !cancelled() }}", "deploy-script result survives an earlier failure");
+  for (const target of ["operational-test-fast", "operational-test-browser"]) {
+    const step = operational.find((entry) => entry.run === `make ${target}`);
+    assert.ok(step, `${target}: exact make command`);
+    assert.ok(operational.indexOf(step) < wait, `${target}: runs before the job ends`);
+  }
+  const job = ci.jobs["dev-https-static"];
+  assert.equal(job.strategy["fail-fast"], false, "every shard finishes");
+  const shards = job.strategy.matrix.shard;
+  const run = job.steps.find((step) => step.env?.SHARD);
+  assert.equal(run.env.SHARD, "${{ matrix.shard }}");
+  const match = run.run.match(/^make operational-test-dev-https DEV_HTTPS_TEST_SHARD="\$SHARD\/(\d+)"$/);
+  assert.ok(match, "dev-https static shard command");
+  assert.deepEqual(shards, Array.from({ length: Number(match[1]) }, (_, index) => index),
+    "dev-https static matrix lists every shard index once");
+  assert.equal(run.if, undefined, "dev-https static shard always runs");
+  assert.equal(job.steps.indexOf(run), 1, "dev-https static shard runs right after checkout");
+}
+
+test("operational suites run once in jobs every selection keeps", () => {
+  checkOperationalJobs(readWorkflow("ci"));
+});
+
+test("operational suite checks reject lost, duplicated, and partial work", () => {
+  const fixtures = [
+    ["dropped fast suite", (ci) => { ci.jobs.operational.steps = ci.jobs.operational.steps.filter((step) => step.run !== "make operational-test-fast"); }],
+    ["duplicated browser suite", (ci) => { ci.jobs.contracts.steps.push({ run: "make operational-test-browser" }); }],
+    ["no deploy wait", (ci) => { ci.jobs.operational.steps = ci.jobs.operational.steps.filter((step) => !step.run?.includes("wait deploy-tests")); }],
+    ["missing shard", (ci) => { ci.jobs["dev-https-static"].strategy.matrix.shard = [0, 1, 2]; }],
+    ["duplicated shard", (ci) => { ci.jobs["dev-https-static"].strategy.matrix.shard = [0, 1, 2, 2]; }],
+    ["shard count drift", (ci) => {
+      const run = ci.jobs["dev-https-static"].steps.find((step) => step.env?.SHARD);
+      run.run = run.run.replace("/4", "/5");
+    }],
+    ["fail-fast shards", (ci) => { ci.jobs["dev-https-static"].strategy["fail-fast"] = true; }],
+  ];
+  for (const [name, mutate] of fixtures) {
+    const ci = readWorkflow("ci");
+    mutate(ci);
+    assert.throws(() => checkOperationalJobs(ci), undefined, name);
+  }
 });
 
 test("browser artifact contract rejects unsafe uploads and masked failures", () => {
@@ -1177,6 +1244,8 @@ function checkJobTimeouts(ci, vn) {
   const timeouts = {
     preflight: 5,
     contracts: 20,
+    operational: 20,
+    "dev-https-static": 20,
     "macos-tooling": 5,
     server: 20,
     "server-integration": 20,

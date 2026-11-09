@@ -314,10 +314,10 @@ Add `server-runtime-smoke` (`Server runtime smoke`) after `web` in
 `.github/workflows/ci.yml`, `ubuntu-24.04`, needing `[preflight, server, web]`,
 with the existing full/prose condition. Add it to `ci.needs`, expected keys and
 the permitted PR-prose skip set (nine omissions). Complete keys: `preflight`,
-`contracts`, `macos-tooling`, `vn-infra`, `server`, `server-integration`,
-`server-resumeapi`, `web`, `web-e2e`, `dev-https-proofs`,
-`server-runtime-smoke`. Update selection design/contracts together; missing
-evidence, cancellation or unexplained skips fail.
+`contracts`, `operational`, `dev-https-static`, `macos-tooling`, `vn-infra`,
+`server`, `server-integration`, `server-resumeapi`, `web`, `web-e2e`,
+`dev-https-proofs`, `server-runtime-smoke`. Update selection design/contracts
+together; missing evidence, cancellation or unexplained skips fail.
 
 Use same-run/commit `runtime-server` and `runtime-web` artifacts, retained one
 day, with verified commit/SHA-256 manifests. Export `server`,
