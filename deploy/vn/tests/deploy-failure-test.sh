@@ -83,6 +83,7 @@ case $args in
   *' -O exit '*) exit 0 ;;
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
   *'SSH_CLIENT'*) printf '198.51.100.10'; exit 0 ;;
+  *' podman exec aboutme-caddy '*) printf '10s\n'; exit 0 ;;
 esac
 printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/order.log"
 if [[ $args == *' /usr/local/lib/aboutme/fence.sh lock '* ]]; then
@@ -152,12 +153,29 @@ elif [[ $args == *'ghcr.io/v2/'* ]]; then
 elif [[ $args == *'/healthz'* || $args == *'/readyz'* ]]; then
   printf '200'
 elif [[ $args == *'fsSI'* ]]; then
-  printf 'HTTP/2 200\r\nx-content-type-options: nosniff\r\n\r\n'
+  if [[ -n ${EDGE_CASE:-} ]]; then
+    printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\nx-content-type-options: nosniff\r\n\r\n'
+  else
+    printf 'HTTP/2 200\r\nx-content-type-options: nosniff\r\n\r\n'
+  fi
+elif [[ -n ${EDGE_CASE:-} ]] && grep -q ' ban-test del ' "$DEPLOY_TEST_DIR/host.log"; then
+  count=0
+  [[ ! -f $DEPLOY_TEST_DIR/edge-count ]] || read -r count <"$DEPLOY_TEST_DIR/edge-count"
+  count=$((count + 1))
+  printf '%s\n' "$count" >"$DEPLOY_TEST_DIR/edge-count"
+  if [[ $EDGE_CASE == delayed && $count -gt 3 ]]; then printf '200'; else printf '403'; fi
+elif [[ -n ${EDGE_CASE:-} ]] && grep -q ' ban-test add ' "$DEPLOY_TEST_DIR/host.log"; then
+  printf '403'
 elif grep -q ' maintenance-up ' "$DEPLOY_TEST_DIR/host.log"; then
   printf '<!-- aboutme:maintenance -->\n503'
 else
   printf '200'
 fi
+STUB
+
+cat >"$work/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$DEPLOY_TEST_DIR/sleep.log"
 STUB
 
 chmod +x "$work/bin/"*
@@ -293,4 +311,35 @@ for FAIL_CIMD in render restore app-up; do
   grep -q 'operation lock remains for manual recovery' "$work/cimd-$FAIL_CIMD.out"
 done
 unset FAIL_CIMD
+
+edge_failures=0
+for EDGE_CASE in delayed stuck; do
+  export EDGE_CASE
+  : >"$work/host.log"
+  : >"$work/sleep.log"
+  rm -f "$work/edge-count"
+  if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/edge-$EDGE_CASE.out" 2>&1; then
+    result=success
+  else
+    result=failure
+  fi
+  count=0
+  [[ ! -f $work/edge-count ]] || read -r count <"$work/edge-count"
+  if [[ $EDGE_CASE == delayed ]]; then
+    if [[ $result != success || $count -lt 4 ]]; then
+      echo 'delayed edge recovery did not wait for a 200 before success' >&2
+      edge_failures=1
+    fi
+  else
+    elapsed=$(awk '{ sum += $1 } END { print sum + 0 }' "$work/sleep.log")
+    if [[ $result != failure || $elapsed -lt 25 || $count -lt 2 ]] ||
+       ! grep -q 'smoke:.*after.*ban' "$work/edge-$EDGE_CASE.out" ||
+       ! grep -q ' fail-closed ' "$work/host.log"; then
+      echo 'persistent edge denial did not fail closed after the polling bound' >&2
+      edge_failures=1
+    fi
+  fi
+done
+unset EDGE_CASE
+((edge_failures == 0)) || exit 1
 echo "deployment failure test passed"

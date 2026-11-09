@@ -15,14 +15,23 @@ import (
 // ever receives the 32-byte digest, never a raw token. Privacy notice expiry may
 // be zero so the outbox derives its exact 24-hour lifetime from the enqueue clock.
 type EnqueueRequest struct {
-	JobID          uuid.UUID
-	Kind           Kind
+	// JobID is the caller-chosen, non-nil job ID the ciphertext is bound to.
+	JobID uuid.UUID
+	// Kind is the closed email kind; it decides which scope ID is required.
+	Kind Kind
+	// RegistrationID scopes a verify job to its pending registration.
 	RegistrationID *uuid.UUID
-	ResetTokenID   *uuid.UUID
-	UserID         *uuid.UUID
-	TokenDigest    *[32]byte
-	Payload        Payload
-	ExpiresAt      time.Time
+	// ResetTokenID scopes a reset job to its reset token.
+	ResetTokenID *uuid.UUID
+	// UserID scopes every other kind to its account.
+	UserID *uuid.UUID
+	// TokenDigest is the 32-byte SHA-256 digest of the verify or reset token.
+	TokenDigest *[32]byte
+	// Payload is the plaintext the outbox validates and seals.
+	Payload Payload
+	// ExpiresAt is when the job stops being deliverable, within the kind's
+	// lifetime; a privacy notice may leave it zero.
+	ExpiresAt time.Time
 }
 
 // Outbox seals payloads and inserts pending jobs through the caller's
@@ -97,8 +106,8 @@ func (o *Outbox) EnqueueTx(ctx context.Context, qtx *store.Queries, req EnqueueR
 	return err
 }
 
-// validateRequest enforces the D3 scope matrix and the non-nil job/scope IDs
-// before any sealing or insert work.
+// validateRequest enforces the per-kind scope matrix and the non-nil
+// job/scope IDs before any sealing or insert work.
 func validateRequest(req EnqueueRequest) error {
 	if req.JobID == uuid.Nil {
 		return ErrJobID

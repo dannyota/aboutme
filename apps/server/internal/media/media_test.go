@@ -11,9 +11,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 )
 
-// D11: resumes/{canonical lowercase resume UUID}/photo-{32 lowercase hex
-// from crypto/rand}.{jpg|png}. One constructor and one parser own this
-// grammar; these tests pin it.
+// Photo keys are resumes/{canonical lowercase resume UUID}/photo-{32
+// lowercase hex from crypto/rand}.{jpg|png}. One constructor and one parser
+// own this grammar; these tests pin it.
 
 var testResumeID = uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f")
 
@@ -54,7 +54,7 @@ func TestNewPhotoKey_PNG(t *testing.T) {
 func TestNewPhotoKey_Rejections(t *testing.T) {
 	t.Parallel()
 	sixteen := bytes.Repeat([]byte{0x01}, 16)
-	// A WebP input is never stored as WebP (D11); only normalized jpg/png.
+	// A WebP input is never stored as WebP; only normalized jpg/png.
 	for _, ext := range []string{"", "webp", "gif", "JPG", "jpeg", "PNG", "jpg ", ".jpg"} {
 		if _, err := media.NewPhotoKey(bytes.NewReader(sixteen), testResumeID, ext); err == nil {
 			t.Errorf("NewPhotoKey(ext %q) err = nil, want error", ext)

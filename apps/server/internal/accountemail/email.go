@@ -1,8 +1,8 @@
-// Package accountemail implements the canonical account-email parser for
-// Phase PA (D1): a deliberate deliverable-address subset of addr-spec that is
-// bounded, pure ASCII, and stored lowercase. The full grammar is authoritative
-// for account creation and lookup; the migration preflight in 00008 is only a
-// cheap subset of it.
+// Package accountemail implements the canonical account-email parser of
+// docs/design/security.md ("Password authentication"): a deliberate
+// deliverable-address subset of addr-spec that is bounded, pure ASCII, and
+// stored lowercase. The full grammar is authoritative for account creation and
+// lookup.
 package accountemail
 
 import (

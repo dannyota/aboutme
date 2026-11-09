@@ -293,8 +293,9 @@ func TestFS_ContentTypeSurvivesReopen(t *testing.T) {
 }
 
 // TestFS_PutUnderFileSegmentFails: FS cannot store both "k" and "k/child"
-// (a documented, D11-unreachable divergence from S3); the failure must be
-// a clean proved non-create, never PutUnknown and never a partial object.
+// (a documented divergence from S3 that photo keys never reach); the failure
+// must be a clean proved non-create, never PutUnknown and never a partial
+// object.
 func TestFS_PutUnderFileSegmentFails(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)

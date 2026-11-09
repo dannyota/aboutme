@@ -21,7 +21,7 @@ existing changes alone. Stay inside the brief's owned paths. Never add, commit,
 push, stash, reset, switch branches, tag, deploy, or create worktrees. Never
 read or print secret values or personal data. Use plain words and active voice,
 no em dashes, no plan, task, or phase IDs in code, comments, tests, or living
-docs. Keep Markdown at or under 450 lines, non-test Go under apps/server at or
+docs. Keep Markdown at or under 400 lines, non-test Go under apps/server at or
 under 400, and other non-test code at or under 700; a file with a generated
 header is exempt. Temporary files and reports go to the scratchpad outside the
 repository.
@@ -53,7 +53,7 @@ Review for:
 1. Contradictions with accepted ADRs, design docs, architecture, or another description of the same contract. An accepted ADR wins over conflicting design text.
 2. Security gaps traced end to end with the attacker list above, including trust boundaries, keys, authorization, revocation, recovery, and hostile renderer input.
 3. Unspecified items an implementer could not build without a decision: API and schema shapes, migration and loss rules, older-client behavior, size limits, UI values, and release order.
-4. Writing-rule violations, stale facts, duplicated contracts that disagree, and Markdown over 450 lines. Follow docs/standards/engineering.md, including its ADR change rules.
+4. Writing-rule violations, stale facts, duplicated contracts that disagree, and Markdown over 400 lines. Follow docs/standards/engineering.md, including its ADR change rules.
 
 Output in Markdown:
 Verdict: merge, fix first, or redesign.

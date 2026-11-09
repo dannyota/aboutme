@@ -889,7 +889,7 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 	}
 }
 
-// --- P2B inspection and commit-outcome contract ---
+// --- Inspection and commit-outcome contract ---
 
 func TestIdempotencyStore_Inspect_DecidesWithoutReservingOrCleaning(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
@@ -1202,7 +1202,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	})
 }
 
-// --- P2B bounded retention and capacity accounting ---
+// --- Bounded retention and capacity accounting ---
 
 func seedIdempotencyRows(ctx context.Context, t *testing.T, pool *store.Pool,
 	userID uuid.UUID, routePrefix string, count int, firstExpiry time.Time,
@@ -1896,7 +1896,7 @@ func TestIdempotencyStore_Execute_CallbackRollbackLeavesUsageUnchanged(t *testin
 	}
 }
 
-// --- P2B normalized replay identity and stored-header policy ---
+// --- Normalized replay identity and stored-header policy ---
 
 func TestIdempotencyStore_Execute_FirstAndReplayAreByteIdentical(t *testing.T) {
 	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)

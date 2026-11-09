@@ -10,7 +10,7 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
-MD_MAX=450
+MD_MAX=400
 CODE_MAX=700
 SERVER_CODE_MAX=400
 

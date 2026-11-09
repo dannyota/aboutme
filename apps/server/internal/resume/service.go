@@ -1,6 +1,6 @@
 // Package resume provides the aggregate store and write-safety kernel.
 //
-// service.go is the P2B transaction seam: the exported tx-scoped mirrors
+// service.go is the transaction seam: the exported tx-scoped mirrors
 // of Store's pool-backed methods, plus the full-aggregate metadata CAS, the
 // revision-CAS delete, and the transactional media deletion-job enqueue.
 //
@@ -12,7 +12,7 @@
 // wrappers over these, so each behavior has exactly one implementation.
 //
 // Every method is scoped by id AND userID: a wrong-owner id is ErrNotFound,
-// identical to a nonexistent one (P2A D17 — no existence oracle).
+// identical to a nonexistent one (no existence oracle).
 package resume
 
 import (
@@ -41,7 +41,7 @@ var ErrLngTooLong = errors.New("resume: language tag exceeds 35 characters")
 // CreateTx is Create's transaction-scoped core: validate, lock the owner's
 // users row, check the resume cap, insert. lng is the already-canonicalized
 // BCP 47 tag, or nil for unset — the HTTP boundary owns parsing and
-// canonicalization (D17); this store enforces only the stored-length bound,
+// canonicalization; this store enforces only the stored-length bound,
 // before any statement runs.
 func (s *Store) CreateTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, lng *string, doc schema.Resume) (Resume, error) {
 	if err := validateTitle(title); err != nil {
@@ -182,7 +182,7 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 
 // SaveMetadataAndDocumentTx writes title, lng, and the caller-supplied
 // already-projected, sanitized, validated current-version aggregate under
-// ONE revision CAS (P2B D15/D17). The store persists the document
+// ONE revision CAS. The store persists the document
 // unchanged — validation here is the same store validation every document
 // write gets, not a second sanitizer. lng is stored as given: nil clears,
 // a non-nil canonical tag over 35 characters is rejected before any
@@ -252,8 +252,8 @@ func (s *Store) DeleteTx(ctx context.Context, qtx *store.Queries, userID, id uui
 }
 
 // EnqueueMediaDeletionTx records exact-key cleanup work in the caller's
-// transaction (ADR 0009, D13). The caller validates key against resumeID
-// before this call; the ledger's own database check (D11 grammar with the
+// transaction (ADR 0009). The caller validates key against resumeID before
+// this call; the ledger's own database check (photo-key grammar with the
 // embedded canonical resume ID equal to resume_id) is the fail-closed
 // backstop, so a malformed or cross-resume key errors here and aborts the
 // caller's transaction. Duplicate enqueue of the immutable key is

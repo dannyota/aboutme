@@ -249,8 +249,6 @@ func (b *exitRateAdmissionBackend) Put(ctx context.Context, key, contentType str
 
 func TestMediaAdmissionAndCleanup(t *testing.T) {
 	assertPhotoPutDeadlineAuthority(t)
-	originalAdmission := taskPhotoAdmission
-	t.Cleanup(func() { taskPhotoAdmission = originalAdmission })
 
 	t.Run("five-second Put deadline and synchronous completion", func(t *testing.T) {
 		h := newResumeAPITestHarness(t)
@@ -263,7 +261,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		}
 		h.service.blobs = backend
 		h.service.photoNormalizationDuration = func(time.Duration) { events.add("normalized") }
-		taskPhotoAdmission = media.NewPhotoAdmission()
+		h.service.photoAdmission = media.NewPhotoAdmission()
 
 		before := snapshotPhotoUploadState(t, h, created.ID)
 		response := exitRateAdmissionUpload(context.Background(), t, h, created.ID, created.Revision,
@@ -288,7 +286,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		if backend.active.Load() != 0 {
 			t.Fatalf("active object writes after response = %d, want zero", backend.active.Load())
 		}
-		assertExitPhotoPermitFree(t)
+		assertExitPhotoPermitFree(t, h.service.photoAdmission)
 		assertPhotoUploadState(t, h, created.ID, before)
 	})
 
@@ -298,7 +296,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		entered := make(chan context.Context, 1)
 		backend := &exitRateAdmissionBackend{Backend: h.service.blobs, putEntered: entered, waitForDone: true}
 		h.service.blobs = backend
-		taskPhotoAdmission = media.NewPhotoAdmission()
+		h.service.photoAdmission = media.NewPhotoAdmission()
 		before := snapshotPhotoUploadState(t, h, created.ID)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -327,7 +325,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		if backend.active.Load() != 0 {
 			t.Fatalf("active object writes after canceled response = %d, want zero", backend.active.Load())
 		}
-		assertExitPhotoPermitFree(t)
+		assertExitPhotoPermitFree(t, h.service.photoAdmission)
 		assertPhotoUploadState(t, h, created.ID, before)
 	})
 
@@ -358,7 +356,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 				Backend: h.service.blobs, putResponse: media.PutNotCreated, putErr: errors.New("Put must not run"),
 			}
 			h.service.blobs = backend
-			taskPhotoAdmission = media.NewPhotoAdmission()
+			h.service.photoAdmission = media.NewPhotoAdmission()
 			before := snapshotPhotoUploadState(t, h, created.ID)
 
 			var recorder http.ResponseWriter = &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
@@ -373,7 +371,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 			if backend.puts.Load() != 0 {
 				t.Fatalf("object Put calls = %d, want zero", backend.puts.Load())
 			}
-			assertExitPhotoPermitFree(t)
+			assertExitPhotoPermitFree(t, h.service.photoAdmission)
 			assertPhotoUploadState(t, h, created.ID, before)
 		})
 	}
@@ -387,7 +385,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		}
 		h.service.blobs = backend
 		h.service.photoNormalizationDuration = func(time.Duration) { events.add("normalized") }
-		taskPhotoAdmission = media.NewPhotoAdmission()
+		h.service.photoAdmission = media.NewPhotoAdmission()
 
 		response := exitRateAdmissionUpload(context.Background(), t, h, created.ID, created.Revision,
 			makePhotoPNG(t), &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()})
@@ -401,15 +399,15 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		if backend.active.Load() != 0 {
 			t.Fatalf("active object writes after response = %d, want zero", backend.active.Load())
 		}
-		assertExitPhotoPermitFree(t)
+		assertExitPhotoPermitFree(t, h.service.photoAdmission)
 	})
 }
 
-func assertExitPhotoPermitFree(t *testing.T) {
+func assertExitPhotoPermitFree(t *testing.T, admission *media.PhotoAdmission) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
-	release, err := taskPhotoAdmission.Acquire(ctx)
+	release, err := admission.Acquire(ctx)
 	if err != nil {
 		t.Fatalf("photo permit remained held after response: %v", err)
 	}
@@ -421,7 +419,7 @@ const requiredPhotoPutTimeout = 5 * time.Second
 func assertPhotoPutDeadlineAuthority(t *testing.T) {
 	t.Helper()
 	if photoPutTimeout != requiredPhotoPutTimeout {
-		t.Fatalf("production photo Put timeout = %v, Task 11 requires %v", photoPutTimeout, requiredPhotoPutTimeout)
+		t.Fatalf("production photo Put timeout = %v, budgets.md requires %v", photoPutTimeout, requiredPhotoPutTimeout)
 	}
 }
 

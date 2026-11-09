@@ -14,7 +14,7 @@ import (
 )
 
 // Fixed, non-secret test vectors shared across the package's tests. These are
-// deliberately public: they pin the D3 AAD layout and the AES-256-GCM output
+// deliberately public: they pin the AAD layout and the AES-256-GCM output
 // without ever exercising a production key.
 func fixedKey() [32]byte {
 	var k [32]byte

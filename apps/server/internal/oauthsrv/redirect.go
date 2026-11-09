@@ -10,45 +10,51 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// The closed errors for the M1 registration grammar. Neither carries the
+// The closed errors for the client registration grammar. Neither carries the
 // presented value.
 var (
-	// ErrRedirectInvalid rejects a redirect URI outside the M1 grammar.
+	// ErrRedirectInvalid rejects a redirect URI outside the registration
+	// grammar.
 	ErrRedirectInvalid = errors.New("oauth redirect uri invalid")
-	// ErrClientNameInvalid rejects a client name outside the M1 bounds.
+	// ErrClientNameInvalid rejects a client name outside the registration bounds.
 	ErrClientNameInvalid = errors.New("oauth client name invalid")
 )
 
 const (
-	// redirectURIMaxBytes is the M1 per-URI byte ceiling.
+	// redirectURIMaxBytes is the per-URI byte ceiling.
 	redirectURIMaxBytes = 512
-	// clientNameMaxCodePoints is the M1 name ceiling, counted after NFC.
+	// clientNameMaxCodePoints is the client-name ceiling, counted after NFC.
 	clientNameMaxCodePoints = 64
-	// clientNameMaxRawBytes bounds the input before normalization runs. M1
-	// counts code points after NFC, and NFC composition can collapse several
-	// code points into one, so a conforming name may arrive far longer than
-	// its normalized width. The gate is therefore the M1 registration body
+	// clientNameMaxRawBytes bounds the input before normalization runs. The
+	// name bound counts code points after NFC, and NFC composition can collapse
+	// several code points into one, so a conforming name may arrive far longer
+	// than its normalized width. The gate is therefore the registration body
 	// cap: no name a conforming body can carry is rejected here, and
 	// unbounded input still never reaches NFC.
 	clientNameMaxRawBytes = 4096
 )
 
-// loopbackRedirectHosts is the closed set of hosts M1 allows over plain http.
-// url.URL.Hostname strips the brackets from an IPv6 literal, so the M1 host
+// loopbackRedirectHost reports whether host, already lowercased, is in the
+// closed set of hosts the registration grammar allows over plain http.
+// url.URL.Hostname strips the brackets from an IPv6 literal, so the host
 // [::1] appears here as ::1; no other spelling of the loopback address is
 // admitted.
-var loopbackRedirectHosts = map[string]bool{
-	"127.0.0.1": true,
-	"localhost": true,
-	"::1":       true,
+func loopbackRedirectHost(host string) bool {
+	switch host {
+	case "127.0.0.1", "localhost", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
-// ValidateRedirectURI enforces the M1 grammar for one redirect URI: 1 to 512
-// printable ASCII bytes, absolute, no fragment, no userinfo, and either https
-// with any host or http with a loopback host on any port and path. Scheme and
-// host are matched case-insensitively, as RFC 3986 section 3.1 requires.
+// ValidateRedirectURI enforces the registration grammar for one redirect
+// URI: 1 to 512 printable ASCII bytes, absolute, no fragment, no userinfo, and
+// either https with any host or http with a loopback host on any port and
+// path. Scheme and host are matched case-insensitively, as RFC 3986 section
+// 3.1 requires.
 //
-// The M1 cap of five URIs per client is the registration caller's rule, not
+// The cap of five URIs per client is the registration caller's rule, not
 // this function's.
 func ValidateRedirectURI(raw string) error {
 	if len(raw) == 0 || len(raw) > redirectURIMaxBytes {
@@ -72,7 +78,7 @@ func ValidateRedirectURI(raw string) error {
 	case "https":
 		return nil
 	case "http":
-		if loopbackRedirectHosts[strings.ToLower(u.Hostname())] {
+		if loopbackRedirectHost(strings.ToLower(u.Hostname())) {
 			return nil
 		}
 		return ErrRedirectInvalid
@@ -81,11 +87,11 @@ func ValidateRedirectURI(raw string) error {
 	}
 }
 
-// ValidateClientName enforces the M1 client-name bounds and returns the NFC
+// ValidateClientName enforces the client-name bounds and returns the NFC
 // canonical form: valid UTF-8, 1 to 64 Unicode code points after NFC, and no
 // control characters. The name is not trimmed, collapsed, or case-folded. The
 // bound is on code points after NFC, so a decomposed spelling that composes
-// within the bound is accepted; only input past the M1 registration body cap
+// within the bound is accepted; only input past the registration body cap
 // is rejected before normalization runs.
 func ValidateClientName(raw string) (canonical string, err error) {
 	if len(raw) == 0 || len(raw) > clientNameMaxRawBytes {

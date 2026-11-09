@@ -104,7 +104,7 @@ func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 
 	resp := doJSON(t, handler, http.MethodPost, auth.LogoutPath, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(rawSelf)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("POST %s status = %d, want %d (DD-C13)", auth.LogoutPath, resp.StatusCode, http.StatusNoContent)
+		t.Fatalf("POST %s status = %d, want %d", auth.LogoutPath, resp.StatusCode, http.StatusNoContent)
 	}
 	assertNoBody(t, resp)
 
@@ -239,10 +239,10 @@ func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 			continue
 		}
 		if resp.StatusCode != refStatus {
-			t.Errorf("%s: status = %d, want %d (must match %q -- DD-C5 no-oracle)", c.name, resp.StatusCode, refStatus, cases[0].name)
+			t.Errorf("%s: status = %d, want %d (must match %q -- no oracle)", c.name, resp.StatusCode, refStatus, cases[0].name)
 		}
 		if !bytes.Equal(body, refBody) {
-			t.Errorf("%s: body = %s, want byte-identical to %q's body %s (DD-C5 -- no oracle across other-user/unknown/already-revoked)", c.name, body, cases[0].name, refBody)
+			t.Errorf("%s: body = %s, want byte-identical to %q's body %s (no oracle across other-user/unknown/already-revoked)", c.name, body, cases[0].name, refBody)
 		}
 	}
 }
@@ -307,7 +307,7 @@ func TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace(t
 	}
 	afterGraceIDs := listedSessionIDs(t, resp2)
 	if afterGraceIDs[predSess.ID.String()] {
-		t.Error("grace-dead predecessor (revoked_at NULL, rotation_grace_until past) present in the list, want absent (DD-C5)")
+		t.Error("grace-dead predecessor (revoked_at NULL, rotation_grace_until past) present in the list, want absent")
 	}
 	if !afterGraceIDs[liveSess.ID.String()] {
 		t.Error("caller's own live session missing from its own list after the predecessor died")
@@ -325,7 +325,7 @@ func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 
 	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(sess.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(rawSelf)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("DELETE own current session status = %d, want %d (DD-C13)", resp.StatusCode, http.StatusNoContent)
+		t.Fatalf("DELETE own current session status = %d, want %d", resp.StatusCode, http.StatusNoContent)
 	}
 	assertNoBody(t, resp)
 	cleared := extractCookie(resp, auth.SessionCookieName)

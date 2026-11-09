@@ -49,96 +49,11 @@ the laptop, and the provider can bypass these controls.
 
 ## Area proposals
 
-### SSH, security group, and private values
+Access and confinement proposals have their own pages:
 
-**Access.** S:8-40 has key-only login, root login denied, PAM enabled, X11 and
-user environment disabled, six authentication tries, a 120-second grace period,
-no client-alive probes, forwarding enabled, and INFO logging.
-`H/cloud-init.yaml.tftpl:33-52` owns the initial config; `H/install.sh:419` does
-not yet install an SSH policy. Add a managed drop-in under
-`E/ssh/sshd_config.d/` and explicit installer validation/reload. Keep
-`AllowUsers aboutme-admin`, `PermitRootLogin no`, `PasswordAuthentication no`,
-`KbdInteractiveAuthentication no`, `UsePAM yes`, `X11Forwarding no`, and
-`PermitUserEnvironment no`. Propose `MaxAuthTries 3`, `LoginGraceTime 30`,
-`ClientAliveInterval 300`, `ClientAliveCountMax 2`, and
-`AllowAgentForwarding no`. Alive probes remove unresponsive connections, not
-idle but responsive sessions. Agent users need `IdentitiesOnly=yes` to avoid
-spending three tries on unrelated keys. Risk: operator lockout or interrupted
-transport, not automatic cancellation of durable host operations. [Noble SSH]
-
-**Forwarding.** Propose `AllowTcpForwarding local`, `PermitOpen none`,
-`AllowStreamLocalForwarding no`, and `PermitTunnel no`. A privately rendered,
-attended drill exception may replace `PermitOpen` with only the drill host and
-SSH port, then restore `none`. `V/scripts/restore-drill.sh:503` uses `ssh -W`;
-blanket forwarding denial breaks that recovery path. Validate exception removal
-after success and failure. This limits convenient pivots by a stolen operator
-key; an administrator with a shell and sudo can bypass it. The workflow's
-compromised-container attacker benefits only if it steals operator authority.
-Home: SSH drop-in and the drill coordinator, not a public destination list.
-[OpenSSH]
-
-**Cryptography.** S:26-35 offers modern AEAD/CTR ciphers and hybrid/curve/DH
-exchange, plus SHA-1 and 64-bit MAC variants. Keep Noble's patched cipher, KEX,
-and host-key defaults. Propose only `MACs -hmac-sha1*,umac-64*` as a
-conservative reduction, not a claim these offers prove an exploitable host.
-Retain `PubkeyAcceptedAlgorithms ssh-ed25519` from cloud-init. Never delete host
-keys to narrow negotiation. Compare the installed Noble `sshd -T` and laptop
-negotiation after updates; do not copy latest upstream default lists. Risk: old
-operator clients may fail. Home: the same drop-in. [Noble SSH]
-
-**Verification and lockout recovery.** Before any SSH change, prove attended
-console access can restore a root-owned configuration, not merely display a
-console log. Keep a current SSH session. Stage the candidate, run `sshd -t` and
-`sshd -T -C user=aboutme-admin,host=<host>,addr=<operator-address>` privately,
-and account for first-value-wins includes and Match blocks. Reload the active
-SSH service only after success; socket activation needs its own listener
-handling. Open a second pinned-host-key login and prove sudo, rsync, deployment
-transport, rejected forwarding, and the scoped drill path before closing the
-first. Syntax or login failure restores the saved config. [OpenSSH]
-
-**Security group.** `V/prod/variables.tf:65-88` supplies public defaults;
-`V/prod/main.tf:51-62` creates IPv4 SSH rules. The accepted design describes
-broad SSH ingress; the snapshot does not prove the provider's effective SG.
-Require nonempty explicit `ssh_allowlist` of reviewed operator IPv4 `/32`
-addresses initially; reject unrestricted prefixes and missing values. Keep
-public HTTP/HTTPS rules. This removes visitor scanning before sshd and reduces
-key-attack exposure, but does not constrain a compromised local container. Risk:
-travel or changing ISP addresses lock out the owner. [Provider SG]
-
-Home: `V/prod/`, private `aboutme-infra/prod.tfvars`, and the production
-runbook. Add and test the new narrow rules before removing broad rules. Read
-back all attached groups, including unmanaged rules; verify login from an
-allowed address and denial from an unallowed one. IPv6 floating-IP support and
-effective IPv6 ingress remain unverified; do not assume IPv4 rules cover IPv6.
-Use the console/API to add a narrow recovery address if access fails. Do not
-change the SSH port in the same rollout. A later port change must admit the new
-port first, verify both listeners, migrate clients, then remove the old one.
-
-**Private-values migration.** Require `ssh_port` in private Tofu input and
-`SSH_PORT` in the laptop environment; require explicit probe input on the host.
-Validate integer range 1-65535 and matching private inputs; errors stop before
-SSH, provider writes, or installation. Public examples use `<ssh-port>` and
-`<operator-ipv4>/32`; tests use explicit synthetic ports and documentation
-addresses. Avoid shell tracing and printing rendered private config or plans.
-Port secrecy is not authentication; history retains earlier disclosures.
-
-Literal/default search found these locations; values are intentionally omitted:
-
-- `V/prod/variables.tf:68,76,82,83,86,87`; `V/prod/main.tf:52,135,136`;
-  `V/prod/prod.tfvars.example:4,5`;
-  `V/prod/tests/drill-network.tftest.hcl:64,74`.
-- `V/README.md:68,73,74`; `V/scripts/ssh-lib.sh:3`; `V/probe/probe.sh:7,8,22`;
-  `V/probe/README.md:14,15,46`.
-- `V/tests/cutover-ssh-failure-test.sh:42`;
-  `V/tests/deploy-failure-test.sh:168`; `V/tests/host-operations-test.sh:124`.
-- `docs/design/vietnam-production.md:49,153`;
-  `docs/design/restore-drill-networking.md:33`;
-  `docs/runbooks/production.md:11,16`; `docs/runbooks/account-delete.md:21`;
-  `docs/runbooks/observer.md:129`; `instructions/releases.md:16`.
-
-Update consumers/fixtures, including `ssh-lib.sh` callers, together. Provision
-private values before removing defaults; update laptop scripts before rollout.
-Repeat the private search with path/line-only output; encrypt plans/state.
+- [Access](host-hardening-access.md): SSH, security group, and private values.
+- [Confinement](host-hardening-confinement.md): container confinement and
+  Chromium, host services and timers.
 
 ### Kernel and network
 
@@ -181,93 +96,6 @@ named otherwise.
   evidence supports a change. Verify new interfaces too: changing forwarding can
   reset IPv4 defaults. Test DNS, package egress, Nuxt print redemption, observer
   isolation, both Caddy modes, and backup uploads. [IP sysctls]
-
-### Container confinement and Chromium
-
-S:279-282 shows non-root images, writable roots except observer, and a server
-SYS_ADMIN setting. `Q/aboutme-server.container.in:34-39` explains that the
-capability selects default seccomp namespace allowances; the snapshot does not
-establish effective process capabilities. `Q/aboutme-observer.container.in:17`
-already has read-only root, dropped capabilities, NNP, and bounded tmpfs.
-
-**Ordinary containers.** Propose `DropCapability=all`, `NoNewPrivileges=true`,
-and `ReadOnly=true` first for web, Caddy, maintenance, migrate, db-setup, and
-jobs. Home: their `Q/*.container.in` files and `H/job-run.sh:41`, which launches
-jobs without Quadlet. Keep the Podman default seccomp policy. The read-only root
-needs explicit writable mounts and bounded temporary storage discovered from the
-pinned image, not unrestricted tmpfs. Caddy needs `/data`, its log mount, and
-verified config-generation scratch; web and jobs need their actual temporary
-paths. New tmpfs consumption counts inside existing memory ceilings; do not add
-capacity without budget approval. Verify generated units, actual capability
-sets, NNP, failed root writes, job completion, migration, Caddy ACME/storage
-sharing, and maintenance overlap. This limits persistence and privilege gain
-after a container exploit. [Quadlet]
-
-**Server-only namespace exception.** `E/sysctl.d/90-aboutme.conf:7-11` globally
-relaxes Ubuntu user namespaces; `V/probe/probe.sh:163-200` currently requires
-that relaxation and only tests Alpine unshare. Replace it only after a pinned
-Chromium proof. Target: AppArmor enforcing, global
-`kernel.apparmor_restrict_unprivileged_userns=1`, namespace permission granted
-to the named server profile only, and a server seccomp profile allowing only the
-sandbox syscalls actually needed without SYS_ADMIN. Keep
-`user.max_user_namespaces=16384` and unprivileged namespace support available
-for Chromium. Home: new `E/apparmor.d/` and `E/containers/` profiles, server
-Quadlet, installer ordering, and revised probe. [Ubuntu AppArmor]
-
-Load profiles first; use `PodmanArgs` for Podman 4.9's
-`--security-opt apparmor=<profile>` and `seccomp=<file>`. No sandbox bypass.
-AppArmor profile inheritance/transition, seccomp syscall flags, NNP with
-Chromium, and removal of SYS_ADMIN are **unverified on this image/kernel**.
-Require successful sandboxed PDF/image renders, sandbox-status evidence,
-negative namespace creation from web/ordinary host processes, actual process
-labels/capabilities, and unchanged blocked egress. Do not infer confinement from
-an empty `podman inspect` capability list. [Podman run]
-
-Defer rootful `UserNS=auto`/UID remapping, distinct from Chromium namespaces.
-Prove PostgreSQL peer identity, socket mounts, secret access, Caddy shared
-UID/`SO_REUSEPORT`, and persistent ownership before proposing Quadlet maps and
-ownership migration. Never recursively chown live data for a test. Failed proof
-retains existing policy and records residual risk. [Podman run]
-
-### Host services and timers
-
-`E/systemd/system/aboutme-alert@.service:7`, `aboutme-backup@.service:9`,
-`aboutme-watch.service:6`, and retention/vacuum/job/operation services mostly
-omit sandboxing. Alert/backup have no address-family restrictions. The reporter
-sets NNP and resource/core limits at
-`aboutme-deployment-document.service:10-15`. Inspect effective units/drop-ins;
-S:300-311 scores do not prove confinement.
-
-Propose `NoNewPrivileges=yes`, `ProtectSystem=full`, `ProtectHome=yes`,
-`PrivateTmp=yes`, `ProtectKernelTunables=yes`, `ProtectKernelModules=yes`,
-`ProtectControlGroups=yes`, and `RestrictSUIDSGID=yes` for alert and backup
-services first. Set empty `CapabilityBoundingSet=` and `AmbientCapabilities=` on
-both; retain backup `User=postgres`. Removing CAP_SYS_ADMIN prevents a
-compromised root helper undoing mount restrictions. Prove empty process bounds,
-failed mount/remount attempts, secret/config reads, pgBackRest lock/spool
-writes, WAL shipping, and alert delivery before activation. Private temp/home
-controls can break staging or credential reads. Authorized writes remain
-possible. Home: service drop-ins under `E/systemd/system/`. [Systemd exec]
-
-On those two services propose `SystemCallArchitectures=native` and
-`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`. These preserve local sockets
-and DNS/HTTPS/SMTP while reducing a compromised helper's socket attack surface;
-they do not restrict destinations or inherited sockets. Prove DNS, IPv4/IPv6
-transport, journal, PG socket, backup, and alert paths plus AF_PACKET denial. If
-required resolver behavior fails, stop and revise the family list from evidence.
-Rollback restores the previous reviewed drop-ins and reruns both services. Keep
-launcher/bouncer exceptions below. [Systemd exec]
-
-For watcher, retention, vacuum, operation, reporter, and Podman job launchers,
-start with core limits and per-unit review. Keep fence, bundle, workload,
-retention locks and systemd control available. Do not apply `PrivateUsers`,
-`PrivateNetwork`, `ProtectControlGroups`, empty capability bounds, syscall
-filters, or `MemoryDenyWriteExecute` globally: Podman needs mounts/namespaces,
-the bouncer needs host nftables, helpers change UID, and Chromium/V8 uses JIT.
-Defer stronger `ProtectSystem=strict` and exact `ReadWritePaths` until each
-helper's closure is enumerated. Verify failure-triggered alerts, retained fence
-ownership, privacy-gate shutdown, deploy recovery, and timer catch-up. A better
-`systemd-analyze security` score alone does not pass acceptance. [Systemd exec]
 
 ### Database, logs, and cores
 
@@ -392,7 +220,8 @@ floors, secrets, and privacy gates. Missing proof stops only that control.
 1. **Low host risk:** private-input migration and access recovery docs. Verify
    synthetic transport fixtures; coordinator rollback requires private inputs.
 2. **Moderate lockout risk:** narrow SG, then a separate SSH policy PR/install.
-   Use the two-login sequence and access recovery rules above.
+   Use the two-login sequence and access recovery rules in
+   [access](host-hardening-access.md).
 3. **Moderate restart risk:** separate core and reversible-sysctl PRs. Prove
    reboot readiness; rollback restores reversible knobs/limits.
 4. **Moderate application risk:** per-container read-only/capability controls,
@@ -416,21 +245,13 @@ and recovery; no benchmark compliance claim. Owner approval: narrow sources with
 console recovery; scoped drill forwarding; SSH limits/MACs; key separation;
 kexec after proof; staged server confinement; journald without auditd.
 
-[Noble SSH]: https://manpages.ubuntu.com/manpages/noble/man5/sshd_config.5.html
 [OpenSSH]: https://man.openbsd.org/sshd_config
-[Provider SG]:
-  https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/resources/vserver_secgrouprule.md
 [Yama]: https://docs.kernel.org/admin-guide/LSM/Yama.html
 [Kernel]: https://docs.kernel.org/admin-guide/sysctl/kernel.html
 [BPF]: https://docs.kernel.org/admin-guide/sysctl/net.html
 [Filesystem sysctls]: https://docs.kernel.org/admin-guide/sysctl/fs.html
 [IP sysctls]: https://docs.kernel.org/networking/ip-sysctl.html
 [Quadlet]: https://docs.podman.io/en/v4.9.3/markdown/podman-systemd.unit.5.html
-[Podman run]: https://docs.podman.io/en/v4.9.3/markdown/podman-run.1.html
-[Ubuntu AppArmor]:
-  https://documentation.ubuntu.com/security/security-features/privilege-restriction/apparmor/
-[Systemd exec]:
-  https://manpages.ubuntu.com/manpages/noble/man5/systemd.exec.5.html
 [PostgreSQL HBA]: https://www.postgresql.org/docs/18/auth-pg-hba-conf.html
 [PG sockets]: https://www.postgresql.org/docs/18/runtime-config-connection.html
 [CrowdSec journal]:

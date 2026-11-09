@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
@@ -31,7 +30,7 @@ const (
 	smtpTLSStartTLS = "starttls"
 	// maxSMTPValueBytes bounds SMTP_USERNAME and SMTP_PASSWORD.
 	maxSMTPValueBytes = 256
-	// requiredSESRegion is the exact region SES mode requires (D7).
+	// requiredSESRegion is the exact region SES mode requires.
 	requiredSESRegion = "ap-southeast-1"
 )
 
@@ -41,41 +40,50 @@ const (
 // same reason. SESFrom and SESFromName are the From address and display name
 // in both SES and SMTP mode.
 type AuthEmailConfig struct {
-	RateHMACKey   [32]byte
-	ActiveKeyID   string
-	ActiveKey     [32]byte
+	// RateHMACKey keys the password rate-limit email HMAC
+	// (PASSWORD_RATE_HMAC_KEY).
+	RateHMACKey [32]byte
+	// ActiveKeyID names the key that seals new outbox jobs
+	// (AUTH_EMAIL_ACTIVE_KEY_ID).
+	ActiveKeyID string
+	// ActiveKey seals new outbox jobs (AUTH_EMAIL_ACTIVE_KEY).
+	ActiveKey [32]byte
+	// PreviousKeyID names the retired key kept for opening older jobs
+	// (AUTH_EMAIL_PREVIOUS_KEY_ID); empty unless HasPrevious.
 	PreviousKeyID string
-	PreviousKey   [32]byte
-	HasPrevious   bool
-	Mode          string
-	CaptureURL    string
+	// PreviousKey opens jobs sealed before rotation (AUTH_EMAIL_PREVIOUS_KEY).
+	PreviousKey [32]byte
+	// HasPrevious reports whether a previous key is configured.
+	HasPrevious bool
+	// Mode is the delivery mode: ses, capture, or smtp (AUTH_EMAIL_MODE).
+	Mode string
+	// CaptureURL is the loopback mail-capture endpoint in capture mode
+	// (AUTH_EMAIL_CAPTURE_URL).
+	CaptureURL string
+	// CaptureBearer authenticates capture-mode posts
+	// (AUTH_EMAIL_CAPTURE_BEARER).
 	CaptureBearer [32]byte
-	SESFrom       string
-	SESFromName   string
-	SESConfigSet  string
-	SESRegion     string
-	SMTPHost      string
-	SMTPPort      int
-	SMTPTLS       string
-	SMTPUsername  string
-	SMTPPassword  Secret
+	// SESFrom is the From address (SES_FROM_ADDRESS).
+	SESFrom string
+	// SESFromName is the From display name (SES_FROM_NAME).
+	SESFromName string
+	// SESConfigSet is the SES configuration set (SES_CONFIGURATION_SET).
+	SESConfigSet string
+	// SESRegion is the SES region (AWS_REGION); SES mode requires
+	// ap-southeast-1.
+	SESRegion string
+	// SMTPHost is the SMTP relay host (SMTP_HOST).
+	SMTPHost string
+	// SMTPPort is the SMTP relay TCP port (SMTP_PORT).
+	SMTPPort int
+	// SMTPTLS is the explicit SMTP TLS mode: implicit or starttls
+	// (SMTP_TLS).
+	SMTPTLS string
+	// SMTPUsername is the SMTP login, at most 256 bytes (SMTP_USERNAME).
+	SMTPUsername string
+	// SMTPPassword is the SMTP password, at most 256 bytes (SMTP_PASSWORD).
+	SMTPPassword Secret
 }
-
-// Secret is a string value that formats and logs as "[redacted]". Read it with
-// Reveal only where the value is used.
-type Secret string
-
-// Reveal returns the secret value.
-func (s Secret) Reveal() string { return string(s) }
-
-// String implements fmt.Stringer without the value.
-func (Secret) String() string { return "[redacted]" }
-
-// GoString implements fmt.GoStringer without the value.
-func (Secret) GoString() string { return "[redacted]" }
-
-// LogValue implements slog.LogValuer without the value.
-func (Secret) LogValue() slog.Value { return slog.StringValue("[redacted]") }
 
 // loadAuthEmailConfig reads and validates the password-mail configuration. It
 // rejects a missing or malformed rate key, active key, a previous key that is
@@ -329,7 +337,7 @@ func isAWSSafeASCII(s string) bool {
 
 // validateCaptureURL requires an absolute loopback http URL with an explicit
 // port and no userinfo, query, or fragment. The mailcapture client only ever
-// POSTs there, so this is the D7 loopback-only boundary.
+// POSTs there, so this is the loopback-only boundary.
 func validateCaptureURL(raw string) error {
 	u, err := parseLoopbackURL(raw)
 	if err != nil {

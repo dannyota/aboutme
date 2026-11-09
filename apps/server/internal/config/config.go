@@ -184,15 +184,22 @@ const (
 	maxPort = 65535
 )
 
-var validLogLevels = map[string]bool{
-	"debug": true,
-	"info":  true,
-	"warn":  true,
-	"error": true,
+// validLogLevel reports whether level is an accepted lowercase LOG_LEVEL.
+func validLogLevel(level string) bool {
+	switch level {
+	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
 }
 
-var validEnvs = map[string]bool{
-	"dev":     true,
-	"staging": true,
-	"prod":    true,
+// validEnv reports whether env is an accepted lowercase ENV.
+func validEnv(env string) bool {
+	switch env {
+	case "dev", "staging", "prod":
+		return true
+	default:
+		return false
+	}
 }

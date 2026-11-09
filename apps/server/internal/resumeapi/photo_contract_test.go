@@ -143,7 +143,7 @@ func assertPhotoMultipartAuthorityCompleteness(t *testing.T) photoMultipartAutho
 		t.Fatalf("production photo file limit = %d, budgets.md requires %d", photoFileBytes, authority.fileBytes)
 	}
 	if photoFilenameBytes != authority.filenameBytes {
-		t.Fatalf("production photo filename limit = %d, Task 11 requires %d UTF-8 bytes", photoFilenameBytes, authority.filenameBytes)
+		t.Fatalf("production photo filename limit = %d, the photo upload contract requires %d UTF-8 bytes", photoFilenameBytes, authority.filenameBytes)
 	}
 	return authority
 }
@@ -171,14 +171,14 @@ const requiredPhotoCandidateLifetime = 5 * time.Minute
 func assertPhotoReadDeadlineAuthority(t *testing.T) {
 	t.Helper()
 	if photoReadTimeout != requiredPhotoReadTimeout {
-		t.Fatalf("production photo read timeout = %v, Task 11 requires %v", photoReadTimeout, requiredPhotoReadTimeout)
+		t.Fatalf("production photo read timeout = %v, budgets.md requires %v", photoReadTimeout, requiredPhotoReadTimeout)
 	}
 }
 
 func assertPhotoCandidateLifetimeAuthority(t *testing.T) {
 	t.Helper()
 	if photoCandidateLifetime != requiredPhotoCandidateLifetime {
-		t.Fatalf("production photo candidate lifetime = %v, Task 11 requires %v",
+		t.Fatalf("production photo candidate lifetime = %v, budgets.md requires %v",
 			photoCandidateLifetime, requiredPhotoCandidateLifetime)
 	}
 }

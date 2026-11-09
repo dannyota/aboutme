@@ -52,22 +52,16 @@ type registrationInput struct {
 	ScopeSet bool
 }
 
-// nativeLoopbackHosts is the set of loopback hosts an application_type
-// native redirect may use. It equals the general redirect grammar's
-// loopbackRedirectHosts in redirect.go, which admits "localhost" for a client
-// that omits application_type, so a native client such as Claude Code may
-// register a localhost loopback redirect; see
+// nativeLoopbackRedirect reports whether raw is an http redirect to a loopback
+// host, the application_type native requirement. It uses the general redirect
+// grammar's loopbackRedirectHost in redirect.go, which admits "localhost" for
+// a client that omits application_type, so a native client such as Claude Code
+// may register a localhost loopback redirect; see
 // docs/design/mcp-client-compatibility.md rule 3. A redirect must match the
 // client's registered value exactly, port included.
-var nativeLoopbackHosts = map[string]bool{
-	"127.0.0.1": true,
-	"localhost": true,
-	"::1":       true,
-}
-
 func nativeLoopbackRedirect(raw string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "http" && nativeLoopbackHosts[strings.ToLower(u.Hostname())]
+	return err == nil && u.Scheme == "http" && loopbackRedirectHost(strings.ToLower(u.Hostname()))
 }
 
 // webRedirect reports whether raw is an https redirect, the application_type
@@ -77,23 +71,27 @@ func webRedirect(raw string) bool {
 	return err == nil && u.Scheme == "https"
 }
 
-// validGrantTypesForRegistration is the closed set a registration's
-// grant_types member may name, per
+// registrationGrantType reports whether value is in the closed set a
+// registration's grant_types member may name, per
 // docs/design/mcp-client-compatibility.md rule 2.
-var validGrantTypesForRegistration = map[string]bool{
-	"authorization_code": true,
-	"refresh_token":      true,
+func registrationGrantType(value string) bool {
+	switch value {
+	case "authorization_code", "refresh_token":
+		return true
+	default:
+		return false
+	}
 }
 
 // validGrantTypesSet reports whether values is a non-empty, duplicate-free
-// subset of validGrantTypesForRegistration.
+// set of registration grant types.
 func validGrantTypesSet(values []string) bool {
 	if len(values) == 0 {
 		return false
 	}
 	seen := make(map[string]bool, len(values))
 	for _, value := range values {
-		if !validGrantTypesForRegistration[value] || seen[value] {
+		if !registrationGrantType(value) || seen[value] {
 			return false
 		}
 		seen[value] = true
