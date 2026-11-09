@@ -137,8 +137,8 @@ The deployer then:
    host. Starts Caddy, then stops maintenance and proves it stopped.
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
    `nosniff`, and a CrowdSec 403 for the operator's test ban. Deletes the ban,
-   polls `/` for HTTP 200 (two ticks plus 5 s of sleeps, up to 10 s a request;
-   85 s at most with the 10 s ticker), then releases the lock.
+   polls `/` until HTTP 200 (sleeps of two ticks plus 5 s, rounded up to 5 s
+   steps, and up to 10 s a request: about 85 s), then releases the lock.
 
 vMonitor and the uptime backstop keep running during maintenance. Host alarms
 and backup timers also remain active. A deploy can therefore send a site-down
