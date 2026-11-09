@@ -38,10 +38,12 @@ const hosted = [
   ...readdirSync(join(root, ".github/workflows")).filter((file) => file.endsWith(".yml")).map((file) => `.github/workflows/${file}`),
   ...readdirSync(join(root, ".github/actions"), { recursive: true }).filter((file) => file.endsWith("/action.yml")).map((file) => `.github/actions/${file}`),
 ];
-// CI never fetches a tool from GitHub releases, the GitHub API, or GHCR with
-// curl or wget: tools come from the ci-tools package or a verified cache.
+// CI never fetches release assets, release metadata, registry blobs, or
+// GitHub Packages with curl or wget: tools come from the ci-tools package or a
+// verified cache. Health checks and other API queries download no tool.
+const releaseOrPackage = /https:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/releases\/download\/|(?:objects|release-assets)\.githubusercontent\.com\/|api\.github\.com\/repos\/[^/\s]+\/[^/\s]+\/releases\b|ghcr\.io\/v2\/|(?:[^/\s]+\.)?pkg\.github\.com)/;
 function checkNoDirectDownload(command) {
-  assert.ok(!(/\b(?:curl|wget)\b/.test(command) && /https:\/\/(?:github\.com\/[^/]+\/[^/]+\/releases\/download\/|api\.github\.com|ghcr\.io|(?:[^/]+\.)?pkg\.github\.com)/.test(command)),
+  assert.ok(!(/\b(?:curl|wget)\b/.test(command) && releaseOrPackage.test(command)),
     `tools come from the ci-tools package, not a direct download: ${command}`);
 }
 for (const file of hosted) {
@@ -59,7 +61,14 @@ for (const command of [
 ]) {
   assert.throws(() => checkNoDirectDownload(command), /ci-tools package/);
 }
-checkNoDirectDownload("curl -fsS -o /dev/null http://127.0.0.1:3000/");
+for (const command of [
+  "curl -fsS -o /dev/null http://127.0.0.1:3000/",
+  "curl -fsS http://127.0.0.1:2019/config/",
+  'curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/dannyota/aboutme/actions/runs?head_sha=$SHA"',
+  "curl -fsS https://api.github.com/repos/dannyota/aboutme/commits/main",
+]) {
+  checkNoDirectDownload(command);
+}
 const packageImage = "ghcr.io/dannyota/ci-tools@sha256:3b4625da1c1fb5207f918734a4bd89dada662f3366a868fe3d04a09f36327225";
 // Trivy's version and archive digests come from the script that installs it.
 const securityScan = readFileSync(join(root, "scripts/security-scan.sh"), "utf8");
@@ -141,17 +150,30 @@ function checkPackageSteps(list, label) {
   }
   return loaders.length > 0;
 }
+// Only these release-images.yml jobs publish images, each with exactly this
+// permission set. No other job or workflow may write packages, request an
+// identity token, or take write-all.
+const publisherPermissions = { actions: "read", contents: "read", packages: "write", "id-token": "write", attestations: "write" };
+const publishers = new Set(["build", "image", "observer-image", "observer-image-amd64"]
+  .map((id) => `.github/workflows/release-images.yml:${id}`));
+const writesPackages = (permissions) => permissions === "write-all" ||
+  ["packages", "id-token"].some((scope) => permissions?.[scope] === "write");
+// Checks every job's permissions before any step order, so each failure names
+// its own cause.
 function checkPackagePermissions(doc, actions = localActions, label = "workflow") {
-  for (const [id, job] of Object.entries(doc.jobs ?? {})) {
-    const packaged = checkPackageSteps(expandSteps(job.steps ?? [], actions), `${label}:${id}`);
-    if (!packaged && job.uses !== "./.github/workflows/vn-infra.yml") continue;
-    // A publishing job already holds packages: write, which includes read.
-    if (job.permissions?.packages === "write") {
-      assert.equal(job.permissions.contents, "read", `${id}: read-only contents beside existing package permissions`);
-    } else {
-      assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${id}: explicit read-only package permissions`);
+  assert.ok(!writesPackages(doc.permissions), `${label}: no workflow-level package or identity write permissions`);
+  const jobs = Object.entries(doc.jobs ?? {}).map(([id, job]) => [`${label}:${id}`, job, expandSteps(job.steps ?? [], actions)]);
+  for (const [key, job, list] of jobs) {
+    if (publishers.has(key)) {
+      assert.deepEqual(job.permissions, publisherPermissions, `${key}: exact publishing permissions`);
+      continue;
+    }
+    assert.ok(!writesPackages(job.permissions), `${key}: package or identity write permissions belong only to the named publishing jobs`);
+    if (list.some((step) => step.uses === ciTools) || job.uses === "./.github/workflows/vn-infra.yml") {
+      assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${key}: explicit read-only package permissions`);
     }
   }
+  for (const [key, , list] of jobs) checkPackageSteps(list, key);
 }
 const loader = { uses: ciTools };
 for (const [tool, installer] of [
@@ -193,14 +215,28 @@ for (const [tool, installer] of [
   } };
   assert.throws(() => checkPackagePermissions(separate), /load ci-tools before/, `${tool}: a loader in another job does not provide tools`);
 }
-const publisher = { jobs: { publish: { permissions: { contents: "read", packages: "write" }, steps: [loader, { uses: "./.github/actions/install-caddy" }] } } };
-checkPackagePermissions(publisher);
-publisher.jobs.publish.permissions.contents = "write";
-assert.throws(() => checkPackagePermissions(publisher), /read-only contents/, "a publishing job keeps read-only contents");
+for (const [file, name, mutate] of [
+  ["ci", "server packages write", (doc) => { doc.jobs.server.permissions.packages = "write"; }],
+  ["ci", "server packages and identity write", (doc) => { Object.assign(doc.jobs.server.permissions, { packages: "write", "id-token": "write" }); }],
+  ["ci", "server write-all", (doc) => { doc.jobs.server.permissions = "write-all"; }],
+  ["ci", "non-loading job packages write", (doc) => { doc.jobs.ci.permissions = { contents: "read", packages: "write" }; }],
+  ["ci", "workflow-level packages write", (doc) => { doc.permissions = { contents: "read", packages: "write" }; }],
+  ["security-scan", "scan job identity write", (doc) => { doc.jobs["image-scan"].permissions["id-token"] = "write"; }],
+  ["release-images", "publisher without attestations", (doc) => { delete doc.jobs.build.permissions.attestations; }],
+  ["release-images", "publisher with an extra write", (doc) => { doc.jobs["observer-image"].permissions.issues = "write"; }],
+  ["release-images", "publisher with contents write", (doc) => { doc.jobs["observer-image-amd64"].permissions.contents = "write"; }],
+  ["release-images", "index job with an extra write", (doc) => { doc.jobs.image.permissions.issues = "write"; }],
+]) {
+  const changed = load(`.github/workflows/${file}.yml`);
+  mutate(changed);
+  assert.throws(() => checkPackagePermissions(changed, localActions, `.github/workflows/${file}.yml`), /permissions/, name);
+}
 for (const [name, action] of localActions) {
   if (action.runs?.using !== "composite") continue;
   checkPackageSteps(expandSteps(action.runs.steps, localActions), name);
 }
+const releaseJobs = Object.keys(load(".github/workflows/release-images.yml").jobs).map((id) => `.github/workflows/release-images.yml:${id}`);
+assert.ok([...publishers].every((key) => releaseJobs.includes(key)), "every named publishing job exists");
 for (const file of hosted.filter((path) => path.startsWith(".github/workflows/"))) {
   const doc = load(file);
   checkPackagePermissions(doc, localActions, file);
@@ -209,7 +245,7 @@ for (const file of hosted.filter((path) => path.startsWith(".github/workflows/")
     for (const permission of ["contents", "packages"]) {
       const changed = structuredClone(doc);
       delete changed.jobs[id].permissions[permission];
-      assert.throws(() => checkPackagePermissions(changed), undefined, `${id}: reject missing ${permission} permission`);
+      assert.throws(() => checkPackagePermissions(changed, localActions, file), /permissions/, `${id}: reject missing ${permission} permission`);
     }
   }
 }
@@ -445,6 +481,40 @@ for (const scenario of ["valid", "missing", "corrupt"]) {
     assert.ok(output.includes(golangci.packaged) && output.includes("ci-tools"), "golangci-lint: name the missing package archive");
   }
 }
+// Replays a job's step conditions with one failing step and returns the steps
+// that run. As on GitHub, a condition without a status function runs only
+// while every earlier step has succeeded.
+function stepsThatRun(job, failing) {
+  let succeeding = true;
+  const outcomes = {};
+  const ran = [];
+  for (const step of job.steps) {
+    let condition = String(step.if ?? "success()").replace(/^\s*\$\{\{\s*([\s\S]*?)\s*\}\}\s*$/, "$1");
+    if (!/\b(?:success|failure|always|cancelled)\(\)/.test(condition)) condition = `success() && (${condition})`;
+    const expression = condition
+      .replace(/\bsteps\.([A-Za-z_][\w-]*)\.(?:outcome|conclusion)\b/g, (_, id) => `outcome(${JSON.stringify(id)})`)
+      .replaceAll("==", "===");
+    const runs = Function("success", "failure", "always", "cancelled", "outcome", `return Boolean(${expression});`)(
+      () => succeeding, () => !succeeding, () => true, () => false, (id) => outcomes[id] ?? "");
+    const outcome = !runs ? "skipped" : step === failing ? "failure" : "success";
+    if (step.id) outcomes[step.id] = outcome;
+    if (runs) ran.push(step);
+    if (outcome === "failure") succeeding = false;
+  }
+  return ran;
+}
+const usesOpenTofu = (step) => step.uses === "./.github/actions/install-opentofu" || /\btofu\b/.test(step.run ?? "");
+// After a failed ci-tools load or mirror setup, a cached OpenTofu binary would
+// reach tofu init without the mirror and download providers directly.
+function checkOpenTofuGate(job, label) {
+  const loader = job.steps.find((step) => step.uses === "./.github/actions/ci-tools");
+  const mirror = job.steps.find((step) => step.name === "Configure the provider mirror");
+  assert.ok(stepsThatRun(job).some(usesOpenTofu), `${label}: OpenTofu steps run after a verified load`);
+  for (const failing of [loader, mirror]) {
+    const reached = stepsThatRun(job, failing).filter(usesOpenTofu).map((step) => step.name ?? step.run ?? step.uses);
+    assert.deepEqual(reached, [], `${label}: a failed ${failing === loader ? "ci-tools load" : "mirror setup"} must stop every OpenTofu step`);
+  }
+}
 for (const file of ["ci", "vn-infra"]) {
   const doc = load(`.github/workflows/${file}.yml`);
   const list = steps(doc);
@@ -457,6 +527,10 @@ for (const file of ["ci", "vn-infra"]) {
   const packageIndex = job.steps.findIndex((s) => s.id === "ci-tools" && s.uses === "./.github/actions/ci-tools");
   assert.ok(packageIndex >= 0 && packageIndex < job.steps.indexOf(mirror), `${file}: verify package before mirror setup`);
   assert.ok(job.steps.indexOf(mirror) < job.steps.findIndex((s) => /\btofu\b[^\n]*\binit\b/.test(s.run ?? "")), `${file}: mirror before every init`);
+  checkOpenTofuGate(job, file);
+  const loose = structuredClone(job);
+  for (const step of loose.steps.filter(usesOpenTofu)) step.if = "${{ !cancelled() }}";
+  assert.throws(() => checkOpenTofuGate(loose, file), /must stop every OpenTofu step/, `${file}: reject OpenTofu steps that outlive a failed load`);
   const temp = join(work, `mirror-${file}`);
   mkdirSync(temp);
   const envFile = join(temp, "env");

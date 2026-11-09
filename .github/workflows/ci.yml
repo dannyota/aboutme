@@ -188,6 +188,7 @@ jobs:
         id: ci-tools
         uses: ./.github/actions/ci-tools
       - name: Configure the provider mirror
+        id: provider-mirror
         if: ${{ !cancelled() && steps.ci-tools.outcome == 'success' }}
         run: |
           cat >"$RUNNER_TEMP/ci-tools.tfrc" <<EOF
@@ -202,11 +203,13 @@ jobs:
           }
           EOF
           echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/ci-tools.tfrc" >> "$GITHUB_ENV"
-      - if: ${{ !cancelled() }}
+      # The mirror runs only after a verified load, so OpenTofu never starts
+      # without it and never installs providers directly.
+      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
         uses: ./.github/actions/install-opentofu
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
         run: tofu fmt -check -recursive deploy/aws
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
         name: Validate each root
         run: |
           for root in deploy/aws/probe deploy/aws/bootstrap deploy/aws/prod; do
