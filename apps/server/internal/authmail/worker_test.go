@@ -291,9 +291,15 @@ func beginWorkerTx(ctx context.Context, t *testing.T, pool *store.Pool) pgx.Tx {
 	return tx
 }
 
+// newWorkerPool opens a pool on a fresh migrated database owned by the calling
+// test. A tick claims the oldest due jobs across the whole table, requeues any
+// expired lease, and deletes any expired registration, while other packages
+// commit, claim, and lock auth mail rows in the shared database with their own
+// clocks. No fixture clock keeps those rows out of a tick or this test's rows
+// out of theirs, so each worker test gets a database of its own.
 func newWorkerPool(t *testing.T) (context.Context, *store.Pool, *store.Queries) {
 	t.Helper()
-	dsn := testutil.RequireMigratedTestDatabaseURL(t)
+	dsn, _ := testutil.NewMigratedTestDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	pool, err := pgxpool.New(ctx, dsn)
@@ -703,6 +709,73 @@ func TestWorkerReplacementTerminalWithoutSend(t *testing.T) {
 	}
 }
 
+func TestWorkerUndecryptableJobTerminalPersists(t *testing.T) {
+	enqueueRing := func(t *testing.T) *KeyRing {
+		return mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+	}
+	cases := []struct {
+		name       string
+		workerRing func(t *testing.T) *KeyRing
+		corrupt    string
+	}{
+		{
+			name: "unknown key",
+			workerRing: func(t *testing.T) *KeyRing {
+				return mustRing(t, "k-other", map[string][32]byte{"k-other": keyAt(7)}, fixedNonce())
+			},
+		},
+		{
+			name:       "corrupted ciphertext",
+			workerRing: enqueueRing,
+			corrupt:    `UPDATE auth_email_jobs SET ciphertext = decode('00', 'hex') WHERE id = $1`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, sp, q := newWorkerPool(t)
+			clock := testutil.NewClockAtEpoch()
+			regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
+			tx := beginWorkerTx(ctx, t, sp)
+			jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), enqueueRing(t), clock.Now, regID, digest)
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatalf("Commit: %v", err)
+			}
+			if tc.corrupt != "" {
+				if _, err := sp.Exec(ctx, tc.corrupt, jobID); err != nil {
+					t.Fatalf("corrupt job: %v", err)
+				}
+			}
+
+			sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
+			w := newTestWorker(t, sp, q, tc.workerRing(t), sender, clock, nil, uuid.New())
+			if err := w.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			// A later tick past the claim's lease must find nothing to recover.
+			clock.Advance(leaseDuration + time.Second)
+			if err := w.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce after lease expiry: %v", err)
+			}
+
+			if sender.count() != 0 {
+				t.Fatalf("sends = %d, want 0 (undecryptable job must not send)", sender.count())
+			}
+			state, leasedTo := jobState(ctx, t, sp, jobID)
+			if state != "terminal" || leasedTo != "" {
+				t.Fatalf("state = %q lease = %q, want terminal and unleased after the worker returns", state, leasedTo)
+			}
+			var attempts int32
+			var ciphertext []byte
+			if err := sp.QueryRow(ctx, `SELECT attempts, ciphertext FROM auth_email_jobs WHERE id = $1`, jobID).Scan(&attempts, &ciphertext); err != nil {
+				t.Fatalf("read job: %v", err)
+			}
+			if attempts != 1 || ciphertext != nil {
+				t.Fatalf("attempts = %d ciphertext set = %v, want 1 attempt and cleared ciphertext", attempts, ciphertext != nil)
+			}
+		})
+	}
+}
+
 func TestWorkerMissingScopeTerminalOrCancelled(t *testing.T) {
 	ctx, sp, q := newWorkerPool(t)
 	clock := testutil.NewClockAtEpoch()
@@ -1043,9 +1116,7 @@ func TestWorkerCancellationLeavesRecoverableLease(t *testing.T) {
 
 func TestWorkerClaimOrderAndBatch(t *testing.T) {
 	ctx, sp, q := newWorkerPool(t)
-	// A clock before every other fixture keeps rows left by other suites in the
-	// shared database from being due at this claim's now.
-	clock := testutil.NewClock(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	clock := testutil.NewClockAtEpoch()
 	total := claimBatchSize + 1
 	ring := testRing(t, total)
 
