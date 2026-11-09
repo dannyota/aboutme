@@ -59,14 +59,15 @@ Publish only the final enum, never raw paths, to outputs and the step summary.
 
 ## Jobs and aggregate
 
-Until runtime-smoke integration, `prose` runs `preflight`, the entire
-`contracts` job, and `ci`. It omits exactly `macos-tooling`, `vn-infra`,
-`server`, `server-integration`, `server-resumeapi`, `web`, `web-e2e`, and
-`dev-https-proofs`. Each retains `needs: [preflight]` and runs unless event is
-`pull_request` and selection is `prose`; ordinary success dependency handling
-stays. No web/server job is needed: contracts already runs docs lint, link
-tests/checks using `base_sha`, lengths, full-history gitleaks, schema/API
-checks, operational tests, and npm audits. Keep all those steps.
+Until runtime-smoke integration, `prose` runs `preflight`, all three contracts
+jobs (`contracts`, `operational`, and every `dev-https-static` shard), and `ci`.
+It omits exactly `macos-tooling`, `vn-infra`, `server`, `server-integration`,
+`server-resumeapi`, `web`, `web-e2e`, and `dev-https-proofs`. Each retains
+`needs: [preflight]` and runs unless event is `pull_request` and selection is
+`prose`; ordinary success dependency handling stays. No web/server job is
+needed: the contracts jobs already run docs lint, link tests/checks using
+`base_sha`, lengths, full-history gitleaks, schema/API checks, operational
+tests, the dev-https static suite, and npm audits. Keep all those steps.
 
 The accepted
 [runtime-smoke addition](local-tooling-simplification.md#production-runtime-coverage)

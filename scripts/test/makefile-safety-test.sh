@@ -91,24 +91,11 @@ assert_web_e2e_rejected update-golden-present web-e2e \
 assert_web_e2e_rejected playwright-update-present web-e2e \
   'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' \
   WEB_E2E_RUN_ID=valid PLAYWRIGHT_UPDATE_SNAPSHOTS=
-assert_web_e2e_rejected unknown-shard web-e2e \
-  'WEB_E2E_SHARD must be all, preview-gap, or rest' \
-  WEB_E2E_RUN_ID=valid WEB_E2E_SHARD=harness
-
-python3 - "$ROOT" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-root = Path(sys.argv[1])
-makefile = (root / "Makefile").read_text()
-specs = {path.name for path in (root / "apps/web/e2e").glob("print*.spec.ts")}
-harness = re.search(r"^WEB_E2E_HARNESS_SPECS := (.+)$", makefile, re.M)[1].split()
-preview = re.search(r"preview-gap\) harness_specs='([^']+)'", makefile)[1].split()
-excluded = re.search(r"rest\) harness_specs='\$\(filter-out ([^,]+),", makefile)[1].split()
-for selected in [harness, preview, excluded]:
-    assert all(selected.count(spec) == 1 for spec in specs), "Print spec selection drifted"
-PY
+for shard in harness rest; do
+  assert_web_e2e_rejected "unknown-shard-$shard" web-e2e \
+    'WEB_E2E_SHARD must be all, preview-gap, rest-1, rest-2, or rest-3' \
+    WEB_E2E_RUN_ID=valid WEB_E2E_SHARD="$shard"
+done
 
 # Exercise the public diagnostic collector without a browser or container.
 python3 - "$ROOT/Makefile" "$ROOT/scripts/collect-browser-diagnostics.py" "$WORK" <<'PYTHON'
@@ -117,6 +104,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -276,16 +264,24 @@ if mode.name == "update":
 sys.exit(int(os.environ["FIXTURE_STATUS"]))
 """)
 (work / "fixture.png").write_bytes(png)
-for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e-update", "all")]:
+shards = ["preview-gap", "rest-1", "rest-2", "rest-3"]
+selections = {}
+for target, shard in [*[("web-e2e", shard) for shard in ["all", *shards]], ("web-e2e-update", "all")]:
     for status in [42, 0]:
         run_id = f"{target}-{shard}-{status}"
+        calls = work / f"{run_id}-calls.json"
         result = subprocess.run(["/usr/bin/make", "--no-print-directory", target], cwd=repo, env={
             **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
             "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
             "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
-            "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
+            "FIXTURE_CALLS": str(calls), "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
         }, capture_output=True, timeout=10)
         assert result.returncode == (2 if status else 0), result.stderr
+        if target == "web-e2e":
+            args = json.loads(calls.read_text())
+            env = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "-e")
+            selections.setdefault(shard, []).append(
+                (env["WEB_E2E_HARNESS_SPECS"].split(), env["WEB_E2E_NORMAL_SPECS"].split()))
         mode = repo / ".dev/web-e2e-results" / ("a" * 40) / run_id / ("update" if target.endswith("update") else "compare")
         summary = json.loads((mode / "diagnostics/failure-summary.json").read_text())
         assert summary["exit_status"] == status
@@ -301,6 +297,21 @@ for target, shard in [("web-e2e", "preview-gap"), ("web-e2e", "rest"), ("web-e2e
         assert candidate_metadata.exists() == (target == "web-e2e-update" and status == 0)
         if candidate_metadata.exists():
             assert candidate_metadata.read_text() == metadata
+# The shards partition every spec on disk: none skipped, none run twice.
+config = (makefile.parent / "apps/web/e2e/playwright.config.ts").read_text()
+match = re.search(r"testMatch: surface === 'harness'\s*\?\s*\[(.*?)\]\s*:\s*\[(.*?)\]", config, re.S)
+assert match, "Playwright surface spec lists are missing"
+surfaces = [sorted(re.findall(r"'([^']+\.spec\.ts)'", part)) for part in match.groups()]
+disk = sorted(path.name for path in (makefile.parent / "apps/web/e2e").glob("*.spec.ts"))
+assert sorted(surfaces[0] + surfaces[1]) == disk, "every e2e spec must belong to exactly one surface"
+for shard, runs in selections.items():
+    assert all(run == runs[0] for run in runs), f"{shard}: selection depends on the result"
+for index, surface in enumerate(["harness", "normal"]):
+    assert sorted(selections["all"][0][index]) == surfaces[index], f"all must run every {surface} spec"
+    sharded = sorted(spec for shard in shards for spec in selections[shard][0][index])
+    assert sharded == surfaces[index], f"{surface} shards must run every spec exactly once: {sharded}"
+prints = [spec for spec in disk if spec.startswith("print")]
+assert prints and all(selections["preview-gap"][0][0].count(spec) == 1 for spec in prints), "Print spec selection drifted"
 for status in [42, 0]:
     calls = work / f"template-calls-{status}.json"
     result = subprocess.run(["/usr/bin/make", "--no-print-directory", "web-template-pages"], cwd=repo, env={

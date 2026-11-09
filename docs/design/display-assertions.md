@@ -236,7 +236,7 @@ Authority amendments are accepted. Add replacement assertions alongside the
 existing gate. Prove every inventory cell and mutation below; validate native
 and Linux runs. Split product image generation before removing `web-e2e-update`.
 Then delete test baselines, comparison helpers and Baselines workflow together;
-retain `web-e2e` and `web-e2e-fast` names and both shard selections. No baseline
+retain `web-e2e` and `web-e2e-fast` names and every shard selection. No baseline
 update mode remains in either test target. Release only after exact-commit CI.
 
 Product PNGs in `public/templates/pages/` are served by Library and PDF tabs.
