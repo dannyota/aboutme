@@ -5,6 +5,7 @@
 |Path|Role|
 |-|-|
 |`cmd/server/`|Command wiring, dependency construction, listeners, and shutdown|
+|`internal/app/`|Server component constructors called from `cmd/server/`; domains never import it|
 |`cmd/migrate/`, `cmd/db-setup/`|Deployment database commands, separate from serving startup|
 |`internal/api/`, `internal/resumeapi/`, `internal/accountapi/`, `internal/publicapi/`, `internal/mcpapi/`|Transport adapters, HTTP envelopes, and authorization entry points|
 |`internal/auth/`, `internal/password/`, `internal/secondfactor/`, `internal/oauthsrv/`|Session, credential, second-factor, and agent authorization domains|

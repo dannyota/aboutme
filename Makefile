@@ -167,7 +167,7 @@ server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./cmd/db-setup ./internal/dbroles ./cmd/dev-seed ./internal/testutil ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... ./internal/publicapi/... -race -count=1 -v
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./internal/showcase/... ./cmd/server ./cmd/mcp-uat-fixture ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... ./internal/privacynotice/... ./internal/secondfactor/... ./internal/oauthsrv/... ./internal/mcpapi/... ./internal/accountemail/... ./internal/authmail/... -p=1 -race -count=1 -v
+	  go test ./internal/showcase/... ./cmd/server ./internal/app ./cmd/mcp-uat-fixture ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... ./internal/privacynotice/... ./internal/secondfactor/... ./internal/oauthsrv/... ./internal/mcpapi/... ./internal/accountemail/... ./internal/authmail/... -p=1 -race -count=1 -v
 
 .PHONY: idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep media-orphan-sweep-dry-run privacy-retention-sweep
 idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep privacy-retention-sweep: ## Run one bounded privacy job using runtime DATABASE_URL and media configuration

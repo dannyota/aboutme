@@ -28,7 +28,7 @@ func testLogger() *slog.Logger {
 // variadic register extension point. A caller-supplied func(*http.ServeMux)
 // can attach routes New itself knows nothing about
 // (internal/auth's Google/LinkedIn/GitHub start/callback handlers, wired
-// from cmd/server/main.go — internal/auth imports internal/api, so the
+// from internal/app/router.go — internal/auth imports internal/api, so the
 // reverse import would cycle, hence this inversion). The registered route
 // must actually respond AND go through the same middleware chain as
 // /healthz and /readyz: X-Request-Id is set on the response only if

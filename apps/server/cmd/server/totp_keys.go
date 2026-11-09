@@ -1,8 +1,8 @@
 package main
 
-// TOTP key-ring composition helpers: the issuer derived from PUBLIC_ORIGIN,
-// the periodic key-health ticker, and the one-shot `server totp-key-reencrypt`
-// command. See docs/design/totp-key-management.md and
+// TOTP key-ring command helpers: the periodic key-health ticker and the
+// one-shot `server totp-key-reencrypt` command. See
+// docs/design/totp-key-management.md and
 // docs/design/totp-second-factor-contract.md.
 
 import (
@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -35,22 +34,6 @@ const (
 	// IDs...").
 	totpHealthCheckInterval = 5 * time.Minute
 )
-
-// totpIssuerFromPublicOrigin derives the canonical TOTP issuer — the
-// lowercase ASCII PUBLIC_ORIGIN host, no port — from cfg.PublicOrigin, which
-// internal/config.loadPublicOrigin has already normalized to a plain
-// scheme://host[:port] origin. secondfactor.New's ValidateTOTPIssuer call
-// rejects an IP literal or non-canonical host when TOTP enrollment is
-// enabled, so this helper only extracts the host; it does not itself
-// validate it (docs/design/totp-second-factor-contract.md "Provisioning
-// data").
-func totpIssuerFromPublicOrigin(publicOrigin string) (string, error) {
-	u, err := url.Parse(publicOrigin)
-	if err != nil || u.Host == "" {
-		return "", errors.New("parse public origin for totp issuer")
-	}
-	return u.Hostname(), nil
-}
 
 // runTOTPHealthTicker calls check every totpHealthCheckInterval until ctx is
 // done. A query failure is logged and never stops the ticker or crashes the
