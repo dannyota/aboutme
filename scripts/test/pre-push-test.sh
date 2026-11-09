@@ -270,6 +270,21 @@ check "$REPO" 2 STUB_GOLANGCI_VERSION=2.13.0
 has_line 'golangci-lint +REFUSED +installed 2.13.0'
 git -C "$REPO" reset -q --hard
 
+# Go packages excluded by build constraints are skipped without hiding other packages.
+mkdir -p "$REPO/apps/server/internal/pins"
+printf '//go:build dependency_pins\n\npackage pins\n' >"$REPO/apps/server/internal/pins/pins.go"
+check "$REPO" 0
+has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
+has_line 'golangci-lint +skip +no changed packages in a linted directory'
+no_call 'golangci-lint run'
+printf 'package foo\n\nvar X = 1\n' >"$REPO/apps/server/internal/foo/foo.go"
+check "$REPO" 0
+has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
+has_call 'golangci-lint run --concurrency=2 ./internal/foo (in server)'
+no_call './internal/pins (in server)'
+rm -rf "$REPO/apps/server/internal/pins"
+git -C "$REPO" checkout -q -- apps/server/internal/foo/foo.go
+
 # Shell: bash -n catches syntax errors; other scripts use error severity.
 printf 'if then\n' >"$REPO/scripts/bad.sh"
 check "$REPO" 1
