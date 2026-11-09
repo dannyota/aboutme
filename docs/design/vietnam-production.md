@@ -361,7 +361,10 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
 
 The [production runbook](../runbooks/production.md#deploy) owns release gates,
 deployment, rollback, and recovery; the [host guide](../../deploy/vn/README.md)
-maps `deploy/vn/`. Backend settings, provider variables, and state stay ignored.
+maps `deploy/vn/`. Before reporting success, the laptop deploy proves the
+operator can reach `/` with HTTP 200 after its CrowdSec test ban is removed; an
+unreadable ticker or continued denial fails the deploy. Backend settings,
+provider variables, and state stay ignored.
 
 ## AWS reference and recovery
 
