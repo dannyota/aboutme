@@ -23,7 +23,14 @@ const (
 // ErrUnsupportedMediaType reports bytes that are not JPEG, PNG, or WebP.
 var ErrUnsupportedMediaType = errors.New("media: unsupported photo type")
 
-var normalizationRuntimeMu sync.Mutex
+// PhotoNormalizer serializes normalization while the process memory limit is changed.
+// Share one instance among all photo normalization callers in a process.
+type PhotoNormalizer struct {
+	mu sync.Mutex
+}
+
+// NewPhotoNormalizer creates a photo normalizer.
+func NewPhotoNormalizer() *PhotoNormalizer { return &PhotoNormalizer{} }
 
 // PhotoInvalidReason is the closed client-safe normalization failure reason.
 type PhotoInvalidReason string
@@ -91,9 +98,9 @@ func invalidPhoto(reason PhotoInvalidReason) error {
 
 // NormalizePhoto validates and fully decodes one JPEG, PNG, or WebP before
 // emitting metadata-free canonical JPEG or PNG bytes.
-func NormalizePhoto(source []byte) (NormalizedPhoto, error) {
-	normalizationRuntimeMu.Lock()
-	defer normalizationRuntimeMu.Unlock()
+func (n *PhotoNormalizer) NormalizePhoto(source []byte) (NormalizedPhoto, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	var memory runtime.MemStats
 	runtime.ReadMemStats(&memory)
 	memoryLimit := int64(180 * 1024 * 1024)

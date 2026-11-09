@@ -248,12 +248,12 @@ contradict an accepted ADR, stop for owner approval of that topic record.
 
 Repository sources at the brief's fixed base are primary evidence:
 
-- [Server dispatch](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/apps/server/cmd/server/main.go),
-  [account deletion](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/apps/server/cmd/server/account_delete.go),
-  [TOTP command](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/apps/server/cmd/server/totp_keys.go).
-- [Host secrets](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/deploy/vn/scripts/secrets-host.sh),
-  [release fence](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/deploy/vn/scripts/fence.sh),
-  [VN gate](https://github.com/dannyota/aboutme/blob/f63edede34b9986f8aa336dfca25793e0d132457/.github/workflows/vn-infra.yml).
+- [Server dispatch](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/apps/server/cmd/server/main.go),
+  [account deletion](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/apps/server/cmd/server/account_delete.go),
+  [TOTP command](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/apps/server/cmd/server/totp_keys.go).
+- [Host secrets](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/deploy/vn/scripts/secrets-host.sh),
+  [release fence](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/deploy/vn/scripts/fence.sh),
+  [VN gate](https://github.com/dannyota/aboutme/blob/39faec1d8639ac10820bb68b1daff26292f8ba66/.github/workflows/vn-infra.yml).
 
 First-party external references to verify against the installed versions before
 implementation:

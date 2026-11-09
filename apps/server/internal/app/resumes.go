@@ -56,6 +56,7 @@ func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 			PublicOrigin:        cfg.PublicOrigin,
 			TrustedProxies:      api.TrustedProxies(cfg.TrustedProxyCIDRs),
 			PhotoAdmission:      media.NewPhotoAdmission(),
+			PhotoNormalizer:     media.NewPhotoNormalizer(),
 			Coordinator:         deps.Coordinator,
 			RecoveryPool:        deps.Pool,
 			PrintQueue:          deps.PrintQueue,

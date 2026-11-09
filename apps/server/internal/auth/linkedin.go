@@ -31,7 +31,9 @@ const linkedinIssuer = "https://www.linkedin.com/oauth"
 
 // linkedinScopes are the OAuth2 scopes requested for LinkedIn login:
 // "openid profile email". See docs/design/security.md.
-var linkedinScopes = []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
+func linkedinScopes() []string {
+	return []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
+}
 
 // linkedinCancelErrors are the callback error values that mean the person
 // canceled: LinkedIn's two documented values and the RFC 6749 access_denied.
@@ -115,7 +117,7 @@ func (s *Service) linkedinOAuth2Config(endpoint oauth2.Endpoint, redirectURL str
 		ClientSecret: s.linkedin.clientSecret,
 		Endpoint:     endpoint,
 		RedirectURL:  redirectURL,
-		Scopes:       linkedinScopes,
+		Scopes:       linkedinScopes(),
 	}
 }
 
