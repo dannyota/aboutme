@@ -63,10 +63,10 @@ False positive: generic-api-key fires on the fixed ALTCHA test vector's derived
 key. The test signs its challenge with secrets derived from 64 bytes of 0x5a
 and checks that the server accepts the browser solver's solution; the derived
 key is a proof-of-work result for that fixture, not a credential. Limited to
-that constant's exact shape in that test file. Verified 2026-11-09.
+that constant's exact value in that test file. Verified 2026-11-09.
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''apps/server/internal/viewcount/challenge_test\.go$''']
-regexTarget = "line"
-regexes = ['''browserVectorDerivedKey\s*=\s*"[0-9a-f]{64}"''']
+regexTarget = "match"
+regexes = ['''^browserVectorDerivedKey\s*=\s*"10af46ffb1c0c5a2b152bc0a46f02db92ddcfff3d20793675c70f45b8861ce73"$''']
