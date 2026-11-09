@@ -1,4 +1,4 @@
-package main
+package app
 
 // Second-factor composition: the WebAuthn relying party, the TOTP key ring
 // and health checker, the secondfactor.Service, and the HTTP handlers that
@@ -10,9 +10,11 @@ package main
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
@@ -23,16 +25,18 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// secondFactorRuntime is newSecondFactorRoutes's result: the route registrar
-// every caller already used, plus the TOTP key-health checker the caller
-// must run at startup and on a five-minute ticker
-// (docs/design/totp-key-management.md "Key failures").
-type secondFactorRuntime struct {
+// SecondFactor is NewSecondFactor's result: the route registrar every caller
+// already used, plus the TOTP key-health checker the caller must run at
+// startup and on a five-minute ticker (docs/design/totp-key-management.md
+// "Key failures").
+type SecondFactor struct {
+	// RegisterRoutes attaches every second-factor route to a mux.
 	RegisterRoutes func(*http.ServeMux)
-	TOTPHealth     *secondfactor.TOTPHealthChecker
+	// TOTPHealth checks the stored TOTP key IDs against the configured ring.
+	TOTPHealth *secondfactor.TOTPHealthChecker
 }
 
-// newSecondFactorRoutes builds the relying party, the TOTP key ring and
+// NewSecondFactor builds the relying party, the TOTP key ring and
 // unavailable signal, the factor service, the TOTP health checker, and the
 // handlers, and returns a registrar that attaches every second-factor route
 // unconditionally: registration options and completion recheck
@@ -48,29 +52,29 @@ type secondFactorRuntime struct {
 // "Passkeys", docs/design/totp-key-management.md, "Key ring", and
 // internal/config/passkey.go and internal/config/totp.go for the narrower
 // checks that give an operator a clearer, earlier error.
-func newSecondFactorRoutes(logger *slog.Logger, cfg config.Config, pool *store.Pool) (secondFactorRuntime, error) {
+func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool) (SecondFactor, error) {
 	rp, err := secondfactor.NewRelyingParty(cfg.PublicOrigin)
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create passkey relying party: %w", err)
+		return SecondFactor{}, fmt.Errorf("create passkey relying party: %w", err)
 	}
 	ring, err := newMailKeyRing(cfg)
 	if err != nil {
-		return secondFactorRuntime{}, err
+		return SecondFactor{}, err
 	}
 	outbox, err := authmail.NewOutbox(ring, time.Now)
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create second factor mail outbox: %w", err)
+		return SecondFactor{}, fmt.Errorf("create second factor mail outbox: %w", err)
 	}
 	pending := auth.NewPendingAuthenticationManager(pool, logger)
 	sessions := auth.NewSessionManagerWithPool(pool)
 
 	totpRing, err := secondfactor.NewTOTPKeyRing(cfg.TOTPActiveKey, cfg.TOTPPreviousKey, rand.Reader)
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create totp key ring: %w", err)
+		return SecondFactor{}, fmt.Errorf("create totp key ring: %w", err)
 	}
 	totpIssuer, err := totpIssuerFromPublicOrigin(cfg.PublicOrigin)
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("derive totp issuer: %w", err)
+		return SecondFactor{}, fmt.Errorf("derive totp issuer: %w", err)
 	}
 	totpSignal := secondfactor.NewTOTPUnavailableSignal(time.Now, logger)
 
@@ -90,7 +94,7 @@ func newSecondFactorRoutes(logger *slog.Logger, cfg config.Config, pool *store.P
 		Logger:                logger,
 	})
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create second factor service: %w", err)
+		return SecondFactor{}, fmt.Errorf("create second factor service: %w", err)
 	}
 
 	h, err := auth.NewSecondFactorHandlers(auth.SecondFactorHandlerOptions{
@@ -105,14 +109,30 @@ func newSecondFactorRoutes(logger *slog.Logger, cfg config.Config, pool *store.P
 		Logger:         logger,
 	})
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create second factor handlers: %w", err)
+		return SecondFactor{}, fmt.Errorf("create second factor handlers: %w", err)
 	}
 
 	health, err := secondfactor.NewTOTPHealthChecker(secondfactor.TOTPHealthConfig{
 		Pool: pool, Ring: totpRing, Now: time.Now, Signal: totpSignal,
 	})
 	if err != nil {
-		return secondFactorRuntime{}, fmt.Errorf("create totp health checker: %w", err)
+		return SecondFactor{}, fmt.Errorf("create totp health checker: %w", err)
 	}
-	return secondFactorRuntime{RegisterRoutes: h.RegisterRoutes, TOTPHealth: health}, nil
+	return SecondFactor{RegisterRoutes: h.RegisterRoutes, TOTPHealth: health}, nil
+}
+
+// totpIssuerFromPublicOrigin derives the canonical TOTP issuer (the
+// lowercase ASCII PUBLIC_ORIGIN host, no port) from cfg.PublicOrigin, which
+// internal/config.loadPublicOrigin has already normalized to a plain
+// scheme://host[:port] origin. secondfactor.New's ValidateTOTPIssuer call
+// rejects an IP literal or non-canonical host when TOTP enrollment is
+// enabled, so this helper only extracts the host; it does not itself
+// validate it (docs/design/totp-second-factor-contract.md "Provisioning
+// data").
+func totpIssuerFromPublicOrigin(publicOrigin string) (string, error) {
+	u, err := url.Parse(publicOrigin)
+	if err != nil || u.Host == "" {
+		return "", errors.New("parse public origin for totp issuer")
+	}
+	return u.Hostname(), nil
 }

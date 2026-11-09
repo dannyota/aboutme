@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"errors"
@@ -11,7 +11,11 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
 
-func newPrintRuntime(platform string, config printrender.Config, create func(printrender.Config) (*printrender.Renderer, error)) (*printrender.Renderer, *renderjob.Queue, error) {
+// NewPrint builds the private print runtime. On linux it creates the
+// sandboxed browser renderer with create, and any failure is fatal; on every
+// other platform the renderer is nil and the returned queue is already
+// closed, so it rejects all admission.
+func NewPrint(platform string, config printrender.Config, create func(printrender.Config) (*printrender.Renderer, error)) (*printrender.Renderer, *renderjob.Queue, error) {
 	var renderer *printrender.Renderer
 	var err error
 	if platform == "linux" {
@@ -37,7 +41,9 @@ func newPrintRuntime(platform string, config printrender.Config, create func(pri
 	return renderer, queue, nil
 }
 
-func privatePrintHandler(queue *renderjob.Queue, enabled bool) (http.Handler, error) {
+// PrivatePrintHandler serves the private print redemption route when enabled,
+// and otherwise answers every request 503 temporarily_unavailable.
+func PrivatePrintHandler(queue *renderjob.Queue, enabled bool) (http.Handler, error) {
 	if enabled {
 		return printapi.NewRedeemHandler(queue)
 	}

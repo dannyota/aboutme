@@ -101,7 +101,7 @@ func (o Options) withDefaults() Options {
 // (e.g. "GET /healthz") so this package can produce enveloped 404 and 405
 // responses via WriteError instead of ServeMux's plain-text defaults.
 //
-// register lets callers (the composition root in cmd/server/main.go)
+// register lets callers (the composition root in internal/app/router.go)
 // attach additional routes without this package importing the packages
 // that define them — internal/auth imports internal/api (for its error
 // envelope and TrustedProxies), so the reverse import would cycle. Each
@@ -188,7 +188,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	//
 	// Both RateLimit and SecurityHeaders are wired with opts.TrustedProxies
 	// (see Options.TrustedProxies) rather than a value this package
-	// invents: the caller (cmd/server/main.go) is the one place that knows
+	// invents: the caller (internal/app/router.go) is the one place that knows
 	// the deployment's actual topology, sourced from
 	// internal/config.Config.TrustedProxyCIDRs.
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
