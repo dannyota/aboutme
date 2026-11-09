@@ -1,8 +1,11 @@
 package resumeapi
 
+// Mutation admission: the request, input, and context types every resume
+// mutation shares, the transaction callback binding, and executeMutation's
+// HTTP admission order from headers to the idempotent write.
+
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,51 +18,98 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
+// mutationHeaders holds a mutation request's parsed headers.
 type mutationHeaders struct {
-	Key              uuid.UUID
+	// Key is the request's Idempotency-Key.
+	Key uuid.UUID
+	// ExpectedRevision is the If-Match revision, or nil when the route
+	// takes no precondition.
 	ExpectedRevision *int64
-	WireVersion      int32
+	// WireVersion is the resume schema version resolved from the request.
+	WireVersion int32
 }
 
+// boundedInput is a mutation request decoded within its size bounds.
 type boundedInput struct {
+	// Payload is the bounded request bytes the request fingerprint covers.
 	Payload []byte
-	Value   any
+	// Value is the decoded request value that later steps type-assert.
+	Value any
 }
 
+// idempotencyInspection is the idempotency store's decision for a request
+// before preparation runs.
 type idempotencyInspection struct {
-	Operation   string
+	// Operation is the hex digest of the method, registered operation, and
+	// canonical targets.
+	Operation string
+	// RequestHash is the request fingerprint over wire version,
+	// precondition, semantic inputs, and payload.
 	RequestHash [32]byte
-	Response    resume.StoredResponse
-	Replayed    bool
+	// Response is the committed response when Replayed is true.
+	Response resume.StoredResponse
+	// Replayed reports whether a committed record already answers this key
+	// and fingerprint.
+	Replayed bool
 }
 
+// preparedInput is a mutation's input after preparation.
 type preparedInput struct {
-	Input         boundedInput
-	Value         any
+	// Input is the decoded request preparation started from.
+	Input boundedInput
+	// Value is the operation-specific prepared value that Run type-asserts.
+	Value any
+	// ExecuteBefore, when not zero, bounds execution: the mutation is not
+	// attempted after it passes, and the execution context ends there.
 	ExecuteBefore time.Time
 }
 
+// mutationContext identifies the caller and request a mutation runs for.
 type mutationContext struct {
-	UserID                      uuid.UUID
-	SessionID                   uuid.UUID
-	Session                     store.Session
-	Agent                       *AgentPrincipal
+	// UserID is the account the mutation acts for: the agent token's user
+	// for an agent caller, otherwise the session's user.
+	UserID uuid.UUID
+	// SessionID is the caller's session ID, or the zero UUID without a
+	// session.
+	SessionID uuid.UUID
+	// Session is the caller's session; the transaction replaces it with the
+	// durable row it rechecks.
+	Session store.Session
+	// Agent is the agent principal for an agent token caller, or nil.
+	Agent *AgentPrincipal
+	// ExpectedDiscoveryGeneration is the discovery generation a global
+	// transition locked and matched in its transaction, or nil.
 	ExpectedDiscoveryGeneration *int64
-	ExpectedRevision            *int64
-	WireVersion                 int32
-	Operation                   string
-	RequestHash                 [32]byte
-	CurrentResume               *resume.Resume
+	// ExpectedRevision is the If-Match revision, or nil when the route
+	// takes no precondition.
+	ExpectedRevision *int64
+	// WireVersion is the resume schema version for the request and response.
+	WireVersion int32
+	// Operation is the hex operation digest that keys the idempotency record.
+	Operation string
+	// RequestHash is the request fingerprint stored with the idempotency
+	// record.
+	RequestHash [32]byte
+	// CurrentResume is the resume row a transition read in its transaction
+	// at the preflight revision, or nil outside a transition.
+	CurrentResume *resume.Resume
 }
 
+// mutationRunResult is the result of one mutationOperation run.
 type mutationRunResult struct {
+	// Response is the response the idempotency store records and the
+	// handler writes.
 	Response resume.StoredResponse
 }
 
+// mutationOperation performs one mutation inside its database transaction.
 type mutationOperation interface {
+	// Run performs the mutation with qtx after the transaction rechecks the
+	// caller, and returns the response to record.
 	Run(context.Context, *store.Queries, mutationContext, preparedInput) (mutationRunResult, error)
 }
 
+// mutationOperationFunc is a function that implements mutationOperation.
 type mutationOperationFunc func(context.Context, *store.Queries, mutationContext, preparedInput) (mutationRunResult, error)
 
 // Run adapts a function to mutationOperation.
@@ -69,29 +119,58 @@ func (f mutationOperationFunc) Run(ctx context.Context, qtx *store.Queries, muta
 	return f(ctx, qtx, mutation, prepared)
 }
 
+// mutationSpec describes one mutation route for executeMutation.
 type mutationSpec struct {
+	// RegisteredOperation is the route's operation name, hashed into the
+	// idempotency operation digest.
 	RegisteredOperation string
-	RequireMatch        bool
-	Decode              func(*http.Request) (boundedInput, error)
-	CanonicalTargets    func(boundedInput) ([]string, error)
-	SemanticInputs      func(boundedInput) ([]string, error)
-	Prepare             func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error)
-	Run                 mutationOperation
-	Finalize            func(context.Context, preparedInput, resume.ExecuteResult, error)
-	Transition          func(context.Context, resume.Resume, preparedInput) (mutationTransition, error)
+	// RequireMatch reports whether the route requires If-Match; when false
+	// the route rejects one.
+	RequireMatch bool
+	// Decode reads and bounds the request. Required.
+	Decode func(*http.Request) (boundedInput, error)
+	// CanonicalTargets returns name and value pairs that identify the
+	// mutation target in the operation digest. Required.
+	CanonicalTargets func(boundedInput) ([]string, error)
+	// SemanticInputs, when set, returns name and value pairs added to the
+	// request fingerprint.
+	SemanticInputs func(boundedInput) ([]string, error)
+	// Prepare, when set, builds the prepared input after idempotency
+	// inspection; otherwise the decoded value is used as is.
+	Prepare func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error)
+	// Run performs the mutation in its transaction. Required.
+	Run mutationOperation
+	// Finalize, when set, runs after every execution outcome once
+	// preparation succeeds, including errors.
+	Finalize func(context.Context, preparedInput, resume.ExecuteResult, error)
+	// Transition, when set, sends the mutation through executeTransition
+	// and describes its public-state transition.
+	Transition func(context.Context, resume.Resume, preparedInput) (mutationTransition, error)
 }
 
+// mutationTransition describes a mutation's public-state transition for one
+// resume.
 type mutationTransition struct {
+	// ResumeID is the resume the transition changes; it must match the
+	// preflight row.
 	ResumeID uuid.UUID
-	Class    publicstate.TransitionClass
-	Global   bool
-	Retire   bool
+	// Class is the transition's public-state class.
+	Class publicstate.TransitionClass
+	// Global reports whether the transition also fences and locks the
+	// discovery generation.
+	Global bool
+	// Retire reports whether the transition retires the resume from public
+	// state.
+	Retire bool
 	// Slugs is the complete old/new claim set resolved during preflight. The
 	// callback locks this exact set before public state or any row operation.
-	Slugs   []string
+	Slugs []string
+	// Publish is the recovery proof for a publish transition, or nil.
 	Publish *publishRecoveryProof
 }
 
+// boundMutation binds an operation to its execution context and inputs as
+// the idempotency store's transaction callback.
 type boundMutation struct {
 	service   *Service
 	ctx       context.Context
@@ -237,209 +316,4 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 		return
 	}
 	s.writeMutationResponse(w, result.Response)
-}
-
-func (s *Service) executeTransition(ctx context.Context, mutation mutationContext, prepared preparedInput,
-	spec mutationSpec,
-) (resume.ExecuteResult, error) {
-	if s.coordinator == nil || s.recoveryPool == nil {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: public transition dependencies are unavailable")
-	}
-	reader, ok := s.resumes.(resumePoolReader)
-	if !ok || mutation.ExpectedRevision == nil {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, internalClientError()
-	}
-	runCtx := ctx
-	cancelRun := func() {}
-	if !prepared.ExecuteBefore.IsZero() {
-		now := time.Now()
-		if s.clock != nil {
-			now = s.clock()
-		}
-		remaining := prepared.ExecuteBefore.Sub(now)
-		if remaining <= 0 {
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, context.DeadlineExceeded
-		}
-		runCtx, cancelRun = context.WithTimeout(ctx, remaining)
-	}
-	defer cancelRun()
-	identity := mutationIdentity{UserID: mutation.UserID, Operation: mutation.Operation, Key: mutationKeyFromContext(ctx), RequestHash: mutation.RequestHash}
-	if identity.Key == uuid.Nil {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: transition mutation identity is missing idempotency key")
-	}
-	recheckPreflight := func() (resume.ExecuteResult, bool, error) {
-		recheck, recheckErr := s.idempotency.Recheck(runCtx, identity.UserID, identity.Operation, identity.Key, identity.RequestHash)
-		if recheckErr != nil {
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, true, recheckErr
-		}
-		switch recheck.Decision {
-		case resume.RecheckReplay:
-			return resume.ExecuteResult{Response: recheck.Response, Replayed: true, Outcome: resume.CommitCommitted}, true, nil
-		case resume.RecheckReuse:
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, true, resume.ErrIdempotencyKeyReuse
-		case resume.RecheckFresh:
-			return resume.ExecuteResult{}, false, nil
-		default:
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, true, errors.New("resumeapi: invalid idempotency recheck decision")
-		}
-	}
-	current, err := reader.Get(runCtx, mutation.UserID, resumeIDFromPrepared(prepared))
-	if err != nil {
-		if errors.Is(err, resume.ErrNotFound) {
-			if result, decided, recheckErr := recheckPreflight(); decided {
-				return result, recheckErr
-			}
-		}
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, err
-	}
-	if current.Revision != *mutation.ExpectedRevision {
-		if result, decided, recheckErr := recheckPreflight(); decided {
-			return result, recheckErr
-		}
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, &resume.RevisionMismatchError{CurrentRevision: current.Revision, Current: current}
-	}
-	descriptor, err := spec.Transition(runCtx, current, prepared)
-	if err != nil {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, err
-	}
-	if descriptor.ResumeID != current.ID {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: transition target does not match preflight row")
-	}
-	if descriptor.Publish != nil {
-		input, ok := prepared.Value.(publishMutationPrepared)
-		if !ok {
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: publish transition has the wrong prepared input")
-		}
-		input.ReleasedAt = descriptor.Publish.ReleasedAt
-		prepared.Value = input
-	}
-	var deleteProof *deleteRecoveryProof
-	if descriptor.Retire {
-		deleteProof = &deleteRecoveryProof{ResumeID: current.ID}
-		if photo := current.Doc.PersonalDetails.Photo; photo != nil {
-			deleteProof.PhotoKey = photo.Key
-		}
-		if current.Slug != nil {
-			releasedAt := time.Now()
-			if s.clock != nil {
-				releasedAt = s.clock()
-			}
-			releasedAt = normalizePostgresTimestamp(releasedAt)
-			input, ok := prepared.Value.(deletePreparedInput)
-			if !ok {
-				return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: delete transition has the wrong prepared input")
-			}
-			input.ReleasedAt = releasedAt
-			prepared.Value = input
-			slug := *current.Slug
-			deleteProof.Slug, deleteProof.ReleasedAt = &slug, releasedAt
-		}
-	}
-	plan := publicstate.Plan{Resumes: []publicstate.ResumeTarget{{
-		ID: current.ID, ExpectedRevision: current.Revision, Class: descriptor.Class,
-	}}}
-	if descriptor.Global {
-		state, stateErr := store.New(s.recoveryPool).GetPublicState(runCtx)
-		if stateErr != nil {
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, stateErr
-		}
-		plan.DiscoveryGeneration = &state.DiscoveryGeneration
-	}
-	runPlan := func(currentPlan publicstate.Plan) (resume.ExecuteResult, error) {
-		return s.runMutation(runCtx, identity, mutationPlan{
-			Fence: currentPlan,
-			Mutate: func(runCtx context.Context, qtx *store.Queries) (resume.StoredResponse, publicstate.CommittedState, error) {
-				transactionMutation := mutation
-				if err := lockTransitionSlugs(runCtx, qtx, descriptor.Slugs); err != nil {
-					return resume.StoredResponse{}, publicstate.CommittedState{}, err
-				}
-				s.recordTransactionOrder("slug")
-				if currentPlan.DiscoveryGeneration != nil {
-					if _, lockErr := qtx.LockPublicState(runCtx); lockErr != nil {
-						return resume.StoredResponse{}, publicstate.CommittedState{}, lockErr
-					}
-					public, publicErr := qtx.GetPublicState(runCtx)
-					if publicErr != nil {
-						return resume.StoredResponse{}, publicstate.CommittedState{}, publicErr
-					}
-					if public.DiscoveryGeneration != *currentPlan.DiscoveryGeneration {
-						return resume.StoredResponse{}, publicstate.CommittedState{}, &publicstate.GenerationMismatchError{Expected: *currentPlan.DiscoveryGeneration, Actual: public.DiscoveryGeneration}
-					}
-					transactionMutation.ExpectedDiscoveryGeneration = currentPlan.DiscoveryGeneration
-					s.recordTransactionOrder("public_state")
-				}
-				transactionCurrent, currentErr := s.resumes.GetTx(runCtx, qtx, mutation.UserID, current.ID)
-				if currentErr != nil {
-					return resume.StoredResponse{}, publicstate.CommittedState{}, currentErr
-				}
-				if transactionCurrent.Revision != current.Revision {
-					return resume.StoredResponse{}, publicstate.CommittedState{}, &resume.RevisionMismatchError{CurrentRevision: transactionCurrent.Revision, Current: transactionCurrent}
-				}
-				transactionMutation.CurrentResume = &transactionCurrent
-				s.recordTransactionOrder("resume")
-				transactionMutation, sessionErr := s.transactionMutation(runCtx, qtx, transactionMutation)
-				if sessionErr != nil {
-					return resume.StoredResponse{}, publicstate.CommittedState{}, sessionErr
-				}
-				runResult, runErr := spec.Run.Run(runCtx, qtx, transactionMutation, prepared)
-				if runErr != nil {
-					return resume.StoredResponse{}, publicstate.CommittedState{}, runErr
-				}
-				if deleteProof != nil && deleteProof.Slug != nil {
-					tombstone, tombstoneErr := qtx.GetSlugTombstoneForUpdate(runCtx, *deleteProof.Slug)
-					if tombstoneErr != nil {
-						return resume.StoredResponse{}, publicstate.CommittedState{}, tombstoneErr
-					}
-					deleteProof.ReleasedAt = tombstone.ReleasedAt
-				}
-				state := publicstate.CommittedState{ResumeRevisions: map[uuid.UUID]int64{current.ID: current.Revision + 1}}
-				if descriptor.Retire {
-					state.ResumeRevisions = nil
-					state.RetiredResumes = []uuid.UUID{current.ID}
-				}
-				if currentPlan.DiscoveryGeneration != nil {
-					durable, readErr := qtx.GetPublicState(runCtx)
-					if readErr != nil {
-						return resume.StoredResponse{}, publicstate.CommittedState{}, readErr
-					}
-					state.DiscoveryGeneration = &durable.DiscoveryGeneration
-				}
-				return runResult.Response, state, nil
-			},
-			ReplayState: func(replayCtx context.Context, _ resume.StoredResponse) (publicstate.CommittedState, error) {
-				return s.replayCommittedState(replayCtx, mutation.UserID, currentPlan, descriptor.Retire)
-			},
-			Recover: &mutationRecovery{pool: s.recoveryPool, identity: identity, plan: currentPlan, retire: descriptor.Retire, delete: deleteProof, publish: descriptor.Publish},
-		})
-	}
-	result, transitionErr := runPlan(plan)
-	var mismatch *publicstate.GenerationMismatchError
-	if errors.As(transitionErr, &mismatch) {
-		// A contender may have read the old owner generation before the winner
-		// committed. First distinguish that real content race from an unrelated
-		// discovery-generation advance.
-		fresh, readErr := reader.Get(runCtx, mutation.UserID, current.ID)
-		if readErr != nil {
-			return result, readErr
-		}
-		if fresh.Revision != current.Revision {
-			return result, &resume.RevisionMismatchError{CurrentRevision: fresh.Revision, Current: fresh}
-		}
-		if plan.DiscoveryGeneration == nil {
-			// A non-global fence mismatch means another owner completed between
-			// preflight and Begin. Even when a test seam observes the same durable
-			// revision, it is a stale optimistic-concurrency result, never 500.
-			return result, &resume.RevisionMismatchError{CurrentRevision: fresh.Revision, Current: fresh}
-		}
-		public, readErr := store.New(s.recoveryPool).GetPublicState(runCtx)
-		if readErr != nil {
-			return result, readErr
-		}
-		plan.DiscoveryGeneration = &public.DiscoveryGeneration
-		result, transitionErr = runPlan(plan)
-		if errors.As(transitionErr, &mismatch) {
-			return result, &clientError{Status: http.StatusServiceUnavailable, Code: "public_state_busy", Message: "public state is busy", Headers: map[string]string{"Retry-After": "1"}}
-		}
-	}
-	return result, transitionErr
 }
