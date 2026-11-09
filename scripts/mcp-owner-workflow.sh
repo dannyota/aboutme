@@ -111,8 +111,8 @@ take_lock() {
 # of reserved-prefix accounts and captured mail never overlaps the password
 # proof (instructions/resources.md). An inherited descriptor for it is reused.
 take_local_check_lock() {
-  local lock=$GIT_COMMON/aboutme-local-check.lock lock_trace lock_status line
-  [ ! -L "$lock" ] || fail 'the shared local-check lock is a symbolic link'
+  local lock=$MAIN/.dev/locks/local-check.lock lock_trace lock_status line
+  [ ! -L "${lock%/*}" ] && [ ! -L "$lock" ] && install -d -m 0700 "${lock%/*}" || fail 'the shared local-check lock is a symbolic link'
   if lock_trace=$(python3 -I -B -c '
 import fcntl, os, sys
 error_class = "none"

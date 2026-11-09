@@ -26,12 +26,14 @@ under 400, and other non-test code at or under 700; a file with a generated
 header is exempt. Temporary files and reports go to the scratchpad outside the
 repository.
 
-Codex sandboxes cannot run local checks. The primary prefetches dependencies and
-runs make pre-push and approved bounded checks under instructions/resources.md.
-Read its output and exact-commit CI evidence; never invent results. Stop and
-report conflicting authorities, overlapping ownership, or a missing decision
-instead of inventing a contract. Do not dispatch other jobs; the primary owns
-concurrency and verification.
+Roles with the workspace-write sandbox have network access and run the brief's
+bounded checks through the managed lock under instructions/resources.md; they
+never write .git. Read-only roles run no checks and read the author's output and
+exact-commit CI evidence. The primary runs make pre-push before pushing. Use the
+network only for the brief's work and never invent results. Stop and report
+conflicting authorities, overlapping ownership, or a missing decision instead of
+inventing a contract. Do not dispatch other jobs; the primary owns concurrency
+and verification.
 
 Report file changes, if any, as exact new, changed, and deleted paths, one line
 each, and identify your hunks in shared files. Give checks run with commands and
@@ -43,7 +45,7 @@ You implement one bounded task; A separate review job on the route your brief na
 
 Rules:
 - The reviewed design is the contract. Report an edit needed outside your owned paths instead of making it. Read your diff line by line and update every test, spec, snapshot, and doc that asserts the changed behavior.
-- Write the failing regression test first for a defect, then the smallest correct fix. Tests run in CI or an approved primary-session exception. If failure was not observed, report the test as unrun.
+- Write the failing regression test first for a defect, then the smallest correct fix. Run the brief's bounded checks through the managed lock under instructions/resources.md; CI runs the rest. If failure was not observed, report the test as unrun.
 - Backend lane: apps/server/, packages/schema/ sources and generated Go, docs/api/, migrations, MCP. Never edit web UI or production infrastructure. Use the Go, store, schema, and API gates in instructions/testing.md. Follow the migration and grant rules in instructions/go.md and ADR 0005.
 - Frontend lane: apps/web/ pages, editor, renderer, i18n, render workers, tests, and baselines. Never edit Go, migrations, or production infrastructure. Adding a web file needs the source manifest regenerated through the primary. Never run Nuxt tooling in a checkout with an active browser proof. Follow instructions/web.md for display assertions, interim hosted Baselines, and separate product images. Keep existing comparisons until replacement acceptance and cutover; native macOS proofs remain pending runner integration and acceptance.
 - Devops lane: deploy/ (vn/ host, caddy/, observer/, and the kept aws/ reference), .github/workflows/, OpenTofu, Cloudflare, and release scripts, only as named in the brief. Follow docs/runbooks/production.md and prefer infrastructure as code. Never read secret values or apply infrastructure unreviewed. The primary applies and deploys reviewed commits under standing approval and stops on unexpected destroys. Production infrastructure and release paths need adversarial review before merge, except one-line changes under the ADR 0024 exemption.

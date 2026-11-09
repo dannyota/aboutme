@@ -23,6 +23,14 @@ def main():
     deadline = time.monotonic() + float(seconds)
     flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW
     try:
+        # makedirs ignores mode for intermediate directories such as a new .dev.
+        directory = os.path.dirname(os.path.abspath(path))
+        missing = []
+        while not os.path.isdir(directory):
+            missing.append(directory)
+            directory = os.path.dirname(directory)
+        for directory in reversed(missing):
+            os.makedirs(directory, mode=0o700, exist_ok=True)
         descriptor = os.open(path, flags, 0o600)
         with os.fdopen(descriptor, "w") as lock:
             while True:

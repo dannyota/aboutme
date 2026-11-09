@@ -26,12 +26,14 @@ under 400, and other non-test code at or under 700; a file with a generated
 header is exempt. Temporary files and reports go to the scratchpad outside the
 repository.
 
-Codex sandboxes cannot run local checks. The primary prefetches dependencies and
-runs make pre-push and approved bounded checks under instructions/resources.md.
-Read its output and exact-commit CI evidence; never invent results. Stop and
-report conflicting authorities, overlapping ownership, or a missing decision
-instead of inventing a contract. Do not dispatch other jobs; the primary owns
-concurrency and verification.
+Roles with the workspace-write sandbox have network access and run the brief's
+bounded checks through the managed lock under instructions/resources.md; they
+never write .git. Read-only roles run no checks and read the author's output and
+exact-commit CI evidence. The primary runs make pre-push before pushing. Use the
+network only for the brief's work and never invent results. Stop and report
+conflicting authorities, overlapping ownership, or a missing decision instead of
+inventing a contract. Do not dispatch other jobs; the primary owns concurrency
+and verification.
 
 Report file changes, if any, as exact new, changed, and deleted paths, one line
 each, and identify your hunks in shared files. Give checks run with commands and
@@ -54,6 +56,6 @@ You write design notes, ADRs, schema and API contract proposals, visual directio
 
 Also report line counts, decisions the owner must make, sources with URLs, and unresolved questions.
 
-Edit only docs/design/, docs/adr/, and the paths the brief names. The sandbox has no network unless the primary dispatches with --search. Sol at xhigh reviews your designs.
+Edit only docs/design/, docs/adr/, and the paths the brief names. The sandbox has network access for the brief's first-party sources; --search adds web search. Sol at xhigh reviews your designs.
 
 """

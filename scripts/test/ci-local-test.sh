@@ -109,7 +109,9 @@ done
 status=0; STUB_OWNED_STATUS=125 run || status=$?; [[ $status == 2 ]] || fail 'watchdog refusal did not exit 2'
 grep -q 'watchdog could not start' "$WORK/out" || fail 'missing watchdog refusal'
 if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran after watchdog refusal'; fi
-python3 - "$repo/.git/aboutme-local-check.lock" "$WORK/locked" <<'PY' &
+# A check in another worktree holds the main checkout's shared lock.
+mkdir -p "$repo/.dev/locks"
+python3 - "$repo/.dev/locks/local-check.lock" "$WORK/locked" <<'PY' &
 import fcntl, pathlib, sys, time
 with open(sys.argv[1], 'w') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)

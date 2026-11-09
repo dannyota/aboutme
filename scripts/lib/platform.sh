@@ -18,6 +18,19 @@ require_gnu_tools() {
   done
 }
 
+# local_check_lock_path [dir] prints the shared local-check lock. It lives in
+# the main checkout's ignored .dev/locks directory, outside .git, so every
+# worktree resolves the same file and Codex sandboxes can take it.
+local_check_lock_path() {
+  local common
+  common=$(git -C "${1:-.}" rev-parse --path-format=absolute --git-common-dir) || return 1
+  if [[ $common != /*/.git ]]; then
+    printf 'the main checkout has an unexpected Git layout: %s\n' "$common" >&2
+    return 1
+  fi
+  printf '%s/.dev/locks/local-check.lock\n' "${common%/.git}"
+}
+
 port_listening() {
   local listeners
   if command -v ss >/dev/null; then

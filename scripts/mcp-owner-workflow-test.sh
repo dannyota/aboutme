@@ -1184,7 +1184,8 @@ kill "$holder" 2>/dev/null || true
 wait "$holder" 2>/dev/null || true
 rm -f -- "$CTL/lock.held"
 
-shared_lock=$MAIN/.git/aboutme-local-check.lock
+shared_lock=$MAIN/.dev/locks/local-check.lock
+mkdir -p "$MAIN/.dev/locks"
 (
   exec 8>>"$shared_lock"
   flock 8

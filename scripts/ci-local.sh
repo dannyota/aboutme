@@ -10,8 +10,7 @@ source "$(dirname "$SCRIPT")/lib/platform.sh"
 require_modern_bash || exit 2
 command -v python3 >/dev/null || { printf 'ci-local: python3 is required\n' >&2; exit 2; }
 ROOT=$(git rev-parse --show-toplevel)
-COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
-LOCK=$COMMON/aboutme-local-check.lock
+LOCK=$(local_check_lock_path) || exit 2
 cd "$ROOT"
 say() { printf 'ci-local: %s\n' "$*"; }
 
