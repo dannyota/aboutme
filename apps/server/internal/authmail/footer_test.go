@@ -11,7 +11,7 @@ func TestAuthMailFooterByMode(t *testing.T) {
 	const en = "This email was sent through Bizfly's mail server. If you reply, your email goes straight to Danny's Google Workspace mailbox."
 	for _, mode := range []string{"smtp", "ses", "capture"} {
 		t.Run(mode, func(t *testing.T) {
-			for kind := range templates {
+			for kind := range templates() {
 				t.Run(string(kind), func(t *testing.T) {
 					payload := Payload{To: "alice@example.com", Link: verifyLinkPrefix + "token", OccurredAt: "2026-10-11T09:00:00Z"}
 					message := buildMessage(kind, payload, FooterNoteForMode(mode))

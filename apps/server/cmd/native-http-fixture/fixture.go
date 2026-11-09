@@ -350,7 +350,7 @@ func injectPhoto(personalDetails []byte, photoKey string) ([]byte, error) {
 // writePhoto normalizes the embedded source photo and stores the normalized
 // object. An existing object is treated as already-seeded, never overwritten.
 func writePhoto(ctx context.Context, mediaRoot, key string) error {
-	normalized, err := media.NormalizePhoto(photoPNG)
+	normalized, err := media.NewPhotoNormalizer().NormalizePhoto(photoPNG)
 	if err != nil {
 		return fmt.Errorf("normalize photo: %w", err)
 	}

@@ -96,7 +96,7 @@ func (s *Service) handleUploadResumePhoto(w http.ResponseWriter, r *http.Request
 				return preparedInput{}, internalClientError()
 			}
 			normalizeStarted := time.Now()
-			normalized, normalizeErr := media.NormalizePhoto(decoded.File)
+			normalized, normalizeErr := s.photoNormalizer.NormalizePhoto(decoded.File)
 			s.recordPhotoNormalizationDuration(time.Since(normalizeStarted))
 			if normalizeErr != nil {
 				release()

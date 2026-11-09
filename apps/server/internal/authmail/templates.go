@@ -57,68 +57,70 @@ func FooterNoteForMode(mode string) string {
 		"This email was sent through Bizfly's mail server. If you reply, your email goes straight to Danny's Google Workspace mailbox."
 }
 
-var templates = map[Kind]template{
-	KindPrivacyNotice: privacyNoticeTemplate(),
-	KindVerify: {
-		subject:   "Xác minh email aboutme.vn / Verify your aboutme.vn email",
-		preheader: "Xác nhận email để hoàn tất đăng ký. Confirm your email to finish your account.",
-		action:    "Xác minh email · Verify email",
-		vi: section{
-			lang:    "vi",
-			heading: "Xác minh email của bạn",
-			body:    "Cảm ơn bạn đã đăng ký aboutme.vn. Hãy xác nhận địa chỉ email này để hoàn tất việc tạo tài khoản.",
-			note:    "Liên kết có hiệu lực trong 24 giờ. Nếu bạn không đăng ký, hãy bỏ qua email này; sẽ không có tài khoản nào được tạo.",
+func templates() map[Kind]template {
+	return map[Kind]template{
+		KindPrivacyNotice: privacyNoticeTemplate(),
+		KindVerify: {
+			subject:   "Xác minh email aboutme.vn / Verify your aboutme.vn email",
+			preheader: "Xác nhận email để hoàn tất đăng ký. Confirm your email to finish your account.",
+			action:    "Xác minh email · Verify email",
+			vi: section{
+				lang:    "vi",
+				heading: "Xác minh email của bạn",
+				body:    "Cảm ơn bạn đã đăng ký aboutme.vn. Hãy xác nhận địa chỉ email này để hoàn tất việc tạo tài khoản.",
+				note:    "Liên kết có hiệu lực trong 24 giờ. Nếu bạn không đăng ký, hãy bỏ qua email này; sẽ không có tài khoản nào được tạo.",
+			},
+			en: section{
+				lang:    "en",
+				heading: "Verify your email",
+				body:    "Thanks for signing up for aboutme.vn. Confirm this email address to finish creating your account.",
+				note:    "The link works for 24 hours. If you did not sign up, ignore this email and no account is created.",
+			},
 		},
-		en: section{
-			lang:    "en",
-			heading: "Verify your email",
-			body:    "Thanks for signing up for aboutme.vn. Confirm this email address to finish creating your account.",
-			note:    "The link works for 24 hours. If you did not sign up, ignore this email and no account is created.",
+		KindReset: {
+			subject:   "Đặt lại mật khẩu aboutme.vn / Reset your aboutme.vn password",
+			preheader: "Liên kết đặt lại mật khẩu, hiệu lực 30 phút. Your password reset link, valid for 30 minutes.",
+			action:    "Đặt lại mật khẩu · Reset password",
+			vi: section{
+				lang:    "vi",
+				heading: "Đặt lại mật khẩu",
+				body:    "Có người đã yêu cầu đặt lại mật khẩu cho tài khoản aboutme.vn dùng email này.",
+				note:    "Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn sẽ không thay đổi.",
+			},
+			en: section{
+				lang:    "en",
+				heading: "Reset your password",
+				body:    "Someone asked to reset the password for the aboutme.vn account that uses this email.",
+				note:    "The link works once, for 30 minutes. If you did not ask, ignore this email and your password stays the same.",
+			},
 		},
-	},
-	KindReset: {
-		subject:   "Đặt lại mật khẩu aboutme.vn / Reset your aboutme.vn password",
-		preheader: "Liên kết đặt lại mật khẩu, hiệu lực 30 phút. Your password reset link, valid for 30 minutes.",
-		action:    "Đặt lại mật khẩu · Reset password",
-		vi: section{
-			lang:    "vi",
-			heading: "Đặt lại mật khẩu",
-			body:    "Có người đã yêu cầu đặt lại mật khẩu cho tài khoản aboutme.vn dùng email này.",
-			note:    "Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn sẽ không thay đổi.",
+		KindPasswordChanged: {
+			subject:   "Mật khẩu aboutme.vn đã thay đổi / Your aboutme.vn password was changed",
+			preheader: "Mật khẩu tài khoản của bạn vừa được thay đổi. Your account password was just changed.",
+			vi: section{
+				lang:    "vi",
+				heading: "Mật khẩu đã được thay đổi",
+				body:    "Mật khẩu tài khoản aboutme.vn của bạn vừa được thay đổi.",
+				note:    "Nếu bạn không thực hiện thay đổi này, hãy trả lời email này ngay để chúng tôi hỗ trợ.",
+			},
+			en: section{
+				lang:    "en",
+				heading: "Your password was changed",
+				body:    "The password for your aboutme.vn account was just changed.",
+				note:    "If you did not make this change, reply to this email right away and we will help.",
+			},
 		},
-		en: section{
-			lang:    "en",
-			heading: "Reset your password",
-			body:    "Someone asked to reset the password for the aboutme.vn account that uses this email.",
-			note:    "The link works once, for 30 minutes. If you did not ask, ignore this email and your password stays the same.",
-		},
-	},
-	KindPasswordChanged: {
-		subject:   "Mật khẩu aboutme.vn đã thay đổi / Your aboutme.vn password was changed",
-		preheader: "Mật khẩu tài khoản của bạn vừa được thay đổi. Your account password was just changed.",
-		vi: section{
-			lang:    "vi",
-			heading: "Mật khẩu đã được thay đổi",
-			body:    "Mật khẩu tài khoản aboutme.vn của bạn vừa được thay đổi.",
-			note:    "Nếu bạn không thực hiện thay đổi này, hãy trả lời email này ngay để chúng tôi hỗ trợ.",
-		},
-		en: section{
-			lang:    "en",
-			heading: "Your password was changed",
-			body:    "The password for your aboutme.vn account was just changed.",
-			note:    "If you did not make this change, reply to this email right away and we will help.",
-		},
-	},
-	KindSecondFactorEnabled:           securityTemplate("Xác thực hai bước đã bật / Second factor enabled", "Xác thực hai bước đã được bật", "Second-factor authentication was enabled"),
-	KindPasskeyAdded:                  securityTemplate("Passkey đã được thêm / Passkey added", "Một passkey đã được thêm", "A passkey was added"),
-	KindPasskeyRemoved:                securityTemplate("Passkey đã được xóa / Passkey removed", "Một passkey đã được xóa", "A passkey was removed"),
-	KindSecondFactorDisabled:          securityTemplate("Xác thực hai bước đã tắt / Second factor disabled", "Xác thực hai bước đã được tắt", "Second-factor authentication was disabled"),
-	KindRecoveryCodesRegenerated:      securityTemplate("Mã khôi phục đã tạo lại / Recovery codes regenerated", "Mã khôi phục đã được tạo lại", "Recovery codes were regenerated"),
-	KindRecoveryCodeUsed:              securityTemplate("Mã khôi phục đã được dùng / Recovery code used", "Một mã khôi phục đã được dùng", "A recovery code was used"),
-	KindSecondFactorAttemptsExhausted: securityTemplate("Đã hết lượt xác thực hai bước / Second-factor attempts exhausted", "Đã hết lượt thử xác thực hai bước", "Second-factor verification attempts were exhausted"),
-	KindTOTPAdded:                     securityTemplate("Ứng dụng xác thực đã được thêm / Authenticator app added", "Một ứng dụng xác thực đã được thêm", "An authenticator app was added"),
-	KindTOTPReplaced:                  securityTemplate("Ứng dụng xác thực đã được thay thế / Authenticator app replaced", "Một ứng dụng xác thực đã được thay thế", "An authenticator app was replaced"),
-	KindTOTPRemoved:                   securityTemplate("Ứng dụng xác thực đã được xóa / Authenticator app removed", "Một ứng dụng xác thực đã được xóa", "An authenticator app was removed"),
+		KindSecondFactorEnabled:           securityTemplate("Xác thực hai bước đã bật / Second factor enabled", "Xác thực hai bước đã được bật", "Second-factor authentication was enabled"),
+		KindPasskeyAdded:                  securityTemplate("Passkey đã được thêm / Passkey added", "Một passkey đã được thêm", "A passkey was added"),
+		KindPasskeyRemoved:                securityTemplate("Passkey đã được xóa / Passkey removed", "Một passkey đã được xóa", "A passkey was removed"),
+		KindSecondFactorDisabled:          securityTemplate("Xác thực hai bước đã tắt / Second factor disabled", "Xác thực hai bước đã được tắt", "Second-factor authentication was disabled"),
+		KindRecoveryCodesRegenerated:      securityTemplate("Mã khôi phục đã tạo lại / Recovery codes regenerated", "Mã khôi phục đã được tạo lại", "Recovery codes were regenerated"),
+		KindRecoveryCodeUsed:              securityTemplate("Mã khôi phục đã được dùng / Recovery code used", "Một mã khôi phục đã được dùng", "A recovery code was used"),
+		KindSecondFactorAttemptsExhausted: securityTemplate("Đã hết lượt xác thực hai bước / Second-factor attempts exhausted", "Đã hết lượt thử xác thực hai bước", "Second-factor verification attempts were exhausted"),
+		KindTOTPAdded:                     securityTemplate("Ứng dụng xác thực đã được thêm / Authenticator app added", "Một ứng dụng xác thực đã được thêm", "An authenticator app was added"),
+		KindTOTPReplaced:                  securityTemplate("Ứng dụng xác thực đã được thay thế / Authenticator app replaced", "Một ứng dụng xác thực đã được thay thế", "An authenticator app was replaced"),
+		KindTOTPRemoved:                   securityTemplate("Ứng dụng xác thực đã được xóa / Authenticator app removed", "Một ứng dụng xác thực đã được xóa", "An authenticator app was removed"),
+	}
 }
 
 func securityTemplate(subject, viAction, enAction string) template {
@@ -140,7 +142,7 @@ func securityTemplate(subject, viAction, enAction string) template {
 // buildMessage renders the fixed template for a decrypted payload. An unknown
 // kind yields a message with no subject or body, which SES rejects.
 func buildMessage(kind Kind, p Payload, footerNote string) Message {
-	t, ok := templates[kind]
+	t, ok := templates()[kind]
 	if !ok {
 		return Message{Kind: kind, To: p.To}
 	}

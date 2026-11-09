@@ -246,7 +246,7 @@ func TestInjectPhotoAddsOnlyTheKey(t *testing.T) {
 // one semi-transparent pixel to stay a PNG; this test fails loudly if the
 // source is replaced with an opaque image and the key/content type drift.
 func TestPhotoNormalizesToPNG(t *testing.T) {
-	normalized, err := media.NormalizePhoto(photoPNG)
+	normalized, err := media.NewPhotoNormalizer().NormalizePhoto(photoPNG)
 	if err != nil {
 		t.Fatalf("NormalizePhoto: %v", err)
 	}

@@ -27,9 +27,6 @@ import (
 
 const apiResumePath = "/api/v1/resumes"
 
-var defaultPhotoKeyInvariantFailures atomic.Uint64
-var defaultPhotoNormalizationNanoseconds atomic.Uint64
-
 // Options configures the resume API route service.
 type Options struct {
 	// Logger receives resume diagnostics; nil uses slog.Default.
@@ -48,17 +45,21 @@ type Options struct {
 	// uses docmigrate.AcceptedVersions.
 	AcceptedVersions []int32
 	// PhotoKeyInvariant counts a stored photo key that fails to parse; nil
-	// uses a package counter.
+	// uses a service counter.
 	PhotoKeyInvariant func()
 	// PhotoRandom supplies photo key suffix bytes; nil uses crypto/rand.
 	PhotoRandom io.Reader
 	// PhotoNormalizationDuration records each photo normalization time; nil
-	// uses a package counter.
+	// uses a service counter.
 	PhotoNormalizationDuration func(time.Duration)
 	// PhotoAdmission is the process-wide photo decode permit that the REST
 	// and agent upload paths share. Nil gives this Service its own permit, so
 	// a process builds one Service or passes one PhotoAdmission to each.
 	PhotoAdmission *media.PhotoAdmission
+	// PhotoNormalizer serializes changes to the process memory limit. Share it
+	// among all photo normalization callers in the process; nil gives this
+	// Service its own normalizer.
+	PhotoNormalizer *media.PhotoNormalizer
 	// Coordinator is the shared public-generation coordinator. Composition
 	// initializes it from durable public_state before serving mutations.
 	Coordinator *publicstate.Coordinator
@@ -94,6 +95,7 @@ type Service struct {
 	photoRandom                io.Reader
 	photoNormalizationDuration func(time.Duration)
 	photoAdmission             *media.PhotoAdmission
+	photoNormalizer            *media.PhotoNormalizer
 	coordinator                *publicstate.Coordinator
 	recoveryPool               *store.Pool
 	printQueue                 PrintQueue
@@ -142,15 +144,20 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		opts.PhotoRandom = rand.Reader
 	}
 	if opts.PhotoKeyInvariant == nil {
-		opts.PhotoKeyInvariant = func() { defaultPhotoKeyInvariantFailures.Add(1) }
+		var failures atomic.Uint64
+		opts.PhotoKeyInvariant = func() { failures.Add(1) }
 	}
 	if opts.PhotoNormalizationDuration == nil {
+		var nanoseconds atomic.Uint64
 		opts.PhotoNormalizationDuration = func(elapsed time.Duration) {
-			defaultPhotoNormalizationNanoseconds.Add(uint64(max(elapsed.Nanoseconds(), 0)))
+			nanoseconds.Add(uint64(max(elapsed.Nanoseconds(), 0)))
 		}
 	}
 	if opts.PhotoAdmission == nil {
 		opts.PhotoAdmission = media.NewPhotoAdmission()
+	}
+	if opts.PhotoNormalizer == nil {
+		opts.PhotoNormalizer = media.NewPhotoNormalizer()
 	}
 	limiter := slugAttemptLimiter(newSlugAttemptLimiter())
 	return &Service{
@@ -163,6 +170,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		photoRandom:                opts.PhotoRandom,
 		photoNormalizationDuration: opts.PhotoNormalizationDuration,
 		photoAdmission:             opts.PhotoAdmission,
+		photoNormalizer:            opts.PhotoNormalizer,
 		coordinator:                opts.Coordinator,
 		recoveryPool:               opts.RecoveryPool,
 		printQueue:                 opts.PrintQueue,

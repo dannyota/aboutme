@@ -44,11 +44,11 @@ func TestNormalizeAcceptsFrozenCorpusDeterministically(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
 			source := readFixture(t, tc.path)
-			first, err := NormalizePhoto(source)
+			first, err := NewPhotoNormalizer().NormalizePhoto(source)
 			if err != nil {
 				t.Fatalf("NormalizePhoto: %v", err)
 			}
-			second, err := NormalizePhoto(source)
+			second, err := NewPhotoNormalizer().NormalizePhoto(source)
 			if err != nil {
 				t.Fatalf("NormalizePhoto second call: %v", err)
 			}
@@ -94,7 +94,7 @@ func TestNormalizeAppliesEveryExifOrientation(t *testing.T) {
 		t.Run(string(rune('0'+orientation)), func(t *testing.T) {
 			encoded := encodePNG(t, source)
 			encoded = insertPNGChunk(t, encoded, "eXIf", tiffOrientation(orientation), "IDAT")
-			got, err := NormalizePhoto(encoded)
+			got, err := NewPhotoNormalizer().NormalizePhoto(encoded)
 			if err != nil {
 				t.Fatalf("NormalizePhoto: %v", err)
 			}
@@ -153,7 +153,7 @@ func TestNormalizeRejectsUnsafeRecognizedContainers(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NormalizePhoto(tc.input)
+			_, err := NewPhotoNormalizer().NormalizePhoto(tc.input)
 			assertInvalidReason(t, err, tc.reason)
 		})
 	}
@@ -172,14 +172,14 @@ func TestNormalizeRejectsBadOrientationMetadata(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NormalizePhoto(tc.input)
+			_, err := NewPhotoNormalizer().NormalizePhoto(tc.input)
 			assertInvalidReason(t, err, ReasonOrientation)
 		})
 	}
 }
 
 func TestNormalizeRejectsUnsupportedBytes(t *testing.T) {
-	_, err := NormalizePhoto([]byte("GIF89a"))
+	_, err := NewPhotoNormalizer().NormalizePhoto([]byte("GIF89a"))
 	if !errors.Is(err, ErrUnsupportedMediaType) {
 		t.Fatalf("error = %v, want ErrUnsupportedMediaType", err)
 	}
@@ -229,7 +229,7 @@ func TestNormalizeStripsMetadataAndSourceChunks(t *testing.T) {
 
 func assertNormalizedMetadataFree(t *testing.T, source []byte, marker string, forms ...string) NormalizedPhoto {
 	t.Helper()
-	got, err := NormalizePhoto(source)
+	got, err := NewPhotoNormalizer().NormalizePhoto(source)
 	if err != nil {
 		t.Fatalf("NormalizePhoto: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestNormalizeUsesFixedOpaqueDownscaleLadder(t *testing.T) {
 	if len(source) > MaxObjectBytes {
 		t.Fatalf("test source = %d bytes, exceeds intake limit", len(source))
 	}
-	got, err := NormalizePhoto(source)
+	got, err := NewPhotoNormalizer().NormalizePhoto(source)
 	if err != nil {
 		t.Fatalf("NormalizePhoto: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestNormalizationBudget(t *testing.T) {
 		}
 		source := readFixture(t, os.Getenv("ABOUTME_NORMALIZATION_BUDGET_FIXTURE"))
 		started := time.Now()
-		if _, err := NormalizePhoto(source); err != nil {
+		if _, err := NewPhotoNormalizer().NormalizePhoto(source); err != nil {
 			t.Fatalf("NormalizePhoto: %v", err)
 		}
 		fmt.Printf("ABOUTME_NORMALIZATION_DURATION_NS=%d\n", time.Since(started).Nanoseconds())
