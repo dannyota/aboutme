@@ -19,7 +19,7 @@ var ErrCodeInvalid = errors.New("oauth code invalid")
 
 const (
 	// secretEntropyBytes is the entropy behind every code and token: 32
-	// random bytes (M2, M3).
+	// random bytes.
 	secretEntropyBytes = 32
 	// secretBodyChars is secretEntropyBytes rendered as unpadded base64url.
 	secretBodyChars = 43
@@ -36,8 +36,8 @@ func NewCode(entropy io.Reader) (raw string, digest [32]byte, err error) {
 	return body, sha256.Sum256([]byte(body)), nil
 }
 
-// ParseCode checks a presented code against the exact M2 spelling — 43
-// canonical, unpadded base64url characters, no prefix — and returns its
+// ParseCode checks a presented code against the exact code spelling (43
+// canonical, unpadded base64url characters, no prefix) and returns its
 // digest. Shape decoding happens before hashing, so no malformed spelling
 // reaches a store lookup.
 func ParseCode(raw string) (digest [32]byte, err error) {

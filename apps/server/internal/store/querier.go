@@ -76,7 +76,7 @@ type Querier interface {
 	CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	ConsumeLiveWebAuthnCeremoniesForBinding(ctx context.Context, arg ConsumeLiveWebAuthnCeremoniesForBindingParams) (int64, error)
-	// Single-use consumption (M2). One conditional UPDATE both takes the row lock
+	// Single-use consumption. One conditional UPDATE both takes the row lock
 	// and decides the winner: under two concurrent exchanges of the same code the
 	// second blocks, re-evaluates the predicate after the first commits, matches
 	// no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
@@ -97,7 +97,7 @@ type Querier interface {
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	ConsumeOldestLivePendingAuthentication(ctx context.Context, arg ConsumeOldestLivePendingAuthenticationParams) (PendingAuthentication, error)
 	ConsumeSecondFactorRecoveryCode(ctx context.Context, arg ConsumeSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
-	// The M5 live-grant cap check. Callers serialize it with the user row lock
+	// The live-grant cap check. Callers serialize it with the user row lock
 	// (GetUserForUpdate) so two concurrent approvals cannot both read the same
 	// pre-cap count.
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -128,13 +128,13 @@ type Querier interface {
 	// The caller checks the provider subject first for the common case. The
 	// database uniqueness constraint remains the concurrency backstop.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
-	// Code issue (M2). expires_at is computed here, not passed in, so the exact
+	// Code issue. expires_at is computed here, not passed in, so the exact
 	// 60-second TTL the table checks can never be missed by a caller. Only the
 	// code's digest is stored; the raw code exists solely in the redirect the user
 	// agent carries.
 	CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
 	// ---------------------------------------------------------------------------
-	// Phase PM: OAuth agent access — clients, authorization codes, grants, and
+	// OAuth agent access: clients, authorization codes, grants, and
 	// tokens. Storage is digest-only: no query here reads, writes, or returns raw
 	// code or token material, and PKCE verifiers are never stored.
 	//
@@ -145,11 +145,11 @@ type Querier interface {
 	// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
 	// skip a client another transaction is consenting to.
 	// ---------------------------------------------------------------------------
-	// Dynamic client registration (M1). The primary key returned here IS the
+	// Dynamic client registration. The primary key returned here IS the
 	// public client_id; there is no secret. last_used_at starts at created_at so
 	// the column is never NULL and the ordering check holds from the first row.
 	CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error)
-	// The first token of a family, issued by a code exchange (M3). expires_at is
+	// The first token of a family, issued by a code exchange. expires_at is
 	// clamped to the family's own death so no token can outlive the family it
 	// belongs to; the table's ordering check is the backstop for raw SQL.
 	CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error)
@@ -197,7 +197,7 @@ type Querier interface {
 	// concurrent cleanup bounded and deadlock-free. Always returns one
 	// aggregate row, even when nothing was deleted.
 	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (DeleteExpiredIdempotencyRecordsForUserRow, error)
-	// The P8-priv scheduled sweep's bounded page: oldest expired rows across
+	// The scheduled privacy sweep's bounded page: oldest expired rows across
 	// all users, grouped per user so the sweep can release each user's exact
 	// counters (once per returned user) before committing that cleanup
 	// transaction.
@@ -345,7 +345,7 @@ type Querier interface {
 	// The grant-row lock every token-family revocation takes first, so a rotation
 	// committing concurrently cannot resurrect a family the revocation just killed.
 	GetOAuthGrantForUpdate(ctx context.Context, id uuid.UUID) (OAuthGrant, error)
-	// The bearer boundary's single round trip (M7): token row, its grant, and its
+	// The bearer boundary's single round trip: token row, its grant, and its
 	// account in one query. The caller applies expiry, revocation, supersession,
 	// and kind checks to the returned row; every rejection class therefore reads
 	// the same rows and produces the same closed response.
@@ -464,7 +464,7 @@ type Querier interface {
 	// review_key and the other review columns are unused; the insert leaves them
 	// to their defaults (docs/design/showcase.md "Data and contract").
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
-	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
+	// Refresh rotation. Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
 	// from the caller, so a rotated token structurally cannot join a different
 	// family, client, user, or grant than the token it succeeds. A missing
@@ -493,7 +493,7 @@ type Querier interface {
 	ListFailedPrivacyNoticeRecipients(ctx context.Context, failureCode *string) ([]PrivacyNoticeRecipient, error)
 	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
-	// The bounded idle-client sweep (M1/M5): clients registered before
+	// The bounded idle-client sweep: clients registered before
 	// idle_before that hold no live grant and no live token. FOR UPDATE SKIP
 	// LOCKED both reserves the returned rows for the caller's transaction -- so a
 	// concurrent grant insert blocks on the FK's key-share lock and then fails
@@ -732,7 +732,7 @@ type Querier interface {
 	// caller passes touch_before = now - window, so the throttle is enforced by
 	// the predicate rather than by caller bookkeeping.
 	TouchOAuthClientLastUsed(ctx context.Context, arg TouchOAuthClientLastUsedParams) (int64, error)
-	// Bounded activity record (M3): at most one write per token per touch window,
+	// Bounded activity record: at most one write per token per touch window,
 	// and never on a revoked token. The caller passes touch_before = now - window.
 	TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error)
 	// Records that this session's lineage just completed a full OAuth login
@@ -756,7 +756,7 @@ type Querier interface {
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error)
-	// The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+	// The full-aggregate metadata write: title, lng, and the
 	// caller's complete already-projected document under ONE revision CAS. The
 	// returned revision is the NEW revision. A stale or non-matching $3
 	// updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
@@ -771,7 +771,7 @@ type Querier interface {
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
 	UpdateWebAuthnCredentialAfterAssertion(ctx context.Context, arg UpdateWebAuthnCredentialAfterAssertionParams) (WebauthnCredential, error)
-	// Consent approval (M8): records a new grant or refreshes the live one's
+	// Consent approval: records a new grant or refreshes the live one's
 	// scopes. The conflict target names the partial unique index's predicate, so
 	// the upsert arbitrates on exactly the "one live grant per (user, client)"
 	// rule the database enforces. created_at is never rewritten -- the settings

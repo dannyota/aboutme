@@ -937,7 +937,7 @@ func TestProject_ConvertsAndResplits(t *testing.T) {
 			continue
 		}
 		if _, ok := m["schemaVersion"]; ok {
-			t.Errorf("projected %s carries a schemaVersion key (D4 forbids it)", name)
+			t.Errorf("projected %s carries a schemaVersion key", name)
 		}
 	}
 }

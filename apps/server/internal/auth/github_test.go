@@ -403,7 +403,7 @@ func TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail(t *testing.T) {
 
 	clearedTxCookie := extractCookie(cbResp, auth.OAuthTxCookieName)
 	if clearedTxCookie == nil {
-		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it (ruling 1)")
+		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it")
 	}
 	if clearedTxCookie.MaxAge >= 0 {
 		t.Errorf("callback __Host-oauth-tx MaxAge = %d, want negative (cleared)", clearedTxCookie.MaxAge)

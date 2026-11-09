@@ -261,7 +261,7 @@ func TestPhotoMethodPoliciesStayDistinct(t *testing.T) {
 	assertSecurityExitPreflightCalls(t, storageCalls, idempotencyCalls, afterGetCalls)
 	assertSecurityExitState(t, h, afterUpload)
 
-	release, err := taskPhotoAdmission.Acquire(h.ctx)
+	release, err := h.service.photoAdmission.Acquire(h.ctx)
 	if err != nil {
 		t.Fatalf("hold photo admission permit: %v", err)
 	}

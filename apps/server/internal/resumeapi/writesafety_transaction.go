@@ -163,7 +163,7 @@ func (s *Service) replayCommittedState(ctx context.Context, userID uuid.UUID, pl
 }
 
 // mutationRequestKeys carries the already parsed idempotency key through the
-// request-local context without changing every P2B operation signature.
+// request-local context without changing every resume operation signature.
 type mutationRequestKeyContext struct{}
 
 func mutationKeyFromContext(ctx context.Context) uuid.UUID {

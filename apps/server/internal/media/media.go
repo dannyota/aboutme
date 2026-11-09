@@ -11,7 +11,7 @@
 // winner. Deletion reports an already-absent object as ErrNotFound.
 //
 // Object keys are canonical, forward-slash-separated, nonempty segments
-// produced only by this package's callers (D11). Both backends run the same
+// produced only by this package's callers. Both backends run the same
 // key validation before any I/O; the S3 backend passes the validated bytes
 // unchanged and the filesystem backend additionally re-roots the cleaned
 // path as a second defense, so the two backends can never name the same
@@ -99,7 +99,9 @@ type Backend interface {
 // Object is one stored object as seen by ListPage. UpdatedAt feeds the
 // orphan sweep's minimum-age gate (budgets.md "Media orphan minimum age").
 type Object struct {
-	Key       string
+	// Key is the object's canonical key.
+	Key string
+	// UpdatedAt is the backend's last-modified time for the object.
 	UpdatedAt time.Time
 }
 
@@ -236,11 +238,11 @@ func readExact(body io.Reader, size int64) ([]byte, error) {
 	}
 }
 
-// photoKeyRandomBytes is the crypto/rand suffix width D11 fixes: 16 bytes,
+// photoKeyRandomBytes is the fixed crypto/rand suffix width: 16 bytes,
 // rendered as 32 lowercase hex characters.
 const photoKeyRandomBytes = 16
 
-// NewPhotoKey constructs the one D11 photo key:
+// NewPhotoKey constructs a photo key in the one canonical grammar:
 // resumes/{canonical lowercase resume UUID}/photo-{32 lowercase hex}.{jpg|png}.
 // randSource supplies the 16 random suffix bytes; production passes
 // crypto/rand.Reader and tests inject a deterministic reader. ext is
@@ -260,9 +262,9 @@ func NewPhotoKey(randSource io.Reader, resumeID uuid.UUID, ext string) (string, 
 	return "resumes/" + resumeID.String() + "/photo-" + hex.EncodeToString(raw[:]) + "." + ext, nil
 }
 
-// ParsePhotoKey proves that a stored key is canonical D11 grammar and that
-// it belongs to resumeID, returning the key's extension. Callers must use
-// it before any Get or Delete so a malformed or cross-resume key never
+// ParsePhotoKey proves that a stored key is in the canonical photo-key grammar
+// and that it belongs to resumeID, returning the key's extension. Callers must
+// use it before any Get or Delete so a malformed or cross-resume key never
 // reaches a backend.
 func ParsePhotoKey(resumeID uuid.UUID, key string) (ext string, err error) {
 	if resumeID == uuid.Nil {

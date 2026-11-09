@@ -6,9 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// KeyRing holds exactly one active key and at most one previous 32-byte key
-// (D3). Seal always uses the active key; Open decrypts with whichever key ID
-// the blob names, so rotation keeps previously sealed jobs readable.
+// KeyRing holds exactly one active key and at most one previous 32-byte key.
+// Seal always uses the active key; Open decrypts with whichever key ID the
+// blob names, so rotation keeps previously sealed jobs readable.
 type KeyRing struct {
 	activeID string
 	keys     map[string][32]byte
@@ -44,7 +44,7 @@ func NewKeyRing(activeID string, keys map[string][32]byte, nonce io.Reader) (*Ke
 }
 
 // Seal validates the payload, serializes it to strict JSON, and encrypts it
-// under the active key with a fresh 12-byte nonce and the D3 AAD.
+// under the active key with a fresh 12-byte nonce and the job-bound AAD.
 func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, p Payload) (Sealed, error) {
 	if err := validatePayload(kind, p); err != nil {
 		return Sealed{}, err

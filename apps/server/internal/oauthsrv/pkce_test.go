@@ -156,7 +156,7 @@ func TestVerifyS256RejectsMismatchAtEitherEnd(t *testing.T) {
 func TestVerifyS256UsesConstantTimeCompare(t *testing.T) {
 	t.Parallel()
 
-	// M4 requires the digest comparison to be constant time. Assert the
+	// The PKCE digest comparison must be constant time. Assert the
 	// comparator in the source so a later edit cannot silently swap it for
 	// bytes.Equal or ==.
 	src, err := os.ReadFile("pkce.go")

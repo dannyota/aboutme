@@ -5,17 +5,20 @@ import (
 	"strings"
 )
 
-// ErrScopeInvalid is the closed error for every scope parameter outside the M3
+// ErrScopeInvalid is the closed error for every scope parameter outside the
 // set or the delimiter rules. It never carries the presented value.
 var ErrScopeInvalid = errors.New("oauth scope invalid")
 
-// Scope is one member of the closed M3 scope set.
+// Scope is one member of the closed scope set.
 type Scope string
 
 // The closed scope set. Read tools require ScopeResumesRead; every mutating
 // tool requires ScopeResumesWrite.
 const (
-	ScopeResumesRead  Scope = "resumes:read"
+	// ScopeResumesRead grants the read tools over every resume of the account.
+	ScopeResumesRead Scope = "resumes:read"
+	// ScopeResumesWrite grants the mutating tools over every resume of the
+	// account.
 	ScopeResumesWrite Scope = "resumes:write"
 )
 
@@ -31,7 +34,7 @@ const scopesMaxBytes = len(ScopeResumesRead) + 1 + len(ScopeResumesWrite)
 // Scopes is a set of granted scopes held in canonical order.
 type Scopes []Scope
 
-// ParseScopes parses an OAuth scope parameter into the closed M3 set. Members
+// ParseScopes parses an OAuth scope parameter into the closed scope set. Members
 // are separated by exactly one space, must all be inside the set, and may not
 // repeat; the result is in canonical order whatever order the request used. An
 // empty parameter is invalid: a caller that treats an absent scope as a

@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 )
 
-// PKCE code-verifier bounds, from M4 and RFC 7636 section 4.1.
+// PKCE code-verifier bounds, from RFC 7636 section 4.1.
 const (
 	pkceVerifierMinChars = 43
 	pkceVerifierMaxChars = 128

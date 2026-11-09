@@ -1,5 +1,5 @@
 // Command render-budget measures the production print queue and browser
-// controller against the fixed local Phase 7 fixture protocol.
+// controller against the fixed local fixture protocol.
 //
 // Usage:
 //

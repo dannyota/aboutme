@@ -11,17 +11,19 @@ import (
 // carries the presented value.
 var ErrTokenInvalid = errors.New("oauth token invalid")
 
-// TokenKind is the closed set of token kinds M3 stores.
+// TokenKind is the closed set of stored token kinds.
 type TokenKind string
 
 // The token kinds. The values are the stored kind column's spellings.
 const (
-	TokenKindAccess  TokenKind = "access"
+	// TokenKindAccess is a bearer access token.
+	TokenKindAccess TokenKind = "access"
+	// TokenKindRefresh is a refresh token that rotates on use.
 	TokenKindRefresh TokenKind = "refresh"
 )
 
 const (
-	// accessTokenPrefix and refreshTokenPrefix are the M3 token prefixes.
+	// accessTokenPrefix and refreshTokenPrefix are the token prefixes.
 	accessTokenPrefix  = "amat_"
 	refreshTokenPrefix = "amrt_"
 	// tokenPrefixChars is the shared prefix width; tokenChars is the only
@@ -47,9 +49,9 @@ func NewToken(kind TokenKind, entropy io.Reader) (raw string, digest [32]byte, e
 	return raw, sha256.Sum256([]byte(raw)), nil
 }
 
-// ParseToken checks a presented token against the exact M3 spelling — a known
-// 5-byte prefix followed by 43 canonical, unpadded base64url characters — and
-// returns its kind and digest. Shape decoding happens before hashing, so no
+// ParseToken checks a presented token against the exact token spelling (a
+// known 5-byte prefix followed by 43 canonical, unpadded base64url characters)
+// and returns its kind and digest. Shape decoding happens before hashing, so no
 // malformed spelling reaches a store lookup.
 //
 // The digest covers the prefix, which domain-separates the two kinds: the same
@@ -69,7 +71,7 @@ func ParseToken(raw string) (kind TokenKind, digest [32]byte, err error) {
 	return kind, sha256.Sum256([]byte(raw)), nil
 }
 
-// tokenPrefixFor maps a kind to its M3 prefix. The second result is false for
+// tokenPrefixFor maps a kind to its prefix. The second result is false for
 // any kind outside the closed set.
 func tokenPrefixFor(kind TokenKind) (string, bool) {
 	switch kind {
@@ -82,7 +84,7 @@ func tokenPrefixFor(kind TokenKind) (string, bool) {
 	}
 }
 
-// tokenKindFor maps an M3 prefix to its kind. The second result is false for
+// tokenKindFor maps a token prefix to its kind. The second result is false for
 // any other prefix.
 func tokenKindFor(prefix string) (TokenKind, bool) {
 	switch prefix {

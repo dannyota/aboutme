@@ -252,7 +252,7 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 	}
 	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
 	entropy := &blockingEntropy{started: make(chan struct{}), release: make(chan struct{})}
-	s.entropy = entropy
+	s.entropy = &lockedEntropy{reader: entropy}
 
 	type approvalResult struct {
 		redirect string

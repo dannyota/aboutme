@@ -30,30 +30,44 @@ type PhotoInvalidReason string
 
 // Closed client-safe media_invalid reasons.
 const (
-	ReasonMalformed           PhotoInvalidReason = "malformed"
-	ReasonAnimated            PhotoInvalidReason = "animated"
-	ReasonDimensions          PhotoInvalidReason = "dimensions"
-	ReasonOrientation         PhotoInvalidReason = "orientation"
-	ReasonTrailingData        PhotoInvalidReason = "trailing_data"
+	// ReasonMalformed reports a container that does not parse.
+	ReasonMalformed PhotoInvalidReason = "malformed"
+	// ReasonAnimated reports an animated image.
+	ReasonAnimated PhotoInvalidReason = "animated"
+	// ReasonDimensions reports conflicting or out-of-bounds dimensions.
+	ReasonDimensions PhotoInvalidReason = "dimensions"
+	// ReasonOrientation reports unreadable or repeated orientation metadata.
+	ReasonOrientation PhotoInvalidReason = "orientation"
+	// ReasonTrailingData reports bytes after the image's declared end.
+	ReasonTrailingData PhotoInvalidReason = "trailing_data"
+	// ReasonNormalizationFailed reports a decode or encode failure during
+	// normalization.
 	ReasonNormalizationFailed PhotoInvalidReason = "normalization_failed"
 )
 
-// PhotoInvalidError exposes only D19's closed reason vocabulary.
+// PhotoInvalidError exposes only the closed photo-invalid reason vocabulary.
 type PhotoInvalidError struct {
+	// Reason is the closed client-safe failure reason.
 	Reason PhotoInvalidReason
 }
 
+// Error returns a message that names only the reason.
 func (e *PhotoInvalidError) Error() string {
 	return "media: invalid photo (" + string(e.Reason) + ")"
 }
 
 // NormalizedPhoto is a canonical bounded JPEG or PNG and its metadata.
 type NormalizedPhoto struct {
-	Bytes       []byte
+	// Bytes is the normalized encoded image.
+	Bytes []byte
+	// ContentType is image/jpeg or image/png.
 	ContentType string
-	Extension   string
-	Width       int
-	Height      int
+	// Extension is jpg or png, matching ContentType.
+	Extension string
+	// Width is the normalized width in pixels.
+	Width int
+	// Height is the normalized height in pixels.
+	Height int
 }
 
 type photoContainer uint8

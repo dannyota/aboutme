@@ -27,10 +27,10 @@ import (
 var oauthNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 const (
-	// oauthCodeTTL is the exact M2 authorization-code lifetime the database
+	// oauthCodeTTL is the exact authorization-code lifetime the database
 	// pins with an equality check.
 	oauthCodeTTL = 60 * time.Second
-	// oauthAccessTTL and oauthFamilyTTL are the M3 access-token lifetime and
+	// oauthAccessTTL and oauthFamilyTTL are the access-token lifetime and
 	// refresh-family absolute lifetime the database bounds.
 	oauthAccessTTL = time.Hour
 	oauthFamilyTTL = 30 * 24 * time.Hour
@@ -197,7 +197,7 @@ var oauthAgentAccessTables = []string{
 }
 
 // ---------------------------------------------------------------------------
-// oauth_clients: M1 name and redirect-URI bounds.
+// oauth_clients: client-name and redirect-URI bounds.
 // ---------------------------------------------------------------------------
 
 func TestOAuthClientConstraints(t *testing.T) {
@@ -317,7 +317,7 @@ func TestOAuthClientConstraints(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// oauth_authorization_codes: M2 digest, scope, challenge, redirect, and the
+// oauth_authorization_codes: digest, scope, challenge, redirect, and the
 // exact 60-second expiry.
 // ---------------------------------------------------------------------------
 

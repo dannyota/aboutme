@@ -17,9 +17,9 @@ import (
 // or over-budget encoded password hash.
 var ErrHashInvalid = errors.New("password hash invalid")
 
-// Argon2id parameters (D2). These are the parse budget: any encoded hash that
-// exceeds them is rejected before allocation; a hash below them verifies and
-// reports NeedsRehash.
+// Argon2id parameters (docs/design/budgets.md). These are the parse budget:
+// any encoded hash that exceeds them is rejected before allocation; a hash
+// below them verifies and reports NeedsRehash.
 const (
 	argon2Version     = 19
 	argon2MemoryKiB   = 65536 // 64 MiB
@@ -32,15 +32,21 @@ const (
 
 // HashPolicy is a complete Argon2id parameter set.
 type HashPolicy struct {
-	Version     int
-	MemoryKiB   uint32
-	Iterations  uint32
+	// Version is the Argon2 version number.
+	Version int
+	// MemoryKiB is the memory cost in KiB.
+	MemoryKiB uint32
+	// Iterations is the time cost.
+	Iterations uint32
+	// Parallelism is the lane count.
 	Parallelism uint8
-	SaltLen     int
-	KeyLen      uint32
+	// SaltLen is the salt length in bytes.
+	SaltLen int
+	// KeyLen is the derived key length in bytes.
+	KeyLen uint32
 }
 
-// DefaultHashPolicy returns the production Argon2id parameters from D2.
+// DefaultHashPolicy returns the production Argon2id parameters.
 func DefaultHashPolicy() HashPolicy {
 	return HashPolicy{
 		Version:     argon2Version,
@@ -64,7 +70,10 @@ func (p HashPolicy) equal(o HashPolicy) bool {
 
 // VerifyResult is the outcome of verifying a password against an encoded hash.
 type VerifyResult struct {
-	Match       bool
+	// Match reports whether the password matches the hash.
+	Match bool
+	// NeedsRehash reports that the hash's parameters differ from the current
+	// policy.
 	NeedsRehash bool
 }
 

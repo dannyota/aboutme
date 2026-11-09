@@ -7,16 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// aadPrefix is the D3 authenticated-data domain separator.
+// aadPrefix is the authenticated-data domain separator.
 const aadPrefix = "aboutme.auth-email.v1"
 
-// maxPlaintextBytes caps the serialized payload (D3: closed JSON <= 4,096).
+// maxPlaintextBytes caps the serialized closed JSON payload at 4,096 bytes.
 const maxPlaintextBytes = 4096
 
 // maxCiphertextBytes is maxPlaintextBytes plus the AES-256-GCM tag (16 bytes).
 const maxCiphertextBytes = 4096 + 16
 
-// aad builds the exact D3 AAD:
+// aad builds the exact AAD:
 //
 //	aboutme.auth-email.v1 \x00 <job-id-bytes> \x00 <kind> \x00 <key-id>
 //

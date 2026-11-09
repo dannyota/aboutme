@@ -118,9 +118,8 @@ func TestCanonicalizeInvalid(t *testing.T) {
 }
 
 // TestCanonicalizeLiveEmails reads every stored email through the exact Go
-// parser (D1's last paragraph). It is skipped unless TEST_DATABASE_URL is set;
-// the corpus above is seeded so the check is non-vacuous even on a cold
-// database.
+// parser. It is skipped unless TEST_DATABASE_URL is set; the corpus above is
+// seeded so the check is non-vacuous even on a cold database.
 func TestCanonicalizeLiveEmails(t *testing.T) {
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 	db, err := sql.Open("pgx", dsn)

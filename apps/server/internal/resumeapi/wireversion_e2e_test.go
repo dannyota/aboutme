@@ -199,8 +199,8 @@ func TestWireVersion_ExplicitFallbackFontTargetsCurrentFont(t *testing.T) {
 	}
 }
 
-// TestWireVersion_AcceptProjectPersistEmit is Task 9's granular old-client
-// proof. It drives the real entry route after that route lands in W3.
+// TestWireVersion_AcceptProjectPersistEmit is the granular old-client proof.
+// It drives the real entry route.
 func TestWireVersion_AcceptProjectPersistEmit(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	doc := loadMinimalDocument(t)

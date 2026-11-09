@@ -13,11 +13,11 @@
 // routing *decision* Caddy makes at request time, not a static property of
 // the adapted JSON tree. A test that only re-parses the Caddyfile (or its
 // JSON form) is one Caddyfile-syntax refactor away from asserting nothing
-// real, which is exactly the "greps the Caddyfile text" failure mode the
-// task called out. This file takes (a): a real `caddy` binary, fronting
-// two tiny stub HTTP backends that each identify themselves in a response
-// header, with every path class from UAT-P0-06 driven over real HTTP and
-// the actual backend reached (or Caddy's own denial) observed directly.
+// real, which is exactly the "greps the Caddyfile text" failure mode to
+// avoid. This file takes (a): a real `caddy` binary, fronting two tiny stub
+// HTTP backends that each identify themselves in a response header, with
+// every path class AC-OPS-005 names driven over real HTTP and the actual
+// backend reached (or Caddy's own denial) observed directly.
 //
 // # Why the real Caddyfile, not a duplicated fixture
 //
@@ -127,8 +127,8 @@ func findUpward(t *testing.T, startDir, rel string) string {
 // TOCTOU window between the close and Caddy's own bind — the standard
 // trade-off for handing a subprocess a port number in advance — but it is
 // the same technique httptest.NewServer uses internally to pick its own
-// port, and is not a source of the sleep-based flakiness the task warns
-// against: readiness is still established by polling (waitForCaddyReady),
+// port, and is not a source of sleep-based flakiness: readiness is still
+// established by polling (waitForCaddyReady),
 // never assumed from this call succeeding.
 func findFreePort(t *testing.T) int {
 	t.Helper()
@@ -343,7 +343,7 @@ const (
 )
 
 // TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend drives every
-// route class UAT-P0-06 / AC-OPS-005 describes through a real Caddy
+// route class AC-OPS-005 describes through a real Caddy
 // process fronting two stub backends, and asserts each one reaches the
 // correct backend (or, for /print and /print/*, reaches neither).
 func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
@@ -375,7 +375,7 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		path   string
 		want   wantBackend
 	}{
-		// go-proxied: UAT-P0-06's `/api/v1/nope`, `/sitemap.xml`,
+		// go-proxied: `/api/v1/nope`, `/sitemap.xml`,
 		// `/robots.txt`, `/llms.txt`, plus the root-level `/*.md` class
 		// and the unversioned health endpoints, all under the @go
 		// matcher in deploy/caddy/Caddyfile.
@@ -410,7 +410,7 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "minimum_markdown_slug", method: http.MethodGet, path: "/a1-b.md", want: wantGo},
 		{name: "maximum_markdown_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md", want: wantGo},
 
-		// web-proxied: UAT-P0-06's `/`, plus an arbitrary unmatched path
+		// web-proxied: `/`, plus an arbitrary unmatched path
 		// and a *nested* .md path — the Caddyfile's own comment says its
 		// wildcard "does not cross a '/'", so a nested .md must fall
 		// through to the catch-all, not the @go matcher. This is the
@@ -472,8 +472,8 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "underscore_slug", method: http.MethodGet, path: "/ab_cd", want: wantWeb},
 		{name: "unregistered_extension", method: http.MethodGet, path: "/someone.txt", want: wantWeb},
 
-		// denied: UAT-P0-06's `/print`, `/print/x` — Caddy answers
-		// directly (respond 404), never proxying to either backend.
+		// denied: `/print`, `/print/x`. Caddy answers directly (respond
+		// 404), never proxying to either backend.
 		{name: "print_denied", method: http.MethodGet, path: "/print", want: wantDenied},
 		{name: "print_subpath_denied", method: http.MethodGet, path: "/print/x", want: wantDenied},
 		{name: "print_markdown_denied", method: http.MethodGet, path: "/print.md", want: wantDenied},

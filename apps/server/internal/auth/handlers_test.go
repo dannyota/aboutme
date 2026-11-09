@@ -754,7 +754,7 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil {
-		t.Fatal("response missing a __Host-oauth-tx Set-Cookie header, want one clearing it (ruling 1)")
+		t.Fatal("response missing a __Host-oauth-tx Set-Cookie header, want one clearing it")
 	}
 	if cleared.MaxAge >= 0 {
 		t.Errorf("__Host-oauth-tx MaxAge = %d, want negative (cleared)", cleared.MaxAge)

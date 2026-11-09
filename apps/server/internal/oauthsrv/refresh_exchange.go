@@ -90,36 +90,27 @@ func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedCl
 	if !issue {
 		return tokenResponse{}, nil
 	}
-	oauthEntropyMu.Lock()
-	access, accessDigest, err := NewToken(TokenKindAccess, s.entropy)
-	var refresh string
-	var refreshDigest [32]byte
-	if err == nil {
-		var refreshErr error
-		refresh, refreshDigest, refreshErr = NewToken(TokenKindRefresh, s.entropy)
-		err = refreshErr
-	}
-	oauthEntropyMu.Unlock()
+	pair, err := s.newTokenPair()
 	if err != nil {
 		return tokenResponse{}, err
 	}
 	if _, err = q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{ID: token.ID, FamilyID: token.FamilyID, SupersededAt: now}); err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	if _, err = q.InsertRotatedOAuthToken(ctx, store.InsertRotatedOAuthTokenParams{TokenDigest: refreshDigest[:], Kind: string(TokenKindRefresh), CreatedAt: now, ExpiresAt: token.FamilyExpiresAt, RotatedFrom: token.ID}); err != nil {
+	if _, err = q.InsertRotatedOAuthToken(ctx, store.InsertRotatedOAuthTokenParams{TokenDigest: pair.refreshDigest[:], Kind: string(TokenKindRefresh), CreatedAt: now, ExpiresAt: token.FamilyExpiresAt, RotatedFrom: token.ID}); err != nil {
 		return tokenResponse{}, err
 	}
 	accessExpiresAt := now.Add(accessTokenTTL)
 	if token.FamilyExpiresAt.Before(accessExpiresAt) {
 		accessExpiresAt = token.FamilyExpiresAt
 	}
-	if _, err = q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: accessDigest[:], Kind: string(TokenKindAccess), FamilyID: token.FamilyID, ClientID: token.ClientID, UserID: token.UserID, GrantID: token.GrantID, CreatedAt: now, ExpiresAt: accessExpiresAt, FamilyExpiresAt: token.FamilyExpiresAt}); err != nil {
+	if _, err = q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: pair.accessDigest[:], Kind: string(TokenKindAccess), FamilyID: token.FamilyID, ClientID: token.ClientID, UserID: token.UserID, GrantID: token.GrantID, CreatedAt: now, ExpiresAt: accessExpiresAt, FamilyExpiresAt: token.FamilyExpiresAt}); err != nil {
 		return tokenResponse{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tokenResponse{}, err
 	}
-	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: refresh, Scope: grant.Scopes}, nil
+	return tokenResponse{AccessToken: pair.access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: pair.refresh, Scope: grant.Scopes}, nil
 }
 
 func tokenStateError(err error) error {
