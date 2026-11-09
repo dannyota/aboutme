@@ -651,7 +651,43 @@ for index in "${!valid_targets[@]}"; do
   ip=192.0.2.$((60 + index))
   IFS='|' read -r probe target <<<"${valid_targets[$index]}"
   append_records "$ip" 404 21 unknown GET "$probe" "$target"
-  wait_for_decision "$ip" >/dev/null || { echo "valid-probe-rejected" >&2; exit 1; }
+  wait_for_decision "$ip" >/dev/null || {
+    ( umask 022
+      printf 'valid_target_index=%s\n' "$index"
+      printf 'fixture_time=%s\n' "$retention_fixture_now"
+      printf 'failure_time=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      printf 'feed_record_count='
+      python3 -I - "$feed" "$ip" <<'PYDIAG'
+import json,sys
+count=0
+for line in open(sys.argv[1]):
+    try:
+        record=json.loads(line)
+        count+=record.get('source_ip')==sys.argv[2]
+    except (ValueError,AttributeError):
+        pass
+print(count)
+PYDIAG
+      printf 'alert_count='
+      sql "SELECT count(*) FROM alerts WHERE source_ip='$ip';" || printf 'unavailable\n'
+      printf 'decision_count='
+      sql "SELECT count(*) FROM decisions WHERE value='$ip';" || printf 'unavailable\n'
+      printf 'active_decision_count='
+      sql "SELECT count(*) FROM decisions WHERE value='$ip' AND until>clock_timestamp();" || printf 'unavailable\n'
+      printf 'api_filtered_count='
+      if diagnostic=$(crowdsec_admitted_cli decisions list --ip "$ip" -o json 2>/dev/null); then
+        jq '[.[]? | .decisions[]? | select(.value == $ip and .scenario == "aboutme/http-status")] | length' --arg ip "$ip" <<<"$diagnostic" || printf 'invalid-json\n'
+      else
+        printf 'unavailable\n'
+      fi
+      for unit in crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service; do
+        if systemctl is-active --quiet "$unit"; then state=active; else state=inactive; fi
+        printf '%s=%s\n' "$unit" "$state"
+      done
+    ) > /tmp/aboutme-crowdsec-probe-diagnostic.txt
+    echo "valid-probe-rejected" >&2
+    exit 1
+  }
   if [[ -n $target ]]; then
     [[ $(sql "SELECT count(*) FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip = '$ip') AND position('$target' in serialized) > 0;") -gt 0 ]] || {
       echo "valid-probe-sample-missing" >&2
