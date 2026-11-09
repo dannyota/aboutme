@@ -1629,16 +1629,29 @@ const golangciInstaller = "./.github/actions/install-golangci-lint";
 const golangciLintAction = "golangci/golangci-lint-action@";
 const packagedInstallers = new Set([golangciInstaller, "./.github/actions/install-caddy", "./.github/actions/install-opentofu"]);
 const packagedTool = /golangci|trivy|caddy|opentofu|\btofu\b/i;
-const toolFetch = /\b(?:curl|wget|gh\s+release|go\s+(?:install|run|get|tool)|brew\s+install|apt(?:-get)?\s+install|snap\s+install|pip3?\s+install|npx|npm\s+(?:install|exec))\b|install\.sh|releases\/download\//;
+const toolRepository = String.raw`(?:golangci\/golangci-lint|aquasecurity\/trivy|caddyserver\/caddy|opentofu\/opentofu)`;
+const toolName = String.raw`(?:golangci-lint|trivy|caddy|opentofu|tofu)`;
+// Each pattern acquires one of these tools: a release or install-script
+// download, a source build, a download saved under the tool's name, a script
+// piped to a shell, or a package manager install.
+const toolAcquisition = [
+  /\/releases\/download\//,
+  new RegExp(String.raw`\bgo\s+(?:install|run|get)\b.*github\.com\/${toolRepository}`),
+  new RegExp(String.raw`\bgo\s+tool\s+${toolName}\b`),
+  new RegExp(String.raw`\bgh\s+release\s+download\b.*${toolRepository}`),
+  new RegExp(String.raw`\b(?:curl|wget)\b.*https?:\/\/(?:(?:github\.com|raw\.githubusercontent\.com)\/${toolRepository}|api\.github\.com\/repos\/${toolRepository}\/releases|get\.trivy\.dev|get\.opentofu\.org|golangci-lint\.run|caddyserver\.com\/api\/download)`),
+  new RegExp(String.raw`\b(?:curl|wget)\b.*\s(?:-o|-O|--output|--output-document)[\s=]+["']?[^\s"']*${toolName}`, "i"),
+  /\b(?:curl|wget)\b.*\|\s*(?:sudo\s+)?(?:ba)?sh\b/,
+  new RegExp(String.raw`\b(?:brew|apt|apt-get|snap|pip|pip3|npm)\s+install\b.*\b${toolName}\b`),
+];
 const scriptPath = /(?:^|[\s"'=])(?:\.\/)?(scripts\/[\w./-]+\.sh)\b/g;
 
-// Rejects a line that fetches golangci-lint, Trivy, Caddy, or OpenTofu, and
+// Rejects a line that acquires golangci-lint, Trivy, Caddy, or OpenTofu, and
 // any GitHub release download at all.
 function checkToolLines(text, label, skipComments = false) {
   for (const line of text.replace(/\\\r?\n\s*/g, " ").split("\n")) {
     if (skipComments && /^\s*#/.test(line)) continue;
-    assert.ok(!/\/releases\/download\//.test(line), `${label}: tools come only from the ci-tools package, not a release download`);
-    assert.ok(!(packagedTool.test(line) && toolFetch.test(line)), `${label}: tools come only from the ci-tools package: ${line.trim()}`);
+    assert.ok(!toolAcquisition.some((pattern) => pattern.test(line)), `${label}: tools come only from the ci-tools package: ${line.trim()}`);
   }
 }
 
@@ -1685,6 +1698,19 @@ test("golangci-lint, Trivy, Caddy, and OpenTofu come only from the ci-tools pack
   checkToolSources(job(`${install}      - run: golangci-lint run ./...\n`), "fixture");
   checkToolSources(job("      - uses: ./.github/actions/install-caddy\n      - uses: ./.github/actions/install-opentofu\n"), "fixture");
   checkToolSources(job(trivyInstall), "fixture");
+  // Health checks, API queries, and tool use acquire nothing.
+  checkToolSources(job([
+    "      - run: curl -fsS http://127.0.0.1:2019/config/\n",
+    "      - run: curl -fsS -o /dev/null http://caddy:2019/config/\n",
+    "      - run: gh api repos/dannyota/aboutme/actions/runs --jq .total_count\n",
+    '      - run: curl -fsSL -o runs.json "https://api.github.com/repos/dannyota/aboutme/actions/runs?head_sha=$SHA"\n',
+    '      - run: trivy image --format spdx-json --output sbom.json "$IMAGE"\n',
+    "      - run: tofu -chdir=deploy/vn/prod init -backend=false -input=false\n",
+  ].join("")), "fixture");
+  checkToolSources(job('      - run: CADDY_BIN=caddy scripts/route-check.sh\n'), "fixture", (called) => {
+    assert.equal(called, "scripts/route-check.sh");
+    return '#!/usr/bin/env bash\ncurl -fsS "$CADDY_ADMIN/config/" >/dev/null\n';
+  });
   const version = pins["golangci-lint"];
   const release = (repository, asset) => `https://github.com/${repository}/releases/download/v1.2.3/${asset}`;
   const fetchingScript = (lines) => (called) => {
@@ -1720,6 +1746,9 @@ test("golangci-lint, Trivy, Caddy, and OpenTofu come only from the ci-tools pack
     ["release URL as an action input", `      - uses: owner/fetch@${sha} # v1.0.0\n        with:\n          url: ${release("opentofu/opentofu", "tofu_1.2.3_linux_amd64.zip")}\n`],
     ["script curls Trivy", trivyInstall, fetchingScript('curl -fsSL -o "$tmp/trivy.tar.gz" "$url"')],
     ["script holds a release URL", trivyInstall, fetchingScript(`url=${release("aquasecurity/trivy", "trivy.tar.gz")}`)],
+    ["apt installs Caddy", "      - run: sudo apt-get install -y caddy\n"],
+    ["gh downloads a Trivy release", "      - run: gh release download v1.2.3 --repo aquasecurity/trivy --pattern '*Linux-64bit.tar.gz'\n"],
+    ["API release lookup for Trivy", "      - run: curl -fsSL https://api.github.com/repos/aquasecurity/trivy/releases/latest\n"],
   ]) {
     assert.throws(() => checkToolSources(job(steps), "fixture", readScript), /ci-tools/, name);
   }
