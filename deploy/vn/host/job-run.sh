@@ -38,7 +38,7 @@ image=$(jq -r .server_image <<<"$release")
 
 "$lib/fence.sh" check "$number" "aboutme-job@$name"
 
-exec podman run --rm --name "aboutme-job-$name" \
+exec podman run --rm --no-healthcheck --name "aboutme-job-$name" \
   --network "$network" \
   --entrypoint /usr/local/bin/server \
   --memory 256m \
