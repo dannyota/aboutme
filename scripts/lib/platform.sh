@@ -18,6 +18,38 @@ require_gnu_tools() {
   done
 }
 
+# ensure_dev_ignored adds .dev to the Git exclude file when it is not ignored.
+ensure_dev_ignored() {
+  local root exclude status=0
+  root=$(git rev-parse --show-toplevel) || return 1
+  exclude=$(git -C "$root" rev-parse --git-path info/exclude) || return 1
+  [[ $exclude = /* ]] || exclude=$root/$exclude
+  git -C "$root" check-ignore -q -- .dev/probe || status=$?
+  [ "$status" -eq 0 ] && return 0
+  if [ "$status" -ne 1 ]; then
+    printf 'cannot check whether .dev is Git-ignored\n' >&2
+    return 1
+  fi
+  if ! mkdir -p "$(dirname "$exclude")"; then
+    printf 'cannot update Git exclude file: %s\n' "$exclude" >&2
+    return 1
+  fi
+  if [ -s "$exclude" ] && [ -n "$(tail -c 1 "$exclude")" ]; then
+    if ! printf '\n' >>"$exclude"; then
+      printf 'cannot update Git exclude file: %s\n' "$exclude" >&2
+      return 1
+    fi
+  fi
+  if ! printf '/.dev/\n' >>"$exclude"; then
+    printf 'cannot update Git exclude file: %s\n' "$exclude" >&2
+    return 1
+  fi
+  git -C "$root" check-ignore -q -- .dev/probe || {
+    printf '.dev is not Git-ignored after updating %s\n' "$exclude" >&2
+    return 1
+  }
+}
+
 # local_check_lock_path [dir] prints the shared local-check lock. It lives in
 # the main checkout's ignored .dev/locks directory, outside .git, so every
 # worktree resolves the same file and Codex sandboxes can take it.

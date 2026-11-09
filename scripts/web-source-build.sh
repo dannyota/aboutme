@@ -7,6 +7,9 @@
 set -Eeuo pipefail
 export LC_ALL=C
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=scripts/lib/platform.sh
+source scripts/lib/platform.sh
+ensure_dev_ignored
 
 commit=$(git rev-parse --verify 'HEAD^{commit}')
 out=".dev/web-source-build/$commit/source.tar"

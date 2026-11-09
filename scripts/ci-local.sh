@@ -63,6 +63,10 @@ capped() {
   bash "$ROOT/scripts/pre-push.sh" --check-dependencies \
     node_modules apps/web/node_modules apps/web/.nuxt apps/web/.output \
     packages/schema/node_modules deploy/dev-https-browser/node_modules || exit 2
+  if ! ensure_dev_ignored; then
+    say 'refused: could not ignore .dev; CI did not run'
+    exit 2
+  fi
   if ! tree_status=$(git status --porcelain --untracked-files=all); then
     say 'refused: could not check worktree status; CI did not run'
     exit 2
