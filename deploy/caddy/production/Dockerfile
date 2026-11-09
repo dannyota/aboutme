@@ -9,13 +9,13 @@ WORKDIR /src
 COPY deploy/caddy/production/build/ ./
 # Retry proxy transport failures without changing module checksum verification.
 RUN for attempt in 1 2 3; do \
-      GOWORK=off go mod download && exit 0; \
+      go mod download && exit 0; \
       status=$?; \
       if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
       echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
       sleep "$((attempt * 5))" || exit $?; \
     done
-RUN CGO_ENABLED=0 GOWORK=off go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/caddy .
+RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/caddy .
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS render
 RUN apk add --no-cache bash grep openssl

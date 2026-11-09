@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // InitialResult contains no campaign state or recipient data.

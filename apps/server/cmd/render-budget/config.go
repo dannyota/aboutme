@@ -39,7 +39,7 @@ func parseConfig(args []string) (config, error) {
 	if err != nil || root != result.RepositoryRoot {
 		return config{}, errors.New("invalid_repository_root")
 	}
-	if info, statErr := os.Stat(filepath.Join(root, "go.work")); statErr != nil || !info.Mode().IsRegular() {
+	if info, statErr := os.Stat(filepath.Join(root, "go.mod")); statErr != nil || !info.Mode().IsRegular() {
 		return config{}, errors.New("invalid_repository_root")
 	}
 	if info, statErr := os.Stat(result.BrowserExecutable); statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
 func TestRecoveryCode_FormatAndParseRoundTrip(t *testing.T) {

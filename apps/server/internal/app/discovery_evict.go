@@ -1,9 +1,9 @@
 package app
 
 import (
-	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
-	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
-	"github.com/dannyota/aboutme/apps/server/internal/realtime"
+	"danny.vn/aboutme/apps/server/internal/publicapi"
+	"danny.vn/aboutme/apps/server/internal/publiccache"
+	"danny.vn/aboutme/apps/server/internal/realtime"
 )
 
 // EvictDiscoveryOnDelete drops the cached sitemap and llms.txt when a resume

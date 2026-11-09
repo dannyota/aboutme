@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // unreachableDSN points at a closed local port so connection attempts fail

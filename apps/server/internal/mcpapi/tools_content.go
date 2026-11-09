@@ -6,8 +6,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
-	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
 type entryInput struct {

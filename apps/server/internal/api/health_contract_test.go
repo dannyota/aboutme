@@ -23,7 +23,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // Schema component references the health responses must use, per

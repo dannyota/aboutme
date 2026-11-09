@@ -9,7 +9,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *joinGroup, failure *attemptFailure, initialURL string, navigation renderjob.Navigation) error {

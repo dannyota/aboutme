@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
 func TestToolErrorMapIsClosed(t *testing.T) {

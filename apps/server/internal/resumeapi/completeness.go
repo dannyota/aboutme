@@ -11,11 +11,11 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
+	"danny.vn/aboutme/apps/server/internal/publicpage"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
 const (

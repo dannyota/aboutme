@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 // NewLogger returns the process logger: text on stderr in the dev

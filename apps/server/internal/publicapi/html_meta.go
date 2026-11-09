@@ -5,9 +5,9 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // formatDetectionContent stops Safari from auto-linking digit runs, such as

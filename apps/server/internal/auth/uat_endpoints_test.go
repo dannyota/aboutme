@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 type discoveryFixture struct {

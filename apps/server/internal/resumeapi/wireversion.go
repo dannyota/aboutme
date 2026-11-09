@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
 const wireVersionHeader = "X-Resume-Schema-Version"

@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderprocess"
+	"danny.vn/aboutme/apps/server/internal/renderprocess"
 )
 
 func main() {

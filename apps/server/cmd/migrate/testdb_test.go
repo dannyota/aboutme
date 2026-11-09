@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 // requireMigrateTestDatabaseURL returns TEST_DATABASE_URL, skipping the

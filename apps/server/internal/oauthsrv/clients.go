@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // HandleRegister registers a public OAuth client. It intentionally never

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 func TestReadinessRenderRequestPostsValidMinimalPublicResume(t *testing.T) {

@@ -7,12 +7,12 @@ import (
 
 	"github.com/google/uuid"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const (

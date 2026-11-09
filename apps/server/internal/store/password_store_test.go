@@ -17,8 +17,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 var _ store.PasswordQueries = (*store.Queries)(nil)

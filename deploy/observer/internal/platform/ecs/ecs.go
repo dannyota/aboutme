@@ -13,7 +13,7 @@ import (
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
 // maxDescribeTasks is the largest task list ecs:DescribeTasks accepts in one

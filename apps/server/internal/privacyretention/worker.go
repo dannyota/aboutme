@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const (

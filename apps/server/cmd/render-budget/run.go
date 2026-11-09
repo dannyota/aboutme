@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/printapi"
-	"github.com/dannyota/aboutme/apps/server/internal/printrender"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/printapi"
+	"danny.vn/aboutme/apps/server/internal/printrender"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func run(ctx context.Context, settings config) (resultErr error) {

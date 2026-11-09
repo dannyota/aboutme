@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
 func TestWriteResumeError_EnvelopeAndDetails(t *testing.T) {

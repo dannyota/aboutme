@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // Document v4 adds customization.header.photoPosition and a project entry

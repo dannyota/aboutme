@@ -20,9 +20,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/text/language"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // storedPhotoReference is the photo entry of a projected document's personal

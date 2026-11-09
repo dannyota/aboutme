@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // oauthNow is the fixed instant every row in this file is created at, so

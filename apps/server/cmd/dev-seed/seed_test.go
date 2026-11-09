@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )

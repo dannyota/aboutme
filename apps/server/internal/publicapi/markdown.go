@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
-	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/publiccache"
+	"danny.vn/aboutme/apps/server/internal/publicformat"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
 // ErrUnavailableDependencies reports missing required public-route dependencies.

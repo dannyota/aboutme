@@ -19,8 +19,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // handleRevokeAllSessions implements DELETE /api/v1/sessions:

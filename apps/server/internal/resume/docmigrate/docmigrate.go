@@ -42,7 +42,7 @@ import (
 	"math"
 	"slices"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // CurrentVersion is generated from the reviewed schema release manifest.

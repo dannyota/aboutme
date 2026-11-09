@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/leakscan"
-	"github.com/dannyota/aboutme/deploy/observer/schema"
+	"danny.vn/aboutme/deploy/observer/internal/leakscan"
+	"danny.vn/aboutme/deploy/observer/schema"
 )
 
 // maxBytes is the document cap the observer enforces before it writes.

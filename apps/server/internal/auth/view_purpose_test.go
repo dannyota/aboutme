@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth/oidctest"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
 // viewFixture is one live resume with a fresh owner, for the view purpose's

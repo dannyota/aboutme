@@ -10,9 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 IMAGES = (
-    ("deploy/caddy/production/Dockerfile", "mod download", "off"),
-    ("deploy/server.Dockerfile", "-C apps/server mod download", ""),
-    ("deploy/observer/Dockerfile", "mod download", "off"),
+    ("deploy/caddy/production/Dockerfile", "mod download", ""),
+    ("deploy/server.Dockerfile", "mod download", ""),
+    ("deploy/observer/Dockerfile", "mod download", ""),
 )
 STREAM_ERROR = (
     'go: example.com/module@v1.0.0: read '

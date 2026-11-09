@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 func TestPasskeySecondFactorMigrationDefinesRequiredRelations(t *testing.T) {

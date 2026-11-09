@@ -35,7 +35,7 @@ The accepted dependency change requires checkout-local `npm ci` and `npm --prefi
 
 ## Pre-push check
 
-`make pre-push` (`scripts/pre-push.sh`) is allowed without a separate brief. It is static only: changed-source ESLint, gofmt, golangci-lint in each changed module with its own configuration, human Markdown Prettier/markdownlint, lengths, `bash -n`, and shellcheck. A module outside `go.work` uses `GOWORK=off`. It runs no tests, typechecks, builds, databases, stacks, or browsers.
+`make pre-push` (`scripts/pre-push.sh`) is allowed without a separate brief. It is static only: changed-source ESLint, gofmt, golangci-lint in each changed directory with its own configuration, human Markdown Prettier/markdownlint, lengths, `bash -n`, and shellcheck. It runs no tests, typechecks, builds, databases, stacks, or browsers.
 
 - Run before every push. Push only on exit 0, or exit 2 after the summary with each refused check named in the report.
 - Keep Bash 4+, Python 3, the shared parent-held lock, and the 600-second deadline. Until wrapper integration, `run-capped.sh` also enforces and reports RSS. Exit 1 means failure; exit 2 before the summary means nothing ran and requires resolving the refusal. Exit 2 after the summary names checks refused for missing/stale tools or changed manifests; CI covers them.

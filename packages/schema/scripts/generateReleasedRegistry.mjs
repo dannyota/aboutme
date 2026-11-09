@@ -108,7 +108,7 @@ export function readReleasedManifest() {
 
 // The Go half of the released-version registry. It lives in the CURRENT
 // package (gen/go, package schema) and imports one retained package per
-// released version, so `go build ./...` in that module is itself the proof
+// released version, so `go build ./...` in gen/go is itself the proof
 // that every retained snapshot still compiles.
 //
 // Lookup fails closed: an unreleased version returns ErrUnknownSchemaVersion

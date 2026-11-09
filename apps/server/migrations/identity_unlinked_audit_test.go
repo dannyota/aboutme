@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // 00002's down path must delete identity_unlinked rows before it restores the

@@ -16,10 +16,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/viewcount"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
 
 // Route tests for docs/design/viewer-analytics/delivery.md, "API", and the

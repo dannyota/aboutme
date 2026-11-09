@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 func TestJSONLDDiscoverableGoldenAndCSP(t *testing.T) {

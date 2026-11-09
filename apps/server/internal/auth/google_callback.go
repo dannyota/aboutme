@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/accountemail"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // buildGoogleAuthorizeURL binds PKCE S256 and an OIDC nonce to the stored

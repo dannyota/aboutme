@@ -17,10 +17,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
-	"github.com/dannyota/aboutme/apps/server/internal/media"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/accountapi"
+	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 type fakeBackend struct {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/devdb"
+	"danny.vn/aboutme/apps/server/internal/devdb"
 )
 
 func TestValidateURL(t *testing.T) {

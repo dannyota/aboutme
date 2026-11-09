@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 // CIMDRateError carries only the closed admission failure and retry duration.

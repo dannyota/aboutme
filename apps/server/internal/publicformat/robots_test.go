@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // robotsAllowed evaluates path against rules the way RFC 9309 does: the

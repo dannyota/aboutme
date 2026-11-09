@@ -15,7 +15,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 func cimdTestNow() time.Time {

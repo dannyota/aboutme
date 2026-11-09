@@ -21,13 +21,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/leakscan"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform/ecs"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform/kubernetes"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
-	"github.com/dannyota/aboutme/deploy/observer/schema"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/leakscan"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/platform/ecs"
+	"danny.vn/aboutme/deploy/observer/internal/platform/kubernetes"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/schema"
 )
 
 // The fixtures under testdata/leak fill every field the design says must

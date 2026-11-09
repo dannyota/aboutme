@@ -5,7 +5,7 @@ normalization benchmark manifest pins their hashes.
 
 The two WebP decoder-regression fixtures are copied byte-for-byte from
 `golang.org/x/image@v0.45.0/testdata`, the exact module version in
-`apps/server/go.mod`:
+the root `go.mod`:
 
 - `blue-purple-pink-large.lossless.webp`
 - `blue-purple-pink-large.no-filter.lossy.webp`

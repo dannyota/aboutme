@@ -21,8 +21,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
-	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/accountemail"
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 // linkedinIssuer is LinkedIn's OIDC discovery issuer. Tests override only the

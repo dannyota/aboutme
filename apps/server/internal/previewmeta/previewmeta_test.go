@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // Sentinels sit only in fields the public snapshot must drop or the preview

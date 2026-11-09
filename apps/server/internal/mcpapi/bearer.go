@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const lastUsedWindow = time.Minute

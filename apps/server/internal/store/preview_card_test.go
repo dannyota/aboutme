@@ -11,14 +11,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/previewcard"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 var previewCardPNG = []byte("\x89PNG\r\n\x1a\nstored-card")

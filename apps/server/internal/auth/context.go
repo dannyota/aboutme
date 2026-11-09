@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // sessionCtxKey prevents collisions with context keys from other packages.

@@ -17,8 +17,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // ghEmail is one entry of a stubbed GET /user/emails response. Field names

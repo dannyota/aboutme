@@ -33,9 +33,9 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
 // --- fixtures and synthetic schema/converter construction ---

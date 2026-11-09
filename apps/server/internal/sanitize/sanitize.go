@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"strings"
 
-	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schemagen "danny.vn/aboutme/packages/schema/gen/go"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"

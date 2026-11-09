@@ -50,14 +50,10 @@ jobs:
         name: deploy/observer
         run: govulncheck ./...
         working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: deploy/caddy/production/build
         run: govulncheck ./...
         working-directory: deploy/caddy/production/build
-        env:
-          GOWORK: "off"
       - if: failure()
         run: echo "### govulncheck failed (reachable vulnerability or scan error)" >>"$GITHUB_STEP_SUMMARY"
 

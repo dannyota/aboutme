@@ -3,9 +3,9 @@ package sanitize
 import (
 	"testing"
 
-	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schemagen "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize/sanitizetest"
+	"danny.vn/aboutme/apps/server/internal/sanitize/sanitizetest"
 )
 
 func TestRichTextHostileCorpusConformance(t *testing.T) {

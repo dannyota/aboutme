@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
 func newRegistrationOffEnv(t *testing.T) *passwordEnv {

@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 func (s *Service) reviewed(ctx context.Context, operation func(*store.Queries, store.PrivacyNoticeCampaign) error) (resultErr error) {

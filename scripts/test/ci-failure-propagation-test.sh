@@ -14,8 +14,8 @@ mkdir -p "$REPO/scripts" "$REPO/apps/server" \
   "$REPO/packages/schema/gen/go" "$REPO/deploy/caddy/production/build" "$BIN"
 cp "$ROOT/scripts/ci.sh" "$REPO/scripts/ci.sh"
 cp "$ROOT/scripts/check-migrations-append-only.sh" "$REPO/scripts/"
-: >"$REPO/apps/server/go.mod"
-: >"$REPO/apps/server/go.sum"
+: >"$REPO/go.mod"
+: >"$REPO/go.sum"
 : >"$CALLS"
 
 cat >"$BIN/make" <<'EOF'

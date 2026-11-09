@@ -3,7 +3,7 @@ package testutil_test
 import (
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 func TestSeededUUID_SameSeedYieldsSameID(t *testing.T) {

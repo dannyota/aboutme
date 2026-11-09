@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 type fakeLister struct {

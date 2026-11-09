@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/dbroles"
+	"danny.vn/aboutme/apps/server/internal/dbroles"
 )
 
 func validEnv() map[string]string {

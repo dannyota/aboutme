@@ -16,16 +16,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/publiccache"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/viewpass"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // gateTestKey is a fixed 32-byte VIEW_PASS_KEY for gate tests.

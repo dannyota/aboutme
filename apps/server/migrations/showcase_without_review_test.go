@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // seedShowcaseRow inserts a resume and its showcase row through plain SQL at

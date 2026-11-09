@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/mailcapture"
+	"danny.vn/aboutme/apps/server/internal/mailcapture"
 )
 
 const (

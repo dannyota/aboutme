@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // DeleteDue drains at most 2,000 jobs that were due when this run began. It

@@ -199,9 +199,7 @@ assert_all_image_versions() {
 
 check_repository_contract() {
   assert_file_line node apps/web/.nvmrc "${expected[nodejs]}"
-  assert_file_line go go.work "go ${expected[golang]}"
-  assert_file_line go apps/server/go.mod "go ${expected[golang]}"
-  assert_file_line go packages/schema/gen/go/go.mod "go ${expected[golang]}"
+  assert_file_line go go.mod "go ${expected[golang]}"
   assert_all_image_versions node deploy/web.Dockerfile \
     docker.io/library/node: "${expected[nodejs]}"
   assert_all_image_versions go deploy/server.Dockerfile \

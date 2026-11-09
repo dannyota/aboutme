@@ -12,7 +12,7 @@ import (
 	// this registration only ever runs inside a test binary.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/dannyota/aboutme/apps/server/internal/dbroles"
+	"danny.vn/aboutme/apps/server/internal/dbroles"
 )
 
 // BootstrapTestDatabaseRoles ensures the fixed aboutme_migrator/aboutme_app

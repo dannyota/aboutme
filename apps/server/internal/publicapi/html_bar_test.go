@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicformat"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // publicMarkSVG is the page bar's brand mark, the seal mark alone without the

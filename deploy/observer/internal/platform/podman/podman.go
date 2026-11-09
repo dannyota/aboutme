@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/schema"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/schema"
 )
 
 // MaxBytes bounds both the file read and the decoded observation.

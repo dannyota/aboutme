@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // TestFS_EmbedsAtLeastOneMigration guards the go:embed directive itself:

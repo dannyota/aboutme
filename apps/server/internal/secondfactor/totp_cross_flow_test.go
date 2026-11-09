@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
 // sessionSecondFactorVerifiedAt reads one session's second_factor_verified_at

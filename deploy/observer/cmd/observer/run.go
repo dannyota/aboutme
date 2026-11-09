@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 // run performs one observation: list the running images, check every

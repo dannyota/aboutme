@@ -10,7 +10,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // resumeSchemaID is derived from the current embedded schema, so releasing a

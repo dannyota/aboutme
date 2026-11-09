@@ -7,13 +7,13 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	ecsplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/ecs"
-	kubernetesplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/kubernetes"
-	podmanplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/podman"
-	"github.com/dannyota/aboutme/deploy/observer/internal/publish"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	ecsplatform "danny.vn/aboutme/deploy/observer/internal/platform/ecs"
+	kubernetesplatform "danny.vn/aboutme/deploy/observer/internal/platform/kubernetes"
+	podmanplatform "danny.vn/aboutme/deploy/observer/internal/platform/podman"
+	"danny.vn/aboutme/deploy/observer/internal/publish"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 // checker checks one running digest against the signed build record. It is

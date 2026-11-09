@@ -20,10 +20,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
 // viewOpenIDScope is the only scope the view purpose requests

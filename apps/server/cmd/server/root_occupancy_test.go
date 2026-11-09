@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 func TestParseCheckPublicRootCommand(t *testing.T) {

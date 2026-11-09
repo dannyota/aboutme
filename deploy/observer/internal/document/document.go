@@ -11,8 +11,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 // Constants every document carries.

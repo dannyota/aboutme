@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
 // newTLSServer starts an httptest TLS server that serves body for any GET

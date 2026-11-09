@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/previewcard"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // cardBuilderValues reads the resume the way the preview card builder does and

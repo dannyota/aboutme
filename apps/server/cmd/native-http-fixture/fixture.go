@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/devdb"
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/devdb"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 // frozenNow is the single accepted --now value. Freezing it keeps every seed

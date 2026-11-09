@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // ErrQueueFull reports the fixed notice backlog bound without mutation.

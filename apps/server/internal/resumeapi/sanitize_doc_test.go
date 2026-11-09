@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
+	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
 func loadMinimalDocument(t *testing.T) schema.Resume {

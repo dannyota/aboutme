@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/printrender"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/printrender"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func TestPrintStartupKeepsLinuxSandboxFailureFatal(t *testing.T) {

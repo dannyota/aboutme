@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schemagen "danny.vn/aboutme/packages/schema/gen/go"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
+	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
 const (

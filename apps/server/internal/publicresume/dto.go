@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // PublicResume is the complete public representation of one live resume.

@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // NewSessionManagerForTest builds a manager with an injected clock.

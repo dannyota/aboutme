@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
 // Fixed loopback-only addresses.

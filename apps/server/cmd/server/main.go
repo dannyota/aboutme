@@ -16,15 +16,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/app"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/printrender"
-	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
-	"github.com/dannyota/aboutme/apps/server/internal/realtime"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/app"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/printrender"
+	"danny.vn/aboutme/apps/server/internal/publiccache"
+	"danny.vn/aboutme/apps/server/internal/realtime"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 func main() {

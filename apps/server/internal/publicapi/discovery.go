@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
-	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/publiccache"
+	"danny.vn/aboutme/apps/server/internal/publicformat"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // DiscoveryRouteClass is the cache route class of the discovery documents.

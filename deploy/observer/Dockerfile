@@ -1,10 +1,10 @@
 # Deployment transparency observer image
 # (docs/design/deployment-transparency/README.md). The build context is the
-# repository root; this image copies only deploy/observer/, which is its own
-# Go module outside go.work.
+# repository root; this image copies only the root go.mod and go.sum and
+# deploy/observer/.
 
 # ---- build ----
-# Match the module's own go.mod (go 1.27.3). Digest pins the multi-arch index
+# Match the root go.mod (go 1.27.3). Digest pins the multi-arch index
 # so the same reference resolves on amd64 and arm64.
 FROM docker.io/library/golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS build
 
@@ -14,21 +14,21 @@ WORKDIR /src
 # package manager to install one itself.
 RUN apk add --no-cache ca-certificates
 
-COPY deploy/observer/go.mod deploy/observer/go.sum ./
+COPY go.mod go.sum ./
 # Retry proxy transport failures without changing module checksum verification.
 RUN for attempt in 1 2 3; do \
-      GOWORK=off go mod download && exit 0; \
+      go mod download && exit 0; \
       status=$?; \
       if [ "$attempt" -eq 3 ]; then exit "$status"; fi; \
       echo "go mod download failed (attempt $attempt/3); retrying in $((attempt * 5))s" >&2; \
       sleep "$((attempt * 5))" || exit $?; \
     done
 
-COPY deploy/observer/ ./
+COPY deploy/observer/ ./deploy/observer/
 
 ARG VERSION=""
 ARG COMMIT=""
-RUN GOWORK=off CGO_ENABLED=0 go build -trimpath \
+RUN CGO_ENABLED=0 go -C deploy/observer build -trimpath \
     -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
     -o /out/observer ./cmd/observer
 

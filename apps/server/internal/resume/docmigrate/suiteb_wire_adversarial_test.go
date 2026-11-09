@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
 // suiteBHeadline is the marker synthetic version v (>= 2) carries at

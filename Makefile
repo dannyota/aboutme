@@ -176,8 +176,8 @@ server-vet: ## Vet the Go API server
 server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
-observer-test: ## Test the deployment transparency observer (its own module, outside go.work)
-	cd deploy/observer && GOWORK=off go test ./...
+observer-test: ## Test the deployment transparency observer
+	cd deploy/observer && go test ./...
 
 server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_DATABASE_URL fails when REQUIRE_TEST_DB=1
 	@printf '%s\n' 'server-test-db: go test live db-setup/roles/dev-seed/testutil/auth/store/user/resume/realtime/publicapi/showcase/server/mcp-uat-fixture/account/media-cleanup/privacy/privacy-notice/second-factor/oauth/mcp/mail packages'

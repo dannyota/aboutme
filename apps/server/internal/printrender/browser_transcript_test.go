@@ -19,7 +19,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 const (

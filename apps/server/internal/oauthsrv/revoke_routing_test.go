@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/mcpapi"
-	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
-	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/mcpapi"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
 type revokeRoutingExecutor struct{}

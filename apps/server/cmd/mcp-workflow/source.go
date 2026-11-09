@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 var (

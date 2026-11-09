@@ -62,7 +62,7 @@ for path in \
   packages/schema/fixtures/bounds/unused.json \
   packages/schema/fixtures/full.json \
   packages/schema/fixtures/vn-full.json \
-  packages/schema/gen/go/go.mod \
+  packages/schema/gen/go/resume.go \
   packages/schema/gen/ts/resume.ts \
   packages/schema/package-lock.json \
   packages/schema/package.json \

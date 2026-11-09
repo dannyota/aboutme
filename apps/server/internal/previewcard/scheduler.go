@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 const (

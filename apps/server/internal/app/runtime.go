@@ -4,9 +4,9 @@ import (
 	"encoding/base64"
 	"errors"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // PublicRuntime is the validated public serving identity: the canonical and

@@ -6,6 +6,7 @@ For backend client-IP handling, read the authoritative [proxy rule](deploy.md) i
 
 - Follow Google Go style with `gofmt`/`goimports`.
 - Goose SQL in `apps/server/migrations/` is the migration source and sqlc reads it. Run `make sqlc-check`. `sqlc.yaml` keeps its `public.citext` override.
+- One root module, `danny.vn/aboutme` (`go.mod`), holds `apps/server`, `packages/schema/gen/go`, and `deploy/observer`; run `go mod tidy` at the root. `deploy/caddy/production/build` stays a separate module.
 - Run server Go commands under `apps/server`, and generated-schema Go checks under `packages/schema/gen/go`.
 - Live DB targets use `-count=1`. Compose PostgreSQL is not host-published.
 - golangci-lint uses `//nolint:`. A justified exception needs a reason. CI enforces errcheck, shadow, and US-spelling misspell.

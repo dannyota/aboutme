@@ -15,11 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
-	"github.com/dannyota/aboutme/apps/server/internal/viewcount"
-	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/viewcount"
+	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
 // maxBodyBytes bounds start and collect bodies. A collect body with its

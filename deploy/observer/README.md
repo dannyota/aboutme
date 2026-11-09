@@ -3,10 +3,11 @@
 `deploy/observer` is the deployment transparency observer: a program, separate
 from the application, that asks the platform which image digests are running,
 checks each one against the signed GitHub build record, and publishes the result
-to `https://aboutme.vn/.well-known/deployment.json`. It is its own Go module
-(`github.com/dannyota/aboutme/deploy/observer`, go 1.27.3), outside the
-repository's `go.work`, because it ships as a separate container image and never
-shares a dependency graph with `apps/server`.
+to `https://aboutme.vn/.well-known/deployment.json`. Its packages belong to the
+repository's root Go module (`danny.vn/aboutme`, go 1.27.3), under the package
+prefix `danny.vn/aboutme/deploy/observer`. It ships as a separate container
+image and imports no `apps/server` package, so the observer binary links only
+its own dependencies.
 
 The design lives in
 [`docs/design/deployment-transparency/`](../../docs/design/deployment-transparency/README.md):
@@ -124,16 +125,16 @@ remains single-platform arm64 for Lambda.
 
 ## Tests
 
-Run from this directory, with `GOWORK=off` so the module builds outside
-`go.work`:
+Run from this directory:
 
 ```sh
-cd deploy/observer && GOWORK=off go test ./...
+cd deploy/observer && go test ./...
 ```
 
 `make observer-test` from the repository root runs the same command. GitHub CI
-additionally runs `go build`, `go vet`, `golangci-lint`, a `go mod tidy` no-op
-check, and `govulncheck` (`.github/workflows/ci.yml`, the `server` job).
+additionally runs `go build`, `go vet`, `golangci-lint`, and `govulncheck` here,
+and the root module's `go mod tidy` no-op check (`.github/workflows/ci.yml`, the
+`server` job).
 
 The ECS and Kubernetes adapters are tested against `httptest` servers standing
 in for the ECS control plane and the in-cluster Kubernetes API, using
@@ -152,7 +153,7 @@ a golden file under `testdata/examples/`. Run the test with `-update` to
 regenerate a golden file after an intentional change:
 
 ```sh
-cd deploy/observer && GOWORK=off go test ./internal/document/... -run TestExamples -update
+cd deploy/observer && go test ./internal/document/... -run TestExamples -update
 ```
 
 The frontend reads these files by name, so the set is stable:

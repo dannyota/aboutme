@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // PublicRenderMode identifies the renderer mode used for public pages.

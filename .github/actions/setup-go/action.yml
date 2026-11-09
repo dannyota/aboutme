@@ -48,7 +48,7 @@ runs:
     - id: key
       shell: bash
       env:
-        SUMS: ${{ hashFiles('apps/server/go.sum', 'go.work.sum', 'deploy/observer/go.sum') }}
+        SUMS: ${{ hashFiles('go.sum') }}
         JOB: ${{ github.job }}
         LIGHT: ${{ inputs.light }}
       run: |
