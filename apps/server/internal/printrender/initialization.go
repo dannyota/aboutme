@@ -65,7 +65,7 @@ func diagnoseInitialization(ctx context.Context, kind error, stage string, err e
 		}
 	}
 	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded), errors.Is(err, context.DeadlineExceeded), err != nil && err.Error() == "websocket url timeout reached":
+	case errors.Is(ctx.Err(), context.DeadlineExceeded), errors.Is(err, context.DeadlineExceeded), err != nil && strings.HasPrefix(err.Error(), "websocket url timeout reached"):
 		failure.stage, failure.reason = "timeout", "deadline exceeded"
 	case errors.Is(ctx.Err(), context.Canceled), errors.Is(err, context.Canceled):
 		failure.reason = "operation canceled"

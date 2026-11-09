@@ -1,0 +1,7 @@
+browser Target.setAutoAttach {"autoAttach":true,"waitForDebuggerOnStart":true,"flatten":true}
+page Fetch.enable {"patterns":[{"urlPattern":"*","requestStage":"Request"}],"handleAuthRequests":false}
+page Network.setCacheDisabled {"cacheDisabled":true}
+page Emulation.setEmulatedMedia {"media":"print"}
+page Page.navigate {"url":"http://127.0.0.1:20030/print/00000000-0000-0000-0000-000000000001"}
+page Fetch.continueRequest {"requestId":"interception-1","headers":[{"name":"Accept","value":"text/html"},{"name":"Authorization","value":"RenderCapability abcdefghijklmnopqrstuvwxyzABCDEFGH012345678"},{"name":"X-Render-Job-ID","value":"00000000-0000-0000-0000-000000000002"}],"interceptResponse":false}
+page Fetch.failRequest {"requestId":"interception-2","errorReason":"BlockedByClient"}
