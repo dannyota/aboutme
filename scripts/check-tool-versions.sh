@@ -213,11 +213,11 @@ check_repository_contract() {
 
   assert_ci_yaml_values node node-version "${expected[nodejs]}"
   assert_ci_yaml_values go go-version "${expected[golang]}"
-  assert_ci_text golangci-lint "version: v${expected[golangci-lint]}"
+  assert_ci_text golangci-lint \
+    "golangci-lint-${expected[golangci-lint]}-linux-amd64.tar.gz"
   assert_ci_text govulncheck "govulncheck@v${expected[govulncheck]}"
   assert_ci_text sqlc "sqlc@v${expected[sqlc]}"
-  assert_ci_text caddy \
-    "caddyserver/caddy/releases/download/v${expected[caddy]}"
+  assert_ci_text caddy "caddy_${expected[caddy]}_linux_amd64.tar.gz"
 
   assert_all_yaml_values node .github/workflows/security-scan.yml \
     node-version "${expected[nodejs]}"

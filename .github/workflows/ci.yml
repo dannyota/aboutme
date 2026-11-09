@@ -187,7 +187,6 @@ jobs:
       - if: ${{ !cancelled() }}
         id: ci-tools
         uses: ./.github/actions/ci-tools
-        continue-on-error: true
       - name: Configure the provider mirror
         if: ${{ !cancelled() && steps.ci-tools.outcome == 'success' }}
         run: |
@@ -362,11 +361,16 @@ jobs:
         run: make server-vet
       - if: ${{ !cancelled() }}
         run: make server-test
+      # golangci-lint and Caddy below come from the ci-tools package.
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/ci-tools
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/install-golangci-lint
       - if: ${{ !cancelled() }}
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: apps/server
-          version: v2.15.0
+          install-mode: none
       - if: ${{ !cancelled() }}
         name: go mod tidy is a no-op
         run: |
@@ -396,9 +400,6 @@ jobs:
       # through a live caddy process fronting stub backends. Needs a caddy
       # binary but no database; pinned to 2.11.9 to match
       # deploy/compose.yml's caddy image tag.
-      - if: ${{ !cancelled() }}
-        uses: ./.github/actions/ci-tools
-        continue-on-error: true
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/install-caddy
       - if: ${{ !cancelled() }}
@@ -452,7 +453,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: deploy/observer
-          version: v2.15.0
+          install-mode: none
         env:
           GOWORK: "off"
       - if: ${{ !cancelled() }}

@@ -5,6 +5,18 @@
 # scanning one image into a JSON report, and printing a compact table of any
 # fixable HIGH/CRITICAL findings. One script keeps both workflow files from
 # repeating the same install-and-scan steps.
+#
+# Usage:
+#   security-scan.sh install-trivy DEST ARCHIVE_DIR
+#   security-scan.sh scan-image TRIVY REF PLATFORM REPORT
+#   security-scan.sh report REPORT
+#   security-scan.sh weekly-scan TRIVY REPORT_DIR [RELEASE_TAG [OBSERVER_RELEASE_TAG]]
+#
+# install-trivy never downloads. ARCHIVE_DIR holds the release archive for
+# this machine (trivy_VERSION_Linux-64bit.tar.gz or
+# trivy_VERSION_Linux-ARM64.tar.gz): CI passes "$RUNNER_TEMP/ci-tools" after
+# ./.github/actions/ci-tools loads the package; local use passes a directory
+# holding an archive fetched by hand.
 set -Eeuo pipefail
 
 TRIVY_VERSION=0.76.1
@@ -34,20 +46,18 @@ trivy_asset() {
   esac
 }
 
-# Downloads the pinned Trivy release tarball for the current architecture
-# straight from GitHub (never a third-party action), verifies it against the
-# sha256 pinned above, and extracts the binary into $1.
+# Verifies the pinned Trivy archive for the current architecture in $2
+# against the sha256 pinned above and extracts only the binary into $1.
 install_trivy() {
-  local dest=${1:?install-trivy needs a destination directory}
-  local asset sha256 tmp
-  read -r asset sha256 < <(trivy_asset)
-  tmp=$(mktemp -d)
-  trap 'rm -rf -- "$tmp"' RETURN
-  curl -fsSL -o "$tmp/$asset" \
-    "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${asset}"
-  echo "$sha256  $tmp/$asset" | sha256sum -c -
+  [ "$#" -eq 2 ] || die "usage: $0 install-trivy DEST ARCHIVE_DIR"
+  local dest=$1 dir=$2 pair asset sha256
+  pair=$(trivy_asset)
+  read -r asset sha256 <<<"$pair"
+  [ -f "$dir/$asset" ] ||
+    die "$dir/$asset is missing: load the ci-tools package first; Trivy has no other source"
+  echo "$sha256  $dir/$asset" | sha256sum -c -
   mkdir -p "$dest"
-  tar -xzf "$tmp/$asset" -C "$dest" trivy
+  tar -xzf "$dir/$asset" -C "$dest" trivy
   "$dest/trivy" --version
 }
 
@@ -237,6 +247,6 @@ weekly-scan)
   weekly_scan "$@"
   ;;
 *)
-  die "usage: $0 {install-trivy|scan-image|report|weekly-scan} [args...]"
+  die "usage: $0 {install-trivy|scan-image|report|weekly-scan} [args...]; see the header"
   ;;
 esac

@@ -8,6 +8,8 @@ trap 'rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/bin"
 ln -s "$(command -v bash)" "$WORK/bin/bash"
 ln -s "$(command -v jq)" "$WORK/bin/jq"
+ln -s "$(command -v sha256sum)" "$WORK/bin/sha256sum"
+ln -s "$(command -v tar)" "$WORK/bin/tar"
 export FIXTURE_DIR="$WORK" CALL_LOG="$WORK/calls" API_LOG="$WORK/api"
 export PATH="$WORK/bin:/usr/bin:/bin"
 
@@ -207,3 +209,68 @@ run_scan
 expect_status success
 [ ! -s "$WORK/reports/failed.txt" ] || fail 'stale failure survived a clean run'
 printf 'ok - observer findings and engine errors fail while collecting other targets\n'
+
+# install-trivy takes the pinned archive for this machine from a directory,
+# checks its sha256, and never downloads.
+for name in curl wget; do
+  cat >"$WORK/bin/$name" <<'STUB'
+#!/usr/bin/env bash
+printf '%s %s\n' "${0##*/}" "$*" >>"$FETCH_LOG"
+STUB
+done
+cat >"$WORK/bin/uname" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = -m ] || exit 64
+printf '%s\n' "$FIXTURE_MACHINE"
+STUB
+chmod +x "$WORK/bin/curl" "$WORK/bin/wget" "$WORK/bin/uname"
+export FETCH_LOG="$WORK/fetch.log"
+version=$(sed -n 's/^TRIVY_VERSION=//p' "$ROOT/scripts/security-scan.sh")
+archives=$WORK/trivy-archives
+mkdir -p "$archives"
+cp "$ROOT/scripts/security-scan.sh" "$WORK/security-scan.sh"
+for arch in amd64 arm64; do
+  case $arch in
+  amd64) asset="trivy_${version}_Linux-64bit.tar.gz" pin=TRIVY_SHA256_LINUX_AMD64 ;;
+  arm64) asset="trivy_${version}_Linux-ARM64.tar.gz" pin=TRIVY_SHA256_LINUX_ARM64 ;;
+  esac
+  mkdir -p "$WORK/trivy-src-$arch"
+  printf '#!/bin/sh\nprintf "Version: %s\\n"\n' "$arch" >"$WORK/trivy-src-$arch/trivy"
+  chmod +x "$WORK/trivy-src-$arch/trivy"
+  printf 'not extracted\n' >"$WORK/trivy-src-$arch/README.md"
+  tar -czf "$archives/$asset" -C "$WORK/trivy-src-$arch" trivy README.md
+  hash=$(sha256sum "$archives/$asset")
+  sed "s/^$pin=.*/$pin=${hash%% *}/" "$WORK/security-scan.sh" >"$WORK/security-scan.next"
+  mv "$WORK/security-scan.next" "$WORK/security-scan.sh"
+done
+install_trivy() { # machine archive-dir...
+  rm -rf "$WORK/trivy-bin" "$FETCH_LOG"
+  status=0
+  FIXTURE_MACHINE=$1 bash "$WORK/security-scan.sh" install-trivy "$WORK/trivy-bin" "${@:2}" >"$WORK/output" 2>&1 || status=$?
+  [ ! -e "$FETCH_LOG" ] || fail 'install-trivy fell back to a download'
+}
+for machine in x86_64 aarch64; do
+  install_trivy "$machine" "$archives"
+  expect_status success
+  case $machine in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+  grep -Fxq "Version: $arch" "$WORK/output" || fail "install-trivy chose the wrong archive on $machine"
+  [ "$(ls "$WORK/trivy-bin")" = trivy ] || fail 'install-trivy extracted more than the binary'
+done
+install_trivy x86_64
+expect_status failure
+grep -Fq 'usage' "$WORK/output" || fail 'install-trivy without an archive directory must print usage'
+install_trivy x86_64 "$WORK/empty"
+expect_status failure
+grep -Fq "trivy_${version}_Linux-64bit.tar.gz" "$WORK/output" || fail 'install-trivy must name the missing archive'
+[ ! -e "$WORK/trivy-bin/trivy" ] || fail 'install-trivy installed without an archive'
+cp -R "$archives" "$WORK/corrupt-archives"
+printf 'corrupt\n' >"$WORK/corrupt-archives/trivy_${version}_Linux-64bit.tar.gz"
+install_trivy x86_64 "$WORK/corrupt-archives"
+expect_status failure
+[ ! -e "$WORK/trivy-bin/trivy" ] || fail 'install-trivy extracted a corrupt archive'
+install_trivy riscv64 "$archives"
+expect_status failure
+grep -Fq 'unsupported architecture riscv64' "$WORK/output" || fail 'install-trivy must reject an unsupported architecture'
+FIXTURE_MACHINE=x86_64 bash "$ROOT/scripts/security-scan.sh" install-trivy "$WORK/trivy-bin" "$archives" >"$WORK/output" 2>&1 &&
+  fail 'install-trivy accepted an archive that does not match the pinned sha256'
+printf 'ok - install-trivy installs only the pinned archive from the ci-tools directory\n'

@@ -1,6 +1,7 @@
 name: Install Caddy
 description: >-
-  Installs the pinned Caddy release binary and puts it on PATH. A
+  Installs the pinned Caddy release binary from the ci-tools package, or from
+  its verified archive cache, and puts it on PATH. It never downloads. A
   go-installed caddy reports version "unknown", which the dev-https tool
   check rejects, and the release binary is faster than compiling Caddy.
 runs:
@@ -19,8 +20,8 @@ runs:
         if [ -f "$RUNNER_TEMP/ci-tools/caddy_2.11.9_linux_amd64.tar.gz" ]; then
           cp "$RUNNER_TEMP/ci-tools/caddy_2.11.9_linux_amd64.tar.gz" "$RUNNER_TEMP/caddy.tar.gz"
         elif [ "$CACHE_HIT" != true ]; then
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 \
-            -o "$RUNNER_TEMP/caddy.tar.gz" https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_amd64.tar.gz
+          echo "::error::caddy_2.11.9_linux_amd64.tar.gz is in neither the ci-tools package nor the cache; load ./.github/actions/ci-tools first"
+          exit 1
         fi
     - name: Verify and install Caddy
       shell: bash

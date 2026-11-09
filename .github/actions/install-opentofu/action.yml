@@ -1,7 +1,8 @@
 name: Install OpenTofu
 description: >-
-  Installs the pinned Linux amd64 OpenTofu release without a wrapper. Packaged,
-  cached, and downloaded archives must pass the pinned SHA-256 before extraction.
+  Installs the pinned Linux amd64 OpenTofu release without a wrapper, from the
+  ci-tools package or its verified archive cache. It never downloads. Packaged
+  and cached archives must pass the pinned SHA-256 before extraction.
 runs:
   using: composite
   steps:
@@ -18,8 +19,8 @@ runs:
         if [ -f "$RUNNER_TEMP/ci-tools/tofu_1.12.6_linux_amd64.zip" ]; then
           cp "$RUNNER_TEMP/ci-tools/tofu_1.12.6_linux_amd64.zip" "$RUNNER_TEMP/tofu.zip"
         elif [ "$CACHE_HIT" != true ]; then
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 \
-            -o "$RUNNER_TEMP/tofu.zip" https://github.com/opentofu/opentofu/releases/download/v1.12.6/tofu_1.12.6_linux_amd64.zip
+          echo "::error::tofu_1.12.6_linux_amd64.zip is in neither the ci-tools package nor the cache; load ./.github/actions/ci-tools first"
+          exit 1
         fi
     - name: Verify and install OpenTofu
       shell: bash

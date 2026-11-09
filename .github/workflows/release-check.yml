@@ -12,8 +12,10 @@ jobs:
     name: Release checks (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
+    # packages: read lets release-image-check load Trivy from ci-tools.
     permissions:
       contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
