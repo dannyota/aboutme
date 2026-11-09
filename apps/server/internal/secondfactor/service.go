@@ -1,7 +1,6 @@
 package secondfactor
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,11 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -37,8 +34,6 @@ const (
 	purposeAssertion    = "assertion"
 )
 
-var errDuplicateCredential = errors.New("secondfactor: credential already registered")
-
 // FactorCounter counts one factor type's active credentials. It must be a
 // plain read with no row lock; ActiveFactorCount supplies the user lock.
 type FactorCounter func(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (int, error)
@@ -58,20 +53,41 @@ func PasskeyCounter(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (
 // TOTPEnrollmentEnabled is true; a nil TOTPSignal defaults to a silent one
 // (docs/design/totp-key-management.md).
 type Options struct {
-	Pool                  *store.Pool
-	Pending               *auth.PendingAuthenticationManager
-	Sessions              *auth.SessionManager
-	Outbox                *authmail.Outbox
-	RelyingParty          *RelyingParty
-	EnrollmentEnabled     bool
-	TOTPKeyRing           *TOTPKeyRing
+	// Pool is the database pool every factor transaction runs on. Required.
+	Pool *store.Pool
+	// Pending locks and claims live pending authentications. Required.
+	Pending *auth.PendingAuthenticationManager
+	// Sessions issues a session on pending completion and replaces the
+	// current one after a factor change. Required.
+	Sessions *auth.SessionManager
+	// Outbox enqueues security mail in the caller's transaction. Required.
+	Outbox *authmail.Outbox
+	// RelyingParty is the WebAuthn relying-party policy. Required.
+	RelyingParty *RelyingParty
+	// EnrollmentEnabled is the passkey enrollment flag.
+	EnrollmentEnabled bool
+	// TOTPKeyRing seals and opens TOTP secrets. Required when
+	// TOTPEnrollmentEnabled is true.
+	TOTPKeyRing *TOTPKeyRing
+	// TOTPEnrollmentEnabled is the TOTP enrollment flag.
 	TOTPEnrollmentEnabled bool
-	TOTPIssuer            string
-	TOTPSignal            *TOTPUnavailableSignal
-	Counters              []FactorCounter
-	Clock                 func() time.Time
-	Entropy               io.Reader
-	Logger                *slog.Logger
+	// TOTPIssuer is the provisioning URI issuer. It must pass
+	// ValidateTOTPIssuer when TOTPEnrollmentEnabled is true.
+	TOTPIssuer string
+	// TOTPSignal emits the shared totp_unavailable signal. Nil defaults to a
+	// silent signal.
+	TOTPSignal *TOTPUnavailableSignal
+	// Counters lists one counter per factor type. Nil registers
+	// PasskeyCounter and TOTPCounter.
+	Counters []FactorCounter
+	// Clock returns the current time. Required.
+	Clock func() time.Time
+	// Entropy is the source of every random value the service draws.
+	// Required.
+	Entropy io.Reader
+	// Logger receives cleanup warnings and security-event logs. It may be
+	// nil.
+	Logger *slog.Logger
 }
 
 // Service implements auth.SecondFactorService for passkeys and recovery
@@ -244,387 +260,22 @@ func (s *Service) State(ctx context.Context, userID uuid.UUID) (auth.SecondFacto
 	return state, nil
 }
 
-// StartPasskeyRegistration creates a registration ceremony for the current
-// session. Before a policy exists it proposes a new random user handle and
-// stores it in the ceremony; afterwards it reuses the stored handle.
-func (s *Service) StartPasskeyRegistration(ctx context.Context, current store.Session) (auth.SecondFactorOptions, error) {
-	if !s.enabled {
-		return auth.SecondFactorOptions{}, auth.ErrSecondFactorEnrollmentDisabled
+func (s *Service) random(n int) ([]byte, error) {
+	b := make([]byte, n)
+	if _, err := io.ReadFull(s.entropy, b); err != nil {
+		return nil, fmt.Errorf("secondfactor: entropy: %w", err)
 	}
-	s.cleanup(ctx)
-	var options auth.SecondFactorOptions
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, err := lockAccount(ctx, qtx, current, now)
-		if err != nil {
-			return err
-		}
-		if err = auth.RequireRecentSecondFactorReauth(user, policy, sess, now); err != nil {
-			return err
-		}
-		active, err := qtx.ListWebAuthnCredentialsForUser(ctx, user.ID)
-		if err != nil {
-			return fmt.Errorf("list passkeys: %w", err)
-		}
-		if len(active) >= maxActivePasskeys {
-			return auth.ErrSecondFactorLimitReached
-		}
-		var handle, proposed []byte
-		if policy != nil {
-			handle = policy.WebauthnUserHandle
-		} else {
-			if proposed, err = s.random(userHandleBytes); err != nil {
-				return err
-			}
-			handle = proposed
-		}
-		token, challenge, err := s.createCeremony(ctx, qtx, user, purposeRegistration, &sess.ID, nil, proposed, now)
-		if err != nil {
-			return err
-		}
-		publicKey, err := s.rp.registrationOptions(challenge, handle, user.Email, user.Name, active)
-		if err != nil {
-			return fmt.Errorf("registration options: %w", err)
-		}
-		options = auth.SecondFactorOptions{CeremonyID: token, PublicKey: publicKey}
-		return nil
-	})
-	if err != nil {
-		return auth.SecondFactorOptions{}, err
-	}
-	return options, nil
+	return b, nil
 }
 
-// CompletePasskeyRegistration verifies and stores a passkey. It claims the
-// ceremony under the user, session, and policy locks. First versus later
-// enrollment follows policy existence: first creates the policy with the
-// ceremony's proposed handle, the credential, and recovery codes; later reuses
-// the stored handle. A claimed ceremony stays consumed when the completion is
-// rejected, including while enrollment is disabled.
-func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store.Session, credential auth.SecondFactorCredential) (auth.SecondFactorRegistration, error) {
-	reg, ok := credential.(*passkeyRegistration)
-	if !ok {
-		return auth.SecondFactorRegistration{}, auth.ErrSecondFactorRequestInvalid
-	}
-	values, display, err := generateRecoveryCodes(s.entropy)
-	if err != nil {
-		return auth.SecondFactorRegistration{}, err
-	}
-	var (
-		result  auth.SecondFactorRegistration
-		outcome error
-	)
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
-		if lockErr != nil {
-			return lockErr
-		}
-		ceremony, claimErr := claimCeremony(ctx, qtx, reg.ceremonyDigest, user, purposeRegistration, &sess.ID, nil, now)
-		if claimErr != nil {
-			return claimErr
-		}
-		if !s.enabled {
-			outcome = auth.ErrSecondFactorEnrollmentDisabled
-			return nil
-		}
-		if reauthErr := auth.RequireRecentSecondFactorReauth(user, policy, sess, now); reauthErr != nil {
-			return reauthErr
-		}
-		first := policy == nil
-		handle := ceremony.ProposedUserHandle
-		switch {
-		case first != (handle != nil):
-			outcome = auth.ErrSecondFactorChallengeInvalid
-			return nil
-		case !first:
-			handle = policy.WebauthnUserHandle
-		}
-		active, listErr := qtx.ListWebAuthnCredentialsForUser(ctx, user.ID)
-		if listErr != nil {
-			return fmt.Errorf("list passkeys: %w", listErr)
-		}
-		if len(active) >= maxActivePasskeys {
-			outcome = auth.ErrSecondFactorLimitReached
-			return nil
-		}
-		verified, verifyErr := s.rp.verifyRegistration(reg, ceremony.ChallengeDigest, handle, user.Email, user.Name)
-		if verifyErr != nil {
-			// Commit the ceremony consumption and report the failure through
-			// outcome, so a rejected registration cannot be retried.
-			outcome = verifyErr
-			return nil //nolint:nilerr // the failure is returned through outcome after commit
-		}
-		// The writes run in a savepoint so a duplicate credential ID rolls
-		// back only them and the ceremony stays consumed.
-		writeErr := pgx.BeginFunc(ctx, tx, func(sp pgx.Tx) error {
-			var storeErr error
-			result, storeErr = s.storePasskey(ctx, s.q.WithTx(sp), user, sess, handle, first, verified, values, display, now)
-			return storeErr
-		})
-		if errors.Is(writeErr, errDuplicateCredential) {
-			outcome = auth.ErrSecondFactorVerificationFailed
-			return nil
-		}
-		return writeErr
-	})
-	if err != nil {
-		return auth.SecondFactorRegistration{}, err
-	}
-	if outcome != nil {
-		return auth.SecondFactorRegistration{}, outcome
-	}
-	return result, nil
+func passkeyView(credential store.WebauthnCredential) auth.SecondFactorPasskey {
+	return auth.SecondFactorPasskey{ID: credential.ID, CreatedAt: credential.CreatedAt, LastUsedAt: credential.LastUsedAt}
 }
 
-// storePasskey writes a verified credential and commits the factor change.
-// First enrollment sets the replacement session's factor proof to now; later
-// enrollment copies the prior proof.
-func (s *Service) storePasskey(ctx context.Context, qtx *store.Queries, user store.User, sess store.Session, handle []byte, first bool, verified verifiedPasskey, values []recoveryValue, display []string, now time.Time) (auth.SecondFactorRegistration, error) {
-	if first {
-		if _, err := qtx.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{UserID: user.ID, WebauthnUserHandle: handle, EnabledAt: now}); err != nil {
-			return auth.SecondFactorRegistration{}, fmt.Errorf("create policy: %w", err)
-		}
+func passkeyViews(credentials []store.WebauthnCredential) []auth.SecondFactorPasskey {
+	views := make([]auth.SecondFactorPasskey, 0, len(credentials))
+	for _, credential := range credentials {
+		views = append(views, passkeyView(credential))
 	}
-	transports := verified.transports
-	if transports == nil {
-		transports = []string{}
-	}
-	stored, err := qtx.CreateWebAuthnCredential(ctx, store.CreateWebAuthnCredentialParams{
-		UserID: user.ID, CredentialID: verified.credentialID, PublicKey: verified.publicKey,
-		SignCount: int64(verified.signCount), BackupEligible: verified.backupEligible,
-		BackupState: verified.backupState, Transports: transports, CreatedAt: now,
-	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return auth.SecondFactorRegistration{}, errDuplicateCredential
-		}
-		return auth.SecondFactorRegistration{}, fmt.Errorf("create passkey: %w", err)
-	}
-	kind, proof := authmail.KindPasskeyAdded, sess.SecondFactorVerifiedAt
-	var codes []string
-	if first {
-		if err = insertRecoveryCodes(ctx, qtx, user.ID, values, now); err != nil {
-			return auth.SecondFactorRegistration{}, err
-		}
-		kind, proof, codes = authmail.KindSecondFactorEnabled, &now, display
-	}
-	issue, err := s.commitFactorChange(ctx, qtx, user, sess, proof, kind, now)
-	if err != nil {
-		return auth.SecondFactorRegistration{}, err
-	}
-	return auth.SecondFactorRegistration{Passkey: passkeyView(stored), RecoveryCodes: codes, Session: issue}, nil
-}
-
-// StartPasskeyAssertion creates an assertion ceremony for a live pending
-// authentication. An account with no active passkey gets
-// ErrSecondFactorNotFound; that rolls back, so no ceremony is created and the
-// pending row and its failure count are unchanged.
-func (s *Service) StartPasskeyAssertion(ctx context.Context, pendingToken string, sessionID *uuid.UUID) (auth.SecondFactorOptions, error) {
-	s.cleanup(ctx)
-	var options auth.SecondFactorOptions
-	_, err := s.pending.WithLivePending(ctx, pendingToken, sessionID, lockPolicyBeforePending,
-		func(ctx context.Context, qtx *store.Queries, locked auth.PendingAuthenticationLocked) error {
-			active, err := qtx.ListWebAuthnCredentialsForUser(ctx, locked.User.ID)
-			if err != nil {
-				return fmt.Errorf("list passkeys: %w", err)
-			}
-			if len(active) == 0 {
-				return auth.ErrSecondFactorNotFound
-			}
-			token, challenge, err := s.createCeremony(ctx, qtx, locked.User, purposeAssertion, nil, &locked.Pending.ID, nil, s.now())
-			if err != nil {
-				return err
-			}
-			publicKey, err := s.rp.assertionOptions(challenge, active)
-			if err != nil {
-				return err
-			}
-			options = auth.SecondFactorOptions{CeremonyID: token, PublicKey: publicKey}
-			return nil
-		})
-	if err != nil {
-		return auth.SecondFactorOptions{}, err
-	}
-	return options, nil
-}
-
-// CompletePending completes a live pending authentication with a passkey
-// assertion or a recovery code.
-func (s *Service) CompletePending(ctx context.Context, pendingToken string, sessionID *uuid.UUID, credential auth.SecondFactorCredential, client auth.SecondFactorClient) (*auth.SessionIssue, error) {
-	switch c := credential.(type) {
-	case *passkeyAssertion:
-		return s.completeAssertion(ctx, pendingToken, sessionID, c, client)
-	case *recoveryCredential:
-		return s.completeRecovery(ctx, pendingToken, sessionID, c, client)
-	case *totpCredential:
-		return s.completeTOTPPending(ctx, pendingToken, sessionID, c, client)
-	default:
-		return nil, auth.ErrSecondFactorRequestInvalid
-	}
-}
-
-// completeAssertion locks the user, bound session, policy, and the presented
-// credential before the pending row, then claims the ceremony. A failed
-// verification commits only the ceremony consumption, the counter security
-// event, the counted attempt, and the exhaustion mail; it never writes the
-// credential counter or a session. A failed event insert rolls every write
-// back.
-func (s *Service) completeAssertion(ctx context.Context, pendingToken string, sessionID *uuid.UUID, a *passkeyAssertion, client auth.SecondFactorClient) (*auth.SessionIssue, error) {
-	var (
-		policy *store.SecondFactorPolicy
-		active []store.WebauthnCredential
-		target *store.WebauthnCredential
-		issue  *auth.SessionIssue
-	)
-	before := func(ctx context.Context, qtx *store.Queries, user store.User, _ *store.Session) error {
-		var err error
-		if policy, err = lockPolicy(ctx, qtx, user.ID); err != nil {
-			return err
-		}
-		if active, err = qtx.ListWebAuthnCredentialsForUser(ctx, user.ID); err != nil {
-			return fmt.Errorf("list passkeys: %w", err)
-		}
-		for _, candidate := range active {
-			if !bytes.Equal(candidate.CredentialID, a.rawID) {
-				continue
-			}
-			locked, lockErr := qtx.GetWebAuthnCredentialForUpdate(ctx, store.GetWebAuthnCredentialForUpdateParams{ID: candidate.ID, UserID: user.ID})
-			if lockErr != nil {
-				return fmt.Errorf("lock passkey: %w", lockErr)
-			}
-			target = &locked
-		}
-		return nil
-	}
-	_, err := s.pending.WithLivePending(ctx, pendingToken, sessionID, before,
-		func(ctx context.Context, qtx *store.Queries, locked auth.PendingAuthenticationLocked) error {
-			now := s.now()
-			ceremony, err := claimCeremony(ctx, qtx, a.ceremonyDigest, locked.User, purposeAssertion, nil, &locked.Pending.ID, now)
-			if err != nil {
-				return err
-			}
-			if policy == nil || target == nil {
-				return s.failAttempt(locked.User)
-			}
-			result, err := s.rp.verifyAssertion(a, ceremony.ChallengeDigest, policy.WebauthnUserHandle, active, *target)
-			if err != nil {
-				return s.failAttempt(locked.User)
-			}
-			if result.counterRegressed {
-				if err = s.recordCounterEvent(ctx, qtx, *target, result.received, now); err != nil {
-					return err
-				}
-				return s.failAttempt(locked.User)
-			}
-			if _, err = qtx.UpdateWebAuthnCredentialAfterAssertion(ctx, store.UpdateWebAuthnCredentialAfterAssertionParams{
-				SignCount: int64(result.received), BackupEligible: target.BackupEligible,
-				BackupState: result.backupState, LastUsedAt: now, ID: target.ID, UserID: locked.User.ID,
-			}); err != nil {
-				return fmt.Errorf("advance passkey counter: %w", err)
-			}
-			issue, err = s.finishPending(ctx, qtx, locked, client, now)
-			return err
-		})
-	if err != nil {
-		return nil, err
-	}
-	return issue, nil
-}
-
-// recordCounterEvent inserts the bounded non-increasing counter event. Logs
-// name only the event ID and fixed kind.
-func (s *Service) recordCounterEvent(ctx context.Context, qtx *store.Queries, credential store.WebauthnCredential, received uint32, now time.Time) error {
-	if s.counterEventProbe != nil {
-		if err := s.counterEventProbe(); err != nil {
-			return fmt.Errorf("insert counter event: %w", err)
-		}
-	}
-	event, err := qtx.InsertPasskeyCounterSecurityEvent(ctx, store.InsertPasskeyCounterSecurityEventParams{
-		UserID: credential.UserID, PasskeyID: credential.ID, StoredCounter: credential.SignCount,
-		ReceivedCounter: int64(received), OccurredAt: now,
-	})
-	if err != nil {
-		return fmt.Errorf("insert counter event: %w", err)
-	}
-	if s.logger != nil {
-		s.logger.Warn("authentication security event", "event_id", event.ID.String(), "kind", event.Kind)
-	}
-	return nil
-}
-
-// RemovePasskey deletes one owned passkey. Final versus non-final comes only
-// from ActiveFactorCount after the delete: final removal deletes the recovery
-// codes and policy, clears the factor proof, and sends second_factor_disabled;
-// otherwise the policy, codes, and proof stay and passkey_removed is sent.
-func (s *Service) RemovePasskey(ctx context.Context, current store.Session, passkeyID uuid.UUID) (auth.SessionIssue, error) {
-	var issue auth.SessionIssue
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, err := lockAccount(ctx, qtx, current, now)
-		if err != nil {
-			return err
-		}
-		if err = auth.RequireRecentSecondFactorReauth(user, policy, sess, now); err != nil {
-			return err
-		}
-		if policy == nil {
-			return auth.ErrSecondFactorNotFound
-		}
-		if _, err = qtx.GetWebAuthnCredentialForUpdate(ctx, store.GetWebAuthnCredentialForUpdateParams{ID: passkeyID, UserID: user.ID}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return auth.ErrSecondFactorNotFound
-			}
-			return fmt.Errorf("lock passkey: %w", err)
-		}
-		if _, err = qtx.DeleteWebAuthnCredentialForUser(ctx, store.DeleteWebAuthnCredentialForUserParams{ID: passkeyID, UserID: user.ID}); err != nil {
-			return fmt.Errorf("delete passkey: %w", err)
-		}
-		remaining, err := s.ActiveFactorCount(ctx, qtx, user.ID)
-		if err != nil {
-			return err
-		}
-		kind, proof := authmail.KindPasskeyRemoved, sess.SecondFactorVerifiedAt
-		if remaining == 0 {
-			if _, err = qtx.DeleteSecondFactorRecoveryCodesForUser(ctx, user.ID); err != nil {
-				return fmt.Errorf("delete recovery codes: %w", err)
-			}
-			if _, err = qtx.DeleteSecondFactorPolicyForUser(ctx, user.ID); err != nil {
-				return fmt.Errorf("delete policy: %w", err)
-			}
-			kind, proof = authmail.KindSecondFactorDisabled, nil
-		}
-		issue, err = s.commitFactorChange(ctx, qtx, user, sess, proof, kind, now)
-		return err
-	})
-	if err != nil {
-		return auth.SessionIssue{}, err
-	}
-	return issue, nil
-}
-
-// commitFactorChange advances the epoch, replaces the current session and
-// revokes every other one, then revokes every live agent grant and its token
-// families, and enqueues the notification, all in the caller's transaction
-// under the user lock. Sessions come before grants, as the lock order in
-// docs/design/second-factor-authentication.md requires.
-func (s *Service) commitFactorChange(ctx context.Context, qtx *store.Queries, user store.User, sess store.Session, factorProof *time.Time, kind authmail.Kind, now time.Time) (auth.SessionIssue, error) {
-	if _, err := qtx.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
-		return auth.SessionIssue{}, fmt.Errorf("advance epoch: %w", err)
-	}
-	issue, err := s.sessions.ReplaceAfterEpochChangeTx(ctx, qtx, user.ID, sess.ID, factorProof)
-	if err != nil {
-		return auth.SessionIssue{}, err
-	}
-	if err = oauthsrv.RevokeGrantsForEpochChangeTx(ctx, qtx, user.ID, now); err != nil {
-		return auth.SessionIssue{}, err
-	}
-	if err = s.enqueueSecurityMail(ctx, qtx, user, kind, now, nil); err != nil {
-		return auth.SessionIssue{}, err
-	}
-	return issue, nil
+	return views
 }

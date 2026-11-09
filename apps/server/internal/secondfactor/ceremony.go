@@ -127,3 +127,10 @@ func (s *Service) cleanup(ctx context.Context) {
 		s.logger.Warn("webauthn ceremony cleanup failed")
 	}
 }
+
+func sameID(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
