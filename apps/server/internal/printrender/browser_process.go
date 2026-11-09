@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/remote"
 	"golang.org/x/sys/unix"
 )
 
@@ -76,6 +77,9 @@ func allocatorOptions(executable, proxyURL string, configure func(*exec.Cmd)) []
 	options := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(browserEnvironmentExecutable),
 		chromedp.ModifyCmdFunc(configure),
+		// Read the DevTools address from the browser output within the timeout
+		// below; the pipe transport has no startup limit of its own.
+		remote.WebSocket,
 		chromedp.WSURLReadTimeout(5 * time.Second),
 	}
 	for _, name := range names {

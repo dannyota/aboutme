@@ -37,7 +37,7 @@ func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 		}
 	}()
 	if err := withBrowser(ctx, renderer.executable, proxy.url(), renderer.supervisor, true, func(browserCtx context.Context) error {
-		return chromedp.Run(browserCtx)
+		return chromedp.Do(browserCtx)
 	}); err != nil {
 		return err
 	}
@@ -113,21 +113,27 @@ func (f *attemptFailure) output() []byte {
 	return f.bytes
 }
 
-func configureCaptureEnvironment(ctx context.Context, format renderjob.Format) error {
+// configureCaptureEnvironment sets the media and viewport of format. Like every
+// protocol request of a render, it sets each optional flag explicitly, so a
+// render never depends on browser defaults such as the choice of tagged PDFs.
+func configureCaptureEnvironment(ctx context.Context, session cdp.Session, format renderjob.Format) error {
 	if format == renderjob.PDF {
-		if err := emulation.SetEmulatedMedia().WithMedia("print").Do(ctx); err != nil {
+		if _, err := cdp.Call(ctx, session, emulation.SetEmulatedMedia, emulation.SetEmulatedMediaParams{Media: "print"}); err != nil {
 			return ErrRenderFailed
 		}
 		return nil
 	}
 	white := &cdp.RGBA{R: 255, G: 255, B: 255, A: 1}
-	if err := emulation.SetDeviceMetricsOverride(1200, 630, 1, false).Do(ctx); err != nil {
+	if _, err := cdp.Call(ctx, session, emulation.SetDeviceMetricsOverride, emulation.SetDeviceMetricsOverrideParams{
+		Width: 1200, Height: 630, DeviceScaleFactor: 1, Mobile: false,
+		DontSetVisibleSize: new(false), ScreenOrientationLockEmulation: new(false),
+	}); err != nil {
 		return ErrRenderFailed
 	}
-	if err := emulation.SetEmulatedMedia().WithMedia("screen").Do(ctx); err != nil {
+	if _, err := cdp.Call(ctx, session, emulation.SetEmulatedMedia, emulation.SetEmulatedMediaParams{Media: "screen"}); err != nil {
 		return ErrRenderFailed
 	}
-	if err := emulation.SetDefaultBackgroundColorOverride().WithColor(white).Do(ctx); err != nil {
+	if _, err := cdp.Call(ctx, session, emulation.SetDefaultBackgroundColorOverride, emulation.SetDefaultBackgroundColorOverrideParams{Color: white}); err != nil {
 		return ErrRenderFailed
 	}
 	return nil
@@ -147,33 +153,46 @@ const pageReadinessExpression = `(async () => {
 })()`
 
 func awaitPageReadiness(ctx context.Context) error {
-	var ready bool
-	err := chromedp.Run(ctx, chromedp.Evaluate(pageReadinessExpression, &ready, func(params *runtime.EvaluateParams) *runtime.EvaluateParams {
-		return params.WithAwaitPromise(true)
-	}))
+	ready, err := chromedp.Run(ctx, chromedp.Evaluate[bool](pageReadinessExpression, readinessEvaluation))
 	if err != nil || !ready {
 		return ErrRenderFailed
 	}
 	return nil
 }
 
-func capturePDF(ctx context.Context, revisionTime time.Time) ([]byte, error) {
-	data, handle, err := page.PrintToPDF().
-		WithLandscape(false).
-		WithDisplayHeaderFooter(false).
-		WithPrintBackground(true).
-		WithScale(1).
-		WithMarginTop(0).
-		WithMarginBottom(0).
-		WithMarginLeft(0).
-		WithMarginRight(0).
-		WithPreferCSSPageSize(true).
-		WithTransferMode(page.PrintToPDFTransferModeReturnAsStream).
-		Do(ctx)
-	if err != nil || len(data) != 0 || handle == "" {
+// readinessEvaluation completes the parameters that chromedp.Evaluate starts
+// with the expression and returnByValue.
+func readinessEvaluation(params *runtime.EvaluateParams) {
+	params.IncludeCommandLineAPI = new(false)
+	params.Silent = new(false)
+	params.GeneratePreview = new(false)
+	params.UserGesture = new(false)
+	params.AwaitPromise = new(true)
+	params.ThrowOnSideEffect = new(false)
+	params.DisableBreaks = new(false)
+	params.ReplMode = new(false)
+	params.AllowUnsafeEvalBlockedByCSP = new(true)
+}
+
+func capturePDF(ctx context.Context, session cdp.Session, revisionTime time.Time) ([]byte, error) {
+	result, err := cdp.Call(ctx, session, page.PrintToPDF, page.PrintToPDFParams{
+		Landscape:               new(false),
+		DisplayHeaderFooter:     new(false),
+		PrintBackground:         new(true),
+		Scale:                   1,
+		MarginTop:               new(0.0),
+		MarginBottom:            new(0.0),
+		MarginLeft:              new(0.0),
+		MarginRight:             new(0.0),
+		PreferCSSPageSize:       new(true),
+		TransferMode:            page.PrintToPDFTransferModeReturnAsStream,
+		GenerateTaggedPDF:       new(false),
+		GenerateDocumentOutline: new(false),
+	})
+	if err != nil || len(result.Data) != 0 || result.Stream == "" {
 		return nil, ErrRenderFailed
 	}
-	output, err := readPDFStream(ctx, &cdpPDFStream{handle: handle}, pdfMaxBytes)
+	output, err := readPDFStream(ctx, &cdpPDFStream{session: session, handle: result.Stream}, pdfMaxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -183,10 +202,15 @@ func capturePDF(ctx context.Context, revisionTime time.Time) ([]byte, error) {
 	return output, nil
 }
 
-type cdpPDFStream struct{ handle cdpio.StreamHandle }
+type cdpPDFStream struct {
+	session cdp.Session
+	handle  cdpio.StreamHandle
+}
 
+// read decodes IO.read itself because cdpio.ReadResult decodes data as base64,
+// while the protocol returns raw text when base64Encoded is false.
 func (s *cdpPDFStream) read(ctx context.Context, size int64) (streamChunk, error) {
-	params := cdpio.Read(s.handle).WithSize(size)
+	params := cdpio.ReadParams{Handle: s.handle, Size: size}
 	var result struct {
 		// Base64Encoded reports whether Data holds base64 rather than raw text.
 		Base64Encoded bool `json:"base64Encoded"`
@@ -195,26 +219,30 @@ func (s *cdpPDFStream) read(ctx context.Context, size int64) (streamChunk, error
 		// EOF reports whether the stream has no more content after Data.
 		EOF bool `json:"eof"`
 	}
-	if err := cdp.Execute(ctx, cdpio.CommandRead, params, &result); err != nil {
+	if err := s.session.Call(ctx, cdpio.Read.Method, params, &result); err != nil {
 		return streamChunk{}, err
 	}
 	return streamChunk{data: result.Data, base64: result.Base64Encoded, eof: result.EOF}, nil
 }
 
-func (s *cdpPDFStream) close(ctx context.Context) error { return cdpio.Close(s.handle).Do(ctx) }
+func (s *cdpPDFStream) close(ctx context.Context) error {
+	_, err := cdp.Call(ctx, s.session, cdpio.Close, cdpio.CloseParams{Handle: s.handle})
+	return err
+}
 
-func capturePNG(ctx context.Context, limit int) ([]byte, error) {
-	data, err := page.CaptureScreenshot().
-		WithFormat(page.CaptureScreenshotFormatPng).
-		WithClip(&page.Viewport{X: 0, Y: 0, Width: 1200, Height: 630, Scale: 1}).
-		WithFromSurface(true).
-		WithCaptureBeyondViewport(false).
-		Do(ctx)
+func capturePNG(ctx context.Context, session cdp.Session, limit int) ([]byte, error) {
+	result, err := cdp.Call(ctx, session, page.CaptureScreenshot, page.CaptureScreenshotParams{
+		Format:                page.CaptureScreenshotFormatPng,
+		Clip:                  &page.Viewport{X: 0, Y: 0, Width: 1200, Height: 630, Scale: 1},
+		FromSurface:           new(true),
+		CaptureBeyondViewport: new(false),
+		OptimizeForSpeed:      new(false),
+	})
 	if err != nil {
 		return nil, ErrRenderFailed
 	}
-	if err := validatePNG(data, limit); err != nil {
+	if err := validatePNG(result.Data, limit); err != nil {
 		return nil, err
 	}
-	return data, nil
+	return result.Data, nil
 }
