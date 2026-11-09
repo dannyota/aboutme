@@ -144,12 +144,33 @@ package_is_pinned() { # package=version
 }
 
 install_pinned() { # package=version...
-  local spec pkg
-  apt-get install -y -qq --allow-downgrades "$@" >/dev/null
+  local spec pkg holds failure='' status=0
+  local -a held_packages=()
+  holds=$(apt-mark showhold) || die "cannot inspect package holds"
   for spec in "$@"; do
     pkg=${spec%%=*}
-    package_is_pinned "$spec" || die "$pkg is not installed at pinned ${spec#*=}"
-    apt-mark hold "$pkg" >/dev/null
+    if grep -qxF "$pkg" <<<"$holds"; then held_packages+=("$pkg"); fi
+  done
+  apt-get install -y -qq --allow-downgrades --allow-change-held-packages "$@" >/dev/null || status=$?
+  if ((status == 0)); then
+    for spec in "$@"; do
+      if ! package_is_pinned "$spec"; then
+        failure="${spec%%=*} is not installed at pinned ${spec#*=}"
+        status=1
+        break
+      fi
+    done
+  fi
+  if ((status != 0)); then
+    # Unpacking can clear a hold before apt or the version check fails.
+    if ((${#held_packages[@]})); then
+      apt-mark hold "${held_packages[@]}" >/dev/null || true
+    fi
+    [[ -z $failure ]] || die "$failure"
+    return "$status"
+  fi
+  for spec in "$@"; do
+    apt-mark hold "${spec%%=*}" >/dev/null || return $?
   done
 }
 
