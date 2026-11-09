@@ -82,7 +82,7 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 |Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model); latest-Opus subagents when the primary needs them ([workflow](instructions/workflow.md#models-and-ownership))|
 |Codex|`.codex/agents/`|`implementer` (`gpt-6.1-terra` xhigh, workspace-write), `troubleshooter` (`gpt-6.1-terra` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6.1-sol` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-terra` xhigh, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write)|
 
-The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). Set model and effort explicitly on every dispatch. Track these agent definitions; keep other local tool settings ignored.
+The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). `workspace-write` roles get network access and run their own bounded checks through the managed lock; read-only roles get network only with `--search`. Set model and effort explicitly on every dispatch. Track these agent definitions; keep other local tool settings ignored.
 
 The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, display evidence, release checks, and persona dogfooding, never product fixes.
 

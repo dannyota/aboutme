@@ -20,6 +20,6 @@ Use exact states: `planned`, `in progress`, `landed`, `verified`, `accepted`, or
 
 ## Evidence
 
-Reports go to the scratchpad outside the repository. Findings not fixed at once become lines in `docs/plans/backlog.md`.
+Reports go to the scratchpad outside the repository; a Codex worker's report is its final message. Findings not fixed at once become lines in `docs/plans/backlog.md`.
 
 Save assigned persona evidence under `.dev/personas/`. Persona work never edits product files. Report each defect with steps, URL, expected and actual behavior, severity, screenshot or other evidence, and owning lane.

@@ -24,7 +24,7 @@ const (
 
 // canonicalScopes is the closed set in canonical order. Every parsed result is
 // a subsequence of it, so one granted set has exactly one stored spelling.
-var canonicalScopes = [...]Scope{ScopeResumesRead, ScopeResumesWrite}
+func canonicalScopes() [2]Scope { return [2]Scope{ScopeResumesRead, ScopeResumesWrite} }
 
 // scopesMaxBytes is the length of the longest valid scope parameter — the
 // whole closed set with one space between members — so a longer input is
@@ -43,7 +43,8 @@ func ParseScopes(raw string) (Scopes, error) {
 	if len(raw) == 0 || len(raw) > scopesMaxBytes {
 		return nil, ErrScopeInvalid
 	}
-	var granted [len(canonicalScopes)]bool
+	scopes := canonicalScopes()
+	var granted [len(scopes)]bool
 	for _, field := range strings.Split(raw, " ") {
 		index, ok := canonicalScopeIndex(field)
 		if !ok || granted[index] {
@@ -51,10 +52,10 @@ func ParseScopes(raw string) (Scopes, error) {
 		}
 		granted[index] = true
 	}
-	out := make(Scopes, 0, len(canonicalScopes))
+	out := make(Scopes, 0, len(scopes))
 	for i, ok := range granted {
 		if ok {
-			out = append(out, canonicalScopes[i])
+			out = append(out, scopes[i])
 		}
 	}
 	return out, nil
@@ -82,7 +83,7 @@ func (s Scopes) Has(scope Scope) bool {
 
 // canonicalScopeIndex returns the closed-set index of field.
 func canonicalScopeIndex(field string) (int, bool) {
-	for i, scope := range canonicalScopes {
+	for i, scope := range canonicalScopes() {
 		if field == string(scope) {
 			return i, true
 		}

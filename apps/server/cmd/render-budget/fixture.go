@@ -62,7 +62,7 @@ func buildFixtureCorpus(repositoryRoot string) ([]fixture, error) {
 	if err != nil {
 		return nil, errors.New("photo_fixture_read_failed")
 	}
-	normalizedPhoto, err := media.NormalizePhoto(photoSource)
+	normalizedPhoto, err := media.NewPhotoNormalizer().NormalizePhoto(photoSource)
 	if err != nil || normalizedPhoto.ContentType != "image/png" {
 		return nil, errors.New("photo_fixture_normalization_failed")
 	}

@@ -14,7 +14,9 @@ const googleIssuer = "https://accounts.google.com"
 
 // googleScopes request the ID, verified email, and optional display name used
 // by the login flow. The profile scope does not guarantee a name claim.
-var googleScopes = []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
+func googleScopes() []string {
+	return []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
+}
 
 // googleClaims contains the required email state and optional display name.
 type googleClaims struct {
@@ -62,7 +64,7 @@ func (s *Service) googleOAuth2Config(endpoint oauth2.Endpoint, redirectURL strin
 		ClientSecret: s.google.clientSecret,
 		Endpoint:     endpoint,
 		RedirectURL:  redirectURL,
-		Scopes:       googleScopes,
+		Scopes:       googleScopes(),
 	}
 }
 

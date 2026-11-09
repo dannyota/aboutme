@@ -1184,7 +1184,25 @@ kill "$holder" 2>/dev/null || true
 wait "$holder" 2>/dev/null || true
 rm -f -- "$CTL/lock.held"
 
-shared_lock=$MAIN/.git/aboutme-local-check.lock
+# A caller from a branch older than the .dev/locks move holds only the .git lock.
+(
+  exec 8>>"$MAIN/.git/aboutme-local-check.lock"
+  flock 8
+  : >"$CTL/lock.held"
+  exec sleep 30
+) &
+holder=$!
+for _ in $(seq 100); do [ -e "$CTL/lock.held" ] && break; sleep 0.05; done
+run_workflow local
+check 'an old caller holding the pre-move shared lock refuses the proof' \
+  has 'another local check holds the shared lock' "$CTL/out"
+check 'a held pre-move lock runs no fixture or build' [ ! -s "$CTL/calls" ]
+kill "$holder" 2>/dev/null || true
+wait "$holder" 2>/dev/null || true
+rm -f -- "$CTL/lock.held"
+
+shared_lock=$MAIN/.dev/locks/local-check.lock
+mkdir -p "$MAIN/.dev/locks"
 (
   exec 8>>"$shared_lock"
   flock 8

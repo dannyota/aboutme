@@ -58,7 +58,7 @@ Reviews stay read-only. Reviewers read the primary's check output and exact-comm
 
 There is no numeric agent-job ceiling. Each concurrent writer has its own worktree. The primary creates worktrees, verifies their base commits, and coordinates shared fixtures. Managed local checks remain serialized under [resources](resources.md); ordinary commands need no mandatory wrapper or lock after the tooling change lands.
 
-Codex sandboxes cannot run local checks. The primary prefetches dependencies under the resource rules before a worker needs them, runs `make pre-push` and approved bounded checks under the resource rules, and gives reviewers the output.
+Codex `workspace-write` workers have network access and run the brief's bounded checks through the managed lock under the resource rules, like Opus subagents. Read-only reviewers and the explorer run none. The primary runs `make pre-push` before pushing and gives reviewers the check output.
 
 When a worker stops with a question, a design conflict, overlapping ownership, or a missing decision, the primary answers from the reviewed design or returns the conflict to the designer and independent reviewer. Record an approved contract change in the design before resuming the worker with a new brief that states the answer. Never invent a contract.
 

@@ -104,7 +104,7 @@ func TestSealOpenRoundtrip(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	p := validVerifyPayload()
 
-	s, err := ring.Seal(fixedJobID(), KindVerify, p)
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, p)
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestSealOpenRoundtrip(t *testing.T) {
 		t.Fatal("ciphertext empty")
 	}
 
-	got, err := ring.Open(fixedJobID(), KindVerify, s)
+	got, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -134,11 +134,11 @@ func TestSealOpenRecoveryCodeUsedRoundtrip(t *testing.T) {
 		RemainingRecoveryCodes: &remaining,
 	}
 
-	s, err := ring.Seal(fixedJobID(), KindRecoveryCodeUsed, p)
+	s, err := ring.Seal(fixedJobID(), KindRecoveryCodeUsed, JobScope{}, p)
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	got, err := ring.Open(fixedJobID(), KindRecoveryCodeUsed, s)
+	got, err := ring.Open(fixedJobID(), KindRecoveryCodeUsed, JobScope{}, s)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -164,11 +164,11 @@ func TestSealOpenRandomNonceInequality(t *testing.T) {
 	}
 	p := validVerifyPayload()
 
-	s1, err := ring.Seal(fixedJobID(), KindVerify, p)
+	s1, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2, err := ring.Seal(fixedJobID(), KindVerify, p)
+	s2, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestSealOpenRandomNonceInequality(t *testing.T) {
 
 func TestSealRejectsUnknownKind(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	if _, err := ring.Seal(fixedJobID(), Kind("bogus"), validVerifyPayload()); !errors.Is(err, ErrInvalidKind) {
+	if _, err := ring.Seal(fixedJobID(), Kind("bogus"), JobScope{}, validVerifyPayload()); !errors.Is(err, ErrInvalidKind) {
 		t.Fatalf("err = %v, want ErrInvalidKind", err)
 	}
 }
@@ -191,7 +191,7 @@ func TestSealRejectsOversizedPlaintext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	p := validVerifyPayload()
 	p.Link = verifyLinkPrefix + strings.Repeat("t", 5000)
-	if _, err := ring.Seal(fixedJobID(), KindVerify, p); !errors.Is(err, ErrOversizedPayload) {
+	if _, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, p); !errors.Is(err, ErrOversizedPayload) {
 		t.Fatalf("err = %v, want ErrOversizedPayload", err)
 	}
 }
@@ -201,14 +201,14 @@ func TestSealRejectsNonceFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload()); !errors.Is(err, ErrNonce) {
+	if _, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload()); !errors.Is(err, ErrNonce) {
 		t.Fatalf("err = %v, want ErrNonce", err)
 	}
 }
 
 func TestOpenRejectsEmptyCiphertext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	_, err := ring.Open(fixedJobID(), KindVerify, Sealed{KeyID: "k-active", Ciphertext: []byte{}})
+	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k-active", Ciphertext: []byte{}})
 	if !errors.Is(err, ErrCiphertext) {
 		t.Fatalf("err = %v, want ErrCiphertext", err)
 	}
@@ -216,7 +216,7 @@ func TestOpenRejectsEmptyCiphertext(t *testing.T) {
 
 func TestOpenRejectsOversizedCiphertext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	_, err := ring.Open(fixedJobID(), KindVerify, Sealed{KeyID: "k-active", Ciphertext: make([]byte, maxCiphertextBytes+1)})
+	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k-active", Ciphertext: make([]byte, maxCiphertextBytes+1)})
 	if !errors.Is(err, ErrCiphertext) {
 		t.Fatalf("err = %v, want ErrCiphertext", err)
 	}
@@ -225,7 +225,7 @@ func TestOpenRejectsOversizedCiphertext(t *testing.T) {
 func TestOpenAcceptsBoundCiphertext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	// Exactly the upper bound passes the size gate and fails authentication.
-	_, err := ring.Open(fixedJobID(), KindVerify, Sealed{KeyID: "k-active", Ciphertext: make([]byte, maxCiphertextBytes)})
+	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k-active", Ciphertext: make([]byte, maxCiphertextBytes)})
 	if !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication (bound accepted, auth failed)", err)
 	}
@@ -233,7 +233,7 @@ func TestOpenAcceptsBoundCiphertext(t *testing.T) {
 
 func TestOpenRejectsUnknownKeyID(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	_, err := ring.Open(fixedJobID(), KindVerify, Sealed{KeyID: "k-removed", Ciphertext: make([]byte, 16)})
+	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k-removed", Ciphertext: make([]byte, 16)})
 	if !errors.Is(err, ErrUnknownKey) {
 		t.Fatalf("err = %v, want ErrUnknownKey", err)
 	}
@@ -241,7 +241,7 @@ func TestOpenRejectsUnknownKeyID(t *testing.T) {
 
 func TestOpenRejectsInvalidKeyID(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	_, err := ring.Open(fixedJobID(), KindVerify, Sealed{KeyID: "k\tbad", Ciphertext: make([]byte, 16)})
+	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k\tbad", Ciphertext: make([]byte, 16)})
 	if !errors.Is(err, ErrInvalidKeyID) {
 		t.Fatalf("err = %v, want ErrInvalidKeyID", err)
 	}
@@ -249,58 +249,58 @@ func TestOpenRejectsInvalidKeyID(t *testing.T) {
 
 func TestOpenRejectsTamperedCiphertext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	s, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Ciphertext[len(s.Ciphertext)-1] ^= 0x01
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
 
 func TestOpenRejectsTruncatedTag(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	s, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Ciphertext = s.Ciphertext[:len(s.Ciphertext)-1]
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
 
 func TestOpenRejectsWrongNonce(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	s, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Nonce[0] ^= 0xff
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
 
 func TestOpenRejectsWrongJobID(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	s, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ring.Open(uuid.New(), KindVerify, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := ring.Open(uuid.New(), KindVerify, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
 
 func TestOpenRejectsWrongKind(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	s, err := ring.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := ring.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ring.Open(fixedJobID(), KindReset, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := ring.Open(fixedJobID(), KindReset, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
@@ -310,11 +310,11 @@ func TestOpenRejectsWrongKeyMaterial(t *testing.T) {
 	good := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	bad := mustRing(t, "k-active", map[string][32]byte{"k-active": keyAt(200)}, fixedNonce())
 
-	s, err := good.Seal(fixedJobID(), KindVerify, validVerifyPayload())
+	s, err := good.Seal(fixedJobID(), KindVerify, JobScope{}, validVerifyPayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bad.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrAuthentication) {
+	if _, err := bad.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication", err)
 	}
 }
@@ -330,7 +330,7 @@ func TestOpenDecryptsPreviousKeyAfterRotation(t *testing.T) {
 	plaintext := []byte(`{"version":1,"to":"alice@example.com","link":"` + verifyLinkPrefix + `tok"}`)
 	s := sealWithKey(t, prev, "k-prev", fixedJobID(), KindVerify, plaintext)
 
-	got, err := ring.Open(fixedJobID(), KindVerify, s)
+	got, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s)
 	if err != nil {
 		t.Fatalf("Open previous-key job: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestOpenRemovedKeyFailsClosed(t *testing.T) {
 	plaintext := []byte(`{"version":1,"to":"a@b.c","link":"` + verifyLinkPrefix + `tok"}`)
 	s := sealWithKey(t, keyAt(50), "k-removed", fixedJobID(), KindVerify, plaintext)
 
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrUnknownKey) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrUnknownKey) {
 		t.Fatalf("err = %v, want ErrUnknownKey", err)
 	}
 }
@@ -352,7 +352,7 @@ func TestOpenRemovedKeyFailsClosed(t *testing.T) {
 func TestOpenRejectsUnknownPayloadVersion(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	s := sealRaw(t, ring, fixedJobID(), KindVerify, []byte(`{"version":2,"to":"alice@example.com","link":"`+verifyLinkPrefix+`tok"}`))
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrUnknownVersion) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrUnknownVersion) {
 		t.Fatalf("err = %v, want ErrUnknownVersion", err)
 	}
 }
@@ -360,7 +360,7 @@ func TestOpenRejectsUnknownPayloadVersion(t *testing.T) {
 func TestOpenRejectsDuplicateJSONKey(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	s := sealRaw(t, ring, fixedJobID(), KindVerify, []byte(`{"version":1,"version":1,"to":"alice@example.com"}`))
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrStrictJSON) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrStrictJSON) {
 		t.Fatalf("err = %v, want ErrStrictJSON", err)
 	}
 }
@@ -368,7 +368,7 @@ func TestOpenRejectsDuplicateJSONKey(t *testing.T) {
 func TestOpenRejectsUnknownField(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	s := sealRaw(t, ring, fixedJobID(), KindVerify, []byte(`{"version":1,"to":"alice@example.com","evil":1}`))
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrStrictJSON) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrStrictJSON) {
 		t.Fatalf("err = %v, want ErrStrictJSON", err)
 	}
 }
@@ -376,7 +376,7 @@ func TestOpenRejectsUnknownField(t *testing.T) {
 func TestOpenRejectsInvalidEmailInPlaintext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	s := sealRaw(t, ring, fixedJobID(), KindVerify, []byte(`{"version":1,"to":"not-an-email"}`))
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrInvalidEmail) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrInvalidEmail) {
 		t.Fatalf("err = %v, want ErrInvalidEmail", err)
 	}
 }
@@ -384,7 +384,7 @@ func TestOpenRejectsInvalidEmailInPlaintext(t *testing.T) {
 func TestOpenRejectsInvalidLinkInPlaintext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	s := sealRaw(t, ring, fixedJobID(), KindVerify, []byte(`{"version":1,"to":"alice@example.com","link":"https://evil.example/x"}`))
-	if _, err := ring.Open(fixedJobID(), KindVerify, s); !errors.Is(err, ErrInvalidLink) {
+	if _, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, s); !errors.Is(err, ErrInvalidLink) {
 		t.Fatalf("err = %v, want ErrInvalidLink", err)
 	}
 }

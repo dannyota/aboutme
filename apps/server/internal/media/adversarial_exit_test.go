@@ -69,7 +69,7 @@ func TestCanonicalImageOutput(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			source := phase2BPattern(tc.width, tc.height, tc.alpha)
-			got, err := NormalizePhoto(phase2BEncodePNG(t, source))
+			got, err := NewPhotoNormalizer().NormalizePhoto(phase2BEncodePNG(t, source))
 			if err != nil {
 				t.Fatalf("NormalizePhoto: %v", err)
 			}
@@ -94,7 +94,7 @@ func TestCanonicalImageOutput(t *testing.T) {
 
 	t.Run("opaque output uses JPEG quality 85", func(t *testing.T) {
 		sourceBytes := phase2BEncodePNG(t, phase2BPattern(73, 41, false))
-		got, err := NormalizePhoto(sourceBytes)
+		got, err := NewPhotoNormalizer().NormalizePhoto(sourceBytes)
 		if err != nil {
 			t.Fatalf("NormalizePhoto: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestMediaKeyCannotBeInfluenced(t *testing.T) {
 		{name: "WebP container", input: opaqueWebP},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			normalized, err := NormalizePhoto(tc.input)
+			normalized, err := NewPhotoNormalizer().NormalizePhoto(tc.input)
 			if err != nil {
 				t.Fatalf("NormalizePhoto: %v", err)
 			}
@@ -167,7 +167,7 @@ func TestMediaKeyCannotBeInfluenced(t *testing.T) {
 		})
 	}
 
-	alpha, err := NormalizePhoto(phase2BEncodePNG(t, phase2BPattern(32, 64, true)))
+	alpha, err := NewPhotoNormalizer().NormalizePhoto(phase2BEncodePNG(t, phase2BPattern(32, 64, true)))
 	if err != nil {
 		t.Fatalf("NormalizePhoto(alpha): %v", err)
 	}

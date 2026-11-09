@@ -33,7 +33,9 @@ const (
 )
 
 // githubScopes permits reading a private verified primary email.
-var githubScopes = []string{"user:email"}
+func githubScopes() []string {
+	return []string{"user:email"}
+}
 
 // githubProviderConfig holds GitHub's OAuth2 client credentials.
 type githubProviderConfig struct {
@@ -56,7 +58,7 @@ func (s *Service) githubOAuth2Config(redirectURL string) oauth2.Config {
 			TokenURL: tokenURL,
 		},
 		RedirectURL: redirectURL,
-		Scopes:      githubScopes,
+		Scopes:      githubScopes(),
 	}
 }
 

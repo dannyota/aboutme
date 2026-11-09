@@ -42,6 +42,19 @@ if platform_stat u "$work/missing" 2>/dev/null || platform_realpath "$work/missi
   printf '%s\n' 'missing path accepted' >&2
   exit 1
 fi
+# Every worktree resolves one shared lock in the main checkout, outside .git.
+git init -q "$work/main"
+git -C "$work/main" -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
+git -C "$work/main" worktree add -q -b fixture "$work/tree"
+main_real=$(cd "$work/main" && pwd -P)
+[ "$(local_check_lock_path "$work/main")" = "$main_real/.dev/locks/local-check.lock" ]
+[ "$(local_check_lock_path "$work/tree")" = "$main_real/.dev/locks/local-check.lock" ]
+[ "$(cd "$work/tree" && local_check_lock_path)" = "$main_real/.dev/locks/local-check.lock" ]
+git init -q --separate-git-dir "$work/separate.git" "$work/separate"
+if local_check_lock_path "$work/separate" 2>/dev/null; then
+  printf '%s\n' 'unexpected Git layout accepted' >&2
+  exit 1
+fi
 [ "$(platform_sha256sum "$work/file" | awk '{print $1}')" = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad ]
 [ "$(printf abc | platform_sha256sum | awk '{print $1}')" = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad ]
 (

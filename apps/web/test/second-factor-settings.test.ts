@@ -1309,6 +1309,30 @@ describe('second-factor settings', () => {
       .toBe(false);
   });
 
+  it.each([
+    { label: 'absent', field: {} },
+    { label: 'null', field: { totpEnabled: null } },
+    { label: 'a string', field: { totpEnabled: 'true' } },
+    { label: 'a number', field: { totpEnabled: 1 } },
+    { label: 'an object', field: { totpEnabled: {} } },
+  ])(
+    'shows TOTP as not set up when totpEnabled is $label',
+    async ({ field }) => {
+      stateResponse = {
+        data: { enabled, passkeys, recoveryCodesRemaining, ...field },
+      };
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      expect(wrapper.get('[data-testid="totp-status"]').text())
+        .toBe('Not set up.');
+      expect(wrapper.find('[data-testid="totp-setup-start"]').exists())
+        .toBe(true);
+      expect(wrapper.find('[data-testid="totp-setup-replace"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-testid="totp-remove"]').exists())
+        .toBe(false);
+    },
+  );
+
   it(
     'still shows status and remove when enrollment is closed but TOTP is '
     + 'already enabled',

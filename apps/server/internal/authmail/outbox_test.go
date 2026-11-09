@@ -640,7 +640,7 @@ func TestOutboxEnqueueCommitsEncryptedJob(t *testing.T) {
 
 	var nonceArr [12]byte
 	copy(nonceArr[:], nonce)
-	got, err := ring.Open(jobID, KindVerify, Sealed{KeyID: keyID, Nonce: nonceArr, Ciphertext: ciphertext})
+	got, err := ring.Open(jobID, KindVerify, JobScope{RegistrationID: &reg, TokenDigest: tokenDigest}, Sealed{KeyID: keyID, Nonce: nonceArr, Ciphertext: ciphertext})
 	if err != nil {
 		t.Fatalf("Open stored row: %v", err)
 	}
