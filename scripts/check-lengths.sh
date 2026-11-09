@@ -12,7 +12,7 @@ cd "$ROOT"
 
 MD_MAX=450
 CODE_MAX=700
-SERVER_CODE_MAX=500
+SERVER_CODE_MAX=400
 
 # Generated paths without a standard header. sqlc output has the header, so no
 # .sql.go pattern belongs here.
