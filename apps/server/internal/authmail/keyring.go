@@ -8,7 +8,7 @@ import (
 
 // KeyRing holds exactly one active key and at most one previous 32-byte key.
 // Seal always uses the active key; Open decrypts with whichever key ID the
-// blob names, so rotation keeps previously sealed jobs readable.
+// blob names for jobs using the current AAD version.
 type KeyRing struct {
 	activeID string
 	keys     map[string][32]byte
@@ -45,7 +45,8 @@ func NewKeyRing(activeID string, keys map[string][32]byte, nonce io.Reader) (*Ke
 
 // Seal validates the payload, serializes it to strict JSON, and encrypts it
 // under the active key with a fresh 12-byte nonce and the job-bound AAD.
-func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, p Payload) (Sealed, error) {
+// Scope must match the nullable columns inserted with the sealed blob.
+func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, scope JobScope, p Payload) (Sealed, error) {
 	if err := validatePayload(kind, p); err != nil {
 		return Sealed{}, err
 	}
@@ -64,7 +65,7 @@ func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, p Payload) (Sealed, error) {
 	if _, nonceErr := io.ReadFull(k.nonce, nonce[:]); nonceErr != nil {
 		return Sealed{}, ErrNonce
 	}
-	ct, err := sealAEAD(key, nonce[:], plaintext, aad(jobID, kind, k.activeID))
+	ct, err := sealAEAD(key, nonce[:], plaintext, aad(jobID, kind, k.activeID, scope))
 	if err != nil {
 		return Sealed{}, err
 	}
@@ -75,8 +76,9 @@ func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, p Payload) (Sealed, error) {
 // length) before AEAD work, then decrypts and strictly decodes the payload.
 // The nonce length is fixed at 12 bytes by the Sealed type. Unknown payload
 // version, strict-JSON violations, and invalid email/link are rejected after
-// decryption but before any plaintext is returned.
-func (k *KeyRing) Open(jobID uuid.UUID, kind Kind, s Sealed) (Payload, error) {
+// decryption but before any plaintext is returned. Scope must come from the
+// stored job; any changed identity or scope fails authentication.
+func (k *KeyRing) Open(jobID uuid.UUID, kind Kind, scope JobScope, s Sealed) (Payload, error) {
 	if err := validateKind(kind); err != nil {
 		return Payload{}, err
 	}
@@ -90,7 +92,7 @@ func (k *KeyRing) Open(jobID uuid.UUID, kind Kind, s Sealed) (Payload, error) {
 	if !ok {
 		return Payload{}, ErrUnknownKey
 	}
-	pt, err := openAEAD(key, s.Nonce[:], s.Ciphertext, aad(jobID, kind, s.KeyID))
+	pt, err := openAEAD(key, s.Nonce[:], s.Ciphertext, aad(jobID, kind, s.KeyID, scope))
 	if err != nil {
 		return Payload{}, err
 	}

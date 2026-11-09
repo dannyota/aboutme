@@ -74,7 +74,14 @@ func (o *Outbox) EnqueueTx(ctx context.Context, qtx *store.Queries, req EnqueueR
 		return err
 	}
 
-	sealed, err := o.ring.Seal(req.JobID, req.Kind, req.Payload)
+	var digest []byte
+	if req.TokenDigest != nil {
+		d := *req.TokenDigest
+		digest = d[:]
+	}
+	scope := JobScope{UserID: req.UserID, RegistrationID: req.RegistrationID,
+		ResetTokenID: req.ResetTokenID, TokenDigest: digest}
+	sealed, err := o.ring.Seal(req.JobID, req.Kind, scope, req.Payload)
 	if err != nil {
 		return err
 	}
@@ -82,11 +89,6 @@ func (o *Outbox) EnqueueTx(ctx context.Context, qtx *store.Queries, req EnqueueR
 	keyID := sealed.KeyID
 	nonce := sealed.Nonce[:]
 	next := now
-	var digest []byte
-	if req.TokenDigest != nil {
-		d := *req.TokenDigest
-		digest = d[:]
-	}
 
 	_, err = qtx.CreateAuthEmailJob(ctx, store.CreateAuthEmailJobParams{
 		ID:             req.JobID,

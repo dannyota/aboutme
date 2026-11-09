@@ -81,7 +81,7 @@ func sealWithKey(t *testing.T, key [32]byte, keyID string, jobID uuid.UUID, kind
 	nonce := fixedNonce()
 	var n [12]byte
 	copy(n[:], nonce)
-	ct, err := sealAEAD(key, nonce, plaintext, aad(jobID, kind, keyID))
+	ct, err := sealAEAD(key, nonce, plaintext, aad(jobID, kind, keyID, JobScope{}))
 	if err != nil {
 		t.Fatalf("sealAEAD: %v", err)
 	}
@@ -93,18 +93,24 @@ func sealRaw(t *testing.T, ring *KeyRing, jobID uuid.UUID, kind Kind, plaintext 
 	return sealWithKey(t, ring.keys[ring.activeID], ring.activeID, jobID, kind, plaintext)
 }
 
-func TestAADIsExactD3Bytes(t *testing.T) {
+func TestAAD_EncodesJobIdentityAndNullableScope(t *testing.T) {
 	jobID := fixedJobID()
 	const keyID = "k-active"
 
-	got := aad(jobID, KindVerify, keyID)
-
-	want := append([]byte("aboutme.auth-email.v1"), 0x00)
-	want = append(want, jobID[:]...)
-	want = append(want, 0x00)
-	want = append(want, "verify"...)
-	want = append(want, 0x00)
-	want = append(want, keyID...)
+	got := aad(jobID, KindVerify, keyID, JobScope{
+		UserID: &jobID, RegistrationID: &jobID, ResetTokenID: &jobID, TokenDigest: []byte{0xab},
+	})
+	want, err := hex.DecodeString("61626f75746d652e617574682d656d61696c2e763200" +
+		"123e4567e89b12d3a456426614174000" +
+		"0000000000000006766572696679" +
+		"00000000000000086b2d616374697665" +
+		"01123e4567e89b12d3a456426614174000" +
+		"01123e4567e89b12d3a456426614174000" +
+		"01123e4567e89b12d3a456426614174000" +
+		"010000000000000001ab")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if !bytes.Equal(got, want) {
 		t.Fatalf("AAD = %x, want %x", got, want)
@@ -115,7 +121,7 @@ func TestSealAEADDeterministicRoundtrip(t *testing.T) {
 	key := fixedKey()
 	nonce := fixedNonce()
 	plaintext := []byte(`{"version":1,"to":"alice@example.com","link":"` + verifyLinkPrefix + `TESTTOKEN"}`)
-	a := aad(fixedJobID(), KindVerify, "k-active")
+	a := aad(fixedJobID(), KindVerify, "k-active", JobScope{})
 
 	ct1, err := sealAEAD(key, nonce, plaintext, a)
 	if err != nil {
@@ -191,12 +197,7 @@ func TestDeterministicCiphertextFixture(t *testing.T) {
 	var keyArr [32]byte
 	copy(keyArr[:], key)
 
-	gotAAD := aad(jobID, Kind(fx.Kind), fx.KeyID)
-	if !bytes.Equal(gotAAD, wantAAD) {
-		t.Fatalf("AAD mismatch:\n got %x\nwant %x", gotAAD, wantAAD)
-	}
-
-	gotCT, err := sealAEAD(keyArr, nonce, plaintext, gotAAD)
+	gotCT, err := sealAEAD(keyArr, nonce, plaintext, wantAAD)
 	if err != nil {
 		t.Fatalf("sealAEAD: %v", err)
 	}
@@ -209,11 +210,17 @@ func TestDeterministicCiphertextFixture(t *testing.T) {
 		t.Fatalf("ciphertext sha256 = %s, want %s", got, fx.CiphertextSHA256)
 	}
 
-	opened, err := openAEAD(keyArr, nonce, wantCT, gotAAD)
+	opened, err := openAEAD(keyArr, nonce, wantCT, wantAAD)
 	if err != nil {
 		t.Fatalf("openAEAD: %v", err)
 	}
 	if !bytes.Equal(opened, plaintext) {
 		t.Fatalf("opened plaintext = %q, want %q", opened, plaintext)
+	}
+	ring := mustRing(t, fx.KeyID, map[string][32]byte{fx.KeyID: keyArr}, nonce)
+	sealed := Sealed{KeyID: fx.KeyID, Ciphertext: wantCT}
+	copy(sealed.Nonce[:], nonce)
+	if _, err := ring.Open(jobID, Kind(fx.Kind), JobScope{}, sealed); !errors.Is(err, ErrAuthentication) {
+		t.Fatalf("open v1 fixture = %v, want ErrAuthentication", err)
 	}
 }

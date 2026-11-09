@@ -134,11 +134,17 @@ keys. Keep the 4,096-byte plaintext bound. Derive the fixed copy and
 `https://aboutme.vn/privacy` from compiled constants, never from the payload,
 environment, database text, request host, or command arguments.
 
-Keep AES-256-GCM, fresh nonces, job/kind/key-ID authenticated data,
-current/previous key custody, and secret injection. Before sending, decrypt and
-match account, address, notice, and generation against locked account/ledger.
-Reparented jobs, replayed generations, deleted users, or bad ciphertext cannot
-send.
+Keep AES-256-GCM, fresh nonces, current/previous key custody, and secret
+injection. Auth mail AAD uses `aboutme.auth-email.v2` followed by NUL, the raw
+16-byte job `id`, `kind`, `key_id`, `user_id`, `registration_id`,
+`reset_token_id`, and `token_digest`, in that order. Variable-width values use
+an eight-byte big-endian byte length; nullable columns use 0 for absent or 1
+followed by the encoded value for present, with UUIDs as 16 raw bytes. Every
+kind uses this AAD and rejects v1 ciphertext through its existing failure path.
+The release introducing v2 AAD must deploy only while no privacy notice job is
+pending or leased. Before sending, decrypt and match account, address, notice,
+and generation against locked account/ledger. Reparented jobs, replayed
+generations, deleted users, or bad ciphertext cannot send.
 
 Expiry is 24 hours after enqueue, not cutoff. Keep the 30-second lease,
 ten-second send deadline, eight attempts, bounded jitter, ten-job claim batch,
