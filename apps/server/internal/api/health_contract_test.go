@@ -27,7 +27,7 @@ import (
 )
 
 // Schema component references the health responses must use, per
-// docs/api/openapi.yaml's components — this test asserts the document
+// docs/api/openapi.yaml's components; this test asserts the document
 // points at these shared components rather than an inlined schema, and
 // that the real handler body actually satisfies the referenced shape.
 const (
@@ -68,7 +68,7 @@ type oaSchemaRef struct {
 // directory containing rel, returning the joined path at the first match.
 // This is used instead of a hardcoded "../../../../docs/api/openapi.yaml"
 // so the lookup doesn't silently break if this package ever moves relative
-// to the repo root — it only needs docs/api/openapi.yaml to still exist
+// to the repo root; it only needs docs/api/openapi.yaml to still exist
 // somewhere above wherever this test runs from.
 func findUpward(t *testing.T, startDir, rel string) string {
 	t.Helper()
@@ -185,10 +185,10 @@ func healthContractCases() []healthContractCase {
 
 // TestHealthContract_OpenAPIAndHandlerAgree is the contract test itself.
 // For every case it: (1) reads what docs/api/openapi.yaml documents for
-// that method/status — media type and referenced schema — then (2) sends a
+// that method/status (media type and referenced schema), then (2) sends a
 // real request of that method to api.New()'s router (wired exactly as
 // production wires it) and checks the actual status code, Content-Type,
-// and body shape match. A drift on either side — document or handler —
+// and body shape match. A drift on either side, document or handler,
 // fails this test.
 func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 	t.Parallel()
@@ -251,7 +251,7 @@ func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 
 			if tc.method == http.MethodHead {
 				if len(body) != 0 {
-					t.Fatalf("%s %s: body = %q, want empty — openapi.yaml's HEAD description promises no response body",
+					t.Fatalf("%s %s: body = %q, want empty; openapi.yaml's HEAD description promises no response body",
 						tc.method, tc.path, body)
 				}
 				// Normalize whitespace (the YAML block literal wraps prose
@@ -271,7 +271,7 @@ func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 
 // assertBodyMatchesSchema checks body against the shape the referenced
 // component schema requires: {"data":...} for a 200 (Envelope), or
-// {"error":{"code":...,"message":...}} for a non-200 (Error) — the same
+// {"error":{"code":...,"message":...}} for a non-200 (Error), the same
 // two shapes envelope.go's WriteData/WriteError produce and
 // docs/api/openapi.yaml's Envelope/Error components require.
 func assertBodyMatchesSchema(t *testing.T, method, path string, status int, body []byte) {

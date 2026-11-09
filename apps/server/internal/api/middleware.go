@@ -85,7 +85,7 @@ func Logging(logger *slog.Logger) Middleware {
 // logged after the handler returns. It implements Unwrap() http.ResponseWriter
 // so http.ResponseController (used by streaming handlers, e.g. SSE, to
 // Flush or SetWriteDeadline) can see through this wrapper to the underlying
-// writer's real capabilities — a naked type assertion like
+// writer's real capabilities; a naked type assertion like
 // w.(http.Flusher) cannot do this and will incorrectly report the
 // capability as missing. See http.ResponseController's docs.
 type statusWriter struct {

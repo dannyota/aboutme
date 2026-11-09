@@ -108,13 +108,17 @@ Agent procedures for plans, states, and evidence live in
 
 Use relative links inside `docs/` and Mermaid for diagrams.
 
-`scripts/check-lengths.sh` enforces two limits in CI, `make check`, and the
+`scripts/check-lengths.sh` enforces three limits in CI, `make check`, and the
 pre-commit hook:
 
 - Markdown files: at most 450 lines. Split a larger document into a directory
   with a `README.md` index and focused pages, or trim it.
-- Non-test code (Go, TypeScript, Vue, JavaScript, shell): at most 700 lines.
-  Split by topic into sibling files; Go stays in the same package.
+- Non-test Go under `apps/server`: at most 600 lines.
+- Other non-test code (Go, TypeScript, Vue, JavaScript, shell): at most 700
+  lines.
 
-Generated files and tests are exempt. Keep functions short enough to read in one
-screen; split long ones into helpers.
+Split oversized code by topic into sibling files; Go stays in the same package.
+Tests and generated files are exempt. A file counts as generated only with a
+`Code generated ... DO NOT EDIT` or `@generated` header in its first five lines,
+or on a generated path the script lists; a `.sql.go` name alone exempts nothing.
+Keep functions short enough to read in one screen; split long ones into helpers.

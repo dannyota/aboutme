@@ -14,12 +14,12 @@ import (
 const (
 	// DefaultBodyLimitBytes matches the request-body budget (256 KB); see
 	// docs/design/budgets.md. Applies to every route EXCEPT the health
-	// endpoints — see HealthBodyLimitBytes.
+	// endpoints; see HealthBodyLimitBytes.
 	DefaultBodyLimitBytes int64 = 256 * 1024
 	// HealthBodyLimitBytes caps request bodies on the health chain far
 	// below DefaultBodyLimitBytes, independent of Options.BodyLimitBytes.
 	// Health endpoints (see isHealthPath) never expect a body at all, and
-	// — unlike every other route — they are deliberately exempt from
+	// unlike every other route, they are deliberately exempt from
 	// RateLimit (see healthChain's comment below), so nothing upstream
 	// bounds how often a caller can make this server buffer a body in
 	// memory before rejecting it. A small dedicated cap is what keeps that
@@ -29,8 +29,8 @@ const (
 	// performed on /readyz's behalf may take before it is treated as
 	// unreachable.
 	DefaultReadyTimeout = 3 * time.Second
-	// DefaultReadyTTL is how long /readyz's cached readiness result —
-	// success or failure — is reused before a fresh database ping is
+	// DefaultReadyTTL is how long /readyz's cached readiness result
+	// (success or failure) is reused before a fresh database ping is
 	// attempted; see cachedPinger. One second bounds the amplification an
 	// unbounded flood of /readyz requests could otherwise cause against
 	// the connection pool. It remains short enough to reflect a recovery or
@@ -54,13 +54,14 @@ type Options struct {
 	ReadyTTL time.Duration
 	// TrustedProxies controls which peers RateLimit and SecurityHeaders
 	// treat as a trusted reverse proxy able to assert this request's real
-	// client IP and scheme — see TrustedProxies. The zero value (nil)
+	// client IP and scheme (see TrustedProxies). The zero value (nil)
 	// trusts no one, so callers must supply the deployment's real
 	// trusted-proxy CIDRs explicitly (internal/config's
-	// TRUSTED_PROXY_CIDRS, populated from main.go) rather than this package
-	// assuming a topology. A loopback default is unsafe when a reverse proxy
-	// reaches Go over a container network because it collapses all client
-	// rate-limit keys to the proxy address. See docs/design/deployment.md.
+	// TRUSTED_PROXY_CIDRS, populated in internal/app/router.go) rather
+	// than this package assuming a topology. A loopback default is unsafe
+	// when a reverse proxy reaches Go over a container network because it
+	// collapses all client rate-limit keys to the proxy address. See
+	// docs/design/deployment.md.
 	TrustedProxies TrustedProxies
 	// Clock returns the current time, used by RateLimit's token buckets
 	// and by /readyz's readiness cache (see cachedPinger). Defaults to
@@ -101,9 +102,9 @@ func (o Options) withDefaults() Options {
 // (e.g. "GET /healthz") so this package can produce enveloped 404 and 405
 // responses via WriteError instead of ServeMux's plain-text defaults.
 //
-// register lets callers (the composition root in cmd/server/main.go)
+// register lets callers (the composition root in internal/app/router.go)
 // attach additional routes without this package importing the packages
-// that define them — internal/auth imports internal/api (for its error
+// that define them; internal/auth imports internal/api (for its error
 // envelope and TrustedProxies), so the reverse import would cycle. Each
 // func receives the same mux built below, before the middleware chain is
 // wrapped around it, so every extra route gets the same RequestID/
@@ -148,7 +149,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	// may serve a stale result instead of checking live.
 	healthChain := NoStoreCache()(BodyLimit(HealthBodyLimitBytes)(mux))
 
-	// Ordinary routes: NoStoreCache (outermost — see below), then
+	// Ordinary routes: NoStoreCache (outermost; see below), then
 	// RateLimit (so an over-limit client is rejected before the server
 	// spends any I/O reading its body), then BodyLimit, then the mux.
 	// Exact /mcp and photo-upload routes use routeOwnedBodyChain because their
@@ -157,8 +158,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	//
 	// NoStoreCache is the DEFAULT cache policy here, not an incidental
 	// side effect of where it happens to sit: it is outermost specifically
-	// so every rejection this chain can produce — RateLimit's 429 and its
-	// own 400 invalid_client_ip, BodyLimit's 413, the mux's 404/405 — all
+	// so every rejection this chain can produce (RateLimit's 429 and its
+	// own 400 invalid_client_ip, BodyLimit's 413, the mux's 404/405) all
 	// carry Cache-Control: no-store, no-transform, not just a successful
 	// response. A route inside the mux can substitute a different policy
 	// (the public API sends no-cache, must-revalidate): its Cache-Control
@@ -179,8 +180,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	//   - SecurityHeaders comes next, and specifically outside every layer
 	//     that can itself write a response (RateLimit's 429, BodyLimit's
 	//     413, the mux's 404/405). It only sets headers before calling
-	//     next, so wrapping those rejection points — not just the
-	//     success path — is what makes "every response carries these
+	//     next, so wrapping those rejection points, not just the
+	//     success path, is what makes "every response carries these
 	//     headers" actually true.
 	//   - Logging wraps both chains so a 429, 413, or health-check result
 	//     shows up in the request log with its real status and request
@@ -188,7 +189,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	//
 	// Both RateLimit and SecurityHeaders are wired with opts.TrustedProxies
 	// (see Options.TrustedProxies) rather than a value this package
-	// invents: the caller (cmd/server/main.go) is the one place that knows
+	// invents: the caller (internal/app/router.go) is the one place that knows
 	// the deployment's actual topology, sourced from
 	// internal/config.Config.TrustedProxyCIDRs.
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,14 +213,14 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	return handler
 }
 
-// isHealthPath reports whether escapedPath — r.URL.EscapedPath(), NOT
-// r.URL.Path — is one of the two operational health endpoints New
-// registers, which — see the healthChain comment above — get their own
+// isHealthPath reports whether escapedPath (r.URL.EscapedPath(), NOT
+// r.URL.Path) is one of the two operational health endpoints New
+// registers, which (see the healthChain comment above) get their own
 // middleware treatment distinct from every other route, most importantly
 // exemption from RateLimit. EscapedPath() preserves percent-encoding (Path
-// is already decoded by net/http), so a request to e.g. "/%68ealthz" —
+// is already decoded by net/http), so a request to e.g. "/%68ealthz",
 // which net/http's own ServeMux still resolves to the registered
-// "/healthz" handler, since mux matching happens on the decoded path —
+// "/healthz" handler, since mux matching happens on the decoded path,
 // compares unequal here and falls through to the rate-limited chain
 // instead of silently taking the RateLimit-exempt branch.
 func isHealthPath(escapedPath string) bool {

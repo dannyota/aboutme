@@ -1,8 +1,8 @@
 package main
 
-// TOTP key-ring composition helpers: the issuer derived from PUBLIC_ORIGIN,
-// the periodic key-health ticker, and the one-shot `server totp-key-reencrypt`
-// command. See docs/design/totp-key-management.md and
+// TOTP key-ring command helpers: the periodic key-health ticker and the
+// one-shot `server totp-key-reencrypt` command. See
+// docs/design/totp-key-management.md and
 // docs/design/totp-second-factor-contract.md.
 
 import (
@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -35,22 +34,6 @@ const (
 	// IDs...").
 	totpHealthCheckInterval = 5 * time.Minute
 )
-
-// totpIssuerFromPublicOrigin derives the canonical TOTP issuer — the
-// lowercase ASCII PUBLIC_ORIGIN host, no port — from cfg.PublicOrigin, which
-// internal/config.loadPublicOrigin has already normalized to a plain
-// scheme://host[:port] origin. secondfactor.New's ValidateTOTPIssuer call
-// rejects an IP literal or non-canonical host when TOTP enrollment is
-// enabled, so this helper only extracts the host; it does not itself
-// validate it (docs/design/totp-second-factor-contract.md "Provisioning
-// data").
-func totpIssuerFromPublicOrigin(publicOrigin string) (string, error) {
-	u, err := url.Parse(publicOrigin)
-	if err != nil || u.Host == "" {
-		return "", errors.New("parse public origin for totp issuer")
-	}
-	return u.Hostname(), nil
-}
 
 // runTOTPHealthTicker calls check every totpHealthCheckInterval until ctx is
 // done. A query failure is logged and never stops the ticker or crashes the
@@ -90,7 +73,7 @@ func runTOTPKeyReencrypt(args []string) error {
 // executeTOTPKeyReencrypt runs the job and writes one fixed JSON report to
 // output, the same shape executePrivacyCommand uses for the other bounded
 // server commands. The report carries only the job name, success, and
-// runTOTPReencryptJob's result — counts and internal row IDs, never a key,
+// runTOTPReencryptJob's result: counts and internal row IDs, never a key,
 // secret, nonce, ciphertext, email, or account ID
 // (docs/design/totp-key-management.md "Rotation").
 func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, output, diagnostics io.Writer) error {
@@ -111,7 +94,7 @@ func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, ou
 }
 
 // runTOTPReencryptJob loads the reduced TOTP re-encryption configuration
-// (config.LoadTOTPReencryptJob — DATABASE_URL and the key ring only, never
+// (config.LoadTOTPReencryptJob: DATABASE_URL and the key ring only, never
 // PUBLIC_ORIGIN, auth-email, OAuth, or password-rate values), opens a pool,
 // and runs one bounded TOTPRotationRunner pass.
 func runTOTPReencryptJob(ctx context.Context, getenv func(string) string, logger *slog.Logger) (secondfactor.TOTPReencryptResult, error) {

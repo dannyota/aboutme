@@ -165,11 +165,11 @@ Container browsers remain the Linux alternative; no Mac VM tunnel is proposed.
 ### Server rendering
 
 **Accepted: explicit Mac skips**, with full Linux CI coverage after native
-runner integration. In `apps/server/cmd/server/print_runtime.go`, Darwin closes
-the render queue; `printrender/renderer.go` requires nonroot Linux user
-namespaces. Keep these guards. Skip whole mixed journeys, with no split in this
-change. Paths below are relative to `deploy/dev-https-browser/`; lines identify
-the reviewed source.
+runner integration. In `apps/server/internal/app/print.go`, Darwin closes the
+render queue; `printrender/renderer.go` requires nonroot Linux user namespaces.
+Keep these guards. Skip whole mixed journeys, with no split in this change.
+Paths below are relative to `deploy/dev-https-browser/`; lines identify the
+reviewed source.
 
 | Mac disposition | Exact test and lost local coverage                                                                                                                                                                                                                       |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

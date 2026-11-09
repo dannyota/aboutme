@@ -124,9 +124,9 @@ func TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore(t *testing.T) {
 
 // TestRouter_NonHealthChain_AllRejectionsCarryNoStore proves
 // NoStoreCache must be the default, outermost cache policy of the
-// non-health chain, so every rejection it can produce — 404
+// non-health chain, so every rejection it can produce, 404
 // (unknown route), 413 (oversized body), 429 (rate limited), and 400
-// (invalid_client_ip) — carries Cache-Control: no-store, exactly like the
+// (invalid_client_ip), carries Cache-Control: no-store, exactly like the
 // health chain already does. Route groups override this default from inside
 // the mux when they need another policy.
 func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
@@ -207,7 +207,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 
 // TestRouter_HealthEndpoints_BypassRateLimit proves flooding
 // /healthz far past a tiny configured request budget must never return
-// 429 — infrastructure probes are exempt from the external-viewer limiter
+// 429; infrastructure probes are exempt from the external-viewer limiter
 // entirely, not merely given a generous quota.
 func TestRouter_HealthEndpoints_BypassRateLimit(t *testing.T) {
 	t.Parallel()

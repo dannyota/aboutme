@@ -32,7 +32,7 @@ func IPKeyFunc(r *http.Request, trusted TrustedProxies) (string, bool) {
 // middleware stores in the request context via
 // WithAccountID. An unauthenticated request has no account in context and
 // keys on the empty account ID, so every anonymous caller would collide on
-// one bucket — AccountKeyFunc must not be used alone on a route reachable
+// one bucket; AccountKeyFunc must not be used alone on a route reachable
 // without authentication; compose it with IPKeyFunc via CompositeKeyFunc,
 // or restrict it to routes auth middleware already gates. It always
 // succeeds (never rejects a request) since an absent account ID is a valid,
@@ -81,7 +81,7 @@ func WithAccountID(ctx context.Context, accountID string) context.Context {
 }
 
 // AccountIDFromContext returns the account ID stored by WithAccountID, and
-// whether one was present — false for an unauthenticated request, or one
+// whether one was present: false for an unauthenticated request, or one
 // that reached this code outside any auth middleware (e.g. most unit
 // tests).
 func AccountIDFromContext(ctx context.Context) (string, bool) {

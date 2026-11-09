@@ -24,7 +24,7 @@ const (
 	DefaultRateLimitWindow = time.Minute
 	// DefaultRateLimitMaxKeys bounds the limiter's memory: at most this
 	// many distinct client keys are tracked at once, no matter how many
-	// unique keys — real or forged — send requests. See rateLimiter for
+	// unique keys, real or forged, send requests. See rateLimiter for
 	// what happens once the store is at this limit.
 	DefaultRateLimitMaxKeys = 10_000
 )
@@ -56,9 +56,9 @@ type RateLimiterConfig struct {
 	// See KeyFunc, AccountKeyFunc, and CompositeKeyFunc for composing a
 	// stricter route policy.
 	Key KeyFunc
-	// Logger receives RateLimit's own operational warnings — currently
+	// Logger receives RateLimit's own operational warnings, currently
 	// just the rate-limited client-IP trust boundary mismatch warning (see
-	// trustMismatchWarner) — as distinct from Logging's per-request access
+	// trustMismatchWarner), as distinct from Logging's per-request access
 	// log. Defaults to slog.Default().
 	Logger *slog.Logger
 }
@@ -97,7 +97,7 @@ func (c RateLimiterConfig) withDefaults() RateLimiterConfig {
 // group (auth, slug claims, or render) to layer a tighter limit on the
 // whole-server default wired in router.go.
 //
-// Keys come from cfg.Key, which defaults to IPKeyFunc — itself gated on
+// Keys come from cfg.Key, which defaults to IPKeyFunc, itself gated on
 // cfg.TrustedProxies. See TrustedProxies for why getting that wrong is a
 // bypass, not just an inaccuracy.
 func RateLimit(cfg RateLimiterConfig) Middleware {
@@ -109,7 +109,7 @@ func RateLimit(cfg RateLimiterConfig) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			now := cfg.Clock()
 
-			// Trust is configured (cfg.TrustedProxies is non-empty — the
+			// Trust is configured (cfg.TrustedProxies is non-empty, the
 			// required, fail-closed production state, see
 			// internal/config's TRUSTED_PROXY_CIDRS), yet this request's
 			// socket peer isn't in it. Either something is reaching this
@@ -127,7 +127,7 @@ func RateLimit(cfg RateLimiterConfig) Middleware {
 
 			key, ok := cfg.Key(r, cfg.TrustedProxies)
 			if !ok {
-				// cfg.Key could not determine a trusted, unambiguous key —
+				// cfg.Key could not determine a trusted, unambiguous key;
 				// see IPKeyFunc/resolveClientIP for when this happens.
 				// Reject outright rather than falling back to a default key.
 				// A fallback would let a trusted proxy's
@@ -172,7 +172,7 @@ func RateLimit(cfg RateLimiterConfig) Middleware {
 
 // peerBucketKey derives a rate-limit key from r's raw socket peer address
 // (never TrustedClientIPHeader, which by construction is exactly what
-// failed to resolve when this is called) — see RateLimit's invalid_client_ip
+// failed to resolve when this is called); see RateLimit's invalid_client_ip
 // path. The "peer:" prefix keeps this in a separate namespace from
 // IPKeyFunc's "ip:" keys, so metering a misbehaving proxy's malformed
 // requests can never collide with, or spend down, any real viewer's own

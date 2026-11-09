@@ -28,9 +28,9 @@ const (
 )
 
 // SecurityHeaders returns middleware that sets baseline security response
-// headers on every response it wraps — including
+// headers on every response it wraps, including
 // error responses written by later middleware (RateLimit's 429,
-// BodyLimit's 413) and the router's own 404/405 — because it sets headers
+// BodyLimit's 413) and the router's own 404/405, because it sets headers
 // on the ResponseWriter before calling next, and headers set before the
 // first WriteHeader/Write are honored no matter which handler downstream
 // ends up writing the response.
@@ -44,7 +44,7 @@ func SecurityHeaders(trusted TrustedProxies) Middleware {
 			h.Set("Content-Security-Policy", ContentSecurityPolicy)
 			h.Set("X-Content-Type-Options", XContentTypeOptions)
 			h.Set("Referrer-Policy", ReferrerPolicy)
-			// HSTS is only meaningful — and only safe — on an HTTPS
+			// HSTS is only meaningful, and only safe, on an HTTPS
 			// response: browsers ignore it over plain HTTP, and sending it
 			// on http://localhost during local dev would force HTTPS
 			// there too, breaking the dev loop for whoever hits it next.

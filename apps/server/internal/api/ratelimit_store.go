@@ -32,15 +32,15 @@ const rateLimiterIdleExpiry = 24 * time.Hour
 // a clock that briefly moves backward (an NTP step, a VM migration pause)
 // re-anchors cleanly instead of latching the bucket at a stale high-water
 // mark and refusing to refill again until real time catches back up past
-// it — the failure mode a hand-rolled "only refill when elapsed > 0, else
+// it, the failure mode a hand-rolled "only refill when elapsed > 0, else
 // leave lastSeen untouched" implementation has. See clampedLimiter for the
 // one gap x/time/rate itself does not close (an admitted request observed
 // at a rolled-back time can still re-anchor the bucket backward).
 //
 // Memory is bounded at cfg.MaxKeys entries. Once full, admitting a new key
-// first tries to reclaim space from entries that are expired — fully
+// first tries to reclaim space from entries that are expired, fully
 // refilled, i.e. carrying no state distinguishable from a brand-new key
-// (see evictExpiredLocked) — and only if none are found does the new key
+// (see evictExpiredLocked), and only if none are found does the new key
 // fall back to sharing overflow, a single limiter common to every key that
 // arrives while the store is saturated with genuinely active entries.
 // Deliberately not evicting an arbitrary active entry is the point: doing
@@ -51,7 +51,7 @@ const rateLimiterIdleExpiry = 24 * time.Hour
 // exactly one key's normal budget.
 //
 // allow performs lookup/admission, the expiry decision, and the resulting
-// limiter's first token check as ONE operation under l.mu — never
+// limiter's first token check as ONE operation under l.mu, never
 // releasing the lock between "this key now has an entry" and "that entry's
 // first token is spent." Otherwise a concurrent admission could evict a
 // newly inserted, still-full entry before its first token is consumed and
@@ -191,7 +191,7 @@ func decideNow(lim *clampedLimiter, now time.Time, consume bool) (bool, time.Dur
 }
 
 // evictExpiredLocked drops every entry whose bucket is fully refilled at
-// now — holding no state a fresh key wouldn't also start with — so the
+// now (holding no state a fresh key wouldn't also start with), so the
 // store can admit a new key without discarding any entry that is still
 // mid-window for a real, currently-active client. l.mu must be held by the
 // caller.
@@ -212,14 +212,14 @@ func (l *rateLimiter) evictExpiredLocked(now time.Time) {
 // x/time/rate's ReserveN always advances the limiter's internal
 // bookkeeping (lastEvent in particular), even for a reservation that will
 // be canceled immediately after, and CancelAt cannot always fully reverse
-// that — if a second reservation is made before the first is canceled,
+// that: if a second reservation is made before the first is canceled,
 // CancelAt's restoration is partial or a no-op. Concurrent rejected
 // requests could therefore leave the bucket owing a token it never
 // actually spent, extending denial for the next legitimate request beyond
 // one real Window. AllowN(now, 1) mutates the limiter's state ONLY on the
 // admitted path (see x/time/rate's reserveN with maxFutureReserve=0: the
 // state-updating branch is skipped entirely whenever it would return
-// false) — there is no reservation to cancel because none is ever made on
+// false); there is no reservation to cancel because none is ever made on
 // the denied path, so a rejected request can never leave debt for any
 // interleaving, not just the ones a test happens to construct.
 func admitNow(lim *clampedLimiter, now time.Time) (bool, time.Duration) {
@@ -250,7 +250,7 @@ func tokenWait(lim *clampedLimiter, now time.Time) time.Duration {
 // latest it has already returned. A backward step (an NTP correction, a VM
 // migration pause, or a test's injected rollback) therefore cannot make a
 // time-throttled decision behave as if less time had elapsed than really
-// did — which would otherwise suppress that decision for the whole rollback
+// did, which would otherwise suppress that decision for the whole rollback
 // span. Three places reuse it: clampedLimiter (so x/time/rate never
 // re-anchors a bucket backward), rateLimiter.allow (so a rollback can't skip
 // a due eviction sweep), and trustMismatchWarner (so a

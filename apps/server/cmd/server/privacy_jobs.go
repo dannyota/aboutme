@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dannyota/aboutme/apps/server/internal/app"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/mediacleanup"
 	"github.com/dannyota/aboutme/apps/server/internal/privacyretention"
@@ -85,7 +86,7 @@ func runPrivacyJob(ctx context.Context, command privacyCommand, getenv func(stri
 		return nil, errors.New("privacy job database is unavailable")
 	}
 	if needsMedia {
-		blobs, backendErr := newMediaBackend(ctx, cfg)
+		blobs, backendErr := app.NewMedia(ctx, cfg)
 		if backendErr != nil {
 			return nil, errors.New("privacy job media is unavailable")
 		}

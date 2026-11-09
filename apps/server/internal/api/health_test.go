@@ -15,7 +15,7 @@ import (
 func TestHealthz_AlwaysReturns200AndNeverTouchesDB(t *testing.T) {
 	t.Parallel()
 
-	// Healthz takes no dependencies at all — there is no pinger, database
+	// Healthz takes no dependencies at all; there is no pinger, database
 	// handle, or other collaborator for it to call. That is what
 	// guarantees liveness never touches the database: the handler simply
 	// has nothing to touch it with.

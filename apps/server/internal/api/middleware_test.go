@@ -160,7 +160,7 @@ func TestLogging_PreservesFlushThroughResponseController(t *testing.T) {
 		t.Fatal("handler never reached the flush call")
 	}
 	if !rec.Flushed {
-		t.Error("underlying ResponseRecorder.Flushed = false, want true — " +
+		t.Error("underlying ResponseRecorder.Flushed = false, want true; " +
 			"Flush() did not reach it through the middleware chain")
 	}
 }
