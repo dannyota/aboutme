@@ -12,8 +12,9 @@ inconsistent between pages, and expensive to change.
 
 The resume renderer has the opposite requirement. The same document must render
 the same way in the editor preview, the public page, and the print browser, so
-nothing the chrome loads may leak into it. Only the line-break drift that
-[ADR 0002](0002-system-architecture.md#consequences) accepts may differ.
+nothing the chrome loads may leak into it. Line and page breaks in the editor
+preview stay advisory, as [ADR 0002](0002-system-architecture.md#consequences)
+states.
 
 ## Decision
 
@@ -120,5 +121,5 @@ only after the contract's Linux and macOS coverage and mutation proofs pass.
 - Former ADR 0052 (2026-09-24): guarded token edits to generated primitives,
   replacing 0029's "never hand-styled" rule. Former ADR 0065 added the
   `destructive` variant to the guarded edits.
-- 2026-11-10, owner: Context says "the same way" instead of "the same pixels",
-  allowing the preview line-break drift that ADR 0002 accepts.
+- 2026-11-10, owner: Context says "the same way" instead of "the same pixels";
+  preview line and page breaks stay advisory under ADR 0002.

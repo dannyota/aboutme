@@ -57,12 +57,11 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 
 - Node runs in production beside Go (two app services and Caddy).
 - Preview, public page, and PDF share one renderer, so content and structure
-  match, and preview page breaks match the PDF. Text measurement still differs
-  slightly: a word within about 0.4 px of a line edge can wrap differently, so
-  the editor preview may differ from the PDF by up to two line breaks in the
-  cases `apps/web/e2e/preview-gap-expected.json` lists. Chromium print is
-  authoritative. Golden snapshots, display checks, and the preview-gap ceilings
-  protect this.
+  match. Line and page breaks in the editor preview are advisory and Chromium
+  print is authoritative ([print design](../design/templates/print.md)): a word
+  within about 0.4 px of a line edge can wrap differently, and the ceilings in
+  `apps/web/e2e/preview-gap-expected.json` bound the drift for the tested
+  samples. Golden snapshots, display checks, and those ceilings protect this.
 - No bidirectional channel exists. Collaborative editing (CRDT or OT) would be a
   new decision.
 - SSE streams need heartbeats, connection caps, and slow-client eviction; the
@@ -75,5 +74,6 @@ and 0007 (unversioned health endpoints), all accepted 2026-08-01 and unchanged
 in substance.
 
 On 2026-11-10 the owner accepted up to two preview line breaks that differ from
-the PDF, because no shared renderer change removed the measured drift; Context
-and Consequences now say "the same way" instead of "identically".
+the PDF in the tested samples, because no shared renderer change removed the
+measured drift; Context now says "the same way" instead of "identically", and
+Consequences keep preview breaks advisory instead of matching by construction.
