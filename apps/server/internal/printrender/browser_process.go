@@ -21,6 +21,7 @@ const (
 	browserTimezone              = "TZ=UTC"
 	browserLanguage              = "LANG=C.UTF-8"
 	browserLocale                = "LC_ALL=C.UTF-8"
+	browserProfilePrefix         = "printrender-profile-"
 )
 
 func browserEnvironment() []string {
@@ -67,7 +68,7 @@ func browserFlags(proxyURL string) map[string]any {
 	}
 }
 
-func allocatorOptions(executable, proxyURL string, configure func(*exec.Cmd)) []chromedp.ExecAllocatorOption {
+func allocatorOptions(executable, proxyURL, profile string, configure func(*exec.Cmd)) []chromedp.ExecAllocatorOption {
 	flags := browserFlags(proxyURL)
 	names := make([]string, 0, len(flags))
 	for name := range flags {
@@ -85,7 +86,9 @@ func allocatorOptions(executable, proxyURL string, configure func(*exec.Cmd)) []
 	for _, name := range names {
 		options = append(options, chromedp.Flag(name, flags[name]))
 	}
-	return options
+	// Given a profile, the allocator neither creates nor removes one, and never
+	// scans for leftover profile users to kill by numeric PID.
+	return append(options, chromedp.UserDataDir(profile))
 }
 
 func controlledBrowserArguments(executable string, arguments ...string) []string {
@@ -221,14 +224,24 @@ func ignoreProcessError(error) {}
 
 func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, diagnose bool, run func(context.Context) error) (resultErr error) {
 	started := time.Now()
+	profile, err := os.MkdirTemp("", browserProfilePrefix)
+	if err != nil {
+		if diagnose {
+			return diagnoseInitialization(ctx, ErrUnavailable, "launch", err, nil, time.Since(started))
+		}
+		return err
+	}
 	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
-	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL, configure)...)
+	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL, profile, configure)...)
 	browserCtx, browserCancel := chromedp.NewContext(allocatorCtx)
 	defer func() {
 		browserCancel()
 		allocatorCancel()
 		proof.completeIfNotStarted()
 		proof.wait()
+		// The proof completes only after every browser process is terminal, so
+		// no browser process can still write to the profile.
+		ignoreProcessError(os.RemoveAll(profile))
 		if diagnose && resultErr != nil {
 			proof.mu.Lock()
 			var state *os.ProcessState
