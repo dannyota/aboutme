@@ -61,9 +61,15 @@ The deployer then:
 7. Restarts Nuxt, starts Go, and waits for `/readyz` at `127.0.0.1:8080` on the
    host. Starts Caddy, then stops maintenance and proves it stopped.
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
-   `nosniff`, and a CrowdSec 403 for the operator's test ban. Deletes the ban,
-   polls `/` until HTTP 200 (sleeps of two ticks plus 5 s, rounded up to 5 s
-   steps, and up to 10 s a request: about 85 s), then releases the lock.
+   `nosniff`, and a CrowdSec 403 for the operator's test ban (12 tries 5 s
+   apart, up to 10 s a request). Deletes the ban, polls `/` until HTTP 200
+   (sleeps of two ticks plus 5 s, rounded up to 5 s steps, and up to 10 s a
+   request: about 85 s), then releases the lock.
+
+The 403 wait assumes the new Caddy's first decision pull succeeded. If the local
+API fails that pull, the bouncer retries after a random wait whose bound doubles
+from 10 s to two minutes, so the smoke can fail before bans are enforced
+([pinned bouncer behavior](../design/crowdsec-retention-reload.md#pinned-bouncer-behavior)).
 
 vMonitor and the uptime backstop keep running during maintenance. Host alarms
 and backup timers also remain active. A deploy can therefore send a site-down
