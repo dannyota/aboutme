@@ -28,7 +28,7 @@ func testLogger() *slog.Logger {
 // variadic register extension point. A caller-supplied func(*http.ServeMux)
 // can attach routes New itself knows nothing about
 // (internal/auth's Google/LinkedIn/GitHub start/callback handlers, wired
-// from internal/app/router.go — internal/auth imports internal/api, so the
+// from internal/app/router.go; internal/auth imports internal/api, so the
 // reverse import would cycle, hence this inversion). The registered route
 // must actually respond AND go through the same middleware chain as
 // /healthz and /readyz: X-Request-Id is set on the response only if
@@ -53,7 +53,7 @@ func TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain(t *testing.T) {
 		t.Fatalf("status = %d, want %d (the registered handler)", rec.Code, http.StatusTeapot)
 	}
 	if rec.Header().Get(api.RequestIDHeader) == "" {
-		t.Error("response missing X-Request-Id header — the registered route must go through the standard middleware chain")
+		t.Error("response missing X-Request-Id header; the registered route must go through the standard middleware chain")
 	}
 }
 
@@ -117,8 +117,9 @@ func TestPublicDispatchWrongMethodPrecedesDefaultBodyAndRateChain(t *testing.T) 
 }
 
 // TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply proves every
-// register func New receives is actually applied, not just the first —
-// main.go may pass more than one provider or service RegisterRoutes function.
+// register func New receives is actually applied, not just the first;
+// internal/app/router.go passes more than one provider or service
+// RegisterRoutes function.
 func TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply(t *testing.T) {
 	t.Parallel()
 
@@ -230,7 +231,7 @@ func TestRouter_Healthz_IgnoresDBOutage(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d — liveness must survive a DB outage", rec.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d; liveness must survive a DB outage", rec.Code, http.StatusOK)
 	}
 }
 
@@ -330,7 +331,7 @@ func TestRouter_MCPAloneBypassesDefaultBodyLimit(t *testing.T) {
 }
 
 // decodeErrorEnvelope unmarshals rec's body as {"error":{"code","message"}}
-// and fails the test if it isn't shaped that way — every non-2xx response
+// and fails the test if it isn't shaped that way; every non-2xx response
 // from this router must use the standard envelope, never a stdlib default
 // plain-text body.
 func decodeErrorEnvelope(t *testing.T, rec *httptest.ResponseRecorder) struct {
@@ -426,8 +427,8 @@ func TestRouter_WrongMethodOnExistingRoute_Returns405WithErrorEnvelope(t *testin
 // body is genuinely empty on the wire. This deliberately uses a real
 // httptest.Server rather than the httptest.NewRecorder() pattern used
 // elsewhere in this file: net/http's HEAD body suppression lives in the
-// real server's connection-writing path, which httptest.ResponseRecorder —
-// constructed with no request of its own — never exercises, so asserting
+// real server's connection-writing path, which httptest.ResponseRecorder,
+// constructed with no request of its own, never exercises, so asserting
 // an empty body against a Recorder would prove nothing. The route relies on
 // transport-level suppression, so the test observes the real transport.
 func TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody(t *testing.T) {
@@ -513,7 +514,7 @@ func TestRouter_Healthz_PostStillReturns405(t *testing.T) {
 // ServeMux still resolves
 // a percent-encoded variant of /healthz or /readyz (e.g. "/%68ealthz") to
 // the same registered handler, since mux matching happens on the decoded
-// path — but the health/non-health DISPATCH decision in router.go must not
+// path, but the health/non-health DISPATCH decision in router.go must not
 // make the same mistake, or a percent-encoded health path would silently
 // take the RateLimit-exempt branch.
 func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
@@ -542,7 +543,7 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 				}
 			}
 			if !sawTooManyRequests {
-				t.Errorf("flooding %s (a percent-encoded health path) never returned 429 — "+
+				t.Errorf("flooding %s (a percent-encoded health path) never returned 429; "+
 					"it must not take the RateLimit-exempt branch", path)
 			}
 		})
@@ -551,7 +552,7 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 
 // TestRouter_HealthEndpoints_BodyCapIndependentOfOptions proves health
 // endpoints reject an over-cap body using api.HealthBodyLimitBytes, never
-// Options.BodyLimitBytes — even when the latter is configured far larger.
+// Options.BodyLimitBytes, even when the latter is configured far larger.
 func TestRouter_HealthEndpoints_BodyCapIndependentOfOptions(t *testing.T) {
 	t.Parallel()
 
@@ -594,7 +595,7 @@ func (c *countingReader) bytesRead() int64 {
 
 // TestRouter_HealthEndpoint_BoundedBodyRead proves a 256 KB body to /healthz is
 // rejected/aborted after at most api.HealthBodyLimitBytes+1 bytes are
-// actually read into memory — not the whole 256 KB — regardless of
+// actually read into memory, not the whole 256 KB, regardless of
 // Options.BodyLimitBytes. The request deliberately omits a declared
 // Content-Length so BodyLimit cannot short-circuit on that alone and must
 // actually bound the read via http.MaxBytesReader.
@@ -645,8 +646,8 @@ func (p *countingPinger) callCount() int {
 }
 
 // blockingCountingPinger is a DBPinger whose Ping blocks until release is
-// closed (or ctx is done), and counts how many times Ping actually started
-// — used to prove the readiness cache's single-flight behavior under real
+// closed (or ctx is done), and counts how many times Ping actually started.
+// It is used to prove the readiness cache's single-flight behavior under real
 // concurrency: N callers arriving while a ping is in flight must collapse
 // into exactly one real Ping call, not N.
 type blockingCountingPinger struct {
@@ -710,7 +711,7 @@ func TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing(t *testing.T) {
 	// <-release) before releasing it: from this point on, every other
 	// goroutine that reaches the cache is guaranteed to observe an
 	// in-flight ping (inflight is set, under lock, strictly before Ping is
-	// called), never a nil one — deterministic, not a timing guess.
+	// called), never a nil one: deterministic, not a timing guess.
 	for pinger.callCount() == 0 {
 		runtime.Gosched()
 	}

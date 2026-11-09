@@ -157,7 +157,7 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 	if completed.Load() {
-		t.Fatal("handler completed before being released — test setup is broken")
+		t.Fatal("handler completed before being released; test setup is broken")
 	}
 
 	close(release)
