@@ -544,7 +544,7 @@ type ConsumeOAuthAuthorizationCodeParams struct {
 	CodeDigest     []byte
 }
 
-// Single-use consumption (M2). One conditional UPDATE both takes the row lock
+// Single-use consumption. One conditional UPDATE both takes the row lock
 // and decides the winner: under two concurrent exchanges of the same code the
 // second blocks, re-evaluates the predicate after the first commits, matches
 // no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
@@ -695,7 +695,7 @@ const countLiveOAuthGrantsForUser = `-- name: CountLiveOAuthGrantsForUser :one
 SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL
 `
 
-// The M5 live-grant cap check. Callers serialize it with the user row lock
+// The live-grant cap check. Callers serialize it with the user row lock
 // (GetUserForUpdate) so two concurrent approvals cannot both read the same
 // pre-cap count.
 func (q *Queries) CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
@@ -931,7 +931,7 @@ type CreateOAuthAuthorizationCodeParams struct {
 	AuthEpoch     *int64
 }
 
-// Code issue (M2). expires_at is computed here, not passed in, so the exact
+// Code issue. expires_at is computed here, not passed in, so the exact
 // 60-second TTL the table checks can never be missed by a caller. Only the
 // code's digest is stored; the raw code exists solely in the redirect the user
 // agent carries.
@@ -985,7 +985,7 @@ type CreateOAuthClientParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Phase PM: OAuth agent access — clients, authorization codes, grants, and
+// OAuth agent access: clients, authorization codes, grants, and
 // tokens. Storage is digest-only: no query here reads, writes, or returns raw
 // code or token material, and PKCE verifiers are never stored.
 //
@@ -996,7 +996,7 @@ type CreateOAuthClientParams struct {
 // (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
 // skip a client another transaction is consenting to.
 // ---------------------------------------------------------------------------
-// Dynamic client registration (M1). The primary key returned here IS the
+// Dynamic client registration. The primary key returned here IS the
 // public client_id; there is no secret. last_used_at starts at created_at so
 // the column is never NULL and the ordering check holds from the first row.
 func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error) {
@@ -1039,7 +1039,7 @@ type CreateOAuthTokenParams struct {
 	FamilyExpiresAt time.Time
 }
 
-// The first token of a family, issued by a code exchange (M3). expires_at is
+// The first token of a family, issued by a code exchange. expires_at is
 // clamped to the family's own death so no token can outlive the family it
 // belongs to; the table's ordering check is the backstop for raw SQL.
 func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error) {
@@ -1694,7 +1694,7 @@ type DeleteExpiredIdempotencyRecordsGlobalRow struct {
 	DeletedBytes   int64
 }
 
-// The P8-priv scheduled sweep's bounded page: oldest expired rows across
+// The scheduled privacy sweep's bounded page: oldest expired rows across
 // all users, grouped per user so the sweep can release each user's exact
 // counters (once per returned user) before committing that cleanup
 // transaction.
@@ -2566,7 +2566,7 @@ type GetOAuthTokenAuthorityByDigestRow struct {
 	User       User
 }
 
-// The bearer boundary's single round trip (M7): token row, its grant, and its
+// The bearer boundary's single round trip: token row, its grant, and its
 // account in one query. The caller applies expiry, revocation, supersession,
 // and kind checks to the returned row; every rejection class therefore reads
 // the same rows and produces the same closed response.
@@ -3535,7 +3535,7 @@ type InsertRotatedOAuthTokenParams struct {
 	RotatedFrom uuid.UUID
 }
 
-// Refresh rotation (M3). Every identity field -- family, client, user, grant,
+// Refresh rotation. Every identity field -- family, client, user, grant,
 // and family expiry -- is read from the predecessor row rather than trusted
 // from the caller, so a rotated token structurally cannot join a different
 // family, client, user, or grant than the token it succeeds. A missing
@@ -3733,7 +3733,7 @@ type ListIdleOAuthClientCandidatesParams struct {
 	LimitRows  int32
 }
 
-// The bounded idle-client sweep (M1/M5): clients registered before
+// The bounded idle-client sweep: clients registered before
 // idle_before that hold no live grant and no live token. FOR UPDATE SKIP
 // LOCKED both reserves the returned rows for the caller's transaction -- so a
 // concurrent grant insert blocks on the FK's key-share lock and then fails
@@ -5143,7 +5143,7 @@ type TouchOAuthTokenLastUsedParams struct {
 	TouchBefore time.Time
 }
 
-// Bounded activity record (M3): at most one write per token per touch window,
+// Bounded activity record: at most one write per token per touch window,
 // and never on a revoked token. The caller passes touch_before = now - window.
 func (q *Queries) TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, touchOAuthTokenLastUsed, arg.Now, arg.ID, arg.TouchBefore)
@@ -5320,7 +5320,7 @@ type UpdateResumeMetadataAndDocumentCASParams struct {
 	SchemaVersion   int32
 }
 
-// The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+// The full-aggregate metadata write: title, lng, and the
 // caller's complete already-projected document under ONE revision CAS. The
 // returned revision is the NEW revision. A stale or non-matching $3
 // updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
@@ -5441,7 +5441,7 @@ type UpsertOAuthGrantParams struct {
 	AuthEpoch int64
 }
 
-// Consent approval (M8): records a new grant or refreshes the live one's
+// Consent approval: records a new grant or refreshes the live one's
 // scopes. The conflict target names the partial unique index's predicate, so
 // the upsert arbitrates on exactly the "one live grant per (user, client)"
 // rule the database enforces. created_at is never rewritten -- the settings

@@ -28,8 +28,6 @@ const (
 	photoPutAttempts       = 3
 )
 
-var taskPhotoAdmission = media.NewPhotoAdmission()
-
 type photoUploadInput struct {
 	// ResumeID is the resume named by the request path.
 	ResumeID uuid.UUID
@@ -56,7 +54,7 @@ func (s *Service) handleUploadResumePhoto(w http.ResponseWriter, r *http.Request
 		writeResumeError(w, photoTooLargeError())
 		return
 	}
-	release, err := taskPhotoAdmission.Acquire(r.Context())
+	release, err := s.photoAdmission.Acquire(r.Context())
 	if err != nil {
 		if errors.Is(err, media.ErrMediaBusy) {
 			writeResumeError(w, &clientError{Status: http.StatusServiceUnavailable, Code: "media_busy", Message: "photo intake is busy", Headers: map[string]string{"Retry-After": "1"}})

@@ -1,5 +1,5 @@
 // Package authmail implements the encrypted transactional email
-// outbox: closed payload types, the D3 AES-256-GCM key ring, and the
+// outbox: closed payload types, the AES-256-GCM key ring, and the
 // transaction-scoped enqueue primitive. It imports no crypto dependency beyond
 // the standard library and never holds or logs plaintext, keys, nonces, or
 // raw tokens.
@@ -8,7 +8,6 @@ package authmail
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"strings"
 	"time"
@@ -22,22 +21,40 @@ import (
 // auth_email_jobs.kind values.
 type Kind string
 
-// Closed Kind values written to auth_email_jobs.kind (D3).
+// Closed Kind values written to auth_email_jobs.kind.
 const (
-	KindVerify                        Kind = "verify"
-	KindReset                         Kind = "reset"
-	KindPasswordChanged               Kind = "password_changed"
-	KindSecondFactorEnabled           Kind = "second_factor_enabled"
-	KindPasskeyAdded                  Kind = "passkey_added"
-	KindPasskeyRemoved                Kind = "passkey_removed"
-	KindSecondFactorDisabled          Kind = "second_factor_disabled"
-	KindRecoveryCodesRegenerated      Kind = "recovery_codes_regenerated"
-	KindRecoveryCodeUsed              Kind = "recovery_code_used"
+	// KindVerify is the registration verification email.
+	KindVerify Kind = "verify"
+	// KindReset is the password reset email.
+	KindReset Kind = "reset"
+	// KindPasswordChanged notifies that the account password changed.
+	KindPasswordChanged Kind = "password_changed"
+	// KindSecondFactorEnabled notifies that a second factor was enabled.
+	KindSecondFactorEnabled Kind = "second_factor_enabled"
+	// KindPasskeyAdded notifies that a passkey was added.
+	KindPasskeyAdded Kind = "passkey_added"
+	// KindPasskeyRemoved notifies that a passkey was removed.
+	KindPasskeyRemoved Kind = "passkey_removed"
+	// KindSecondFactorDisabled notifies that second-factor sign-in was
+	// turned off.
+	KindSecondFactorDisabled Kind = "second_factor_disabled"
+	// KindRecoveryCodesRegenerated notifies that recovery codes were
+	// replaced.
+	KindRecoveryCodesRegenerated Kind = "recovery_codes_regenerated"
+	// KindRecoveryCodeUsed notifies that a recovery code was used; its
+	// payload carries the remaining count.
+	KindRecoveryCodeUsed Kind = "recovery_code_used"
+	// KindSecondFactorAttemptsExhausted notifies that second-factor attempts
+	// ran out.
 	KindSecondFactorAttemptsExhausted Kind = "second_factor_attempts_exhausted"
-	KindTOTPAdded                     Kind = "totp_added"
-	KindTOTPReplaced                  Kind = "totp_replaced"
-	KindTOTPRemoved                   Kind = "totp_removed"
-	KindPrivacyNotice                 Kind = "privacy_notice"
+	// KindTOTPAdded notifies that an authenticator app was added.
+	KindTOTPAdded Kind = "totp_added"
+	// KindTOTPReplaced notifies that the authenticator app was replaced.
+	KindTOTPReplaced Kind = "totp_replaced"
+	// KindTOTPRemoved notifies that the authenticator app was removed.
+	KindTOTPRemoved Kind = "totp_removed"
+	// KindPrivacyNotice is the fixed account privacy notice.
+	KindPrivacyNotice Kind = "privacy_notice"
 )
 
 // PrivacyNoticeID is the only accepted privacy notice campaign.
@@ -49,8 +66,8 @@ const payloadVersion = 1
 const securityPayloadVersion = 2
 
 // canonicalLinkOrigin is the hard-coded origin used to build verification and
-// reset links (ruling: a clearly-named placeholder, not a sender identity).
-// Link validation checks only the prefix; full D1 canonicalization and token
+// reset links: a clearly named placeholder, not a sender identity. Link
+// validation checks only the prefix; full canonicalization and token
 // construction are the caller's job.
 const canonicalLinkOrigin = "https://aboutme.vn"
 
@@ -64,14 +81,24 @@ const (
 // recovery-code use carries a remaining count. Version 3 binds the fixed privacy
 // notice to an account and ledger generation without message or link fields.
 type Payload struct {
-	Version                int    `json:"version"`
-	To                     string `json:"to"`
-	Link                   string `json:"link,omitempty"`
-	OccurredAt             string `json:"occurredAt,omitempty"`
-	RemainingRecoveryCodes *int   `json:"remainingRecoveryCodes,omitempty"`
-	UserID                 string `json:"-"`
-	NoticeID               string `json:"-"`
-	Generation             int32  `json:"-"`
+	// Version is the payload version: 1, 2, or 3, fixed by the kind.
+	Version int `json:"version"`
+	// To is the recipient address.
+	To string `json:"to"`
+	// Link is the version 1 verification or reset link.
+	Link string `json:"link,omitempty"`
+	// OccurredAt is the version 2 event time, RFC 3339 in whole UTC seconds.
+	OccurredAt string `json:"occurredAt,omitempty"`
+	// RemainingRecoveryCodes is the 0–9 count a recovery-code-used payload
+	// carries.
+	RemainingRecoveryCodes *int `json:"remainingRecoveryCodes,omitempty"`
+	// UserID is the canonical account UUID a version 3 privacy notice binds.
+	UserID string `json:"-"`
+	// NoticeID is the version 3 privacy notice campaign, PrivacyNoticeID.
+	NoticeID string `json:"-"`
+	// Generation is the non-negative ledger generation a version 3 privacy
+	// notice binds.
+	Generation int32 `json:"-"`
 
 	linkPresent                   bool
 	occurredAtPresent             bool
@@ -82,31 +109,13 @@ type Payload struct {
 // Sealed is an encrypted payload plus the metadata the database stores beside
 // it. Nonce is exactly 12 bytes by type; Ciphertext is 1–4,112 bytes.
 type Sealed struct {
-	KeyID      string
-	Nonce      [12]byte
+	// KeyID names the ring key that sealed the payload.
+	KeyID string
+	// Nonce is the fresh AES-256-GCM nonce.
+	Nonce [12]byte
+	// Ciphertext is the sealed payload with its 16-byte tag.
 	Ciphertext []byte
 }
-
-// Closed sentinels. None of them carries a key, nonce, plaintext, email,
-// token, ciphertext, or raw AEAD error, so they are safe to surface.
-var (
-	ErrInvalidKind      = errors.New("authmail: invalid email kind")
-	ErrInvalidEmail     = errors.New("authmail: invalid email address")
-	ErrInvalidLink      = errors.New("authmail: invalid link")
-	ErrUnknownVersion   = errors.New("authmail: unknown payload version")
-	ErrStrictJSON       = errors.New("authmail: payload is not strict JSON")
-	ErrInvalidKeyID     = errors.New("authmail: invalid key id")
-	ErrUnknownKey       = errors.New("authmail: unknown key id")
-	ErrKeyRing          = errors.New("authmail: invalid key ring")
-	ErrNonce            = errors.New("authmail: nonce entropy failure")
-	ErrCiphertext       = errors.New("authmail: invalid ciphertext")
-	ErrAuthentication   = errors.New("authmail: authentication failed")
-	ErrOversizedPayload = errors.New("authmail: payload too large")
-	ErrScope            = errors.New("authmail: invalid job scope")
-	ErrExpiry           = errors.New("authmail: invalid expiry")
-	ErrJobID            = errors.New("authmail: invalid job id")
-	ErrOutbox           = errors.New("authmail: invalid outbox")
-)
 
 func validateKind(k Kind) error {
 	switch k {
@@ -121,9 +130,9 @@ func validateKind(k Kind) error {
 	}
 }
 
-// validateEmail performs the minimal structural check (ruling: full D1
-// canonicalization is the caller's job): non-empty, exactly one '@', non-empty
-// local and domain parts, and no whitespace or control bytes.
+// validateEmail performs the minimal structural check and leaves full
+// account-email canonicalization to the caller: non-empty, exactly one '@',
+// non-empty local and domain parts, and no whitespace or control bytes.
 func validateEmail(to string) error {
 	if to == "" {
 		return ErrInvalidEmail
@@ -143,8 +152,8 @@ func validateEmail(to string) error {
 	return nil
 }
 
-// validateLink enforces the per-kind link shape (ruling): verify/reset use the
-// canonical origin plus the D8 fragment route with a non-empty token;
+// validateLink enforces the per-kind link shape: verify/reset use the
+// canonical origin plus the fragment route with a non-empty token;
 // password-changed has no link.
 func validateLink(kind Kind, link string) error {
 	switch kind {

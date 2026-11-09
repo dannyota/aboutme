@@ -87,7 +87,7 @@ func TestPasswordRateBudgetParity(t *testing.T) {
 		t.Errorf("passwordRateMaxKeys = %d, want 10000", passwordRateMaxKeys)
 	}
 
-	// The exact D6 budget rows (budgets.md).
+	// The exact password rate budget rows (budgets.md).
 	if loginAdmissionLimit != 30 {
 		t.Errorf("loginAdmissionLimit = %d, want 30", loginAdmissionLimit)
 	}

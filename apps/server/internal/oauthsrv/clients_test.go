@@ -36,6 +36,9 @@ func TestNativeLoopbackRedirect(t *testing.T) {
 		{"loopback with path only", "http://127.0.0.1/callback", true},
 		{"localhost", "http://localhost:20090/callback", true},
 		{"localhost no port", "http://localhost/callback", true},
+		{"localhost uppercase", "http://LOCALHOST:20090/callback", true},
+		{"IPv4-mapped loopback", "http://[::ffff:127.0.0.1]:20090/callback", false},
+		{"unspecified address", "http://0.0.0.0:20090/callback", false},
 		{"loopback-looking prefix", "http://localhost.evil.example/callback", false},
 		{"https loopback", "https://127.0.0.1:20090/callback", false},
 		{"non-loopback host", "http://agent.example/callback", false},
@@ -44,6 +47,33 @@ func TestNativeLoopbackRedirect(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := nativeLoopbackRedirect(tc.raw); got != tc.want {
 				t.Errorf("nativeLoopbackRedirect(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidGrantTypesSet pins the registration grant_types rule: a non-empty,
+// duplicate-free subset of authorization_code and refresh_token.
+func TestValidGrantTypesSet(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		values []string
+		want   bool
+	}{
+		{"both", []string{"authorization_code", "refresh_token"}, true},
+		{"both reversed", []string{"refresh_token", "authorization_code"}, true},
+		{"authorization_code only", []string{"authorization_code"}, true},
+		{"refresh_token only", []string{"refresh_token"}, true},
+		{"nil", nil, false},
+		{"empty", []string{}, false},
+		{"duplicate", []string{"refresh_token", "refresh_token"}, false},
+		{"unknown member", []string{"authorization_code", "implicit"}, false},
+		{"case differs", []string{"Authorization_Code"}, false},
+		{"empty member", []string{""}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validGrantTypesSet(tc.values); got != tc.want {
+				t.Errorf("validGrantTypesSet(%q) = %v, want %v", tc.values, got, tc.want)
 			}
 		})
 	}
@@ -359,7 +389,7 @@ func TestRegister_OverLimitBodyWithUnknownMembersRejects(t *testing.T) {
 }
 
 // TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue confirms
-// that adding "localhost" to nativeLoopbackHosts does not widen what a
+// that admitting "localhost" for native clients does not widen what a
 // registered client may authorize to: registeredRedirect still requires a
 // byte-for-byte match, port included. See
 // docs/design/mcp-client-compatibility.md rule 3.

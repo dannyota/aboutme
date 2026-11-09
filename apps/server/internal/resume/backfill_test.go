@@ -98,10 +98,10 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 		t.Errorf("schema_version after backfill = %d, want 6", after.SchemaVersion)
 	}
 	if after.Revision != before.Revision {
-		t.Errorf("revision moved %d -> %d; a backfill must not bump it (D12)", before.Revision, after.Revision)
+		t.Errorf("revision moved %d -> %d; a backfill must not bump it", before.Revision, after.Revision)
 	}
 	if !after.UpdatedAt.Equal(before.UpdatedAt) {
-		t.Errorf("updated_at moved %v -> %v; a backfill is not a user-visible change (D12)", before.UpdatedAt, after.UpdatedAt)
+		t.Errorf("updated_at moved %v -> %v; a backfill is not a user-visible change", before.UpdatedAt, after.UpdatedAt)
 	}
 	if after.PersonalDetails == before.PersonalDetails {
 		t.Errorf("personal_details was not rewritten; the backfill persisted nothing new:\n %s", after.PersonalDetails)
@@ -201,7 +201,7 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 		t.Errorf("schema_version after the retry = %d, want 6", v)
 	}
 	if final := pjSnapshot(ctx, t, pool, created.ID); final.Revision != after.Revision {
-		t.Errorf("the retry bumped revision %d -> %d; a backfill must not (D12)", after.Revision, final.Revision)
+		t.Errorf("the retry bumped revision %d -> %d; a backfill must not", after.Revision, final.Revision)
 	}
 }
 

@@ -32,15 +32,33 @@ var defaultPhotoNormalizationNanoseconds atomic.Uint64
 
 // Options configures the resume API route service.
 type Options struct {
-	Logger                     *slog.Logger
-	SessionManager             *auth.SessionManager
-	PublicOrigin               string
-	TrustedProxies             api.TrustedProxies
-	Clock                      func() time.Time
-	AcceptedVersions           []int32
-	PhotoKeyInvariant          func()
-	PhotoRandom                io.Reader
+	// Logger receives resume diagnostics; nil uses slog.Default.
+	Logger *slog.Logger
+	// SessionManager authenticates owner requests.
+	SessionManager *auth.SessionManager
+	// PublicOrigin is the canonical public origin the CSRF check compares with
+	// a mutating request's Origin.
+	PublicOrigin string
+	// TrustedProxies are the proxy prefixes whose forwarded client address is
+	// trusted for rate limits.
+	TrustedProxies api.TrustedProxies
+	// Clock returns the current time; nil uses time.Now.
+	Clock func() time.Time
+	// AcceptedVersions are the document wire versions requests may name; nil
+	// uses docmigrate.AcceptedVersions.
+	AcceptedVersions []int32
+	// PhotoKeyInvariant counts a stored photo key that fails to parse; nil
+	// uses a package counter.
+	PhotoKeyInvariant func()
+	// PhotoRandom supplies photo key suffix bytes; nil uses crypto/rand.
+	PhotoRandom io.Reader
+	// PhotoNormalizationDuration records each photo normalization time; nil
+	// uses a package counter.
 	PhotoNormalizationDuration func(time.Duration)
+	// PhotoAdmission is the process-wide photo decode permit that the REST
+	// and agent upload paths share. Nil gives this Service its own permit, so
+	// a process builds one Service or passes one PhotoAdmission to each.
+	PhotoAdmission *media.PhotoAdmission
 	// Coordinator is the shared public-generation coordinator. Composition
 	// initializes it from durable public_state before serving mutations.
 	Coordinator *publicstate.Coordinator
@@ -75,6 +93,7 @@ type Service struct {
 	photoKeyInvariant          func()
 	photoRandom                io.Reader
 	photoNormalizationDuration func(time.Duration)
+	photoAdmission             *media.PhotoAdmission
 	coordinator                *publicstate.Coordinator
 	recoveryPool               *store.Pool
 	printQueue                 PrintQueue
@@ -130,6 +149,9 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 			defaultPhotoNormalizationNanoseconds.Add(uint64(max(elapsed.Nanoseconds(), 0)))
 		}
 	}
+	if opts.PhotoAdmission == nil {
+		opts.PhotoAdmission = media.NewPhotoAdmission()
+	}
 	limiter := slugAttemptLimiter(newSlugAttemptLimiter())
 	return &Service{
 		resumes: store, idempotency: idem, projector: proj, blobs: blobs,
@@ -140,6 +162,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		photoKeyInvariant:          opts.PhotoKeyInvariant,
 		photoRandom:                opts.PhotoRandom,
 		photoNormalizationDuration: opts.PhotoNormalizationDuration,
+		photoAdmission:             opts.PhotoAdmission,
 		coordinator:                opts.Coordinator,
 		recoveryPool:               opts.RecoveryPool,
 		printQueue:                 opts.PrintQueue,
@@ -192,7 +215,7 @@ func registeredRoutes() []routeSpec {
 	return routes
 }
 
-// RegisterRoutes attaches the whole P2B route inventory in one step.
+// RegisterRoutes attaches the whole resume route inventory in one step.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	chains := s.newRouteChains()
 	byPattern := make(map[string][]routeSpec)

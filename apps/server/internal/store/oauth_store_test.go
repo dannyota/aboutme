@@ -1,10 +1,10 @@
-// Phase PM task 1's live-database tests for the OAuth agent-access store
+// Live-database tests for the OAuth agent-access store
 // contract: single-use code consumption under two real transactions, single
 // live grant per (user, client), family revocation, rotation lineage that
 // cannot cross families, the joined bearer lookup, the throttled last-used
 // touch, and the bounded GC and cleanup queries — all through the generated
-// query layer (store.New) so the sqlc contract and the M1–M3 database bounds
-// are proven together.
+// query layer (store.New) so the sqlc contract and the client, code, and token
+// database bounds are proven together.
 package store_test
 
 import (
@@ -773,7 +773,7 @@ func TestOAuthTokenLastUsedTouchIsThrottled(t *testing.T) {
 }
 
 // TestOAuthTokenDigestColumnRejectsRawMaterial proves storage is digest-only:
-// the raw M3 spellings this test builds in memory are 48 characters and can
+// the raw token spellings this test builds in memory are 48 characters and can
 // never reach a 32-byte digest column. The prefixes exist here and nowhere in
 // the migration, the queries, or any stored fixture.
 func TestOAuthTokenDigestColumnRejectsRawMaterial(t *testing.T) {
@@ -1071,9 +1071,9 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 		t.Fatalf("cleanup after family expiry deleted %d rows, want the 1 refresh token", deleted)
 	}
 
-	// The frozen M1/M5 ceiling is enforced by the query, not merely by callers:
-	// a future sweep must not turn a caller bug into an unbounded request-path
-	// delete by passing a value larger than 200.
+	// The fixed 200-row cleanup batch ceiling is enforced by the query, not
+	// merely by callers: a future sweep must not turn a caller bug into an
+	// unbounded request-path delete by passing a value larger than 200.
 	for i := 0; i < 201; i++ {
 		newOAuthStoreCode(ctx, t, q, userID, client.ID, oauthGCEpoch)
 	}

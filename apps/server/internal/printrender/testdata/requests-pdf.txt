@@ -1,0 +1,13 @@
+browser Target.setAutoAttach {"autoAttach":true,"waitForDebuggerOnStart":true,"flatten":true}
+page Fetch.enable {"patterns":[{"urlPattern":"*","requestStage":"Request"}],"handleAuthRequests":false}
+page Network.setCacheDisabled {"cacheDisabled":true}
+page Emulation.setEmulatedMedia {"media":"print"}
+page Page.navigate {"url":"http://127.0.0.1:20030/print/00000000-0000-0000-0000-000000000001"}
+page Fetch.continueRequest {"requestId":"interception-1","headers":[{"name":"Accept","value":"text/html"},{"name":"Authorization","value":"RenderCapability abcdefghijklmnopqrstuvwxyzABCDEFGH012345678"},{"name":"X-Render-Job-ID","value":"00000000-0000-0000-0000-000000000002"}],"interceptResponse":false}
+page Fetch.continueRequest {"requestId":"interception-2","interceptResponse":false}
+page Fetch.continueRequest {"requestId":"interception-3","interceptResponse":false}
+page Emulation.setEmulatedMedia {"media":"print"}
+page Runtime.evaluate {"expression":"(async () => {\n  const roots = document.querySelectorAll('[data-print-document=\"true\"]');\n  if (roots.length !== 1 || document.scripts.length !== 0) throw new Error('invalid document');\n  void document.documentElement.offsetHeight;\n  await document.fonts.ready;\n  const fonts = Array.from(document.fonts);\n  if (document.fonts.status !== 'loaded' || fonts.some((font) => font.status === 'error')) throw new Error('fonts failed');\n  const images = Array.from(document.images);\n  await Promise.all(images.map((image) => image.decode()));\n  if (images.some((image) => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0)) throw new Error('image failed');\n  return true;\n})()","includeCommandLineAPI":false,"silent":false,"returnByValue":true,"generatePreview":false,"userGesture":false,"awaitPromise":true,"throwOnSideEffect":false,"disableBreaks":false,"replMode":false,"allowUnsafeEvalBlockedByCSP":true}
+page Page.printToPDF {"landscape":false,"displayHeaderFooter":false,"printBackground":true,"scale":1,"marginTop":0,"marginBottom":0,"marginLeft":0,"marginRight":0,"preferCSSPageSize":true,"transferMode":"ReturnAsStream","generateTaggedPDF":false,"generateDocumentOutline":false}
+page IO.read {"handle":"stream-1","size":65536}
+page IO.close {"handle":"stream-1"}

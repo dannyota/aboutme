@@ -458,6 +458,6 @@ func TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	errorCode := assertRejected(t, resp)
 	const wantErrorCode = "cancelled" //nolint:misspell // Exact wire value uses double-L "cancelled".
 	if errorCode != wantErrorCode {
-		t.Errorf("error code = %q, want %q (fix-round ruling b2, applied identically to GitHub per this task's binding ruling on provider-declined consent)", errorCode, wantErrorCode)
+		t.Errorf("error code = %q, want %q (provider-declined consent maps to the same code for every provider)", errorCode, wantErrorCode)
 	}
 }

@@ -1,4 +1,4 @@
-// service_test.go exercises the P2B transaction seam on resume.Store
+// service_test.go exercises the transaction seam on resume.Store
 // against a live Postgres database: the exported tx-scoped mirrors
 // (CreateTx, GetTx, ListTx, SaveDocumentTx), the full-aggregate metadata
 // CAS (SaveMetadataAndDocumentTx), the revision-CAS delete (DeleteTx), and
@@ -8,7 +8,7 @@
 // (a) identical behavior to the pool-backed method it mirrors, including
 // every error shape; (b) rollback leaves ZERO observable effect; (c) a
 // wrong-owner id and a nonexistent id are byte-identical on every method
-// (P2A D17 — no existence oracle). Shares store_test.go's helpers
+// (no existence oracle). Shares store_test.go's helpers
 // (newIntegrationStore, createTestUser, assertResumeRowEqual) and
 // validate_test.go's validDocForTest.
 package resume_test
@@ -96,7 +96,7 @@ func seamJobCount(ctx context.Context, t *testing.T, pool *store.Pool, resumeID 
 	return n
 }
 
-// seamPhotoKey builds the exact D11 canonical key for resumeID.
+// seamPhotoKey builds the exact canonical photo key for resumeID.
 func seamPhotoKey(resumeID uuid.UUID) string {
 	return "resumes/" + resumeID.String() + "/photo-0123456789abcdef0123456789abcdef.jpg"
 }

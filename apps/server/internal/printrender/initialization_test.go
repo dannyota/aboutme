@@ -303,6 +303,16 @@ func TestInitializationDiagnosticsUseOnlyClosedReasons(t *testing.T) {
 	}
 }
 
+func TestInitializationDiagnosticsClassifyTheDevToolsAddressTimeout(t *testing.T) {
+	// The exec allocator reports the elapsed limit and the browser output.
+	err := errors.New("websocket url timeout reached after 5s, chrome printed:\nTOKEN=private-value /private/path document-text")
+	failure := diagnoseInitialization(context.Background(), ErrUnavailable, "launch", err, nil, 5*time.Second)
+	if failure.stage != "timeout" || failure.reason != "deadline exceeded" {
+		t.Fatalf("stage, reason = %q, %q; want timeout, deadline exceeded", failure.stage, failure.reason)
+	}
+	assertNoPrivateDiagnostic(t, failure.Error())
+}
+
 func TestBrowserCleanupKeepsRenderOutputLimitError(t *testing.T) {
 	err := withBrowser(context.Background(), "/bin/true", "http://127.0.0.1:20030", testSupervisorCommand(t), false, func(context.Context) error {
 		return ErrOutputTooLarge

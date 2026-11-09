@@ -295,7 +295,7 @@ SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
 SELECT * FROM resumes WHERE id = $1;
 
 -- name: UpdateResumeMetadataAndDocumentCAS :one
--- The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+-- The full-aggregate metadata write: title, lng, and the
 -- caller's complete already-projected document under ONE revision CAS. The
 -- returned revision is the NEW revision. A stale or non-matching $3
 -- updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
@@ -388,7 +388,7 @@ SELECT count(*)::bigint AS deleted_records,
 FROM deleted;
 
 -- name: DeleteExpiredIdempotencyRecordsGlobal :many
--- The P8-priv scheduled sweep's bounded page: oldest expired rows across
+-- The scheduled privacy sweep's bounded page: oldest expired rows across
 -- all users, grouped per user so the sweep can release each user's exact
 -- counters (once per returned user) before committing that cleanup
 -- transaction.
@@ -1275,7 +1275,7 @@ WHERE id IN (
 );
 
 -- ---------------------------------------------------------------------------
--- Phase PM: OAuth agent access — clients, authorization codes, grants, and
+-- OAuth agent access: clients, authorization codes, grants, and
 -- tokens. Storage is digest-only: no query here reads, writes, or returns raw
 -- code or token material, and PKCE verifiers are never stored.
 --
@@ -1288,7 +1288,7 @@ WHERE id IN (
 -- ---------------------------------------------------------------------------
 
 -- name: CreateOAuthClient :one
--- Dynamic client registration (M1). The primary key returned here IS the
+-- Dynamic client registration. The primary key returned here IS the
 -- public client_id; there is no secret. last_used_at starts at created_at so
 -- the column is never NULL and the ordering check holds from the first row.
 INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
@@ -1342,7 +1342,7 @@ WHERE id = sqlc.arg(id)
 DELETE FROM oauth_clients WHERE id = $1;
 
 -- name: ListIdleOAuthClientCandidates :many
--- The bounded idle-client sweep (M1/M5): clients registered before
+-- The bounded idle-client sweep: clients registered before
 -- idle_before that hold no live grant and no live token. FOR UPDATE SKIP
 -- LOCKED both reserves the returned rows for the caller's transaction -- so a
 -- concurrent grant insert blocks on the FK's key-share lock and then fails
@@ -1373,7 +1373,7 @@ FOR UPDATE SKIP LOCKED;
 DELETE FROM oauth_clients WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: CreateOAuthAuthorizationCode :one
--- Code issue (M2). expires_at is computed here, not passed in, so the exact
+-- Code issue. expires_at is computed here, not passed in, so the exact
 -- 60-second TTL the table checks can never be missed by a caller. Only the
 -- code's digest is stored; the raw code exists solely in the redirect the user
 -- agent carries.
@@ -1400,7 +1400,7 @@ SELECT * FROM oauth_authorization_codes WHERE code_digest = $1;
 SELECT * FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE;
 
 -- name: ConsumeOAuthAuthorizationCode :one
--- Single-use consumption (M2). One conditional UPDATE both takes the row lock
+-- Single-use consumption. One conditional UPDATE both takes the row lock
 -- and decides the winner: under two concurrent exchanges of the same code the
 -- second blocks, re-evaluates the predicate after the first commits, matches
 -- no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
@@ -1432,7 +1432,7 @@ USING candidates
 WHERE target.id = candidates.id;
 
 -- name: UpsertOAuthGrant :one
--- Consent approval (M8): records a new grant or refreshes the live one's
+-- Consent approval: records a new grant or refreshes the live one's
 -- scopes. The conflict target names the partial unique index's predicate, so
 -- the upsert arbitrates on exactly the "one live grant per (user, client)"
 -- rule the database enforces. created_at is never rewritten -- the settings
@@ -1459,7 +1459,7 @@ WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL;
 SELECT * FROM oauth_grants WHERE id = $1 FOR UPDATE;
 
 -- name: CountLiveOAuthGrantsForUser :one
--- The M5 live-grant cap check. Callers serialize it with the user row lock
+-- The live-grant cap check. Callers serialize it with the user row lock
 -- (GetUserForUpdate) so two concurrent approvals cannot both read the same
 -- pre-cap count.
 SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL;
@@ -1509,7 +1509,7 @@ WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND revoked_at IS NULL
 RETURNING *;
 
 -- name: CreateOAuthToken :one
--- The first token of a family, issued by a code exchange (M3). expires_at is
+-- The first token of a family, issued by a code exchange. expires_at is
 -- clamped to the family's own death so no token can outlive the family it
 -- belongs to; the table's ordering check is the backstop for raw SQL.
 INSERT INTO oauth_tokens (
@@ -1525,7 +1525,7 @@ INSERT INTO oauth_tokens (
 RETURNING *;
 
 -- name: InsertRotatedOAuthToken :one
--- Refresh rotation (M3). Every identity field -- family, client, user, grant,
+-- Refresh rotation. Every identity field -- family, client, user, grant,
 -- and family expiry -- is read from the predecessor row rather than trusted
 -- from the caller, so a rotated token structurally cannot join a different
 -- family, client, user, or grant than the token it succeeds. A missing
@@ -1547,7 +1547,7 @@ WHERE predecessor.id = sqlc.arg(rotated_from)::uuid
 RETURNING *;
 
 -- name: GetOAuthTokenAuthorityByDigest :one
--- The bearer boundary's single round trip (M7): token row, its grant, and its
+-- The bearer boundary's single round trip: token row, its grant, and its
 -- account in one query. The caller applies expiry, revocation, supersession,
 -- and kind checks to the returned row; every rejection class therefore reads
 -- the same rows and produces the same closed response.
@@ -1585,7 +1585,7 @@ SET revoked_at = sqlc.arg(revoked_at)::timestamptz
 WHERE grant_id = sqlc.arg(grant_id) AND revoked_at IS NULL;
 
 -- name: TouchOAuthTokenLastUsed :execrows
--- Bounded activity record (M3): at most one write per token per touch window,
+-- Bounded activity record: at most one write per token per touch window,
 -- and never on a revoked token. The caller passes touch_before = now - window.
 UPDATE oauth_tokens
 SET last_used_at = sqlc.arg(now)::timestamptz

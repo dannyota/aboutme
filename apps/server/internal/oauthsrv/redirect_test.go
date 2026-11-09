@@ -126,8 +126,8 @@ func TestValidateRedirectURIByteBound(t *testing.T) {
 func TestValidateRedirectURIDoesNotBoundListLength(t *testing.T) {
 	t.Parallel()
 
-	// M1 caps a registration at five redirect URIs. That count is the
-	// registration caller's rule (T04): each of these six URIs is
+	// A registration carries at most five redirect URIs. That count is the
+	// registration caller's rule: each of these six URIs is
 	// individually valid, so a validator that silently enforced the count
 	// here would hide the caller's check.
 	list := []string{
@@ -240,10 +240,10 @@ func TestValidateClientNameCodePointBounds(t *testing.T) {
 func TestValidateClientNamePreNormalizationGate(t *testing.T) {
 	t.Parallel()
 
-	// M1 bounds code points *after* NFC, so a conforming name can arrive in a
-	// decomposed form far longer than 64 code points: 64 decomposed Hangul
-	// syllables are 192 code points in 576 bytes and compose to exactly 64
-	// code points. Both that form and the composed wire form must be
+	// The name bound counts code points *after* NFC, so a conforming name can
+	// arrive in a decomposed form far longer than 64 code points: 64
+	// decomposed Hangul syllables are 192 code points in 576 bytes and compose
+	// to exactly 64 code points. Both that form and the composed wire form must be
 	// accepted, and both must canonicalize to the same stored name.
 	decomposed := strings.Repeat("\u1100\u1161\u11a8", 64)
 	composed := strings.Repeat("\uac01", 64)
@@ -267,7 +267,7 @@ func TestValidateClientNamePreNormalizationGate(t *testing.T) {
 		t.Errorf("ValidateClientName(composed Hangul) = %q, %v; want the input unchanged and nil", gotComposed, err)
 	}
 
-	// The gate itself sits at the M1 registration body cap, so it can never
+	// The gate itself sits at the registration body cap, so it can never
 	// reject a name a conforming body could carry. Input at or beyond it is
 	// rejected: at the cap by the code-point bound, beyond it before
 	// normalization runs.

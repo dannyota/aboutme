@@ -19,7 +19,7 @@ import (
 //     GetOAuthClientForUpdate. That lock is also what makes
 //     ListIdleOAuthClientCandidates skip (rather than collect) a client another
 //     transaction is consenting to.
-//   - The M5 live-grant cap is read under GetUserForUpdate, so two concurrent
+//   - The live-grant cap is read under GetUserForUpdate, so two concurrent
 //     approvals cannot both observe the same pre-cap count.
 //   - A token-family revocation first takes GetOAuthGrantForUpdate, so a
 //     rotation committing concurrently cannot resurrect a family the
@@ -44,7 +44,7 @@ type OAuthQueries interface {
 	ListIdleOAuthClientCandidates(context.Context, ListIdleOAuthClientCandidatesParams) ([]uuid.UUID, error)
 	DeleteOAuthClients(context.Context, []uuid.UUID) (int64, error)
 
-	// Authorization codes (M2). Consumption is a single conditional UPDATE, so
+	// Authorization codes. Consumption is a single conditional UPDATE, so
 	// two concurrent exchanges of one code yield exactly one success and one
 	// pgx.ErrNoRows; the locked lookup serves the consumed-code replay path.
 	CreateOAuthAuthorizationCode(context.Context, CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
@@ -53,7 +53,7 @@ type OAuthQueries interface {
 	ConsumeOAuthAuthorizationCode(context.Context, ConsumeOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
 	DeleteExpiredOAuthAuthorizationCodes(context.Context, DeleteExpiredOAuthAuthorizationCodesParams) (int64, error)
 
-	// Grants (M5, M8). GetUserForUpdate is the cap serialization point; the
+	// Grants. GetUserForUpdate is the cap serialization point; the
 	// partial unique index behind UpsertOAuthGrant is what makes a second live
 	// grant per (user, client) impossible.
 	GetUserForUpdate(context.Context, uuid.UUID) (User, error)
@@ -65,7 +65,7 @@ type OAuthQueries interface {
 	RevokeOAuthGrant(context.Context, RevokeOAuthGrantParams) (int64, error)
 	RevokeOAuthGrantForUser(context.Context, RevokeOAuthGrantForUserParams) (OAuthGrant, error)
 
-	// Tokens (M3, M7). InsertRotatedOAuthToken derives family, client, user,
+	// Tokens. InsertRotatedOAuthToken derives family, client, user,
 	// grant, and family expiry from the predecessor row, so a rotated token
 	// cannot cross into another family; SupersedeOAuthToken additionally
 	// requires the caller's family to match the row it marks.

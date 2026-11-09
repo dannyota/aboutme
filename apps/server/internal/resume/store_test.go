@@ -456,10 +456,10 @@ func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 		Customization:   customization,
 	})
 	if err == nil {
-		t.Fatal("4th direct CreateResume() error = nil, want the D7 trigger's cap violation")
+		t.Fatal("4th direct CreateResume() error = nil, want the per-owner cap trigger's violation")
 	}
 	if !resume.IsResumeCapExceededForTest(err) {
-		t.Errorf("4th direct CreateResume() error = %v, want it to match the D7 trigger's exact 23514/resumes_user_cap_exceeded mapping", err)
+		t.Errorf("4th direct CreateResume() error = %v, want it to match the per-owner cap trigger's exact 23514/resumes_user_cap_exceeded mapping", err)
 	}
 
 	// The store's own Create, for the same now-at-3 user, must also see

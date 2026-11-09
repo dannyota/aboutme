@@ -169,7 +169,7 @@ func assertEmailCollisionRejected(t *testing.T, resp *http.Response, attemptProv
 	}
 	tx := extractCookie(resp, auth.OAuthTxCookieName)
 	if tx == nil || tx.MaxAge >= 0 {
-		t.Error("__Host-oauth-tx not cleared on a rejected email-collision callback (ruling 1)")
+		t.Error("__Host-oauth-tx not cleared on a rejected email-collision callback")
 	}
 
 	if existingProvider != attemptProvider && strings.Contains(strings.ToLower(loc), string(existingProvider)) {

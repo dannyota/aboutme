@@ -1,10 +1,10 @@
-// Phase 2A task 3's constraint-boundary and trigger-behavior tests for the
-// resumes, slug_tombstones, and idempotency_records tables added by
-// migrations 00004/00005. Every insert here is raw parameterized SQL
-// against a live, goose-migrated database -- no internal/store layer in
-// the path -- because the point is proving the database itself enforces
-// every invariant (D7: even a writer that bypasses the store entirely),
-// not that a Go-level validation pass happens to agree with it.
+// Constraint-boundary and trigger-behavior tests for the resumes,
+// slug_tombstones, and idempotency_records tables. Every insert here is raw
+// parameterized SQL against a live, goose-migrated database -- no
+// internal/store layer in the path -- because the point is proving the
+// database itself enforces every invariant (even against a writer that
+// bypasses the store entirely), not that a Go-level validation pass happens
+// to agree with it.
 //
 // Every test shares TEST_DATABASE_URL (via
 // internal/testutil.RequireMigratedTestDatabaseURL) with every other
@@ -152,7 +152,7 @@ func requireConstraintViolation(t *testing.T, err error, want string) {
 
 // resumeRow is every column of a resumes insert this file needs to vary.
 // personal_details/content/customization are always '{}'::jsonb -- no
-// boundary in this task's DDL depends on their content, only their
+// boundary in this DDL depends on their content, only their
 // NOT NULL-ness, which every row here already satisfies.
 type resumeRow struct {
 	userID        uuid.UUID
@@ -545,9 +545,9 @@ func TestResumeCapTrigger_ExistsOnResumesTable(t *testing.T) {
 	}
 }
 
-// TestResumeCapTrigger_EnforcesThreePerUser is this task's headline
-// behavioral proof: 3 inserts for one user succeed, a 4th raises
-// SQLSTATE 23514 with message resumes_user_cap_exceeded (D7's per-owner
+// TestResumeCapTrigger_EnforcesThreePerUser is the headline behavioral
+// proof of the per-owner cap: 3 inserts for one user succeed, a 4th raises
+// SQLSTATE 23514 with message resumes_user_cap_exceeded (the per-owner
 // serialization via the trigger's own FOR UPDATE lock on the users row,
 // not this test's transaction discipline, is what makes the count read
 // consistent), deleting one row frees a slot for a new insert, and a

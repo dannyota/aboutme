@@ -1,5 +1,5 @@
 // Package mediatest provides the standalone test-S3 harness gate for suites
-// that run against the local S3-compatible service (D10). It mirrors
+// that run against the local S3-compatible service. It mirrors
 // testutil's skip-or-fail-closed shape and, like testutil, is imported only
 // by _test.go files, never by production code.
 package mediatest

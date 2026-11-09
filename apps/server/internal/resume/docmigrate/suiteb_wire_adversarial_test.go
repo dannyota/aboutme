@@ -945,7 +945,7 @@ func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 			continue // content/customization need not be objects for this check
 		}
 		if _, present := m["schemaVersion"]; present {
-			t.Errorf("Project leaked schemaVersion into the %s part (D4 forbids it): %s", part.name, part.raw)
+			t.Errorf("Project leaked schemaVersion into the %s part: %s", part.name, part.raw)
 		}
 	}
 }

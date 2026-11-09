@@ -21,7 +21,7 @@ import (
 // cannot be completed and no valid cached answer exists (fail closed).
 var ErrBreachUnavailable = errors.New("breach service unavailable")
 
-// HIBP budgets and protocol constants (D2).
+// HIBP budgets (docs/design/budgets.md) and protocol constants.
 const (
 	hibpMaxPrefixes    = 256
 	hibpMaxCacheBytes  = 16 * 1024 * 1024 // 16 MiB of parsed digest bytes

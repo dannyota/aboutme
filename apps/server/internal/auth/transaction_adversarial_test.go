@@ -227,7 +227,7 @@ func TestConsume_RejectsProviderMismatch(t *testing.T) {
 			// The mismatched attempt already consumed the transaction. A retry
 			// with the correct provider must remain invalid.
 			if _, err := ts.Consume(ctx, handle, tt.begin); !errors.Is(err, auth.ErrTransactionInvalid) {
-				t.Errorf("Consume(as %s, the correct provider) after a mismatched attempt error = %v, want ErrTransactionInvalid (DD-C1: single-attempt fail-closed)", tt.begin, err)
+				t.Errorf("Consume(as %s, the correct provider) after a mismatched attempt error = %v, want ErrTransactionInvalid (single-attempt fail-closed)", tt.begin, err)
 			}
 		})
 	}

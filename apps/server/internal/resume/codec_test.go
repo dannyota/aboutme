@@ -176,7 +176,7 @@ func TestCodec_PartsNeverContainSchemaVersion(t *testing.T) {
 			t.Fatalf("%s: unmarshaling generically: %v", label, err)
 		}
 		if _, ok := generic["schemaVersion"]; ok {
-			t.Errorf("%s contains a schemaVersion key, want it absent (D4)", label)
+			t.Errorf("%s contains a schemaVersion key, want it absent", label)
 		}
 	}
 }

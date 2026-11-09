@@ -333,7 +333,7 @@ func TestPhotoCandidateStopsAtThreeCollisionsAndNeverDeletes(t *testing.T) {
 		media.NormalizedPhoto{Bytes: []byte("x"), ContentType: "image/jpeg", Extension: "jpg"}, time.Now)
 	const taskPhotoCollisionAttempts = 3
 	if len(backend.puts) > taskPhotoCollisionAttempts {
-		t.Fatalf("collision attempts = %d, Task 11 permits at most %d", len(backend.puts), taskPhotoCollisionAttempts)
+		t.Fatalf("collision attempts = %d, the photo upload contract permits at most %d", len(backend.puts), taskPhotoCollisionAttempts)
 	}
 	if !errors.Is(err, media.ErrAlreadyExists) || len(backend.puts) != taskPhotoCollisionAttempts || len(backend.deletes) != 0 {
 		t.Fatalf("error=%v puts=%d deletes=%v", err, len(backend.puts), backend.deletes)
@@ -344,7 +344,7 @@ func assertPhotoCollisionAttemptAuthority(t *testing.T) {
 	t.Helper()
 	const taskPhotoCollisionAttempts = 3
 	if photoPutAttempts != taskPhotoCollisionAttempts {
-		t.Fatalf("production collision-attempt limit = %d, Task 11 requires %d", photoPutAttempts, taskPhotoCollisionAttempts)
+		t.Fatalf("production collision-attempt limit = %d, the photo upload contract requires %d", photoPutAttempts, taskPhotoCollisionAttempts)
 	}
 }
 
@@ -361,7 +361,8 @@ func TestPhotoCandidateUnknownAndDefiniteFailureDoNotRetryOrDelete(t *testing.T)
 }
 
 func TestPhotoBusyWaitsOneSecondAndDoesNotReadBody(t *testing.T) {
-	release, err := taskPhotoAdmission.Acquire(context.Background())
+	admission := media.NewPhotoAdmission()
+	release, err := admission.Acquire(context.Background())
 	if err != nil {
 		t.Fatalf("hold admission: %v", err)
 	}
@@ -377,7 +378,7 @@ func TestPhotoBusyWaitsOneSecondAndDoesNotReadBody(t *testing.T) {
 	req.SetPathValue("id", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f")
 	recorder := httptest.NewRecorder()
 	started := time.Now()
-	(&Service{acceptedVersions: []int32{2}}).handleUploadResumePhoto(recorder, req)
+	(&Service{acceptedVersions: []int32{2}, photoAdmission: admission}).handleUploadResumePhoto(recorder, req)
 	elapsed := time.Since(started)
 	if recorder.Code != http.StatusServiceUnavailable || recorder.Header().Get("Retry-After") != "1" {
 		t.Fatalf("busy response = %d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body.Bytes())

@@ -125,8 +125,8 @@ func NewPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	return &PasswordAuth{Service: service, Worker: worker}, nil
 }
 
-// newMailKeyRing builds the D3 key ring from config: exactly one active key plus
-// at most one previous key.
+// newMailKeyRing builds the auth-mail key ring from config: exactly one active
+// key plus at most one previous key.
 func newMailKeyRing(cfg config.Config) (*authmail.KeyRing, error) {
 	keys := map[string][32]byte{cfg.AuthEmail.ActiveKeyID: cfg.AuthEmail.ActiveKey}
 	if cfg.AuthEmail.HasPrevious {

@@ -25,24 +25,36 @@ import (
 )
 
 // Password route paths. The mux serves every API route under /api/v1; these
-// match the T02 OpenAPI operations (servers.url = .../api/v1).
+// match the docs/api/openapi.yaml operations (servers.url = .../api/v1).
 const (
+	// PasswordRegisterPath is the POST route that starts a password
+	// registration; it is not registered while password sign-up is off.
 	PasswordRegisterPath = "/api/v1/auth/password/register"
-	PasswordVerifyPath   = "/api/v1/auth/password/verify"
-	PasswordLoginPath    = "/api/v1/auth/password/login"
-	PasswordForgotPath   = "/api/v1/auth/password/forgot"
-	PasswordResetPath    = "/api/v1/auth/password/reset"
-	PasswordReauthPath   = "/api/v1/auth/password/reauth"
-	PasswordMePath       = "/api/v1/me/password"
+	// PasswordVerifyPath is the POST route that consumes a registration
+	// token.
+	PasswordVerifyPath = "/api/v1/auth/password/verify"
+	// PasswordLoginPath is the POST route for email and password sign-in.
+	PasswordLoginPath = "/api/v1/auth/password/login"
+	// PasswordForgotPath is the POST route that requests a reset email.
+	PasswordForgotPath = "/api/v1/auth/password/forgot"
+	// PasswordResetPath is the POST route that consumes a reset token.
+	PasswordResetPath = "/api/v1/auth/password/reset"
+	// PasswordReauthPath is the session POST route that reauthenticates with
+	// the account password.
+	PasswordReauthPath = "/api/v1/auth/password/reauth"
+	// PasswordMePath is the session PUT route that adds or changes the
+	// account password.
+	PasswordMePath = "/api/v1/me/password"
 )
 
-// passwordMaxBodyBytes is the exact per-route request-body cap (D2/D9). It is
-// tighter than the router's default 256 KiB limit and is enforced by the
-// password-only strict JSON chain before any policy or storage work.
+// passwordMaxBodyBytes is the exact per-route request-body cap
+// (docs/design/budgets.md). It is tighter than the router's default 256 KiB
+// limit and is enforced by the password-only strict JSON chain before any
+// policy or storage work.
 const passwordMaxBodyBytes = 4096
 
-// Registration and reset token lifetimes (D3), kept exact against migration
-// 00008's expiry CHECK constraints.
+// Registration and reset token lifetimes (docs/design/budgets.md), kept exact
+// against the baseline migration's expiry CHECK constraints.
 const (
 	passwordRegistrationTTL = 24 * time.Hour
 	passwordResetTokenTTL   = 30 * time.Minute
@@ -95,8 +107,8 @@ var (
 )
 
 // passwordPolicyIssueForError maps the password package's closed policy errors
-// to the D9 details.issue value. ok is false for any error that is not a policy
-// issue.
+// to the details.issue value in docs/api/openapi.yaml. ok is false for any
+// error that is not a policy issue.
 func passwordPolicyIssueForError(err error) (issue string, ok bool) {
 	switch {
 	case errors.Is(err, password.ErrPasswordLength):
@@ -111,7 +123,7 @@ func passwordPolicyIssueForError(err error) (issue string, ok bool) {
 }
 
 // Request bodies. Each password request is one closed JSON object of string
-// fields (D2: strict JSON admits exactly one object, rejects duplicate and
+// fields (strict JSON admits exactly one object, rejects duplicate and
 // unknown fields and trailing bytes, and checks scalar types before work).
 
 type passwordRegisterRequest struct {
@@ -236,9 +248,9 @@ func readPasswordBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 // when the body exceeds passwordMaxBodyBytes.
 var errPasswordBodyTooLarge = errors.New("auth: password body too large")
 
-// normalizeRegistrationName applies the D1 name bounds: at most 400 raw UTF-8
-// bytes, 1–100 Unicode code points after NFC, and no control characters. It is
-// not trimmed, collapsed, or case-folded.
+// normalizeRegistrationName applies the registration name bounds: at most 400
+// raw UTF-8 bytes, 1–100 Unicode code points after NFC, and no control
+// characters. It is not trimmed, collapsed, or case-folded.
 func normalizeRegistrationName(raw string) (string, error) {
 	if len(raw) > 400 {
 		return "", errPasswordNameInvalid

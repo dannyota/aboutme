@@ -256,9 +256,10 @@ func TestRouter_BodyLimitAppliesToAllRoutes(t *testing.T) {
 	}
 }
 
-// TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit freezes D14's exact
-// dispatch boundary. Only a canonical POST photo path reaches the mux without
-// the ordinary JSON buffer; wrong methods and near-match paths retain it.
+// TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit freezes the exact
+// photo-upload dispatch boundary. Only a canonical POST photo path reaches the
+// mux without the ordinary JSON buffer; wrong methods and near-match paths
+// retain it.
 func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
 	t.Parallel()
 
