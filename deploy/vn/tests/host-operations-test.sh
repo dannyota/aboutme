@@ -31,7 +31,8 @@ for envelope in \
 done
 # Invocation controls must stay outside generic jobs and their media secrets.
 ! grep -qE 'account-delete|media-deletion-status' "$here/host/job-run.sh" || fail 'generic job allowlist expanded'
-for text in '--network none' '--memory-swap 256m' '--log-driver none' '--ulimit core=0:0' '--cap-drop ALL' '--read-only' '--security-opt no-new-privileges'; do
+grep -qF -- '--no-healthcheck' "$here/host/job-run.sh" || fail 'scheduled jobs inherit image healthchecks'
+for text in '--no-healthcheck' '--network none' '--memory-swap 256m' '--log-driver none' '--ulimit core=0:0' '--cap-drop ALL' '--read-only' '--security-opt no-new-privileges'; do
   grep -qF -- "$text" "$here/host/operation-account.sh" || fail "missing isolation: $text"
 done
 ! grep -qE 'secret (media-|smtp-|google-|linkedin-)' "$here/host/operation-account.sh" || fail 'credential overreach'

@@ -16,43 +16,43 @@ import (
 func TestWAFMetadataEncoderRecognizesEngineErrors(t *testing.T) {
 	t.Parallel()
 
-	for _, message := range []string{
-		"error creating serial log writer",
-		"Failed to initialize audit log",
-		"Failed to write audit log",
-		"Error converting request length to integer",
-		"collection in setvar is not a map",
-		"collection in setvar is nil",
-		"Invalid value",
-		"Invalid range",
-		"Invalid status",
-		"Invalid audit log part",
-		"Unknown toggle",
-		"Invalid limit",
-		"Invalid rule ID",
-		"Invalid log level",
-		"attempted to use regex with non-selectable collection",
-		"attempted to use string with non-selectable collection",
-		"ProcessRequestHeaders has already been called",
-		"Calling ProcessRequestHeaders but there is a preexisting interruption",
-		"Calling ProcessRequestBody but there is a preexisting interruption",
-		"Failed to process request body",
-		"ProcessResponseHeaders has already been called",
-		"Calling ProcessResponseHeaders but there is a preexisting interruption",
-		"Calling ProcessResponseBody but there is a preexisting interruption",
-		"Failed to process response body",
-		"Failed to close the transaction",
+	for _, tc := range []struct {
+		message string
+		kind    string
+	}{
+		{"key not found in collection, returning the original text", "macro_key_missing"},
+		{"error creating serial log writer", "serial_log_writer_error"},
+		{"Failed to initialize audit log", "audit_log_init_error"},
+		{"Failed to write audit log", "audit_log_write_error"},
+		{"Error converting request length to integer", "request_length_invalid"},
+		{"collection in setvar is not a map", "setvar_collection_not_map"},
+		{"collection in setvar is nil", "setvar_collection_nil"},
+		{"Invalid value", "invalid_value"},
+		{"Invalid range", "invalid_range"},
+		{"Invalid status", "invalid_status"},
+		{"Invalid audit log part", "invalid_audit_log_part"},
+		{"Unknown toggle", "unknown_toggle"},
+		{"Invalid limit", "invalid_limit"},
+		{"Invalid rule ID", "invalid_rule_id"},
+		{"Invalid log level", "invalid_log_level"},
+		{"attempted to use regex with non-selectable collection", "regex_collection_unsupported"},
+		{"attempted to use string with non-selectable collection", "string_collection_unsupported"},
+		{"ProcessRequestHeaders has already been called", "request_headers_repeated"},
+		{"Calling ProcessRequestHeaders but there is a preexisting interruption", "request_headers_interrupted"},
+		{"Calling ProcessRequestBody but there is a preexisting interruption", "request_body_interrupted"},
+		{"Failed to process request body", "request_body_error"},
+		{"ProcessResponseHeaders has already been called", "response_headers_repeated"},
+		{"Calling ProcessResponseHeaders but there is a preexisting interruption", "response_headers_interrupted"},
+		{"Calling ProcessResponseBody but there is a preexisting interruption", "response_body_interrupted"},
+		{"Failed to process response body", "response_body_error"},
+		{"Failed to close the transaction", "transaction_close_error"},
+		{"WAF rule violation detected", "interruption_summary"},
 	} {
-		t.Run(message, func(t *testing.T) {
+		t.Run(tc.kind, func(t *testing.T) {
 			t.Parallel()
-			assertWAFMessageKind(t, message, "waf_engine_diagnostic")
+			assertWAFMetadata(t, tc.message, "waf_engine_diagnostic", tc.kind)
 		})
 	}
-}
-
-func TestWAFMetadataEncoderRecognizesViolationSummary(t *testing.T) {
-	t.Parallel()
-	assertWAFMessageKind(t, "WAF rule violation detected", "waf_engine_diagnostic")
 }
 
 func TestWAFMetadataEncoderRejectsUnknownEngineMessages(t *testing.T) {
@@ -63,21 +63,24 @@ func TestWAFMetadataEncoderRejectsUnknownEngineMessages(t *testing.T) {
 		"tokenmarker3f8a Failed to process request body",
 		"Failed to process request body\n",
 		"WAF rule violation detected: tokenmarker3f8a",
+		"key not found in collection, returning the original text: tokenmarker3f8a",
+		"request_body_error",
 		"+tx.tokenmarker3f8a",
 	} {
 		t.Run(message, func(t *testing.T) {
 			t.Parallel()
-			assertWAFMessageKind(t, message, "waf_rule_match_unparsed")
+			assertWAFMetadata(t, message, "waf_rule_match_unparsed", "")
 		})
 	}
 }
 
-func assertWAFMessageKind(t *testing.T, message, kind string) {
+func assertWAFMetadata(t *testing.T, message, event, kind string) {
 	t.Helper()
 
 	const marker = "tokenmarker3f8a"
 	encoder := newWAFMetadataEncoder()
 	encoder.AddString("context", marker)
+	encoder.AddString("kind", marker)
 	encoded, err := encoder.Clone().EncodeEntry(zapcore.Entry{
 		Time:       time.Unix(1_700_000_000, 0),
 		Level:      zapcore.ErrorLevel,
@@ -88,6 +91,7 @@ func assertWAFMessageKind(t *testing.T, message, kind string) {
 		zap.String("uri", "/"+marker),
 		zap.String("client_ip", "203.0.113.8"),
 		zap.Int("rule_id", 941100),
+		zap.String("kind", marker),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,9 +104,18 @@ func assertWAFMessageKind(t *testing.T, message, kind string) {
 	if err := json.Unmarshal(encoded.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 4 || got["msg"] != kind || got["level"] != "error" ||
+	wantFields := 4
+	if kind != "" {
+		wantFields++
+		if got["kind"] != kind {
+			t.Fatalf("encoded WAF diagnostic kind = %#v, want %s", got["kind"], kind)
+		}
+	} else if _, exists := got["kind"]; exists {
+		t.Fatalf("unparsed WAF message has kind: %#v", got)
+	}
+	if len(got) != wantFields || got["msg"] != event || got["level"] != "error" ||
 		got["logger"] != "http.handlers.waf" || got["ts"] != float64(1_700_000_000) {
-		t.Fatalf("encoded WAF metadata = %#v, want only metadata with kind %s", got, kind)
+		t.Fatalf("encoded WAF metadata = %#v, want only metadata for %s with kind %q", got, event, kind)
 	}
 }
 
@@ -141,5 +154,5 @@ SecAction "id:1001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
 	if upstreamMessage != "Failed to process request body" {
 		t.Fatalf("Coraza body error message = %q", upstreamMessage)
 	}
-	assertWAFMessageKind(t, upstreamMessage, "waf_engine_diagnostic")
+	assertWAFMetadata(t, upstreamMessage, "waf_engine_diagnostic", "request_body_error")
 }

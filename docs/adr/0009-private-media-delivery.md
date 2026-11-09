@@ -63,6 +63,13 @@ fixed before implementation. The 48-hour minimum age is far beyond the
 five-minute candidate lifetime, so a request cannot later resume and reference
 an object that reconciliation has proved unreferenced and removed.
 
+## Alternatives rejected
+
+- Stable public object URLs can keep photos reachable after unpublish or
+  deletion.
+- Versioned media storage retains hidden old bytes when deletion must remove
+  them.
+
 ## Consequences
 
 - Object existence alone grants no public access.

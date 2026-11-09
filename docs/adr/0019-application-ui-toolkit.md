@@ -66,7 +66,7 @@ loading or unavailable, the preview renders a projection without photo metadata
 and shows the photo state inline, so the renderer contract that pairs photo
 metadata with an authorized URL still holds.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Hand-built shared components on the existing CSS.** The team would own every
   accessibility detail of dialogs, menus, tabs, and selects.

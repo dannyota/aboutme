@@ -73,7 +73,7 @@ bounded and may require a new login; they never create a second successor.
 Revoking either member of a rotation pair also revokes its live lineage partner,
 so a device action cannot leave the paired credential active.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Cognito-backed passwords.** Splits account and session authority across two
   systems; moving every provider and session to Cognito locks identity to one

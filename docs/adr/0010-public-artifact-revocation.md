@@ -123,6 +123,13 @@ its commit:
 - the server drops its cached `/sitemap.xml` and `/llms.txt` when it sees that
   notification.
 
+## Alternatives rejected
+
+- A 60-second public cache can serve artifacts after revocation.
+- SSE alone cannot protect crawlers, clients without JavaScript, or new cache
+  hits.
+- Best-effort invalidation cannot define a privacy boundary.
+
 ## Consequences
 
 - Unpublish, delete, and rename have immediate public effect at the cost of an

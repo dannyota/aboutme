@@ -111,7 +111,7 @@ otherwise for the public page on screen.
 - The page bar takes the light or ink-black values of its scoped tokens to match
   the page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **The toolkit default, or the grey desk.** Consistent and cheap, but generic.
 - **Gradient everywhere, or a gradient logo.** Competes with the resume, weakens
