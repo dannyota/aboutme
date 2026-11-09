@@ -68,3 +68,13 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 Consolidates former ADRs 0002 (renderer split), 0003 (SSE and HTTP autosave),
 and 0007 (unversioned health endpoints), all accepted 2026-08-01 and unchanged
 in substance.
+
+### Amendment: Preview line breaks (2026-11-10)
+
+Accepted by the owner: one renderer still produces the preview, the public
+page, and the PDF, but a word that ends within about 0.4 px of the line edge
+can wrap differently in the editor preview than in the PDF. The preview may
+differ from the PDF by at most two such line breaks, and only in the cases
+`apps/web/e2e/preview-gap-expected.json` lists. Page breaks, missing words, and
+extra words stay at zero. Chromium print is authoritative, and the preview-gap
+gate enforces these ceilings.

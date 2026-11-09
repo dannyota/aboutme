@@ -119,3 +119,10 @@ only after the contract's Linux and macOS coverage and mutation proofs pass.
 - Former ADR 0052 (2026-09-24): guarded token edits to generated primitives,
   replacing 0029's "never hand-styled" rule. Former ADR 0065 added the
   `destructive` variant to the guarded edits.
+
+### Amendment: Preview line breaks (2026-11-10)
+
+Accepted by the owner: "the same pixels" requires renderer isolation, not
+identical text measurement. The editor preview may wrap a few words differently
+from the PDF within the limits of
+[ADR 0002](0002-system-architecture.md#amendment-preview-line-breaks-2026-11-10).
