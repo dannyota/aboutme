@@ -322,22 +322,21 @@ sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
 
-`coraza-matches` and `coraza-unparsed` do not send mail. Each watcher run writes
-one journal line with match and unparsed counts for the preceding hour:
+Each watcher run journals hourly totals without sending mail:
 
 ```sh
 sudo journalctl -u aboutme-watch --since -1h -o cat
 ```
 
-The line contains only `coraza counts in the last hour: matches=N unparsed=N`,
-including zeros. A malformed log or unknown record kind still sends
+`coraza counts in the last hour: matches=N unparsed=N diagnostics=N` is the only
+output, including zeros. Malformed logs or unknown record kinds still send
 `coraza-log-invalid` mail; inspect the WAF log format and reader on the host.
 
-Coraza counts rule-match records, not distinct requests. Its metadata lives in
-`/run/aboutme/caddy-log/waf/` on tmpfs, in current and rotated serving and
-maintenance logs. Summarize timestamps, levels, message kinds, and rule IDs;
-these records do not establish response status or successful access. Check the
-configured Coraza mode before interpreting a match as a blocked request.
+Coraza counts rule-match records, not distinct requests. Inspect current and
+rotated serving and maintenance metadata logs on tmpfs at
+`/run/aboutme/caddy-log/waf/` for timestamps, levels, message types, diagnostic
+kinds, and rule IDs. These records do not prove response status or successful
+access. Check the configured Coraza mode before treating a match as blocked.
 
 ### Host Telegram setup and rotation
 

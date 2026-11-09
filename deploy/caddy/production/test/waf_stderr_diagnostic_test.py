@@ -25,10 +25,26 @@ CLEAN_LINES = (
     '{"rule_id":"949110ms"}',
     'rule_id=941100.1 chain_rule_id=949110ms other_rule_id=941100',
     '{"client_ip_headers":["X-Forwarded-For"],"other_remote_ip":"benign"}',
-    '{"logger":"http.handlers.waf","msg":"waf_engine_diagnostic"}',
     '{"ts":"2026-10-10T01:02:03.000000004Z","level":"error","msg":"http_error"}',
     'Coraza: engine initialized',
     json.dumps({"msg": '{"ts":1791966300.949110,"duration":"941100ms"}'}),
+)
+CLEAN_LINES += tuple(
+    json.dumps({
+        "ts": 1791966300.9411001, "level": "error", "logger": "http.handlers.waf",
+        "msg": "waf_engine_diagnostic", "kind": kind,
+    })
+    for kind in (
+        "macro_key_missing", "serial_log_writer_error", "audit_log_init_error",
+        "audit_log_write_error", "request_length_invalid", "setvar_collection_not_map",
+        "setvar_collection_nil", "invalid_value", "invalid_range", "invalid_status",
+        "invalid_audit_log_part", "unknown_toggle", "invalid_limit", "invalid_rule_id",
+        "invalid_log_level", "regex_collection_unsupported", "string_collection_unsupported",
+        "request_headers_repeated", "request_headers_interrupted", "request_body_interrupted",
+        "request_body_error", "response_headers_repeated", "response_headers_interrupted",
+        "response_body_interrupted", "response_body_error", "transaction_close_error",
+        "interruption_summary",
+    )
 )
 LEAK_LINES = (
     (("rule-id-text", "rule-match-marker"),
@@ -157,6 +173,57 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
         self.assertNotIn("marker3f8a", json.dumps(records))
         self.assertNotIn("203.0.113.8", json.dumps(records))
 
+    def test_unknown_diagnostic_kind_is_rejected(self):
+        for kind in ("arbitrary-text", "", None, 1, [], {}):
+            with self.subTest(kind=kind):
+                records = self.records(json.dumps({
+                    "ts": 1791966300.9411001, "level": "error",
+                    "logger": "http.handlers.waf", "msg": "waf_engine_diagnostic",
+                    "kind": kind,
+                }))
+                self.assertEqual(records, [{
+                    "stream": "stderr", "line": 1, "pattern": "invalid-diagnostic",
+                    "logger": "http.handlers.waf", "message_kind": "waf-engine-diagnostic",
+                }])
+
+    def test_extra_diagnostic_field_is_rejected(self):
+        records = self.records(json.dumps({
+            "ts": 1791966300.9411001, "level": "error", "logger": "http.handlers.waf",
+            "msg": "waf_engine_diagnostic", "kind": "macro_key_missing",
+            "extra": "extramarker3f8a",
+        }))
+        self.assertEqual(records, [{
+            "stream": "stderr", "line": 1, "pattern": "invalid-diagnostic",
+            "logger": "http.handlers.waf", "message_kind": "waf-engine-diagnostic",
+        }])
+
+    def test_diagnostic_fields_must_be_present_once(self):
+        fields = {
+            "ts": 1791966300.9411001, "level": "error", "logger": "http.handlers.waf",
+            "msg": "waf_engine_diagnostic", "kind": "macro_key_missing",
+        }
+        for key in fields:
+            lines = [json.dumps(fields)[:-1] + "," + json.dumps(key) + ":" +
+                     json.dumps(fields[key]) + "}"]
+            if key != "msg":
+                lines.append(json.dumps({name: value for name, value in fields.items()
+                                         if name != key}))
+            for line in lines:
+                with self.subTest(key=key, line=line):
+                    self.assertEqual([record["pattern"] for record in self.records(line)],
+                                     ["invalid-diagnostic"])
+
+    def test_diagnostic_kind_and_source_fields_are_redacted(self):
+        records = self.records(json.dumps({
+            "ts": 1791966300.9411001, "level": "error", "logger": "http.handlers.waf",
+            "msg": "waf_engine_diagnostic", "kind": "kindmarker3f8a",
+            "client_ip": "203.0.113.8",
+        }))
+        self.assertEqual(records, [{
+            "stream": "stderr", "line": 1, "pattern": pattern,
+            "logger": "http.handlers.waf", "message_kind": "waf-engine-diagnostic",
+        } for pattern in ("client-ip-key", "invalid-diagnostic")])
+
     def test_non_json_rule_message_has_a_fixed_category(self):
         record = self.records('Coraza: [id "941100"] tokenmarker3f8a')[0]
         self.assertEqual(record["message_kind"], "coraza-rule-match")
@@ -214,6 +281,26 @@ class WAFStderrDiagnosticTest(unittest.TestCase):
                         } for pattern in patterns])
                         self.assertNotIn("203.0.113.8", result.stderr)
                         self.assertNotIn("2001:db8", result.stderr)
+
+    def test_shell_gate_rejects_invalid_diagnostics_in_both_modes_and_streams(self):
+        for mode in ("serving", "maintenance"):
+            for stream in ("stdout", "stderr"):
+                for fields in ({"kind": "arbitrary-text"}, {"extra": "extramarker3f8a"}):
+                    with self.subTest(mode=mode, stream=stream, fields=fields):
+                        line = json.dumps({
+                            "ts": 1791966300.9411001, "level": "error",
+                            "logger": "http.handlers.waf", "msg": "waf_engine_diagnostic",
+                            "kind": "macro_key_missing", **fields,
+                        })
+                        result = self.run_gate(mode, line if stream == "stdout" else "",
+                                               line if stream == "stderr" else "")
+                        self.assertEqual(result.returncode, 1)
+                        self.assertEqual(result.stdout, "")
+                        self.assertEqual(json.loads(result.stderr), {
+                            "stream": stream, "line": 1, "pattern": "invalid-diagnostic",
+                            "logger": "http.handlers.waf",
+                            "message_kind": "waf-engine-diagnostic",
+                        })
 
     def test_shell_gate_preserves_maintenance_marker_detection(self):
         line = '{"msg":"maintmarker6e4d"}'
