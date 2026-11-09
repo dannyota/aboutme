@@ -622,8 +622,9 @@ import configparser, sys
 unit = configparser.ConfigParser(interpolation=None)
 unit.read(sys.argv[1])
 service = unit["Service"]
-# Allow the credential lock (20s), request (15s), and outcome cleanup to finish.
-assert 35 < int(service["TimeoutStartSec"].removesuffix("s")) <= 120
+# Allow the credential lock (20s), three requests (15s each), two waits (10s
+# each), and outcome cleanup to finish within the 100s start timeout.
+assert int(service["TimeoutStartSec"].removesuffix("s")) == 100
 assert 1 <= int(service["TimeoutStopSec"].removesuffix("s")) <= 10
 assert service["StandardError"] == "journal"
 assert service["StandardOutput"] == "null"
