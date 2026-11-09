@@ -240,3 +240,71 @@ describe('view start owner and signedIn callback', () => {
       expect(onStart).not.toHaveBeenCalled();
     });
 });
+
+// One challenge the Go server issues and the solution its verifier accepts:
+// the fixed vector in apps/server/internal/viewcount/challenge_test.go. The
+// beacon solves it with the real altcha-lib solver, so a change in either
+// library or in how the beacon calls the solver fails one of the two tests.
+const SERVER_CHALLENGE = {
+  parameters: {
+    algorithm: 'PBKDF2/SHA-256',
+    nonce: '51fbdcb225ff905fd95f74004f1d8bf3',
+    salt: 'e9bab6504c9be5f5505966b5d465eda0',
+    cost: 1000,
+    keyLength: 32,
+    keyPrefix: '10af46ffb1c0c5a2b152bc0a46f02db9',
+    keySignature:
+      '0ba76e0d148fc3792b7db085a69a85d024600285a8ec994cd17271a654e9d502',
+    data: { view: 'AQIDBAUGBwgJCgsMDQ4PEA' },
+  },
+  signature: '7d447670d8367e6e84361c00482b3cfe96dc87d68c31ec81dea1431ae69244eb',
+};
+const SERVER_SOLUTION = {
+  counter: 437,
+  derivedKey:
+    '10af46ffb1c0c5a2b152bc0a46f02db92ddcfff3d20793675c70f45b8861ce73',
+};
+
+describe('proof of work with the real solver', () => {
+  it('sends the solution the server verifier accepts', async () => {
+    // The solver yields to the event loop through real timers; the
+    // visible-time wait runs on the injected clock instead.
+    vi.useRealTimers();
+    let clock = 0;
+    const target = new EventTarget();
+    const fetchImpl = vi.fn(async (url: string) => (
+      url.includes('/collect')
+        ? ({ ok: true, json: async () => ({}) } as unknown as Response)
+        : okStartResponse({
+            owner: false,
+            token: 'tok',
+            challenge: SERVER_CHALLENGE,
+          })
+    ));
+    startViewBeacon({
+      slug: 'ada-lovelace',
+      fetch: fetchImpl as unknown as typeof fetch,
+      document: new FakeDoc() as unknown as Document,
+      target,
+      now: () => clock,
+      setTimeout: (() => 0) as unknown as typeof setTimeout,
+      clearTimeout: () => {},
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    await flushMicrotasks();
+    clock = 8_000;
+    target.dispatchEvent(trustedEvent('scroll'));
+    await vi.waitFor(
+      () => expect(collectCalls(fetchImpl)).toHaveLength(1),
+      { timeout: 30_000 },
+    );
+    const [, init] = fetchImpl.mock.calls.find(
+      ([u]) => String(u).includes('/collect'),
+    )!;
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      token: 'tok',
+      challenge: SERVER_CHALLENGE,
+      solution: SERVER_SOLUTION,
+    });
+  }, 60_000);
+});

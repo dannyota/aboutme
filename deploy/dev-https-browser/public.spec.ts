@@ -2,6 +2,7 @@ import {
   expect,
   test,
   type BrowserContext,
+  type ConsoleMessage,
   type Page,
 } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
@@ -21,6 +22,7 @@ import {
   pinEnglish,
   signInWithGoogle,
   startLinkedInAuthorize,
+  WAIT_WARM_MS,
   waitForHydration,
 } from './harness-lib';
 import {
@@ -28,6 +30,7 @@ import {
   httpFailureStatus,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedAnonymousMeConsole,
 } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
@@ -361,10 +364,31 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   // Set right after the resume is deleted: only then is a 404 for the page
   // document itself expected.
   let deleted = false;
+  // The signed-out viewer's one visit to /guide/mcp, the application page
+  // the gated reads below run from. Its shell's GET /api/v1/me gets a 401,
+  // and the browser logs that once. Only that one line, from that page,
+  // while that visit is open, is excused; any other /api/v1/me failure, a
+  // second one, or one from another viewer still counts.
+  let guideVisit: { readonly page: Page; excused: boolean } | null = null;
+  // excuseGuideVisitMeConsole reports whether message is that one line, and
+  // uses up the visit's single excuse when it is.
+  const excuseGuideVisitMeConsole = (message: ConsoleMessage): boolean => {
+    const visit = guideVisit;
+    if (visit === null || visit.excused) return false;
+    const source = message.page();
+    if (source !== visit.page) return false;
+    if (new URL(source.url()).pathname !== '/guide/mcp') return false;
+    if (!isExpectedAnonymousMeConsole(message.text(), message.location().url)) {
+      return false;
+    }
+    visit.excused = true;
+    return true;
+  };
   // Gated routes answer 404 to an anonymous fetch on purpose, so the
   // browser's own console line for those exact reads is expected.
   const attach = pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) => {
+      if (excuseGuideVisitMeConsole(message)) return false;
       if (httpFailureStatus(message.text()) !== 404) return true;
       let path = '';
       try {
@@ -487,13 +511,34 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.gate = true;
 
   stage('view-gated-routes');
+  // The page's shell reads /api/v1/me once it hydrates, after goto returns.
+  // Waiting for that read and its console line keeps both inside this visit
+  // on every run, instead of racing the next navigation away from the page.
+  guideVisit = { page: anon, excused: false };
+  const meRead = anon.waitForResponse(
+    (response) => response.url() === `${ORIGIN}/api/v1/me`
+      && response.request().method() === 'GET'
+      && response.status() === 401,
+    { timeout: WAIT_WARM_MS },
+  );
+  const meConsole = anon.waitForEvent('console', {
+    predicate: (message) => isExpectedAnonymousMeConsole(
+      message.text(),
+      message.location().url,
+    ),
+    timeout: WAIT_WARM_MS,
+  });
   await anon.goto(`${ORIGIN}/guide/mcp`);
+  await Promise.all([meRead, meConsole]);
+  expect(guideVisit.excused).toBe(true);
   expect(await gatedStatuses(anon, slug, true)).toEqual({
     json: 404,
     pdf: 404,
     start: 404,
     live: 404,
   });
+  // The visit ends here: from now on every /api/v1/me failure counts.
+  guideVisit = null;
   viewSteps.gatedRoutes = true;
 
   stage('view-owner-gated');
