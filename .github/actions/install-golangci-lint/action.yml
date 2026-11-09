@@ -1,0 +1,20 @@
+name: Install golangci-lint
+description: >-
+  Installs the pinned Linux amd64 golangci-lint from the archive that
+  ./.github/actions/ci-tools loaded and puts it on PATH. It has no cache or
+  download fallback, so it fails when the package did not load.
+runs:
+  using: composite
+  steps:
+    - name: Verify and install golangci-lint
+      shell: bash
+      run: |
+        archive="$RUNNER_TEMP/ci-tools/golangci-lint-2.15.0-linux-amd64.tar.gz"
+        if [ ! -f "$archive" ]; then
+          echo "::error::$archive is missing: the ci-tools step did not load the package, and golangci-lint has no other source"
+          exit 1
+        fi
+        echo "9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea  $archive" | sha256sum -c -
+        mkdir -p "$RUNNER_TEMP/golangci-lint"
+        tar -xzf "$archive" -C "$RUNNER_TEMP/golangci-lint" --strip-components=1 golangci-lint-2.15.0-linux-amd64/golangci-lint
+        echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"

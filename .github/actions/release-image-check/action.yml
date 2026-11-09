@@ -7,6 +7,11 @@ inputs:
 runs:
   using: composite
   steps:
+    # Trivy comes only from the ci-tools package; load it before the build so
+    # a failed load stops the job early.
+    - name: Load pinned CI tools
+      id: load-ci-tools
+      uses: ./.github/actions/ci-tools
     - name: Build release image
       id: build-release-image
       shell: bash
@@ -87,7 +92,7 @@ runs:
     - name: Install Trivy
       id: install-trivy
       shell: bash
-      run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
+      run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"
     # Reports cover public image packages only and expire after seven days.
     - name: Scan for fixable HIGH/CRITICAL vulnerabilities
       id: scan-image

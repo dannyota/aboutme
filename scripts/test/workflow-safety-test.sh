@@ -38,33 +38,52 @@ const hosted = [
   ...readdirSync(join(root, ".github/workflows")).filter((file) => file.endsWith(".yml")).map((file) => `.github/workflows/${file}`),
   ...readdirSync(join(root, ".github/actions"), { recursive: true }).filter((file) => file.endsWith("/action.yml")).map((file) => `.github/actions/${file}`),
 ];
-function checkRetries(command) {
-  assert.match(command, /(?:^|\s)(?:-\w*f\w*|--fail)(?=\s|$)/, "tool curl fails on HTTP errors");
-  for (const flag of ["--retry 5", "--retry-delay 5", "--retry-all-errors", "--retry-max-time 120"]) {
-    assert.match(command, new RegExp(`(?:^|\\s)${flag.replaceAll(" ", "\\s+")}(?=\\s|$)`), `tool curl requires ${flag}`);
-  }
+// CI never fetches a tool from GitHub releases, the GitHub API, or GHCR with
+// curl or wget: tools come from the ci-tools package or a verified cache.
+function checkNoDirectDownload(command) {
+  assert.ok(!(/\b(?:curl|wget)\b/.test(command) && /https:\/\/(?:github\.com\/[^/]+\/[^/]+\/releases\/download\/|api\.github\.com|ghcr\.io|(?:[^/]+\.)?pkg\.github\.com)/.test(command)),
+    `tools come from the ci-tools package, not a direct download: ${command}`);
 }
 for (const file of hosted) {
   for (const step of steps(load(file))) {
-    for (const command of (step.run ?? "").replace(/\\\r?\n\s*/g, " ").split("\n")) {
-      if (/\bcurl\b/.test(command) && /https:\/\/(?:github\.com\/[^/]+\/[^/]+\/releases\/download\/|api\.github\.com|ghcr\.io|(?:[^/]+\.)?pkg\.github\.com)/.test(command)) {
-        checkRetries(command);
-      }
-    }
+    for (const command of (step.run ?? "").replace(/\\\r?\n\s*/g, " ").split("\n")) checkNoDirectDownload(command);
   }
 }
-const validCurl = "curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 -o tool.zip https://github.com/owner/tool/releases/download/v1/tool.zip";
-for (const flag of ["-fsSL", "--retry 5", "--retry-delay 5", "--retry-all-errors", "--retry-max-time 120"]) {
-  assert.throws(() => checkRetries(validCurl.replace(flag, "")), /tool curl/);
+const releaseCurl = "curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --retry-max-time 120 -o tool.zip https://github.com/owner/tool/releases/download/v1/tool.zip";
+for (const command of [
+  releaseCurl,
+  "curl -fsSL -o tool.zip https://github.com/owner/tool/releases/download/v1/tool.zip",
+  "wget -q https://github.com/owner/tool/releases/download/v1/tool.zip",
+  "curl -fsSL https://api.github.com/repos/owner/tool/releases/latest",
+  "curl -fsSL -o tool.tar https://ghcr.io/v2/owner/tool/blobs/sha256:0",
+]) {
+  assert.throws(() => checkNoDirectDownload(command), /ci-tools package/);
 }
-assert.throws(() => checkRetries(validCurl.replace("--retry 5", "--retry 50")), /tool curl/);
-const packageImage = "ghcr.io/dannyota/ci-tools@sha256:89b209b970088035112da16c3355b3cad0e930bee8e3cba0778f1788a4e881a6";
+checkNoDirectDownload("curl -fsS -o /dev/null http://127.0.0.1:3000/");
+const packageImage = "ghcr.io/dannyota/ci-tools@sha256:3b4625da1c1fb5207f918734a4bd89dada662f3366a868fe3d04a09f36327225";
+// Trivy's version and archive digests come from the script that installs it.
+const securityScan = readFileSync(join(root, "scripts/security-scan.sh"), "utf8");
+const trivyPin = (name) => securityScan.match(new RegExp(`^${name}=(\\S+)$`, "m"))[1];
+const trivyVersion = trivyPin("TRIVY_VERSION");
+const trivyArchives = [
+  [`trivy_${trivyVersion}_Linux-64bit.tar.gz`, trivyPin("TRIVY_SHA256_LINUX_AMD64")],
+  [`trivy_${trivyVersion}_Linux-ARM64.tar.gz`, trivyPin("TRIVY_SHA256_LINUX_ARM64")],
+];
+const golangciVersion = readFileSync(join(root, ".tool-versions"), "utf8").match(/^golangci-lint\s+(\S+)$/m)[1];
+const golangci = {
+  version: golangciVersion,
+  directory: `golangci-lint-${golangciVersion}-linux-amd64`,
+  packaged: `golangci-lint-${golangciVersion}-linux-amd64.tar.gz`,
+  digest: "9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea",
+};
 const packageArchives = [
   ["caddy_2.11.9_linux_amd64.tar.gz", "5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb"],
   ["tofu_1.12.6_linux_amd64.zip", "5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8"],
   ["providers/registry.opentofu.org/hashicorp/aws/terraform-provider-aws_6.64.0_linux_amd64.zip", "d7e9cc87ada1314e6d8ecc5849385a8f8f45757bd2c145b8657f015c65e5078d"],
   ["providers/registry.opentofu.org/cloudflare/cloudflare/terraform-provider-cloudflare_5.27.0_linux_amd64.zip", "ae47a9f29594d57e634cc0b5b96a18da5a364f43cbd735622ce5fe808728065f"],
   ["providers/registry.opentofu.org/vngcloud/vngcloud/terraform-provider-vngcloud_1.3.21_linux_amd64.zip", "d0f8ae399a3c7a8a6d8d2b569542e977426498270062f8d286a202923ffa8fc1"],
+  [golangci.packaged, golangci.digest],
+  ...trivyArchives,
 ];
 function checkPackage(action) {
   const step = action.runs.steps.find((s) => /podman login/.test(s.run ?? ""));
@@ -92,7 +111,9 @@ for (const [from, to] of [
   assert.throws(() => checkPackage(changed), undefined, "ci-tools: reject unpinned package or unsafe login");
 }
 const ciTools = "./.github/actions/ci-tools";
-const toolInstaller = /^\.\/\.github\/actions\/install-(?:caddy|opentofu)$/;
+const toolInstaller = /^\.\/\.github\/actions\/install-(?:caddy|opentofu|golangci-lint)$/;
+const trivyInstall = /\bscripts\/security-scan\.sh install-trivy\b/;
+const installsTool = (step) => toolInstaller.test(step.uses ?? "") || trivyInstall.test(step.run ?? "");
 const localActions = new Map(hosted.filter((file) => file.startsWith(".github/actions/")).map((file) => [
   `./${file.replace(/\/action\.yml$/, "")}`, load(file),
 ]));
@@ -110,12 +131,13 @@ function checkPackageSteps(list, label) {
   assert.ok(loaders.length <= 1, `${label}: load ci-tools only once`);
   const packageIndex = list.findIndex((step) => step.uses === ciTools);
   for (const [index, step] of list.entries()) {
-    if (toolInstaller.test(step.uses ?? "")) {
-      assert.ok(packageIndex >= 0 && packageIndex < index, `${label}: load ci-tools before ${step.uses}`);
+    if (installsTool(step)) {
+      assert.ok(packageIndex >= 0 && packageIndex < index, `${label}: load ci-tools before ${step.uses ?? step.run}`);
     }
   }
+  // Installers have no download fallback, so the job depends on the load.
   for (const loader of loaders) {
-    assert.equal(loader["continue-on-error"], true, `${label}: allow verified cache or release fallback`);
+    assert.equal(loader["continue-on-error"], undefined, `${label}: the ci-tools load must fail the job`);
   }
   return loaders.length > 0;
 }
@@ -123,21 +145,28 @@ function checkPackagePermissions(doc, actions = localActions, label = "workflow"
   for (const [id, job] of Object.entries(doc.jobs ?? {})) {
     const packaged = checkPackageSteps(expandSteps(job.steps ?? [], actions), `${label}:${id}`);
     if (!packaged && job.uses !== "./.github/workflows/vn-infra.yml") continue;
-    assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${id}: explicit read-only package permissions`);
+    // A publishing job already holds packages: write, which includes read.
+    if (job.permissions?.packages === "write") {
+      assert.equal(job.permissions.contents, "read", `${id}: read-only contents beside existing package permissions`);
+    } else {
+      assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, `${id}: explicit read-only package permissions`);
+    }
   }
 }
-const loader = { uses: ciTools, "continue-on-error": true };
-for (const tool of ["caddy", "opentofu"]) {
-  const installer = { uses: `./.github/actions/install-${tool}` };
+const loader = { uses: ciTools };
+for (const [tool, installer] of [
+  ...["caddy", "opentofu", "golangci-lint"].map((name) => [name, { uses: `./.github/actions/install-${name}` }]),
+  ["trivy", { run: 'scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"' }],
+]) {
   checkPackageSteps([loader, installer], tool);
   for (const invalid of [
     [installer],
     [installer, loader],
     [loader, loader, installer],
-    [{ uses: ciTools }, installer],
-    [{ ...loader, "continue-on-error": false }, installer],
+    [{ ...loader, "continue-on-error": true }, installer],
+    [{ ...loader, "continue-on-error": "${{ true }}" }, installer],
   ]) {
-    assert.throws(() => checkPackageSteps(invalid, tool), /ci-tools|fallback/, `${tool}: reject missing, late, duplicate, or blocking loader`);
+    assert.throws(() => checkPackageSteps(invalid, tool), /ci-tools/, `${tool}: reject missing, late, duplicate, or optional loader`);
   }
   const wrapper = "./.github/actions/fixture-wrapper";
   const nested = "./.github/actions/fixture-nested";
@@ -164,6 +193,10 @@ for (const tool of ["caddy", "opentofu"]) {
   } };
   assert.throws(() => checkPackagePermissions(separate), /load ci-tools before/, `${tool}: a loader in another job does not provide tools`);
 }
+const publisher = { jobs: { publish: { permissions: { contents: "read", packages: "write" }, steps: [loader, { uses: "./.github/actions/install-caddy" }] } } };
+checkPackagePermissions(publisher);
+publisher.jobs.publish.permissions.contents = "write";
+assert.throws(() => checkPackagePermissions(publisher), /read-only contents/, "a publishing job keeps read-only contents");
 for (const [name, action] of localActions) {
   if (action.runs?.using !== "composite") continue;
   checkPackageSteps(expandSteps(action.runs.steps, localActions), name);
@@ -193,10 +226,13 @@ function checkInstaller(action, tool) {
   assert.equal(restore.with.path, `\${{ runner.temp }}/${tool.archive}`);
   assert.ok(restore.with.key.includes(tool.version) && restore.with.key.includes(tool.digest), `${tool.name}: version and digest cache key`);
   assert.equal(restore.with["restore-keys"], undefined, `${tool.name}: exact archive cache only`);
-  const download = list.find((step) => /\bcurl\b/.test(step.run ?? ""));
-  assert.equal(download.if, undefined, `${tool.name}: select package before cache or download`);
-  assert.equal(download.env.CACHE_HIT, `\${{ steps.${restore.id}.outputs.cache-hit }}`, `${tool.name}: preserve cache hit result`);
-  checkRetries(download.run);
+  const select = list.find((step) => (step.run ?? "").includes(`$RUNNER_TEMP/ci-tools/${tool.packaged}`));
+  assert.ok(select, `${tool.name}: select the ci-tools archive`);
+  assert.equal(select.if, undefined, `${tool.name}: select package before cache`);
+  assert.equal(select.env?.CACHE_HIT, `\${{ steps.${restore.id}.outputs.cache-hit }}`, `${tool.name}: preserve cache hit result`);
+  for (const step of list) {
+    assert.ok(!/\b(?:curl|wget)\b|https?:\/\//.test(step.run ?? ""), `${tool.name}: no download fallback`);
+  }
   const install = list.find((step) => (step.run ?? "").includes(tool.extract));
   assert.equal(install.if, undefined, `${tool.name}: verify hits and misses`);
   assert.ok(install.run.includes(tool.digest), `${tool.name}: pinned checksum`);
@@ -204,8 +240,8 @@ function checkInstaller(action, tool) {
   assert.equal(save.if, `\${{ github.ref == 'refs/heads/main' && steps.${restore.id}.outputs.cache-hit != 'true' }}`, `${tool.name}: only main saves misses`);
   assert.equal(save.with.path, restore.with.path);
   assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`);
-  assert.ok(list.indexOf(restore) < list.indexOf(download) && list.indexOf(download) < list.indexOf(install) && list.indexOf(install) < list.indexOf(save), `${tool.name}: cache only verified archives`);
-  return { download, install };
+  assert.ok(list.indexOf(restore) < list.indexOf(select) && list.indexOf(select) < list.indexOf(install) && list.indexOf(install) < list.indexOf(save), `${tool.name}: cache only verified archives`);
+  return { select, install };
 }
 function run(command, args, env = {}) {
   return spawnSync(command, args, { encoding: "utf8", env: { ...process.env, ...env } });
@@ -270,13 +306,14 @@ for (const scenario of ["valid", "corrupt-archive", "corrupt-manifest", "copy-fa
 }
 for (const tool of tools) {
   const action = load(`.github/actions/install-${tool.name}/action.yml`);
-  const { download, install } = checkInstaller(action, tool);
+  const { select, install } = checkInstaller(action, tool);
   for (const mutate of [
     (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/save@")).if = "${{ true }}"; },
     (a) => { a.runs.steps.find((s) => s.run?.includes(tool.extract)).if = "${{ false }}"; },
     (a) => { const s = a.runs.steps.find((s) => s.run?.includes(tool.extract)); s.run = s.run.replace(`${tool.hash}sum -c -`, "true"); },
-    (a) => { delete a.runs.steps.find((s) => s.run?.includes("curl")).env.CACHE_HIT; },
+    (a) => { delete a.runs.steps.find((s) => s.env?.CACHE_HIT).env.CACHE_HIT; },
     (a) => { a.runs.steps.find((s) => s.uses?.includes("cache/restore@")).with.key = tool.version; },
+    (a) => { a.runs.steps.find((s) => s.env?.CACHE_HIT).run += `curl -fsSL -o "$RUNNER_TEMP/${tool.archive}" https://github.com/owner/tool/releases/download/v${tool.version}/${tool.packaged}\n`; },
   ]) {
     const changed = structuredClone(action);
     mutate(changed);
@@ -308,22 +345,104 @@ for (const tool of tools) {
       assert.equal(run(binary, []).stdout, "verified-tool\n", `${tool.name}: verified binary reaches PATH`);
     }
   }
+  // Stub fetchers log any attempt to get the tool some other way.
   const fakeBin = join(fixture, "bin");
   mkdirSync(fakeBin);
-  writeFileSync(join(fakeBin, "curl"), "#!/bin/sh\nexit 22\n");
-  chmodSync(join(fakeBin, "curl"), 0o755);
-  const selectEnv = { PATH: `${fakeBin}:${process.env.PATH}`, RUNNER_TEMP: fixture, CACHE_HIT: "false" };
-  assert.notEqual(run("bash", ["-e", "-o", "pipefail", "-c", download.run], selectEnv).status, 0, `${tool.name}: exhausted download fails`);
+  for (const name of ["curl", "wget"]) {
+    writeFileSync(join(fakeBin, name), `#!/bin/sh\nprintf '%s\\n' "${name} $*" >>"$FETCH_LOG"\n`);
+    chmodSync(join(fakeBin, name), 0o755);
+  }
+  const fetchLog = join(fixture, "fetch.log");
+  const selectEnv = { PATH: `${fakeBin}:${process.env.PATH}`, RUNNER_TEMP: fixture, CACHE_HIT: "false", FETCH_LOG: fetchLog };
+  const missing = run("bash", ["-e", "-o", "pipefail", "-c", select.run], selectEnv);
+  assert.notEqual(missing.status, 0, `${tool.name}: no package and a cache miss fails`);
+  assert.ok(`${missing.stdout}${missing.stderr}`.includes(tool.packaged), `${tool.name}: name the missing package archive`);
+  assert.ok(!existsSync(join(fixture, tool.archive)), `${tool.name}: no archive without the package or cache`);
   writeFileSync(join(fixture, tool.archive), "cached archive");
-  assert.equal(run("bash", ["-e", "-o", "pipefail", "-c", download.run], { ...selectEnv, CACHE_HIT: "true" }).status, 0, `${tool.name}: cache hit avoids download`);
+  assert.equal(run("bash", ["-e", "-o", "pipefail", "-c", select.run], { ...selectEnv, CACHE_HIT: "true" }).status, 0, `${tool.name}: cache hit installs without the package`);
   assert.equal(readFileSync(join(fixture, tool.archive), "utf8"), "cached archive");
   mkdirSync(join(fixture, "ci-tools"));
   writeFileSync(join(fixture, "ci-tools", tool.packaged), readFileSync(archive));
   for (const cacheHit of ["true", "false"]) {
     writeFileSync(join(fixture, tool.archive), "cached archive");
-    const result = run("bash", ["-e", "-o", "pipefail", "-c", download.run], { ...selectEnv, CACHE_HIT: cacheHit });
+    const result = run("bash", ["-e", "-o", "pipefail", "-c", select.run], { ...selectEnv, CACHE_HIT: cacheHit });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readFileSync(join(fixture, tool.archive)), readFileSync(archive), `${tool.name}: package wins over cache and failed download`);
+    assert.deepEqual(readFileSync(join(fixture, tool.archive)), readFileSync(archive), `${tool.name}: package wins over cache`);
+  }
+  assert.ok(!existsSync(fetchLog), `${tool.name}: never falls back to a fetch`);
+}
+// golangci-lint has one source: the verified ci-tools archive. No cache, no
+// release download, and no build from source may stand in for it.
+function checkPackagedInstaller(action) {
+  assert.equal(action.runs?.using, "composite", "golangci-lint: composite installer");
+  assert.equal(action.runs.steps.length, 1, "golangci-lint: one install step and no second source");
+  const [install] = action.runs.steps;
+  assert.equal(install.uses, undefined, "golangci-lint: no cache or other action as a second source");
+  assert.equal(install.if, undefined, "golangci-lint: always verify");
+  const script = install.run ?? "";
+  assert.ok(!/\b(?:curl|wget|gh\s+release|go\s+(?:install|run|get|tool))\b|https?:\/\//.test(script), "golangci-lint: no download fallback");
+  assert.ok(script.includes(golangci.digest), "golangci-lint: pinned checksum");
+  assert.ok(script.includes(`$RUNNER_TEMP/ci-tools/${golangci.packaged}`), "golangci-lint: packaged archive");
+  const verify = script.indexOf("sha256sum -c -");
+  const extract = script.indexOf("tar -xzf");
+  assert.ok(verify >= 0 && verify < extract, "golangci-lint: verify before extraction");
+  assert.ok(script.includes(` ${golangci.directory}/golangci-lint\n`), "golangci-lint: extract only the binary");
+  return install;
+}
+const golangciAction = load(".github/actions/install-golangci-lint/action.yml");
+const golangciInstall = checkPackagedInstaller(golangciAction);
+for (const mutate of [
+  (a) => { a.runs.steps.unshift({ uses: `actions/cache/restore@${cachePin}`, with: { path: "${{ runner.temp }}/golangci-lint.tar.gz", key: golangci.digest } }); },
+  (a) => { a.runs.steps[0].if = "${{ false }}"; },
+  (a) => { a.runs.steps[0].run = a.runs.steps[0].run.replace("sha256sum -c -", "true"); },
+  (a) => { a.runs.steps[0].run += `curl -fsSL -o "$RUNNER_TEMP/ci-tools/${golangci.packaged}" https://github.com/golangci/golangci-lint/releases/download/v${golangci.version}/${golangci.packaged}\n`; },
+  (a) => { a.runs.steps[0].run += `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${golangci.version}\n`; },
+]) {
+  const changed = structuredClone(golangciAction);
+  mutate(changed);
+  assert.throws(() => checkPackagedInstaller(changed), undefined, "golangci-lint: reject a second source or skipped verification");
+}
+const golangciFixture = join(work, "golangci-lint-fixture");
+mkdirSync(join(golangciFixture, golangci.directory), { recursive: true });
+writeFileSync(join(golangciFixture, golangci.directory, "golangci-lint"), "#!/bin/sh\nprintf 'verified-tool\\n'\n");
+chmodSync(join(golangciFixture, golangci.directory, "golangci-lint"), 0o755);
+for (const extra of ["LICENSE", "README.md"]) writeFileSync(join(golangciFixture, golangci.directory, extra), "extra\n");
+const golangciArchive = join(work, golangci.packaged);
+const golangciPacked = run("tar", ["-czf", golangciArchive, "-C", golangciFixture, golangci.directory]);
+assert.equal(golangciPacked.status, 0, golangciPacked.stderr);
+const golangciHash = createHash("sha256").update(readFileSync(golangciArchive)).digest("hex");
+// Stub fetchers log any attempt to get the tool some other way.
+const fetchBin = join(work, "golangci-lint-fetch-bin");
+mkdirSync(fetchBin);
+for (const name of ["curl", "wget", "go", "gh"]) {
+  writeFileSync(join(fetchBin, name), `#!/bin/sh\nprintf '%s\\n' "${name} $*" >>"$FETCH_LOG"\n`);
+  chmodSync(join(fetchBin, name), 0o755);
+}
+for (const scenario of ["valid", "missing", "corrupt"]) {
+  const temp = join(work, `golangci-lint-${scenario}`);
+  mkdirSync(join(temp, "ci-tools"), { recursive: true });
+  const packaged = join(temp, "ci-tools", golangci.packaged);
+  if (scenario === "valid") writeFileSync(packaged, readFileSync(golangciArchive));
+  if (scenario === "corrupt") writeFileSync(packaged, "corrupt archive");
+  const pathFile = join(temp, "path");
+  const fetchLog = join(temp, "fetch.log");
+  const result = run("bash", ["-e", "-o", "pipefail", "-c", golangciInstall.run.replace(golangci.digest, golangciHash)], {
+    PATH: `${fetchBin}:${process.env.PATH}`, RUNNER_TEMP: temp, GITHUB_PATH: pathFile, FETCH_LOG: fetchLog,
+  });
+  assert.ok(!existsSync(fetchLog), `golangci-lint: ${scenario} archive never falls back to a fetch`);
+  if (scenario === "valid") {
+    assert.equal(result.status, 0, result.stderr);
+    const directory = readFileSync(pathFile, "utf8").trim();
+    assert.deepEqual(readdirSync(directory), ["golangci-lint"], "golangci-lint: extract only the binary");
+    assert.equal(run(join(directory, "golangci-lint"), []).stdout, "verified-tool\n", "golangci-lint: verified binary reaches PATH");
+  } else {
+    assert.notEqual(result.status, 0, `golangci-lint: ${scenario} archive fails`);
+    assert.ok(!existsSync(pathFile), `golangci-lint: ${scenario} archive never reaches PATH`);
+    assert.ok(!existsSync(join(temp, "golangci-lint", "golangci-lint")), `golangci-lint: ${scenario} archive never extracts`);
+  }
+  if (scenario === "missing") {
+    const output = `${result.stdout}${result.stderr}`;
+    assert.ok(output.includes(golangci.packaged) && output.includes("ci-tools"), "golangci-lint: name the missing package archive");
   }
 }
 for (const file of ["ci", "vn-infra"]) {
@@ -963,7 +1082,7 @@ assert_image_scan() { # image-scan job-body
     fail 'security-scan Scan released images must bind both release tag inputs in its env'
   fi
   install_step=$(step_block "Install Trivy" "$1")
-  grep -Fxq '        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"' <<<"$install_step" ||
+  grep -Fxq '        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"' <<<"$install_step" ||
     fail 'security-scan must install Trivy before Scan released images'
   awk '
     $0 == "      - name: Install Trivy" { install = NR }

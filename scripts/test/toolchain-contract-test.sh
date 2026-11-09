@@ -152,6 +152,35 @@ grep -Fq "go: .github/actions/setup-go/action.yml has 1.99.0, want $FIXTURE_GO" 
   "$WORK/action-drift.out" ||
   fail "repository contract did not identify the drifted composite action"
 
+# Hosted CI pins golangci-lint by the ci-tools archive name.
+cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
+for action in "$CONTRACT"/.github/actions/*/action.yml; do
+  sed "s/golangci-lint-$FIXTURE_GOLANGCI-linux-amd64/golangci-lint-9.9.9-linux-amd64/g" \
+    "$action" >"$WORK/action.yml"
+  mv "$WORK/action.yml" "$action"
+done
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
+  >"$WORK/golangci-drift.out" 2>&1; then
+  fail "repository contract accepted a golangci-lint archive that differs from .tool-versions"
+fi
+grep -Fq "golangci-lint: hosted CI must contain 'golangci-lint-$FIXTURE_GOLANGCI-linux-amd64.tar.gz'" \
+  "$WORK/golangci-drift.out" ||
+  fail "repository contract did not identify the drifted golangci-lint archive"
+
+# Hosted CI pins Caddy by the ci-tools archive name too.
+cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
+for action in "$CONTRACT"/.github/actions/*/action.yml; do
+  sed "s/caddy_${FIXTURE_CADDY}_linux_amd64/caddy_9.9.9_linux_amd64/g" "$action" >"$WORK/action.yml"
+  mv "$WORK/action.yml" "$action"
+done
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
+  >"$WORK/caddy-drift.out" 2>&1; then
+  fail "repository contract accepted a Caddy archive that differs from .tool-versions"
+fi
+grep -Fq "caddy: hosted CI must contain 'caddy_${FIXTURE_CADDY}_linux_amd64.tar.gz'" \
+  "$WORK/caddy-drift.out" ||
+  fail "repository contract did not identify the drifted Caddy archive"
+
 node --test "$ROOT/scripts/test/workflow-contract.test.mjs"
 
 printf 'toolchain contract tests passed\n'

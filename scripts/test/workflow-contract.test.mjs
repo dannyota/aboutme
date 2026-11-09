@@ -630,7 +630,7 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(manual.permissions, { contents: "read" }, "manual read-only permissions");
   assert.deepEqual(Object.keys(manual.jobs), ["build"], "manual build job set");
   for (const job of Object.values(manual.jobs)) {
-    assert.deepEqual(job.permissions, { contents: "read" }, "manual job read-only permissions");
+    assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, "manual job read-only permissions");
     assert.equal(job["timeout-minutes"], 40, "manual timeout-minutes");
     assert.equal(job.strategy["fail-fast"], false);
     assert.deepEqual(job.strategy.matrix.name, ["server", "web", "caddy", "observer"]);
@@ -696,7 +696,8 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(release.jobs.eligibility.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(release.jobs.release.permissions, { actions: "read", contents: "write" });
   assert.equal(action.runs.using, "composite");
-  assert.deepEqual(action.runs.steps.map((step) => step.id), ["build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "scan-image", "upload-trivy-report"], "shared build-only steps");
+  assert.deepEqual(action.runs.steps.map((step) => step.id), ["load-ci-tools", "build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "scan-image", "upload-trivy-report"], "shared build-only steps");
+  assert.equal(action.runs.steps[0].uses, "./.github/actions/ci-tools", "Trivy comes from the ci-tools package");
   for (const step of action.runs.steps) {
     assert.equal(step["continue-on-error"], undefined, `${step.name}: must block on failure`);
     if (step.id === "probe-host-operation-dispatch") {
@@ -1517,7 +1518,7 @@ test("one conflicting mirror fails even when another mirror matches", () => {
   const fixtures = [
     ["nodejs", (v) => `with: {node-version: '${v}'}`],
     ["golang", (v) => `with: {go-version: '${v}'}`],
-    ["golangci-lint", (v) => `uses: golangci/golangci-lint-action@${sha}\nwith: {version: v${v}}`],
+    ["golangci-lint", (v) => `run: sha256sum -c golangci-lint-${v}-linux-amd64.tar.gz`],
     ["govulncheck", (v) => `run: go install golang.org/x/vuln/cmd/govulncheck@v${v}`],
     ["sqlc", (v) => `run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v${v}`],
     ["gitleaks", (v) => `run: go install github.com/zricethezav/gitleaks/v8@v${v}`],
@@ -1602,6 +1603,7 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
     ["gitleaks", /github\.com\/zricethezav\/gitleaks\/v8@v?([^\s"';]+)/g],
     ["caddy", /caddyserver\/caddy\/releases\/download\/v([^/\s]+)/g],
     ["caddy", /caddy_([^_\s/]+)_linux_/g],
+    ["golangci-lint", /golangci-lint-([^-\s/]+)-linux-amd64\.tar\.gz/g],
     ["golang", /^go-toolchain-([^-\s]+)/g],
     ["golang", /\$\{\{\s*runner\.tool_cache\s*\}\}\/go\/([^/\s]+)/g],
   ];
@@ -1618,13 +1620,111 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
         if (key === "go-version") check("golang", String(nested));
         walk(nested);
       }
-      if (value.uses?.startsWith("golangci/golangci-lint-action@")) {
-        check("golangci-lint", String(value.with?.version).replace(/^v/, ""));
-      }
     }
   };
   walk(parseYaml(source, path).toJS());
 }
+
+const golangciInstaller = "./.github/actions/install-golangci-lint";
+const golangciLintAction = "golangci/golangci-lint-action@";
+const packagedInstallers = new Set([golangciInstaller, "./.github/actions/install-caddy", "./.github/actions/install-opentofu"]);
+const packagedTool = /golangci|trivy|caddy|opentofu|\btofu\b/i;
+const toolFetch = /\b(?:curl|wget|gh\s+release|go\s+(?:install|run|get|tool)|brew\s+install|apt(?:-get)?\s+install|snap\s+install|pip3?\s+install|npx|npm\s+(?:install|exec))\b|install\.sh|releases\/download\//;
+const scriptPath = /(?:^|[\s"'=])(?:\.\/)?(scripts\/[\w./-]+\.sh)\b/g;
+
+// Rejects a line that fetches golangci-lint, Trivy, Caddy, or OpenTofu, and
+// any GitHub release download at all.
+function checkToolLines(text, label, skipComments = false) {
+  for (const line of text.replace(/\\\r?\n\s*/g, " ").split("\n")) {
+    if (skipComments && /^\s*#/.test(line)) continue;
+    assert.ok(!/\/releases\/download\//.test(line), `${label}: tools come only from the ci-tools package, not a release download`);
+    assert.ok(!(packagedTool.test(line) && toolFetch.test(line)), `${label}: tools come only from the ci-tools package: ${line.trim()}`);
+  }
+}
+
+// golangci-lint, Trivy, Caddy, and OpenTofu come only from the verified
+// ci-tools archives, through the local installers or a script CI calls for
+// them. golangci-lint-action may only run the binary install-golangci-lint
+// put on PATH earlier in the same job.
+function checkToolSources(source, path, readScript = read) {
+  const doc = parseYaml(source, path).toJS();
+  assert.ok(!/\/releases\/download\//.test(JSON.stringify(doc)), `${path}: tools come only from the ci-tools package, not a release download`);
+  const jobs = doc.jobs ?? { action: { steps: doc.runs?.steps ?? [] } };
+  for (const [id, job] of Object.entries(jobs)) {
+    const steps = job.steps ?? [];
+    const installed = steps.findIndex((step) => step.uses === golangciInstaller);
+    const label = `${path}:${id}`;
+    for (const [index, step] of steps.entries()) {
+      const script = step.run ?? "";
+      checkToolLines(script, label);
+      for (const line of script.replace(/\\\r?\n\s*/g, " ").split("\n").filter((entry) => packagedTool.test(entry))) {
+        for (const [, called] of line.matchAll(scriptPath)) checkToolLines(readScript(called), `${label} -> ${called}`, true);
+      }
+      const uses = step.uses ?? "";
+      if (packagedTool.test(uses) && !packagedInstallers.has(uses)) {
+        assert.ok(uses.startsWith(golangciLintAction), `${label}: ${uses} is not a ci-tools installer`);
+        assert.equal(step.with?.["install-mode"], "none", `${label}: golangci-lint-action must use the binary installed from ci-tools`);
+        assert.equal(step.with?.version, undefined, `${label}: the ci-tools archive name is the only golangci-lint pin`);
+        assert.equal(step.with?.["version-file"], undefined, `${label}: the ci-tools archive name is the only golangci-lint pin`);
+      }
+      if (uses.startsWith(golangciLintAction) || /(?:^|[\s;&|(])golangci-lint\s+run\b/m.test(script)) {
+        assert.ok(installed >= 0 && installed < index, `${label}: install golangci-lint from ci-tools before linting`);
+      }
+    }
+  }
+}
+
+test("golangci-lint, Trivy, Caddy, and OpenTofu come only from the ci-tools package", () => {
+  for (const path of hostedFiles) checkToolSources(read(path), path);
+  const install = `      - uses: ${golangciInstaller}\n`;
+  const lint = (extra = "") =>
+    `      - uses: ${golangciLintAction}${sha} # v9.3.0\n        with:\n          working-directory: apps/server\n${extra}`;
+  const job = (steps) => `jobs:\n  server:\n    steps:\n${steps}`;
+  const trivyInstall = `      - run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"\n`;
+  checkToolSources(job(install + lint("          install-mode: none\n")), "fixture");
+  checkToolSources(job(`${install}      - run: golangci-lint run ./...\n`), "fixture");
+  checkToolSources(job("      - uses: ./.github/actions/install-caddy\n      - uses: ./.github/actions/install-opentofu\n"), "fixture");
+  checkToolSources(job(trivyInstall), "fixture");
+  const version = pins["golangci-lint"];
+  const release = (repository, asset) => `https://github.com/${repository}/releases/download/v1.2.3/${asset}`;
+  const fetchingScript = (lines) => (called) => {
+    assert.equal(called, "scripts/security-scan.sh");
+    return `#!/usr/bin/env bash\n# A comment may name trivy and curl.\n${lines}\n`;
+  };
+  for (const [name, steps, readScript] of [
+    ["action default binary download", install + lint(`          version: v${version}\n`)],
+    ["action binary mode", install + lint("          install-mode: binary\n")],
+    ["action goinstall mode", install + lint("          install-mode: goinstall\n")],
+    ["ignored version beside the package", install + lint(`          install-mode: none\n          version: v${version}\n`)],
+    ["version file beside the package", install + lint("          install-mode: none\n          version-file: .tool-versions\n")],
+    ["action without the packaged installer", lint("          install-mode: none\n")],
+    ["installer after the action", lint("          install-mode: none\n") + install],
+    ["installed only in another job", `${install}  lint:\n    steps:\n${lint("          install-mode: none\n")}`],
+    ["plain run without the packaged installer", "      - run: golangci-lint run ./...\n"],
+    ["go install golangci-lint", `${install}      - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${version}\n`],
+    ["go run golangci-lint", `${install}      - run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${version} run\n`],
+    ["curl golangci-lint release", `${install}      - run: curl -fsSL -o golangci-lint.tar.gz ${release("golangci/golangci-lint", "golangci-lint.tar.gz")}\n`],
+    ["wget golangci-lint release", `${install}      - run: wget -q ${release("golangci/golangci-lint", "golangci-lint.tar.gz")}\n`],
+    ["golangci-lint install script", `${install}      - run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$HOME/bin" v${version}\n`],
+    ["third-party golangci action", `${install}      - uses: reviewdog/action-golangci-lint@${sha} # v2.8.0\n`],
+    ["curl Trivy release", `      - run: curl -fsSL -o trivy.tar.gz ${release("aquasecurity/trivy", "trivy_1.2.3_Linux-64bit.tar.gz")}\n`],
+    ["Trivy install script", "      - run: curl -sfL https://get.trivy.dev/install.sh | sh -s -- -b /usr/local/bin\n"],
+    ["go install Trivy", "      - run: go install github.com/aquasecurity/trivy/cmd/trivy@v1.2.3\n"],
+    ["Trivy action", `      - uses: aquasecurity/trivy-action@${sha} # v0.33.1\n`],
+    ["Trivy setup action", `      - uses: aquasecurity/setup-trivy@${sha} # v0.2.4\n`],
+    ["wget Caddy release", `      - run: wget -q ${release("caddyserver/caddy", "caddy_1.2.3_linux_amd64.tar.gz")}\n`],
+    ["go install Caddy", "      - run: go install github.com/caddyserver/caddy/v2/cmd/caddy@v1.2.3\n"],
+    ["curl OpenTofu release", `      - run: curl -fsSL -o tofu.zip ${release("opentofu/opentofu", "tofu_1.2.3_linux_amd64.zip")}\n`],
+    ["go install OpenTofu", "      - run: go install github.com/opentofu/opentofu/cmd/tofu@v1.2.3\n"],
+    ["OpenTofu setup action", `      - uses: opentofu/setup-opentofu@${sha} # v1.0.6\n`],
+    ["release URL as an action input", `      - uses: owner/fetch@${sha} # v1.0.0\n        with:\n          url: ${release("opentofu/opentofu", "tofu_1.2.3_linux_amd64.zip")}\n`],
+    ["script curls Trivy", trivyInstall, fetchingScript('curl -fsSL -o "$tmp/trivy.tar.gz" "$url"')],
+    ["script holds a release URL", trivyInstall, fetchingScript(`url=${release("aquasecurity/trivy", "trivy.tar.gz")}`)],
+  ]) {
+    assert.throws(() => checkToolSources(job(steps), "fixture", readScript), /ci-tools/, name);
+  }
+  checkToolSources(job(trivyInstall), "fixture", fetchingScript("printf '%s\\n' trivy"));
+});
 
 test("macOS tooling installs missing prerequisites before publishing paths", () => {
   const job = readWorkflow("ci").jobs["macos-tooling"];
