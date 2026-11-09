@@ -260,6 +260,7 @@ has_call "golangci-lint run --concurrency=2 ./internal/foo (in server)"
 has_call "golangci-lint run --concurrency=2 ./internal/foo (in observer)"
 has_line 'golangci-lint +pass +apps/server: 1 package'
 has_line 'golangci-lint +pass +deploy/observer: 1 package'
+! grep -Fq 'go: command not found' "$WORK/out" || fail 'missing Go leaked an error'
 no_call "./internal/gone"
 no_call "golangci-lint run --concurrency=2 ./internal/bar"
 check "$REPO" 1 STUB_FAIL=gofmt
@@ -271,24 +272,28 @@ has_line 'golangci-lint +REFUSED +installed 2.13.0'
 git -C "$REPO" reset -q --hard
 
 # Go packages excluded by build constraints are skipped without hiding other packages.
-mkdir -p "$REPO/apps/server/internal/pins"
-printf '//go:build dependency_pins\n\npackage pins\n' >"$REPO/apps/server/internal/pins/pins.go"
-check "$REPO" 0
-has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
-has_line 'golangci-lint +skip +no changed packages in a linted directory'
-no_call 'golangci-lint run'
-printf 'package foo\n\nvar X = 1\n' >"$REPO/apps/server/internal/foo/foo.go"
-check "$REPO" 0
-has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
-has_call 'golangci-lint run --concurrency=2 ./internal/foo (in server)'
-no_call './internal/pins (in server)'
-git -C "$REPO" checkout -q -- apps/server/internal/foo/foo.go
-printf '//go:build linux &&\n\npackage pins\n' >"$REPO/apps/server/internal/pins/broken.go"
-check "$REPO" 0
-has_call 'golangci-lint run --concurrency=2 ./internal/pins (in server)'
-! grep -Eq 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files' "$WORK/out" ||
-  fail 'invalid Go file was skipped'
-rm -rf "$REPO/apps/server/internal/pins"
+if command -v go >/dev/null 2>&1; then
+  mkdir -p "$REPO/apps/server/internal/pins"
+  printf '//go:build dependency_pins\n\npackage pins\n' >"$REPO/apps/server/internal/pins/pins.go"
+  check "$REPO" 0
+  has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
+  has_line 'golangci-lint +skip +no changed packages in a linted directory'
+  no_call 'golangci-lint run'
+  printf 'package foo\n\nvar X = 1\n' >"$REPO/apps/server/internal/foo/foo.go"
+  check "$REPO" 0
+  has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
+  has_call 'golangci-lint run --concurrency=2 ./internal/foo (in server)'
+  no_call './internal/pins (in server)'
+  git -C "$REPO" checkout -q -- apps/server/internal/foo/foo.go
+  printf '//go:build linux &&\n\npackage pins\n' >"$REPO/apps/server/internal/pins/broken.go"
+  check "$REPO" 0
+  has_call 'golangci-lint run --concurrency=2 ./internal/pins (in server)'
+  ! grep -Eq 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files' "$WORK/out" ||
+    fail 'invalid Go file was skipped'
+  rm -rf "$REPO/apps/server/internal/pins"
+else
+  printf 'pre-push-test: skipping build-tag cases (go not on PATH)\n'
+fi
 
 # Shell: bash -n catches syntax errors; other scripts use error severity.
 printf 'if then\n' >"$REPO/scripts/bad.sh"

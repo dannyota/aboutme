@@ -365,7 +365,7 @@ check_go() {
     count=${#selected[@]}
     mapfile -t candidates < <(go_packages "$dir")
     for package in "${candidates[@]}"; do
-      if probe=$(cd "$dir" && GOFLAGS=-p=2 go list -e -f \
+      if command -v go >/dev/null 2>&1 && probe=$(cd "$dir" && GOFLAGS=-p=2 go list -e -f \
         '{{if and .IgnoredGoFiles (not .InvalidGoFiles) (not .GoFiles) (not .CgoFiles) (not .TestGoFiles) (not .XTestGoFiles)}}skip{{end}}' \
         "$package") && [[ $probe == skip ]]; then
         record golangci-lint skip "$dir/${package#./}: no buildable Go files"
