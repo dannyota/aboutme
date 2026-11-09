@@ -15,6 +15,18 @@ LOGGERS = frozenset({
     "admin", "http", "http.auto_https", "http.handlers.waf", "http.stdlib", "tls",
     "tls.cache.maintenance", "tls.obtain", "tls.renew", "pki.ca.local",
 })
+DIAGNOSTIC_FIELDS = frozenset({"ts", "level", "logger", "msg", "kind"})
+DIAGNOSTIC_KINDS = frozenset({
+    "macro_key_missing", "serial_log_writer_error", "audit_log_init_error",
+    "audit_log_write_error", "request_length_invalid", "setvar_collection_not_map",
+    "setvar_collection_nil", "invalid_value", "invalid_range", "invalid_status",
+    "invalid_audit_log_part", "unknown_toggle", "invalid_limit", "invalid_rule_id",
+    "invalid_log_level", "regex_collection_unsupported", "string_collection_unsupported",
+    "request_headers_repeated", "request_headers_interrupted", "request_body_interrupted",
+    "request_body_error", "response_headers_repeated", "response_headers_interrupted",
+    "response_body_interrupted", "response_body_error", "transaction_close_error",
+    "interruption_summary",
+})
 MESSAGE_KINDS = {
     "waf_rule_match": "waf-rule-match",
     "waf_rule_match_unparsed": "waf-rule-match-unparsed",
@@ -90,8 +102,6 @@ def diagnose(lines, mode, stream):
             patterns.append("http-stdlib-panic")
         if mode == "maintenance" and "maintmarker6e4d" in line:
             patterns.append("probe-marker")
-        if not patterns:
-            continue
 
         logger = "other"
         kind = message_kind(line)
@@ -101,6 +111,15 @@ def diagnose(lines, mode, stream):
             if source_logger in LOGGERS:
                 logger = source_logger
             kind = message_kind(single_field(value, "msg"))
+            if isinstance(value, JSONObject) and any(
+                name == "msg" and item == "waf_engine_diagnostic" for name, item in value
+            ):
+                if (
+                    len(value) != len(DIAGNOSTIC_FIELDS)
+                    or {name for name, _ in value} != DIAGNOSTIC_FIELDS
+                    or single_field(value, "kind") not in DIAGNOSTIC_KINDS
+                ):
+                    patterns.append("invalid-diagnostic")
         except (ValueError, RecursionError):
             pass
 

@@ -71,7 +71,7 @@ module in the repository reads PDF.
 8. The data download path is deferred, not rejected. It is the candidate for
    Vietnamese profiles in a later release and needs its own ADR.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Parse on the server in Go.** The file would reach aboutme with the member's
   email and phone. The service would need an upload route, byte limits, and a

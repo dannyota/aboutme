@@ -15,6 +15,7 @@ produces the same document everywhere.
 | LinkedIn import    | `/app/import/linkedin`                                                             | Client only (`ssr: false`); the only route that loads pdf.js |
 | Public resume      | `/{slug}`                                                                          | Nuxt SSR followed by client hydration and live refetch       |
 | Print              | `/print/**`                                                                        | Internal Nuxt route gated by one Go-issued render capability |
+| Unknown SSR paths  | Catch-all after existing Nuxt pages; client-rendering rules still apply            | Existing error page; HTTP 404                                |
 
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.

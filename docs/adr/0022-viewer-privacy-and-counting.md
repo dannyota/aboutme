@@ -91,7 +91,7 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 6. After sign-in the viewer goes straight to the resume, where a dismissible
    join invite may appear.
 
-## Rejected
+## Alternatives rejected
 
 | Option                                         | Why not                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |

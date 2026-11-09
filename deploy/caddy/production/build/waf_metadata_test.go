@@ -28,9 +28,12 @@ func TestWAFMetadataEncoder(t *testing.T) {
 			" [id \"941100\"] [rev \"\"] [msg \"XSS Attack Detected\"] [data \"Matched Data: " + secret + "\"]",
 	}
 
-	encoded, err := newWAFMetadataEncoder().EncodeEntry(entry, []zapcore.Field{
+	encoder := newWAFMetadataEncoder()
+	encoder.AddString("kind", secret)
+	encoded, err := encoder.Clone().EncodeEntry(entry, []zapcore.Field{
 		zap.String("request", secret),
 		zap.String("client_ip", "203.0.113.8"),
+		zap.String("kind", secret),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +46,7 @@ func TestWAFMetadataEncoder(t *testing.T) {
 	if err := json.Unmarshal(encoded.Bytes(), &got); err != nil {
 		t.Fatalf("decode WAF diagnostic: %v", err)
 	}
-	if got["msg"] != "waf_rule_match" || got["rule_id"] != float64(941100) {
+	if len(got) != 5 || got["msg"] != "waf_rule_match" || got["rule_id"] != float64(941100) {
 		t.Fatalf("encoded WAF diagnostic = %#v", got)
 	}
 	if got["level"] != "warn" || got["logger"] != "http.handlers.waf" || got["ts"] != float64(1_700_000_000) {
@@ -76,6 +79,9 @@ func TestWAFMetadataEncoderFailsClosed(t *testing.T) {
 		}
 		if _, exists := got["rule_id"]; exists {
 			t.Fatalf("unknown WAF diagnostic has rule_id: %#v", got)
+		}
+		if _, exists := got["kind"]; exists {
+			t.Fatalf("unknown WAF diagnostic has kind: %#v", got)
 		}
 	}
 }
@@ -112,7 +118,12 @@ func TestWAFMetadataEncoderRecognizesCorazaMacroDiagnostic(t *testing.T) {
 		t.Fatal("Coraza macro expansion did not emit its missing-key diagnostic")
 	}
 
-	encoded, err := newWAFMetadataEncoder().EncodeEntry(zapcore.Entry{Message: upstreamMessage}, []zapcore.Field{
+	encoded, err := newWAFMetadataEncoder().EncodeEntry(zapcore.Entry{
+		Time:       time.Unix(1_700_000_000, 0),
+		Level:      zapcore.WarnLevel,
+		LoggerName: "http.handlers.waf",
+		Message:    upstreamMessage,
+	}, []zapcore.Field{
 		zap.String("variable", "TX"),
 		zap.String("key", "missing"),
 	})
@@ -120,14 +131,15 @@ func TestWAFMetadataEncoderRecognizesCorazaMacroDiagnostic(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := encoded.String()
-	if strings.Contains(line, "missing") || strings.Contains(line, "TX") {
+	if strings.Contains(line, `"missing"`) || strings.Contains(line, "TX") || strings.Contains(line, "key not found") {
 		t.Fatalf("encoded Coraza diagnostic leaked source fields: %s", line)
 	}
 	var got map[string]any
 	if err := json.Unmarshal(encoded.Bytes(), &got); err != nil {
 		t.Fatalf("decode Coraza diagnostic: %v", err)
 	}
-	if got["msg"] != "waf_engine_diagnostic" {
+	if len(got) != 5 || got["msg"] != "waf_engine_diagnostic" || got["kind"] != "macro_key_missing" ||
+		got["level"] != "warn" || got["logger"] != "http.handlers.waf" || got["ts"] != float64(1_700_000_000) {
 		t.Fatalf("encoded Coraza diagnostic = %#v", got)
 	}
 	if _, exists := got["rule_id"]; exists {

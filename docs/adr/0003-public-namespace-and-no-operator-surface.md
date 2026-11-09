@@ -30,7 +30,7 @@ changes go through infrastructure as code. `/admin` stays a reserved public root
 that Caddy denies. A future operator need supersedes this record explicitly; it
 is never added as a hidden or undocumented route.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Username plus resume slug.** Adds an identity layer and links resumes.
 - **A feature-flagged admin page.** A flag is one misconfiguration away from

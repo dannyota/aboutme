@@ -73,6 +73,8 @@ This file holds the rules every agent needs on every task. Topic files in `instr
 
 ## AI agent definitions
 
+`.codex/agents/*.toml` are generated from `scripts/codex-agents/`; never hand-edit them. Run `make codex-agents` to render them and `make codex-agents-check` to check for drift.
+
 The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs bounded local checks, and owns Git, tags, deploys, and the answer to the owner. It manages and does not investigate: troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Codex does design, research, implementation, troubleshooting, QA, and review by default; the primary may also dispatch latest-Opus subagents for implementation, and their work is reviewed on Codex.
 
 |Tool|Where|Agents with model and effort|
