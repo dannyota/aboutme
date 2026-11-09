@@ -119,6 +119,18 @@ An older client write never erases a field it cannot express:
 - A v1 to v4 write keeps the stored `colorScheme` unconditionally, because
   `customization` exists in every version.
 
+## Alternatives rejected
+
+- Required domain fields on save force invented values for half-written entries.
+- Treating absence as `""` loses the distinction between unset and cleared
+  fields.
+- A hardcoded generator entry list lets omissions pass deterministic drift
+  tests.
+- Section order in `content` is lost because `jsonb` does not preserve key
+  order.
+- Persisting projections on read adds contention and can bump revisions without
+  edits.
+
 ## Consequences
 
 - Absence and `""` stay distinct through Go structs, JSON, and TypeScript types.

@@ -68,6 +68,11 @@ deletes at most 1,000 rows per page and 10,000 per run, updates the same usage
 counters, and emits backlog, oldest-expired-age, and failure metrics. The
 request batch is opportunistic latency protection, not the retention guarantee.
 
+## Alternatives rejected
+
+- Recording results outside the mutation transaction leaves a crash window for
+  repeats.
+
 ## Consequences
 
 - Mutation rollback also rolls back its response record.

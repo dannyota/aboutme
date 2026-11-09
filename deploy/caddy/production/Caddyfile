@@ -7,6 +7,8 @@
 # {vars.client_address}, which routes.caddy sends to Go as X-Real-IP.
 {
 	admin off
+	# Bound long-lived SSE and MCP streams within Podman's default 10s stop timeout.
+	grace_period 5s
 	# No automatic HTTP-to-HTTPS redirect server. CloudFront reaches the
 	# origin over HTTPS on 8443 only, so with only that edge Caddy binds no
 	# privileged port and runs with no capability. The direct edge declares

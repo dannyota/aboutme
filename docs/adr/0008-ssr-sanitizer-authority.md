@@ -43,6 +43,13 @@ The [web rich-text design](../design/web.md#rich-text),
 the ESLint sanitizer rules describe DOMPurify as the client render-path
 sanitizer.
 
+## Alternatives rejected
+
+- SSR DOMPurify brings `jsdom` and its network stack into the untrusted render
+  path.
+- Relying on hydration to sanitize SSR fails because Vue never reapplies
+  `innerHTML`.
+
 ## Consequences
 
 - The SSR path has two parser boundaries (`x/net/html`, then the browser)

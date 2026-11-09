@@ -431,6 +431,7 @@ apps/web/app/lib/showcaseContract.ts
 apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts
 apps/web/app/middleware/signed-in.global.ts
+apps/web/app/pages/[...slug].vue
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts

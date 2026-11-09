@@ -10,6 +10,8 @@ Use the [documentation ownership table](../docs/standards/engineering.md#documen
 
 Files only agents read (`AGENTS.md`, `CLAUDE.md`, `instructions/`, `.claude/`, `.codex/`, `docs/plans/`) stay minified: one line per paragraph or list item, tables without padding. Prettier and markdownlint skip them. Markdown that people read keeps Prettier's 80-column wrap.
 
+`.codex/agents/*.toml` are generated from the shared preamble and role fragments in `scripts/codex-agents/`; never hand-edit them. Run `make codex-agents` after changing their sources.
+
 ## Plans and records
 
 Plans describe work that remains. When a phase exits, delete its plan directory; git history keeps it. The traceability rows it proved, the architecture narrative, and the code record what it built. Never rewrite a proven traceability row's evidence to match later behavior; change its state and cite the new evidence.

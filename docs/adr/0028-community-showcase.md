@@ -50,7 +50,7 @@ document stores no template identity.
 7. **Route.** `/showcase` joins the public-root registry with Nuxt dispatch. The
    migration refuses to run while a resume holds that slug.
 
-## Rejected
+## Alternatives rejected
 
 | Option                               | Why not                                                                                |
 | ------------------------------------ | -------------------------------------------------------------------------------------- |

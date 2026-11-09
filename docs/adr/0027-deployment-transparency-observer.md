@@ -70,7 +70,7 @@ against the signed build record.
   against a compromised application and silent drift, not against the operator.
 - `verify` is a reserved slug in the public-root registry.
 
-## Alternatives
+## Alternatives rejected
 
 - **Application self-report** (a version endpoint in Go): rejected as weaker
   evidence.

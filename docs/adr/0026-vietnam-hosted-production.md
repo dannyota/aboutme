@@ -85,6 +85,19 @@ Hosting in Vietnam removes that transfer for the core service. The owner files
 no data protection impact assessment (DPIA) or cross-border dossier
 (2026-10-10): the processors are GreenNode and Bizfly, both in Vietnam.
 
+## Alternatives rejected
+
+- AWS hosting stores core personal data abroad and creates a cross-border
+  transfer.
+- Managed PostgreSQL offers at most version 17 and no point-in-time recovery.
+- SQLite for CrowdSec adds a checkpoint dependency to the serving gate.
+- GitHub uptime checks alone arrived 3 to 10 hours apart, too slowly for host
+  alarms.
+- SMTP fallback adds a second transport to maintain; SMTP alone misses the
+  requested move.
+- Host quota renewal exposes its key to host compromise; laptop renewal needs
+  uptime.
+
 ## Consequences
 
 - Personal data at rest, in backups, in logs, and at the edge stays in Vietnam.

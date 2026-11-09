@@ -54,6 +54,10 @@ generic localized message. Server messages and user values render as text, never
 HTML. CSRF, Origin, reauthentication, publish, export, and content sanitizing
 boundaries do not change.
 
+## Alternatives rejected
+
+No alternative is recorded; the owner may add one.
+
 ## Consequences
 
 - Static copy maps are the only runtime size increase. Route splitting keeps

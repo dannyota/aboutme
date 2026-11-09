@@ -47,6 +47,12 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 - OpenAPI gives these two operations a path-level `servers` override (root
   `https://aboutme.vn`).
 
+## Alternatives rejected
+
+- Separate Go and Vue renderers drift across preview, public pages, and PDF.
+- WebSocket autosave duplicates HTTP preconditions, idempotency, limits, and
+  logs.
+
 ## Consequences
 
 - Node runs in production beside Go (two app services and Caddy).

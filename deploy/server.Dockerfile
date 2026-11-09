@@ -52,7 +52,7 @@ USER root
 # the current Ubuntu security build, which can be newer than the pinned base's.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
-    && apt-get install -y --no-install-recommends --only-upgrade libssl3t64 openssl libbrotli1 \
+    && apt-get install -y --no-install-recommends --only-upgrade libssl3t64 openssl libbrotli1 apt libapt-pkg6.0t64 \
     && rm -rf /var/lib/apt/lists/* \
     && chromium=/ms-playwright/chromium-1248/chrome-linux64 \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1248/chrome-linux-arm64; } \

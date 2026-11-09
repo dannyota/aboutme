@@ -60,6 +60,13 @@ The one-column and two-column toggle in the customize panel is a different
 operation from applying a template and keeps its own preserve-and-move
 semantics.
 
+## Alternatives rejected
+
+- Replacing all customization with literal preset keys omits or invents section
+  keys.
+- Preserving placement for every preset can leave a two-column preset's sidebar
+  empty.
+
 ## Consequences
 
 - The preset schema and its generated types express `layout.placement`, and

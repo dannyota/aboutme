@@ -142,24 +142,25 @@ mapfile -t waf_logs < <(
 )
 matches=0
 unparsed=0
+diagnostics=0
 if ((${#waf_logs[@]})); then
   since=$(($(date +%s) - 3600))
   counts=$(zcat -f -- "${waf_logs[@]}" 2>/dev/null |
     jq -r --argjson since "$since" '
       if type != "object" or (.ts | type != "number") then "unknown"
       elif .ts < $since then empty
-      elif .msg == "waf_engine_diagnostic" then empty
+      elif .msg == "waf_engine_diagnostic" then "diagnostic"
       elif .msg == "waf_rule_match" then "match"
       elif .msg == "waf_rule_match_unparsed" then "unparsed"
       else "unknown" end' |
-    awk '{ count[$1]++ } END { print count["match"] + 0, count["unparsed"] + 0, count["unknown"] + 0 }') || {
+    awk '{ count[$1]++ } END { print count["match"] + 0, count["unparsed"] + 0, count["diagnostic"] + 0, count["unknown"] + 0 }') || {
     alert coraza-log-invalid "the Coraza match log is malformed"
-    counts='0 0 0'
+    counts='0 0 0 0'
   }
-  read -r matches unparsed unknown <<<"$counts"
+  read -r matches unparsed diagnostics unknown <<<"$counts"
   ((unknown == 0)) || alert coraza-log-invalid "the Coraza match log has $unknown unknown records in the last hour"
 fi
-printf 'coraza counts in the last hour: matches=%s unparsed=%s\n' "$matches" "$unparsed"
+printf 'coraza counts in the last hour: matches=%s unparsed=%s diagnostics=%s\n' "$matches" "$unparsed" "$diagnostics"
 
 # totp_unavailable in the server journal since the last run.
 totp=$(journalctl -u aboutme-server --since -6min -o cat --no-pager 2>/dev/null | grep -c -F totp_unavailable || true)

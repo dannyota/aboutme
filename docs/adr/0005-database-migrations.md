@@ -63,6 +63,13 @@ Migrations run as a deployment step, from a task that runs to completion before
 the service updates. The application does not migrate at startup. That step is
 the only migrator; the advisory lock guarantees it if two ever run.
 
+## Alternatives rejected
+
+- Atlas-generated migrations add drift machinery and silently omit schema
+  objects.
+- In-fleet migrations need a recorded wake, write gate, and separate migrator
+  session.
+
 ## Consequences
 
 - No diff engine checks that a migration expresses the intended change, so
