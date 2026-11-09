@@ -147,7 +147,7 @@ python3 -I - "$repo/docs/runbooks/production.md" <<'PY'
 import pathlib, sys
 runbook = pathlib.Path(sys.argv[1]).read_text()
 section = runbook.split("### Host Telegram setup and rotation", 1)[1].split("\n## ", 1)[0]
-assert len(runbook.splitlines()) <= 450
+assert len(runbook.splitlines()) <= 400
 confirm = "sudo /usr/local/lib/aboutme/alert-transport.sh confirm-receipt --received"
 test = "sudo /usr/local/lib/aboutme/alert-telegram.sh --test </dev/null"
 setup, rotation = section.split("For rotation,", 1)

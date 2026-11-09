@@ -19,6 +19,10 @@ token never reaches a cookie route.
 [password authentication](security-sign-in.md#password-authentication), and the
 [OAuth transaction](security-sign-in.md#oauth-transaction).
 
+## Password authentication
+
+See [Password authentication](security-sign-in.md#password-authentication).
+
 ## Second factor
 
 An account may add passkeys or an authenticator app. An enrolled account needs

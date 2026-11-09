@@ -86,8 +86,9 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [LinkedIn import verification](linkedin-import-verification.md)        | Fixtures, test cases, compatibility, and open facts                        |
 | Other   | [LinkedIn import page](linkedin-import-ui.md)                          | Import page states, layout, accessibility, and copy                        |
 | Other   | [Viewer analytics](viewer-analytics/README.md)                         | View counts and sign in to view, with no viewer data kept                  |
-| Other   | [Public page bar and theme](public-page-theme.md)                      | Owner decisions, color scheme setting, and the dark palette rule           |
+| Other   | [Public page bar and theme](public-page-theme.md)                      | Owner decisions, color scheme setting, what stays light, and checks        |
 | Other   | [Public page bar](public-page-bar.md)                                  | Bar structure, copy, tokens, size, and behavior                            |
+| Other   | [Public page dark palette](public-page-dark-palette.md)                | Dark source colors, how roles reach the page, and preset values            |
 | Other   | [Community showcase](showcase.md)                                      | Showcase product scope, decisions, and approvals                           |
 | Other   | [Showcase contract](showcase-contract.md)                              | Listing fields, filters, delivery, revocation, and compatibility           |
 | Other   | [Showcase copy](showcase-copy.md)                                      | Approved bilingual interface and legal text                                |
