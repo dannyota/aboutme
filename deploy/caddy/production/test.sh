@@ -17,6 +17,8 @@ source "$root/deploy/caddy/production/test/crowdsec_feed.sh"
 source "$root/deploy/caddy/production/test/deployment_document.sh"
 # shellcheck source=deploy/caddy/production/test/waf_stderr.sh
 source "$root/deploy/caddy/production/test/waf_stderr.sh"
+# shellcheck source=deploy/caddy/production/test/grace_period.sh
+source "$root/deploy/caddy/production/test/grace_period.sh"
 work=$(mktemp -d)
 name=aboutme-caddy-test
 waf_volume=$name-waf
@@ -429,7 +431,7 @@ forged=(-H 'X-Forwarded-For: 5.5.5.5' -H 'X-Real-IP: 6.6.6.6' -H 'Forwarded: for
   -H 'True-Client-IP: 203.0.113.51' -H 'x-amzn-waf-aboutme-bot: 1')
 
 start_direct -e EDGES=direct
-wait_direct 200
+test_direct_grace_period
 test_direct_deployment_document
 # 0050 and 01BB are Caddy's 80 and 443, 1F90 and 1F9A the stand-ins.
 check_unprivileged "$name" "0050 01BB 1F90 1F9A" 0000000000000400

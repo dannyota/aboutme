@@ -53,6 +53,9 @@ keeps trusting only loopback. The CloudFront listener with
 `CloudFront-Viewer-Address` remains in the code for the AWS path. Production
 uses `EDGES=direct`.
 
+Serving Caddy uses `grace_period 5s` to bound SSE and MCP stream draining below
+Podman's default 10s stop timeout.
+
 Three host-level controls replace AWS WAF:
 
 - Go's rate limits stay the application control.
