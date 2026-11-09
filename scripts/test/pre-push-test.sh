@@ -282,8 +282,13 @@ check "$REPO" 0
 has_line 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files'
 has_call 'golangci-lint run --concurrency=2 ./internal/foo (in server)'
 no_call './internal/pins (in server)'
-rm -rf "$REPO/apps/server/internal/pins"
 git -C "$REPO" checkout -q -- apps/server/internal/foo/foo.go
+printf '//go:build linux &&\n\npackage pins\n' >"$REPO/apps/server/internal/pins/broken.go"
+check "$REPO" 0
+has_call 'golangci-lint run --concurrency=2 ./internal/pins (in server)'
+! grep -Eq 'golangci-lint +skip +apps/server/internal/pins: no buildable Go files' "$WORK/out" ||
+  fail 'invalid Go file was skipped'
+rm -rf "$REPO/apps/server/internal/pins"
 
 # Shell: bash -n catches syntax errors; other scripts use error severity.
 printf 'if then\n' >"$REPO/scripts/bad.sh"
