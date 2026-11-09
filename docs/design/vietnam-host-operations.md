@@ -91,7 +91,7 @@ the request's saved live record.
 
 ## Server command inventory and contracts
 
-These contracts describe the baseline at `f63edede`. Operation containers run as
+These contracts describe the baseline at `39faec1d`. Operation containers run as
 `aboutme_app` over the PostgreSQL Unix socket, with no network. The separately
 scheduled media sweep retains its existing media credentials and network.
 Configuration contains the DB password and, only for TOTP jobs, the selected
