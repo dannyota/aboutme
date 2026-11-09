@@ -1,148 +1,14 @@
 package oauthsrv
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"reflect"
 	"strconv"
-	"strings"
-	"time"
 
-	"github.com/google/uuid"
-
-	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
-
-const (
-	registerBodyLimit = 4096
-	maxRedirectURIs   = 5
-)
-
-var (
-	errRegisterRequestTooLarge = errors.New("oauth registration request too large")
-	errRegisterRequestInvalid  = errors.New("oauth registration request invalid")
-)
-
-// registerAdmission is the narrow rate-admission boundary for registration.
-// It uses the canonical Caddy client address; this service neither reads
-// cookies nor derives an address itself.
-type registerAdmission interface {
-	AdmitRegister(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
-}
-
-type tokenAdmission interface {
-	AdmitToken(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
-	AdmitGrant(uuid.UUID, time.Time) (grantAttempt, bool, int)
-	FinishGrant(grantAttempt, grantAttemptResult)
-}
-
-// GrantAttempt is an opaque failed-grant reservation.
-type GrantAttempt struct {
-	clientID uuid.UUID
-	leaseID  uint64
-	overflow bool
-}
-
-type grantAttempt = GrantAttempt
-
-type grantAttemptResult uint8
-
-const (
-	grantAttemptRelease grantAttemptResult = iota
-	grantAttemptFailure
-	grantAttemptSuccess
-)
-
-// ServiceDependencies are the shared OAuth service dependencies.
-type ServiceDependencies struct {
-	CIMD              *CIMDResolver
-	CIMDEnabled       bool
-	TrustedProxies    api.TrustedProxies
-	Pool              *store.Pool
-	Queries           store.OAuthQueries
-	Clock             func() time.Time
-	Entropy           io.Reader
-	PublicOrigin      string
-	RegisterAdmission registerAdmission
-	TokenAdmission    tokenAdmission
-	LiveGrantLimit    int
-}
-
-// Service is the OAuth authorization-server service.
-type Service struct {
-	cimd              *CIMDResolver
-	cimdEnabled       bool
-	trustedProxies    api.TrustedProxies
-	pool              *store.Pool
-	queries           store.OAuthQueries
-	clock             func() time.Time
-	entropy           io.Reader
-	publicOrigin      string
-	registerAdmission registerAdmission
-	tokenAdmission    tokenAdmission
-	liveGrantLimit    int
-}
-
-// NewService validates its fixed dependencies and performs the idle-client
-// cleanup sweep before making the service available to routes.
-func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service, error) {
-	switch {
-	case dependencies.Pool == nil:
-		return nil, errors.New("oauth service: nil pool")
-	case isNilDependency(dependencies.Queries):
-		return nil, errors.New("oauth service: nil queries")
-	case dependencies.Clock == nil:
-		return nil, errors.New("oauth service: nil clock")
-	case isNilDependency(dependencies.Entropy):
-		return nil, errors.New("oauth service: nil entropy")
-	case !IsCanonicalOrigin(dependencies.PublicOrigin):
-		return nil, errors.New("oauth service: noncanonical public origin")
-	case isNilDependency(dependencies.RegisterAdmission):
-		return nil, errors.New("oauth service: nil register admission")
-	case isNilDependency(dependencies.TokenAdmission):
-		return nil, errors.New("oauth service: nil token admission")
-	case dependencies.LiveGrantLimit <= 0:
-		return nil, errors.New("oauth service: invalid live grant limit")
-	case dependencies.CIMDEnabled && dependencies.CIMD == nil:
-		return nil, errors.New("oauth service: missing CIMD resolver")
-	}
-
-	s := &Service{
-		cimd: dependencies.CIMD, cimdEnabled: dependencies.CIMDEnabled, trustedProxies: dependencies.TrustedProxies,
-		pool:              dependencies.Pool,
-		queries:           dependencies.Queries,
-		clock:             dependencies.Clock,
-		entropy:           dependencies.Entropy,
-		publicOrigin:      dependencies.PublicOrigin,
-		registerAdmission: dependencies.RegisterAdmission,
-		tokenAdmission:    dependencies.TokenAdmission,
-		liveGrantLimit:    dependencies.LiveGrantLimit,
-	}
-	if err := s.CollectIdleClients(ctx); err != nil {
-		return nil, fmt.Errorf("oauth service: startup idle-client GC: %w", err)
-	}
-	return s, nil
-}
-
-func isNilDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
-}
 
 // HandleRegister registers a public OAuth client. It intentionally never
 // reads a session cookie and has no CSRF check because it is a raw protocol
@@ -270,182 +136,26 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type registrationInput struct {
-	ClientName              string
-	RedirectURIs            []string
-	TokenEndpointAuthMethod string
-	ApplicationType         string
-	ApplicationTypeSet      bool
-	GrantTypes              []string
-	GrantTypesSet           bool
-	ResponseTypes           []string
-	ResponseTypesSet        bool
-	Scope                   string
-	ScopeSet                bool
-}
-
+// registerResponse is the 201 body of a successful registration.
 type registerResponse struct {
-	ClientID                string   `json:"client_id"`
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	ApplicationType         string   `json:"application_type,omitempty"`
-}
-
-// nativeLoopbackHosts is the set of loopback hosts an application_type
-// native redirect may use. The general redirect grammar
-// (loopbackRedirectHosts in redirect.go) already admits "localhost" for a
-// client that omits application_type, so a narrower native rule protected
-// nothing and rejected Claude Code's own loopback registration; see
-// docs/design/mcp-client-compatibility.md rule 3. A redirect must still
-// match the client's registered value exactly, port included.
-var nativeLoopbackHosts = map[string]bool{
-	"127.0.0.1": true,
-	"localhost": true,
-	"::1":       true,
-}
-
-func nativeLoopbackRedirect(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "http" && nativeLoopbackHosts[strings.ToLower(u.Hostname())]
-}
-
-// webRedirect reports whether raw is an https redirect, the application_type
-// web requirement of docs/design/mcp-client-compatibility.md rule 2.
-func webRedirect(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "https"
-}
-
-// validGrantTypesForRegistration is the closed set a registration's
-// grant_types member may name, per
-// docs/design/mcp-client-compatibility.md rule 2.
-var validGrantTypesForRegistration = map[string]bool{
-	"authorization_code": true,
-	"refresh_token":      true,
-}
-
-// validGrantTypesSet reports whether values is a non-empty, duplicate-free
-// subset of validGrantTypesForRegistration.
-func validGrantTypesSet(values []string) bool {
-	if len(values) == 0 {
-		return false
-	}
-	seen := make(map[string]bool, len(values))
-	for _, value := range values {
-		if !validGrantTypesForRegistration[value] || seen[value] {
-			return false
-		}
-		seen[value] = true
-	}
-	return true
-}
-
-// validResponseTypesSet reports whether values is exactly ["code"], the only
-// response_types a registration may name.
-func validResponseTypesSet(values []string) bool {
-	return len(values) == 1 && values[0] == "code"
+	// ClientID is the issued client_id, the new client row's UUID.
+	ClientID string `json:"client_id"`
+	// ClientName is the canonical client name ValidateClientName returned, as
+	// stored.
+	ClientName string `json:"client_name"`
+	// RedirectURIs echoes the registered redirect URIs in request order.
+	RedirectURIs []string `json:"redirect_uris"`
+	// TokenEndpointAuthMethod is always "none": every registered client is
+	// public.
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	// ApplicationType echoes the request's application_type and is omitted
+	// when the request did not name it.
+	ApplicationType string `json:"application_type,omitempty"`
 }
 
 func exactJSONContentType(header http.Header) bool {
 	values := header.Values("Content-Type")
 	return len(values) == 1 && values[0] == "application/json"
-}
-
-func decodeRegistration(body io.Reader) (registrationInput, error) {
-	raw, err := io.ReadAll(io.LimitReader(body, registerBodyLimit+1))
-	if err != nil {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	if len(raw) > registerBodyLimit {
-		return registrationInput{}, errRegisterRequestTooLarge
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	token, err := decoder.Token()
-	if err != nil {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	seen := make(map[string]bool, 8)
-	fields := make(map[string]json.RawMessage, 8)
-	for decoder.More() {
-		token, err := decoder.Token()
-		if err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		name, ok := token.(string)
-		if !ok {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		if seen[name] {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		seen[name] = true
-		var value json.RawMessage
-		if err := decoder.Decode(&value); err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		// A member name outside this set is ignored, per RFC 7591 section 2
-		// and docs/design/mcp-client-compatibility.md rule 2: it is never
-		// stored, logged, or echoed. The duplicate-member check above still
-		// applies to it.
-		switch name {
-		case "client_name", "redirect_uris", "token_endpoint_auth_method", "application_type",
-			"grant_types", "response_types", "scope":
-			fields[name] = value
-		}
-	}
-	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	name, nameOK := fields["client_name"]
-	redirects, redirectsOK := fields["redirect_uris"]
-	if !nameOK || !redirectsOK {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	var registration registrationInput
-	if err := json.Unmarshal(name, &registration.ClientName); err != nil {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	if err := json.Unmarshal(redirects, &registration.RedirectURIs); err != nil {
-		return registrationInput{}, errRegisterRequestInvalid
-	}
-	if authMethod, ok := fields["token_endpoint_auth_method"]; ok {
-		if err := json.Unmarshal(authMethod, &registration.TokenEndpointAuthMethod); err != nil || registration.TokenEndpointAuthMethod != "none" {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-	}
-	if applicationType, ok := fields["application_type"]; ok {
-		if err := json.Unmarshal(applicationType, &registration.ApplicationType); err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		registration.ApplicationTypeSet = true
-	}
-	if grantTypes, ok := fields["grant_types"]; ok {
-		if err := json.Unmarshal(grantTypes, &registration.GrantTypes); err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		registration.GrantTypesSet = true
-	}
-	if responseTypes, ok := fields["response_types"]; ok {
-		if err := json.Unmarshal(responseTypes, &registration.ResponseTypes); err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		registration.ResponseTypesSet = true
-	}
-	if scope, ok := fields["scope"]; ok {
-		if err := json.Unmarshal(scope, &registration.Scope); err != nil {
-			return registrationInput{}, errRegisterRequestInvalid
-		}
-		registration.ScopeSet = true
-	}
-	return registration, nil
 }
 
 func writeOAuthError(w http.ResponseWriter, status int) {

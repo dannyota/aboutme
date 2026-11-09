@@ -1,5 +1,5 @@
 // Package mailcapture implements the local, loopback-only authentication-email
-// capture server (D7). It holds at most 50 messages and 256 KiB total, rejects
+// capture server. It holds at most 50 messages and 256 KiB total, rejects
 // an individual message over 16 KiB, evicts oldest accepted messages, resets on
 // restart, and never logs the bearer secret.
 package mailcapture
@@ -12,7 +12,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/authmail"
 )
 
-// Capture bounds (D7).
+// Capture bounds.
 const (
 	MaxMessages     = 50
 	MaxTotalBytes   = 256 * 1024
@@ -28,13 +28,21 @@ var (
 
 // StoredMessage is the immutable record returned by the capture API.
 type StoredMessage struct {
-	ID         uint64        `json:"id"`
-	ReceivedAt time.Time     `json:"received_at"`
-	Kind       authmail.Kind `json:"kind"`
-	To         string        `json:"to"`
-	Subject    string        `json:"subject"`
-	TextBody   string        `json:"text_body"`
-	HTMLBody   string        `json:"html_body"`
+	// ID is the store-assigned sequence number, starting at 1 after a restart
+	// or Reset.
+	ID uint64 `json:"id"`
+	// ReceivedAt is when the store accepted the message, in UTC.
+	ReceivedAt time.Time `json:"received_at"`
+	// Kind is the authentication email kind.
+	Kind authmail.Kind `json:"kind"`
+	// To is the recipient address.
+	To string `json:"to"`
+	// Subject is the message subject.
+	Subject string `json:"subject"`
+	// TextBody is the plain-text body.
+	TextBody string `json:"text_body"`
+	// HTMLBody is the HTML body.
+	HTMLBody string `json:"html_body"`
 }
 
 // Store is an in-memory, restart-reset bounded message store. All methods are

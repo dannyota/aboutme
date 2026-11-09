@@ -1,5 +1,8 @@
 package resumeapi
 
+// Resume structure route: decoding the structure command list, its canonical
+// targets, and the prepared aggregate mutation that applies the commands.
+
 import (
 	"bytes"
 	"context"
@@ -21,8 +24,11 @@ func structureRoutes() []routeSpec {
 	}
 }
 
+// structureMutationInput is a decoded structure request.
 type structureMutationInput struct {
+	// ResumeID is the resume the commands change, from the request path.
 	ResumeID uuid.UUID
+	// Commands holds 1 to 100 decoded commands in request order.
 	Commands []structureCommand
 }
 
@@ -32,6 +38,8 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 		return boundedInput{}, requestInvalid("resume id is not a UUID")
 	}
 	var body struct {
+		// Commands holds the raw commands, decoded one by one in request
+		// order.
 		Commands []json.RawMessage `json:"commands"`
 	}
 	input, err := decodeJSONBody(r, &body)
@@ -55,6 +63,7 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 
 func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 	var discriminator struct {
+		// Op names the command and selects its strict shape.
 		Op string `json:"op"`
 	}
 	if err := json.Unmarshal(raw, &discriminator); err != nil || discriminator.Op == "" {
@@ -63,13 +72,23 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 	switch discriminator.Op {
 	case "createSection":
 		var command struct {
-			Op          string          `json:"op"`
-			Key         *string         `json:"key"`
-			SectionType *string         `json:"sectionType"`
+			// Op is createSection.
+			Op string `json:"op"`
+			// Key is the required key of the new section.
+			Key *string `json:"key"`
+			// SectionType is the required type of the new section.
+			SectionType *string `json:"sectionType"`
+			// DisplayName is the optional display name, kept raw so a null
+			// value is rejected.
 			DisplayName json.RawMessage `json:"displayName"`
-			IconKey     json.RawMessage `json:"iconKey"`
-			Column      *string         `json:"column"`
-			Index       json.RawMessage `json:"index"`
+			// IconKey is the optional icon key, kept raw so an omitted member
+			// stays distinct from a present one.
+			IconKey json.RawMessage `json:"iconKey"`
+			// Column is the required target layout column.
+			Column *string `json:"column"`
+			// Index is the required zero-based target position, kept raw for
+			// decodeStructureIndex.
+			Index json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil || command.SectionType == nil || command.Column == nil || len(command.Index) == 0 {
 			return structureCommand{}, requestInvalid("createSection command does not match its contract")
@@ -99,7 +118,9 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return result, nil
 	case "deleteSection":
 		var command struct {
-			Op  string  `json:"op"`
+			// Op is deleteSection.
+			Op string `json:"op"`
+			// Key is the required key of the section to delete.
 			Key *string `json:"key"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil {
@@ -108,10 +129,15 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return structureCommand{Op: discriminator.Op, Key: *command.Key}, nil
 	case "moveSection":
 		var command struct {
-			Op     string          `json:"op"`
-			Key    *string         `json:"key"`
-			Column *string         `json:"column"`
-			Index  json.RawMessage `json:"index"`
+			// Op is moveSection.
+			Op string `json:"op"`
+			// Key is the required key of the section to move.
+			Key *string `json:"key"`
+			// Column is the required target layout column.
+			Column *string `json:"column"`
+			// Index is the required zero-based target position, kept raw for
+			// decodeStructureIndex.
+			Index json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Key == nil || command.Column == nil || len(command.Index) == 0 {
 			return structureCommand{}, requestInvalid("moveSection command does not match its contract")
@@ -123,9 +149,12 @@ func decodeStructureCommand(raw json.RawMessage) (structureCommand, error) {
 		return structureCommand{Op: discriminator.Op, Key: *command.Key, Column: *command.Column, Index: index, HasIndex: true, IndexOutside: outside}, nil
 	case "reorderColumn":
 		var command struct {
-			Op     string    `json:"op"`
-			Column *string   `json:"column"`
-			Keys   *[]string `json:"keys"`
+			// Op is reorderColumn.
+			Op string `json:"op"`
+			// Column is the required layout column to reorder.
+			Column *string `json:"column"`
+			// Keys is the required section order for Column.
+			Keys *[]string `json:"keys"`
 		}
 		if err := strictDecodeRaw(raw, &command); err != nil || command.Column == nil || command.Keys == nil {
 			return structureCommand{}, requestInvalid("reorderColumn command does not match its contract")
@@ -188,244 +217,33 @@ func (s *Service) prepareStructureMutation(_ context.Context, input boundedInput
 	}}, nil
 }
 
+// structureCommand is one decoded structure command. Fields other than Op
+// are set only for the commands that take them.
 type structureCommand struct {
-	Op           string
-	Key          string
-	SectionType  string
-	DisplayName  optionalString
-	IconKey      optionalString
-	Column       string
-	Index        int
-	HasIndex     bool
+	// Op is the command name: createSection, deleteSection, moveSection, or
+	// reorderColumn.
+	Op string
+	// Key is the section key a create, delete, or move command names.
+	Key string
+	// SectionType is the type of the section createSection adds.
+	SectionType string
+	// DisplayName is createSection's optional display name.
+	DisplayName optionalString
+	// IconKey is createSection's optional icon key.
+	IconKey optionalString
+	// Column is the layout column name for createSection, moveSection, and
+	// reorderColumn.
+	Column string
+	// Index is the zero-based position in Column for createSection and
+	// moveSection.
+	Index int
+	// HasIndex reports whether the command carried an index.
+	HasIndex bool
+	// IndexOutside reports that the index is an integer outside the int
+	// range.
 	IndexOutside bool
-	Keys         []string
-}
-
-type rawLayout struct {
-	Document      rawDocumentParts
-	Customization map[string]json.RawMessage
-	Layout        map[string]json.RawMessage
-	Sections      map[string]json.RawMessage
-	Main          []string
-	Sidebar       []string
-}
-
-func decodeRawLayout(raw json.RawMessage) (rawLayout, error) {
-	document, err := decodeRawDocument(raw)
-	if err != nil {
-		return rawLayout{}, err
-	}
-	var customization map[string]json.RawMessage
-	if err := json.Unmarshal(document.Document["customization"], &customization); err != nil {
-		return rawLayout{}, fmt.Errorf("decode customization: %w", err)
-	}
-	var layout map[string]json.RawMessage
-	if err := json.Unmarshal(customization["layout"], &layout); err != nil {
-		return rawLayout{}, fmt.Errorf("decode layout: %w", err)
-	}
-	var sections map[string]json.RawMessage
-	if err := json.Unmarshal(layout["sections"], &sections); err != nil {
-		return rawLayout{}, fmt.Errorf("decode layout sections: %w", err)
-	}
-	var main, sidebar []string
-	if err := json.Unmarshal(sections["main"], &main); err != nil {
-		return rawLayout{}, fmt.Errorf("decode main layout: %w", err)
-	}
-	if err := json.Unmarshal(sections["sidebar"], &sidebar); err != nil {
-		return rawLayout{}, fmt.Errorf("decode sidebar layout: %w", err)
-	}
-	return rawLayout{Document: document, Customization: customization, Layout: layout, Sections: sections, Main: main, Sidebar: sidebar}, nil
-}
-
-func (layout rawLayout) marshal() (json.RawMessage, error) {
-	main, err := json.Marshal(layout.Main)
-	if err != nil {
-		return nil, fmt.Errorf("encode main layout: %w", err)
-	}
-	sidebar, err := json.Marshal(layout.Sidebar)
-	if err != nil {
-		return nil, fmt.Errorf("encode sidebar layout: %w", err)
-	}
-	layout.Sections["main"] = main
-	layout.Sections["sidebar"] = sidebar
-	sections, err := json.Marshal(layout.Sections)
-	if err != nil {
-		return nil, fmt.Errorf("encode layout sections: %w", err)
-	}
-	layout.Layout["sections"] = sections
-	layoutRaw, err := json.Marshal(layout.Layout)
-	if err != nil {
-		return nil, fmt.Errorf("encode layout: %w", err)
-	}
-	layout.Customization["layout"] = layoutRaw
-	customization, err := json.Marshal(layout.Customization)
-	if err != nil {
-		return nil, fmt.Errorf("encode customization: %w", err)
-	}
-	layout.Document.Document["customization"] = customization
-	return layout.Document.marshal()
-}
-
-func applyStructureCommands(raw json.RawMessage, commands []structureCommand) (json.RawMessage, error) {
-	layout, err := decodeRawLayout(raw)
-	if err != nil {
-		return nil, err
-	}
-	for _, command := range commands {
-		switch command.Op {
-		case "createSection":
-			err = layout.createSection(command)
-		case "deleteSection":
-			err = layout.deleteSection(command.Key)
-		case "moveSection":
-			err = layout.moveSection(command)
-		case "reorderColumn":
-			err = layout.reorderColumn(command.Column, command.Keys)
-		default:
-			err = validationIssueAt("commands", fmt.Sprintf("unknown structure command %q", command.Op))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	return layout.marshal()
-}
-
-func (layout *rawLayout) createSection(command structureCommand) error {
-	if _, exists := layout.Document.Content[command.Key]; exists {
-		return validationIssueAt("commands.key", fmt.Sprintf("section key %q already exists", command.Key))
-	}
-	if len(layout.Document.Content) >= 24 {
-		return validationIssueAt("content", "a resume cannot contain more than 24 sections")
-	}
-	if !validSectionType(command.SectionType) {
-		return validationIssueAt("commands.sectionType", fmt.Sprintf("unknown sectionType %q", command.SectionType))
-	}
-	column, err := layout.column(command.Column)
-	if err != nil {
-		return err
-	}
-	if !command.HasIndex || command.IndexOutside || command.Index < 0 || command.Index > len(*column) {
-		return validationIssueAt("commands.index", "createSection index is outside the target column")
-	}
-	section := map[string]any{"sectionType": command.SectionType, "entries": []any{}}
-	if command.DisplayName.Present {
-		if command.DisplayName.Value == nil {
-			return validationIssueAt("commands.displayName", "createSection displayName must be a string")
-		}
-		section["displayName"] = *command.DisplayName.Value
-	}
-	if command.IconKey.Present {
-		if command.IconKey.Value == nil {
-			return validationIssueAt("commands.iconKey", "createSection iconKey must be a string")
-		}
-		section["iconKey"] = *command.IconKey.Value
-	}
-	sectionRaw, marshalErr := json.Marshal(section)
-	if marshalErr != nil {
-		return fmt.Errorf("encode created section: %w", marshalErr)
-	}
-	layout.Document.Content[command.Key] = sectionRaw
-	*column = insertString(*column, command.Index, command.Key)
-	return nil
-}
-
-func (layout *rawLayout) deleteSection(key string) error {
-	if _, exists := layout.Document.Content[key]; !exists {
-		return validationIssueAt("commands.key", fmt.Sprintf("section key %q does not exist", key))
-	}
-	var found bool
-	layout.Main, found = removeString(layout.Main, key)
-	var sidebarFound bool
-	layout.Sidebar, sidebarFound = removeString(layout.Sidebar, key)
-	if found == sidebarFound {
-		return validationIssueAt("customization.layout.sections", fmt.Sprintf("section key %q is not placed exactly once", key))
-	}
-	delete(layout.Document.Content, key)
-	return nil
-}
-
-func (layout *rawLayout) moveSection(command structureCommand) error {
-	if _, exists := layout.Document.Content[command.Key]; !exists {
-		return validationIssueAt("commands.key", fmt.Sprintf("section key %q does not exist", command.Key))
-	}
-	var mainFound, sidebarFound bool
-	layout.Main, mainFound = removeString(layout.Main, command.Key)
-	layout.Sidebar, sidebarFound = removeString(layout.Sidebar, command.Key)
-	if mainFound == sidebarFound {
-		return validationIssueAt("customization.layout.sections", fmt.Sprintf("section key %q is not placed exactly once", command.Key))
-	}
-	column, err := layout.column(command.Column)
-	if err != nil {
-		return err
-	}
-	if !command.HasIndex || command.IndexOutside || command.Index < 0 || command.Index > len(*column) {
-		return validationIssueAt("commands.index", "moveSection index is outside the target column after removal")
-	}
-	*column = insertString(*column, command.Index, command.Key)
-	return nil
-}
-
-func (layout *rawLayout) reorderColumn(columnName string, keys []string) error {
-	column, err := layout.column(columnName)
-	if err != nil {
-		return err
-	}
-	if len(*column) != len(keys) {
-		return validationIssueAt("commands.keys", "reorderColumn keys must be a permutation of the current column")
-	}
-	want := make(map[string]struct{}, len(*column))
-	for _, key := range *column {
-		want[key] = struct{}{}
-	}
-	seen := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		if _, duplicate := seen[key]; duplicate {
-			return validationIssueAt("commands.keys", "reorderColumn keys must not contain duplicates")
-		}
-		seen[key] = struct{}{}
-		if _, exists := want[key]; !exists {
-			return validationIssueAt("commands.keys", "reorderColumn keys must be a permutation of the current column")
-		}
-	}
-	*column = append([]string(nil), keys...)
-	return nil
-}
-
-func (layout *rawLayout) column(name string) (*[]string, error) {
-	switch name {
-	case "main":
-		return &layout.Main, nil
-	case "sidebar":
-		return &layout.Sidebar, nil
-	default:
-		return nil, validationIssueAt("commands.column", fmt.Sprintf("unknown layout column %q", name))
-	}
-}
-
-func validSectionType(value string) bool {
-	switch value {
-	case "profile", "work", "education", "skill", "language", "certificate", "project", "custom":
-		return true
-	default:
-		return false
-	}
-}
-
-func insertString(values []string, index int, value string) []string {
-	values = append(values, "")
-	copy(values[index+1:], values[index:])
-	values[index] = value
-	return values
-}
-
-func removeString(values []string, target string) ([]string, bool) {
-	for index, value := range values {
-		if value == target {
-			return append(values[:index], values[index+1:]...), true
-		}
-	}
-	return values, false
+	// Keys is reorderColumn's requested column order.
+	Keys []string
 }
 
 func (s *Service) handleUpdateResumeStructure(w http.ResponseWriter, r *http.Request) {

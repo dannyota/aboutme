@@ -1,33 +1,21 @@
 package accountapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-
-	// Register the standard JPEG decoder used to validate stored portable media.
-	_ "image/jpeg"
-	// Register the standard PNG decoder used to validate stored portable media.
-	_ "image/png"
 	"io"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"golang.org/x/text/language"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
@@ -129,35 +117,63 @@ func exportRequestInvalid(r *http.Request) bool {
 	return false
 }
 
+// exportEnvelope is the top-level object of the export attachment.
 type exportEnvelope struct {
+	// Data is the complete export bundle.
 	Data exportData `json:"data"`
 }
 
+// exportData is one account's portable export bundle.
 type exportData struct {
-	ExportVersion int            `json:"exportVersion"`
-	ExportedAt    time.Time      `json:"exportedAt"`
-	Account       exportProfile  `json:"account"`
-	Resumes       []exportResume `json:"resumes"`
+	// ExportVersion is the bundle format version, always 1.
+	ExportVersion int `json:"exportVersion"`
+	// ExportedAt is when the bundle was built, in UTC.
+	ExportedAt time.Time `json:"exportedAt"`
+	// Account is the account profile.
+	Account exportProfile `json:"account"`
+	// Resumes lists the account's resumes, at most three.
+	Resumes []exportResume `json:"resumes"`
 }
 
+// exportProfile is the account profile in an export bundle.
 type exportProfile struct {
-	ID              uuid.UUID `json:"id"`
-	Email           string    `json:"email"`
-	Name            string    `json:"name"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
-	LinkedProviders []string  `json:"linkedProviders"`
+	// ID is the account's user ID.
+	ID uuid.UUID `json:"id"`
+	// Email is the account email address.
+	Email string `json:"email"`
+	// Name is the account display name.
+	Name string `json:"name"`
+	// CreatedAt is when the account was created.
+	CreatedAt time.Time `json:"createdAt"`
+	// UpdatedAt is when the account profile last changed.
+	UpdatedAt time.Time `json:"updatedAt"`
+	// LinkedProviders lists the distinct linked sign-in providers (google,
+	// github, or linkedin), at most three; provider subjects never appear.
+	LinkedProviders []string `json:"linkedProviders"`
 }
 
+// exportResume is one resume in an export bundle, with its portable document
+// and photo.
 type exportResume struct {
-	ID              uuid.UUID `json:"id"`
-	Title           string    `json:"title"`
-	Slug            *string   `json:"slug"`
-	Live            bool      `json:"live"`
-	DownloadEnabled bool      `json:"downloadEnabled"`
-	SEOGeoEnabled   bool      `json:"seoGeoEnabled"`
-	PublicTitle     *string   `json:"publicTitle"`
-	FaviconEmoji    *string   `json:"faviconEmoji"`
+	// ID is the resume ID.
+	ID uuid.UUID `json:"id"`
+	// Title is the owner-visible title.
+	Title string `json:"title"`
+	// Slug is the public slug, null until the resume is first published.
+	Slug *string `json:"slug"`
+	// Live reports whether the resume is published.
+	Live bool `json:"live"`
+	// DownloadEnabled reports whether public download representations are
+	// enabled.
+	DownloadEnabled bool `json:"downloadEnabled"`
+	// SEOGeoEnabled reports whether the live resume participates in
+	// discovery.
+	SEOGeoEnabled bool `json:"seoGeoEnabled"`
+	// PublicTitle is the public page's browser-tab title, null for the
+	// default.
+	PublicTitle *string `json:"publicTitle"`
+	// FaviconEmoji is the public page's icon emoji, null for none.
+	FaviconEmoji *string `json:"faviconEmoji"`
 	// SignInToView is the publish switch, carried with the other publish
 	// settings; the pass epoch never leaves the server
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
@@ -165,19 +181,33 @@ type exportResume struct {
 	// Showcase is the community-showcase state, null without an opt-in
 	// (docs/design/showcase.md "Privacy and abuse"): the state, the role, and
 	// the request time.
-	Showcase      *exportShowcase `json:"showcase"`
-	Revision      string          `json:"revision"`
-	SchemaVersion int32           `json:"schemaVersion"`
-	Lng           string          `json:"lng"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	UpdatedAt     time.Time       `json:"updatedAt"`
-	Document      json.RawMessage `json:"document"`
-	Photo         *exportPhoto    `json:"photo"`
+	Showcase *exportShowcase `json:"showcase"`
+	// Revision is the stored revision as a decimal string.
+	Revision string `json:"revision"`
+	// SchemaVersion is the current document version the document is
+	// projected to.
+	SchemaVersion int32 `json:"schemaVersion"`
+	// Lng is the canonical BCP 47 language tag, "und" when the stored value
+	// is absent, empty, invalid, or overlong.
+	Lng string `json:"lng"`
+	// CreatedAt is when the resume was created.
+	CreatedAt time.Time `json:"createdAt"`
+	// UpdatedAt is when the resume last changed.
+	UpdatedAt time.Time `json:"updatedAt"`
+	// Document is the projected owner document without
+	// personalDetails.photo.
+	Document json.RawMessage `json:"document"`
+	// Photo is the portable photo, null when the document has none.
+	Photo *exportPhoto `json:"photo"`
 }
 
+// exportShowcase is a resume's showcase opt-in in an export bundle.
 type exportShowcase struct {
-	State       string    `json:"state"`
-	Role        *string   `json:"role"`
+	// State is the showcase state, always "listed".
+	State string `json:"state"`
+	// Role is the role picked for the listing, or null.
+	Role *string `json:"role"`
+	// RequestedAt is when the opt-in was requested.
 	RequestedAt time.Time `json:"requestedAt"`
 }
 
@@ -193,10 +223,15 @@ func exportShowcaseOf(row store.ListAccountExportResumesRow) *exportShowcase {
 	}
 }
 
+// exportPhoto is a resume's portable photo in an export bundle, with no
+// object key.
 type exportPhoto struct {
-	MediaType string          `json:"mediaType"`
-	Data      string          `json:"data"`
-	Crop      json.RawMessage `json:"crop"`
+	// MediaType is image/jpeg or image/png, matching the stored key.
+	MediaType string `json:"mediaType"`
+	// Data is the stored photo bytes in standard base64.
+	Data string `json:"data"`
+	// Crop is the stored crop JSON, or JSON null without one.
+	Crop json.RawMessage `json:"crop"`
 }
 
 func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byte, error) {
@@ -302,184 +337,6 @@ func marshalExportPayload(data exportData) ([]byte, error) {
 		return nil, errors.New("complete export exceeds size limit")
 	}
 	return payload, nil
-}
-
-type storedPhotoReference struct {
-	Key  string          `json:"key"`
-	Crop json.RawMessage `json:"crop"`
-}
-
-func (s *Service) exportDocument(row store.ListAccountExportResumesRow) (json.RawMessage, *storedPhotoReference, error) {
-	personalDetails, content, customization, err := s.projector.Project(
-		row.PersonalDetails, row.Content, row.Customization, row.SchemaVersion,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	if _, decodeErr := resume.DecodeParts(personalDetails, content, customization, s.projector.CurrentVersion()); decodeErr != nil {
-		return nil, nil, fmt.Errorf("decode projected document: %w", decodeErr)
-	}
-
-	var personal map[string]json.RawMessage
-	if unmarshalErr := json.Unmarshal(personalDetails, &personal); unmarshalErr != nil || personal == nil {
-		return nil, nil, errors.New("invalid projected personal details")
-	}
-	var photo *storedPhotoReference
-	if raw, ok := personal["photo"]; ok && !bytes.Equal(raw, []byte("null")) {
-		var reference storedPhotoReference
-		if unmarshalErr := json.Unmarshal(raw, &reference); unmarshalErr != nil || reference.Key == "" {
-			return nil, nil, errors.New("invalid projected photo reference")
-		}
-		if len(reference.Crop) == 0 {
-			reference.Crop = json.RawMessage("null")
-		}
-		photo = &reference
-	}
-	delete(personal, "photo")
-	personalDetails, err = json.Marshal(personal)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal portable personal details: %w", err)
-	}
-	document, err := json.Marshal(struct {
-		Content         json.RawMessage `json:"content"`
-		Customization   json.RawMessage `json:"customization"`
-		PersonalDetails json.RawMessage `json:"personalDetails"`
-		SchemaVersion   int32           `json:"schemaVersion"`
-	}{
-		Content: content, Customization: customization, PersonalDetails: personalDetails,
-		SchemaVersion: s.projector.CurrentVersion(),
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal portable document: %w", err)
-	}
-	return document, photo, nil
-}
-
-func (s *Service) exportPhoto(ctx context.Context, resumeID uuid.UUID, reference *storedPhotoReference) (*exportPhoto, error) {
-	if reference == nil {
-		return nil, nil
-	}
-	extension, err := media.ParsePhotoKey(resumeID, reference.Key)
-	if err != nil {
-		return nil, errors.New("invalid referenced media key")
-	}
-	ctx, cancel := context.WithTimeout(ctx, exportPhotoTimeout)
-	defer cancel()
-	reader, mediaType, err := s.media.Get(ctx, reference.Key)
-	if err != nil {
-		if reader != nil {
-			if closeErr := reader.Close(); closeErr != nil {
-				s.logExportFailure(ctx, "close_get_error_reader", closeErr)
-			}
-		}
-		return nil, err
-	}
-	if reader == nil {
-		return nil, errors.New("referenced media reader is missing")
-	}
-
-	var closeOnce sync.Once
-	var closeErr error
-	closeBody := func() { closeOnce.Do(func() { closeErr = reader.Close() }) }
-	stopClose := make(chan struct{})
-	closeJoined := make(chan struct{})
-	go func() {
-		defer close(closeJoined)
-		select {
-		case <-ctx.Done():
-			closeBody()
-		case <-stopClose:
-		}
-	}()
-	defer func() {
-		close(stopClose)
-		<-closeJoined
-		closeBody()
-	}()
-
-	wantMediaType := "image/jpeg"
-	if extension == "png" {
-		wantMediaType = "image/png"
-	}
-	if mediaType != wantMediaType {
-		return nil, errors.New("referenced media type does not match key")
-	}
-	data, readErr := io.ReadAll(io.LimitReader(reader, media.MaxObjectBytes+1))
-	if readErr != nil {
-		return nil, fmt.Errorf("read photo: %w", readErr)
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("read photo: %w", err)
-	}
-	if len(data) == 0 || len(data) > media.MaxObjectBytes {
-		return nil, errors.New("referenced media exceeds size limit")
-	}
-	if !validPortablePhoto(data, extension) {
-		return nil, errors.New("referenced media is invalid")
-	}
-	closeBody()
-	if closeErr != nil {
-		return nil, fmt.Errorf("close photo: %w", closeErr)
-	}
-	return &exportPhoto{
-		MediaType: mediaType,
-		Data:      base64.StdEncoding.EncodeToString(data),
-		Crop:      reference.Crop,
-	}, nil
-}
-
-func validPortablePhoto(data []byte, extension string) bool {
-	config, format, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || (extension == "jpg" && format != "jpeg") || (extension == "png" && format != "png") {
-		return false
-	}
-	maxEdge := exportJPEGMaxEdge
-	if extension == "png" {
-		maxEdge = exportPNGMaxEdge
-	}
-	if config.Width < 1 || config.Height < 1 || config.Width > maxEdge || config.Height > maxEdge {
-		return false
-	}
-	decoded, format, err := image.Decode(bytes.NewReader(data))
-	if err != nil || (extension == "jpg" && format != "jpeg") || (extension == "png" && format != "png") {
-		return false
-	}
-	bounds := decoded.Bounds()
-	return bounds.Dx() == config.Width && bounds.Dy() == config.Height
-}
-
-func projectExportLanguage(value *string) string {
-	if value == nil || *value == "" {
-		return language.Und.String()
-	}
-	tag, err := language.Parse(*value)
-	if err != nil {
-		return language.Und.String()
-	}
-	canonical := tag.String()
-	if utf8.RuneCountInString(canonical) > resume.MaxLngCharacters {
-		return language.Und.String()
-	}
-	return canonical
-}
-
-func portableProviders(providers []string) ([]string, error) {
-	out := make([]string, 0, len(providers))
-	seen := make(map[string]struct{}, len(providers))
-	for _, provider := range providers {
-		if provider != "google" && provider != "github" && provider != "linkedin" {
-			return nil, errors.New("unknown linked provider")
-		}
-		if _, exists := seen[provider]; exists {
-			continue
-		}
-		seen[provider] = struct{}{}
-		out = append(out, provider)
-	}
-	if len(out) > 3 {
-		return nil, errors.New("too many linked providers")
-	}
-	return out, nil
 }
 
 func (s *Service) writeExportUnavailable(w http.ResponseWriter, r *http.Request, operation string, err error) {

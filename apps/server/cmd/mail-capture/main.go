@@ -1,5 +1,5 @@
 // Command mail-capture runs the local, loopback-only authentication-email
-// capture server used by native and HTTPS development (D7). It binds
+// capture server used by native and HTTPS development. It binds
 // 127.0.0.1:20091 by default, requires a 32-byte bearer secret read from a
 // mode-0600 harness-state file, and never logs the secret.
 //
@@ -52,7 +52,7 @@ func main() {
 
 // parseArgs parses and validates the command line. addr must be a loopback
 // host, because the capture server never binds a wildcard or non-loopback
-// address (D7).
+// address.
 func parseArgs(args []string) (config, error) {
 	fs := flag.NewFlagSet("mail-capture", flag.ContinueOnError)
 	var (
