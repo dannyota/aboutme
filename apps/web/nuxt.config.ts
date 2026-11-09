@@ -380,6 +380,11 @@ export default defineNuxtConfig({
         'class-variance-authority',
         'clsx',
         'dompurify',
+        // Lazy routes import these: the API client on the editor and agent
+        // settings, the QR encoder on two-factor settings, and pdf.js on the
+        // LinkedIn import. The dev server's startup crawl reaches them too.
+        'openapi-fetch',
+        'pdfjs-dist/legacy/build/pdf.mjs',
         // The rich-text editor is the first thing on the editor route
         // (/app/resumes/**, client-only) to import these; the same
         // first-visit reload the comment above describes for sign-in also
@@ -393,6 +398,7 @@ export default defineNuxtConfig({
         'prosemirror-view',
         'reka-ui',
         'tailwind-merge',
+        'uqr',
       ],
     },
   },

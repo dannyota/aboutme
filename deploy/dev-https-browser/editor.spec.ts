@@ -80,6 +80,13 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
   const diagnostics = await prepareEditor(state, () => installDiagnostics(state, context, page));
   let reauthPage: Page | undefined;
   let scenarioSucceeded = false;
+  // A failure stage reports document loads since the editor opened. Until the
+  // accessibility stage navigates away, a nonzero count means a reload.
+  let pageLoads = 0;
+  let editorLoads: number | undefined;
+  page.on('load', () => {
+    pageLoads += 1;
+  });
 
   try {
     await loginAsDevelopmentUser(page);
@@ -91,6 +98,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
       state.recordedResumeIDs,
       steps,
     );
+    editorLoads = pageLoads;
     await proveKeyboardStructureAndContextActions(
       state,
       page,
@@ -137,6 +145,9 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
       : undefined;
     if (sourceLine !== undefined) {
       state.editorDiagnosticStage = `${state.editorDiagnosticStage}-line-${sourceLine}`;
+    }
+    if (editorLoads !== undefined) {
+      state.editorDiagnosticStage = `${state.editorDiagnosticStage}-reloads-${pageLoads - editorLoads}`;
     }
     throw error;
   } finally {

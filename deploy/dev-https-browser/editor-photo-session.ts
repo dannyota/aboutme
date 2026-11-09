@@ -1,4 +1,9 @@
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import {
+  expect,
+  type BrowserContext,
+  type Page,
+  type Response,
+} from '@playwright/test';
 import {
   installPhotoSourceReadProbes,
   loginAsDevelopmentUser,
@@ -15,6 +20,7 @@ import {
   expectURLUnchanged,
   expectNoPersistenceWrites,
   expectSavedOrDiagnose,
+  safeSaveState,
 } from './editor-proof-state';
 
 export async function provePhotoSessionPersistence(
@@ -201,36 +207,130 @@ export async function provePhotoSessionPersistence(
   await expect(page.getByLabel('Headline')).toBeVisible();
   state.editorDiagnosticStage = 'session-destroyed';
   const reauthPage = await context.newPage();
-  state.editorDiagnosticStage = 'session-destroy-request';
-  await destroySessionInSecondPage(reauthPage);
+  await reauthPage.goto('/');
+  // The edit's own save must be the first request to meet the ended session.
+  // Otherwise the editor's realtime stream can read the resume first, once
+  // the server ends the stream of the dead session; the editor then turns
+  // signed out and refuses the edit, and the Headline drops the value checked
+  // below. So the save is dispatched and held before the session ends.
   state.editorDiagnosticStage = 'session-local-edit';
-  diagnostics.expectHTTPFailure(
-    'PATCH',
-    `/api/v1/resumes/${resumeID}/personal-details`,
-    401,
-  );
+  const personalPath = `/api/v1/resumes/${resumeID}/personal-details`;
+  diagnostics.expectHTTPFailure('PATCH', personalPath, 401);
+  const editPause = diagnostics.pauseNextMutation('PATCH', personalPath);
   await page.getByLabel('Headline').fill('Retained after session loss');
   state.editorDiagnosticStage = 'session-local-edit-blur';
   await page.getByLabel('Headline').press('Tab');
-  state.editorDiagnosticStage = 'session-loss-alert';
-  await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
-  await expectURLUnchanged(page, baseline);
-  await expectNoPersistenceWrites(probes);
-  state.editorDiagnosticStage = 'session-reauthenticated';
-  await loginAsDevelopmentUser(reauthPage);
-  await expectURLUnchanged(page, baseline);
-  await expectNoPersistenceWrites(probes);
-  await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
-  await page.getByRole('button', { name: 'Resume after sign-in' }).press('Enter');
-  await expect(page.locator('[data-state="saved"]')).toBeVisible();
-  await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
-  await expectURLUnchanged(page, baseline);
-  await expectNoPersistenceWrites(probes);
+  state.editorDiagnosticStage = 'session-local-edit-dispatched';
+  const editDispatched = await Promise.race([
+    editPause.waitUntilPaused().then(() => true),
+    page.waitForTimeout(10_000).then(() => false),
+  ]);
+  if (!editDispatched) {
+    editPause.release();
+    throw new Error('headline save did not dispatch');
+  }
+  const sessionWindow = observeSessionWindow(page, resumeID);
+  try {
+    state.editorDiagnosticStage = 'session-destroy-request';
+    try {
+      await destroySessionInSecondPage(reauthPage);
+    } finally {
+      editPause.release();
+    }
+    state.editorDiagnosticStage = 'session-loss-alert';
+    await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
+    await expectURLUnchanged(page, baseline);
+    await expectNoPersistenceWrites(probes);
+    state.editorDiagnosticStage = 'session-reauthenticated';
+    await loginAsDevelopmentUser(reauthPage);
+    state.editorDiagnosticStage = 'session-reauth-url';
+    await expectURLUnchanged(page, baseline);
+    state.editorDiagnosticStage = 'session-reauth-persistence';
+    await expectNoPersistenceWrites(probes);
+    state.editorDiagnosticStage = 'session-reauth-headline';
+    await expectHeadlineOrDiagnose(state, page, 'session-reauth');
+    state.editorDiagnosticStage = 'session-resume';
+    await page.getByRole('button', { name: 'Resume after sign-in' }).press('Enter');
+    state.editorDiagnosticStage = 'session-resume-saved';
+    await expectSavedOrDiagnose(state, page, 'session-resume');
+    state.editorDiagnosticStage = 'session-resume-headline';
+    await expectHeadlineOrDiagnose(state, page, 'session-resume');
+    state.editorDiagnosticStage = 'session-resume-url';
+    await expectURLUnchanged(page, baseline);
+    await expectNoPersistenceWrites(probes);
+  } catch (error) {
+    state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${sessionWindow.label()}`;
+    throw error;
+  } finally {
+    sessionWindow.dispose();
+  }
   return reauthPage;
 }
 
+// Counts what the editor page does once its session ends, for the failure
+// stage: resume reads refused with 401, realtime stream requests, and
+// document loads (a reload loses the retained edit).
+function observeSessionWindow(
+  page: Page,
+  resumeID: string,
+): { dispose(): void; label(): string } {
+  let refusedReads = 0;
+  let streams = 0;
+  let loads = 0;
+  const onResponse = (response: Response): void => {
+    const request = response.request();
+    const url = new URL(response.url());
+    if (url.origin !== ORIGIN || request.method() !== 'GET') return;
+    if (url.pathname === `/api/v1/resumes/${resumeID}` && response.status() === 401) {
+      refusedReads += 1;
+    }
+    if (url.pathname === '/api/v1/events') streams += 1;
+  };
+  const onLoad = (): void => {
+    loads += 1;
+  };
+  page.on('response', onResponse);
+  page.on('load', onLoad);
+  return {
+    dispose: (): void => {
+      page.off('response', onResponse);
+      page.off('load', onLoad);
+    },
+    label: (): string => `reads401-${refusedReads}-streams-${streams}-loads-${loads}`,
+  };
+}
+
+// Checks the retained Headline. On failure, the stage names what the field
+// shows (never its text), the save state, and whether the sign-in dialog is open.
+async function expectHeadlineOrDiagnose(
+  state: EditorProofState,
+  page: Page,
+  boundary: 'session-reauth' | 'session-resume',
+): Promise<void> {
+  const headline = page.getByLabel('Headline');
+  try {
+    await expect(headline).toHaveValue('Retained after session loss');
+  } catch (error) {
+    const value = await headline.inputValue({ timeout: 1_000 }).catch(() => null);
+    const shown = value === null ? 'missing' : value === '' ? 'empty' : 'other';
+    const saveState = await page.getByTestId('save-status')
+      .getAttribute('data-state', { timeout: 1_000 })
+      .catch(() => null);
+    const dialog = await page
+      .getByRole('alertdialog', { name: 'Sign in to continue editing' })
+      .isVisible();
+    state.editorDiagnosticStage = [
+      boundary,
+      'headline',
+      shown,
+      safeSaveState(saveState),
+      dialog ? 'dialog' : 'no-dialog',
+    ].join('-');
+    throw error;
+  }
+}
+
 export async function destroySessionInSecondPage(page: Page): Promise<void> {
-  await page.goto('/');
   const status = await page.evaluate(async () => {
     const me = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' });
     const body = await me.json() as { data?: { csrfToken?: unknown } };
