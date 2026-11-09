@@ -10,12 +10,20 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 )
 
+// secondFactorPendingStatusBody is the pending second-factor status response.
 type secondFactorPendingStatusBody struct {
-	Purpose    string   `json:"purpose"`
-	Methods    []string `json:"methods"`
-	ExpiresAt  string   `json:"expiresAt"`
-	ReturnPath string   `json:"returnPath"`
-	CSRFToken  string   `json:"csrfToken"`
+	// Purpose is the pending authentication's purpose, login or reauth.
+	Purpose string `json:"purpose"`
+	// Methods lists the account's factor methods in the fixed order passkey,
+	// totp, recovery; it is never empty.
+	Methods []string `json:"methods"`
+	// ExpiresAt is when the pending authentication expires, RFC 3339 in UTC.
+	ExpiresAt string `json:"expiresAt"`
+	// ReturnPath is the validated same-origin path to open after completion.
+	ReturnPath string `json:"returnPath"`
+	// CSRFToken is the pending row's 32-byte CSRF secret, unpadded
+	// base64url, sent back as X-CSRF-Token on every pending POST.
+	CSRFToken string `json:"csrfToken"`
 }
 
 func (h *SecondFactorHandlers) handlePendingStatus(w http.ResponseWriter, r *http.Request) {

@@ -116,43 +116,81 @@ func validRelyingPartyHost(host string) bool {
 
 // ---- options ----
 
+// credentialDescriptor is one WebAuthn credential descriptor in the options
+// JSON.
 type credentialDescriptor struct {
-	Type       string   `json:"type"`
-	ID         string   `json:"id"`
+	// Type is always "public-key".
+	Type string `json:"type"`
+	// ID is the stored credential ID, unpadded base64url.
+	ID string `json:"id"`
+	// Transports lists the stored transport hints in canonical order; it is
+	// omitted when none is stored.
 	Transports []string `json:"transports,omitempty"`
 }
 
+// registrationPublicKey is the publicKey options member of a passkey
+// registration ceremony.
 type registrationPublicKey struct {
+	// Challenge is the ceremony's 32-byte challenge, unpadded base64url.
 	Challenge string `json:"challenge"`
-	RP        struct {
+	// RP names the relying party.
+	RP struct {
+		// Name is the relying-party display name.
 		Name string `json:"name"`
-		ID   string `json:"id"`
+		// ID is the relying-party ID, the canonical origin's host.
+		ID string `json:"id"`
 	} `json:"rp"`
+	// User identifies the account that registers the passkey.
 	User struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
+		// ID is the account's WebAuthn user handle, unpadded base64url.
+		ID string `json:"id"`
+		// Name is the account email.
+		Name string `json:"name"`
+		// DisplayName is the account display name.
 		DisplayName string `json:"displayName"`
 	} `json:"user"`
+	// PubKeyCredParams lists the accepted credential algorithms in order of
+	// preference: ES256, then RS256.
 	PubKeyCredParams []struct {
+		// Type is always "public-key".
 		Type string `json:"type"`
-		Alg  int    `json:"alg"`
+		// Alg is the COSE algorithm identifier.
+		Alg int `json:"alg"`
 	} `json:"pubKeyCredParams"`
-	Timeout                int                    `json:"timeout"`
-	ExcludeCredentials     []credentialDescriptor `json:"excludeCredentials"`
+	// Timeout is the ceremony timeout in milliseconds.
+	Timeout int `json:"timeout"`
+	// ExcludeCredentials lists the account's active passkeys so an
+	// authenticator that already holds one of them does not register again.
+	ExcludeCredentials []credentialDescriptor `json:"excludeCredentials"`
+	// AuthenticatorSelection requires a discoverable credential and user
+	// verification.
 	AuthenticatorSelection struct {
-		ResidentKey        string `json:"residentKey"`
-		RequireResidentKey bool   `json:"requireResidentKey"`
-		UserVerification   string `json:"userVerification"`
+		// ResidentKey is always "required".
+		ResidentKey string `json:"residentKey"`
+		// RequireResidentKey is always true; it repeats ResidentKey for
+		// WebAuthn Level 1 clients.
+		RequireResidentKey bool `json:"requireResidentKey"`
+		// UserVerification is always "required".
+		UserVerification string `json:"userVerification"`
 	} `json:"authenticatorSelection"`
+	// Attestation is always "none".
 	Attestation string `json:"attestation"`
 }
 
+// assertionPublicKey is the publicKey options member of a pending passkey
+// assertion ceremony.
 type assertionPublicKey struct {
-	Challenge        string                 `json:"challenge"`
-	Timeout          int                    `json:"timeout"`
-	RPID             string                 `json:"rpId"`
+	// Challenge is the ceremony's 32-byte challenge, unpadded base64url.
+	Challenge string `json:"challenge"`
+	// Timeout is the ceremony timeout in milliseconds.
+	Timeout int `json:"timeout"`
+	// RPID is the relying-party ID, the canonical origin's host.
+	RPID string `json:"rpId"`
+	// AllowCredentials lists the account's active passkeys; it is never
+	// empty.
 	AllowCredentials []credentialDescriptor `json:"allowCredentials"`
-	UserVerification string                 `json:"userVerification"`
+	// UserVerification is always "required".
+	UserVerification string `json:"userVerification"`
 }
 
 func descriptors(credentials []store.WebauthnCredential) []credentialDescriptor {

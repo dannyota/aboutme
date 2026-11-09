@@ -10,22 +10,43 @@ import (
 )
 
 type (
+	// secondFactorPasskeyBody is one passkey in a second-factor response.
 	secondFactorPasskeyBody struct {
-		ID         string  `json:"id"`
-		CreatedAt  string  `json:"createdAt"`
+		// ID is the passkey's UUID.
+		ID string `json:"id"`
+		// CreatedAt is when the passkey was registered, RFC 3339 in UTC.
+		CreatedAt string `json:"createdAt"`
+		// LastUsedAt is the passkey's last successful use, RFC 3339 in UTC;
+		// it is null until first use.
 		LastUsedAt *string `json:"lastUsedAt"`
 	}
+	// secondFactorStateBody is the account's second-factor state response.
 	secondFactorStateBody struct {
-		Enabled                bool                      `json:"enabled"`
-		Passkeys               []secondFactorPasskeyBody `json:"passkeys"`
-		TOTPEnabled            bool                      `json:"totpEnabled"`
-		RecoveryCodesRemaining int                       `json:"recoveryCodesRemaining"`
+		// Enabled reports whether the account has any active factor.
+		Enabled bool `json:"enabled"`
+		// Passkeys lists the active passkeys ordered by creation time, then
+		// ID; it is an empty array, never null, without passkeys.
+		Passkeys []secondFactorPasskeyBody `json:"passkeys"`
+		// TOTPEnabled reports whether the account has an active TOTP
+		// credential.
+		TOTPEnabled bool `json:"totpEnabled"`
+		// RecoveryCodesRemaining is the number of unused recovery codes,
+		// 0 to 10.
+		RecoveryCodesRemaining int `json:"recoveryCodesRemaining"`
 	}
+	// secondFactorRegistrationBody is the passkey registration response.
 	secondFactorRegistrationBody struct {
-		Passkey       secondFactorPasskeyBody `json:"passkey"`
-		RecoveryCodes []string                `json:"recoveryCodes,omitempty"`
+		// Passkey is the newly registered passkey.
+		Passkey secondFactorPasskeyBody `json:"passkey"`
+		// RecoveryCodes holds ten new codes only on first enrollment; it is
+		// omitted otherwise.
+		RecoveryCodes []string `json:"recoveryCodes,omitempty"`
 	}
+	// secondFactorRecoveryCodesBody is the recovery-code regeneration
+	// response.
 	secondFactorRecoveryCodesBody struct {
+		// RecoveryCodes holds the ten new codes that replace every prior
+		// code.
 		RecoveryCodes []string `json:"recoveryCodes"`
 	}
 )

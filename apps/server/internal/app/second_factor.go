@@ -25,9 +25,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// SecondFactor is NewSecondFactor's result: the route registrar every caller
-// already used, plus the TOTP key-health checker the caller must run at
-// startup and on a five-minute ticker (docs/design/totp-key-management.md
+// SecondFactor is NewSecondFactor's result: the registrar that attaches every
+// second-factor route, plus the TOTP key-health checker the caller must run
+// at startup and on a five-minute ticker (docs/design/totp-key-management.md
 // "Key failures").
 type SecondFactor struct {
 	// RegisterRoutes attaches every second-factor route to a mux.

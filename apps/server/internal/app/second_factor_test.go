@@ -65,7 +65,7 @@ func TestNewSecondFactorRoutes_RegistersEveryContractRoute(t *testing.T) {
 
 	// Every route below requires the pending or session cookie this test
 	// never sends, so each must be reachable (401, not 404) to prove
-	// registration — the specific 401 body is internal/auth's own concern.
+	// registration; the specific 401 body is internal/auth's own concern.
 	// The TOTP enrollment path answers 404 while TOTP_ENROLLMENT_ENABLED is
 	// false (see TestNewSecondFactorRoutes_TOTPEnrollmentIgnoresFlagOnlyAtRoute),
 	// so this table uses an enrollment-enabled config.
@@ -94,7 +94,7 @@ func TestNewSecondFactorRoutes_RegistersEveryContractRoute(t *testing.T) {
 // TestNewSecondFactorRoutes_RegistrationOptionsIgnoresEnrollmentFlagOnlyAtRoute
 // proves registration options answers the uniform not-found response while
 // enrollment is disabled, before any session check, and proceeds to ordinary
-// session enforcement (401, not 404) once enrollment is enabled — both ends
+// session enforcement (401, not 404) once enrollment is enabled: both ends
 // of docs/design/passkey-second-factor-contract.md's "Release surface" rule
 // that only registration options and completion recheck the flag.
 func TestNewSecondFactorRoutes_RegistrationOptionsIgnoresEnrollmentFlagOnlyAtRoute(t *testing.T) {
@@ -127,7 +127,7 @@ func TestNewSecondFactorRoutes_RegistrationOptionsIgnoresEnrollmentFlagOnlyAtRou
 // TestNewSecondFactorRoutes_TOTPEnrollmentIgnoresFlagOnlyAtRoute proves TOTP
 // enrollment start answers the uniform not-found response while
 // TOTP_ENROLLMENT_ENABLED is false, before any session check, and proceeds to
-// ordinary session enforcement once enabled — the same shape as the passkey
+// ordinary session enforcement once enabled, the same shape as the passkey
 // registration options flag check, for
 // docs/design/totp-second-factor-contract.md "Enrollment start and
 // completion both recheck TOTP_ENROLLMENT_ENABLED".
@@ -165,8 +165,8 @@ func TestNewSecondFactorRoutes_TOTPEnrollmentIgnoresFlagOnlyAtRoute(t *testing.T
 // TestNewSecondFactorRoutes_RejectsRelyingPartyOrigin is the regression test
 // for failing startup closed when PUBLIC_ORIGIN cannot produce a WebAuthn
 // relying party (docs/design/second-factor-authentication.md, "Passkeys").
-// internal/secondfactor.NewRelyingParty is always constructed — every
-// second-factor route (not only enrollment) needs a working relying party —
+// internal/secondfactor.NewRelyingParty is always constructed (every
+// second-factor route, not only enrollment, needs a working relying party),
 // so this fails regardless of PasskeyEnrollment; see NewSecondFactor's
 // own comment and internal/config/passkey_test.go for the narrower
 // flag-gated startup check.
@@ -291,7 +291,7 @@ func TestTOTPIssuerFromPublicOrigin_RejectsAnUnparsableOrigin(t *testing.T) {
 // end-to-end regression for docs/design/totp-key-management.md "Key
 // failures": a TOTP row sealed under a key ID outside the configured ring
 // fails verification with 503 authentication_unavailable, counts no pending
-// failure, and never touches readiness — internal/publicstate/readiness.go
+// failure, and never touches readiness: internal/publicstate/readiness.go
 // takes no TOTP input, so /readyz stays 200 throughout.
 func TestReadyzStaysReadyWhileTOTPVerificationFailsClosedOnAnUnknownKeyID(t *testing.T) {
 	t.Parallel()

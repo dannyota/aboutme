@@ -54,13 +54,14 @@ type Options struct {
 	ReadyTTL time.Duration
 	// TrustedProxies controls which peers RateLimit and SecurityHeaders
 	// treat as a trusted reverse proxy able to assert this request's real
-	// client IP and scheme — see TrustedProxies. The zero value (nil)
+	// client IP and scheme (see TrustedProxies). The zero value (nil)
 	// trusts no one, so callers must supply the deployment's real
 	// trusted-proxy CIDRs explicitly (internal/config's
-	// TRUSTED_PROXY_CIDRS, populated from main.go) rather than this package
-	// assuming a topology. A loopback default is unsafe when a reverse proxy
-	// reaches Go over a container network because it collapses all client
-	// rate-limit keys to the proxy address. See docs/design/deployment.md.
+	// TRUSTED_PROXY_CIDRS, populated in internal/app/router.go) rather
+	// than this package assuming a topology. A loopback default is unsafe
+	// when a reverse proxy reaches Go over a container network because it
+	// collapses all client rate-limit keys to the proxy address. See
+	// docs/design/deployment.md.
 	TrustedProxies TrustedProxies
 	// Clock returns the current time, used by RateLimit's token buckets
 	// and by /readyz's readiness cache (see cachedPinger). Defaults to

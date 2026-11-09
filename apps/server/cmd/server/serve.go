@@ -45,8 +45,8 @@ func servePair(ctx context.Context, logger *slog.Logger, publicListener net.List
 
 // serve runs handler on ln until ctx is done, then drains in-flight
 // requests via a graceful shutdown (bounded by shutdownTimeout) before
-// returning. It takes a context and a listener — rather than reading
-// signals or a port straight from the environment — so shutdown behavior
+// returning. It takes a context and a listener, rather than reading
+// signals or a port straight from the environment, so shutdown behavior
 // can be exercised directly in tests without touching real OS signals or
 // binding a fixed port.
 func serve(ctx context.Context, logger *slog.Logger, ln net.Listener, handler http.Handler) error {

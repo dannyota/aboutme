@@ -109,14 +109,25 @@ type TOTPSecondFactorService interface {
 }
 
 type (
+	// totpEnrollmentStartBody is the TOTP enrollment start response.
 	totpEnrollmentStartBody struct {
-		EnrollmentID    string `json:"enrollmentId"`
-		Secret          string `json:"secret"`
+		// EnrollmentID is the 32-byte enrollment token, unpadded base64url.
+		EnrollmentID string `json:"enrollmentId"`
+		// Secret is the proposed TOTP secret as 32 Base32 characters in
+		// eight space-separated groups of four.
+		Secret string `json:"secret"`
+		// ProvisioningURI is the otpauth URI that carries the same secret.
 		ProvisioningURI string `json:"provisioningUri"`
-		ExpiresAt       string `json:"expiresAt"`
+		// ExpiresAt is when the enrollment stops accepting completion,
+		// RFC 3339 in UTC.
+		ExpiresAt string `json:"expiresAt"`
 	}
+	// totpEnrollmentCompleteBody is the TOTP enrollment completion response.
 	totpEnrollmentCompleteBody struct {
-		TOTPEnabled   bool     `json:"totpEnabled"`
+		// TOTPEnabled is always true.
+		TOTPEnabled bool `json:"totpEnabled"`
+		// RecoveryCodes holds ten new codes only when this completion created
+		// the account's first active factor; it is omitted otherwise.
 		RecoveryCodes []string `json:"recoveryCodes,omitempty"`
 	}
 )

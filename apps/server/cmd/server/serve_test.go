@@ -148,7 +148,7 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	cancel()
 
 	// serve() must not return while the in-flight request is still being
-	// held open — give shutdown a moment to (incorrectly) race ahead before
+	// held open. Give shutdown a moment to (incorrectly) race ahead before
 	// we release the handler, so a bug that aborts in-flight work would
 	// show up as serveDone firing before we release() below.
 	select {

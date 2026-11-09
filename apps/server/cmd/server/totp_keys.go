@@ -73,7 +73,7 @@ func runTOTPKeyReencrypt(args []string) error {
 // executeTOTPKeyReencrypt runs the job and writes one fixed JSON report to
 // output, the same shape executePrivacyCommand uses for the other bounded
 // server commands. The report carries only the job name, success, and
-// runTOTPReencryptJob's result — counts and internal row IDs, never a key,
+// runTOTPReencryptJob's result: counts and internal row IDs, never a key,
 // secret, nonce, ciphertext, email, or account ID
 // (docs/design/totp-key-management.md "Rotation").
 func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, output, diagnostics io.Writer) error {
@@ -94,7 +94,7 @@ func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, ou
 }
 
 // runTOTPReencryptJob loads the reduced TOTP re-encryption configuration
-// (config.LoadTOTPReencryptJob — DATABASE_URL and the key ring only, never
+// (config.LoadTOTPReencryptJob: DATABASE_URL and the key ring only, never
 // PUBLIC_ORIGIN, auth-email, OAuth, or password-rate values), opens a pool,
 // and runs one bounded TOTPRotationRunner pass.
 func runTOTPReencryptJob(ctx context.Context, getenv func(string) string, logger *slog.Logger) (secondfactor.TOTPReencryptResult, error) {

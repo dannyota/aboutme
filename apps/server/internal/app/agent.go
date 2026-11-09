@@ -17,17 +17,30 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
+// agentRouteHandlers holds one handler per agent-access route. Every field is
+// required when agent access is enabled.
 type agentRouteHandlers struct {
+	// AuthorizationMetadata serves /.well-known/oauth-authorization-server.
 	AuthorizationMetadata http.Handler
-	ProtectedMetadata     http.Handler
-	Register              http.Handler
-	Authorize             http.Handler
-	Token                 http.Handler
-	Revoke                http.Handler
-	MCP                   http.Handler
-	Consent               http.Handler
-	AgentGrants           http.Handler
-	AgentGrant            http.Handler
+	// ProtectedMetadata serves /.well-known/oauth-protected-resource.
+	ProtectedMetadata http.Handler
+	// Register serves OAuth client registration at /oauth/register.
+	Register http.Handler
+	// Authorize serves the OAuth authorization endpoint at /oauth/authorize.
+	Authorize http.Handler
+	// Token serves the OAuth token endpoint at /oauth/token.
+	Token http.Handler
+	// Revoke serves OAuth token revocation at /oauth/revoke.
+	Revoke http.Handler
+	// MCP serves the MCP endpoint at /mcp.
+	MCP http.Handler
+	// Consent serves the session-authenticated consent API at
+	// /api/v1/oauth/consent.
+	Consent http.Handler
+	// AgentGrants serves the account's agent-grant list at /api/v1/me/agents.
+	AgentGrants http.Handler
+	// AgentGrant serves one agent grant at /api/v1/me/agents/{grantId}.
+	AgentGrant http.Handler
 }
 
 func newAgentRouteRegistrar(enabled bool, registry []publicroots.Route, handlers agentRouteHandlers) (func(*http.ServeMux), error) {
