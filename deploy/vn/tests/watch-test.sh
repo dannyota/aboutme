@@ -272,7 +272,7 @@ done
 [[ $(wc -l <"$work/transport-attempts") == 8 && $(wc -l <"$work/outage.err") == 8 && ! -s $work/retry-delays ]] || {
   echo 'watcher alerts retried or waited during a transport outage' >&2; exit 1;
 }
-grep -qxF 'coraza counts in the last hour: matches=1 unparsed=1' "$work/outage.alerts.journal"
+grep -qxF 'coraza counts in the last hour: matches=1 unparsed=1 diagnostics=0' "$work/outage.alerts.journal"
 [[ $(wc -l <"$work/totp-reads") == 1 ]] || { echo 'transport outage skipped the final TOTP check' >&2; exit 1; }
 
 # Pause after the watcher selected Telegram, then roll back and replace chat.
