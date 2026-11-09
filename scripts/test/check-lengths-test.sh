@@ -59,20 +59,20 @@ lines_file apps/server/internal/store/querier.go 800 1
 expect_pass 'header-bearing sqlc output'
 
 fresh_repo
-lines_file apps/server/internal/store/custom.sql.go 601
-expect_fail 'handwritten .sql.go' apps/server/internal/store/custom.sql.go 601 600
+lines_file apps/server/internal/store/custom.sql.go 501
+expect_fail 'handwritten .sql.go' apps/server/internal/store/custom.sql.go 501 500
 
 fresh_repo
-lines_file apps/server/internal/store/late.sql.go 601 6
-expect_fail 'header after line five' apps/server/internal/store/late.sql.go 601 600
+lines_file apps/server/internal/store/late.sql.go 501 6
+expect_fail 'header after line five' apps/server/internal/store/late.sql.go 501 500
 
 fresh_repo
-lines_file apps/server/internal/foo/foo.go 600
-expect_pass 'server Go at 600'
+lines_file apps/server/internal/foo/foo.go 500
+expect_pass 'server Go at 500'
 
 fresh_repo
-lines_file apps/server/internal/foo/foo.go 601
-expect_fail 'server Go at 601' apps/server/internal/foo/foo.go 601 600
+lines_file apps/server/internal/foo/foo.go 501
+expect_fail 'server Go at 501' apps/server/internal/foo/foo.go 501 500
 
 fresh_repo
 lines_file apps/server/internal/foo/foo_test.go 800

@@ -113,7 +113,7 @@ pre-commit hook:
 
 - Markdown files: at most 450 lines. Split a larger document into a directory
   with a `README.md` index and focused pages, or trim it.
-- Non-test Go under `apps/server`: at most 600 lines.
+- Non-test Go under `apps/server`: at most 500 lines.
 - Other non-test code (Go, TypeScript, Vue, JavaScript, shell): at most 700
   lines.
 

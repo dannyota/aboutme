@@ -130,7 +130,7 @@ hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged c
 	git config core.hooksPath .githooks
 	@echo "core.hooksPath = .githooks (pre-commit runs gitleaks protect --staged)"
 
-lengths-check: ## Fail when a doc passes 450 lines, non-test apps/server Go passes 600, or other non-test code passes 700
+lengths-check: ## Fail when a doc passes 450 lines, non-test apps/server Go passes 500, or other non-test code passes 700
 	bash scripts/check-lengths.sh
 
 docs-lint: ## Check markdown formatting + lint
