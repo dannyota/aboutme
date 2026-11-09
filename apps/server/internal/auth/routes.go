@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -48,6 +49,10 @@ const sessionRequiredCode = "session_required"
 
 // reauthRequiredCode is shared by all recent-reauth gates.
 const reauthRequiredCode = "reauth_required"
+
+// statusClientClosedRequest is the conventional client-closed-request status;
+// no client receives it.
+const statusClientClosedRequest = 499
 
 // RequireSession authenticates the session, delivers any rotated cookie, and
 // stores the session and account ID in context. Invalid credentials return the
@@ -134,8 +139,16 @@ func (s *Service) sessionChain(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 // writeSessionAPIInternalError logs only fixed fields and an optional SQLSTATE,
-// never database error text, then writes an opaque 500.
+// never database error text. A canceled request records a client-closed status.
 func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Request, op string, err error) {
+	if errors.Is(err, context.Canceled) && errors.Is(r.Context().Err(), context.Canceled) {
+		if s.logger != nil {
+			s.logger.InfoContext(r.Context(), "auth: session api request canceled",
+				"request_id", api.RequestIDFromContext(r.Context()), "op", op)
+		}
+		w.WriteHeader(statusClientClosedRequest)
+		return
+	}
 	if s.logger != nil {
 		attrs := []any{
 			"request_id", api.RequestIDFromContext(r.Context()),
