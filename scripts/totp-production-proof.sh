@@ -85,7 +85,7 @@ done
 # --- Shared lock and watchdog -----------------------------------------------
 
 if [ -z "${ABOUTME_TOTP_PROOF_CAPPED:-}" ]; then
-  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
+  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(local_check_lock_path "$REPO")}
   exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
     env ABOUTME_TOTP_PROOF_CAPPED=1 bash "$REPO/scripts/run-owned.sh" \
     --timeout 4200 -- bash "$REPO/scripts/totp-production-proof.sh" "$MODE"

@@ -23,15 +23,18 @@ read or print secret values or personal data. Use plain words and active voice,
 no em dashes, no plan, task, or phase IDs in code, comments, tests, or living
 docs. Keep Markdown at or under 400 lines, non-test Go under apps/server at or
 under 400, and other non-test code at or under 700; a file with a generated
-header is exempt. Temporary files and reports go to the scratchpad outside the
-repository.
+header is exempt. Put temporary files in $TMPDIR; the sandbox cannot write the
+primary's scratchpad. The launcher saves your final message as the report, so
+put the complete report there.
 
-Codex sandboxes cannot run local checks. The primary prefetches dependencies and
-runs make pre-push and approved bounded checks under instructions/resources.md.
-Read its output and exact-commit CI evidence; never invent results. Stop and
-report conflicting authorities, overlapping ownership, or a missing decision
-instead of inventing a contract. Do not dispatch other jobs; the primary owns
-concurrency and verification.
+Roles with the workspace-write sandbox have network access and run the brief's
+bounded checks through the managed lock under instructions/resources.md; they
+never write .git. Read-only roles run no checks and read the author's output and
+exact-commit CI evidence. The primary runs make pre-push before pushing. Use the
+network only for the brief's work and never invent results. Stop and report
+conflicting authorities, overlapping ownership, or a missing decision instead of
+inventing a contract. Do not dispatch other jobs; the primary owns concurrency
+and verification.
 
 Report file changes, if any, as exact new, changed, and deleted paths, one line
 each, and identify your hunks in shared files. Give checks run with commands and
@@ -45,8 +48,8 @@ You own only the tests, display fixtures, and evidence paths the brief names. Ne
 
 Rules:
 - Use the Playwright MCP server configured in .codex/config.toml to inspect real selectors, requests, and state. If configuration or access is missing, report the boundary to the primary. Write reusable scripted headless @playwright/test specs from observations; MCP never runs the recorded automation.
-- CI runs web-e2e and dev-https proofs. Local proofs need an approved bounded primary-session command and stack under instructions/resources.md. After native runner integration and acceptance, macOS proofs use the owner-account trusted-commit boundary; native HTTPS exclusions report partial evidence and never satisfy full Linux CI. Display harness PDFs still run on Mac. Never start stacks or run local checks from the sandbox.
-- Follow instructions/web.md for the accepted display assertion migration. Until cutover, the primary dispatches hosted Baselines at the exact candidate and downloads candidate-baselines; inspect and report each changed PNG. Before deletion, record inventory and mutation evidence on Linux and Mac. Product page PNGs remain separate assets; optional sanitized review images are non-blocking and retained 14 days. Never run builds from the sandbox.
+- CI runs web-e2e and dev-https proofs. Local proofs need an approved bounded primary-session command and stack under instructions/resources.md. After native runner integration and acceptance, macOS proofs use the owner-account trusted-commit boundary; native HTTPS exclusions report partial evidence and never satisfy full Linux CI. Display harness PDFs still run on Mac. Never start stacks from the sandbox; run other bounded checks through the managed lock under instructions/resources.md.
+- Follow instructions/web.md for the accepted display assertion migration. Until cutover, the primary dispatches hosted Baselines at the exact candidate and downloads candidate-baselines; inspect and report each changed PNG. Before deletion, record inventory and mutation evidence on Linux and Mac. Product page PNGs remain separate assets; optional sanitized review images are non-blocking and retained 14 days. Never build or update baselines locally.
 - Job seeker persona: sign up, start from a template or sample, edit, publish, share, and export in Vietnamese or English. Judge only what a visitor sees. Create accounts and resumes only on the local stack; production stays signed out unless the brief names a test account. Never use the owner's account or create, publish, or delete production resumes.
 - Recruiter persona: stay signed out with no account. Read public pages, gallery samples, PDFs, and applicant tracking system text. Check that content and order agree and are quick to scan and credible.
 - Use phone (390 px) and desktop (1440 px) browser widths. Save persona screenshots and PDFs under .dev/personas/ only when the brief assigns those local evidence paths. Persona work never edits product files.

@@ -44,7 +44,7 @@ source "$REPO/scripts/lib/platform.sh"
 require_modern_bash || exit 1
 require_gnu_tools date || exit 1
 if [ -z "${ABOUTME_DOCUMENT_CHECK_SCOPED:-}" ]; then
-  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock}
+  LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(local_check_lock_path "$REPO")}
   exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
     env ABOUTME_DOCUMENT_CHECK_SCOPED=1 bash "$REPO/scripts/run-owned.sh" \
     --timeout 900 -- bash "$REPO/scripts/deployment-document-check.sh"

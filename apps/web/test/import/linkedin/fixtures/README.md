@@ -68,7 +68,7 @@ command. Until wrapper integration, use the existing lock and timeout path:
 
 ```bash
 python3 scripts/lib/local-check.py \
-  "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
+  "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.dev/locks/local-check.lock" 900 \
   bash scripts/run-capped.sh --timeout 1200 -- \
   bash apps/web/test/import/linkedin/fixtures/generate.sh
 ```
@@ -82,7 +82,7 @@ web dependencies, without creating or removing dependency links:
 
 ```bash
 python3 scripts/lib/local-check.py \
-  "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" 900 \
+  "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.dev/locks/local-check.lock" 900 \
   bash scripts/run-capped.sh --timeout 120 -- \
   node apps/web/scripts/linkedin-pdf-shape.mjs <path-to-pdf>
 ```

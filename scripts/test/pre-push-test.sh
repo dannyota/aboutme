@@ -114,7 +114,7 @@ LOCK
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email test@example.invalid
   git -C "$repo" config user.name "pre-push test"
-  printf 'node_modules\n.nuxt/\n' >"$repo/.git/info/exclude"
+  printf 'node_modules\n.nuxt/\n/.dev/\n' >"$repo/.git/info/exclude"
   git -C "$repo" add -A
   git -C "$repo" commit -qm "test: base"
   git -C "$repo" update-ref refs/remotes/origin/main HEAD
@@ -153,6 +153,9 @@ new_repo "$REPO"
 
 # No changes: every check skips, lengths runs, under the lock and deadline.
 check "$REPO" 0
+# The lock parent creates the main checkout's private .dev/locks directory.
+python3 -c 'import os, sys; assert all(os.stat(p).st_mode & 0o777 == 0o700 for p in sys.argv[1:])' \
+  "$REPO/.dev" "$REPO/.dev/locks" || fail 'the shared lock directory is not private'
 
 has_call "run-owned --timeout 600 -- bash $REPO/scripts/pre-push.sh --capped"
 has_line 'eslint +skip'
@@ -170,7 +173,9 @@ for code in 123 124 126 127 130 137; do
 done
 
 # A real advisory lock held by another process refuses before the watchdog.
-python3 - "$REPO/.git/aboutme-local-check.lock" "$WORK/ready" <<'LOCK' &
+# The shared lock lives in the main checkout's ignored .dev/locks directory.
+mkdir -p "$REPO/.dev/locks"
+python3 - "$REPO/.dev/locks/local-check.lock" "$WORK/ready" <<'LOCK' &
 import fcntl, sys, time
 with open(sys.argv[1], "w") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -413,7 +418,7 @@ for number in (signal.SIGTERM, signal.SIGINT):
                 time.sleep(0.05)
             pid = owned.read_text()
             child.send_signal(number)
-            with open(Path(repo) / ".git/aboutme-local-check.lock", "w") as lock:
+            with open(Path(repo) / ".dev/locks/local-check.lock", "w") as lock:
                 deadline = time.monotonic() + 20
                 while True:
                     try:

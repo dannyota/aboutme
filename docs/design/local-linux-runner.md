@@ -163,19 +163,20 @@ Never change machine settings or control the DB.
 
 ## Locking, cancellation, and integration
 
-The landed `ci-local.sh` acquires the common Git directory's
-`aboutme-local-check.lock` through `scripts/lib/local-check.py`. That Python
-parent closes the descriptor in children; do not infer lock ownership from an
-inherited descriptor. Keep it alive throughout cleanup. Standalone
-`make operational-test-dev-https-linux` calls the public runner, which takes
-this lock and uses `run-capped.sh --timeout 660`. For the gate,
-`ci-local.sh --capped` explicitly calls `ci.sh --local-gate`; only that call
-selects the private Make target `operational-test-dev-https-linux-locked`, whose
-recipe calls the runner `--body` without reacquiring the lock. These internal
-command arguments are trusted call structure, not an environment-variable bypass
-or public API. Ignore inherited mode variables; ordinary `ci.sh` uses the public
-target. The gate retains its 3,600-second watchdog; the private recipe wraps the
-body in a 660-second watchdog without another lock.
+The landed `ci-local.sh` acquires the main checkout's
+`.dev/locks/local-check.lock`, which every worktree shares, through
+`scripts/lib/local-check.py`. That Python parent closes the descriptor in
+children; do not infer lock ownership from an inherited descriptor. Keep it
+alive throughout cleanup. Standalone `make operational-test-dev-https-linux`
+calls the public runner, which takes this lock and uses
+`run-capped.sh --timeout 660`. For the gate, `ci-local.sh --capped` explicitly
+calls `ci.sh --local-gate`; only that call selects the private Make target
+`operational-test-dev-https-linux-locked`, whose recipe calls the runner
+`--body` without reacquiring the lock. These internal command arguments are
+trusted call structure, not an environment-variable bypass or public API. Ignore
+inherited mode variables; ordinary `ci.sh` uses the public target. The gate
+retains its 3,600-second watchdog; the private recipe wraps the body in a
+660-second watchdog without another lock.
 
 Linux `ci.sh` retains `make operational-test`. Darwin runs fast, deploy,
 browser, and isolated targets within `operational contracts`, preserving any
