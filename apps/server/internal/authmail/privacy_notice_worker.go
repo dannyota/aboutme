@@ -81,6 +81,9 @@ func (w *Worker) sendNoticeJob(ctx context.Context, claimed store.AuthEmailJob) 
 		}
 		return nil
 	}
+	if !sameClaimedAuthority(claimed, job) {
+		return finishFailure("payload_invalid")
+	}
 	if !job.ExpiresAt.After(now) {
 		return finishFailure("expired")
 	}

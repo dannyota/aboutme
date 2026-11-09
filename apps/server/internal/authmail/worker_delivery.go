@@ -71,13 +71,24 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return err
 	}
 
-	// Current authority: the lease must still be live, the job must not be
-	// expired, and the stored token digest must match the scope row. An expired
-	// or stale job becomes terminal, and that terminal state is committed here:
-	// the deferred rollback must not undo it.
 	if !leased.LeaseExpiresAt.After(now) {
 		return nil
 	}
+	failAuthentication := func() error {
+		w.logger.Warn("authmail: decrypt failed", "job", leased.ID)
+		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
+			return terminalErr
+		}
+		return tx.Commit(ctx)
+	}
+	if !sameClaimedAuthority(job, leased) {
+		return failAuthentication()
+	}
+
+	// Current authority: the job must not be expired, and the stored token
+	// digest must match the scope row. An expired or stale job becomes terminal,
+	// and that terminal state is committed here: the deferred rollback must not
+	// undo it.
 	if !leased.ExpiresAt.After(now) {
 		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
 			return terminalErr
@@ -95,11 +106,7 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	// sending. A failed open commits terminal state without exposing plaintext.
 	payload, err := w.ring.Open(leased.ID, Kind(leased.Kind), scopeFromJob(leased), sealedFromJob(leased))
 	if err != nil {
-		w.logger.Warn("authmail: decrypt failed", "job", leased.ID)
-		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
-			return terminalErr
-		}
-		return tx.Commit(ctx)
+		return failAuthentication()
 	}
 
 	// Send under a ten-second deadline while both locks are held.
@@ -225,4 +232,27 @@ func sealedFromJob(job store.AuthEmailJob) Sealed {
 func scopeFromJob(job store.AuthEmailJob) JobScope {
 	return JobScope{UserID: job.UserID, RegistrationID: job.RegistrationID,
 		ResetTokenID: job.ResetTokenID, TokenDigest: job.TokenDigest}
+}
+
+// sameClaimedAuthority ties the route and scope locks to the authenticated row.
+// Nullable authority columns must match by presence and value.
+func sameClaimedAuthority(claimed, locked store.AuthEmailJob) bool {
+	if claimed.Kind != locked.Kind || (claimed.TokenDigest == nil) != (locked.TokenDigest == nil) ||
+		!bytes.Equal(claimed.TokenDigest, locked.TokenDigest) {
+		return false
+	}
+	for _, ids := range [][2]*uuid.UUID{
+		{claimed.UserID, locked.UserID},
+		{claimed.RegistrationID, locked.RegistrationID},
+		{claimed.ResetTokenID, locked.ResetTokenID},
+	} {
+		if ids[0] == nil || ids[1] == nil {
+			if ids[0] != ids[1] {
+				return false
+			}
+		} else if *ids[0] != *ids[1] {
+			return false
+		}
+	}
+	return true
 }
