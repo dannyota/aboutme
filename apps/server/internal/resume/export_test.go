@@ -116,7 +116,7 @@ func NewIdempotencyStoreWithRecheckBlockerForTest(pool *store.Pool, now func() t
 }
 
 // ExecuteForTest preserves the response/replayed/error view used by the
-// Phase 2A suites while production callers consume ExecuteResult's commit
+// idempotency suites while production callers consume ExecuteResult's commit
 // classification. The underlying execution path is exactly Execute.
 func (s *IdempotencyStore) ExecuteForTest(ctx context.Context, userID uuid.UUID,
 	operation string, key uuid.UUID, requestHash [32]byte,

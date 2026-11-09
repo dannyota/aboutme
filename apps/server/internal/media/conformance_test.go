@@ -1,7 +1,6 @@
 // Package media_test holds the one table-driven conformance suite both
-// backends must pass identically (D10: one conformance suite, two
-// backends), plus backend-specific tests in fs_test.go / s3_test.go and key
-// grammar tests in media_test.go.
+// backends must pass identically, plus backend-specific tests in fs_test.go /
+// s3_test.go and key grammar tests in media_test.go.
 package media_test
 
 import (
@@ -309,7 +308,7 @@ func TestConformance_ConcurrentSameKey(t *testing.T) {
 	}
 }
 
-// invalidKeys is the alias/hostile matrix from the task file: empty keys,
+// invalidKeys is the alias/hostile key matrix: empty keys,
 // empty/"."/".." segments, repeated separators, leading or trailing
 // separators, backslash, NUL — plus oversize and non-UTF-8 defense cases.
 func invalidKeys() []string {
@@ -600,7 +599,7 @@ func TestConformance_ListPagePrefixAliasesRejected(t *testing.T) {
 // deeper path "k/child" is simply absent — both backends answer Get and
 // Delete with ErrNotFound, so lifecycle code behaves
 // identically over both. (Creating such a deeper key is an FS-impossible
-// layout the D11 grammar never produces; see fs.go.)
+// layout the photo-key grammar never produces; see fs.go.)
 func TestConformance_FileSegmentShadowing(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {

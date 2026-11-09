@@ -18,7 +18,7 @@ import (
 )
 
 // fsBackend is the rooted filesystem implementation of Backend: native
-// development and every unit test (D10). It has no credentials.
+// development and every unit test. It has no credentials.
 //
 // On-disk layout: each object lives at root/<key> as one file whose first
 // line is the stored content type followed by the raw object bytes, so an
@@ -28,7 +28,7 @@ import (
 // create-only guarantee the S3 backend gets from If-None-Match, with no
 // window in which a reader can observe a partial object.
 //
-// Divergence from S3, documented and unreachable through D11 keys: the
+// Divergence from S3, documented and unreachable through photo keys: the
 // filesystem cannot store both "k" and "k/child", because "k" occupies the
 // path "k/child" would need as a directory. Such a Put fails as a proved
 // non-create; Get and Delete on the shadowed deeper path behave exactly
@@ -154,7 +154,7 @@ func (b *fsBackend) Put(ctx context.Context, key, contentType string, body io.Re
 			if info, statErr := b.dir.Stat(target); statErr == nil && info.IsDir() {
 				// The name is a directory for deeper keys, not an object:
 				// the mirror image of the documented "k"/"k/child"
-				// divergence, equally unreachable through D11 keys.
+				// divergence, equally unreachable through photo keys.
 				return PutNotCreated, fmt.Errorf("media: fs put %q: key names a directory", key)
 			}
 			return PutNotCreated, fmt.Errorf("media: fs put %q: %w", key, ErrAlreadyExists)

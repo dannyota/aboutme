@@ -114,16 +114,7 @@ func (s *Service) processAuthorizationCode(ctx context.Context, form url.Values,
 	if _, err = q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{CodeDigest: digest[:], ConsumedAt: now, IssuedFamilyID: familyID}); err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	oauthEntropyMu.Lock()
-	access, accessDigest, err := NewToken(TokenKindAccess, s.entropy)
-	var refresh string
-	var refreshDigest [32]byte
-	if err == nil {
-		var refreshErr error
-		refresh, refreshDigest, refreshErr = NewToken(TokenKindRefresh, s.entropy)
-		err = refreshErr
-	}
-	oauthEntropyMu.Unlock()
+	pair, err := s.newTokenPair()
 	if err != nil {
 		return tokenResponse{}, err
 	}
@@ -132,7 +123,7 @@ func (s *Service) processAuthorizationCode(ctx context.Context, form url.Values,
 		digest  [32]byte
 		kind    TokenKind
 		expires time.Time
-	}{{accessDigest, TokenKindAccess, now.Add(accessTokenTTL)}, {refreshDigest, TokenKindRefresh, familyExpiry}} {
+	}{{pair.accessDigest, TokenKindAccess, now.Add(accessTokenTTL)}, {pair.refreshDigest, TokenKindRefresh, familyExpiry}} {
 		if _, err = q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: token.digest[:], Kind: string(token.kind), FamilyID: familyID, ClientID: code.ClientID, UserID: code.UserID, GrantID: grant.ID, CreatedAt: now, ExpiresAt: token.expires, FamilyExpiresAt: familyExpiry}); err != nil {
 			return tokenResponse{}, err
 		}
@@ -140,5 +131,5 @@ func (s *Service) processAuthorizationCode(ctx context.Context, form url.Values,
 	if err = tx.Commit(ctx); err != nil {
 		return tokenResponse{}, err
 	}
-	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessTokenTTL / time.Second), RefreshToken: refresh, Scope: code.Scopes}, nil
+	return tokenResponse{AccessToken: pair.access, TokenType: "Bearer", ExpiresIn: int64(accessTokenTTL / time.Second), RefreshToken: pair.refresh, Scope: code.Scopes}, nil
 }

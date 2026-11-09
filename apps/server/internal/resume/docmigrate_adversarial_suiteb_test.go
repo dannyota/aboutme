@@ -77,7 +77,7 @@ func suiteBRequireBackfillContract(t *testing.T) {
 		{resume.BackfillLostRace, 3, "BackfillLostRace"},
 	} {
 		if int(tc.got) != tc.want {
-			t.Fatalf("%s = %d, want %d (Task 8's declared iota order)", tc.name, int(tc.got), tc.want)
+			t.Fatalf("%s = %d, want %d (the declared iota order)", tc.name, int(tc.got), tc.want)
 		}
 	}
 }
@@ -455,10 +455,10 @@ func TestSuiteB_Get_NeverWrites(t *testing.T) {
 		t.Fatalf("Get on a stale row: %v", err)
 	}
 	if got.StoredSchemaVersion != suiteBOldVersion {
-		t.Errorf("StoredSchemaVersion = %d, want %d (the row's own version, D18)", got.StoredSchemaVersion, suiteBOldVersion)
+		t.Errorf("StoredSchemaVersion = %d, want %d (the row's own version)", got.StoredSchemaVersion, suiteBOldVersion)
 	}
 	if got.Doc.SchemaVersion != int64(docmigrate.CurrentVersion) {
-		t.Errorf("Doc.SchemaVersion = %d, want %d (always projected to current, D18)", got.Doc.SchemaVersion, docmigrate.CurrentVersion)
+		t.Errorf("Doc.SchemaVersion = %d, want %d (always projected to current)", got.Doc.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if got.Doc.PersonalDetails.Headline != nil {
 		t.Errorf("Doc still carries the synthetic headline %q: the read was not projected", *got.Doc.PersonalDetails.Headline)
@@ -615,10 +615,10 @@ func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 		t.Errorf("schema_version = %d, want %d after a successful backfill", after.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if after.Revision != before.Revision {
-		t.Errorf("revision = %d, want %d: backfill must not bump revision (D12)", after.Revision, before.Revision)
+		t.Errorf("revision = %d, want %d: backfill must not bump revision", after.Revision, before.Revision)
 	}
 	if !after.UpdatedAt.Equal(before.UpdatedAt) {
-		t.Errorf("updated_at = %s, want %s: backfill must not touch updated_at (D12)", after.UpdatedAt, before.UpdatedAt)
+		t.Errorf("updated_at = %s, want %s: backfill must not touch updated_at", after.UpdatedAt, before.UpdatedAt)
 	}
 	if after.PersonalDetails == before.PersonalDetails {
 		t.Error("backfill left personal_details byte-identical: the stored parts were not rewritten")
@@ -636,7 +636,7 @@ func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 		t.Fatalf("assemble the post-backfill document: %v", err)
 	}
 	if !bytes.Equal(docBefore, docAfter) {
-		t.Errorf("backfill is observable to readers (D12(i) forbids it):\nbefore %s\n after %s", docBefore, docAfter)
+		t.Errorf("backfill is observable to readers:\nbefore %s\n after %s", docBefore, docAfter)
 	}
 	if getAfter.Revision != getBefore.Revision {
 		t.Errorf("Get reports revision %d after backfill, want %d", getAfter.Revision, getBefore.Revision)
@@ -707,7 +707,7 @@ func TestSuiteB_Backfill_ConcurrentWithItself_AppliesOnce(t *testing.T) {
 		t.Errorf("schema_version = %d, want %d", after.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if after.Revision != before.Revision {
-		t.Errorf("revision = %d, want %d: no backfill may bump revision (D12)", after.Revision, before.Revision)
+		t.Errorf("revision = %d, want %d: no backfill may bump revision", after.Revision, before.Revision)
 	}
 	if !after.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Errorf("updated_at moved from %s to %s", before.UpdatedAt, after.UpdatedAt)
@@ -1005,7 +1005,7 @@ func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 		t.Errorf("schema_version = %d, want %d after the retry", final.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if final.Revision != stale.Revision {
-		t.Errorf("revision = %d, want %d: the applied backfill must not bump it (D12)", final.Revision, stale.Revision)
+		t.Errorf("revision = %d, want %d: the applied backfill must not bump it", final.Revision, stale.Revision)
 	}
 	if !final.UpdatedAt.Equal(stale.UpdatedAt) {
 		t.Errorf("updated_at moved from %s to %s during the applied backfill", stale.UpdatedAt, final.UpdatedAt)

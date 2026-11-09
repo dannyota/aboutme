@@ -142,7 +142,7 @@ func TestCIMDApprovedAuthoritySurvivesServiceRestartWithFlagOff(t *testing.T) {
 	}
 	// Reconstruct all process-local OAuth state without a resolver or flag.
 	restarted, restartErr := NewService(ctx, ServiceDependencies{
-		Pool: s.pool, Queries: store.New(s.pool), Clock: s.clock, Entropy: s.entropy,
+		Pool: s.pool, Queries: store.New(s.pool), Clock: s.clock, Entropy: s.entropy.reader,
 		PublicOrigin: s.publicOrigin, RegisterAdmission: s.registerAdmission,
 		TokenAdmission: s.tokenAdmission, LiveGrantLimit: s.liveGrantLimit,
 	})
@@ -218,7 +218,7 @@ func TestTokenSharedClientGrantAdmissionIsolatesOwners(t *testing.T) {
 				for block := byte(1); block <= 32; block++ {
 					entropy = append(entropy, bytes.Repeat([]byte{block}, 32)...)
 				}
-				s.entropy = bytes.NewReader(entropy)
+				s.entropy = &lockedEntropy{reader: bytes.NewReader(entropy)}
 				verifier := strings.Repeat("v", 43)
 				challenge := sha256.Sum256([]byte(verifier))
 				request.CodeChallenge = base64.RawURLEncoding.EncodeToString(challenge[:])

@@ -140,7 +140,7 @@ func TestWriteResumeErrorRejectsUndeclaredCodesAndDetails(t *testing.T) {
 		err  *clientError
 	}{
 		{name: "undeclared code", err: &clientError{Status: http.StatusTeapot, Code: "surprise", Message: "surprise"}},
-		{name: "details outside D7", err: &clientError{Status: http.StatusNotFound, Code: "resume_not_found", Message: "missing", Details: map[string]any{"secret": true}}},
+		{name: "undeclared details", err: &clientError{Status: http.StatusNotFound, Code: "resume_not_found", Message: "missing", Details: map[string]any{"secret": true}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()

@@ -37,7 +37,7 @@ func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 
 	tx := extractCookie(resp, auth.OAuthTxCookieName)
 	if tx == nil {
-		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it on success (ruling 1)")
+		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it on success")
 	}
 	if tx.MaxAge >= 0 {
 		t.Errorf("__Host-oauth-tx cookie MaxAge = %d on a successful callback, want negative (cleared)", tx.MaxAge)
@@ -170,7 +170,7 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	}
 	txCookieResp := extractCookie(resp, auth.OAuthTxCookieName)
 	if txCookieResp == nil {
-		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it on success (ruling 1)")
+		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it on success")
 	}
 	if txCookieResp.MaxAge >= 0 {
 		t.Errorf("__Host-oauth-tx cookie MaxAge = %d on a successful callback, want negative (cleared)", txCookieResp.MaxAge)

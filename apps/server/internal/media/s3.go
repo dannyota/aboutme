@@ -25,12 +25,18 @@ import (
 // required). Secret values are never logged, echoed in an error, or
 // included in any returned value.
 type S3Config struct {
-	Bucket          string
-	Region          string
-	Endpoint        string
-	AccessKeyID     string
+	// Bucket is the private media bucket name.
+	Bucket string
+	// Region is the bucket's region.
+	Region string
+	// Endpoint is the local S3-compatible service URL; empty for AWS.
+	Endpoint string
+	// AccessKeyID is the local service's static key ID; empty for AWS.
+	AccessKeyID string
+	// SecretAccessKey is the local service's static secret; empty for AWS.
 	SecretAccessKey string
-	ForcePathStyle  bool
+	// ForcePathStyle selects path-style addressing for the local service.
+	ForcePathStyle bool
 }
 
 // s3Backend is the S3-compatible implementation of Backend.
@@ -155,7 +161,7 @@ func (b *s3Backend) Put(ctx context.Context, key, contentType string, body io.Re
 	// No conclusive service result: transport loss or cancellation after
 	// the request may have reached the service. The key may name this
 	// call's object or a collision winner's; only reconciliation may ever
-	// delete it (D18).
+	// delete it (ADR 0009).
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return PutUnknown, fmt.Errorf("media: s3 put %q: outcome unknown, canceled after dispatch: %w", key, ctxErr)
 	}

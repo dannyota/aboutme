@@ -31,7 +31,7 @@ func loadLogLevel(raw string) (string, error) {
 	}
 
 	level := strings.ToLower(raw)
-	if !validLogLevels[level] {
+	if !validLogLevel(level) {
 		return "", fmt.Errorf("config: LOG_LEVEL: invalid value %q: must be one of debug, info, warn, error", raw)
 	}
 	return level, nil
@@ -44,7 +44,7 @@ func loadEnv(raw string) (string, error) {
 	}
 
 	env := strings.ToLower(raw)
-	if !validEnvs[env] {
+	if !validEnv(env) {
 		return "", fmt.Errorf("config: ENV: invalid value %q: must be one of dev, staging, prod", raw)
 	}
 	return env, nil

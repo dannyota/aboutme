@@ -81,7 +81,8 @@ type ServiceDependencies struct {
 	// decisions. It must not be nil.
 	Clock func() time.Time
 	// Entropy supplies the random bytes for authorization codes and tokens.
-	// It must not be nil.
+	// The service serializes its own reads, so a reader it shares with another
+	// consumer must be safe for concurrent use. It must not be nil.
 	Entropy io.Reader
 	// PublicOrigin is the canonical public origin, such as
 	// https://aboutme.vn. It is the issuer, the endpoint base and the exact
@@ -106,7 +107,7 @@ type Service struct {
 	pool              *store.Pool
 	queries           store.OAuthQueries
 	clock             func() time.Time
-	entropy           io.Reader
+	entropy           *lockedEntropy
 	publicOrigin      string
 	registerAdmission registerAdmission
 	tokenAdmission    tokenAdmission
@@ -142,7 +143,7 @@ func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service
 		pool:              dependencies.Pool,
 		queries:           dependencies.Queries,
 		clock:             dependencies.Clock,
-		entropy:           dependencies.Entropy,
+		entropy:           &lockedEntropy{reader: dependencies.Entropy},
 		publicOrigin:      dependencies.PublicOrigin,
 		registerAdmission: dependencies.RegisterAdmission,
 		tokenAdmission:    dependencies.TokenAdmission,

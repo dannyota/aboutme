@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,10 +17,6 @@ import (
 )
 
 var (
-	// oauthEntropyMu protects injected entropy readers. io.Reader does not
-	// promise concurrent safety, while two approvals may issue codes together.
-	oauthEntropyMu sync.Mutex
-
 	// ErrConsentInvalid is the closed failure for a malformed, forged, or stale
 	// stateless consent request. It never contains request material.
 	ErrConsentInvalid = errors.New("oauth consent invalid")
@@ -40,32 +35,51 @@ var (
 // ConsentQuery is the validated browser representation of an authorization
 // request. Scope remains its canonical OAuth parameter spelling at this edge.
 type ConsentQuery struct {
-	PublicClientID      string
-	metadata            *CIMDMetadata
-	address             netip.Addr
-	ClientID            uuid.UUID
-	RedirectURI         string
-	ResponseType        string
-	Scope               string
-	State               string
-	CodeChallenge       string
+	// PublicClientID is the client_id as presented: a registered client UUID
+	// or an https client metadata document URL.
+	PublicClientID string
+	metadata       *CIMDMetadata
+	address        netip.Addr
+	// ClientID is the registered client's UUID; nil for an unresolved
+	// metadata document URL.
+	ClientID uuid.UUID
+	// RedirectURI is the redirect_uri, which must match a registered value
+	// exactly.
+	RedirectURI string
+	// ResponseType is the response_type; only "code" is valid.
+	ResponseType string
+	// Scope is the scope parameter in its canonical OAuth spelling.
+	Scope string
+	// State is the client's opaque state, at most 512 bytes.
+	State string
+	// CodeChallenge is the PKCE S256 code challenge.
+	CodeChallenge string
+	// CodeChallengeMethod is the PKCE method; only "S256" is valid.
 	CodeChallengeMethod string
-	Scopes              Scopes
+	// Scopes is Scope parsed into the closed scope set.
+	Scopes Scopes
 }
 
 // ConsentView is safe for the session-authenticated consent page: it exposes
 // display metadata but never state, verifier material, or credentials.
 type ConsentView struct {
+	// ClientKind is "dcr" for a registered client or "cimd" for a metadata
+	// document client.
 	ClientKind string
+	// ClientHost is a metadata document client's host; nil when unknown or
+	// for a registered client.
 	ClientHost *string
+	// ClientName is the client's display name.
 	ClientName string
-	Scopes     Scopes
+	// Scopes is the canonical requested scope set.
+	Scopes Scopes
 }
 
 // ConsentDecision carries the exact authorization request together with the
 // user's stateless approval or denial.
 type ConsentDecision struct {
 	ConsentQuery
+	// Decision is "approve" or "deny".
 	Decision string
 }
 
@@ -355,12 +369,6 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 		return "", fmt.Errorf("commit code transaction: %w", err)
 	}
 	return oauthResultURL(request.RedirectURI, s.publicOrigin, rawCode, "", request.State), nil
-}
-
-func (s *Service) newCode() (string, [32]byte, error) {
-	oauthEntropyMu.Lock()
-	defer oauthEntropyMu.Unlock()
-	return NewCode(s.entropy)
 }
 
 func rollbackTransaction(ctx context.Context, tx pgx.Tx, primary *error, action string) {

@@ -40,7 +40,9 @@ type ResumeDependencies struct {
 	Showcase *showcase.Service
 }
 
-// NewResumes returns the authenticated resume service.
+// NewResumes returns the authenticated resume service. It creates the
+// process-wide photo admission permit that the service's REST and agent upload
+// paths share, so a process calls it once.
 func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 	cfg := deps.Config
 	return resumeapi.New(
@@ -53,6 +55,7 @@ func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 			SessionManager:      deps.Sessions,
 			PublicOrigin:        cfg.PublicOrigin,
 			TrustedProxies:      api.TrustedProxies(cfg.TrustedProxyCIDRs),
+			PhotoAdmission:      media.NewPhotoAdmission(),
 			Coordinator:         deps.Coordinator,
 			RecoveryPool:        deps.Pool,
 			PrintQueue:          deps.PrintQueue,

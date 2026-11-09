@@ -9,9 +9,9 @@ import (
 // queue is already full.
 var ErrHashAdmission = errors.New("password hash admission unavailable")
 
-// admission running/waiting budget from D2: at most two hash/verify jobs run
-// concurrently and at most sixteen wait for a slot; the seventeenth waiter
-// fails immediately.
+// admission running/waiting budget (docs/design/budgets.md): at most two
+// hash/verify jobs run concurrently and at most sixteen wait for a slot; the
+// seventeenth waiter fails immediately.
 const (
 	admissionRunning = 2
 	admissionWaiting = 16
