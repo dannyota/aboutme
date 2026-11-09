@@ -16,6 +16,7 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/authmail"
 	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 type deletionMailSender struct {
@@ -77,6 +78,8 @@ func TestDeleteAccountMailInProgressSendDrainsBeforeCommit(t *testing.T) {
 			{name: "ambiguous", result: authmail.SendResult{Outcome: authmail.SendTemporaryFailure}, err: errors.New("delivery outcome unknown")},
 		} {
 			t.Run(string(kind)+"/"+outcome.name, func(t *testing.T) {
+				dsn, _ := testutil.NewMigratedTestDatabase(t)
+				t.Setenv("TEST_DATABASE_URL", dsn)
 				env := newDeletionEnvironment(t)
 				runCtx, cancel := context.WithTimeout(env.ctx, 10*time.Second)
 				defer cancel()
@@ -210,6 +213,8 @@ func TestDeleteAccountMailClaimedBeforeSendCannotSendAfterDeletion(t *testing.T)
 		authmail.KindPasswordChanged,
 	} {
 		t.Run(string(kind), func(t *testing.T) {
+			dsn, _ := testutil.NewMigratedTestDatabase(t)
+			t.Setenv("TEST_DATABASE_URL", dsn)
 			env := newDeletionEnvironment(t)
 			ring := deletionMailKeyRing(t)
 			_, jobID := enqueueDeletionMail(t, env, ring, kind)
