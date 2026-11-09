@@ -5,13 +5,15 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-codex-agent.XXXXXX")
 WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
-# The worktree, the brief and report directory, and $HOME are separate, like a
-# primary's scratchpad beside the owner's home.
+# The worktree, brief, and report share a session scratchpad, like the
+# primary's; the main checkout and $HOME sit outside it.
 MAIN=$WORK/main
-TREE="$WORK/worktrees/tree with spaces"
-SCRATCH=$WORK/scratch
+SESSION=$WORK/session/scratchpad
+TREE="$SESSION/wt/tree with spaces"
+SCRATCH=$SESSION/sdd
 FAKE_HOME=$WORK/home
-mkdir -p "$WORK/bin" "$SCRATCH" "$FAKE_HOME/.ssh" "$FAKE_HOME/.config" "$WORK/zdot"
+mkdir -p "$WORK/bin" "$SCRATCH" "$SESSION/sandbox-probe" "$FAKE_HOME/.ssh" "$FAKE_HOME/.config" \
+  "$FAKE_HOME/.docker" "$FAKE_HOME/gopath" "$FAKE_HOME/other-caches" "$WORK/zdot"
 git init -q "$MAIN"
 git -C "$MAIN" -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
 git -C "$MAIN" worktree add -q -b fixture "$TREE"
@@ -70,7 +72,7 @@ import tomllib
 
 work, main, tree = (Path(arg) for arg in sys.argv[1:4])
 model, effort, search = sys.argv[4:]
-home, scratch = work / "home", work / "scratch"
+home, scratch = work / "home", work / "session/scratchpad/sdd"
 role = tomllib.loads((tree / ".codex/agents/implementer.toml").read_text())
 writes = role["sandbox_mode"] == "workspace-write"
 environment = json.loads((work / "env.json").read_text())
@@ -159,7 +161,8 @@ PY
 
 # run [launcher args...] starts the launcher with credentials, hostile cache
 # and temp settings, and shell startup hooks in its environment. TMPDIR_MODE=unset
-# leaves TMPDIR unset instead of pointing it at the scratchpad.
+# leaves TMPDIR unset instead of pointing it at the scratchpad; HOME_DIR replaces
+# the fixture $HOME.
 run() {
   local -a settings=(GH_TOKEN=ghp_UNTRUSTED GITHUB_TOKEN=UNTRUSTED GH_HOST=github.com
     AWS_PROFILE=prod AWS_SECRET_ACCESS_KEY=UNTRUSTED VNGCLOUD_CLIENT_ID=UNTRUSTED
@@ -170,7 +173,7 @@ run() {
     GOOGLE_APPLICATION_CREDENTIALS=/key.json DOCKER_CONFIG=/docker KUBECONFIG=/kube
     DEPLOY_PASSWORD=UNTRUSTED SESSION_SECRET=UNTRUSTED GOAUTH=netrc
     GOFLAGS=-mod=readonly NODE_OPTIONS=--no-warnings LANG=C.UTF-8
-    "CODEX_HOME=$WORK/codex home" "HOME=$FAKE_HOME"
+    "CODEX_HOME=$WORK/codex home" "HOME=${HOME_DIR:-$FAKE_HOME}"
     "GOCACHE=$FAKE_HOME/.ssh" "GOMODCACHE=$MAIN" "GOLANGCI_LINT_CACHE=$SCRATCH"
     "npm_config_cache=$FAKE_HOME/.config" "ZDOTDIR=$WORK/zdot" BASH_ENV=/hostile ENV=/hostile)
   if [[ ${TMPDIR_MODE:-} == unset ]]; then
@@ -288,16 +291,33 @@ refuse_root() {
   [[ ! -e $WORK/link-saved ]] || mv "$WORK/link-saved" "$link"
 }
 if [[ $(uname -s) == Darwin ]]; then cache=$FAKE_HOME/Library/Caches; else cache=$FAKE_HOME/.cache; fi
-refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.ssh" 'npm_config_cache overlaps a protected path'
-refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME" 'npm_config_cache covers \$HOME'
-refuse_root "$FAKE_HOME/.npm" "$WORK" 'npm_config_cache overlaps the Git directory'
-refuse_root "$FAKE_HOME/go" "$MAIN/.git" 'GOMODCACHE overlaps the Git directory'
-refuse_root "$FAKE_HOME/go" "$MAIN" 'GOMODCACHE overlaps a protected path'
-refuse_root "$cache/go-build" "$SCRATCH" 'GOCACHE overlaps a protected path'
-refuse_root "$cache/golangci-lint" "$WORK/worktrees" 'GOLANGCI_LINT_CACHE overlaps a protected path'
-refuse_root "$cache/golangci-lint" "$FAKE_HOME/.config/golangci-lint" \
-  'GOLANGCI_LINT_CACHE overlaps a protected path'
+# A root that is, or sits under, a symbolic link is refused wherever the link
+# points, so no list of protected paths has to be complete.
+refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.docker" 'npm_config_cache: .*/\.npm is a symbolic link'
+refuse_root "$FAKE_HOME/.npm" "$SESSION/sandbox-probe" 'npm_config_cache: .*/\.npm is a symbolic link'
+refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.ssh" 'npm_config_cache: .*/\.npm is a symbolic link'
+refuse_root "$FAKE_HOME/go" "$FAKE_HOME/gopath" 'GOMODCACHE: .*/go is a symbolic link'
+refuse_root "$FAKE_HOME/go" "$MAIN/.git" 'GOMODCACHE: .*/go is a symbolic link'
+refuse_root "$cache" "$FAKE_HOME/other-caches" 'GOCACHE: .*/[.]?[Cc]aches? is a symbolic link'
+refuse_root "$cache/golangci-lint" "$SESSION/wt" 'GOLANGCI_LINT_CACHE: .* is a symbolic link'
 refuse_root "$MAIN/.dev/locks" "$MAIN/.git" 'lock directory'
+
+# refuse_home <home> <pattern>: a $HOME that puts the fixed roots in Git
+# metadata, the main checkout, or the session scratchpad is refused, and
+# nothing is created there.
+refuse_home() {
+  rm -f "$CALL_LOG"
+  if HOME_DIR=$1 run implementer >"$WORK/error" 2>&1; then
+    printf 'codex-agent-test: accepted HOME=%s\n' "$1" >&2
+    exit 1
+  fi
+  [[ ! -e $CALL_LOG ]] || { echo 'codex-agent-test: called codex with a refused home' >&2; exit 1; }
+  grep -Eq "$2" "$WORK/error" || { cat "$WORK/error" >&2; exit 1; }
+  [[ ! -e $1 ]] || { echo 'codex-agent-test: created a refused home' >&2; exit 1; }
+}
+refuse_home "$MAIN/.git/home" 'GOCACHE overlaps the Git directory'
+refuse_home "$MAIN/home" "GOCACHE overlaps a protected path: $MAIN\$"
+refuse_home "$SESSION/home" "GOCACHE overlaps a protected path: $SESSION\$"
 
 # A workspace-write role outside a Git checkout has no shared lock root.
 mkdir -p "$WORK/plain/.codex/agents"

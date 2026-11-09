@@ -6,15 +6,16 @@
 # workspace-write roles also get network access and writable roots for fixed
 # per-user Go, golangci-lint, and npm caches, that $TMPDIR, and the main
 # checkout's .dev/locks directory, which holds the shared local-check lock.
-# Checkout configuration never chooses a root, /tmp is not writable, and no
-# root may reach Git metadata, the main checkout, the scratchpad, credential
-# stores, or $HOME itself.
+# Checkout configuration never chooses a root, no root may be or sit under a
+# symbolic link, /tmp is not writable, and no root may reach Git metadata, the
+# main checkout, the scratchpad, credential stores, or $HOME itself.
 set -Eeuo pipefail
 
 exec python3 -I - "$@" <<'PY'
 import argparse
 import os
 from pathlib import Path
+import pwd
 import re
 import subprocess
 import sys
@@ -28,9 +29,11 @@ CREDENTIAL_WORDS = ("AUTH", "COOKIE", "CREDENTIAL", "JWT", "KEY", "NETRC", "PASS
                     "TOKEN")
 # Shell startup hooks that would run the owner's files before sandboxed commands.
 STARTUP_NAMES = {"BASH_ENV", "ENV", "ZDOTDIR"}
-# Credential stores under $HOME that no writable root may reach.
-SECRET_DIRS = (".ssh", ".config", ".codex", ".gnupg", ".aws", ".vngcloud", "Library/Keychains",
-               ".local/share/keyrings")
+# Credential stores under $HOME that no writable root may reach. Roots are
+# fixed and free of symbolic links, so this list is defense in depth.
+SECRET_PATHS = (".ssh", ".config", ".codex", ".gnupg", ".aws", ".vngcloud", ".docker", ".kube",
+                ".netrc", ".npmrc", ".pypirc", "Library/Keychains", "Library/Application Support",
+                ".local/share/keyrings")
 
 
 def toml_string(value):
@@ -51,10 +54,31 @@ def overlaps(path, other):
     return path == other or path in other.parents or other in path.parents
 
 
+def symbolic_link(base, path):
+    """Return the first symbolic link below base on the way to path, if any."""
+    parts = path.relative_to(base).parts
+    for depth in range(1, len(parts) + 1):
+        if base.joinpath(*parts[:depth]).is_symlink():
+            return base.joinpath(*parts[:depth])
+    return None
+
+
+def scratchpad(args):
+    """Return the directories of the worktree, brief, and report, and the session
+    scratchpad that holds all three unless that is / or holds the account home."""
+    places = [Path(path).resolve() for path in (args.worktree, args.brief_file, args.report_file)]
+    found = {place.parent for place in places}
+    shared = Path(os.path.commonpath([str(place) for place in places]))
+    account = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+    if shared != Path(shared.anchor) and shared != account and shared not in account.parents:
+        found.add(shared)
+    return found
+
+
 def system_temp_dir():
     """Return the per-user system temp directory, ignoring the caller's TMPDIR."""
     if sys.platform != "darwin":
-        return Path("/tmp")
+        return Path("/tmp").resolve()
     try:
         found = subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], stdin=subprocess.DEVNULL,
                                capture_output=True, text=True, check=True).stdout.strip()
@@ -86,24 +110,28 @@ def writable_roots(args, environment, temp_base):
     common = Path(common).resolve()
     if common.name != ".git":
         parser.error("the main checkout has an unexpected Git layout")
-    main, home = common.parent, Path.home()
+    main, home = common.parent, Path.home().resolve()
     locks = main / ".dev/locks"
     for path in (locks.parent, locks):
         if path.is_symlink() or (path.exists() and not path.is_dir()):
             parser.error("the shared lock directory must be a real directory: " + str(path))
     cache = home / ("Library/Caches" if sys.platform == "darwin" else ".cache")
-    named = {"GOCACHE": cache / "go-build", "GOMODCACHE": home / "go/pkg/mod",
-             "GOLANGCI_LINT_CACHE": cache / "golangci-lint", "npm_config_cache": home / ".npm",
-             # A new directory under the base, checked before it exists.
-             "TMPDIR": temp_base / "aboutme-codex.new"}
-    home = home.resolve()
-    secrets = {path for name in SECRET_DIRS for path in (home / name, (home / name).resolve())}
-    # The worktree's siblings and the brief and report directories are the scratchpad.
-    scratch = {Path(path).resolve().parent
-               for path in (args.worktree, args.brief_file, args.report_file)}
+    caches = {"GOCACHE": cache / "go-build", "GOMODCACHE": home / "go/pkg/mod",
+              "GOLANGCI_LINT_CACHE": cache / "golangci-lint", "npm_config_cache": home / ".npm"}
+    for name, path in caches.items():
+        link = symbolic_link(home, path)
+        if link is not None:
+            parser.error(f"{name}: {link} is a symbolic link; remove it so the cache is a real "
+                         "directory under $HOME")
+    # The temp root is a new directory under the base, checked before it exists.
+    named = {**caches, "TMPDIR": temp_base / "aboutme-codex.new"}
+    secrets = {path for name in SECRET_PATHS for path in (home / name, (home / name).resolve())}
+    scratch = scratchpad(args)
 
     def check(name, value, protected):
         path = Path(value).resolve()
+        if path != Path(value):
+            parser.error(f"{name}: {value} resolves elsewhere through a symbolic link")
         if overlaps(path, common):
             parser.error(f"{name} overlaps the Git directory")
         if path == home or path in home.parents:
