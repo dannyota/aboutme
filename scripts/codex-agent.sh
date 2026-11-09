@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Start one Codex job with its role's model, effort, sandbox, and instructions.
 # Codex and every sandboxed command get the caller's environment minus names
-# that carry or locate credentials. workspace-write roles also get network
-# access and writable roots for the Go, golangci-lint, and npm caches, $TMPDIR,
-# and the main checkout's .dev/locks directory, which holds the shared
-# local-check lock. /tmp is not writable, so every root is checked here and none
-# may overlap the Git directory.
+# that carry or locate credentials, without shell snapshots, login shells, or
+# the owner's shell startup files, and with a new private $TMPDIR per launch.
+# workspace-write roles also get network access and writable roots for fixed
+# per-user Go, golangci-lint, and npm caches, that $TMPDIR, and the main
+# checkout's .dev/locks directory, which holds the shared local-check lock.
+# Checkout configuration never chooses a root, /tmp is not writable, and no
+# root may reach Git metadata, the main checkout, the scratchpad, credential
+# stores, or $HOME itself.
 set -Eeuo pipefail
 
 exec python3 -I - "$@" <<'PY'
@@ -15,6 +18,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 
 CREDENTIAL_PREFIXES = ("ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "CLOUDFLARE_", "CLOUDSDK_",
@@ -22,6 +26,11 @@ CREDENTIAL_PREFIXES = ("ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "CLOUDFLARE_",
                        "TF_VAR_", "VNGCLOUD_")
 CREDENTIAL_WORDS = ("AUTH", "COOKIE", "CREDENTIAL", "JWT", "KEY", "NETRC", "PASS", "SECRET",
                     "TOKEN")
+# Shell startup hooks that would run the owner's files before sandboxed commands.
+STARTUP_NAMES = {"BASH_ENV", "ENV", "ZDOTDIR"}
+# Credential stores under $HOME that no writable root may reach.
+SECRET_DIRS = (".ssh", ".config", ".codex", ".gnupg", ".aws", ".vngcloud", "Library/Keychains",
+               ".local/share/keyrings")
 
 
 def toml_string(value):
@@ -38,63 +47,89 @@ def credential_name(name):
     return name.startswith(CREDENTIAL_PREFIXES) or any(word in name for word in CREDENTIAL_WORDS)
 
 
-def output(command, cwd, environment):
-    return subprocess.run(command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, check=True).stdout
-
-
-def user_cache_dir(environment):
-    if sys.platform == "darwin":
-        return Path.home() / "Library/Caches"
-    return Path(environment.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-
-
 def overlaps(path, other):
     return path == other or path in other.parents or other in path.parents
 
 
-def writable_roots(worktree, environment):
-    """Return the cache, temp, and lock roots, creating each after validation."""
+def system_temp_dir():
+    """Return the per-user system temp directory, ignoring the caller's TMPDIR."""
+    if sys.platform != "darwin":
+        return Path("/tmp")
     try:
-        common = Path(output(["git", "-C", worktree, "rev-parse", "--path-format=absolute",
-                              "--git-common-dir"], worktree, environment).strip()).resolve()
-        go_cache, go_modules = output(["go", "env", "GOCACHE", "GOMODCACHE"],
-                                      worktree, environment).splitlines()
-        npm_cache = output(["npm", "config", "get", "cache"], worktree, environment).strip()
-    except (OSError, ValueError, subprocess.CalledProcessError):
-        parser.error("cannot resolve the Git directory and the Go and npm caches")
+        found = subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        found = ""
+    if not found.startswith("/"):
+        parser.error("cannot find the per-user temp directory")
+    return Path(found).resolve()
+
+
+def run_temp_dir(base):
+    """Create this launch's private temp directory and an empty ZDOTDIR in it."""
+    try:
+        temp = Path(tempfile.mkdtemp(prefix="aboutme-codex.", dir=base))
+        (temp / "zdotdir").mkdir(mode=0o700)
+    except OSError:
+        parser.error("cannot create the temp directory")
+    return temp
+
+
+def writable_roots(args, environment, temp_base):
+    """Validate fixed roots, then create them and the temp root; return all roots."""
+    try:
+        common = subprocess.run(["git", "-C", args.worktree, "rev-parse", "--path-format=absolute",
+                                 "--git-common-dir"], env=environment, stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        parser.error("cannot find the Git directory")
+    common = Path(common).resolve()
     if common.name != ".git":
         parser.error("the main checkout has an unexpected Git layout")
-    lint_cache = environment.get("GOLANGCI_LINT_CACHE") or user_cache_dir(environment) / "golangci-lint"
-    locks = common.parent / ".dev/locks"
+    main, home = common.parent, Path.home()
+    locks = main / ".dev/locks"
     for path in (locks.parent, locks):
         if path.is_symlink() or (path.exists() and not path.is_dir()):
             parser.error("the shared lock directory must be a real directory: " + str(path))
-    named = {"GOCACHE": go_cache, "GOMODCACHE": go_modules, "GOLANGCI_LINT_CACHE": lint_cache,
-             "npm_config_cache": npm_cache, "TMPDIR": environment.get("TMPDIR") or "/tmp"}
-    roots = {}
-    for name, value in [*named.items(), ("lock", locks)]:
-        path = Path(value)
-        if not path.is_absolute():
-            parser.error(f"{name} must be an absolute path")
-        path = path.resolve()
+    cache = home / ("Library/Caches" if sys.platform == "darwin" else ".cache")
+    named = {"GOCACHE": cache / "go-build", "GOMODCACHE": home / "go/pkg/mod",
+             "GOLANGCI_LINT_CACHE": cache / "golangci-lint", "npm_config_cache": home / ".npm",
+             # A new directory under the base, checked before it exists.
+             "TMPDIR": temp_base / "aboutme-codex.new"}
+    home = home.resolve()
+    secrets = {path for name in SECRET_DIRS for path in (home / name, (home / name).resolve())}
+    # The worktree's siblings and the brief and report directories are the scratchpad.
+    scratch = {Path(path).resolve().parent
+               for path in (args.worktree, args.brief_file, args.report_file)}
+
+    def check(name, value, protected):
+        path = Path(value).resolve()
         if overlaps(path, common):
             parser.error(f"{name} overlaps the Git directory")
-        if name != "lock" and overlaps(path, common.parent):
-            parser.error(f"{name} overlaps the main checkout")
-        roots[name] = path
+        if path == home or path in home.parents:
+            parser.error(f"{name} covers $HOME")
+        for other in sorted(protected):
+            if overlaps(path, other):
+                parser.error(f"{name} overlaps a protected path: {other}")
+        return path
+
+    roots = {name: check(name, value, secrets | scratch | {main}) for name, value in named.items()}
+    roots["lock"] = check("the shared lock directory", locks, secrets)
     if roots["lock"] != locks:
         parser.error("the shared lock directory must not resolve elsewhere")
+    roots["TMPDIR"] = run_temp_dir(temp_base)
     try:
         for path in roots.values():
             # mkdir(parents=True) ignores mode for parents such as a new .dev.
             for directory in reversed([path, *path.parents]):
                 directory.mkdir(mode=0o700, exist_ok=True)
+        # local-check.py also locks the pre-move .git lock until no branch older
+        # than the .dev/locks move remains; a sandbox can lock it but not create it.
+        os.close(os.open(common / "aboutme-local-check.lock",
+                         os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600))
     except OSError:
         parser.error("cannot create the writable roots")
     environment.update((name, str(roots[name])) for name in named)
-    # zsh writes here-documents under TMPPREFIX, which defaults to /tmp/zsh.
-    environment["TMPPREFIX"] = str(roots["TMPDIR"] / "zsh")
     return list(dict.fromkeys(str(path) for path in roots.values()))
 
 
@@ -130,25 +165,34 @@ try:
 except (OSError, ValueError, KeyError) as error:
     parser.error(str(error))
 
-environment = {name: value for name, value in os.environ.items() if not credential_name(name)}
+environment = {name: value for name, value in os.environ.items()
+               if not credential_name(name) and name not in STARTUP_NAMES}
 # The login keychain stays reachable from the sandbox. Clearing Git's credential
 # helpers stops an accidental push or authenticated fetch; it is no boundary.
 environment.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "credential.helper",
                     "GIT_CONFIG_VALUE_0": "", "GIT_TERMINAL_PROMPT": "0"})
-# A shell snapshot replays the owner's interactive shell exports, including
-# credentials, before every sandboxed command.
+# A shell snapshot replays the owner's interactive shell exports, and a login
+# shell reads the owner's profile; either can restore a removed credential.
 command = ["codex"] + (["--search"] if args.search else []) + [
     "exec", "-m", model, "-c", f"model_reasoning_effort={effort}",
     "-c", "developer_instructions=" + toml_string(instructions),
-    "-c", "features.shell_snapshot=false", "-s", sandbox,
+    "-c", "features.shell_snapshot=false", "-c", "allow_login_shell=false", "-s", sandbox,
 ]
+temp_base = system_temp_dir()
 if sandbox == "workspace-write":
     # Keys from the Codex configuration reference for sandbox_mode = "workspace-write".
-    roots = writable_roots(args.worktree, environment)
+    roots = writable_roots(args, environment, temp_base)
+    temp = Path(environment["TMPDIR"])
     command += ["-c", "sandbox_workspace_write.network_access=true",
                 "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
                 "-c", "sandbox_workspace_write.writable_roots=["
                 + ",".join(toml_string(root) for root in roots) + "]"]
+else:
+    temp = run_temp_dir(temp_base)
+# zsh reads startup files from ZDOTDIR, here empty, and writes here-documents
+# under TMPPREFIX, which defaults to /tmp/zsh.
+environment.update({"TMPDIR": str(temp), "TMPPREFIX": str(temp / "zsh"),
+                    "ZDOTDIR": str(temp / "zdotdir")})
 command += ["-C", args.worktree, "--ephemeral", "-o", args.report_file, "--", brief]
 with open(os.devnull, "rb") as source:
     os.dup2(source.fileno(), 0)

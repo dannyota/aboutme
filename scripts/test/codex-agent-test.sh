@@ -5,15 +5,19 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-codex-agent.XXXXXX")
 WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
+# The worktree, the brief and report directory, and $HOME are separate, like a
+# primary's scratchpad beside the owner's home.
 MAIN=$WORK/main
-TREE="$WORK/tree with spaces"
-mkdir -p "$WORK/bin" "$WORK/caches" "$WORK/tmp"
+TREE="$WORK/worktrees/tree with spaces"
+SCRATCH=$WORK/scratch
+FAKE_HOME=$WORK/home
+mkdir -p "$WORK/bin" "$SCRATCH" "$FAKE_HOME/.ssh" "$FAKE_HOME/.config" "$WORK/zdot"
 git init -q "$MAIN"
 git -C "$MAIN" -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
 git -C "$MAIN" worktree add -q -b fixture "$TREE"
 mkdir -p "$TREE/.codex/agents"
-export CALL_LOG="$WORK/calls" STDIN_LOG="$WORK/stdin" ENV_LOG="$WORK/env.json"
-export CACHES="$WORK/caches" PATH="$WORK/bin:$PATH"
+export CALL_LOG="$WORK/calls" STDIN_LOG="$WORK/stdin" ENV_LOG="$WORK/env.json" TOOL_LOG="$WORK/tools"
+export PATH="$WORK/bin:$PATH"
 
 cat >"$WORK/bin/codex" <<'SH'
 #!/usr/bin/env bash
@@ -22,20 +26,17 @@ python3 -c 'import json, os, sys; json.dump(dict(os.environ), open(sys.argv[1], 
 cat >"$STDIN_LOG"
 exit "${CODEX_STATUS:-0}"
 SH
-# The launcher resolves cache roots with the same scrubbed environment Codex gets.
-cat >"$WORK/bin/go" <<'SH'
-#!/usr/bin/env bash
-[ -z "${GH_TOKEN+set}" ] || exit 65
-[ "$*" = 'env GOCACHE GOMODCACHE' ] || exit 64
-printf '%s\n' "${FAKE_GOCACHE:-$CACHES/go build}" "$CACHES/go mod"
-SH
-cat >"$WORK/bin/npm" <<'SH'
-#!/usr/bin/env bash
-[ -z "${GH_TOKEN+set}" ] || exit 65
-[ "$*" = 'config get cache' ] || exit 64
-printf '%s\n' "$CACHES/npm"
-SH
+# Checkout configuration never chooses a writable root, so go and npm never run.
+for tool in go npm; do
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$0 $*" >>"$TOOL_LOG"\nprintf "%%s\\n" "%s"\n' \
+    "$FAKE_HOME/.ssh" >"$WORK/bin/$tool"
+done
 chmod +x "$WORK/bin/codex" "$WORK/bin/go" "$WORK/bin/npm"
+# Hostile configuration that once redirected a root: project and user .npmrc
+# files, inherited cache variables, and shell startup files.
+printf 'cache=${HOME}/.ssh\n' | tee "$TREE/.npmrc" >"$FAKE_HOME/.npmrc"
+printf 'export GH_TOKEN=fixture-zshenv\n' >"$WORK/zdot/.zshenv"
+printf 'export GH_TOKEN=fixture-zprofile\n' >"$WORK/zdot/.zprofile"
 
 cat >"$TREE/.codex/agents/implementer.toml" <<'TOML'
 model = "gpt-6.1-sol"
@@ -45,7 +46,7 @@ developer_instructions = '''Read the "role".
 Keep literal \paths and $variables; use Unicode: Việt.
 '''
 TOML
-printf 'A brief with "quotes", $variables and \\paths.\nSecond line.\n' >"$WORK/brief"
+printf 'A brief with "quotes", $variables and \\paths.\nSecond line.\n' >"$SCRATCH/brief"
 python3 - "$WORK/caller-stdin" <<'PY'
 from pathlib import Path
 import sys
@@ -53,33 +54,63 @@ import sys
 Path(sys.argv[1]).write_bytes(b"stdin must not reach codex\n" * 65536)
 PY
 
+# remove_run_temp deletes the per-run temp directory the last launch created.
+remove_run_temp() {
+  python3 -c 'import json, shutil, sys; shutil.rmtree(json.load(open(sys.argv[1]))["TMPDIR"])' "$ENV_LOG"
+}
+
 check_args() {
   python3 - "$WORK" "$MAIN" "$TREE" "$@" <<'PY'
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tomllib
 
 work, main, tree = (Path(arg) for arg in sys.argv[1:4])
 model, effort, search = sys.argv[4:]
+home, scratch = work / "home", work / "scratch"
 role = tomllib.loads((tree / ".codex/agents/implementer.toml").read_text())
 writes = role["sandbox_mode"] == "workspace-write"
-caches = work / "caches"
-roots = [str(caches / "go build"), str(caches / "go mod"), str(caches / "golangci-lint"),
-         str(caches / "npm"), str(work / "tmp"), str(main / ".dev/locks")]
+environment = json.loads((work / "env.json").read_text())
+
+# Every launch gets a new private temp directory in the per-user system temp
+# directory, never the caller's TMPDIR.
+if sys.platform == "darwin":
+    base = subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+else:
+    base = "/tmp"
+temp = Path(environment["TMPDIR"])
+assert temp.parent == Path(base).resolve() and temp.name.startswith("aboutme-codex."), temp
+assert temp.stat().st_mode & 0o777 == 0o700, "the run temp directory is not private"
+seen = work / "seen-temps"
+assert str(temp) not in (seen.read_text().splitlines() if seen.exists() else []), "temp reused"
+with seen.open("a") as record:
+    record.write(f"{temp}\n")
+assert environment["TMPPREFIX"] == str(temp / "zsh")
+assert environment["ZDOTDIR"] == str(temp / "zdotdir") and not os.listdir(temp / "zdotdir")
+for name in ("BASH_ENV", "ENV"):
+    assert name not in environment, name
+
+cache = home / ("Library/Caches" if sys.platform == "darwin" else ".cache")
+roots = [str(cache / "go-build"), str(home / "go/pkg/mod"), str(cache / "golangci-lint"),
+         str(home / ".npm"), str(temp), str(main / ".dev/locks")]
 expected = (["--search"] if search == "yes" else []) + [
     "exec", "-m", model, "-c", f"model_reasoning_effort={effort}",
-    "-c", None, "-c", "features.shell_snapshot=false", "-s", role["sandbox_mode"],
+    "-c", None, "-c", "features.shell_snapshot=false", "-c", "allow_login_shell=false",
+    "-s", role["sandbox_mode"],
 ] + ([
     "-c", "sandbox_workspace_write.network_access=true",
     "-c", "sandbox_workspace_write.exclude_slash_tmp=true", "-c", None,
 ] if writes else []) + [
-    "-C", str(tree), "--ephemeral", "-o", str(work / "report with spaces.md"),
-    "--", (work / "brief").read_text(),
+    "-C", str(tree), "--ephemeral", "-o", str(scratch / "report with spaces.md"),
+    "--", (scratch / "brief").read_text(),
 ]
 actual = (work / "calls").read_bytes().split(b"\0")[:-1]
 actual = [arg.decode() for arg in actual]
-index = expected.index("-s") - 3
+index = expected.index("-s") - 5
 assert actual[index].startswith("developer_instructions=")
 encoded = actual[index].split("=", 1)[1]
 assert tomllib.loads("x = " + encoded)["x"] == role["developer_instructions"]
@@ -96,11 +127,13 @@ if writes:
     assert tomllib.loads("x = " + value)["x"] == roots, value
     assert all(Path(root).is_dir() for root in roots), "a writable root was not created"
     assert (main / ".dev").stat().st_mode & 0o777 == 0o700, "a new .dev is not private"
+    pre_move = main / ".git/aboutme-local-check.lock"
+    assert pre_move.is_file() and pre_move.stat().st_mode & 0o777 == 0o600, "no pre-move lock"
     expected[index] = actual[index]
 assert actual == expected, actual
 assert (work / "stdin").read_bytes() == b"", "codex received stdin"
+assert not (work / "tools").exists(), "the launcher ran go or npm"
 
-environment = json.loads((work / "env.json").read_text())
 for name in ("GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "AWS_PROFILE", "AWS_SECRET_ACCESS_KEY",
              "VNGCLOUD_CLIENT_ID", "REGISTRY_AUTH_FILE", "NPM_TOKEN", "NODE_AUTH_TOKEN",
              "npm_config__authToken", "ANTHROPIC_API_KEY_OWNER", "OPENAI_API_KEY",
@@ -109,41 +142,55 @@ for name in ("GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "AWS_PROFILE", "AWS_SECRET_A
              "DEPLOY_PASSWORD", "SESSION_SECRET", "GOAUTH"):
     assert name not in environment, name
 for name, value in (("GOFLAGS", "-mod=readonly"), ("NODE_OPTIONS", "--no-warnings"),
-                    ("LANG", "C.UTF-8"), ("CODEX_HOME", str(work / "codex home"))):
+                    ("LANG", "C.UTF-8"), ("CODEX_HOME", str(work / "codex home")),
+                    ("HOME", str(home))):
     assert environment.get(name) == value, name
-assert environment["PATH"].startswith(str(work / "bin")) and environment["HOME"]
+assert environment["PATH"].startswith(str(work / "bin"))
 for name, value in (("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "credential.helper"),
                     ("GIT_CONFIG_VALUE_0", ""), ("GIT_TERMINAL_PROMPT", "0")):
     assert environment.get(name) == value, name
 if writes:
-    for name, root in zip(("GOCACHE", "GOMODCACHE", "GOLANGCI_LINT_CACHE", "npm_config_cache",
-                           "TMPDIR"), roots):
+    for name, root in zip(("GOCACHE", "GOMODCACHE", "GOLANGCI_LINT_CACHE", "npm_config_cache"),
+                          roots):
         assert environment.get(name) == root, name
-    assert environment.get("TMPPREFIX") == str(work / "tmp/zsh")
 PY
+  remove_run_temp
 }
 
+# run [launcher args...] starts the launcher with credentials, hostile cache
+# and temp settings, and shell startup hooks in its environment. TMPDIR_MODE=unset
+# leaves TMPDIR unset instead of pointing it at the scratchpad.
 run() {
-  env GH_TOKEN=ghp_UNTRUSTED GITHUB_TOKEN=UNTRUSTED GH_HOST=github.com AWS_PROFILE=prod \
-    AWS_SECRET_ACCESS_KEY=UNTRUSTED VNGCLOUD_CLIENT_ID=UNTRUSTED REGISTRY_AUTH_FILE=/auth.json \
-    NPM_TOKEN=UNTRUSTED NODE_AUTH_TOKEN=UNTRUSTED npm_config__authToken=UNTRUSTED \
-    ANTHROPIC_API_KEY_OWNER=UNTRUSTED OPENAI_API_KEY=UNTRUSTED SSH_AUTH_SOCK=/agent.sock \
-    CLAUDE_CODE_MESSAGING_TOKEN=UNTRUSTED OP_SERVICE_ACCOUNT_TOKEN=UNTRUSTED \
-    GIT_ASKPASS=/askpass GIT_CONFIG_COUNT=2 GOOGLE_APPLICATION_CREDENTIALS=/key.json DOCKER_CONFIG=/docker \
-    KUBECONFIG=/kube DEPLOY_PASSWORD=UNTRUSTED SESSION_SECRET=UNTRUSTED GOAUTH=netrc \
-    GOFLAGS=-mod=readonly NODE_OPTIONS=--no-warnings LANG=C.UTF-8 \
-    CODEX_HOME="$WORK/codex home" GOLANGCI_LINT_CACHE="$CACHES/golangci-lint" TMPDIR="$WORK/tmp" \
-    bash "$ROOT/scripts/codex-agent.sh" "$@" "$TREE" "$WORK/brief" "$WORK/report with spaces.md" \
-    <"$WORK/caller-stdin"
+  local -a settings=(GH_TOKEN=ghp_UNTRUSTED GITHUB_TOKEN=UNTRUSTED GH_HOST=github.com
+    AWS_PROFILE=prod AWS_SECRET_ACCESS_KEY=UNTRUSTED VNGCLOUD_CLIENT_ID=UNTRUSTED
+    REGISTRY_AUTH_FILE=/auth.json NPM_TOKEN=UNTRUSTED NODE_AUTH_TOKEN=UNTRUSTED
+    npm_config__authToken=UNTRUSTED ANTHROPIC_API_KEY_OWNER=UNTRUSTED OPENAI_API_KEY=UNTRUSTED
+    SSH_AUTH_SOCK=/agent.sock CLAUDE_CODE_MESSAGING_TOKEN=UNTRUSTED
+    OP_SERVICE_ACCOUNT_TOKEN=UNTRUSTED GIT_ASKPASS=/askpass GIT_CONFIG_COUNT=2
+    GOOGLE_APPLICATION_CREDENTIALS=/key.json DOCKER_CONFIG=/docker KUBECONFIG=/kube
+    DEPLOY_PASSWORD=UNTRUSTED SESSION_SECRET=UNTRUSTED GOAUTH=netrc
+    GOFLAGS=-mod=readonly NODE_OPTIONS=--no-warnings LANG=C.UTF-8
+    "CODEX_HOME=$WORK/codex home" "HOME=$FAKE_HOME"
+    "GOCACHE=$FAKE_HOME/.ssh" "GOMODCACHE=$MAIN" "GOLANGCI_LINT_CACHE=$SCRATCH"
+    "npm_config_cache=$FAKE_HOME/.config" "ZDOTDIR=$WORK/zdot" BASH_ENV=/hostile ENV=/hostile)
+  if [[ ${TMPDIR_MODE:-} == unset ]]; then
+    env -u TMPDIR "${settings[@]}" bash "$ROOT/scripts/codex-agent.sh" "$@" "$TREE" \
+      "$SCRATCH/brief" "$SCRATCH/report with spaces.md" <"$WORK/caller-stdin"
+  else
+    env "${settings[@]}" "TMPDIR=$SCRATCH" bash "$ROOT/scripts/codex-agent.sh" "$@" "$TREE" \
+      "$SCRATCH/brief" "$SCRATCH/report with spaces.md" <"$WORK/caller-stdin"
+  fi
 }
 
 run implementer
+check_args gpt-6.1-sol medium no
+TMPDIR_MODE='unset' run implementer
 check_args gpt-6.1-sol medium no
 run --model gpt-6-astra --effort xhigh --search implementer
 check_args gpt-6-astra xhigh yes
 
 for brief in '- Review this' '--help'; do
-  printf '%s' "$brief" >"$WORK/brief"
+  printf '%s' "$brief" >"$SCRATCH/brief"
   run implementer
   check_args gpt-6.1-sol medium no
 done
@@ -220,38 +267,44 @@ for effort in low medium high xhigh; do
   check_args gpt-6.1-sol "$effort" no
 done
 
-# Writable roots never reach the Git directory, and the lock root cannot be
-# redirected through a link a previous worker left behind.
-for gocache in "$MAIN/.git/go-build" "$MAIN" "$WORK" "$MAIN/go-build"; do
+# refuse_root <link> <target> <pattern>: a writable root linked to <target> is
+# refused before anything is created there.
+refuse_root() {
+  local link=$1 target=$2 pattern=$3 before after
+  [[ ! -e $link ]] || mv "$link" "$WORK/link-saved"
+  mkdir -p "$(dirname "$link")"
+  ln -s "$target" "$link"
   rm -f "$CALL_LOG"
-  if FAKE_GOCACHE=$gocache run implementer >"$WORK/error" 2>&1; then
-    printf 'codex-agent-test: accepted a writable root overlapping the checkout: %s\n' "$gocache" >&2
+  before=$({ find "$target" -print 2>/dev/null || true; } | wc -l)
+  if run implementer >"$WORK/error" 2>&1; then
+    printf 'codex-agent-test: accepted %s linked to %s\n' "$link" "$target" >&2
     exit 1
   fi
-  [[ ! -e $CALL_LOG ]] || { echo 'codex-agent-test: called codex with .git writable' >&2; exit 1; }
-  grep -Eq 'GOCACHE overlaps the (Git directory|main checkout)' "$WORK/error" ||
-    { cat "$WORK/error" >&2; exit 1; }
-  [[ ! -e $MAIN/.git/go-build && ! -e $MAIN/go-build ]] ||
-    { echo 'codex-agent-test: created a refused root' >&2; exit 1; }
-done
-mv "$MAIN/.dev/locks" "$WORK/locks-real"
-ln -s "$MAIN/.git" "$MAIN/.dev/locks"
-rm -f "$CALL_LOG"
-if run implementer >"$WORK/error" 2>&1; then
-  echo 'codex-agent-test: accepted a linked lock directory' >&2
-  exit 1
-fi
-[[ ! -e $CALL_LOG ]] || { echo 'codex-agent-test: called codex with a linked lock directory' >&2; exit 1; }
-grep -q 'lock directory' "$WORK/error" || { cat "$WORK/error" >&2; exit 1; }
-rm "$MAIN/.dev/locks"
-mv "$WORK/locks-real" "$MAIN/.dev/locks"
+  [[ ! -e $CALL_LOG ]] || { echo 'codex-agent-test: called codex with a refused root' >&2; exit 1; }
+  grep -Eq "$pattern" "$WORK/error" || { cat "$WORK/error" >&2; exit 1; }
+  after=$({ find "$target" -print 2>/dev/null || true; } | wc -l)
+  [[ $before == "$after" ]] || { echo 'codex-agent-test: created a refused root' >&2; exit 1; }
+  rm "$link"
+  [[ ! -e $WORK/link-saved ]] || mv "$WORK/link-saved" "$link"
+}
+if [[ $(uname -s) == Darwin ]]; then cache=$FAKE_HOME/Library/Caches; else cache=$FAKE_HOME/.cache; fi
+refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.ssh" 'npm_config_cache overlaps a protected path'
+refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME" 'npm_config_cache covers \$HOME'
+refuse_root "$FAKE_HOME/.npm" "$WORK" 'npm_config_cache overlaps the Git directory'
+refuse_root "$FAKE_HOME/go" "$MAIN/.git" 'GOMODCACHE overlaps the Git directory'
+refuse_root "$FAKE_HOME/go" "$MAIN" 'GOMODCACHE overlaps a protected path'
+refuse_root "$cache/go-build" "$SCRATCH" 'GOCACHE overlaps a protected path'
+refuse_root "$cache/golangci-lint" "$WORK/worktrees" 'GOLANGCI_LINT_CACHE overlaps a protected path'
+refuse_root "$cache/golangci-lint" "$FAKE_HOME/.config/golangci-lint" \
+  'GOLANGCI_LINT_CACHE overlaps a protected path'
+refuse_root "$MAIN/.dev/locks" "$MAIN/.git" 'lock directory'
 
 # A workspace-write role outside a Git checkout has no shared lock root.
 mkdir -p "$WORK/plain/.codex/agents"
 cp "$WORK/valid-role" "$WORK/plain/.codex/agents/implementer.toml"
 rm -f "$CALL_LOG"
-if bash "$ROOT/scripts/codex-agent.sh" implementer "$WORK/plain" "$WORK/brief" "$WORK/report" \
-  >"$WORK/error" 2>&1 </dev/null; then
+if HOME=$FAKE_HOME bash "$ROOT/scripts/codex-agent.sh" implementer "$WORK/plain" \
+  "$SCRATCH/brief" "$SCRATCH/report" >"$WORK/error" 2>&1 </dev/null; then
   echo 'codex-agent-test: accepted a workspace-write role outside Git' >&2
   exit 1
 fi
@@ -281,5 +334,6 @@ done
 
 status=0
 CODEX_STATUS=23 run implementer || status=$?
+remove_run_temp
 [[ $status == 23 ]] || { echo "codex-agent-test: exit $status, expected 23" >&2; exit 1; }
 printf 'codex-agent tests passed\n'

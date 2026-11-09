@@ -107,13 +107,16 @@ take_lock() {
   flock -n "$LOCK_FD" || fail 'another workflow run holds the lock'
 }
 
-# take_local_check_lock takes the shared local-check lock so the fixture cleanup
-# of reserved-prefix accounts and captured mail never overlaps the password
-# proof (instructions/resources.md). An inherited descriptor for it is reused.
+# take_local_check_lock takes the pre-move .git lock, then the shared lock, so
+# fixture cleanup never overlaps the password proof or another local check
+# (instructions/resources.md). Inherited descriptors for them are reused.
 take_local_check_lock() {
-  local lock=$MAIN/.dev/locks/local-check.lock lock_trace lock_status line
-  [ ! -L "${lock%/*}" ] && [ ! -L "$lock" ] && install -d -m 0700 "${lock%/*}" || fail 'the shared local-check lock is a symbolic link'
-  if lock_trace=$(python3 -I -B -c '
+  local lock lock_trace lock_status line
+  [ ! -L "$MAIN/.dev/locks" ] && install -d -m 0700 "$MAIN/.dev/locks" || fail 'the shared local-check lock is a symbolic link'
+  for lock in "$GIT_COMMON/aboutme-local-check.lock" "$MAIN/.dev/locks/local-check.lock"; do
+    [ ! -L "$lock" ] || fail 'the shared local-check lock is a symbolic link'
+    lock_status=0
+    lock_trace=$(python3 -I -B -c '
 import fcntl, os, sys
 error_class = "none"
 try:
@@ -139,18 +142,15 @@ for fd in descriptors:
             sys.exit(0)
 print("error_class=" + error_class)
 sys.exit(1)
-' "$lock"); then
-    lock_status=0
-  else
-    lock_status=$?
-  fi
-  while IFS= read -r line; do
-    : "$line"
-  done <<<"$lock_trace"
-  : "helper_status=$lock_status"
-  [ "$lock_status" -ne 0 ] || return 0
-  exec {CHECK_FD}>>"$lock"
-  flock -n "$CHECK_FD" || fail 'another local check holds the shared lock'
+' "$lock") || lock_status=$?
+    while IFS= read -r line; do
+      : "$line"
+    done <<<"$lock_trace"
+    : "helper_status=$lock_status"
+    [ "$lock_status" -ne 0 ] || continue
+    exec {CHECK_FD}>>"$lock"
+    flock -n "$CHECK_FD" || fail 'another local check holds the shared lock'
+  done
 }
 
 validate_browser_state() {

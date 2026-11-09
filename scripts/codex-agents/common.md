@@ -17,8 +17,9 @@ read or print secret values or personal data. Use plain words and active voice,
 no em dashes, no plan, task, or phase IDs in code, comments, tests, or living
 docs. Keep Markdown at or under 400 lines, non-test Go under apps/server at or
 under 400, and other non-test code at or under 700; a file with a generated
-header is exempt. Temporary files and reports go to the scratchpad outside the
-repository.
+header is exempt. Put temporary files in $TMPDIR; the sandbox cannot write the
+primary's scratchpad. The launcher saves your final message as the report, so
+put the complete report there.
 
 Roles with the workspace-write sandbox have network access and run the brief's
 bounded checks through the managed lock under instructions/resources.md; they

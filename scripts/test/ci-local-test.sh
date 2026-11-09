@@ -109,9 +109,13 @@ done
 status=0; STUB_OWNED_STATUS=125 run || status=$?; [[ $status == 2 ]] || fail 'watchdog refusal did not exit 2'
 grep -q 'watchdog could not start' "$WORK/out" || fail 'missing watchdog refusal'
 if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran after watchdog refusal'; fi
-# A check in another worktree holds the main checkout's shared lock.
+# A check in another worktree holds the main checkout's shared lock, or a
+# caller from a branch older than the .dev/locks move holds the .git lock.
 mkdir -p "$repo/.dev/locks"
-python3 - "$repo/.dev/locks/local-check.lock" "$WORK/locked" <<'PY' &
+old_lock=$repo/.git/aboutme-local-check.lock new_lock=$repo/.dev/locks/local-check.lock
+for held in "$new_lock" "$old_lock"; do
+  rm -f "$WORK/locked" "$WORK/locked.done"
+  python3 - "$held" "$WORK/locked" <<'PY' &
 import fcntl, pathlib, sys, time
 with open(sys.argv[1], 'w') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -119,11 +123,35 @@ with open(sys.argv[1], 'w') as lock:
     while not pathlib.Path(sys.argv[2] + '.done').exists():
         time.sleep(0.05)
 PY
-holder=$!
-while [[ ! -f $WORK/locked ]]; do sleep 0.05; done
-status=0; run || status=$?; [[ $status == 2 ]] || fail 'held lock did not exit 2'
-grep -q 'another local check' "$WORK/out" || fail 'missing lock refusal'
-if [[ -s $CALL_LOG ]]; then fail 'work ran without the lock'; fi
-touch "$WORK/locked.done"
-wait "$holder"
+  holder=$!
+  while [[ ! -f $WORK/locked ]]; do sleep 0.05; done
+  status=0; run || status=$?; [[ $status == 2 ]] || fail "held $held did not exit 2"
+  grep -q 'another local check' "$WORK/out" || fail 'missing lock refusal'
+  if [[ -s $CALL_LOG ]]; then fail 'work ran without the lock'; fi
+  touch "$WORK/locked.done"
+  wait "$holder"
+done
+# A new caller holds the pre-move lock too, so an old caller waits. A Codex
+# sandbox cannot write .git; a read-only lock file stands in for that here.
+for mode in writable read-only; do
+  [[ $mode == writable ]] || chmod 0444 "$old_lock"
+  rm -f "$WORK/locked" "$WORK/locked.done"
+  (cd "$WORK/tree" && python3 scripts/lib/local-check.py "$new_lock" 0 \
+    bash -c 'touch "$1"; while [ ! -f "$1.done" ]; do sleep 0.05; done' _ "$WORK/locked") &
+  holder=$!
+  while [[ ! -f $WORK/locked ]]; do kill -0 "$holder" 2>/dev/null || fail "$mode: lock parent exited"; sleep 0.05; done
+  python3 - "$old_lock" "$new_lock" <<'PY' || fail "$mode: an old caller could take a lock a new caller holds"
+import fcntl, os, sys
+for path in sys.argv[1:]:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        continue
+    sys.exit(f"{path} was free")
+PY
+  touch "$WORK/locked.done"
+  wait "$holder" || fail "$mode: lock parent failed"
+  chmod 0600 "$old_lock"
+done
 printf 'ci-local-test: passed\n'
