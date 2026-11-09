@@ -40,6 +40,11 @@ type RenderMode = 'continuous' | 'paged' | 'public';
 type FixtureId = 'full' | 'vn-full' | PrintFixtureId
   | `print-probe-${PrintProbe}`;
 
+// Bound from script: vue-tsc misreads `//` in a static component attribute
+// as a comment, which breaks type checking of this template
+// (vuejs/language-tools#6322).
+const HOME_HREF = 'https://aboutme.vn/';
+
 const route = useRoute();
 const queryKeys = Object.keys(route.query);
 const corpusIds = new Set(HOSTILE_CORPUS.map(({ id }) => id));
@@ -470,7 +475,7 @@ onMounted(async () => {
     v-else-if="isGate"
     data-render-mode="gate"
     :data-fonts-ready="fontsSettled ? 'true' : undefined"
-    home-href="https://aboutme.vn/"
+    :home-href="HOME_HREF"
     :lng="gateLng"
     :message="gateMessage"
     page-title="Nguyễn Văn An, Backend Engineer"
@@ -491,7 +496,7 @@ onMounted(async () => {
   >
     <PublicResumeApp
       v-if="publicResume !== undefined"
-      home-href="https://aboutme.vn/"
+      :home-href="HOME_HREF"
       :public-resume="publicResume"
     />
     <ScaledSheet
