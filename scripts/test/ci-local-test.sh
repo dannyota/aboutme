@@ -48,6 +48,7 @@ git -C "$repo" worktree add -q -b fixture "$WORK/tree"
 mkdir -p "$WORK/tree/apps/web" "$WORK/tree/deploy/dev-https-browser" "$WORK/tree/packages/schema"
 export CALL_LOG=$WORK/calls PATH="$WORK/bin:$PATH"
 run() { : >"$CALL_LOG"; (cd "$WORK/tree" && CI_LOCAL_LOCK_WAIT=0 bash scripts/ci-local.sh) >"$WORK/out" 2>&1; }
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$WORK/sentinel"
 touch "$WORK/sentinel/keep"
 for path in apps/web/.nuxt apps/web/.output apps/web/node_modules node_modules deploy/dev-https-browser/node_modules packages/schema/node_modules; do
@@ -88,7 +89,11 @@ status=0; run || status=$?; [[ $status == 2 ]] || fail 'linked ancestor did not 
 if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran through a linked ancestor'; fi
 rm "$WORK/tree/apps"
 mv "$WORK/apps-real" "$WORK/tree/apps"
-run || fail 'successful run failed'
+: >"$repo/.git/info/exclude"
+mkdir -p "$WORK/tree/.dev/locks"
+touch "$WORK/tree/.dev/locks/local-check.lock"
+run || fail 'local lock caused clean-tree refusal'
+grep -q '^ci ' "$CALL_LOG" || fail 'CI did not run with local lock present'
 grep -q -- '--timeout 3600 -- bash .* --capped' "$CALL_LOG" || fail 'missing watchdog arguments'
 printf 'npm %s ci --prefer-offline --no-audit --no-fund\n' "$WORK/tree" "$WORK/tree/apps/web" "$WORK/tree/packages/schema" "$WORK/tree/deploy/dev-https-browser" >"$WORK/expected"
 grep '^npm ' "$CALL_LOG" >"$WORK/actual"

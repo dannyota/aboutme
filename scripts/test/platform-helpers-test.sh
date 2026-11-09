@@ -46,6 +46,26 @@ fi
 git init -q "$work/main"
 git -C "$work/main" -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
 git -C "$work/main" worktree add -q -b fixture "$work/tree"
+(
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  exclude=$work/main/.git/info/exclude
+  : >"$exclude"
+  cd "$work/main"
+  ensure_dev_ignored
+  [ "$(grep -Fxc '/.dev/' "$exclude")" = 1 ]
+  mkdir -p .dev
+  : >.dev/probe
+  git check-ignore -q -- .dev/probe
+  ensure_dev_ignored
+  [ "$(grep -Fxc '/.dev/' "$exclude")" = 1 ]
+  : >"$exclude"
+  cd "$work/tree"
+  ensure_dev_ignored
+  [ "$(grep -Fxc '/.dev/' "$exclude")" = 1 ]
+  mkdir -p .dev
+  : >.dev/probe
+  git check-ignore -q -- .dev/probe
+)
 main_real=$(cd "$work/main" && pwd -P)
 [ "$(local_check_lock_path "$work/main")" = "$main_real/.dev/locks/local-check.lock" ]
 [ "$(local_check_lock_path "$work/tree")" = "$main_real/.dev/locks/local-check.lock" ]
