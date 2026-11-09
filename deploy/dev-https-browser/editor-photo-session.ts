@@ -2,7 +2,9 @@ import {
   expect,
   type BrowserContext,
   type Page,
+  type Request,
   type Response,
+  type Route,
 } from '@playwright/test';
 import {
   installPhotoSourceReadProbes,
@@ -217,32 +219,40 @@ export async function provePhotoSessionPersistence(
   const personalPath = `/api/v1/resumes/${resumeID}/personal-details`;
   diagnostics.expectHTTPFailure('PATCH', personalPath, 401);
   const editPause = diagnostics.pauseNextMutation('PATCH', personalPath);
-  await page.getByLabel('Headline').fill('Retained after session loss');
-  state.editorDiagnosticStage = 'session-local-edit-blur';
-  await page.getByLabel('Headline').press('Tab');
-  state.editorDiagnosticStage = 'session-local-edit-dispatched';
-  const editDispatched = await Promise.race([
-    editPause.waitUntilPaused().then(() => true),
-    page.waitForTimeout(10_000).then(() => false),
-  ]);
-  if (!editDispatched) {
-    editPause.release();
-    throw new Error('headline save did not dispatch');
-  }
-  const sessionWindow = observeSessionWindow(page, resumeID);
+  let sessionWindow: ReturnType<typeof observeSessionWindow> | undefined;
+  let readHold: Awaited<ReturnType<typeof holdSessionReads>> | undefined;
   try {
+    readHold = await holdSessionReads(page, resumeID, diagnostics);
+    await page.getByLabel('Headline').fill('Retained after session loss');
+    state.editorDiagnosticStage = 'session-local-edit-blur';
+    await page.getByLabel('Headline').press('Tab');
+    state.editorDiagnosticStage = 'session-local-edit-dispatched';
+    const editDispatched = await Promise.race([
+      editPause.waitUntilPaused().then(() => true),
+      page.waitForTimeout(10_000).then(() => false),
+    ]);
+    if (!editDispatched) throw new Error('headline save did not dispatch');
+    sessionWindow = observeSessionWindow(page, resumeID);
     state.editorDiagnosticStage = 'session-destroy-request';
-    try {
-      await destroySessionInSecondPage(reauthPage);
-    } finally {
-      editPause.release();
-    }
+    await destroySessionInSecondPage(reauthPage);
+    const editResponse = page.waitForResponse((response) => {
+      const request = response.request();
+      const url = new URL(response.url());
+      return request.method() === 'PATCH'
+        && url.origin === ORIGIN
+        && url.pathname === personalPath;
+    });
+    editPause.release();
+    state.editorDiagnosticStage = 'session-save-response';
+    expect((await editResponse).status()).toBe(401);
+    await readHold.releaseBeforeSignIn();
     state.editorDiagnosticStage = 'session-loss-alert';
     await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
     await expectURLUnchanged(page, baseline);
     await expectNoPersistenceWrites(probes);
     state.editorDiagnosticStage = 'session-reauthenticated';
     await loginAsDevelopmentUser(reauthPage);
+    await readHold.release();
     state.editorDiagnosticStage = 'session-reauth-url';
     await expectURLUnchanged(page, baseline);
     state.editorDiagnosticStage = 'session-reauth-persistence';
@@ -259,12 +269,77 @@ export async function provePhotoSessionPersistence(
     await expectURLUnchanged(page, baseline);
     await expectNoPersistenceWrites(probes);
   } catch (error) {
-    state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${sessionWindow.label()}`;
+    if (sessionWindow !== undefined) {
+      state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${sessionWindow.label()}`;
+    }
     throw error;
   } finally {
-    sessionWindow.dispose();
+    editPause.release();
+    try {
+      await readHold?.release(true);
+    } finally {
+      sessionWindow?.dispose();
+    }
   }
   return reauthPage;
+}
+
+async function holdSessionReads(
+  page: Page,
+  resumeID: string,
+  diagnostics: Diagnostics,
+): Promise<{ releaseBeforeSignIn(): Promise<void>; release(expectFailures?: boolean): Promise<void> }> {
+  const held: { request: Request; release(): void }[] = [];
+  let released = false;
+  const matches = (url: URL): boolean => url.origin === ORIGIN && (
+    url.pathname === `/api/v1/resumes/${resumeID}`
+    || url.pathname === '/api/v1/events'
+  );
+  const handle = async (route: Route): Promise<void> => {
+    const request = route.request();
+    if (request.method() === 'GET' && !released) {
+      await new Promise<void>((resolve) => held.push({ request, release: resolve }));
+    }
+    await route.fallback();
+  };
+  await page.route(matches, handle);
+  return {
+    releaseBeforeSignIn: async (): Promise<void> => {
+      // Reads arriving during this batch stay held until sign-in completes.
+      const pending = [...held];
+      pending.sort((left, right) => (
+        Number(new URL(right.request.url()).pathname === '/api/v1/events')
+        - Number(new URL(left.request.url()).pathname === '/api/v1/events')
+      ));
+      for (const item of pending) {
+        diagnostics.expectHTTPFailure('GET', new URL(item.request.url()).pathname, 401);
+        held.splice(held.indexOf(item), 1);
+        item.release();
+        expect((await item.request.response())?.status()).toBe(401);
+      }
+    },
+    release: async (expectFailures = false): Promise<void> => {
+      if (released) return;
+      released = true;
+      const pending = held.splice(0);
+      try {
+        while (pending.length > 0) {
+          const item = pending.shift()!;
+          const cancel = diagnostics.expectHTTPFailure(
+            'GET', new URL(item.request.url()).pathname, 401,
+          );
+          item.release();
+          if (!expectFailures && (await item.request.response())?.status() !== 401) cancel();
+        }
+      } finally {
+        for (const item of pending) {
+          diagnostics.expectHTTPFailure('GET', new URL(item.request.url()).pathname, 401);
+          item.release();
+        }
+        await page.unroute(matches, handle);
+      }
+    },
+  };
 }
 
 // Counts what the editor page does once its session ends, for the failure

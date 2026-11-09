@@ -53,7 +53,7 @@ export interface Diagnostics {
   assertTemplateFailureSecondChild(): void;
   armPhotoReadFailure(): void;
   armTemplateFailure(): void;
-  expectHTTPFailure(method: string, pathname: string, status: 401 | 412): void;
+  expectHTTPFailure(method: string, pathname: string, status: 401 | 412): () => void;
   pauseNextMutation(method: string, pathname: string): PausedPhotoRequest;
   pauseNextPhotoCrop(): PausedPhotoRequest;
   pauseNextPhotoUpload(): PausedPhotoUpload;

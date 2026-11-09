@@ -36,6 +36,11 @@ pid=
 stop_server() {
   [ -n "$pid" ] || return 0
   kill -TERM -- "-$pid" 2>/dev/null || true
+  local deadline=$((SECONDS + 5))
+  while kill -0 -- "-$pid" 2>/dev/null && ((SECONDS < deadline)); do
+    sleep 1
+  done
+  kill -KILL -- "-$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
   pid=
 }
@@ -58,7 +63,6 @@ set +m
 deadline=$((SECONDS + 240))
 until grep -aq 'Vite client warmed up' "$log"; do
   if ! kill -0 "$pid" 2>/dev/null; then
-    tail -n 20 -- "$log" >&2
     refuse 'the dev server exited before its client warmup finished'
   fi
   ((SECONDS < deadline)) || refuse 'the client warmup did not finish within 240 seconds'
@@ -74,7 +78,9 @@ if grep -a 'Vite client warmed up' "$log" | grep -q 'abandoned'; then
 fi
 found=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -aE 'new dependencies found|discovered new dependencies at runtime|New dependencies found' || true)
 if [ -n "$found" ]; then
-  printf '%s\n' "$found" >&2
+  printf '%s\n' "$found" \
+    | sed -E 's/^.*([Nn]ew dependencies found|discovered new dependencies at runtime):[[:space:]]*//' \
+    | grep -E '^@?[a-zA-Z0-9_.~/-]+(,[[:space:]]*@?[a-zA-Z0-9_.~/-]+)*$' >&2 || true
   printf '%s: the dev server found client dependencies at runtime; add them to vite.optimizeDeps.include in apps/web/nuxt.config.ts\n' "$NAME" >&2
   exit 1
 fi
