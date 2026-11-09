@@ -4,7 +4,7 @@
 // go.mod, and independently re-derives the sectionType
 // list from resume.schema.json (deliberately not importing anything from
 // packages/schema/scripts/generate.mjs or trusting conformance.test.ts's
-// derivation — the point is to check the pipeline against the schema file
+// derivation; the point is to check the pipeline against the schema file
 // itself, the same discipline conformance.test.ts already applies).
 //
 // It checks two failure modes:
@@ -15,7 +15,7 @@
 //     fails a test.
 //   - TestServerRecognizesEverySchemaSectionType reads resume.schema.json at
 //     runtime and fails if the schema declares a sectionType this file's
-//     dispatch() doesn't have a case for — the scenario a 9th, newly added
+//     dispatch() doesn't have a case for, the scenario a 9th, newly added
 //     sectionType produces: a new schema.SectionType constant exists (it's
 //     regenerated from the schema by packages/schema/scripts/generate.mjs),
 //     but nothing yet forces dispatch() to add a case for it, so this test
@@ -44,7 +44,7 @@ func schemaFilePath() string {
 }
 
 // resumeSchemaSectionOneOf mirrors just enough of resume.schema.json's shape
-// to read $defs.section.oneOf[].properties.sectionType.const — the same
+// to read $defs.section.oneOf[].properties.sectionType.const, the same
 // field packages/schema/scripts/generateSchemaTransform.mjs's deriveSectionVariants and
 // packages/schema/test/conformance.test.ts's sectionTypesFromSchema both
 // read, kept as an independent third reader here rather than a shared
@@ -135,7 +135,7 @@ func TestKnownSectionTypeConstantsCompile(t *testing.T) {
 	}
 	for _, sectionType := range known {
 		if !dispatch(sectionType) {
-			t.Fatalf("dispatch() does not recognize its own known constant %q — dispatch() and this list have drifted", sectionType)
+			t.Fatalf("dispatch() does not recognize its own known constant %q; dispatch() and this list have drifted", sectionType)
 		}
 	}
 }
@@ -144,7 +144,7 @@ func TestKnownSectionTypeConstantsCompile(t *testing.T) {
 // resume.schema.json directly and fails if the schema declares a
 // sectionType dispatch() doesn't handle, or if dispatch()'s known set
 // contains a sectionType the schema no longer declares. Either direction
-// means apps/server and packages/schema have drifted — exactly the failure
+// means apps/server and packages/schema have drifted, exactly the failure
 // mode a ninth sectionType added to the schema without server-side wiring
 // produces.
 func TestServerRecognizesEverySchemaSectionType(t *testing.T) {
@@ -169,7 +169,7 @@ func TestServerRecognizesEverySchemaSectionType(t *testing.T) {
 	sort.Strings(knownStrings)
 
 	if len(schemaTypes) != len(knownStrings) {
-		t.Fatalf("resume.schema.json declares %d sectionType(s) %v, but apps/server's dispatch recognizes %d %v — "+
+		t.Fatalf("resume.schema.json declares %d sectionType(s) %v, but apps/server's dispatch recognizes %d %v; "+
 			"a sectionType was added to (or removed from) the schema without updating dispatch() in this file",
 			len(schemaTypes), schemaTypes, len(knownStrings), knownStrings)
 	}
@@ -185,7 +185,7 @@ func TestServerRecognizesEverySchemaSectionType(t *testing.T) {
 		t.Run(want, func(t *testing.T) {
 			t.Parallel()
 			if !dispatch(schema.SectionType(want)) {
-				t.Fatalf("apps/server does not recognize sectionType %q declared by resume.schema.json — "+
+				t.Fatalf("apps/server does not recognize sectionType %q declared by resume.schema.json; "+
 					"dispatch() in this file needs a case added for it (design spec §3, Codegen fidelity)", want)
 			}
 		})

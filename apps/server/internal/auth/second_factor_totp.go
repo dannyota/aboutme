@@ -2,9 +2,8 @@ package auth
 
 // TOTP-specific second-factor HTTP surface: the pending verify route and the
 // account enrollment and removal routes. Kept in its own file, alongside
-// totp_service.go in internal/secondfactor, because second_factor_handlers.go
-// is already near the 700-line non-test file bound
-// (docs/standards/engineering.md). The routes and checks follow
+// totp_service.go in internal/secondfactor, so the TOTP routes stay one
+// concern. The routes and checks follow
 // docs/design/totp-second-factor-contract.md.
 
 import (
@@ -21,9 +20,14 @@ import (
 
 // TOTP route paths ("Release surface").
 const (
-	SecondFactorPendingTOTPPath    = "/api/v1/auth/second-factor/totp/verify"
+	// SecondFactorPendingTOTPPath completes the pending authentication with
+	// an authenticator-app code (POST).
+	SecondFactorPendingTOTPPath = "/api/v1/auth/second-factor/totp/verify"
+	// SecondFactorTOTPEnrollmentPath starts (POST) or completes (PUT) TOTP
+	// enrollment or replacement for the signed-in account.
 	SecondFactorTOTPEnrollmentPath = "/api/v1/me/second-factor/totp/enrollment"
-	SecondFactorTOTPPath           = "/api/v1/me/second-factor/totp"
+	// SecondFactorTOTPPath removes the account's TOTP credential (DELETE).
+	SecondFactorTOTPPath = "/api/v1/me/second-factor/totp"
 )
 
 // SecondFactorMethodTOTP is the pending method name for an authenticator-app
@@ -40,6 +44,7 @@ var ErrTOTPEnrollmentInvalid = errors.New("auth: totp enrollment invalid")
 // Retry-After seconds ("Per-account TOTP failure budget").
 type totpCoolingDown struct{ retryAfterSeconds int }
 
+// Error returns fixed text that carries no account or timing data.
 func (e *totpCoolingDown) Error() string { return "auth: totp cool-down active" }
 
 // NewTOTPCoolingDownError reports a live TOTP cool-down. retryAfterSeconds is
@@ -52,18 +57,26 @@ func NewTOTPCoolingDownError(retryAfterSeconds int) error {
 // ID, the grouped Base32 secret, the provisioning URI, and its expiry
 // ("Enrollment and replacement API").
 type TOTPEnrollmentStart struct {
-	EnrollmentID    string
-	Secret          string
+	// EnrollmentID is the raw, unpadded base64url enrollment token. Only its
+	// SHA-256 digest is stored.
+	EnrollmentID string
+	// Secret is the new TOTP secret in its grouped Base32 display form.
+	Secret string
+	// ProvisioningURI is the otpauth URI that carries the same secret.
 	ProvisioningURI string
-	ExpiresAt       time.Time
+	// ExpiresAt is when the enrollment stops accepting completion.
+	ExpiresAt time.Time
 }
 
 // TOTPEnrollmentComplete reports a completed TOTP enrollment or replacement.
 // RecoveryCodes is set only when this completion created the account's first
 // active factor.
 type TOTPEnrollmentComplete struct {
+	// RecoveryCodes are the new recovery codes for display; nil unless this
+	// completion created the account's first active factor.
 	RecoveryCodes []string
-	Session       SessionIssue
+	// Session is the replacement session the client must receive.
+	Session SessionIssue
 }
 
 // TOTPSecondFactorService is the TOTP behavior behind the TOTP routes. It is
@@ -71,24 +84,50 @@ type TOTPEnrollmentComplete struct {
 // wired TOTP dependencies still satisfies the passkey and recovery contract;
 // a single service implementation satisfies both interfaces.
 type TOTPSecondFactorService interface {
+	// TOTPEnrollmentEnabled reports the TOTP enrollment flag.
 	TOTPEnrollmentEnabled() bool
+	// DecodeTOTPCode strictly decodes a pending verify body before any
+	// cryptographic or database work.
 	DecodeTOTPCode(body []byte) (SecondFactorCredential, error)
+	// DecodeTOTPEnrollmentCompletion strictly decodes an enrollment
+	// completion body before any database work. A malformed enrollment ID
+	// returns ErrTOTPEnrollmentInvalid.
 	DecodeTOTPEnrollmentCompletion(body []byte) (SecondFactorCredential, error)
+	// TOTPState reports whether the account has an active TOTP credential.
 	TOTPState(ctx context.Context, userID uuid.UUID) (bool, error)
+	// StartTOTPEnrollment supersedes any live enrollment and creates a new
+	// one for the session's account, without changing any active factor.
 	StartTOTPEnrollment(ctx context.Context, sess store.Session) (TOTPEnrollmentStart, error)
+	// CompleteTOTPEnrollment proves the enrollment's code and installs or
+	// replaces the active TOTP credential. While enrollment is disabled it
+	// still consumes a matching enrollment and returns
+	// ErrSecondFactorEnrollmentDisabled.
 	CompleteTOTPEnrollment(ctx context.Context, sess store.Session, credential SecondFactorCredential) (TOTPEnrollmentComplete, error)
+	// RemoveTOTP deletes the active TOTP credential and any live enrollment,
+	// and returns the replacement session.
 	RemoveTOTP(ctx context.Context, sess store.Session) (SessionIssue, error)
 }
 
 type (
+	// totpEnrollmentStartBody is the TOTP enrollment start response.
 	totpEnrollmentStartBody struct {
-		EnrollmentID    string `json:"enrollmentId"`
-		Secret          string `json:"secret"`
+		// EnrollmentID is the 32-byte enrollment token, unpadded base64url.
+		EnrollmentID string `json:"enrollmentId"`
+		// Secret is the proposed TOTP secret as 32 Base32 characters in
+		// eight space-separated groups of four.
+		Secret string `json:"secret"`
+		// ProvisioningURI is the otpauth URI that carries the same secret.
 		ProvisioningURI string `json:"provisioningUri"`
-		ExpiresAt       string `json:"expiresAt"`
+		// ExpiresAt is when the enrollment stops accepting completion,
+		// RFC 3339 in UTC.
+		ExpiresAt string `json:"expiresAt"`
 	}
+	// totpEnrollmentCompleteBody is the TOTP enrollment completion response.
 	totpEnrollmentCompleteBody struct {
-		TOTPEnabled   bool     `json:"totpEnabled"`
+		// TOTPEnabled is always true.
+		TOTPEnabled bool `json:"totpEnabled"`
+		// RecoveryCodes holds ten new codes only when this completion created
+		// the account's first active factor; it is omitted otherwise.
 		RecoveryCodes []string `json:"recoveryCodes,omitempty"`
 	}
 )

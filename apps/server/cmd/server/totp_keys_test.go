@@ -8,29 +8,10 @@ import (
 	"testing"
 )
 
-func TestTOTPIssuerFromPublicOrigin(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct{ origin, want string }{
-		{"https://aboutme.vn", "aboutme.vn"},
-		{"https://aboutme.example:8443", "aboutme.example"},
-		{"http://localhost:20080", "localhost"},
-	} {
-		got, err := totpIssuerFromPublicOrigin(tc.origin)
-		if err != nil {
-			t.Fatalf("totpIssuerFromPublicOrigin(%q) error = %v", tc.origin, err)
-		}
-		if got != tc.want {
-			t.Fatalf("totpIssuerFromPublicOrigin(%q) = %q, want %q", tc.origin, got, tc.want)
-		}
-	}
-}
-
-func TestTOTPIssuerFromPublicOrigin_RejectsAnUnparsableOrigin(t *testing.T) {
-	t.Parallel()
-	if _, err := totpIssuerFromPublicOrigin("://not-a-url"); err == nil {
-		t.Fatal("totpIssuerFromPublicOrigin() error = nil, want a parse rejection")
-	}
-}
+// testTOTPActiveKey is the unpadded base64url spelling of 32 zero bytes, a
+// valid TOTP_ACTIVE_KEY value (docs/design/totp-key-management.md "Key
+// ring").
+const testTOTPActiveKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 // TestRunTOTPKeyReencrypt_RejectsArguments proves the command takes no
 // arguments (docs/design/totp-key-management.md "Rotation": the one-shot

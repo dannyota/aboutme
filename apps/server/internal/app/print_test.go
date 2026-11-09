@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 func TestPrintStartupKeepsLinuxSandboxFailureFatal(t *testing.T) {
 	want := printrender.ErrInvalidConfig
-	renderer, queue, err := newPrintRuntime("linux", printrender.Config{}, func(printrender.Config) (*printrender.Renderer, error) {
+	renderer, queue, err := NewPrint("linux", printrender.Config{}, func(printrender.Config) (*printrender.Renderer, error) {
 		return nil, want
 	})
 	if !errors.Is(err, want) || renderer != nil || queue != nil {
@@ -24,7 +24,7 @@ func TestPrintStartupKeepsLinuxSandboxFailureFatal(t *testing.T) {
 func TestPrintStartupDisablesUnsupportedPlatforms(t *testing.T) {
 	for _, platform := range []string{"darwin", "freebsd"} {
 		t.Run(platform, func(t *testing.T) {
-			renderer, queue, err := newPrintRuntime(platform, printrender.Config{}, func(printrender.Config) (*printrender.Renderer, error) {
+			renderer, queue, err := NewPrint(platform, printrender.Config{}, func(printrender.Config) (*printrender.Renderer, error) {
 				t.Fatal("unsupported platform attempted browser initialization")
 				return nil, nil
 			})
@@ -41,7 +41,7 @@ func TestPrintStartupDisablesUnsupportedPlatforms(t *testing.T) {
 			if !errors.Is(err, renderjob.ErrClosed) {
 				t.Fatalf("disabled render = %v", err)
 			}
-			handler, err := privatePrintHandler(queue, false)
+			handler, err := PrivatePrintHandler(queue, false)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -113,7 +113,7 @@ func TestSecurityHeaders_HSTSPresentOnDirectTLS(t *testing.T) {
 }
 
 // TestSecurityHeaders_AppliesToRejectedResponses proves headers land even
-// when a downstream layer rejects the request — the specific requirement
+// when a downstream layer rejects the request, the specific requirement
 // that determined where SecurityHeaders sits in router.go's middleware
 // chain (outside every layer that can itself write a response).
 func TestSecurityHeaders_AppliesToRejectedResponses(t *testing.T) {
@@ -166,7 +166,7 @@ func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T)
 // TestRouter_New_DefaultOptions_NeverTrustsAnyPeer proves api.New does not
 // hardcode LoopbackTrustedProxies(), which is wrong for
 // any topology (e.g. podman-compose) where Caddy doesn't reach Go over
-// loopback. api.New must not assume a topology on the caller's behalf — a
+// loopback. api.New must not assume a topology on the caller's behalf; a
 // zero-value Options (no TrustedProxies configured) must trust no peer at
 // all, even one connecting from loopback, matching
 // RateLimiterConfig.TrustedProxies' own documented zero-value semantics.
@@ -183,6 +183,6 @@ func TestRouter_New_DefaultOptions_NeverTrustsAnyPeer(t *testing.T) {
 
 	if got := rec.Header().Get("Strict-Transport-Security"); got != "" {
 		t.Errorf("Strict-Transport-Security = %q, want absent: api.Options{} must not implicitly trust "+
-			"loopback (or any peer) — the caller must configure TrustedProxies explicitly", got)
+			"loopback (or any peer); the caller must configure TrustedProxies explicitly", got)
 	}
 }
