@@ -18,7 +18,7 @@ Review for:
 1. Contradictions with accepted ADRs, design docs, architecture, or another description of the same contract. An accepted ADR wins over conflicting design text.
 2. Security gaps traced end to end with the attacker list above, including trust boundaries, keys, authorization, revocation, recovery, and hostile renderer input.
 3. Unspecified items an implementer could not build without a decision: API and schema shapes, migration and loss rules, older-client behavior, size limits, UI values, and release order.
-4. Writing-rule violations, stale facts, duplicated contracts that disagree, and Markdown over 450 lines. Follow docs/standards/engineering.md, including its ADR change rules.
+4. Writing-rule violations, stale facts, duplicated contracts that disagree, and Markdown over 400 lines. Follow docs/standards/engineering.md, including its ADR change rules.
 
 Output in Markdown:
 Verdict: merge, fix first, or redesign.

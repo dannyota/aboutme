@@ -90,11 +90,11 @@ lines_file deploy/observer/internal/foo/foo.go 701
 expect_fail 'code outside apps/server at 701' deploy/observer/internal/foo/foo.go 701 700
 
 fresh_repo
-lines_file docs/foo.md 450
-expect_pass 'Markdown at 450'
+lines_file docs/foo.md 400
+expect_pass 'Markdown at 400'
 
 fresh_repo
-lines_file docs/foo.md 451
-expect_fail 'Markdown at 451' docs/foo.md 451 450
+lines_file docs/foo.md 401
+expect_fail 'Markdown at 401' docs/foo.md 401 400
 
 printf 'check-lengths-test: passed\n'
