@@ -107,17 +107,14 @@ chmod +x "$BIN/sqlc"
 
 CONTRACT=$WORK/contract
 mkdir -p "$CONTRACT/scripts" "$CONTRACT/.github/workflows" \
-  "$CONTRACT/apps/web" "$CONTRACT/apps/server" \
-  "$CONTRACT/packages/schema/gen/go" "$CONTRACT/deploy/caddy/production"
+  "$CONTRACT/apps/web" "$CONTRACT/deploy/caddy/production"
 cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
 cp "$ROOT/.github/workflows/security-scan.yml" "$CONTRACT/.github/workflows/"
 cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
 cp "$ROOT/apps/web/.nvmrc" "$CONTRACT/apps/web/"
-cp "$ROOT/apps/server/go.mod" "$CONTRACT/apps/server/"
-cp "$ROOT/packages/schema/gen/go/go.mod" "$CONTRACT/packages/schema/gen/go/"
-cp "$ROOT/go.work" "$CONTRACT/"
+cp "$ROOT/go.mod" "$CONTRACT/"
 cp "$ROOT/deploy/web.Dockerfile" "$ROOT/deploy/server.Dockerfile" \
   "$ROOT/deploy/compose.yml" "$CONTRACT/deploy/"
 cp "$ROOT/deploy/caddy/production/Dockerfile" "$CONTRACT/deploy/caddy/production/"

@@ -1406,7 +1406,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
       },
       {
         "package-ecosystem": "gomod",
-        directories: ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"],
+        directories: ["/"],
         schedule: { interval: "weekly" },
         "open-pull-requests-limit": 2,
         groups: { gomod: { patterns: ["*"], "update-types": ["minor", "patch"] } },
@@ -1566,7 +1566,7 @@ function checkDependabot(config) {
     .map((name) => ({ "dependency-name": name }));
   const scopes = [
     ["github-actions", ["/"], []],
-    ["gomod", ["/apps/server", "/packages/schema/gen/go", "/deploy/observer"], [
+    ["gomod", ["/"], [
       { "dependency-name": "github.com/modelcontextprotocol/go-sdk" },
     ]],
     ["gomod", ["/deploy/caddy/production/build"], [

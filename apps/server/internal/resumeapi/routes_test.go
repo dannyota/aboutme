@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
 func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {

@@ -9,15 +9,15 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
-	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
-	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
-	"github.com/dannyota/aboutme/apps/server/internal/realtimeapi"
-	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
-	"github.com/dannyota/aboutme/apps/server/internal/viewapi"
+	"danny.vn/aboutme/apps/server/internal/accountapi"
+	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/publicapi"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/realtimeapi"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
+	"danny.vn/aboutme/apps/server/internal/viewapi"
 )
 
 // RouterDependencies are the services whose routes the public router serves.

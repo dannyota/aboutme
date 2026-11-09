@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 func TestLoad_PreviewCardFlag(t *testing.T) {

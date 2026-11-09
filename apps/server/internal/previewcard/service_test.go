@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func newTestService(t *testing.T, cards CardStore, queue Queue) *Service {

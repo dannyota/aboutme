@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/privacynotice"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 func TestPrivacyNoticeCommandHasClosedArguments(t *testing.T) {

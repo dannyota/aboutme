@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/media"
-	"github.com/dannyota/aboutme/apps/server/internal/media/mediatest"
+	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/media/mediatest"
 )
 
 // backendCase constructs one Backend under test. The returned namespace

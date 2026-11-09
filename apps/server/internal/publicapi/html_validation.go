@@ -5,8 +5,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicformat"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 func validPublicHTML(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) bool {

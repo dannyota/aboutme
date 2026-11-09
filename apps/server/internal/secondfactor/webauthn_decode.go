@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
 // passkeyRegistration is a decoded registration completion.

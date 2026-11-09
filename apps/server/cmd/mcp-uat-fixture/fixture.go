@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/devdb"
+	"danny.vn/aboutme/apps/server/internal/devdb"
 )
 
 const (

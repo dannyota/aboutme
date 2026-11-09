@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/directrender"
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/directrender"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 const expectedBrowserVersion = "156.0.8078.4"

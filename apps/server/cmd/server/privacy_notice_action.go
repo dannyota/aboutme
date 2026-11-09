@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/authmail"
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/privacynotice"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/authmail"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/privacynotice"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const privacyNoticeTimeout = 5 * time.Minute

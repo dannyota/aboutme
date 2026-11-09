@@ -17,7 +17,7 @@ import (
 	// inside a test binary.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // RequireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling

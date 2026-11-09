@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/media"
 )
 
 // NewMedia returns the configured media backend: the local filesystem for

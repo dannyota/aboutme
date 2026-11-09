@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/devdb"
-	"github.com/dannyota/aboutme/apps/server/internal/password"
+	"danny.vn/aboutme/apps/server/internal/devdb"
+	"danny.vn/aboutme/apps/server/internal/password"
 )
 
 // fixtureDatabase is the only database name the command will touch. Matching

@@ -54,9 +54,9 @@ const publicRootRows = [
 export const appManifestRows = [
   { path: "apps/server/cmd/render-browser-supervisor", kind: "recursive" },
   { path: "apps/server/cmd/server", kind: "recursive" },
-  { path: "apps/server/go.mod", kind: "file" },
-  { path: "apps/server/go.sum", kind: "file" },
   { path: "apps/server/internal", kind: "recursive" },
+  { path: "go.mod", kind: "file" },
+  { path: "go.sum", kind: "file" },
   { path: registryRelativePath, kind: "file" },
   { path: "packages/schema/gen/go", kind: "recursive" },
 ];

@@ -372,7 +372,7 @@ const rawSchemaBase64 = "" +
 
 // RawSchema is resume.v3.schema.json's exact byte content, decoded once at
 // package init from rawSchemaBase64 above. resume.v3.schema.json lives outside
-// this module (gen/go/go.mod), so go:embed cannot reach it directly — this
+// this package's directory, so go:embed cannot reach it directly; this
 // generated constant is the substitute. gen/go/released_test.go asserts this
 // byte-equals ../../../resume.v3.schema.json read directly at test time, and
 // test/gen.test.ts's regenerate-and-byte-compare check covers this file

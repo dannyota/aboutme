@@ -77,7 +77,7 @@ go_build() { make server-build server-vet server-test; }
 go_lint() { cd "$ROOT/apps/server" && GOGC=50 golangci-lint run; }
 
 go_tidy() {
-  cd "$ROOT/apps/server" || return
+  cd "$ROOT" || return
   local tmp
   tmp="$(mktemp -d)" || return
   if ! cp go.mod go.sum "$tmp/"; then
@@ -93,18 +93,19 @@ go_tidy() {
   if ! diff -q "$tmp/go.mod" go.mod >/dev/null || ! diff -q "$tmp/go.sum" go.sum >/dev/null; then
     cp "$tmp/go.mod" "$tmp/go.sum" .
     rm -rf "$tmp"
-    echo "go.mod/go.sum are not tidy -- run 'go mod tidy' in apps/server and commit" >&2
+    echo "go.mod/go.sum are not tidy -- run 'go mod tidy' at the repository root and commit" >&2
     return 1
   fi
   rm -rf "$tmp"
 }
 
 go_vuln() {
-  # Mirrors ci.yml's govulncheck steps: every Go module in the repository, with
-  # the Caddy build module (outside go.work) forced to GOWORK=off.
+  # Mirrors ci.yml's govulncheck steps for apps/server and
+  # packages/schema/gen/go in the root module, and for the separate Caddy build
+  # module.
   (cd "$ROOT/apps/server" && govulncheck ./...) &&
     (cd "$ROOT/packages/schema/gen/go" && govulncheck ./...) &&
-    (cd "$ROOT/deploy/caddy/production/build" && GOWORK=off govulncheck ./...)
+    (cd "$ROOT/deploy/caddy/production/build" && govulncheck ./...)
 }
 
 sqlc_drift() { make sqlc-check; }

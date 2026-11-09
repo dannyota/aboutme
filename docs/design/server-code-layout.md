@@ -389,6 +389,9 @@ Decisions recorded 2026-11-09. Source: owner.
   the documents it catches.
 - Keep adapter and core packages under `apps/server/internal`, with interfaces
   owned by consumers. Defer public Go modules until a second consumer exists.
+- Use one root Go module, `danny.vn/aboutme`, as in the owner's other Go
+  projects, with Go code in its current directories. The Caddy build recipe
+  stays a nested module with Caddy's own dependency graph.
 - Allow only immutable sentinel values (sentinel errors and compiled regular
   expressions) and embedded assets as exceptions to the package-level
   mutable-state ban. Never mutate or reassign them; preserve error identity.

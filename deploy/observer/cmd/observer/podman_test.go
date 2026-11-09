@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	podmanplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/podman"
-	"github.com/dannyota/aboutme/deploy/observer/internal/publish"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	podmanplatform "danny.vn/aboutme/deploy/observer/internal/platform/podman"
+	"danny.vn/aboutme/deploy/observer/internal/publish"
 )
 
 func TestWirePodmanWithoutAWS(t *testing.T) {

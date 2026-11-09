@@ -33,7 +33,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 // sqlExecer is the minimal pgx surface resumeSchemaTx's raw-SQL helpers

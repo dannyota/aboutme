@@ -3,9 +3,9 @@ package showcase
 import (
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
+	"danny.vn/aboutme/apps/server/internal/previewcard"
 )
 
 // AC-SHOW-006: Derive reads the same card inputs as the preview card builder,

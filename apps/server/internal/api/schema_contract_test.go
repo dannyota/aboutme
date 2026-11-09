@@ -1,7 +1,7 @@
 // schema_contract_test.go checks the server side of cross-language schema
-// conformance. It imports github.com/dannyota/aboutme/packages/schema/gen/go
-// as a compile-time dependency, wired through the root go.work and the server's
-// go.mod, and independently re-derives the sectionType
+// conformance. It imports danny.vn/aboutme/packages/schema/gen/go
+// as a compile-time dependency from the same root module, and independently
+// re-derives the sectionType
 // list from resume.schema.json (deliberately not importing anything from
 // packages/schema/scripts/generate.mjs or trusting conformance.test.ts's
 // derivation; the point is to check the pipeline against the schema file
@@ -29,7 +29,7 @@ import (
 	"sort"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // schemaFilePath resolves resume.schema.json relative to this source file's

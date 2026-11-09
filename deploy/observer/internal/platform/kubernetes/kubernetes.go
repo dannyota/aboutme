@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
 // componentLabel is the label the observer reads to map a pod to a

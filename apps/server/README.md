@@ -27,9 +27,9 @@ See [authentication and agent access](../../docs/architecture/auth-and-agent-acc
 
 See [resume data](../../docs/architecture/resume-data.md#implemented-resume-data-layer).
 
-The root `go.work` connects this module to the generated schema module at
-`packages/schema/gen/go`. Run Go commands from `apps/server` so the workspace is
-found upward.
+The root `go.mod` declares one module, `danny.vn/aboutme`, that holds this
+server and the generated schema packages at `packages/schema/gen/go`. Run server
+Go commands from `apps/server`; the go command finds the root `go.mod` upward.
 
 ## Configuration
 

@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 // schemaFixturesDir locates packages/schema/fixtures relative to this

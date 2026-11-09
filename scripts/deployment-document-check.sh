@@ -96,7 +96,7 @@ else
   DOC_CHECK=$BUILD/document-check
   (
     cd "$REPO/deploy/observer"
-    GOWORK=off bash "$REPO/scripts/run-owned.sh" --timeout 300 -- go build -o "$DOC_CHECK" ./cmd/document-check
+    bash "$REPO/scripts/run-owned.sh" --timeout 300 -- go build -o "$DOC_CHECK" ./cmd/document-check
   ) >"$EVIDENCE/build.txt" 2>&1 || {
     record FAIL 'build document-check'
     finish

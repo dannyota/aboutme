@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/document"
 )
 
 // FilePublisher atomically replaces deployment.json in one existing directory.

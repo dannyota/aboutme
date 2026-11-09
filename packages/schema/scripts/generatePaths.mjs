@@ -30,11 +30,11 @@ export const quicktypeBin = join(packageRoot, "node_modules", ".bin", "quicktype
 // generated resume types. Reuse that pinned binary for the sanitizer artifact.
 export const prettierBin = join(packageRoot, "node_modules", ".bin", "prettier");
 
-// The Go import path of the module gen/go/go.mod declares. The released-schema
+// The Go import path of gen/go in the root module (go.mod). The released-schema
 // registry (gen/go/released.go) imports one retained package per released
-// version from underneath it — they are packages inside that same module, not
-// modules of their own, so nothing in go.work changes when a version is added.
-export const GO_MODULE_PATH = "github.com/dannyota/aboutme/packages/schema/gen/go";
+// version from underneath it. They are packages of the root module, not
+// modules of their own, so adding a version changes no module file.
+export const GO_MODULE_PATH = "danny.vn/aboutme/packages/schema/gen/go";
 
 export const generatedHeader = (sourceName) =>
   `// Code generated from ${sourceName}. DO NOT EDIT.`;

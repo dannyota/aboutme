@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
-	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 var observed = time.Date(2026, 10, 2, 3, 14, 5, 0, time.UTC)

@@ -140,8 +140,8 @@ jobs:
             apps/web/package-lock.json
             packages/schema/package-lock.json
             deploy/dev-https-browser/package-lock.json
-      # This job's own Go work is small (building/vetting/testing one
-      # generated schema module, and `go install`-ing gitleaks), so it uses
+      # This job's own Go work is small (building/vetting/testing the
+      # generated schema packages, and `go install`-ing gitleaks), so it uses
       # its own light-scoped cache instead of the full shared build/module
       # cache the server job needs.
       - if: ${{ !cancelled() }}
@@ -317,20 +317,19 @@ jobs:
   # govulncheck, the media package's slow normalization corpus test (which
   # runs in the background beside the rest), and the deployment transparency
   # observer's own build/vet/test/lint/govulncheck (deploy/observer/README.md,
-  # a separate Go module outside go.work with no database, browser, or live
-  # AWS access needed; its platform adapters and S3 publisher are tested
-  # against httptest servers).
+  # packages of the root Go module with no database, browser, or live AWS
+  # access needed; its platform adapters and S3 publisher are tested against
+  # httptest servers).
   #
-  # govulncheck runs in source mode for every Go module in the repository: it
-  # fails only on a vulnerability reachable from the module's own call graph,
-  # not on every dependency with a known advisory. The Caddy build module and
-  # the observer module live outside go.work (the former pins its own Caddy
-  # version; the latter is a standalone deployment tool), so both need
-  # GOWORK=off or govulncheck would refuse to run there at all. The
-  # module-level advisory GO-2026-5932 (x/crypto/openpgp; no fix exists) is
-  # known and not reachable. If it reports as reachable, this job fails and
-  # the trace must be investigated, not suppressed. Revisit by 2026-12-31:
-  # check for x/crypto dropping openpgp.
+  # govulncheck runs in source mode for apps/server, packages/schema/gen/go,
+  # and deploy/observer in the root module, and for the separate Caddy build
+  # module, which pins its own Caddy version. It fails only on a vulnerability
+  # reachable from the scanned packages' own call graph, not on every
+  # dependency with a known advisory. The module-level advisory GO-2026-5932
+  # (x/crypto/openpgp; no fix exists) is known and not reachable. If it
+  # reports as reachable, this job fails and the trace must be investigated,
+  # not suppressed. Revisit by 2026-12-31: check for x/crypto dropping
+  # openpgp.
   server:
     name: Server checks
     needs: [preflight]
@@ -377,11 +376,10 @@ jobs:
       - if: ${{ !cancelled() }}
         name: go mod tidy is a no-op
         run: |
-          cd apps/server
           cp go.mod /tmp/go.mod.before && cp go.sum /tmp/go.sum.before
           go mod tidy
           diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
-            || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
+            || { echo "go.mod/go.sum are not tidy: run 'go mod tidy' at the repository root and commit"; exit 1; }
       # Enforces the single-source-of-truth contract (ADR 0005): apps/server/
       # migrations/ is the only declared source for BOTH goose and sqlc's
       # generated data layer. Fails on any drift, including an untracked
@@ -426,55 +424,34 @@ jobs:
         name: govulncheck deploy/caddy/production/build
         run: govulncheck ./...
         working-directory: deploy/caddy/production/build
-        env:
-          GOWORK: "off"
-      # The deployment transparency observer (deploy/observer/README.md): its
-      # own Go module outside go.work, so every step below runs with
-      # GOWORK=off. No database, browser, or live AWS access is needed; the
-      # platform adapters and the S3 publisher are tested against httptest
-      # servers. It reuses this job's checkout, Go toolchain, and the
-      # govulncheck already installed above.
+      # The deployment transparency observer (deploy/observer/README.md):
+      # packages of the root Go module, built, tested, and linted from their
+      # own directory with their own .golangci.yml. The root go mod tidy step
+      # above covers its dependencies. No database, browser, or live AWS
+      # access is needed; the platform adapters and the S3 publisher are
+      # tested against httptest servers. It reuses this job's checkout, Go
+      # toolchain, and the govulncheck already installed above.
       - if: ${{ !cancelled() }}
         name: observer build
         run: go build ./...
         working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: observer vet
         run: go vet ./...
         working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: observer test
         run: go test -race ./...
         working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: deploy/observer
           install-mode: none
-        env:
-          GOWORK: "off"
-      - if: ${{ !cancelled() }}
-        name: go mod tidy is a no-op (deploy/observer)
-        run: |
-          cp go.mod /tmp/observer-go.mod.before && cp go.sum /tmp/observer-go.sum.before
-          go mod tidy
-          diff /tmp/observer-go.mod.before go.mod && diff /tmp/observer-go.sum.before go.sum \
-            || { echo "go.mod/go.sum are not tidy: run 'go mod tidy' in deploy/observer and commit"; exit 1; }
-        working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: govulncheck deploy/observer
         run: govulncheck ./...
         working-directory: deploy/observer
-        env:
-          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: Wait for the media corpus test
         run: bash scripts/ci-background.sh wait media-corpus 1200

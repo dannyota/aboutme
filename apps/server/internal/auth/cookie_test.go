@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
 // setCookie parses the emitted Set-Cookie header, not an intermediate struct.

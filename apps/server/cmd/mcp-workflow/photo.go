@@ -10,7 +10,7 @@ import (
 	"math"
 	"net/http"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 var errPhoto = errors.New("photo_invalid")

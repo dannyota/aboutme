@@ -12,9 +12,9 @@ import (
 	"errors"
 	"regexp"
 
-	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
-	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/previewmeta"
+	"danny.vn/aboutme/apps/server/internal/printsnapshot"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 const (

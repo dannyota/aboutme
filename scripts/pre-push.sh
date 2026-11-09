@@ -319,47 +319,30 @@ check_docs() {
     "${files[@]}"
 }
 
-# go_packages <module dir>: prints ./pkg for each package with a changed or
-# deleted .go file that still holds Go files.
+# go_packages <lint dir>: prints ./pkg for each package below <lint dir> with
+# a changed or deleted .go file that still holds Go files.
 go_packages() {
-  local module=$1 f dir
+  local root=$1 f dir
   for f in "${TOUCHED[@]}"; do
-    [[ $f == "$module"/*.go && $f != */testdata/* ]] || continue
-    dir=$(dirname "${f#"$module"/}")
-    compgen -G "$module/$dir/*.go" >/dev/null && printf './%s\n' "$dir"
+    [[ $f == "$root"/*.go && $f != */testdata/* ]] || continue
+    dir=$(dirname "${f#"$root"/}")
+    compgen -G "$root/$dir/*.go" >/dev/null && printf './%s\n' "$dir"
   done | sort -u
 }
 
-# go_modules: prints every Go module's root directory (relative to ROOT),
-# tracked or newly added on this branch. Module boundaries are structural, so
-# this reads the current tree rather than TOUCHED.
-go_modules() {
-  { git ls-files -- '*go.mod'
-    git ls-files --others --exclude-standard -- '*go.mod'; } |
-    sed -e 's|/go\.mod$||' -e 's|^go\.mod$|.|' | sort -u
-}
-
-# workspace_modules: prints each directory go.work's "use" lists (block or
-# single-line form), with the "./" prefix and any trailing slash stripped. A
-# module outside this list needs GOWORK=off, as its own go.mod requires.
-workspace_modules() {
-  [[ -f go.work ]] || return 0
-  awk '
-    /^use[[:space:]]*\(/ { inblock = 1; next }
-    inblock && /^\)/      { inblock = 0; next }
-    inblock               { print $1; next }
-    /^use[[:space:]]+/    { sub(/^use[[:space:]]+/, ""); print $1 }
-  ' go.work | sed -e 's|^\./||' -e 's|/*$||'
+# lint_dirs: prints every directory (relative to ROOT) that holds its own
+# .golangci.yml, tracked or newly added on this branch. Lint scopes are
+# structural, so this reads the current tree rather than TOUCHED.
+lint_dirs() {
+  { git ls-files -- '*/.golangci.yml'
+    git ls-files --others --exclude-standard -- '*/.golangci.yml'; } |
+    sed -e 's|/\.golangci\.yml$||' | sort -u
 }
 
 check_go() {
-  local -a modules workspace files
-  mapfile -t modules < <(go_modules)
-  mapfile -t workspace < <(workspace_modules)
-  local pattern
-  pattern=$(printf '%s|' "${modules[@]}")
-  pattern=${pattern%|}
-  mapfile -t files < <(list "${CHANGED[@]}" | filter "^(${pattern})/.*\\.go\$")
+  local -a dirs files
+  mapfile -t dirs < <(lint_dirs)
+  mapfile -t files < <(list "${CHANGED[@]}" | filter '\.go$')
   if ((${#files[@]} == 0)); then
     record gofmt skip "no changed Go files"
     record golangci-lint skip "no changed Go files"
@@ -373,20 +356,18 @@ check_go() {
     sed 's/^/  /' <<<"$unformatted"
     record gofmt FAIL "${#files[@]} file(s); run gofmt -w on the files above"
   fi
-  # Every Go module with its own .golangci.yml is linted with that config,
-  # from its own directory (apps/server, deploy/observer); a module without
-  # one (packages/schema/gen/go, deploy/caddy/production/build) gets gofmt
-  # alone, as before. A module outside go.work's use list runs with
-  # GOWORK=off, matching the Makefile and CI.
-  local module packages_probe
+  # Every directory with its own .golangci.yml (apps/server, deploy/observer)
+  # is linted with that config, from that directory, over its changed
+  # packages. Go code outside those directories (packages/schema/gen/go,
+  # deploy/caddy/production/build) gets gofmt alone, as before.
+  local dir packages_probe
   local -a linted=()
-  for module in "${modules[@]}"; do
-    [[ -f $module/.golangci.yml ]] || continue
-    packages_probe=$(go_packages "$module")
-    [[ -n $packages_probe ]] && linted+=("$module")
+  for dir in "${dirs[@]}"; do
+    packages_probe=$(go_packages "$dir")
+    [[ -n $packages_probe ]] && linted+=("$dir")
   done
   if ((${#linted[@]} == 0)); then
-    record golangci-lint skip "no changed packages in a linted module"
+    record golangci-lint skip "no changed packages in a linted directory"
     return
   fi
   local want have
@@ -397,13 +378,10 @@ check_go() {
     return
   fi
   local -a packages
-  local gowork
-  for module in "${linted[@]}"; do
-    mapfile -t packages < <(go_packages "$module")
-    gowork=
-    printf '%s\n' "${workspace[@]}" | grep -Fqx -- "$module" || gowork='GOWORK=off '
-    run golangci-lint "$module: ${#packages[@]} package(s)" bash -c "cd '$module' &&
-      ${gowork}GOMEMLIMIT=1536MiB GOFLAGS=-p=2 golangci-lint run --concurrency=2 \"\$@\"" \
+  for dir in "${linted[@]}"; do
+    mapfile -t packages < <(go_packages "$dir")
+    run golangci-lint "$dir: ${#packages[@]} package(s)" bash -c "cd '$dir' &&
+      GOMEMLIMIT=1536MiB GOFLAGS=-p=2 golangci-lint run --concurrency=2 \"\$@\"" \
       golangci-lint "${packages[@]}"
   done
 }

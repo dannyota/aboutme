@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/internal/testutil"
-	"github.com/dannyota/aboutme/apps/server/internal/user"
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/internal/user"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // Compile-time assertions that the generated shapes match what internal/user

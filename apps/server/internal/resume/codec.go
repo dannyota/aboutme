@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 // MaxDocumentBytes is the store-layer size bound on the canonical assembled

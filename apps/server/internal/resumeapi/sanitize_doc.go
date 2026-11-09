@@ -1,9 +1,9 @@
 package resumeapi
 
 import (
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
+	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
 // richTextPaths is guarded against the embedded schema by

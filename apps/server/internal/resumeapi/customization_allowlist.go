@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
 const maxCustomizationPathBytes = 256

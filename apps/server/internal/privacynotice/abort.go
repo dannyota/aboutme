@@ -3,7 +3,7 @@ package privacynotice
 import (
 	"context"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // Abort is a reviewed production operation, not a routine command. The host

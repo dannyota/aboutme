@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
+	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
 func TestVersionFailureReportsExitStatusWithoutPrivateOutput(t *testing.T) {

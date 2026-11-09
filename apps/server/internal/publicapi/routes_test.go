@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
 func TestPublicLiveMissingHandlerUsesStreamErrorContract(t *testing.T) {

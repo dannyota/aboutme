@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // RequireRecentSecondFactorReauth checks data that the caller already locked

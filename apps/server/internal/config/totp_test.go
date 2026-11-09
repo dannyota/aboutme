@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/config"
 )
 
 // testBase64URL32Alt is a second canonical 32-byte value, distinct from

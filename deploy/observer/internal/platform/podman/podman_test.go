@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/deploy/observer/internal/document"
-	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/document"
+	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
 var testNow = time.Date(2026, 10, 11, 1, 15, 0, 0, time.UTC)

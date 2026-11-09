@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 type testSetupError struct{}

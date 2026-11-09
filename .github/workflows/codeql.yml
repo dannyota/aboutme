@@ -41,8 +41,8 @@ jobs:
         run: |
           (cd apps/server && go build ./...)
           (cd packages/schema/gen/go && go build ./...)
-          (cd deploy/observer && GOWORK=off go build ./...)
-          (cd deploy/caddy/production/build && GOWORK=off go build ./...)
+          (cd deploy/observer && go build ./...)
+          (cd deploy/caddy/production/build && go build ./...)
       - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: /language:${{ matrix.language }}

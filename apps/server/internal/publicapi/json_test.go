@@ -3,7 +3,7 @@ package publicapi
 import (
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 func TestPublicJSONAddsEnvelopeAndOneLF(t *testing.T) {

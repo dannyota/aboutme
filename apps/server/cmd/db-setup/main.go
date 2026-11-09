@@ -23,7 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/dannyota/aboutme/apps/server/internal/dbroles"
+	"danny.vn/aboutme/apps/server/internal/dbroles"
 )
 
 var (

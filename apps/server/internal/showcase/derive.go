@@ -1,8 +1,8 @@
 package showcase
 
 import (
-	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/previewcard"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
 // Derived holds the two values Go keeps current on every showcase row.

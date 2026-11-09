@@ -88,7 +88,7 @@ want_csp=$(bash "$maintenance_render" "$maintenance_html" |
 
 python3 -B "$root/deploy/caddy/production/test/module_download_test.py"
 python3 -B "$root/deploy/caddy/production/test/waf_stderr_diagnostic_test.py"
-(cd "$root/deploy/caddy/production/build" && GOWORK=off go test ./...)
+(cd "$root/deploy/caddy/production/build" && go test ./...)
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null
 # Production runs the image's own user; the task definitions set none.
 user=$(podman image inspect --format '{{.Config.User}}' localhost/aboutme/caddy:test)
