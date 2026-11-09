@@ -13,10 +13,11 @@ misses healthy-site disk/backup faults. GitHub uptime is slower.
 **Transport and custody.** Keep the one-shot root sender and existing curl, jq,
 and CA roots; no new daemon/package. Each unsuppressed call makes one POST to
 `https://api.telegram.org/bot<TOKEN>/sendMessage`, with JSON `chat_id` and
-`text`. Verify certificates/hostnames; use `--connect-timeout 5`,
-`--max-time 15`, HTTPS only, no retries/redirects/proxy. First argument `-q`
-disables curl config. No traces, verbose output, webhook, polling daemon, or
-inbound firewall opening.
+`text`, subject to the [unit-failure retry exception](#unit-failure-retries).
+Verify certificates/hostnames; use `--connect-timeout 5`, `--max-time 15`, HTTPS
+only. Curl itself has no retries, no redirects, and no proxy. First argument
+`-q` disables curl config. No traces, verbose output, webhook, polling daemon,
+or inbound firewall opening.
 
 The owner reuses the existing bot and vMonitor supergroup through the
 [runbook's pipe-only imports](../runbooks/production.md#host-telegram-setup-and-rotation).
@@ -68,16 +69,6 @@ credential pair, computed from memory through a pipe under that lock. Keep the
 digest only in root-only state. Metadata-only changes preserve approval; imports
 and replacements explicitly clear proof and approval.
 
-Retention failure dispatches `aboutme-alert@aboutme-crowdsec-retention.service`
-with `systemctl --no-block start`. Its five-second dispatch bound does not share
-the sender's process group or locks. Dispatch failure makes the retention action
-fail. Shutdown keeps its 60-second stop bound and 75-second cleanup bound. The
-alert service allows 60 seconds for the 20-second credential-lock wait,
-15-second request, and outcome cleanup, then five seconds to stop. It discards
-stdout and sends sanitized sender outcomes to its own journal. Delivery failure
-does not reopen retention admission; its daily key is
-`unit-aboutme-crowdsec-retention`.
-
 **Trust and egress.** Existing open egress permits resolver DNS and TCP 443 to
 `api.telegram.org`; no IP pin or circumvention proxy. Telegram receives
 metadata, chat ID, and host source IP outside the Vietnam boundary;
@@ -120,6 +111,35 @@ First-party references, unfetched under the network prohibition:
 [BotFather](https://core.telegram.org/bots/features#botfather), and
 [curl options](https://curl.se/docs/manpage.html). Before implementation, verify
 result semantics, limits, revocation, and installed curl bounds.
+
+## Unit-failure retries
+
+Only unit-failure alerts (`unit-*` keys) may make up to three attempts, with 10
+seconds between attempts. Retry only when curl exit 6, 7, or 28, HTTP `000`,
+zero request and upload bytes, and an empty response body together prove nothing
+was sent. Missing proof, any request or upload bytes, any response, or any other
+failure ends the invocation without retry. Watcher alerts and receipt tests get
+one attempt. Curl's own retries remain disabled.
+
+The alert unit independently sets `Wants=network-online.target` and
+`After=network-online.target`. The [target](https://systemd.io/NETWORK_ONLINE/)
+concerns link configuration, not Telegram reachability, and depends on the
+configured waiter.
+[Netplan 1.0.1](https://github.com/canonical/netplan/blob/1.0.1/src/generate.c#L60-L85)
+disables its wait-online generation. The host's waiter state is unverified.
+
+The sender allows a 20-second credential-lock wait, three requests of at most 15
+seconds each, and two 10-second sleeps: 85 seconds before outcome cleanup. The
+alert service uses `TimeoutStartSec=100s` for this budget and cleanup, plus
+`TimeoutStopSec=5s` to stop. It discards stdout and sends sanitized sender
+outcomes to its own journal.
+
+Retention failure dispatches `aboutme-alert@aboutme-crowdsec-retention.service`
+with `systemctl --no-block start`. Its five-second dispatch bound does not share
+the sender's process group or locks. Dispatch failure makes the retention action
+fail. Shutdown keeps its 60-second stop bound and 75-second cleanup bound.
+Delivery failure does not reopen retention admission; its daily key is
+`unit-aboutme-crowdsec-retention`.
 
 ## Operator reference
 

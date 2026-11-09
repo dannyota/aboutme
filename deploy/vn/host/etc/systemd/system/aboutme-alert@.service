@@ -3,12 +3,14 @@
 # "Logs, metrics, and alarms").
 [Unit]
 Description=aboutme alert for %i
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/lib/aboutme/alert.sh unit-%i "unit %i failed"
 StandardInput=null
-TimeoutStartSec=60s
+TimeoutStartSec=100s
 TimeoutStopSec=5s
 StandardOutput=null
 StandardError=journal
