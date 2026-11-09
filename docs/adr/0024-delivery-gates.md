@@ -104,6 +104,12 @@ references no stored secrets. CodeQL runs outside the required `ci` check.
 Bounded local diagnostics limit the effect of hostile or faulty test inputs on
 the shared laptop.
 
+## Alternatives rejected
+
+- Releasing from an earlier green result cannot prove checks on a later commit.
+- Running the local gate on unreviewed commits executes untrusted code as the
+  owner.
+
 ## Consequences
 
 - A defect that a second independent test author would have caught can reach the

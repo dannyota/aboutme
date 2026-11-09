@@ -45,6 +45,12 @@ Limiter state is process-local, which is correct while one replica serves (ADR
 state with the same algorithms, overflow, and debt, and one 300 per minute
 client-IP budget shared by both outer API route chains.
 
+## Alternatives rejected
+
+- An unbounded per-key map lets attacker-controlled keys exhaust memory.
+- Evicting active buckets lets attackers churn keys until their own bucket
+  resets.
+
 ## Consequences
 
 - Key churn degrades toward a shared restrictive policy, not toward unlimited

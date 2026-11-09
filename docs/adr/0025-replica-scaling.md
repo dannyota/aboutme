@@ -66,6 +66,12 @@ composition and readiness. Its core rules:
 - Public HTTP and SSE schemas, mutation ordering, CSRF and session rules,
   privacy deadlines, and print capability authority do not change.
 
+## Alternatives rejected
+
+- Launching two replicas delays launch for capacity the product does not need.
+- Two replicas without shared coordination can bypass revocation or multiply
+  limits.
+
 ## Consequences
 
 - Deploys briefly interrupt service, because one replica cannot hand over. That

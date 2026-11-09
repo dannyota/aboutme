@@ -116,6 +116,14 @@ edit commits while the job runs.
    PDF cache and its strong ETag stay valid. A render with no revision time
    writes the Unix epoch.
 
+## Alternatives rejected
+
+- Resume-ID-only print routes can expose drafts after routing mistakes or SSRF.
+- Forwarding a session cookie gives the render browser ambient account
+  authority.
+- Slug-based names or `resume.pdf` do not identify whose resume was downloaded.
+- Fixed epoch PDF dates make the resume appear to date from 1970.
+
 ## Consequences
 
 - Every print has one narrow authority and deterministic input.

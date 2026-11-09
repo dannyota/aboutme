@@ -55,7 +55,7 @@ stays a human decision in the web UI.
 the account. Photo tools ride on `resumes:write`. Per-resume grants are not
 offered.
 
-## Rejected alternatives
+## Alternatives rejected
 
 - **Personal access tokens only.** Every agent would hold a full-authority
   secret in its own storage, revocation would be per token rather than per
