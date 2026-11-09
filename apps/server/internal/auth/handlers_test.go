@@ -971,7 +971,7 @@ func TestGoogleCallback_RejectionLogsProviderAttribute(t *testing.T) {
 // TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled proves a
 // callback carrying ?error=access_denied (RFC 6749 §4.1.2.1's signal that
 // the visitor declined consent at the provider) redirects with its own
-// distinct error code (handlers.go's cancelledErrorCode -- not the
+// distinct error code (service.go's cancelledErrorCode -- not the
 // generic auth_failed) while still clearing the transaction cookie and
 // never authenticating the visitor.
 func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
