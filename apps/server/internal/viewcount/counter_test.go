@@ -193,7 +193,13 @@ func TestCollectTokenAgeReplayAndProof(t *testing.T) {
 	}
 
 	wrong := f.started(anon("198.51.100.5"))
-	wrong.Solution.DerivedKey = "00" + wrong.Solution.DerivedKey[2:]
+	// Replace the first byte with one that differs from it, so the key is
+	// always wrong, including when the real key already starts with 00.
+	badByte := "00"
+	if wrong.Solution.DerivedKey[:2] == badByte {
+		badByte = "ff"
+	}
+	wrong.Solution.DerivedKey = badByte + wrong.Solution.DerivedKey[2:]
 	f.now = f.now.Add(9 * time.Second)
 	if got := f.counter.Collect(context.Background(), wrong, anon("198.51.100.5"), EdgeLabels{}); got != OutcomeInvalid {
 		t.Fatalf("wrong solution = %q, want invalid", got)
