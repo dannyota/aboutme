@@ -6,7 +6,6 @@ package auth
 // and rate first. The contract is docs/design/passkey-second-factor-contract.md.
 
 import (
-	"encoding/base64"
 	"errors"
 	"io"
 	"log/slog"
@@ -21,14 +20,30 @@ import (
 
 // Second-factor route paths.
 const (
-	SecondFactorPendingPath         = "/api/v1/auth/second-factor"
-	SecondFactorPendingOptionsPath  = "/api/v1/auth/second-factor/passkey/options"
-	SecondFactorPendingPasskeyPath  = "/api/v1/auth/second-factor/passkey/verify"
+	// SecondFactorPendingPath reports the pending authentication's status
+	// (GET).
+	SecondFactorPendingPath = "/api/v1/auth/second-factor"
+	// SecondFactorPendingOptionsPath starts a passkey assertion for the
+	// pending authentication (POST).
+	SecondFactorPendingOptionsPath = "/api/v1/auth/second-factor/passkey/options"
+	// SecondFactorPendingPasskeyPath completes the pending authentication
+	// with a passkey assertion (POST).
+	SecondFactorPendingPasskeyPath = "/api/v1/auth/second-factor/passkey/verify"
+	// SecondFactorPendingRecoveryPath completes the pending authentication
+	// with a recovery code (POST).
 	SecondFactorPendingRecoveryPath = "/api/v1/auth/second-factor/recovery/verify"
-	SecondFactorStatePath           = "/api/v1/me/second-factor"
-	SecondFactorPasskeyOptionsPath  = "/api/v1/me/second-factor/passkeys/options"
-	SecondFactorPasskeysPath        = "/api/v1/me/second-factor/passkeys"
-	SecondFactorRecoveryCodesPath   = "/api/v1/me/second-factor/recovery-codes"
+	// SecondFactorStatePath reports the signed-in account's second-factor
+	// state (GET).
+	SecondFactorStatePath = "/api/v1/me/second-factor"
+	// SecondFactorPasskeyOptionsPath starts passkey registration (POST). It
+	// answers as an unregistered route while passkey enrollment is off.
+	SecondFactorPasskeyOptionsPath = "/api/v1/me/second-factor/passkeys/options"
+	// SecondFactorPasskeysPath completes passkey registration (POST);
+	// SecondFactorPasskeysPath+"/{id}" removes one passkey (DELETE).
+	SecondFactorPasskeysPath = "/api/v1/me/second-factor/passkeys"
+	// SecondFactorRecoveryCodesPath replaces the account's recovery codes
+	// (POST).
+	SecondFactorRecoveryCodesPath = "/api/v1/me/second-factor/recovery-codes"
 )
 
 // Second-factor route bounds and rate budgets from docs/design/budgets.md.
@@ -47,15 +62,27 @@ const (
 // TrustedProxies, and TOTP may be nil. A nil TOTP makes every TOTP route
 // answer as an unregistered route.
 type SecondFactorHandlerOptions struct {
-	Service        SecondFactorService
-	TOTP           TOTPSecondFactorService
-	Pending        *PendingAuthenticationManager
-	Sessions       *SessionManager
-	Limits         *SecondFactorRatePolicies
-	PublicOrigin   string
+	// Service runs the passkey and recovery-code operations. Required.
+	Service SecondFactorService
+	// TOTP runs the authenticator-app operations. Optional.
+	TOTP TOTPSecondFactorService
+	// Pending authenticates the pending-authentication cookie. Required.
+	Pending *PendingAuthenticationManager
+	// Sessions authenticates the session cookie. Required.
+	Sessions *SessionManager
+	// Limits holds the attempt and management rate budgets. Required.
+	Limits *SecondFactorRatePolicies
+	// PublicOrigin is the exact origin that pending POSTs and account
+	// mutations must carry. Required.
+	PublicOrigin string
+	// TrustedProxies selects the client address used in rate keys; nil
+	// trusts no proxy.
 	TrustedProxies api.TrustedProxies
-	Clock          func() time.Time
-	Logger         *slog.Logger
+	// Clock returns the current time for rate admission and session
+	// liveness checks. Required.
+	Clock func() time.Time
+	// Logger receives fixed, secret-free failure warnings. Optional.
+	Logger *slog.Logger
 }
 
 // SecondFactorHandlers serves the pending, state, passkey, recovery-code,
@@ -102,309 +129,6 @@ func (h *SecondFactorHandlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(SecondFactorPasskeysPath+"/{id}", noStore(route(http.MethodDelete, h.handleRemovePasskey)))
 	mux.Handle(SecondFactorRecoveryCodesPath, noStore(route(http.MethodPost, h.handleRegenerate)))
 	h.registerTOTPRoutes(mux, noStore)
-}
-
-type secondFactorPendingStatusBody struct {
-	Purpose    string   `json:"purpose"`
-	Methods    []string `json:"methods"`
-	ExpiresAt  string   `json:"expiresAt"`
-	ReturnPath string   `json:"returnPath"`
-	CSRFToken  string   `json:"csrfToken"`
-}
-
-func (h *SecondFactorHandlers) handlePendingStatus(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readPendingCookie(r)
-	if !ok {
-		writeSecondFactorPendingRequired(w)
-		return
-	}
-	pending, err := h.pending.Authenticate(r.Context(), raw, h.currentSessionID(r))
-	if err != nil {
-		h.writePendingError(w, err)
-		return
-	}
-	methods, err := h.service.PendingMethods(r.Context(), pending.UserID)
-	if err != nil || len(methods) == 0 {
-		h.logFailure("pending_status", err)
-		writePasswordUnavailable(w)
-		return
-	}
-	api.WriteData(w, http.StatusOK, secondFactorPendingStatusBody{
-		Purpose: pending.Purpose, Methods: methods, ExpiresAt: formatSecondFactorTime(pending.ExpiresAt),
-		ReturnPath: pending.ReturnPath, CSRFToken: base64.RawURLEncoding.EncodeToString(pending.CSRFSecret),
-	})
-}
-
-// pendingRequest is a pending POST that passed every check before work.
-type pendingRequest struct {
-	token      string
-	sessionID  *uuid.UUID
-	credential SecondFactorCredential
-}
-
-// admitPending runs the pending POST checks in contract order. It writes the
-// response and returns false on any failure.
-func (h *SecondFactorHandlers) admitPending(w http.ResponseWriter, r *http.Request, limit int64, decode func([]byte) (SecondFactorCredential, error)) (pendingRequest, bool) {
-	body, err := readSecondFactorBody(w, r, limit, true)
-	if err != nil {
-		writeSecondFactorBodyError(w, err)
-		return pendingRequest{}, false
-	}
-	credential, err := decode(body)
-	if err != nil {
-		writePasswordRequestInvalid(w)
-		return pendingRequest{}, false
-	}
-	raw, ok := readPendingCookie(r)
-	if !ok {
-		writeSecondFactorPendingRequired(w)
-		return pendingRequest{}, false
-	}
-	sessionID := h.currentSessionID(r)
-	pending, err := h.pending.Authenticate(r.Context(), raw, sessionID)
-	if err != nil {
-		h.writePendingError(w, err)
-		return pendingRequest{}, false
-	}
-	token, tokenOK := singletonSecurityHeader(r.Header, CSRFHeaderName)
-	decoded, decodeErr := base64.RawURLEncoding.DecodeString(token)
-	if !originAllowed(r, h.publicOrigin) || !tokenOK || decodeErr != nil || !PendingCSRFValid(pending, decoded) {
-		rejectCSRF(w)
-		return pendingRequest{}, false
-	}
-	if d := h.limits.AdmitAttempt(h.clock(), pending.UserID, h.clientIP(r)); !d.Allowed {
-		writePasswordRateLimited(w, d.RetryAfterSeconds)
-		return pendingRequest{}, false
-	}
-	return pendingRequest{token: raw, sessionID: sessionID, credential: credential}, true
-}
-
-func (h *SecondFactorHandlers) handlePendingOptions(w http.ResponseWriter, r *http.Request) {
-	req, ok := h.admitPending(w, r, secondFactorWebAuthnBodyBytes, decodeEmptyObject)
-	if !ok {
-		return
-	}
-	options, err := h.service.StartPasskeyAssertion(r.Context(), req.token, req.sessionID)
-	if err != nil {
-		h.writePendingError(w, err)
-		return
-	}
-	api.WriteData(w, http.StatusOK, options)
-}
-
-// pendingCompletion serves a pending verify route whose body decode is decode.
-func (h *SecondFactorHandlers) pendingCompletion(limit int64, decode func([]byte) (SecondFactorCredential, error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if req, ok := h.admitPending(w, r, limit, decode); ok {
-			h.completePending(w, r, req)
-		}
-	}
-}
-
-func (h *SecondFactorHandlers) decodeRecoveryBody(body []byte) (SecondFactorCredential, error) {
-	var code string
-	if err := decodeStrictStringObject(body, map[string]*string{"code": &code}); err != nil || code == "" {
-		return nil, ErrSecondFactorRequestInvalid
-	}
-	return h.service.DecodeRecoveryCode(code)
-}
-
-func (h *SecondFactorHandlers) completePending(w http.ResponseWriter, r *http.Request, req pendingRequest) {
-	client := SecondFactorClient{UserAgent: r.UserAgent(), IP: h.clientIP(r)}
-	issue, err := h.service.CompletePending(r.Context(), req.token, req.sessionID, req.credential, client)
-	if err != nil {
-		h.writePendingError(w, err)
-		return
-	}
-	if issue != nil {
-		SetSessionCookie(w, issue.RawToken)
-	}
-	ClearPendingAuthenticationCookie(w)
-	writeNoContent(w)
-}
-
-// writePendingError maps pending-route outcomes. Only authentication_required
-// and the exhausting failure clear the pending cookie. A live TOTP cool-down
-// is 429 rate_limited with a bounded Retry-After
-// ("Per-account TOTP failure budget"); it changes no row, so nothing else
-// here applies.
-func (h *SecondFactorHandlers) writePendingError(w http.ResponseWriter, err error) {
-	var failure *PendingVerificationFailure
-	var cooling *totpCoolingDown
-	switch {
-	case errors.As(err, &failure):
-		if failure.Exhausted {
-			ClearPendingAuthenticationCookie(w)
-		}
-		api.WriteError(w, http.StatusUnauthorized, "verification_failed", "verification failed")
-	case errors.As(err, &cooling):
-		writePasswordRateLimited(w, cooling.retryAfterSeconds)
-	case errors.Is(err, ErrPendingAuthenticationRequired):
-		writeSecondFactorPendingRequired(w)
-	case errors.Is(err, ErrSecondFactorChallengeInvalid):
-		writeSecondFactorChallengeInvalid(w)
-	case errors.Is(err, ErrSecondFactorNotFound):
-		writeSecondFactorNotFound(w)
-	default:
-		h.logFailure("pending", err)
-		writePasswordUnavailable(w)
-	}
-}
-
-type (
-	secondFactorPasskeyBody struct {
-		ID         string  `json:"id"`
-		CreatedAt  string  `json:"createdAt"`
-		LastUsedAt *string `json:"lastUsedAt"`
-	}
-	secondFactorStateBody struct {
-		Enabled                bool                      `json:"enabled"`
-		Passkeys               []secondFactorPasskeyBody `json:"passkeys"`
-		TOTPEnabled            bool                      `json:"totpEnabled"`
-		RecoveryCodesRemaining int                       `json:"recoveryCodesRemaining"`
-	}
-	secondFactorRegistrationBody struct {
-		Passkey       secondFactorPasskeyBody `json:"passkey"`
-		RecoveryCodes []string                `json:"recoveryCodes,omitempty"`
-	}
-	secondFactorRecoveryCodesBody struct {
-		RecoveryCodes []string `json:"recoveryCodes"`
-	}
-)
-
-func (h *SecondFactorHandlers) handleState(w http.ResponseWriter, r *http.Request) {
-	sess, ok := h.requireSession(w, r)
-	if !ok {
-		return
-	}
-	state, err := h.service.State(r.Context(), sess.UserID)
-	if err != nil {
-		h.writeAccountError(w, err)
-		return
-	}
-	body := secondFactorStateBody{Enabled: state.Enabled, Passkeys: make([]secondFactorPasskeyBody, 0, len(state.Passkeys)), RecoveryCodesRemaining: state.RecoveryCodesRemaining}
-	for _, passkey := range state.Passkeys {
-		body.Passkeys = append(body.Passkeys, passkeyBody(passkey))
-	}
-	if h.totp != nil {
-		if body.TOTPEnabled, err = h.totp.TOTPState(r.Context(), sess.UserID); err != nil {
-			h.writeAccountError(w, err)
-			return
-		}
-	}
-	api.WriteData(w, http.StatusOK, body)
-}
-
-// handleRegistrationOptions answers exactly like an unregistered route while
-// enrollment is disabled, before any authentication or state work.
-func (h *SecondFactorHandlers) handleRegistrationOptions(w http.ResponseWriter, r *http.Request) {
-	if !h.service.PasskeyEnrollmentEnabled() {
-		api.NotFound()(w, r)
-		return
-	}
-	route(http.MethodPost, h.startRegistration)(w, r)
-}
-
-func (h *SecondFactorHandlers) startRegistration(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, decodeEmptyObject, true)
-	if !ok {
-		return
-	}
-	options, err := h.service.StartPasskeyRegistration(r.Context(), sess)
-	if err != nil {
-		h.writeAccountError(w, err)
-		return
-	}
-	api.WriteData(w, http.StatusOK, options)
-}
-
-// handleRegistrationComplete stores a verified passkey. While enrollment is
-// disabled every outcome is the uniform not-found response.
-func (h *SecondFactorHandlers) handleRegistrationComplete(w http.ResponseWriter, r *http.Request) {
-	if !h.service.PasskeyEnrollmentEnabled() {
-		h.discardRegistration(w, r)
-		return
-	}
-	sess, credential, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, h.service.DecodePasskeyRegistration, true)
-	if !ok {
-		return
-	}
-	registration, err := h.service.CompletePasskeyRegistration(r.Context(), sess, credential)
-	if err != nil {
-		if errors.Is(err, ErrSecondFactorEnrollmentDisabled) {
-			api.NotFound()(w, r)
-			return
-		}
-		h.writeAccountError(w, err)
-		return
-	}
-	SetSessionCookie(w, registration.Session.RawToken)
-	api.WriteData(w, http.StatusCreated, secondFactorRegistrationBody{Passkey: passkeyBody(registration.Passkey), RecoveryCodes: registration.RecoveryCodes})
-}
-
-// discardRegistration lets the service consume a disabled completion's
-// matching ceremony without storing anything. It applies the same session,
-// Origin, CSRF, and management rate checks as an enabled completion, but every
-// outcome, a rate rejection included, is the uniform not-found response.
-func (h *SecondFactorHandlers) discardRegistration(w http.ResponseWriter, r *http.Request) {
-	defer api.NotFound()(w, r)
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil || cookie.Value == "" {
-		return
-	}
-	// The epoch-checked lookup neither rotates nor touches the session; the
-	// service locks and rechecks it before consuming anything.
-	sess, err := h.sessions.q.GetSessionByTokenHash(r.Context(), hashSessionToken(cookie.Value))
-	if err != nil || RequireLiveSession(sess, h.clock()) != nil || h.checkSessionCSRF(r, sess) != nil {
-		return
-	}
-	if d := h.limits.AdmitManagement(h.clock(), sess.UserID, h.clientIP(r)); !d.Allowed {
-		return
-	}
-	body, err := readSecondFactorBody(nil, r, secondFactorWebAuthnBodyBytes, true)
-	if err != nil {
-		return
-	}
-	credential, err := h.service.DecodePasskeyRegistration(body)
-	if err != nil {
-		return
-	}
-	if _, completeErr := h.service.CompletePasskeyRegistration(r.Context(), sess, credential); completeErr != nil && !errors.Is(completeErr, ErrSecondFactorEnrollmentDisabled) {
-		h.logFailure("discard_registration", completeErr)
-	}
-}
-
-func (h *SecondFactorHandlers) handleRemovePasskey(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, nil, false)
-	if !ok {
-		return
-	}
-	passkeyID, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		writeSecondFactorNotFound(w)
-		return
-	}
-	issue, err := h.service.RemovePasskey(r.Context(), sess, passkeyID)
-	if err != nil {
-		h.writeAccountError(w, err)
-		return
-	}
-	SetSessionCookie(w, issue.RawToken)
-	writeNoContent(w)
-}
-
-func (h *SecondFactorHandlers) handleRegenerate(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, decodeEmptyObject, false)
-	if !ok {
-		return
-	}
-	codes, err := h.service.RegenerateRecoveryCodes(r.Context(), sess)
-	if err != nil {
-		h.writeAccountError(w, err)
-		return
-	}
-	SetSessionCookie(w, codes.Session.RawToken)
-	api.WriteData(w, http.StatusOK, secondFactorRecoveryCodesBody{RecoveryCodes: codes.Codes})
 }
 
 // admitAccountMutation authenticates the session, checks Origin and CSRF,
@@ -583,15 +307,6 @@ func decodeEmptyObject(body []byte) (SecondFactorCredential, error) {
 		return nil, ErrSecondFactorRequestInvalid
 	}
 	return nil, nil
-}
-
-func passkeyBody(passkey SecondFactorPasskey) secondFactorPasskeyBody {
-	body := secondFactorPasskeyBody{ID: passkey.ID.String(), CreatedAt: formatSecondFactorTime(passkey.CreatedAt)}
-	if passkey.LastUsedAt != nil {
-		lastUsed := formatSecondFactorTime(*passkey.LastUsedAt)
-		body.LastUsedAt = &lastUsed
-	}
-	return body
 }
 
 func formatSecondFactorTime(t time.Time) string {
