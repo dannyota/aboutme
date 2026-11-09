@@ -1827,7 +1827,7 @@ test("CodeQL scans main and weekly without joining the required gate", () => {
   assert.deepEqual(job.strategy.matrix.language, ["go", "javascript-typescript"]);
   const init = job.steps.find((step) => step.uses?.startsWith("github/codeql-action/init@"));
   const analyze = job.steps.find((step) => step.uses?.startsWith("github/codeql-action/analyze@"));
-  const pin = "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee";
+  const pin = "33d7b85da1a04171e211befe2c739303b9a4c066";
   assert.equal(init.uses, `github/codeql-action/init@${pin}`);
   assert.equal(analyze.uses, `github/codeql-action/analyze@${pin}`);
   assert.equal(init.with.languages, "${{ matrix.language }}");
