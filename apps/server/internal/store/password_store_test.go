@@ -29,6 +29,11 @@ var _ store.PasswordQueries = (*store.Queries)(nil)
 func newPasswordStoreTx(t *testing.T) (context.Context, *pgxpool.Pool, pgx.Tx, *store.Queries) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
+	return newPasswordStoreTxWithDSN(t, dsn)
+}
+
+func newPasswordStoreTxWithDSN(t *testing.T, dsn string) (context.Context, *pgxpool.Pool, pgx.Tx, *store.Queries) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
@@ -47,37 +52,6 @@ func newPasswordStoreTx(t *testing.T) (context.Context, *pgxpool.Pool, pgx.Tx, *
 		}
 	})
 	return ctx, pool, tx, store.New(tx)
-}
-
-// lockExistingAuthEmailJobs holds row locks on the shared queue until the
-// test finishes, so SKIP LOCKED claims only fixtures inserted afterward.
-func lockExistingAuthEmailJobs(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("Begin queue blocker: %v", err)
-	}
-	cleanupCtx := context.WithoutCancel(ctx)
-	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			t.Errorf("Rollback queue blocker: %v", rollbackErr)
-		}
-	})
-
-	rows, err := tx.Query(ctx, `SELECT id FROM auth_email_jobs FOR UPDATE`)
-	if err != nil {
-		t.Fatalf("lock existing auth email jobs: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan existing auth email job: %v", err)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate existing auth email jobs: %v", err)
-	}
 }
 
 func newPasswordStoreUser(ctx context.Context, t *testing.T, q *store.Queries) uuid.UUID {
@@ -219,14 +193,13 @@ func TestPasswordAuthUserDeleteCascades(t *testing.T) {
 }
 
 func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
-	ctx, pool, _, _ := newPasswordStoreTx(t)
-	lockExistingAuthEmailJobs(ctx, t, pool)
+	dsn, _ := testutil.NewMigratedTestDatabase(t)
+	ctx, pool, _, _ := newPasswordStoreTxWithDSN(t, dsn)
 	seed := store.New(pool) // committed so both claimers can see the jobs
 
 	unrelatedReg := newPasswordRegistration(ctx, t, seed)
 	newPendingVerifyJob(ctx, t, seed, unrelatedReg)
-	// Another package can commit a due job after the blocker takes its row-lock
-	// snapshot. Keep those rows ineligible under this test's simulated clock.
+	// Keep the unrelated job ineligible under this test's simulated clock.
 	fixtureNow := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	reg1 := newPasswordRegistration(ctx, t, seed)
 	reg2 := newPasswordRegistration(ctx, t, seed)
@@ -299,15 +272,9 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 }
 
 func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
-	ctx, pool, tx, q := newPasswordStoreTx(t)
-	lockExistingAuthEmailJobs(ctx, t, pool)
+	dsn, _ := testutil.NewMigratedTestDatabase(t)
+	ctx, _, tx, q := newPasswordStoreTxWithDSN(t, dsn)
 
-	// Other packages commit due jobs after the blocker takes its snapshot. If
-	// this transaction claimed one, the second UPDATE below would re-check the
-	// foreign key on a row version this transaction created, taking KEY SHARE
-	// on the other package's registration while that package deletes it and
-	// waits on this job: a deadlock. The simulated clock predates every other
-	// test clock, so the claim and the requeue match only this test's job.
 	fixtureNow := time.Date(1999, time.January, 1, 0, 0, 0, 0, time.UTC)
 	regID := newPasswordRegistration(ctx, t, q)
 	fixture := newPendingVerifyJobAt(ctx, t, q, regID, fixtureNow)
