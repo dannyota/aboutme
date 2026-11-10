@@ -10,7 +10,8 @@
 #
 # Usage: scripts/npm-audit.sh [directory]   (default: the current directory)
 # Test hooks: NPM_AUDIT_NPM (npm command), NPM_AUDIT_EXCEPTIONS (file),
-# NPM_AUDIT_TODAY (YYYY-MM-DD), NPM_AUDIT_ROOT (the repository root).
+# NPM_AUDIT_TODAY (YYYY-MM-DD), NPM_AUDIT_ROOT (the repository root),
+# NPM_AUDIT_TIMEOUT (seconds per audit attempt).
 set -Eeuo pipefail
 
 ROOT=${NPM_AUDIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}
@@ -18,6 +19,7 @@ DIR=${1:-.}
 NPM=${NPM_AUDIT_NPM:-npm}
 EXCEPTIONS=${NPM_AUDIT_EXCEPTIONS:-$ROOT/.github/npm-audit-exceptions.json}
 TODAY=${NPM_AUDIT_TODAY:-$(date -u +%F)}
+LIMIT=${NPM_AUDIT_TIMEOUT:-60}
 
 die() {
   printf 'npm-audit: %s\n' "$*" >&2
@@ -57,10 +59,20 @@ toolong=$(jq -r --arg limit "$limit" '
 # root, "." for the root itself.
 reldir=$(realpath -m --relative-to="$ROOT" "$DIR")
 
-# npm audit exits non-zero when it finds anything; the report decides.
-report=$(cd "$DIR" && "$NPM" audit --omit=dev --json) || true
-jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null ||
-  die "npm audit gave no usable report in $DIR"
+# npm audit exits non-zero when it finds anything; the report decides. Each
+# attempt has a time limit, after which npm and its children are killed, and an
+# unusable report gets one retry. The report goes to a file, not a pipe, so a
+# leftover child that still holds the output cannot block the script.
+out=$(mktemp "${TMPDIR:-/tmp}/npm-audit.XXXXXX")
+trap 'rm -f -- "$out"' EXIT
+usable() { jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null 2>&1; }
+for attempt in 1 2; do
+  (cd "$DIR" && timeout -k 2 "$LIMIT" "$NPM" audit --omit=dev --json) >"$out" || true
+  report=$(<"$out")
+  usable && break
+  printf 'npm-audit: attempt %s gave no usable report in %s\n' "$attempt" "$DIR" >&2
+done
+usable || die "npm audit gave no usable report in $DIR"
 
 # Advisories are the object entries of each package's `via`; string entries
 # only name another vulnerable package that carries the advisory.

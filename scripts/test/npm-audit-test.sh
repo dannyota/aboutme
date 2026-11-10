@@ -11,11 +11,27 @@ fail() {
 }
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-npm-audit-test.XXXXXX")
-trap 'rm -rf -- "$WORK"' EXIT
+trap '[ ! -f "$WORK/child.pids" ] || xargs kill -9 <"$WORK/child.pids" 2>/dev/null || true; rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/pkg"
 
+# The stub hangs on its first $WORK/hangs calls, then prints the report. By
+# default it ignores TERM like a stuck npm (the ignore passes to its sleep
+# child). With $WORK/child present it dies on TERM but leaves a TERM-ignoring
+# child that holds stdout open.
 cat >"$WORK/npm" <<STUB
 #!/usr/bin/env bash
+n=\$(( \$(cat "$WORK/calls" 2>/dev/null || echo 0) + 1 ))
+echo "\$n" >"$WORK/calls"
+if [ "\$n" -le "\$(cat "$WORK/hangs" 2>/dev/null || echo 0)" ]; then
+  if [ -e "$WORK/child" ]; then
+    (trap "" TERM; exec sleep 30 2>/dev/null) &
+    echo "\$!" >>"$WORK/child.pids"
+    wait
+  else
+    trap "" TERM
+    sleep 30
+  fi
+fi
 cat "$WORK/report.json"
 exit 1
 STUB
@@ -42,13 +58,16 @@ OTHER=GHSA-dddd-eeee-ffff
 LISTED=$(entry "$ID" '"pkg"' 2026-11-01)
 TODAY=2026-10-02
 EXFILE=
+AUDIT_TIMEOUT=10
 
 # run NAME EXPECTED_RC [stderr substring]. The audited directory is
 # $WORK/pkg and the repository root is $WORK, so exceptions name "pkg".
 run() {
   local name=$1 want=$2 needle=${3:-} rc=0 err
+  rm -f "$WORK/calls"
   err=$(NPM_AUDIT_NPM="$WORK/npm" NPM_AUDIT_EXCEPTIONS="${EXFILE:-$WORK/ex.json}" \
-    NPM_AUDIT_ROOT="$WORK" NPM_AUDIT_TODAY=$TODAY bash "$SCRIPT" "$WORK/pkg" 2>&1 >/dev/null) || rc=$?
+    NPM_AUDIT_ROOT="$WORK" NPM_AUDIT_TODAY=$TODAY NPM_AUDIT_TIMEOUT=$AUDIT_TIMEOUT \
+    bash "$SCRIPT" "$WORK/pkg" 2>&1 >/dev/null) || rc=$?
   [ "$rc" = "$want" ] || fail "$name: rc $rc, want $want: $err"
   if [ -n "$needle" ]; then
     case $err in *"$needle"*) ;; *) fail "$name: stderr lacks '$needle': $err" ;; esac
@@ -129,5 +148,22 @@ run 'ENOLOCK fails' 1 'no usable report'
 
 : >"$WORK/report.json"
 run 'empty npm output fails' 1 'no usable report'
+
+echo '{"auditReportVersion":2,"vulnerabilities":{}}' >"$WORK/report.json"
+AUDIT_TIMEOUT=1
+echo 1 >"$WORK/hangs"
+run 'hung audit is retried once' 0
+[ "$(cat "$WORK/calls")" = 2 ] || fail 'hung audit: want 2 npm calls'
+echo 2 >"$WORK/hangs"
+start=$SECONDS
+run 'audit that hangs twice fails' 1 'no usable report'
+[ $((SECONDS - start)) -lt 15 ] || fail 'hung audit was not stopped by the time limit'
+touch "$WORK/child"
+start=$SECONDS
+run 'leftover child holding the output does not block' 1 'no usable report'
+[ $((SECONDS - start)) -lt 10 ] || fail 'a leftover child blocked the audit'
+rm -f "$WORK/child"
+rm -f "$WORK/hangs"
+AUDIT_TIMEOUT=10
 
 echo 'npm-audit-test: ok'
