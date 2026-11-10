@@ -28,7 +28,7 @@ The owner's Ubuntu host (8 CPUs, shared with other projects' VMs) runs the check
 |Change touches|Local gate|
 |-|-|
 |Anything|First `make tools-check ARGS="nodejs golang"`: a toolchain that differs from `.tool-versions` fails the gate (host Node 26 failed 249 web tests that pass on the pinned 24); then `make pre-push`|
-|Markdown only|`make pre-push` and `make docs-links-check`|
+|Markdown only|`make pre-push` and `DOC_LINK_BASE=origin/main make docs-links-check` (the default base `HEAD` checks nothing in a clean checkout)|
 |`scripts/`, `Makefile`, `.github/`|`make operational-test-fast`; for the Makefile or workflows also `bash scripts/test/makefile-safety-test.sh`, `bash scripts/test/workflow-safety-test.sh`, and `node --test scripts/test/workflow-contract.test.mjs`|
 |`apps/web/` or schema TypeScript|`make web-lint web-typecheck web-test`, and `WEB_E2E_MUTATIONS=0 WEB_E2E_SHARD=<shard> make web-e2e` for each affected shard (omit `WEB_E2E_MUTATIONS=0` when `apps/web/e2e/` changes); all five when the renderer, shared CSS, Nuxt configuration, or a lockfile changes. Each `make web-e2e` container has a private network, so shards can run together, each with its own `WEB_E2E_RUN_ID`; run at most three or four at once on the shared host and never beside unit or Go tests|
 |`apps/server/`, Go schema output, migrations, `docs/api/`|`make server-vet server-test server-test-db`, and `make api-check` for the API contract|
