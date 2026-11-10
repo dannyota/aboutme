@@ -6,29 +6,30 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 
 |Work|Model|Effort|
 |-|-|-|
-|Design and first-party research|`gpt-6-astra` through `designer`|high|
+|Design, documents, and decisions|The primary; it may dispatch `gpt-6-astra` through `designer` for first-party research or a large proposal|high|
 |Standard implementation and troubleshooting, fix included|Latest Terra, currently `gpt-6.1-terra`, through `implementer` or `troubleshooter`|xhigh|
-|Standard review and fix confirmation; design review|Latest Sol, currently `gpt-6.1-sol`|xhigh|
 |Complex implementation and troubleshooting, fix included|Latest Sol, currently `gpt-6.1-sol`, through `implementer` or `troubleshooter`|xhigh|
-|Complex review and fix confirmation|`gpt-6-astra`|high|
+|Review and fix confirmation of code and architecture designs|`gpt-6-astra` through `code_reviewer` or `design_reviewer`|high|
 |QA proofs and persona dogfooding|Latest Terra, currently `gpt-6.1-terra`, through `qa`|xhigh|
 |Exploration, searches, summaries, mechanical reading|`gpt-6-luna`|low|
 |Implementation that needs local checks or Claude judgment, when the primary chooses it|Latest Claude Opus, currently Opus 5.5, as a subagent of the primary|xhigh|
 
 Opus subagents (owner, 2026-11-09) each work in their own worktree, run bounded build, vet, lint, and test commands under the managed lock, never change Git state or dispatch other agents, and get independent review on a different model: `gpt-6-astra` high through `code_reviewer`.
 
+The primary (owner, 2026-11-10) writes designs, ADR edits, and documentation itself, reviews them, and makes the decisions. Its documentation and prose need no independent review. An architecture or contract design and all code still get one independent review on `gpt-6-astra`; a design the `designer` wrote is reviewed by the primary instead, because no model reviews its own work.
+
 A job is complex when it spans components, touches a contract, a migration, or a security-relevant path listed under [Reviews](#reviews), or when the manager judges it complex. The manager decides and states the route in each brief.
 
-Dispatch with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`, which loads model, effort, sandbox, and developer instructions from the role TOML in that worktree. Keep the role defaults and use launcher overrides for complex jobs: `--model gpt-6.1-sol --effort xhigh implementer` or `troubleshooter`, then `--model gpt-6-astra --effort high code_reviewer`. The owner chooses the primary session's model. Workers and subagents never run on Sonnet. Codex does the work by default; the primary may dispatch latest-Opus subagents when a job needs them. Codex implementers work in any lane within the brief's owned paths. The designer writes and improves design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements code or acts as the independent reviewer.
+Dispatch with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`, which loads model, effort, sandbox, and developer instructions from the role TOML in that worktree. Keep the role defaults and use the launcher override for complex jobs: `--model gpt-6.1-sol --effort xhigh implementer` or `troubleshooter`. Both reviewer roles default to `gpt-6-astra` high. The owner chooses the primary session's model. Workers and subagents never run on Sonnet. Codex implements, troubleshoots, and runs QA by default; the primary may dispatch latest-Opus subagents when a job needs them. Codex implementers work in any lane within the brief's owned paths. The designer, when dispatched, writes and improves design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements code or acts as the independent reviewer.
 
 Design proposals cover benefits, trade-offs, dependencies, limits, alternatives, migration and loss rules, older-client behavior, security, size, and release order. The owner approves product-visible choices before code starts. UI specs give exact values, breakpoints, and copy in both languages. Research cites first-party sources and marks claims supported only by secondary sources as needing verification.
 
 ## Flow
 
 1. Read the brief's authorities and the domain's design docs and accepted ADRs. Design wins over a plan; an accepted ADR wins over conflicting design text.
-2. For a contract or architecture change, the Codex `designer` writes the proposal and `design_reviewer` reviews it independently before implementation. The designer revises and the reviewer confirms. Small changes skip design.
+2. For a contract or architecture change, the primary or the Codex `designer` writes the proposal, and it is reviewed independently before implementation: `design_reviewer` reviews the primary's proposal, and the primary reviews the designer's. The author revises and the reviewer confirms. Small changes skip design.
 3. Brief one implementer per bounded task with exact paths. Write the failing regression test first, then the smallest correct change. Observe failure in CI or an approved local exception; otherwise report it as unrun. Adversarial cases for write safety, races, bounds, hostile input, authorization, and CSRF belong to the author.
-4. Run `code_reviewer` on the job's route once after the last code task. One-line changes, including production DNS, skip the reviewer pass; the primary shows plan or diff evidence instead under [ADR 0024](../docs/adr/0024-delivery-gates.md#amendment-one-line-review-exemption-2026-10-10). Local-only and test-only changes also skip the fresh review under the delivery rules. Other security-relevant changes still require the adversarial pass before merge.
+4. Run `code_reviewer` on the job's route once after the last code task. One-line changes, including production DNS, skip the reviewer pass; the primary shows plan or diff evidence instead under [ADR 0024](../docs/adr/0024-delivery-gates.md#amendment-one-line-review-exemption-2026-10-10). Local-only and test-only changes, and documentation or prose the primary wrote, also skip the fresh review under the delivery rules. Other security-relevant changes still require the adversarial pass before merge.
 5. Return findings to the author for fixes, then request the original reviewer to confirm each fix on the same route.
 6. The primary inspects each diff and report, runs `make pre-push` and approved bounded checks under the resource rules, and reads exact-commit CI evidence. It never repeats checks just to confirm a report. Before adding a pull request to a train, check its own exact-head CI. On the owner fast path, a change to shared scripts, helpers, or test fixtures runs `make operational-test-fast` (or `make ci-local`) before push; a targeted test alone is not enough.
 7. Push the branch and open a draft pull request against `main` (`gh pr create --draft`); mark it ready (`gh pr ready`) when the change is complete. Landing needs independent Codex review and either green pull request CI on the exact head or the owner local gate.

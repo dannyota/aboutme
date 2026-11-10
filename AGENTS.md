@@ -75,16 +75,16 @@ This file holds the rules every agent needs on every task. Topic files in `instr
 
 `.codex/agents/*.toml` are generated from `scripts/codex-agents/`; never hand-edit them. Run `make codex-agents` to render them and `make codex-agents-check` to check for drift.
 
-The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs bounded local checks, and owns Git, tags, deploys, and the answer to the owner. It manages and does not investigate: troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Codex does design, research, implementation, troubleshooting, QA, and review by default; the primary may also dispatch latest-Opus subagents for implementation, and their work is reviewed on Codex.
+The owner talks to the primary agent, which runs as `manager` in `.claude/settings.json`. It plans, briefs, verifies each worker itself, runs bounded local checks, and owns Git, tags, deploys, and the answer to the owner. It writes designs and documentation, reviews them, and makes the decisions. Troubleshooting goes to the Codex `troubleshooter` with the CI logs and artifacts the primary fetches. Workers take one bounded brief and report to the primary. Codex does implementation, troubleshooting, and QA by default, and `gpt-6-astra` independently reviews architecture designs and code; the primary may also dispatch latest-Opus subagents for implementation, and their work is reviewed on Codex.
 
 |Tool|Where|Agents with model and effort|
 |-|-|-|
 |Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model); latest-Opus subagents when the primary needs them ([workflow](instructions/workflow.md#models-and-ownership))|
-|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-terra` xhigh, workspace-write), `troubleshooter` (`gpt-6.1-terra` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6.1-sol` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-terra` xhigh, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write)|
+|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-terra` xhigh, workspace-write), `troubleshooter` (`gpt-6.1-terra` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6-astra` high, read-only), `design_reviewer` (`gpt-6-astra` high, read-only), `qa` (`gpt-6.1-terra` xhigh, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write)|
 
 The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). `workspace-write` roles get network access and run their own bounded checks through the managed lock; read-only roles get network only with `--search`. Set model and effort explicitly on every dispatch. Track these agent definitions; keep other local tool settings ignored.
 
-The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, display evidence, release checks, and persona dogfooding, never product fixes.
+The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the primary or the designer; QA owns proofs, display evidence, release checks, and persona dogfooding, never product fixes.
 
 |Lane|Owned paths|Never|
 |-|-|-|

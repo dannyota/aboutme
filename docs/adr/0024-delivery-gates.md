@@ -1,7 +1,7 @@
 # 0024: Delivery gates
 
 Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
-2026-11-01), by the owner's repository policy.
+2026-11-01, 2026-11-10), by the owner's repository policy.
 
 ## Decision
 
@@ -15,14 +15,15 @@ Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
   and CSRF. There is no separate blind test author.
 - **Per-commit gitleaks.** Each commit runs the pre-commit gitleaks scan.
 - **One fresh review.** One reviewer who authored none of the work reads each
-  plan or release before push. Local-only, test-only, and one-line changes skip
-  this review. For one-line changes, including production DNS, the manager shows
-  plan or diff evidence instead. Findings return to the author, and the same
-  reviewer confirms each fix at `xhigh`. The reviewer runs as a separate job
-  from the author and may use the author's model. A security-sensitive change
-  beyond one line (authentication, sessions, CSRF, sanitizing, concurrency and
-  CAS, idempotency, media privacy, publish revocation) needs the reviewer to
-  confirm those invariants by name.
+  plan or release before push. Local-only, test-only, and one-line changes, and
+  documentation or prose the primary wrote, skip this review. For one-line
+  changes, including production DNS, the manager shows plan or diff evidence
+  instead. Findings return to the author, and the same reviewer confirms each
+  fix. The reviewer runs as a separate job from the author on `gpt-6-astra`; the
+  primary reviews a design that model wrote. A security-sensitive change beyond
+  one line (authentication, sessions, CSRF, sanitizing, concurrency and CAS,
+  idempotency, media privacy, publish revocation) needs the reviewer to confirm
+  those invariants by name.
 - **GitHub CI is the main push and release gate.** `ci.yml` runs checks per job,
   including builds, typechecks, tests, linters, browser proofs, and VN
   infrastructure. The `contracts` job runs full-history gitleaks. The aggregate
@@ -182,6 +183,10 @@ above retains this exemption.
 - 2026-10-11: The owner moved every review and fix confirmation to one model,
   `gpt-6.1-sol` at `xhigh`, run as a separate job from the author. Reviews no
   longer alternate by author model; `gpt-6-astra` writes designs only.
+- 2026-11-10: The owner made the primary the author and reviewer of designs,
+  documentation, and decisions, and moved independent review of architecture
+  designs and code to `gpt-6-astra` at `high`. The primary's documentation and
+  prose need no independent review.
 - 2026-10-11: Corrected the hosted CI entry point to match `ci.yml`: checks run
   per job and aggregate under `ci`, rather than calling local `make ci`.
 - 2026-10-31: The owner approved Linux and macOS local tooling with a sampled
