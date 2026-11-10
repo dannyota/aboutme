@@ -4,6 +4,11 @@ import {
   expectScreen, expectScreenClass, SCREEN_CLASSES, type ScreenContract,
 } from './display-assertions';
 
+/** Register a mutation proof; WEB_E2E_MUTATIONS=0 leaves these out. */
+export const mutationTest = (
+  title: string, body: Parameters<typeof test>[2],
+): void => test(title, { tag: '@mutation' }, body);
+
 export type StyleMutation = Readonly<Record<string,
   string | readonly [value: string, computed: string | RegExp]>>;
 
@@ -117,7 +122,7 @@ export function screenMutationTests(
     if (kind === 'images' && !contract.image) {
       continue;
     }
-    test(`${name} rejects ${kind} mutation`, async ({ page }) => {
+    mutationTest(`${name} rejects ${kind} mutation`, async ({ page }) => {
       test.setTimeout(60_000);
       await open(page);
       await expectScreen(page, contract);

@@ -3,7 +3,9 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
-import { applyStyleMutation, proveMutation } from './style-mutation';
+import {
+  applyStyleMutation, mutationTest, proveMutation,
+} from './style-mutation';
 import { containedPaint } from './screen-paint';
 
 async function assertWidgets(
@@ -139,7 +141,9 @@ export function rendererWidgetTests(): void {
 
   for (const mode of ['bar', 'dots', 'tag'] as const) {
     for (const defect of ['wrapper opacity', 'part opacity', 'clipping']) {
-      test(`screen ${mode} widgets reject ${defect}`, async ({ page }) => {
+      mutationTest(`screen ${mode} widgets reject ${defect}`, async ({
+        page,
+      }) => {
         await page.goto('/_harness/render?template=modern-sidebar'
           + `&mode=continuous&fixture=print-probe-widgets-${mode}`);
         await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -166,7 +170,7 @@ export function rendererWidgetTests(): void {
   }
 
   for (const mode of ['bar', 'dots', 'tag'] as const) {
-    test(`screen widgets reject changed ${mode}`, async ({ page }) => {
+    mutationTest(`screen widgets reject changed ${mode}`, async ({ page }) => {
       await page.goto('/_harness/render?template=modern-sidebar&mode=continuous'
         + `&fixture=print-probe-widgets-${mode}`);
       await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);

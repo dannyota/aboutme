@@ -5,7 +5,9 @@ import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import {
   measureGalleryDetail,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutationTest, screenMutationTests,
+} from './style-mutation';
 import { galleryDetailProofs } from './gallery-detail-proofs';
 import {
   assertGalleryDetail,
@@ -625,7 +627,9 @@ for (const [name, selector, styles] of [
     height: ['24px', /^\d+(?:\.\d+)?px$/u], overflow: 'hidden',
   }],
 ] as const) {
-  test(`template detail assertions reject ${name}`, async ({ page }) => {
+  mutationTest(`template detail assertions reject ${name}`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/templates/executive-band');
     await page.getByRole('tab', { name: 'ATS đọc được gì' }).click();

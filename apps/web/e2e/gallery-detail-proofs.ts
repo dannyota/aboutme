@@ -1,11 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 import { expectScreenClass } from './display-assertions';
 import {
   expectGalleryOrder, GALLERY_PAGE_TYPE, GALLERY_ATS_TYPE,
 } from './gallery-details';
 import { styleProofs } from './screen-style-proofs';
-import { applyStyleMutation, proveMutation } from './style-mutation';
+import {
+  applyStyleMutation, mutationTest, proveMutation,
+} from './style-mutation';
 import { galleryDetailContract } from './support';
 
 export function galleryDetailProofs(): void {
@@ -22,7 +24,7 @@ export function galleryDetailProofs(): void {
     }, tab === 'page' ? GALLERY_PAGE_TYPE : GALLERY_ATS_TYPE);
   }
 
-  test('gallery PDF rejects an invisible preview', async ({ page }) => {
+  mutationTest('gallery PDF rejects an invisible preview', async ({ page }) => {
     await page.goto('/templates/executive-band');
     await page.getByRole('tab', { name: 'PDF', exact: true }).click();
     await proveMutation(() => expectScreenClass(page,
@@ -34,7 +36,9 @@ export function galleryDetailProofs(): void {
   });
 
   for (const selector of ['.section-heading', '.entry'] as const) {
-    test(`gallery preview rejects reordered ${selector}`, async ({ page }) => {
+    mutationTest(`gallery preview rejects reordered ${selector}`, async ({
+      page,
+    }) => {
       await page.goto('/templates/creative-accent');
       const assertion = () => expectGalleryOrder(page, 'vi');
       await assertion();

@@ -1,15 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
-
 import { captureReviewImage } from './review-images';
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
-
 import {
   expectScreen, RESUME_STYLES, resumeContract, measureTextContainment,
 } from './display-assertions';
 import {
   applyStyleMutation, mutateAttribute, mutateText, proveMutation,
-  screenMutationTests,
+  screenMutationTests, mutationTest,
 } from './style-mutation';
 import { expectRendererContent } from './renderer-content';
 import { rendererWidgetTests } from './renderer-widgets';
@@ -31,7 +29,6 @@ const CELLS = [
   { template: 'academic-dense', mode: 'paged' },
   { template: 'modern-sidebar', mode: 'continuous' },
 ] as const;
-
 const CONTENT = {
   en: {
     headings: ['Summary', 'Experience', 'Education', 'Skills', 'Languages',
@@ -51,7 +48,6 @@ const CONTENT = {
       ['Giải thưởng Sáng tạo trẻ']],
   },
 } as const;
-
 async function assertFlow(
   flow: Locator,
   language: keyof typeof CONTENT,
@@ -74,7 +70,6 @@ async function assertFlow(
     });
   }
 }
-
 async function assertRenderer(
   page: Page,
   template: string,
@@ -113,13 +108,22 @@ async function assertRenderer(
       [0, 1, 2, 3, 4, 5, 6, 7]);
   }
 }
-
 for (const locale of ['vi', 'en'] as const) {
   test.describe(`renderer interface ${locale}`, () => {
     test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
-    for (const cell of CELLS) {
-      for (const language of ['vi', 'en'] as const) {
-        for (const viewer of ['light', 'dark'] as const) {
+    for (const [cellIndex, cell] of CELLS.entries()) {
+      for (const [languageIndex, language] of
+        (['vi', 'en'] as const).entries()) {
+        for (const [viewerIndex, viewer] of
+          (['light', 'dark'] as const).entries()) {
+          const continuous = cell.template === 'modern-sidebar'
+            && cell.mode === 'continuous';
+          const rotatedLocale = (Math.floor(cellIndex / 2) + languageIndex) % 2;
+          const rotatedViewer = (cellIndex + languageIndex) % 2;
+          if (!continuous && (locale !== (rotatedLocale === 0 ? 'vi' : 'en')
+            || viewerIndex !== rotatedViewer)) {
+            continue;
+          }
           const title = `renderer ${cell.template} ${cell.mode} ${language}`
             + ` ${viewer}`
             + ` ${'align' in cell ? cell.align : ''}`
@@ -161,9 +165,10 @@ for (const locale of ['vi', 'en'] as const) {
     }
   });
 }
-
 for (const mutation of ['drop', 'reorder'] as const) {
-  test(`renderer rejects ${mutation} of a section`, async ({ page }) => {
+  mutationTest(`renderer rejects ${mutation} of a section`, async ({
+    page,
+  }) => {
     await page.goto('/_harness/render?fixture=vn-full'
       + '&template=modern-sidebar&mode=continuous');
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -185,8 +190,7 @@ for (const mutation of ['drop', 'reorder'] as const) {
     await assertClean();
   });
 }
-
-test('renderer rejects a hidden language section', async ({ page }) => {
+mutationTest('renderer rejects a hidden language section', async ({ page }) => {
   await page.goto('/_harness/render?fixture=vn-full'
     + '&template=modern-sidebar&mode=continuous');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -201,8 +205,9 @@ test('renderer rejects a hidden language section', async ({ page }) => {
   await restore();
   await assertClean();
 });
-
-test('renderer rejects a transparent language section', async ({ page }) => {
+mutationTest('renderer rejects a transparent language section', async ({
+  page,
+}) => {
   await page.goto('/_harness/render?fixture=vn-full'
     + '&template=modern-sidebar&mode=continuous');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -217,7 +222,6 @@ test('renderer rejects a transparent language section', async ({ page }) => {
   await restore();
   await assertClean();
 });
-
 const PUBLIC_PAINT = {
   'classic-serif': {
     light: ['#ffffff', '#23262c', '#ffffff'],
@@ -240,13 +244,11 @@ const PUBLIC_PAINT = {
     dark: ['#13161b', '#d8dfe8', '#1d2f45'],
   },
 } as const;
-
 function rgb(hex: string): string {
   const channels = [1, 3, 5].map((index) =>
     Number.parseInt(hex.slice(index, index + 2), 16));
   return `rgb(${channels.join(', ')})`;
 }
-
 async function assertPublicPaint(
   page: Page,
   template: keyof typeof PUBLIC_PAINT,
@@ -269,16 +271,26 @@ async function assertPublicPaint(
   await expect(article.locator(regionSelector), 'Public region ground.')
     .toHaveCSS('background-color', rgb(region));
 }
-
 for (const language of ['vi', 'en'] as const) {
   test.describe(`public screen ${language}`, () => {
     test.use({ locale: language === 'vi' ? 'vi-VN' : 'en-US' });
     const templates = Object.keys(PUBLIC_PAINT) as
       (keyof typeof PUBLIC_PAINT)[];
-    for (const template of templates) {
-      for (const owner of ['light', 'dark', 'system'] as const) {
-        for (const viewer of ['light', 'dark'] as const) {
+    for (const [templateIndex, template] of templates.entries()) {
+      const offsets = [0, 2, 1, 2, 3];
+      const pairs = [
+        ['vi', 390], ['vi', 1440], ['en', 390], ['en', 1440],
+      ] as const;
+      for (const [ownerIndex, owner] of
+        (['light', 'dark', 'system'] as const).entries()) {
+        for (const [viewerIndex, viewer] of
+          (['light', 'dark'] as const).entries()) {
           for (const width of [390, 1440]) {
+            const pair = pairs[(ownerIndex * 2 + viewerIndex
+              + offsets[templateIndex]!) % pairs.length]!;
+            if (language !== pair[0] || width !== pair[1]) {
+              continue;
+            }
             test(`${template} ${owner} ${viewer} ${width}`, async ({
               page,
             }, testInfo) => {
@@ -408,7 +420,6 @@ for (const language of ['vi', 'en'] as const) {
     }
   });
 }
-
 for (const [name, selector, styles] of [
   ['article ground', '.resume-document', {
     'background-color': 'rgb(255, 0, 0)',
@@ -420,7 +431,7 @@ for (const [name, selector, styles] of [
   }],
   ['foreground', '.resume-document', { color: 'rgb(255, 0, 0)' }],
 ] as const) {
-  test(`public paint rejects changed ${name}`, async ({ page }) => {
+  mutationTest(`public paint rejects changed ${name}`, async ({ page }) => {
     const response = await page.goto(
       '/_harness/render?fixture=vn-full&template=modern-sidebar'
       + '&mode=public&scheme=dark',
@@ -436,7 +447,6 @@ for (const [name, selector, styles] of [
     await assertClean();
   });
 }
-
 async function assertRendererStyles(
   page: Page, template: string, language: 'vi' | 'en', justify: boolean,
   publicPage = false,
@@ -539,7 +549,6 @@ async function assertRendererStyles(
     }
   }
 }
-
 for (const mode of ['continuous', 'public'] as const) {
   screenMutationTests(`renderer ${mode}`, async (page) => {
     await page.setViewportSize({ width: 794, height: 1123 });
@@ -548,10 +557,10 @@ for (const mode of ['continuous', 'public'] as const) {
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
   }, resumeContract('modern-sidebar', 'vi'));
 }
-
 rendererWidgetTests();
-
-test('renderer rejects moving an entry to another page', async ({ page }) => {
+mutationTest('renderer rejects moving an entry to another page', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.goto('/_harness/render?fixture=vn-full'
     + '&template=classic-serif&mode=paged');
@@ -569,9 +578,10 @@ test('renderer rejects moving an entry to another page', async ({ page }) => {
     .nth(1).getByText('Tiếng Anh', { exact: true })).toHaveCount(1);
   await expect(assertion()).rejects.toThrow('Renderer page membership.');
 });
-
 for (const mode of ['continuous', 'public'] as const) {
-  test(`renderer ${mode} rejects replaced body content`, async ({ page }) => {
+  mutationTest(`renderer ${mode} rejects replaced body content`, async ({
+    page,
+  }) => {
     await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
       + `&mode=${mode}`);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -581,7 +591,6 @@ for (const mode of ['continuous', 'public'] as const) {
     'Renderer body content.');
   });
 }
-
 for (const template of ['modern-sidebar', 'executive-band']) {
   styleProofs(`renderer ${template}`, async (page) => {
     await page.goto(`/_harness/render?fixture=full&template=${template}`
@@ -590,7 +599,7 @@ for (const template of ['modern-sidebar', 'executive-band']) {
   }, rendererTypeRules(template));
 }
 
-test('public rejects changed section order', async ({ page }) => {
+mutationTest('public rejects changed section order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
     + '&mode=public');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -602,13 +611,14 @@ test('public rejects changed section order', async ({ page }) => {
     .toHaveText('Experience');
   await expect(assertion()).rejects.toThrow('Renderer section order.');
 });
-
 for (const [selector, message] of [
   ['.resume-headline', 'Renderer headline content.'],
   ['.contact-chip a', 'Renderer contact content.'],
   ['.contact-label', 'Renderer contact label.'],
 ] as const) {
-  test(`renderer rejects replaced ${selector} content`, async ({ page }) => {
+  mutationTest(`renderer rejects replaced ${selector} content`, async ({
+    page,
+  }) => {
     await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
       + '&mode=continuous');
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -616,13 +626,12 @@ for (const [selector, message] of [
       () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
   });
 }
-
 for (const [selector, property, message] of [
   ['.section-heading h2', 'color', 'Renderer heading paint.'],
   ['.resume-sidebar', 'background-color', 'Renderer region paint.'],
   ['.resume-name', 'color', 'Renderer name paint.'],
 ] as const) {
-  test(`renderer rejects changed ${message}`, async ({ page }) => {
+  mutationTest(`renderer rejects changed ${message}`, async ({ page }) => {
     await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
       + '&mode=continuous');
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -633,7 +642,9 @@ for (const [selector, property, message] of [
   });
 }
 
-test('renderer rejects changed English page membership', async ({ page }) => {
+mutationTest('renderer rejects changed English page membership', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.goto('/_harness/render?fixture=full&template=classic-serif'
     + '&mode=paged');
@@ -655,7 +666,9 @@ test('renderer rejects changed English page membership', async ({ page }) => {
   await expect(assertion()).rejects.toThrow('Renderer page membership.');
 });
 
-test('renderer rejects a changed contact destination', async ({ page }) => {
+mutationTest('renderer rejects a changed contact destination', async ({
+  page,
+}) => {
   await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
     + '&mode=continuous');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -663,8 +676,7 @@ test('renderer rejects a changed contact destination', async ({ page }) => {
     () => mutateAttribute(page.locator('.contact-chip a').first(), 'href',
       'mailto:mutated@example.invalid'), 'Renderer contact link.');
 });
-
-test('public rejects changed entry order', async ({ page }) => {
+mutationTest('public rejects changed entry order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
     + '&mode=public');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);

@@ -281,6 +281,7 @@ web-template-pages: ## Generate review-only product page images in the pinned Li
 
 web-e2e: ## Assert display rules in the pinned AMD64 browser
 	@set -Eeuo pipefail; \
+	if [[ $${WEB_E2E_MUTATIONS-1} != 0 && $${WEB_E2E_MUTATIONS-1} != 1 ]]; then echo 'WEB_E2E_MUTATIONS must be 0 or 1' >&2; exit 64; fi; \
 	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
 	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
 	run_id=$${WEB_E2E_RUN_ID-}; \
@@ -317,6 +318,7 @@ web-e2e: ## Assert display rules in the pinned AMD64 browser
 	  -v "$$PWD/$$source_tar:/candidate.tar:ro" \
 	  -v "$$PWD/$$mode_dir:/results:rw" \
 	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e WEB_E2E_MUTATIONS="$${WEB_E2E_MUTATIONS-1}" \
 	  -e WEB_E2E_HARNESS_SPECS="$$harness_specs" -e WEB_E2E_NORMAL_SPECS="$$normal_specs" \
 	  -e PLAYWRIGHT_RESULTS_DIR=/results -w /tmp '$(WEB_E2E_IMAGE)' \
 	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$TZ" = UTC; test "$$LANG" = C.UTF-8; test "$$LC_ALL" = C.UTF-8; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; chrome_version="$$(/ms-playwright/chromium-1248/chrome-linux64/chrome --version)"; chrome_version="$$(printf "%s" "$$chrome_version" | sed "s/[[:space:]]*$$//")"; test "$$chrome_version" = "Google Chrome for Testing 156.0.8078.4"; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; status=0; if [ -n "$$WEB_E2E_HARNESS_SPECS" ]; then PLAYWRIGHT_SURFACE=harness npx --no-install playwright test --config e2e/playwright.config.ts $$WEB_E2E_HARNESS_SPECS || status=$$?; fi; if [ "$$status" -eq 0 ] && [ -n "$$WEB_E2E_NORMAL_SPECS" ]; then PLAYWRIGHT_SURFACE=normal npx --no-install playwright test --config e2e/playwright.config.ts $$WEB_E2E_NORMAL_SPECS || status=$$?; fi; post=0; for path in playwright-report test-results blob-report; do if [ -e "/tmp/aboutme/apps/web/$$path" ]; then echo "unexpected default Playwright output: $$path" >&2; post=1; fi; done; test "$$post" -eq 0 || exit 1; exit "$$status"'; \
@@ -325,6 +327,7 @@ web-e2e: ## Assert display rules in the pinned AMD64 browser
 
 web-e2e-fast: ## Iterate renderer specs in the pinned browser against the working tree; not a gate (ARGS="corpus.spec.ts", PLAYWRIGHT_WORKERS=4, PLAYWRIGHT_SKIP_BUILD=1)
 	@set -Eeuo pipefail; \
+	if [[ $${WEB_E2E_MUTATIONS-1} != 0 && $${WEB_E2E_MUTATIONS-1} != 1 ]]; then echo 'WEB_E2E_MUTATIONS must be 0 or 1' >&2; exit 64; fi; \
 	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
 	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
 	test "$$(uname -m)" = x86_64 || { echo 'web-e2e-fast requires a native x86_64 host' >&2; exit 1; }; \
@@ -336,6 +339,7 @@ web-e2e-fast: ## Iterate renderer specs in the pinned browser against the workin
 	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
 	  -v "$$PWD:/repo:rw" \
 	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e WEB_E2E_MUTATIONS="$${WEB_E2E_MUTATIONS-1}" \
 	  -e PLAYWRIGHT_RESULTS_DIR=/repo/.dev/web-e2e-fast \
 	  -e PLAYWRIGHT_SURFACE="$$surface" \
 	  -e PLAYWRIGHT_WORKERS="$${PLAYWRIGHT_WORKERS-4}" \

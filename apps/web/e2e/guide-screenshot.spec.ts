@@ -7,7 +7,7 @@ import {
 } from './display-assertions';
 import {
   applyStyleMutation, mutateAttribute, mutateText, proveMutation,
-  screenMutationTests,
+  screenMutationTests, mutationTest,
 } from './style-mutation';
 import {
   expectGuideCodeScroll, expectGuideDetails, expectGuideIcons,
@@ -169,7 +169,7 @@ test('style mutations reject unchanged string expectations', async ({
   await expect(target).toHaveAttribute('style', 'opacity: 1');
 });
 
-test('guide flow detects overlapping sections', async ({ page }) => {
+mutationTest('guide flow detects overlapping sections', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await mockSignedOutSession(page);
   const response = await page.goto('/guide/mcp');
@@ -521,7 +521,7 @@ test('style mutations allow an unchanged companion declaration', async ({
   await expect(target).toHaveCSS('opacity', '1');
 });
 
-test('guide rejects a changed instruction icon', async ({ page }) => {
+mutationTest('guide rejects a changed instruction icon', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await mockSignedOutSession(page);
   await page.goto('/guide/mcp');
@@ -558,7 +558,7 @@ for (const [name, selector, message] of [
   ['request', '[data-testid="guide-try-request"] li', 'Guide request order.'],
   ['privacy', '[data-testid="guide-privacy"] li', 'Guide privacy order.'],
 ] as const) {
-  test(`guide rejects changed ${name} content`, async ({ page }) => {
+  mutationTest(`guide rejects changed ${name} content`, async ({ page }) => {
     await openGuide(page);
     await proveMutation(() => expectGuideInstructions(page, 'vi'),
       () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
@@ -571,7 +571,7 @@ for (const selector of [
   '[data-testid="guide-claude"] ol:last-of-type',
   '[data-testid="guide-try-request"] ul', '[data-testid="guide-privacy"] ul',
 ]) {
-  test(`guide rejects missing list semantics at ${selector}`, async ({
+  mutationTest(`guide rejects missing list semantics at ${selector}`, async ({
     page,
   }) => {
     await openGuide(page);
@@ -582,7 +582,7 @@ for (const selector of [
 }
 
 for (const defect of ['geometry', 'stroke'] as const) {
-  test(`guide rejects changed SVG ${defect}`, async ({ page }) => {
+  mutationTest(`guide rejects changed SVG ${defect}`, async ({ page }) => {
     await openGuide(page);
     const path = page.getByTestId('guide-can').locator('path').first();
     await proveMutation(() => expectGuideIcons(page, 'light'), () =>
@@ -592,7 +592,9 @@ for (const defect of ['geometry', 'stroke'] as const) {
   });
 }
 
-test('guide rejects clipping in an instruction ancestor', async ({ page }) => {
+mutationTest('guide rejects clipping in an instruction ancestor', async ({
+  page,
+}) => {
   await openGuide(page);
   await proveMutation(() => expectScreenClass(page,
     guideContract('vi', 'light'), 'containment'),
@@ -605,7 +607,9 @@ for (const [selector, message] of [
   ['[data-testid="guide-plan-note"]', 'Guide explanatory copy.'],
   ['[data-testid="guide-other-apps"] p', 'Guide other apps copy.'],
 ] as const) {
-  test(`guide rejects replaced prose at ${selector}`, async ({ page }) => {
+  mutationTest(`guide rejects replaced prose at ${selector}`, async ({
+    page,
+  }) => {
     await openGuide(page);
     await proveMutation(() => expectGuideProse(page, 'vi'),
       () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
@@ -614,7 +618,7 @@ for (const [selector, message] of [
 
 screenRegressionTests();
 
-test('guide rejects an unreachable code block', async ({ page }) => {
+mutationTest('guide rejects an unreachable code block', async ({ page }) => {
   await openGuide(page);
   await proveMutation(() => expectGuideCodeScroll(page),
     () => applyStyleMutation(page.getByTestId('guide-mcp-page')

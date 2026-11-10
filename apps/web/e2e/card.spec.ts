@@ -15,7 +15,8 @@ import {
   expectScreen, expectScreenClass, type ScreenContract, measureCardCrop,
 } from './display-assertions';
 import {
-  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
+  screenMutationTests,
 } from './style-mutation';
 import { cardType, expectCardDetails, expectCardLogo } from './card-details';
 import { styleProofs } from './screen-style-proofs';
@@ -530,7 +531,9 @@ for (const scheme of ['light', 'dark'] as const) {
   }
 }
 
-test('card crop assertion detects ignored offsets', async ({ page }) => {
+mutationTest('card crop assertion detects ignored offsets', async ({
+  page,
+}) => {
   const card = CASES[0]!.card;
   await openCard(page, await renderCardHTML(buildEnvelope(card)));
   const image = page.locator('.preview-card-photo-image');
@@ -551,7 +554,7 @@ for (const [name, selector, styles, pseudo] of [
     'background-image': 'none',
   }, '::after'],
 ] as const) {
-  test(`card display rejects changed ${name}`, async ({ page }) => {
+  mutationTest(`card display rejects changed ${name}`, async ({ page }) => {
     const card = CASES[2]!.card;
     await openCard(page, await renderCardHTML(buildEnvelope(card)));
     const assertCard = () => expectCardDisplay(page, card, 'no-photo-en');
@@ -639,7 +642,7 @@ styleProofs('card', async (page) => {
 }, cardType('short-name-en', true));
 
 for (const defect of ['geometry', 'stroke', 'tilt'] as const) {
-  test(`card rejects changed logo ${defect}`, async ({ page }) => {
+  mutationTest(`card rejects changed logo ${defect}`, async ({ page }) => {
     await openCard(page, await renderCardHTML(buildEnvelope(CASES[1]!.card)));
     await proveMutation(() => expectCardLogo(page), () => {
       const logo = page.locator('.preview-card-footer svg');
@@ -657,7 +660,9 @@ for (const defect of ['geometry', 'stroke', 'tilt'] as const) {
 }
 
 for (const selector of ['.preview-card-photo img', '.preview-card-photo']) {
-  test(`card rejects invisible photo at ${selector}`, async ({ page }) => {
+  mutationTest(`card rejects invisible photo at ${selector}`, async ({
+    page,
+  }) => {
     const card = CASES[1]!.card;
     await openCard(page, await renderCardHTML(buildEnvelope(card)));
     await proveMutation(() => expectScreenClass(page, cardContract(card),

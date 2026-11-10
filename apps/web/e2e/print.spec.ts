@@ -6,7 +6,7 @@ import { writeFile } from 'node:fs/promises';
 import { captureReviewImage } from './review-images';
 import { measurePdfLayout, measurePrintRules } from './display-assertions';
 import { assertPrintDom, assertPrintRules } from './pdf-fonts';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, mutationTest } from './style-mutation';
 import { pdfPaintPage } from './pdf-paint';
 import { assertOverflowTextStyle } from './pdf-text-style';
 import { overflowPdfChunks } from './pdf-input-content';
@@ -204,7 +204,9 @@ for (const printCase of CASES) {
 }
 
 for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
-  test(`${fixture} print rules detect relaxed widows`, async ({ page }) => {
+  mutationTest(`${fixture} print rules detect relaxed widows`, async ({
+    page,
+  }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     expect((await page.goto(`/_harness/render?fixture=${fixture}`
@@ -218,7 +220,9 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
   });
 }
 
-test('PDF membership detects an orphan section heading', async ({ page }) => {
+mutationTest('PDF membership detects an orphan section heading', async ({
+  page,
+}) => {
   const external = await denyExternalRequests(page);
   await page.emulateMedia({ media: 'print' });
   expect((await page.goto('/_harness/render?fixture=print-probe-heading'

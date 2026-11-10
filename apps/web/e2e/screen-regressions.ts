@@ -7,7 +7,9 @@ import {
 import { expectSvg } from './screen-paint';
 import { measureScreenText } from './screen-containment';
 import { expectStyleRule } from './screen-expectations';
-import { applyStyleMutation, proveMutation } from './style-mutation';
+import {
+  applyStyleMutation, mutationTest, proveMutation,
+} from './style-mutation';
 
 const CONTRACT: ScreenContract = {
   root: '#surface', text: '#surface p', flow: '#surface p',
@@ -18,7 +20,7 @@ const CONTRACT: ScreenContract = {
 };
 
 export function screenRegressionTests(): void {
-  test('screen styles recognize normal letter spacing as zero', async ({
+  mutationTest('screen styles recognize normal letter spacing as zero', async ({
     page,
   }) => {
     await page.setContent('<p>First line</p>');
@@ -31,7 +33,9 @@ export function screenRegressionTests(): void {
     }), 'Screen zero letter spacing letter-spacing.');
   });
 
-  test('screen text allows clipped decorative siblings', async ({ page }) => {
+  mutationTest('screen text allows clipped decorative siblings', async ({
+    page,
+  }) => {
     await page.setContent('<main id="surface"><div id="clip" '
       + 'style="position:relative;height:24px;overflow:hidden">'
       + '<p style="margin:0">First line</p><span aria-hidden="true" '
@@ -45,7 +49,9 @@ export function screenRegressionTests(): void {
     ), 'Screen containment.');
   });
 
-  test('screen text allows leading but rejects a one-pixel clip', async ({
+  const leadingMutationTitle
+    = 'screen text allows leading but rejects a one-pixel clip';
+  mutationTest(leadingMutationTitle, async ({
     page,
   }) => {
     await page.setContent('<main id="surface"><p style="margin:0;'
@@ -59,7 +65,9 @@ export function screenRegressionTests(): void {
     }), 'Screen containment.');
   });
 
-  test('screen blocks reject overlapping logical lines', async ({ page }) => {
+  mutationTest('screen blocks reject overlapping logical lines', async ({
+    page,
+  }) => {
     await page.setContent('<main id="surface"><p style="margin:0;'
       + 'height:160px;padding:48px 8px;text-indent:100px;font:32px/48px Arial">'
       + 'gẤ<br>gẤ</p></main>');
@@ -95,7 +103,7 @@ export function screenRegressionTests(): void {
     });
   }
 
-  test('screen text accepts leading inside a clipping block', async ({
+  mutationTest('screen text accepts leading inside a clipping block', async ({
     page,
   }) => {
     await page.setContent('<main id="surface"><p style="margin:0;'
@@ -106,7 +114,7 @@ export function screenRegressionTests(): void {
     ), 'Screen containment.');
   });
 
-  test('screen text rejects horizontal overflow', async ({ page }) => {
+  mutationTest('screen text rejects horizontal overflow', async ({ page }) => {
     await page.setContent('<main id="surface"><p style="width:100px">'
       + 'First line wraps inside the container</p></main>');
     const assertion = () => expectScreenClass(page, CONTRACT, 'containment');
@@ -115,7 +123,9 @@ export function screenRegressionTests(): void {
     ), 'Screen containment.');
   });
 
-  test('screen text distinguishes inline runs from separate lines', async ({
+  const inlineMutationTitle
+    = 'screen text distinguishes inline runs from separate lines';
+  mutationTest(inlineMutationTitle, async ({
     page,
   }) => {
     await page.setContent('<main id="surface"><p style="font:32px/48px Arial">'
@@ -127,7 +137,9 @@ export function screenRegressionTests(): void {
   });
 
   for (const ancestor of ['body', 'html']) {
-    test(`screen text detects clipping at ${ancestor}`, async ({ page }) => {
+    mutationTest(`screen text detects clipping at ${ancestor}`, async ({
+      page,
+    }) => {
       await page.setContent('<style>body{margin:0}p{margin:0}</style>'
         + '<main id="surface"><p>First line</p></main>');
       const assertion = () => expectScreenClass(page, CONTRACT, 'containment');
@@ -153,7 +165,8 @@ export function screenRegressionTests(): void {
     }));
   });
 
-  test('renderer text excludes wrappers with graphical or absent levels',
+  mutationTest(
+    'renderer text excludes wrappers with graphical or absent levels',
     async ({ page }) => {
       await page.goto('/_harness/render?fixture=print-probe-widgets-dots'
         + '&template=modern-sidebar&mode=continuous&lng=vi');
@@ -185,7 +198,9 @@ export function screenRegressionTests(): void {
       .toBe(0);
   });
 
-  test('screen containment rejects ancestor clipping before scrolling', async ({
+  const scrollingMutationTitle
+    = 'screen containment rejects ancestor clipping before scrolling';
+  mutationTest(scrollingMutationTitle, async ({
     page,
   }) => {
     await page.setContent('<main id="surface"><div id="list">'
@@ -205,7 +220,9 @@ export function screenRegressionTests(): void {
   });
 
   for (const selector of ['img', '#frame']) {
-    test(`screen images reject opacity on ${selector}`, async ({ page }) => {
+    mutationTest(`screen images reject opacity on ${selector}`, async ({
+      page,
+    }) => {
       await page.setContent('<main id="surface"><div id="frame">'
         + '<img width="20" height="20" src="data:image/svg+xml,'
         + '%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' '
@@ -224,7 +241,9 @@ export function screenRegressionTests(): void {
     });
   }
 
-  test('screen SVG rejects missing geometry with its identity intact', async ({
+  const svgMutationTitle
+    = 'screen SVG rejects missing geometry with its identity intact';
+  mutationTest(svgMutationTitle, async ({
     page,
   }) => {
     await page.setContent('<svg class="lucide-check" width="24" height="24" '
@@ -243,7 +262,7 @@ export function screenRegressionTests(): void {
     await expect(assertion()).rejects.toThrow('Screen check icon.');
   });
 
-  test('screen containment allows only scrolling sheet bodies', async ({
+  mutationTest('screen containment allows only scrolling sheet bodies', async ({
     page,
   }) => {
     await page.setContent('<style>p{height:20px;margin:0}</style>'

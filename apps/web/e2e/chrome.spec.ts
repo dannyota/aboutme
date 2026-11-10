@@ -19,7 +19,8 @@ import {
   measureVerticalFlow,
 } from './display-assertions';
 import {
-  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
+  screenMutationTests,
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeList, expectChromeNavigation,
@@ -396,7 +397,7 @@ for (const [name, selector, styles] of [
   ['body font size', 'body', { 'font-size': '17px' }],
   ['navigation', 'nav a[href="/templates"]', { display: 'none' }],
 ] as const) {
-  test(`chrome assertions reject changed ${name}`, async ({ page }) => {
+  mutationTest(`chrome assertions reject changed ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     expect((await page.goto('/'))?.status()).toBe(200);
     await page.evaluate(() => document.fonts.ready);
@@ -422,7 +423,9 @@ for (const [name, selector, styles] of [
 
 for (const path of ['/', '/templates'] as const) {
   for (const overflow of ['visible', 'hidden'] as const) {
-    test(`desktop heading rejects ${overflow} overflow on ${path}`, async ({
+    const desktopHeadingMutationTitle
+      = `desktop heading rejects ${overflow} overflow on ${path}`;
+    mutationTest(desktopHeadingMutationTitle, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -550,7 +553,7 @@ for (const entry of PAGES) {
 }
 
 for (const kind of ['shadow', 'gradient'] as const) {
-  test(`chrome rejects changed ${kind} values`, async ({ page }) => {
+  mutationTest(`chrome rejects changed ${kind} values`, async ({ page }) => {
     await page.goto('/');
     await proveMutation(() => expectChromeDecoration(page, 'light', kind),
       () => applyStyleMutation(page.getByTestId(kind === 'shadow'
@@ -564,7 +567,7 @@ for (const kind of ['shadow', 'gradient'] as const) {
 }
 
 for (const kind of ['navigation', 'template list'] as const) {
-  test(`chrome rejects changed ${kind} semantics`, async ({ page }) => {
+  mutationTest(`chrome rejects changed ${kind} semantics`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/');
     await prepareScreen(page);

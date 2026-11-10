@@ -6,6 +6,11 @@
 import { defineConfig } from '@playwright/test';
 import { isAbsolute, resolve } from 'node:path';
 
+const mutations = process.env.WEB_E2E_MUTATIONS ?? '1';
+if (mutations !== '0' && mutations !== '1') {
+  throw new Error('WEB_E2E_MUTATIONS must be 0 or 1.');
+}
+
 const surface = process.env.PLAYWRIGHT_SURFACE;
 if (surface !== 'harness' && surface !== 'normal') {
   throw new Error('PLAYWRIGHT_SURFACE must be harness or normal.');
@@ -51,6 +56,7 @@ else delete buildEnvironment.NUXT_HARNESS;
 export default defineConfig({
   forbidOnly: true,
   fullyParallel: false,
+  grepInvert: mutations === '0' ? /@mutation/ : undefined,
   outputDir: resolve(surfaceResults, 'artifacts'),
   preserveOutput: 'always',
   reporter: [
