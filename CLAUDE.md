@@ -24,6 +24,7 @@
 - Find a commit's runs with `gh api "repos/dannyota/aboutme/actions/runs?head_sha=<sha>"`; `gh run list --branch` lags after a push.
 - For a finished job while its run is still in progress, get its log with `gh api --allow-escape-sequences repos/dannyota/aboutme/actions/jobs/<job-id>/logs` and strip ANSI codes; `gh run view --log` refuses until the run completes.
 - Display checks: follow [web rules](instructions/web.md) for the accepted assertion replacement and interim hosted Baselines command. Native Mac proofs remain pending runner acceptance; contributor heads use hosted CI.
+- Release: `gh workflow run release-check.yml --ref main`; when green, `git tag -s vX.Y.Z <sha>`, push the tag, wait for `release-images`, then deploy ([releases](instructions/releases.md)).
 - Deploy: `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh vX.Y.Z` after green `main` CI and release-images ([releases](instructions/releases.md)).
 
 ## Gotchas
@@ -34,3 +35,7 @@
 - zsh reads `"$var:r…"` as a history modifier (`"$sha:refs/heads/main"` breaks); write `"${sha}:refs/heads/main"`.
 - GNU tools come first on PATH on the Mac: `sed -i`, not `sed -i ''`.
 - Start long jobs with `run_in_background` (or a done-file plus a background waiter); `( … ) &` inside one Bash call is not tracked.
+- Pushing a commit to a branch with an open pull request cancels its running CI (workflow concurrency); batch fixes instead of pushing mid-run.
+- Worktrees have no `node_modules`: ESM scripts ignore `NODE_PATH`. For one-off checks symlink the main checkout's ignored `node_modules` and remove it after; `make pre-push` refuses symlinked dependencies, so run Prettier and markdownlint from the main checkout's `node_modules/.bin`.
+- New GHCR packages start private; only the owner can make one public, in its settings page. Check anonymous pulls with the registry token flow (`curl "https://ghcr.io/token?scope=repository:dannyota/<pkg>:pull"`, then the manifest URL); an empty podman auth file can falsely report a denial.
+- The Bash tool blocks foreground `sleep` chains: wait with `run_in_background` and an until-loop. Background waiters die with the session, so write `.dev/handoff/<date>-manager.md` before a restart.
