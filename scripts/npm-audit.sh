@@ -61,10 +61,14 @@ reldir=$(realpath -m --relative-to="$ROOT" "$DIR")
 
 # npm audit exits non-zero when it finds anything; the report decides. Each
 # attempt has a time limit, after which npm and its children are killed, and an
-# unusable report gets one retry.
+# unusable report gets one retry. The report goes to a file, not a pipe, so a
+# leftover child that still holds the output cannot block the script.
+out=$(mktemp "${TMPDIR:-/tmp}/npm-audit.XXXXXX")
+trap 'rm -f -- "$out"' EXIT
 usable() { jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null 2>&1; }
 for attempt in 1 2; do
-  report=$(cd "$DIR" && timeout -k 2 "$LIMIT" "$NPM" audit --omit=dev --json) || true
+  (cd "$DIR" && timeout -k 2 "$LIMIT" "$NPM" audit --omit=dev --json) >"$out" || true
+  report=$(<"$out")
   usable && break
   printf 'npm-audit: attempt %s gave no usable report in %s\n' "$attempt" "$DIR" >&2
 done

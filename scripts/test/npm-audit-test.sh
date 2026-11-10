@@ -11,16 +11,27 @@ fail() {
 }
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-npm-audit-test.XXXXXX")
-trap 'rm -rf -- "$WORK"' EXIT
+trap '[ ! -f "$WORK/child.pids" ] || xargs kill -9 <"$WORK/child.pids" 2>/dev/null; rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/pkg"
 
-# The stub hangs on its first $WORK/hangs calls, ignoring TERM like a stuck npm
-# (the ignore passes to its sleep child), then prints the report.
+# The stub hangs on its first $WORK/hangs calls, then prints the report. By
+# default it ignores TERM like a stuck npm (the ignore passes to its sleep
+# child). With $WORK/child present it dies on TERM but leaves a TERM-ignoring
+# child that holds stdout open.
 cat >"$WORK/npm" <<STUB
 #!/usr/bin/env bash
 n=\$(( \$(cat "$WORK/calls" 2>/dev/null || echo 0) + 1 ))
 echo "\$n" >"$WORK/calls"
-[ "\$n" -gt "\$(cat "$WORK/hangs" 2>/dev/null || echo 0)" ] || { trap "" TERM; sleep 30; }
+if [ "\$n" -le "\$(cat "$WORK/hangs" 2>/dev/null || echo 0)" ]; then
+  if [ -e "$WORK/child" ]; then
+    (trap "" TERM; exec sleep 30 2>/dev/null) &
+    echo "\$!" >>"$WORK/child.pids"
+    wait
+  else
+    trap "" TERM
+    sleep 30
+  fi
+fi
 cat "$WORK/report.json"
 exit 1
 STUB
@@ -147,6 +158,11 @@ echo 2 >"$WORK/hangs"
 start=$SECONDS
 run 'audit that hangs twice fails' 1 'no usable report'
 [ $((SECONDS - start)) -lt 15 ] || fail 'hung audit was not stopped by the time limit'
+touch "$WORK/child"
+start=$SECONDS
+run 'leftover child holding the output does not block' 1 'no usable report'
+[ $((SECONDS - start)) -lt 10 ] || fail 'a leftover child blocked the audit'
+rm -f "$WORK/child"
 rm -f "$WORK/hangs"
 AUDIT_TIMEOUT=10
 
