@@ -60,10 +60,11 @@ toolong=$(jq -r --arg limit "$limit" '
 reldir=$(realpath -m --relative-to="$ROOT" "$DIR")
 
 # npm audit exits non-zero when it finds anything; the report decides. Each
-# attempt has a time limit, and an unusable report gets one retry.
+# attempt has a time limit, after which npm and its children are killed, and an
+# unusable report gets one retry.
 usable() { jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null 2>&1; }
 for attempt in 1 2; do
-  report=$(cd "$DIR" && timeout "$LIMIT" "$NPM" audit --omit=dev --json) || true
+  report=$(cd "$DIR" && timeout -k 2 "$LIMIT" "$NPM" audit --omit=dev --json) || true
   usable && break
   printf 'npm-audit: attempt %s gave no usable report in %s\n' "$attempt" "$DIR" >&2
 done
