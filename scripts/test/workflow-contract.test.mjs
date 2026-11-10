@@ -1241,6 +1241,21 @@ test("VN keeps database migration in the PostgreSQL job", () => {
   assert.ok(!step.if && !step["continue-on-error"], "migration test must block");
 });
 
+test("VN CrowdSec jobs load verified packages before the package proof", () => {
+  const vn = readWorkflow("vn-infra");
+  for (const name of ["crowdsec-integration", "crowdsec-postgresql"]) {
+    const steps = vn.jobs[name].steps;
+    const loader = steps.findIndex((step) => step.uses === "./.github/actions/vn-infra-debs");
+    const proof = steps.findIndex((step) => step.name === "Inspect signed packages and prove suppressed engine setup");
+    assert.ok(loader >= 0 && proof > loader, `${name}: load packages before the proof`);
+    for (const step of [steps[loader], steps[proof]]) {
+      assert.equal(step.if, undefined, `${name}: package steps are unconditional`);
+      assert.equal(step["continue-on-error"], undefined, `${name}: package failures block the job`);
+    }
+    assert.equal(steps[proof].run.trim(), 'sudo env GITHUB_ACTIONS=true ABOUTME_VN_DEBS="$ABOUTME_VN_DEBS" bash deploy/vn/tests/crowdsec-offline-test.sh packages');
+  }
+});
+
 function checkJobTimeouts(ci, vn) {
   const timeouts = {
     preflight: 5,

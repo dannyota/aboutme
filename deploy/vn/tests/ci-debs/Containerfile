@@ -1,0 +1,4 @@
+FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/dannyota/aboutme" \
+      org.opencontainers.image.description="Pinned Ubuntu 24.04 amd64 packages for the VN infrastructure CrowdSec CI jobs"
+COPY debs /debs

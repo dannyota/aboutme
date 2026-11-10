@@ -110,6 +110,19 @@ function checkPackage(action) {
 }
 const packageAction = load(".github/actions/ci-tools/action.yml");
 const packageStep = checkPackage(packageAction);
+const vnDebs = load(".github/actions/vn-infra-debs/action.yml");
+assert.equal(vnDebs.runs?.using, "composite", "VN packages: composite loader");
+assert.equal(vnDebs.runs.steps.length, 1, "VN packages: one loader without a fallback");
+const vnDebsStep = vnDebs.runs.steps[0];
+assert.equal(vnDebsStep.if, undefined, "VN packages: always verify");
+assert.equal(vnDebsStep["continue-on-error"], undefined, "VN packages: loading failures block");
+const vnDebsRun = vnDebsStep.run;
+assert.ok(vnDebsRun.includes("ghcr.io/dannyota/vn-infra-debs@sha256:afe81df59073eef94c642963e4bcdfd4bc762fafc8f2b9c75abe2b625f0ad0c1"), "VN packages: pinned image");
+assert.ok(vnDebsRun.includes("5d8a71a91b0585bfede57369c825a25a304d756d4ba56df4a07901c11c2bd455  SHA256SUMS"), "VN packages: pinned manifest");
+assert.ok(vnDebsRun.indexOf("sha256sum -c -") < vnDebsRun.indexOf("sha256sum -c SHA256SUMS") &&
+  vnDebsRun.indexOf("sha256sum -c -") >= 0 && vnDebsRun.indexOf("sha256sum -c SHA256SUMS") < vnDebsRun.indexOf('mv "$stage/debs"'),
+  "VN packages: verify manifest and contents before exposing packages");
+assert.ok(!/\b(?:curl|wget|podman login)\b/.test(vnDebsRun), "VN packages: public image without download fallback");
 for (const [from, to] of [
   [packageImage, "ghcr.io/dannyota/ci-tools:2026-11-08"],
   ["--password-stdin", "--password"],

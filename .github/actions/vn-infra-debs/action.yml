@@ -1,0 +1,22 @@
+name: Load VN infrastructure packages
+description: Copy verified packages from the pinned public GHCR image.
+runs:
+  using: composite
+  steps:
+    - name: Load pinned VN infrastructure packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        stage=$(mktemp -d "$RUNNER_TEMP/vn-infra-debs.XXXXXX")
+        trap 'podman rm -f vn-infra-debs >/dev/null 2>&1 || true; rm -rf "$stage"' EXIT
+        rm -rf "$RUNNER_TEMP/vn-infra-debs"
+        podman create --name vn-infra-debs ghcr.io/dannyota/vn-infra-debs@sha256:afe81df59073eef94c642963e4bcdfd4bc762fafc8f2b9c75abe2b625f0ad0c1 /bin/true >/dev/null
+        podman cp vn-infra-debs:/debs "$stage/debs"
+        podman rm vn-infra-debs >/dev/null
+        (
+          cd "$stage/debs"
+          printf '%s\n' '5d8a71a91b0585bfede57369c825a25a304d756d4ba56df4a07901c11c2bd455  SHA256SUMS' | sha256sum -c -
+          sha256sum -c SHA256SUMS
+        )
+        mv "$stage/debs" "$RUNNER_TEMP/vn-infra-debs"
+        echo "ABOUTME_VN_DEBS=$RUNNER_TEMP/vn-infra-debs" >> "$GITHUB_ENV"

@@ -105,9 +105,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/vn-infra-debs
       - name: Inspect signed packages and prove suppressed engine setup
         run: |
-          sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
+          sudo env GITHUB_ACTIONS=true ABOUTME_VN_DEBS="$ABOUTME_VN_DEBS" bash deploy/vn/tests/crowdsec-offline-test.sh packages
       - name: Build the pinned production Caddy binary
         run: |
           sudo apt-get install -y -qq podman >/dev/null
@@ -145,9 +146,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/vn-infra-debs
       - name: Inspect signed packages and prove suppressed engine setup
         run: |
-          sudo env GITHUB_ACTIONS=true bash deploy/vn/tests/crowdsec-offline-test.sh packages
+          sudo env GITHUB_ACTIONS=true ABOUTME_VN_DEBS="$ABOUTME_VN_DEBS" bash deploy/vn/tests/crowdsec-offline-test.sh packages
       - name: Derive pinned catalog metadata
         run: |
           set -euo pipefail
