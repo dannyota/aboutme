@@ -6,7 +6,6 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 
 |Path|Holds|
 |-|-|
-|[v0.8-roadmap.md](v0.8-roadmap.md)|Active release order|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[crowdsec-postgresql.md](crowdsec-postgresql.md)|CrowdSec PostgreSQL storage, bounded probe paths, retention, and ordinary deployment|
 |[restore-drill.md](restore-drill.md)|Isolated backup restore drill and its remaining safety proofs|
@@ -18,7 +17,6 @@ Shipped history lives in GitHub Releases and git history.
 
 ## Remaining
 
-- [v0.8-roadmap.md](v0.8-roadmap.md): editor/PDF parity.
 - [backlog.md](backlog.md): open follow-ups, Vietnam production work, acceptance evidence, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
 

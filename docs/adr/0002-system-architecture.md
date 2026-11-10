@@ -1,10 +1,10 @@
 # 0002: Go API, one Vue renderer, HTTP autosave, and SSE refresh
 
-Status: Accepted (2026-08-01).
+Status: Accepted (2026-08-01, 2026-11-10).
 
 ## Context
 
-The resume layout must render identically in three places: the editor's live
+The resume layout must render the same way in three places: the editor's live
 preview, the public page that search engines and AI crawlers read, and the PDF.
 Two renderers (for example Go templates and Vue components) guarantee drift.
 
@@ -56,8 +56,12 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 ## Consequences
 
 - Node runs in production beside Go (two app services and Caddy).
-- Preview, public page, and PDF match by construction; golden snapshots and
-  screenshot diffs protect this.
+- Preview, public page, and PDF share one renderer, so content and structure
+  match. Line and page breaks in the editor preview are advisory and Chromium
+  print is authoritative ([print design](../design/templates/print.md)): a word
+  within about 0.4 px of a line edge can wrap differently, and the ceilings in
+  `apps/web/e2e/preview-gap-expected.json` bound the drift for the tested
+  samples. Golden snapshots, display checks, and those ceilings protect this.
 - No bidirectional channel exists. Collaborative editing (CRDT or OT) would be a
   new decision.
 - SSE streams need heartbeats, connection caps, and slow-client eviction; the
@@ -68,3 +72,8 @@ a reconnect always refetches, because PostgreSQL `NOTIFY` is not durable.
 Consolidates former ADRs 0002 (renderer split), 0003 (SSE and HTTP autosave),
 and 0007 (unversioned health endpoints), all accepted 2026-08-01 and unchanged
 in substance.
+
+On 2026-11-10 the owner accepted up to two preview line breaks that differ from
+the PDF in the tested samples, because no shared renderer change removed the
+measured drift; Context now says "the same way" instead of "identically", and
+Consequences keep preview breaks advisory instead of matching by construction.
