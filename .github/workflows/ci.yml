@@ -85,7 +85,7 @@ jobs:
             elif ! runs=$(timeout 30s gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BEFORE_SHA&event=push&per_page=50" 2>/dev/null); then
               selection=full
               mutations=1
-            elif ! verdict=$(printf '%s\n' "$runs" | jq -r 'if (.workflow_runs | type) != "array" then error("shape") elif any(.workflow_runs[]; type == "object" and .conclusion == "success" and .path == ".github/workflows/ci.yml" and .head_branch == "main" and .event == "push") then "green" else "other" end' 2>/dev/null); then
+            elif ! verdict=$(printf '%s\n' "$runs" | jq -er 'if (.workflow_runs | type) != "array" then error("shape") elif any(.workflow_runs[]; type == "object" and .conclusion == "success" and .path == ".github/workflows/ci.yml" and .head_branch == "main" and .event == "push") then "green" else "other" end' 2>/dev/null); then
               selection=full
               mutations=1
             elif [ "$verdict" != green ]; then
