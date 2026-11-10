@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      checks: read
+      actions: read
     outputs:
       base_sha: ${{ steps.comparison.outputs.base_sha }}
       selection: ${{ steps.selection.outputs.selection }}
@@ -80,13 +80,15 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ] && [ "$selection" = no-web ]; then
             if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
               selection=full
-            elif ! checks=$(timeout 30s gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE_SHA/check-runs?check_name=ci" 2>/dev/null); then
+            # Only a successful main push run of this workflow counts; GitHub
+            # Apps can write check runs but cannot create workflow runs.
+            elif ! runs=$(timeout 30s gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BEFORE_SHA&event=push&per_page=50" 2>/dev/null); then
               selection=full
               mutations=1
-            elif ! printf '%s\n' "$checks" | jq -e '.check_runs | type == "array"' >/dev/null 2>&1; then
+            elif ! verdict=$(printf '%s\n' "$runs" | jq -r 'if (.workflow_runs | type) != "array" then error("shape") elif any(.workflow_runs[]; type == "object" and .conclusion == "success" and .path == ".github/workflows/ci.yml" and .head_branch == "main" and .event == "push") then "green" else "other" end' 2>/dev/null); then
               selection=full
               mutations=1
-            elif ! printf '%s\n' "$checks" | jq -e 'any(.check_runs[]; .conclusion == "success")' >/dev/null 2>&1; then
+            elif [ "$verdict" != green ]; then
               selection=full
             fi
           fi

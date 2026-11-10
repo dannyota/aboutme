@@ -9,20 +9,21 @@ Put the selector in `scripts/ci-path-selection.py`, using Python's standard
 library. Preflight publishes `selection` as `full`, `prose`, or `no-web` after
 the comparison and immutable-artifact guards. PRs compare with the PR base; main
 pushes compare with `before`. Only PRs select `prose`. PRs and main pushes may
-select `no-web`; a push also requires the `before` commit's `ci` check to have
-concluded `success`. Missing or failed checks, API errors, and an all-zero
-`before` select `full`. Dispatch and nightly schedule select `full`. Keep
-workflow triggers unfiltered.
+select `no-web`; a push also requires a successful `ci.yml` workflow run for the
+`before` commit on a main push (a workflow run, not a check run, because GitHub
+Apps can write check runs). Missing or failed runs and an all-zero `before`
+select `full`; API or parsing errors select `full` with mutations on. Dispatch
+and nightly schedule select `full`. Keep workflow triggers unfiltered.
 
 `no-web` requires every changed path to be outside `apps/web/`, `packages/`,
 `docs/api/`, `.github/`, and the paths in `scripts/web-e2e-source.manifest`. The
 manifest itself, `scripts/web-e2e-source.sh`,
 `scripts/generate-web-e2e-source-manifest.sh`,
 `scripts/collect-browser-diagnostics.py`, `Makefile`, `.tool-versions`,
-`package.json`, and `package-lock.json` are also web inputs. Check both sides of
-renames. `prose` takes precedence. Preflight also publishes `mutations=1` for
-changes under `apps/web/e2e/`, schedules, dispatches, or errors; otherwise it
-publishes `0`.
+`.gitignore`, `package.json`, and `package-lock.json` are also web inputs. Check
+both sides of renames. `prose` takes precedence. Preflight also publishes
+`mutations=1` for changes under `apps/web/e2e/`, schedules, dispatches, or
+errors; otherwise it publishes `0`.
 
 The complete initial allowlist is `docs/adr/[0-9][0-9][0-9][0-9]-*.md` and
 `docs/plans/**/*.md`. Match repository-relative paths case-sensitively: `*`
