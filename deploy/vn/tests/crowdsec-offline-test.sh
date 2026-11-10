@@ -6,26 +6,26 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 
 if [[ ${1:-} == packages ]]; then
+  if [[ ! -d ${ABOUTME_VN_DEBS:-} || ! -f ${ABOUTME_VN_DEBS:-}/Packages || ! -f ${ABOUTME_VN_DEBS:-}/SHA256SUMS ]]; then
+    echo 'ABOUTME_VN_DEBS must contain Packages and SHA256SUMS' >&2
+    exit 1
+  fi
   [[ $EUID == 0 && ${GITHUB_ACTIONS:-} == true ]] || exit 1
   proof=$(mktemp -d /run/crowdsec-package-proof.XXXXXX)
   mount -t tmpfs -o size=512m,mode=0700 tmpfs "$proof"
   trap 'status=$?; systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null 2>&1; umount "$proof"; rmdir "$proof"; exit "$status"' EXIT
   trap 'echo "FAIL pinned-package-proof" >&2' ERR
-  install -d -m 0755 /etc/apt/keyrings
-  install -m 0644 "$repo_root/deploy/vn/host/keys/pgdg.asc" /etc/apt/keyrings/postgresql.asc
-  gpg --dearmor --yes -o /etc/apt/keyrings/crowdsec.gpg "$repo_root/deploy/vn/host/keys/crowdsec.asc" 2>/dev/null
-  [[ $(gpg --show-keys --with-colons "$repo_root/deploy/vn/host/keys/crowdsec.asc" 2>/dev/null |
-    awk -F: '$1=="pub" {want=1;next} want&&$1=="fpr" {print $10;want=0}') == 6A89E3C2303A901A889971D3376ED5326E93CD0C ]]
-  printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main' >/etc/apt/sources.list.d/crowdsec.list
-  printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' >/etc/apt/sources.list.d/pgdg.list
-  apt-get update -qq >/dev/null 2>&1
-  apt-get -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null \
+  (cd "$ABOUTME_VN_DEBS" && sha256sum -c --quiet SHA256SUMS)
+  # CI installs only from the pinned package image: its digest and the pinned
+  # SHA256SUMS hash replace apt signatures for this local source. The source
+  # stays configured so later package installs in the job resolve the same pins.
+  printf 'deb [trusted=yes] file:%s ./\n' "$ABOUTME_VN_DEBS" >/etc/apt/sources.list.d/aboutme-ci-debs.list
+  apt_options=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/aboutme-ci-debs.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
+  cp "$ABOUTME_VN_DEBS/crowdsec_1.8.2_amd64.deb" "$ABOUTME_VN_DEBS/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" "$proof/"
+  apt-get "${apt_options[@]}" update -qq >/dev/null 2>&1
+  apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null \
     install -y -qq postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 \
     postgresql-client-18=18.6-1.pgdg24.04+2 python3-yaml nftables gettext-base strace >/dev/null 2>&1
-  (
-    cd "$proof"
-    apt-get download crowdsec=1.8.2 crowdsec-firewall-bouncer-nftables=0.0.36 >/dev/null 2>&1
-  )
   printf '%s\n' \
     "d534ad21e6eed3d82a8fd748fa19f34970e95bfccd99735c0ebebcbad1e6366e  $proof/crowdsec_1.8.2_amd64.deb" \
     "fb3f38d222793cd031dac7e2b33076033a05c5bb476f323129d431cdc8b69b78  $proof/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" |
@@ -93,7 +93,7 @@ PY
   before=$(catalog | sha256sum)
   [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -h /run/postgresql -p 5432 -d postgres \
     -c "SELECT count(*) FROM pg_database WHERE datname='crowdsec';" 2>/dev/null) == 0 ]]
-  crowdsec_install_offline apt-get -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
+  crowdsec_install_offline apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
     -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.2
   [[ $(dpkg-query -W -f='${Status}\t${Version}' crowdsec) == $'install ok installed\t1.8.2' ]]
   # Read loaded command metadata only. Services stay disabled and the missing
@@ -133,13 +133,19 @@ PY
   [[ -z $(find /var/lib/crowdsec -type f -name '*.db*' -print -quit) ]]
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
+  printf 'PASS pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
   exit 0
 fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
+
+if env -u ABOUTME_VN_DEBS GITHUB_ACTIONS=true bash "${BASH_SOURCE[0]}" packages 2>"$work/missing-debs"; then
+  echo "CI package proof accepted a missing package directory" >&2
+  exit 1
+fi
+grep -qF 'ABOUTME_VN_DEBS must contain Packages and SHA256SUMS' "$work/missing-debs"
 
 cat >"$work/bin/debconf-set-selections" <<'STUB'
 #!/usr/bin/env bash
