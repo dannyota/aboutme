@@ -359,13 +359,23 @@ check_go() {
   # is linted with that config, from that directory, over its changed
   # packages. Go code outside those directories (packages/schema/gen/go,
   # deploy/caddy/production/build) gets gofmt alone, as before.
-  local dir packages_probe
-  local -a linted=()
+  local dir package probe count
+  local -a linted=() candidates=() selected=()
   for dir in "${dirs[@]}"; do
-    packages_probe=$(go_packages "$dir")
-    [[ -n $packages_probe ]] && linted+=("$dir")
+    count=${#selected[@]}
+    mapfile -t candidates < <(go_packages "$dir")
+    for package in "${candidates[@]}"; do
+      if command -v go >/dev/null 2>&1 && probe=$(cd "$dir" && GOFLAGS=-p=2 go list -e -f \
+        '{{if and .IgnoredGoFiles (not .InvalidGoFiles) (not .GoFiles) (not .CgoFiles) (not .TestGoFiles) (not .XTestGoFiles)}}skip{{end}}' \
+        "$package") && [[ $probe == skip ]]; then
+        record golangci-lint skip "$dir/${package#./}: no buildable Go files"
+      else
+        selected+=("$dir:$package")
+      fi
+    done
+    ((${#selected[@]} == count)) || linted+=("$dir")
   done
-  if ((${#linted[@]} == 0)); then
+  if ((${#selected[@]} == 0)); then
     record golangci-lint skip "no changed packages in a linted directory"
     return
   fi
@@ -378,7 +388,10 @@ check_go() {
   fi
   local -a packages
   for dir in "${linted[@]}"; do
-    mapfile -t packages < <(go_packages "$dir")
+    packages=()
+    for package in "${selected[@]}"; do
+      [[ $package == "$dir:"* ]] && packages+=("${package#"$dir:"}")
+    done
     run golangci-lint "$dir: ${#packages[@]} package(s)" bash -c "cd '$dir' &&
       GOMEMLIMIT=1536MiB GOFLAGS=-p=2 golangci-lint run --concurrency=2 \"\$@\"" \
       golangci-lint "${packages[@]}"
