@@ -154,15 +154,15 @@ jobs:
           sudo env GITHUB_ACTIONS=true unshare --mount --propagation private \
             bash deploy/vn/tests/crowdsec-db-test.sh derive | \
             tee "$RUNNER_TEMP/crowdsec-catalog-output.txt"
-          sed -n '/^BEGIN crowdsec-v1.8.1-postgresql18-catalog$/,/^END crowdsec-v1.8.1-postgresql18-catalog$/p' \
+          sed -n '/^BEGIN crowdsec-v1.8.2-postgresql18-catalog$/,/^END crowdsec-v1.8.2-postgresql18-catalog$/p' \
             "$RUNNER_TEMP/crowdsec-catalog-output.txt" | sed '1d;$d' \
-            >"$RUNNER_TEMP/crowdsec-schema-v1.8.1.tsv"
-          test -s "$RUNNER_TEMP/crowdsec-schema-v1.8.1.tsv"
+            >"$RUNNER_TEMP/crowdsec-schema-v1.8.2.tsv"
+          test -s "$RUNNER_TEMP/crowdsec-schema-v1.8.2.tsv"
       - name: Upload catalog metadata for review
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crowdsec-postgresql-catalog
-          path: ${{ runner.temp }}/crowdsec-schema-v1.8.1.tsv
+          path: ${{ runner.temp }}/crowdsec-schema-v1.8.2.tsv
           if-no-files-found: error
           retention-days: 7
       - name: Test inactive PostgreSQL gate

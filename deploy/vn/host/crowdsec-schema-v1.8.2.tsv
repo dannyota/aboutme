@@ -103,6 +103,7 @@ column	machines	15	osversion	character varying	false
 column	machines	16	featureflags	character varying	false			
 column	machines	17	hubstate	jsonb	false			
 column	machines	18	datasources	jsonb	false			
+column	machines	19	features	jsonb	false			
 column	machines	2	created_at	timestamp with time zone	true			
 column	machines	3	updated_at	timestamp with time zone	true			
 column	machines	4	last_push	timestamp with time zone	false			
@@ -230,7 +231,7 @@ index	config_items	config_items_pkey	CREATE UNIQUE INDEX config_items_pkey ON pu
 index	decisions	decision_alert_decisions	CREATE INDEX decision_alert_decisions ON public.decisions USING btree (alert_decisions)	true	true
 index	decisions	decision_start_ip_end_ip	CREATE INDEX decision_start_ip_end_ip ON public.decisions USING btree (start_ip, end_ip)	true	true
 index	decisions	decision_until	CREATE INDEX decision_until ON public.decisions USING btree (until)	true	true
-index	decisions	decision_value_type_scope_until	CREATE INDEX decision_value_type_scope_until ON public.decisions USING btree (value, type, scope, until)	true	true
+index	decisions	decision_value_type_scope_until_simulated	CREATE INDEX decision_value_type_scope_until_simulated ON public.decisions USING btree (value, type, scope, until, simulated)	true	true
 index	decisions	decisions_pkey	CREATE UNIQUE INDEX decisions_pkey ON public.decisions USING btree (id)	true	true
 index	events	event_alert_events	CREATE INDEX event_alert_events ON public.events USING btree (alert_events)	true	true
 index	events	events_pkey	CREATE UNIQUE INDEX events_pkey ON public.events USING btree (id)	true	true
@@ -279,7 +280,7 @@ relation	config_items_pkey	i	crowdsec
 relation	decision_alert_decisions	i	crowdsec	
 relation	decision_start_ip_end_ip	i	crowdsec	
 relation	decision_until	i	crowdsec	
-relation	decision_value_type_scope_until	i	crowdsec	
+relation	decision_value_type_scope_until_simulated	i	crowdsec	
 relation	decisions	r	crowdsec	
 relation	decisions_id_seq	S	crowdsec	
 relation	decisions_pkey	i	crowdsec	

@@ -89,7 +89,7 @@ crowdsec_db_admin() {
 }
 crowdsec_db_psql() {
   cat >/dev/null
-  cat "$FIXTURE_CASE/lib/crowdsec-schema-v1.8.1.tsv"
+  cat "$FIXTURE_CASE/lib/crowdsec-schema-v1.8.2.tsv"
   printf 'check\ttrue\nidentity\t123:1577836800.000001\n'
 }
 SH
@@ -287,7 +287,7 @@ for mode in ordinary postgres; do
   printf '1\n' >"$FIXTURE_CASE/generation"
   touch "$FIXTURE_CASE/run/crowdsec-retention.lock" "$FIXTURE_CASE/state/fence.lock"
   chmod 0600 "$FIXTURE_CASE/run/crowdsec-retention.lock" "$FIXTURE_CASE/state/fence.lock"
-  cp "$FIXTURE_BUNDLE/host/crowdsec-schema-v1.8.1.tsv" "$FIXTURE_CASE/lib/"
+  cp "$FIXTURE_BUNDLE/host/crowdsec-schema-v1.8.2.tsv" "$FIXTURE_CASE/lib/"
   cp "$FIXTURE_BUNDLE/host/crowdsec-retention.sh" "$FIXTURE_CASE/lib/"
   cp "$work/database-fixture.sh" "$FIXTURE_CASE/"
   sed -e "s|$work/host-placeholder|$FIXTURE_CASE/etc/postgresql/18/main|g" \

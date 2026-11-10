@@ -41,6 +41,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [CrowdSec notice commands](crowdsec-privacy-notification-commands.md)  | Send authority, restore fence, activation, abort, and wire contract        |
 | Other   | [CrowdSec retention batching](crowdsec-retention-batching.md)          | Nightly and age-triggered stopped reconciliation                           |
 | Other   | [CrowdSec retention reload](crowdsec-retention-reload.md)              | Why graceful reload cannot replace stopped reconciliation                  |
+| Other   | [CrowdSec 1.8.2 upgrade](crowdsec-1.8.2-raise.md)                      | Explicit reset, catalog generation, rollout, and recovery                  |
 | 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                            |
 | Other   | [Host hardening](host-hardening.md)                                    | Proposed host controls, evidence, risks, and staged rollout                |
 | Other   | [Host hardening: access](host-hardening-access.md)                     | Proposed SSH, security group, and private-value controls                   |

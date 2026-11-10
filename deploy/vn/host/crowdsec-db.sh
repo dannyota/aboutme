@@ -14,7 +14,7 @@ crowdsec_db_root() {
     [[ ! -v $name ]] || return 1
   done
   crowdsec_db_safe /usr/local/lib/aboutme/crowdsec-db.sh 755 &&
-    crowdsec_db_safe /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv 644
+    crowdsec_db_safe /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv 644
 }
 crowdsec_db_psql() {
   timeout 15 env -i PATH=/usr/bin:/bin PGPASSFILE=/dev/null PGSSLMODE=disable \
@@ -222,9 +222,9 @@ crowdsec_db_ready() {
   identity=$(grep '^identity' <<<"$result") || return 1
   [[ $identity =~ ^identity$'\t'[0-9]+:[0-9]+\.[0-9]+$ ]] || return 1
   actual=$(grep -vE '^(check|identity)' <<<"$result" | LC_ALL=C sort) || return 1
-  [[ $actual == "$(< /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv)" ]] || return 1
+  [[ $actual == "$(< /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv)" ]] || return 1
   crowdsec_db_epoch=$(printf '%s\n%s\n%s\n' "$before" "$identity" \
-    "$(sha256sum /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv | cut -d' ' -f1)" | sha256sum | cut -d' ' -f1) || return 1
+    "$(sha256sum /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv | cut -d' ' -f1)" | sha256sum | cut -d' ' -f1) || return 1
   [[ -z $expected || $expected == "$crowdsec_db_epoch" ]]
 }
 crowdsec_db_held_lock() {
@@ -261,7 +261,7 @@ crowdsec_db_apply() {
   [[ ${crowdsec_db_provisioning:-} == yes ]] && crowdsec_db_authority &&
     crowdsec_db_stopped && crowdsec_db_auth && crowdsec_db_role || return 1
   actual=$({ crowdsec_db_begin; crowdsec_db_catalog_sql; printf 'COMMIT;\n'; } | crowdsec_db_psql | LC_ALL=C sort) || return 1
-  [[ $actual == "$(< /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv)" ]] || return 1
+  [[ $actual == "$(< /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv)" ]] || return 1
   crowdsec_db_psql >/dev/null <<'SQL'
 BEGIN;
 SET LOCAL statement_timeout = '10s';

@@ -308,7 +308,7 @@ so.
 | `postgresql-18`, `postgresql-client-18`, `libpq5` | `18.6-1.pgdg24.04+2`   | PGDG key `host/keys/pgdg.asc`, fingerprint `B97B0AFC…ACCC4CF8`         |
 | `postgresql-common`                               | `293.pgdg24.04+1`      | the same PGDG key                                                      |
 | `pgbackrest`                                      | `2.59.3-1.pgdg24.04+1` | the same PGDG key                                                      |
-| `crowdsec`                                        | `1.8.1`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`              |
+| `crowdsec`                                        | `1.8.2`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`              |
 | `crowdsec-firewall-bouncer-nftables`              | `0.0.36`               | the same CrowdSec key                                                  |
 | `age`, `msmtp`                                    | Ubuntu archive         | Ubuntu archive signature; security updates through unattended-upgrades |
 
@@ -324,7 +324,7 @@ fail and holds each package after verifying its version.
 A CrowdSec engine or bouncer pin raise needs a reviewed catalog transition:
 `host/crowdsec-schema-v<version>.tsv` and `host/crowdsec-db.sh` compare the
 catalog exactly. Follow the
-[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md#engine-and-hub-upgrades);
+[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md#engine-upgrade-to-182);
 changing a version constant and rerunning the installer is not a supported
 CrowdSec upgrade procedure.
 

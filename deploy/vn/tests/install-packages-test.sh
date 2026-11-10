@@ -256,11 +256,11 @@ for package_state in missing unheld held-older held-exact; do
     missing) export ENGINE_STATE=missing ;;
     unheld) export ENGINE_STATE='install ok installed' ;;
     held-older) export ENGINE_STATE='hold ok installed' ;;
-    held-exact) export ENGINE_STATE='hold ok installed' ENGINE_VERSION=1.8.1 ;;
+    held-exact) export ENGINE_STATE='hold ok installed' ENGINE_VERSION=1.8.2 ;;
   esac
   bash "$work/install.sh" >"$work/out" 2>"$work/err" || fail "pinned install refused $package_state package"
   [[ ! -s $work/out && ! -s $work/err ]] || fail 'pinned install printed diagnostics'
-  expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.1\nmark hold crowdsec'
+  expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.2\nmark hold crowdsec'
   [[ $(<"$CALLS") == "$expected" ]] || fail 'pinned install changed apt arguments or hold order'
 done
 printf 'PASS pinned-install-and-held-upgrade-apply-hold-after-exact-version-check\n'
@@ -281,7 +281,7 @@ for VERIFY_PACKAGE in yes offline; do
     expected_status=1
     if [[ $VERIFY_PACKAGE == yes && $fault != version ]]; then expected_status=100; fi
     [[ $status == "$expected_status" ]] || fail "$fault failure lost its status through $VERIFY_PACKAGE"
-    expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.1\nmark hold crowdsec'
+    expected=$'mark showhold\napt install -y -qq --allow-downgrades --allow-change-held-packages crowdsec=1.8.2\nmark hold crowdsec'
     if [[ $VERIFY_PACKAGE == offline ]]; then
       expected=$'offline\nunit stop crowdsec.service crowdsec-firewall-bouncer.service\nunit mask --runtime crowdsec.service crowdsec-firewall-bouncer.service\n'"$expected"$'\nclose'
     fi
@@ -291,7 +291,7 @@ for VERIFY_PACKAGE in yes offline; do
       [[ $(<"$FIXTURE_CASE/unpacked-state") == 'install ok installed' ]] || fail "$fault fixture did not change the selection"
     fi
     if [[ $fault == version ]]; then
-      grep -qxF 'install: crowdsec is not installed at pinned 1.8.1' "$work/err" || fail 'version failure lost its diagnostic'
+      grep -qxF 'install: crowdsec is not installed at pinned 1.8.2' "$work/err" || fail 'version failure lost its diagnostic'
       if [[ $VERIFY_PACKAGE == offline ]]; then
         grep -qxF 'install: crowdsec_package_refused' "$work/err" || fail 'offline install lost its refusal'
       fi

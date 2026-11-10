@@ -62,7 +62,7 @@ module retention-profile-proof
 
 go 1.27.3
 
-require github.com/crowdsecurity/crowdsec v1.8.1
+require github.com/crowdsecurity/crowdsec v1.8.2
 MOD
   cat >"$proof/main.go" <<'GO'
 package main
@@ -340,7 +340,7 @@ SQL
     install -m 0755 "$root/deploy/vn/host/$script.sh" "$retention_fixture/lib/$script.sh"
   done
   install -m 0755 "$root/deploy/vn/scripts/fence.sh" "$retention_fixture/lib/fence.sh"
-  install -m 0644 "$root/deploy/vn/host/crowdsec-schema-v1.8.1.tsv" "$retention_fixture/lib/"
+  install -m 0644 "$root/deploy/vn/host/crowdsec-schema-v1.8.2.tsv" "$retention_fixture/lib/"
   printf '#!/usr/bin/env bash\nprintf "alarm\\n" >>%q/alarms\n' "$retention_fixture" >"$retention_fixture/lib/alert.sh"
   chmod 0755 "$retention_fixture/lib/alert.sh"
   mount --bind "$retention_fixture/lib" /usr/local/lib/aboutme

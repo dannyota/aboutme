@@ -15,7 +15,7 @@ service = (host / "etc/systemd/system/aboutme-crowdsec-vacuum.service").read_tex
 timer = (host / "etc/systemd/system/aboutme-crowdsec-vacuum.timer").read_text()
 assert "crowdsec-db.sh" in script and "preflight-ready" in script
 assert re.search(r"\bflock\b", script)
-assert "crowdsec-schema-v1.8.1.tsv" in script
+assert "crowdsec-schema-v1.8.2.tsv" in script
 assert re.search(r"VACUUM\s*\(\s*ANALYZE\s+FALSE\s*\)", script, re.I)
 without_allowed = re.sub(r"VACUUM\s*\(\s*ANALYZE\s+FALSE\s*\)", "", script, flags=re.I)
 assert not re.search(r"\bANALYZE\b|\bFULL\b|\bFREEZE\b|\bCHECKPOINT\b|sqlite|pgbackrest|pg_switch_wal", without_allowed, re.I)
