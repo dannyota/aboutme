@@ -75,8 +75,10 @@ The resume document stays the only authority for what a resume shows.
   without it behaves as today.
 - Every write of a resume document checks that each `projectId` names a project
   of the same account and that no two entries of the resume name the same
-  project. The check runs under the owner lock that every resume write already
-  takes, on create, entry upsert, import and agent writes alike.
+  project. The check runs inside the owner-locked transaction of every REST and
+  agent write, on create, entry upsert and import alike. An agent write that
+  adds or changes a reference also needs the project read scope
+  ([contract](projects-contract.md#agents)).
 - Linking inserts an entry in the resume's project section. When the resume has
   none, linking creates a section with key `projects` at the end of the main
   column, through the existing structure command.
@@ -127,6 +129,8 @@ work in [shell and editor](ui/shell-and-editor.md) and
 ## Open points for the owner
 
 1. The proposed limits above.
-2. Print: the project title as a link only (proposed, no layout change), or an
-   added line with the address of the resume's project list, which changes the
-   renderer contract, pagination and the product images.
+2. Print. The roadmap says the PDF and print carry a short link so a reader of
+   any copy can reach the projects. This design proposes the title as a link
+   only, which serves a PDF reader and not a paper reader. Choose: title link
+   only in v0.9 (no layout change), or an added printed address line (changes
+   the renderer contract, pagination and the product images).
