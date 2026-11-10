@@ -25,7 +25,7 @@ The owner's Ubuntu host (8 CPUs, shared with other projects' VMs) runs the check
 
 |Change touches|Local gate|
 |-|-|
-|Anything|`make pre-push`|
+|Anything|First `make tools-check ARGS="nodejs golang"`: a toolchain that differs from `.tool-versions` fails the gate (host Node 26 failed 249 web tests that pass on the pinned 24); then `make pre-push`|
 |Markdown only|`make pre-push` and `make docs-links-check`|
 |`scripts/`, `Makefile`, `.github/`|`make operational-test-fast`; for the Makefile or workflows also `bash scripts/test/makefile-safety-test.sh`, `bash scripts/test/workflow-safety-test.sh`, and `node --test scripts/test/workflow-contract.test.mjs`|
 |`apps/web/` or schema TypeScript|`make web-lint web-typecheck web-test`, and `WEB_E2E_SHARD=<shard> make web-e2e` for each affected shard; all five when the renderer, shared CSS, Nuxt configuration, or a lockfile changes. One harness shard and one normal shard can run together; two of the same surface cannot|
