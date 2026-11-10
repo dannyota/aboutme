@@ -6,7 +6,7 @@ import { assertOverflowTextStyle } from './pdf-text-style';
 import { overflowPdfChunks } from './pdf-input-content';
 import { sampleInputMutationTests, overflowInputMutationTests }
   from './pdf-input-mutations';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, mutationTest } from './style-mutation';
 import {
   checkMembership,
   expectedEntryIds,
@@ -31,7 +31,7 @@ import { assertPdfPageGeometry } from './sample-pdf-content';
 sampleInputMutationTests();
 overflowInputMutationTests();
 
-test('PDF columns reject a main entry moved into the page-two sidebar',
+mutationTest('PDF columns reject a main entry moved into the page-two sidebar',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -72,7 +72,7 @@ test('PDF columns reject a main entry moved into the page-two sidebar',
 
 for (const mutation of ['margin', 'coincident text',
   'cross-column collision'] as const) {
-  test(`PDF glyph bounds reject ${mutation}`, async ({ page }) => {
+  mutationTest(`PDF glyph bounds reject ${mutation}`, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     await page.setViewportSize({
@@ -133,7 +133,9 @@ for (const mutation of ['margin', 'coincident text',
   });
 }
 
-test('PDF content measurements detect entry and accent mutations', async ({
+const pdfContentMutationTitle
+  = 'PDF content measurements detect entry and accent mutations';
+mutationTest(pdfContentMutationTitle, async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -201,7 +203,7 @@ test('PDF content measurements detect entry and accent mutations', async ({
   expect(external).toEqual([]);
 });
 
-test('PDF membership detects forced break', async ({ page }) => {
+mutationTest('PDF membership detects forced break', async ({ page }) => {
   test.setTimeout(30_000);
   const external = await denyExternalRequests(page);
   const printCase = CASES[1]!;
@@ -226,7 +228,7 @@ test('PDF membership detects forced break', async ({ page }) => {
   expect(external).toEqual([]);
 });
 
-test('PDF membership detects unbreakable entries', async ({ page }) => {
+mutationTest('PDF membership detects unbreakable entries', async ({ page }) => {
   const external = await denyExternalRequests(page);
   await page.emulateMedia({ media: 'print' });
   expect((await page.goto('/_harness/render?fixture=print-probe-breakable-entry'
@@ -276,7 +278,9 @@ const PAINT_MUTATIONS = [
   'photo', 'substituted photo',
 ] as const;
 for (const mutation of PAINT_MUTATIONS) {
-  test(`PDF measurements detect a changed ${mutation}`, async ({ page }) => {
+  mutationTest(`PDF measurements detect a changed ${mutation}`, async ({
+    page,
+  }) => {
     test.setTimeout(30_000);
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -401,7 +405,9 @@ for (const mutation of PAINT_MUTATIONS) {
 }
 
 for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
-  test(`PDF ${mutation} detects a level-four mutation`, async ({ page }) => {
+  mutationTest(`PDF ${mutation} detects a level-four mutation`, async ({
+    page,
+  }) => {
     test.setTimeout(30_000);
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -474,7 +480,7 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
     if (fixture.startsWith('sample-') && defect === 'image') {
       continue;
     }
-    test(`${fixture} print DOM detects ${defect}`, async ({ page }) => {
+    mutationTest(`${fixture} print DOM detects ${defect}`, async ({ page }) => {
       const external = await denyExternalRequests(page);
       await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
       await page.setViewportSize({ width: 688, height: 1123 });
@@ -556,7 +562,9 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
 
 for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
   for (const defect of ['count', 'size'] as const) {
-    test(`${fixture} PDF page geometry detects changed ${defect}`, async ({
+    const pdfGeometryMutationTitle
+      = `${fixture} PDF page geometry detects changed ${defect}`;
+    mutationTest(pdfGeometryMutationTitle, async ({
       page,
     }) => {
       const external = await denyExternalRequests(page);
@@ -597,7 +605,7 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
 }
 
 for (const defect of ['font size', 'color', 'icon color', 'crop'] as const) {
-  test(`overflow print contract detects changed ${defect}`, async ({
+  mutationTest(`overflow print contract detects changed ${defect}`, async ({
     page,
   }) => {
     const external = await denyExternalRequests(page);

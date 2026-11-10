@@ -8,7 +8,8 @@ import {
   measureVerticalFlow,
 } from './display-assertions';
 import {
-  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
+  screenMutationTests,
 } from './style-mutation';
 import {
   expectGateDetails, expectGateProviders, expectInviteText, GATE_TYPE,
@@ -119,7 +120,7 @@ test.describe('join invite', () => {
 });
 
 for (const kind of ['long text', 'nested clipping', 'overlap'] as const) {
-  test(`display assertions reject ${kind}`, async ({ page }) => {
+  mutationTest(`display assertions reject ${kind}`, async ({ page }) => {
     await page.setContent(`
       <div id="text" style="width: 100px; height: 20px; overflow: hidden">
         <span>One line</span>
@@ -434,14 +435,16 @@ for (const placement of ['bar', 'card'] as const) {
     });
   };
   styleProofs(`invite ${placement}`, open, inviteType(placement));
-  test(`invite ${placement} rejects clipped paragraph`, async ({ page }) => {
+  mutationTest(`invite ${placement} rejects clipped paragraph`, async ({
+    page,
+  }) => {
     await open(page);
     await proveMutation(() => expectInviteText(page, 'vi', placement),
       () => applyStyleMutation(page.locator('.join-invite p'), {
         transform: ['translateY(-100px)', /matrix/u],
       }), 'Invite paragraph containment.');
   });
-  test(`invite ${placement} rejects hidden accessible text`, async ({
+  mutationTest(`invite ${placement} rejects hidden accessible text`, async ({
     page,
   }) => {
     await open(page);
@@ -451,7 +454,7 @@ for (const placement of ['bar', 'card'] as const) {
   });
 }
 
-test('gate rejects unexpected provider artwork', async ({ page }) => {
+mutationTest('gate rejects unexpected provider artwork', async ({ page }) => {
   await page.goto('/_harness/render?mode=gate&lng=vi&providers=google'
     + '&message=none');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);

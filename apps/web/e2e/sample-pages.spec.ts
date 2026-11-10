@@ -8,7 +8,7 @@ import type { Resume } from '@aboutme/schema';
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { measurePdfLayout } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, mutationTest } from './style-mutation';
 import { assertPrintDom, assertPhotoCrop, assertPrintRules } from './pdf-fonts';
 import {
   pdfParagraphGeometry, pdfTextPage, printedDisplayPages, withPrintedPdf,
@@ -202,7 +202,8 @@ test('sample paragraphs preserve input text across inline markup', async () => {
 });
 
 for (const templateId of ['ats-plain', 'elegant-serif-two']) {
-  test(`${templateId} print ranges allow visible overhang and reject clipping`,
+  mutationTest(
+    `${templateId} print ranges allow visible overhang and reject clipping`,
     async ({ page }) => {
       const external = await denyExternalRequests(page);
       await page.emulateMedia({ media: 'print' });
@@ -243,7 +244,7 @@ for (const templateId of ['ats-plain', 'elegant-serif-two']) {
     });
 }
 
-test('print heading displacement outside an ancestor clip fails',
+mutationTest('print heading displacement outside an ancestor clip fails',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -300,7 +301,7 @@ test('print text ranges support transformed text and font features',
   });
 
 for (const defect of ['ancestor clip', 'line overlap', 'horizontal overflow']) {
-  test(`print text ranges detect ${defect}`, async ({ page }) => {
+  mutationTest(`print text ranges detect ${defect}`, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
@@ -349,7 +350,7 @@ for (const defect of ['ancestor clip', 'line overlap', 'horizontal overflow']) {
   });
 }
 
-test('sample print DOM and PDF detect dropped bold with shared glyphs',
+mutationTest('sample print DOM and PDF detect dropped bold with shared glyphs',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -433,7 +434,9 @@ test('gallery sample page manifest stays current', async () => {
 for (const defect of ['font size', 'text color', 'icon color',
   'sidebar tint', 'level bar',
   'photo', 'margin', 'heading rule', 'line spacing'] as const) {
-  test(`sample PDF contract detects changed ${defect}`, async ({ page }) => {
+  mutationTest(`sample PDF contract detects changed ${defect}`, async ({
+    page,
+  }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
     const sample: Resume = JSON.parse(await readFile(resolve(
@@ -526,7 +529,9 @@ for (const defect of ['font size', 'text color', 'icon color',
 }
 
 for (const boundary of ['minimum', 'maximum'] as const) {
-  test(`sample PDF fill detects a broken ${boundary}`, async ({ page }) => {
+  mutationTest(`sample PDF fill detects a broken ${boundary}`, async ({
+    page,
+  }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     await page.setViewportSize({ width: 688, height: 1123 });

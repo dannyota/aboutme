@@ -9,7 +9,7 @@ import {
 } from './display-assertions';
 import {
   applyStyleMutation, mutateAttribute, mutateText, proveMutation,
-  screenMutationTests,
+  screenMutationTests, mutationTest,
 } from './style-mutation';
 import { expectLibraryStructure } from './gallery-details';
 import { expectLibraryGrid } from './gallery-display';
@@ -222,7 +222,9 @@ for (const [name, selector, styles] of [
     transform: ['translateY(4px)', 'matrix(1, 0, 0, 1, 0, 4)'],
   }],
 ] as const) {
-  test(`Library assertions reject changed ${name}`, async ({ page }) => {
+  mutationTest(`Library assertions reject changed ${name}`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
     await assertLibrary(page, 'vi', 'light', 390, false);
@@ -233,7 +235,7 @@ for (const [name, selector, styles] of [
 }
 
 for (const name of ['control', 'heading'] as const) {
-  test(`Library sheet rejects a hidden ${name}`, async ({ page }) => {
+  mutationTest(`Library sheet rejects a hidden ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
     await page.locator('[data-action="gallery-filters-open"]').click();
@@ -571,7 +573,9 @@ screenMutationTests('Library sheet', async (page) => {
 }, filterSheetContract('gallery', 'vi', 'light'));
 
 for (const defect of ['name', 'visibility', 'box'] as const) {
-  test(`Library sheet rejects changed Close ${defect}`, async ({ page }) => {
+  mutationTest(`Library sheet rejects changed Close ${defect}`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
     await page.locator('[data-action="gallery-filters-open"]').click();
@@ -593,7 +597,7 @@ for (const defect of ['name', 'visibility', 'box'] as const) {
   });
 }
 
-test('Library rejects missing list semantics', async ({ page }) => {
+mutationTest('Library rejects missing list semantics', async ({ page }) => {
   await page.goto('/templates');
   await prepareScreen(page);
   await proveMutation(() => expectLibraryStructure(page, false),
@@ -608,7 +612,9 @@ styleProofs('Library sheet', async (page) => {
   await page.locator('[data-action="gallery-filters-open"]').click();
 }, sheetType('gallery'));
 
-test('Library sheet rejects missing option semantics', async ({ page }) => {
+mutationTest('Library sheet rejects missing option semantics', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/templates');
   await page.locator('[data-action="gallery-filters-open"]').click();
@@ -618,7 +624,9 @@ test('Library sheet rejects missing option semantics', async ({ page }) => {
     'Sheet accessible structure.');
 });
 
-test('Library rejects changed accessible template names', async ({ page }) => {
+mutationTest('Library rejects changed accessible template names', async ({
+  page,
+}) => {
   await page.goto('/templates');
   await prepareScreen(page);
   await proveMutation(() => expectLibraryStructure(page, false),

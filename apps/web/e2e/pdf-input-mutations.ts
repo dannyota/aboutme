@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import type { Resume } from '@aboutme/schema';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -14,13 +14,13 @@ import {
   samplePdfContentMatches,
 } from './pdf-input-content';
 import { assertOverflowTextStyle } from './pdf-text-style';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, mutationTest } from './style-mutation';
 import { denyExternalRequests, waitForImages } from './support';
 
 export function sampleInputMutationTests(): void {
   for (const mutation of ['accents', 'replacement', 'reorder',
     'hide', 'duplicate'] as const) {
-    test(`sample PDF input expectations detect ${mutation}`, async ({
+    mutationTest(`sample PDF input expectations detect ${mutation}`, async ({
       page,
     }) => {
       const external = await denyExternalRequests(page);
@@ -119,7 +119,8 @@ export function sampleInputMutationTests(): void {
 export function overflowInputMutationTests(): void {
   for (const printCase of PRINT_CASES) {
     for (const field of ['name', 'contact'] as const) {
-      test(`${printCase.fixture} input content detects changed ${field}`,
+      mutationTest(
+        `${printCase.fixture} input content detects changed ${field}`,
         async ({ page }) => {
           const external = await denyExternalRequests(page);
           await page.emulateMedia({ media: 'print' });

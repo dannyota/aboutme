@@ -80,6 +80,10 @@ assert_web_e2e_rejected() {
   fi
 }
 
+assert_web_e2e_rejected invalid-mutations web-e2e \
+  'WEB_E2E_MUTATIONS must be 0 or 1' WEB_E2E_MUTATIONS=invalid
+assert_web_e2e_rejected invalid-fast-mutations web-e2e-fast \
+  'WEB_E2E_MUTATIONS must be 0 or 1' WEB_E2E_MUTATIONS=invalid
 assert_web_e2e_rejected invalid-run-id web-e2e \
   'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' WEB_E2E_RUN_ID='../bad'
 assert_web_e2e_rejected invalid-template-run-id web-template-pages \
@@ -303,7 +307,9 @@ from pathlib import Path
 import sys
 if os.environ.get("FIXTURE_CALLS"):
     Path(os.environ["FIXTURE_CALLS"]).write_text(json.dumps(sys.argv[1:]))
-mount = next(arg for arg in sys.argv if arg.endswith(":/results:rw"))
+mount = next((arg for arg in sys.argv if arg.endswith(":/results:rw")), None)
+if mount is None:
+    sys.exit(int(os.environ["FIXTURE_STATUS"]))
 mode = Path(mount.removesuffix(":/results:rw"))
 artifacts = mode / "harness/artifacts/fixture"
 artifacts.mkdir(parents=True)
@@ -330,7 +336,9 @@ for target, shard in [("web-e2e", shard) for shard in ["all", *shards]]:
         run_id = f"{target}-{shard}-{status}"
         calls = work / f"{run_id}-calls.json"
         result = subprocess.run(["/usr/bin/make", "--no-print-directory", target], cwd=repo, env={
-            **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
+            **{key: value for key, value in os.environ.items() if key != "WEB_E2E_MUTATIONS"},
+            **({"WEB_E2E_MUTATIONS": "0"} if status else {}),
+            "PATH": str(bin_dir) + ":" + os.environ["PATH"],
             "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
             "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": str(status),
             "FIXTURE_CALLS": str(calls), "WEB_E2E_RUN_ID": run_id, "WEB_E2E_SHARD": shard,
@@ -339,6 +347,7 @@ for target, shard in [("web-e2e", shard) for shard in ["all", *shards]]:
         if target == "web-e2e":
             args = json.loads(calls.read_text())
             env = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "-e")
+            assert env["WEB_E2E_MUTATIONS"] == ("0" if status else "1")
             selections.setdefault(shard, []).append(
                 (env["WEB_E2E_HARNESS_SPECS"].split(), env["WEB_E2E_NORMAL_SPECS"].split()))
         mode = repo / ".dev/web-e2e-results" / ("a" * 40) / run_id / "compare"
@@ -356,6 +365,20 @@ for target, shard in [("web-e2e", shard) for shard in ["all", *shards]]:
                             f"manifest_sha256={hashlib.sha256((repo / 'scripts/web-e2e-source.manifest').read_bytes()).hexdigest()}\n"
                             f"tar_sha256={hashlib.sha256(archive.read_bytes()).hexdigest()}\n"
                             f"browser_image_digest={image.split('@')[1]}\n")
+(repo / "apps/web/node_modules").mkdir(parents=True)
+for mutations in [None, "0"]:
+    calls = work / f"fast-calls-{mutations}.json"
+    env = {key: value for key, value in os.environ.items() if key != "WEB_E2E_MUTATIONS"}
+    env.update({"PATH": str(bin_dir) + ":" + os.environ["PATH"],
+                "FIXTURE_CALLS": str(calls), "FIXTURE_STATUS": "0"})
+    if mutations is not None:
+        env["WEB_E2E_MUTATIONS"] = mutations
+    result = subprocess.run(["/usr/bin/make", "--no-print-directory", "web-e2e-fast"],
+                            cwd=repo, env=env, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    args = json.loads(calls.read_text())
+    passed = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "-e")
+    assert passed["WEB_E2E_MUTATIONS"] == (mutations or "1")
 (repo / "scripts/collect-browser-diagnostics.py").write_text("raise RuntimeError('fixture')\n")
 for status in [42, 0]:
     result = subprocess.run(["/usr/bin/make", "--no-print-directory", "web-e2e"], cwd=repo, env={

@@ -5,7 +5,7 @@ import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
 
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, mutationTest } from './style-mutation';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -196,7 +196,7 @@ test.describe('renderer layout subset', () => {
   }
 });
 
-test('renderer text containment detects clipping', async ({ page }) => {
+mutationTest('renderer text containment detects clipping', async ({ page }) => {
   const response = await page.goto(
     '/_harness/render?fixture=vn-full&template=modern-sidebar&mode=continuous',
   );
@@ -217,7 +217,7 @@ for (const [name, styles] of [
   ['clipping', { height: '1px', overflow: 'hidden' }],
   ['opacity', { opacity: '0' }],
 ] as const) {
-  test(`renderer text containment detects ancestor ${name}`, async ({
+  mutationTest(`renderer text containment detects ancestor ${name}`, async ({
     page,
   }) => {
     const response = await page.goto(
@@ -593,7 +593,7 @@ test.describe('public page color scheme', () => {
   });
 });
 
-test('renderer crop detects ignored offsets', async ({ page }) => {
+mutationTest('renderer crop detects ignored offsets', async ({ page }) => {
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
     + '&mode=continuous');

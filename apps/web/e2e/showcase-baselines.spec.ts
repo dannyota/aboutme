@@ -10,7 +10,8 @@ import {
   measureTextContainment,
 } from './display-assertions';
 import {
-  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
+  screenMutationTests,
 } from './style-mutation';
 import {
   expectShowcaseDetails, expectShowcaseFlow, expectShowcaseHeading,
@@ -473,7 +474,7 @@ const SHOWCASE_MUTATIONS = [
 ] as const;
 
 for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
-  test(`showcase assertions reject ${name}`, async ({ page }) => {
+  mutationTest(`showcase assertions reject ${name}`, async ({ page }) => {
     test.setTimeout(60_000);
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
@@ -509,7 +510,9 @@ for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
 }
 
 for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
-  test(`showcase assertions reject changed ${name}`, async ({ page }) => {
+  mutationTest(`showcase assertions reject changed ${name}`, async ({
+    page,
+  }) => {
     test.setTimeout(60_000);
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
@@ -614,7 +617,7 @@ async function openFilledShowcase(page: Page): Promise<void> {
 
 styleProofs('showcase', openFilledShowcase, showcaseType(390, false));
 
-test('showcase rejects displaced result flow', async ({ page }) => {
+mutationTest('showcase rejects displaced result flow', async ({ page }) => {
   await openFilledShowcase(page);
   await proveMutation(() => expectShowcaseFlow(page),
     () => applyStyleMutation(page.getByTestId('showcase-results'), {
@@ -623,7 +626,9 @@ test('showcase rejects displaced result flow', async ({ page }) => {
 });
 
 for (const scope of ['list', 'pager'] as const) {
-  test(`showcase rejects changed ${scope} semantics`, async ({ page }) => {
+  mutationTest(`showcase rejects changed ${scope} semantics`, async ({
+    page,
+  }) => {
     await openFilledShowcase(page);
     await proveMutation(() => scope === 'list'
       ? expectShowcaseList(page, 'vi')
@@ -642,7 +647,9 @@ styleProofs('showcase sheet', async (page) => {
   await page.locator('[data-action="showcase-filters-open"]').click();
 }, sheetType('showcase'));
 
-test('showcase sheet rejects missing option semantics', async ({ page }) => {
+mutationTest('showcase sheet rejects missing option semantics', async ({
+  page,
+}) => {
   await openFilledShowcase(page);
   await page.locator('[data-action="showcase-filters-open"]').click();
   await proveMutation(() => expectSheetStructure(page, 'showcase', 'vi'),

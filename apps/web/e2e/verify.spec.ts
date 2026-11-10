@@ -1,7 +1,8 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import {
-  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
+  screenMutationTests,
 } from './style-mutation';
 import { expectVerifyIcon, expectVerifyStructure } from './verify-details';
 import {
@@ -560,7 +561,7 @@ for (const cell of DISPLAY_STATES) {
   }
 }
 
-test('verify display rejects overlapping cards', async ({ page }) => {
+mutationTest('verify display rejects overlapping cards', async ({ page }) => {
   await serveDeployment(page, { fixture: 'verified' });
   await gotoVerify(page, 'vi', 'light');
   await expect(page.getByTestId('verify-status')).toHaveAttribute(
@@ -587,7 +588,9 @@ screenMutationTests('verify', async (page) => {
     .toHaveAttribute('data-state', 'verified');
 }, verifyContract('vi', 'light'));
 
-test('verify status rejects a missing status icon', async ({ page }) => {
+mutationTest('verify status rejects a missing status icon', async ({
+  page,
+}) => {
   await serveDeployment(page, { fixture: 'verified' });
   await gotoVerify(page, 'vi', 'light');
   const icon = page.locator('.verify-mark .lucide-shield-check');
@@ -600,7 +603,9 @@ test('verify status rejects a missing status icon', async ({ page }) => {
 });
 
 for (const scope of ['chain', 'components', 'limits'] as const) {
-  test(`verify rejects changed ${scope} semantics`, async ({ page }) => {
+  mutationTest(`verify rejects changed ${scope} semantics`, async ({
+    page,
+  }) => {
     await serveDeployment(page, { fixture: 'verified' });
     await gotoVerify(page, 'vi', 'light');
     await expect(page.getByTestId('verify-status'))
@@ -615,7 +620,7 @@ for (const scope of ['chain', 'components', 'limits'] as const) {
 
 for (const state of ['verified', 'unavailable'] as const) {
   for (const defect of ['geometry', 'stroke'] as const) {
-    test(`verify ${state} rejects SVG ${defect}`, async ({ page }) => {
+    mutationTest(`verify ${state} rejects SVG ${defect}`, async ({ page }) => {
       await serveDeployment(page, state === 'verified'
         ? { fixture: 'verified' }
         : { status: 404, body: '[]' });

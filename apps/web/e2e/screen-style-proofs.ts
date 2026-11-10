@@ -3,7 +3,9 @@ import { test, type Page } from '@playwright/test';
 import {
   expectStyleRule, type StyleRule,
 } from './screen-expectations';
-import { applyStyleMutation, proveMutation } from './style-mutation';
+import {
+  applyStyleMutation, mutationTest, proveMutation,
+} from './style-mutation';
 
 /** Every literal style expectation has its own isolated mutation step. */
 export function styleProofs(
@@ -11,7 +13,9 @@ export function styleProofs(
   rules: readonly StyleRule[],
 ): void {
   for (const rule of rules) {
-    test(`${surface} rejects changed ${rule.message}`, async ({ page }) => {
+    mutationTest(`${surface} rejects changed ${rule.message}`, async ({
+      page,
+    }) => {
       test.setTimeout(90_000);
       await open(page);
       await expectStyleRule(page, rule);
