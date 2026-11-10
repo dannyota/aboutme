@@ -17,9 +17,10 @@ if [[ ${1:-} == packages ]]; then
   trap 'echo "FAIL pinned-package-proof" >&2' ERR
   (cd "$ABOUTME_VN_DEBS" && sha256sum -c --quiet SHA256SUMS)
   # CI installs only from the pinned package image: its digest and the pinned
-  # SHA256SUMS hash replace apt signatures for this local source.
-  printf 'deb [trusted=yes] file:%s ./\n' "$ABOUTME_VN_DEBS" >"$proof/local.list"
-  apt_options=(-o "Dir::Etc::sourcelist=$proof/local.list" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
+  # SHA256SUMS hash replace apt signatures for this local source. The source
+  # stays configured so later package installs in the job resolve the same pins.
+  printf 'deb [trusted=yes] file:%s ./\n' "$ABOUTME_VN_DEBS" >/etc/apt/sources.list.d/aboutme-ci-debs.list
+  apt_options=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/aboutme-ci-debs.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
   cp "$ABOUTME_VN_DEBS/crowdsec_1.8.2_amd64.deb" "$ABOUTME_VN_DEBS/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" "$proof/"
   apt-get "${apt_options[@]}" update -qq >/dev/null 2>&1
   apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null \
