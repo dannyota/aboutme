@@ -9,6 +9,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[crowdsec-postgresql.md](crowdsec-postgresql.md)|CrowdSec PostgreSQL storage, bounded probe paths, retention, and ordinary deployment|
 |[restore-drill.md](restore-drill.md)|Isolated backup restore drill and its remaining safety proofs|
+|[roadmap.md](roadmap.md)|Proposed vision and feature order for v0.9 to v1.0, with open owner questions|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
 A multi-release goal gets one plan file; its task briefs go in a directory of the same name while work is open. Delete both when the work ships, after moving any still-open item to `backlog.md`.
@@ -18,6 +19,7 @@ Shipped history lives in GitHub Releases and git history.
 ## Remaining
 
 - [backlog.md](backlog.md): open follow-ups, Vietnam production work, acceptance evidence, and launch gates.
+- [roadmap.md](roadmap.md): v0.9 to v1.0, proposed and awaiting the owner's answers.
 - Flutter app: deferred beyond web v1 (AC-API-002).
 
 ## Gates
