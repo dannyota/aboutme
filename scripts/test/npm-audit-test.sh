@@ -11,7 +11,7 @@ fail() {
 }
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-npm-audit-test.XXXXXX")
-trap '[ ! -f "$WORK/child.pids" ] || xargs kill -9 <"$WORK/child.pids" 2>/dev/null; rm -rf -- "$WORK"' EXIT
+trap '[ ! -f "$WORK/child.pids" ] || xargs kill -9 <"$WORK/child.pids" 2>/dev/null || true; rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/pkg"
 
 # The stub hangs on its first $WORK/hangs calls, then prints the report. By
