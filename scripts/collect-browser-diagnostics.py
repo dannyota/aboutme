@@ -198,8 +198,11 @@ try:
 
                 # Validate before publishing any images from this report.
                 selected = []
-                for spec in cases(data.get("suites", [])):
+                for spec, owner in ((spec, Path(suite.get("file", "")).name)
+                                    for suite in data.get("suites", []) for spec in cases([suite])):
                     file = Path(spec.get("file", "")).name
+                    if file not in specs:
+                        file = owner
                     line = spec.get("line")
                     if file not in specs or type(line) is not int or not 0 < line < 100000:
                         continue

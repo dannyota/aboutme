@@ -231,6 +231,27 @@ for fixture in ["failure", "container-path", "timed-out", "interrupted", "symlin
     assert facts["failures"] == ([] if fixture in ["malformed-report", "passed-case", "unknown-fixture"] else
                                   [{"file": "card.spec.ts", "line": 12, "status": state}])
     assert "commit=" + "a" * 40 in (public / "source-metadata.txt").read_text()
+# Helper locations belong to the archived top-level spec, not the helper.
+mode = work / "helper-location"
+artifacts = mode / "harness/artifacts/fixture"
+artifacts.mkdir(parents=True)
+image = artifacts / "test-failed-1.png"
+image.write_bytes(metadata_png)
+(mode / "harness/results.json").write_text(json.dumps({"suites": [
+    {"file": "apps/web/e2e/card.spec.ts", "suites": [{"specs": [
+        spec("style-mutation.ts", "failed", [attachment(image)], 37)]}]},
+    {"file": "apps/web/e2e/unknown.spec.ts", "specs": [
+        spec("style-mutation.ts", "failed", [attachment(image)], 38)]},
+    {"file": "apps/web/e2e/print-pdf.spec.ts", "specs": [
+        spec("style-mutation.ts", "failed", [attachment(image)], 39)]},
+]}))
+public = collect(mode)
+summary = json.loads((public / "failure-summary.json").read_text())
+assert summary["surfaces"]["harness"]["failures"] == [
+    {"file": "card.spec.ts", "line": 37, "status": "failed"}]
+images = list(public.rglob("*.png"))
+assert len(images) == 1 and images[0].name == "card.png"
+assert images[0].read_bytes() == png
 # A passing run selects exactly the eight review IDs, with fixed unavailable status.
 reviews = {
     "public-modern-sidebar-vi-dark-390": "resume-screen.spec.ts",
