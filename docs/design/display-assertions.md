@@ -2,8 +2,9 @@
 
 Status: Accepted by the owner, 2026-11-01. Revised with the owner's approval on
 2026-11-10: hosted Linux CI alone gates the cutover, and mutation tests stay in
-CI permanently. The assertions, mutation tests and product image generator have
-landed beside the pixel comparisons; the [cutover](#cutover) is pending.
+CI permanently. Most assertions and mutation tests, and the product image
+generator, have landed beside the pixel comparisons; the [cutover](#cutover)
+closes the remaining gaps and is pending.
 
 ## Decision and authority
 
@@ -151,13 +152,13 @@ Check independent inputs in every applicable screen/PDF cell, including
 engineer-compact and modern-sidebar. For `primitives/LevelWidget.vue`, add skill
 and language levels 0–5, absent level and all four modes in both languages.
 
-| Mapping        | Required evidence                                                                                                                                                                                                                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Bar            | Visible fill width = track width × level / 5 within 1 CSS px; correct start edge, height and colors. Zero has no painted fill.                                                                                                                                                                         |
-| Dots           | Five equal visible dots; exactly `level` leading dots filled. Check actual colors, diameter and gaps, not classes.                                                                                                                                                                                     |
-| Tag/absence    | Literal `level/5`, independent colors/padding/border and text containment. Absent level and text mode have no widget or stray paint.                                                                                                                                                                   |
-| PDF widgets    | Locate beside entry text; transform/clip painted paths. Fill length within 1 point; five dot shapes with exact filled count/order; tag text/background bounds. Unsupported paint evidence fails.                                                                                                       |
-| Other mappings | Paper size/margins, column ratios/gaps, section/entry spacing, font multipliers, photo crop/position, card fitted-name sizes and thumbnail scale use fixture inputs and independent tokens. Include grid counts, image ratios, page membership and color schemes in per-cell evidence before deletion. |
+| Mapping        | Required evidence                                                                                                                                                                                                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bar            | Visible fill width = track width × level / 5 within 1 CSS px; correct start edge, height and colors. Zero has no painted fill.                                                                                                                                                            |
+| Dots           | Five equal visible dots; exactly `level` leading dots filled. Check actual colors, diameter and gaps, not classes.                                                                                                                                                                        |
+| Tag/absence    | Literal `level/5`, independent colors/padding/border and text containment. Absent level and text mode have no widget or stray paint.                                                                                                                                                      |
+| PDF widgets    | Locate beside entry text; transform/clip painted paths. Fill length within 1 point; five dot shapes with exact filled count/order; tag text/background bounds. Unsupported paint evidence fails.                                                                                          |
+| Other mappings | Paper size/margins, column ratios/gaps, section/entry spacing, font multipliers, photo crop/position, card fitted-name sizes and thumbnail scale use fixture inputs and independent tokens. Assert grid counts, image ratios, page membership and color schemes in every applicable cell. |
 
 ## Print and PDF
 
@@ -199,19 +200,26 @@ pagination remains advisory and Chromium print remains authoritative.
 
 ## Proof: mutation tests
 
-A mutation test seeds one defect into a passing page, confirms the defect took
-effect, and requires the named assertion to fail. Mutation tests run in
-`web-e2e` on every commit, so an assertion that stops detecting its defect turns
-CI red. `style-mutation.ts` applies screen mutations and proves the computed
-value changed; `print-mutations.spec.ts` holds the PDF mutations.
+A mutation test seeds one defect into a passing page and requires one named
+assertion to fail. Mutation tests run in `web-e2e` on every commit, so an
+assertion that stops detecting its defect turns CI red. `style-mutation.ts`
+applies screen mutations; `print-mutations.spec.ts` and `print-pdf.spec.ts` hold
+the PDF mutations.
+
+An assertion class is one row of the [assertion contract](#assertion-contract)
+(geometry, overflow and clipping, overlap, typography, color and decoration,
+content and structure, accessibility, images) or one PDF rule under
+[print and PDF](#print-and-pdf) (page count and size, page membership, text,
+glyph bounds, paint and images, widgets).
 
 - Every spec in the inventory has at least one mutation test for each assertion
-  class it relies on. A new display assertion lands with its mutation test.
-- A mutation that crashes setup, or that leaves the computed value or PDF output
-  unchanged, does not count.
-- No per-image record, second platform, or proof that the old comparison caught
-  the mutation is required. A pixel comparison fails on every visible change by
-  construction, so that proof adds no information.
+  class it relies on. A mutation for a spec's fixture may live in a sibling
+  spec. A new display assertion lands with its mutation test.
+- Each mutation test shows three things: the clean page passes; the defect took
+  effect, as a changed computed value or changed PDF output; and the named
+  assertion fails. A setup crash or an unspecific thrown error does not count.
+- No per-image record, second platform, or replay against the old comparison is
+  required.
 
 | Mutation                                                               | Required failure                                    |
 | ---------------------------------------------------------------------- | --------------------------------------------------- |
@@ -298,24 +306,38 @@ the test fixtures. Showcase test card images become ephemeral fixtures.
 
 ## Cutover
 
-Landed by 2026-11-10: the shared invariants, surface checks, PDF checks and
-mutation tests in every inventory spec; the product image generator, validator
-and manifest hashes. Pixel comparisons still run beside them. Three steps
-remain, and none waits on another platform or tool.
+Landed by 2026-11-10: assertions and mutation tests in every inventory spec, and
+the product image generator, validator and manifest hashes. Coverage is partial.
+Known gaps: the guide pages check neither paragraph containment nor colors;
+`verify.spec.ts` mutates only overlap; `print.spec.ts` relies on mutations in
+sibling specs that are not yet mapped to it; `style-mutation.ts` skips its
+change check for string expectations; some mutation tests accept any thrown
+error. Pixel comparisons still run beside the assertions. Three steps remain,
+and none waits on another platform or tool.
 
-| Step                      | Lane and paths                                                                                          | Done when                                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                               | Each inventory row maps to its invariants, surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
-| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`; devops: `.github/workflows/ci.yml`; frontend capture | A failed case uploads only that case; a passing run uploads the eight review images; neither can change the gate result                |
-| 3. Delete the comparisons | frontend, devops and the shared `Makefile`, in one pull request                                         | Hosted CI is green on the exact commit                                                                                                 |
+| Step                      | Lane and paths                                                                                                                                                                       | Done when                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                                                                                                            | Each inventory row maps to its shared invariants, its surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
+| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`, `scripts/test/makefile-safety-test.sh`; shared: `Makefile` diagnostics trap; devops: `.github/workflows/ci.yml`; frontend capture | A failed case uploads only that case; a passing run uploads the eight review images; a failed optional capture cannot change the gate result      |
+| 3. Delete the comparisons | frontend, devops, tooling and the shared `Makefile`, in one pull request                                                                                                             | Steps 1 and 2 have landed; hosted CI is green on the exact commit                                                                                 |
 
 Step 3 deletes `apps/web/e2e/baselines/` and `apps/web/e2e/print-baselines/`,
-`verifyScreenshot`, both `compareRaster` helpers, the unused `toHaveScreenshot`
-configuration, `web-e2e-update`, and `.github/workflows/baselines.yml` together.
+`verifyScreenshot`, both `compareRaster` helpers, the `toHaveScreenshot`
+configuration and snapshot path in `playwright.config.ts`, `web-e2e-update`, and
+`.github/workflows/baselines.yml` together. The same pull request updates every
+consumer:
+
+- `showcase-baselines.spec.ts` reads its card images from ephemeral fixtures,
+  not the deleted directory.
+- `scripts/web-e2e-source.manifest` is regenerated without the deleted PNGs.
+- `scripts/test/workflow-contract.test.mjs` and
+  `scripts/test/makefile-safety-test.sh` drop the Baselines workflow,
+  `web-e2e-update`, and comparison-triplet fixtures.
+- The web, verification and QA instructions and the backlog lines follow.
+
 It keeps `web-e2e`, `web-e2e-fast`, every shard selection, the product images,
-and Git history. No baseline update mode remains in either test target. The same
-pull request updates the web and verification instructions and removes the
-matching backlog lines. Release only after exact-commit CI.
+and Git history. No baseline update mode remains in either test target. Release
+only after exact-commit CI.
 
 After cutover, a deliberate display change updates the expected values of the
 affected assertions in the same pull request, and its author looks at the review

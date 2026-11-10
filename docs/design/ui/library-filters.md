@@ -383,12 +383,11 @@ Tests prove DOM updates and focus, not identical screen-reader wording.
 
 [Display assertions](../display-assertions.md) owns the accepted Library
 inventory and migration: four chrome Library cells and five sheet/filter/row
-cells. Keep those comparisons until replacement assertions pass Linux/macOS
-acceptance and mutation proofs. After cutover, geometry, visible bilingual
-content, focus/state, colors, image readiness, and containment replace PNG
-comparisons. Preserve shared showcase controls, unrelated surfaces, both shard
-selections, and source-manifest coverage. Product template page images remain
-separate assets.
+cells. Keep those comparisons until the display cutover lands. After cutover,
+geometry, visible bilingual content, focus/state, colors, image readiness, and
+containment replace PNG comparisons. Preserve shared showcase controls,
+unrelated surfaces, both shard selections, and source-manifest coverage. Product
+template page images remain separate assets.
 
 Use existing font/image/thumbnail waits. Sheet fixtures keep a fixed 900 px
 viewport height. Optional review captures follow the display design and do not

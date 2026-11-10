@@ -164,7 +164,7 @@ container path.
 
 The accepted [display contract](../design/display-assertions.md) keeps `web-e2e`
 and `web-e2e-fast`, with native Chromium harness PDFs on Mac. Retain existing
-comparisons until Linux/macOS inventory and mutation acceptance passes. Stop old
+comparisons until the display cutover lands; hosted Linux CI gates it. Stop old
 stacks with old helpers before session migration; preserve shared DB, keys, and
 media. Ambiguous ownership needs manual recovery, never name-based kills. This
 runbook update authorizes no local run.
