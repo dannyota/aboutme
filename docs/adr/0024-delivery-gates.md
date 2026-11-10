@@ -135,7 +135,10 @@ full hosted gate still runs once on every `main` push and still gates tags and
 deployments on the exact commit; nobody waits for it after landing. Contributors
 keep pull request CI. The owner rejected using that host as a self-hosted
 runner. Reviews follow the author's model: `gpt-6.1-sol` reviews Terra work and
-`gpt-6-astra` reviews Sol work.
+`gpt-6-astra` reviews Sol work. A `main` push that changes no web-e2e input,
+after a green `main` commit, skips `web-e2e`
+([path selection](../design/ci-path-selection.md)); display mutation tests run
+when `apps/web/e2e/` changes and nightly.
 
 ### Amendment: Tooling and display checks (2026-11-01)
 
