@@ -233,6 +233,8 @@ test("push selection requires a successful previous main ci workflow run", () =>
     ['{"workflow_runs":[]}', "a".repeat(40), "full"],
     ['{"check_runs":[]}', "a".repeat(40), "full"],
     ["invalid", "a".repeat(40), "full"],
+    ["", "a".repeat(40), "full"],
+    ["   ", "a".repeat(40), "full"],
     ['{"workflow_runs":[{"conclusion":"success","path":".github/workflows/ci.yml","head_branch":"main","event":"push"}]}', "0".repeat(40), "full"],
     [null, "a".repeat(40), "full"],
   ]) {
@@ -245,7 +247,7 @@ test("push selection requires a successful previous main ci workflow run", () =>
           BASE_SHA: before, FIXTURE_RESPONSE: response ?? "", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\nmutations=${response === null || response === "invalid" || response.startsWith('{"check_runs"') ? "1" : "0"}\n`);
+      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\nmutations=${response === null || response === "invalid" || response.trim() === "" || response.startsWith('{"check_runs"') ? "1" : "0"}\n`);
     });
   }
 });
