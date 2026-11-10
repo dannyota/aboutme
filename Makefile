@@ -159,7 +159,11 @@ schema-gen: ## Regenerate schema types (Go/TS)
 	cd packages/schema && npm run generate
 
 schema-check: ## Fail if generated types drift from the schema
-	cd packages/schema && npm ci && npm test
+	cd packages/schema && for attempt in 1 2; do \
+	  timeout 180 npm ci && break; \
+	  echo "npm ci attempt $$attempt did not finish" >&2; rm -rf node_modules; \
+	  [ $$attempt = 1 ] || exit 1; \
+	done && npm test
 
 api-gen: ## Regenerate the committed TypeScript API client from docs/api/openapi.yaml
 	cd apps/web && npm run api:gen
