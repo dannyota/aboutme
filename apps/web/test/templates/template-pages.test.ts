@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { generatePages } from '../../scripts/generate-template-pages.mts';
 import {
+  RENDER_DEPENDENCIES,
   pngDimensions,
   refreshHashes,
   sha256,
@@ -45,6 +46,23 @@ function save(entries: Record<string, unknown>[]): void {
   );
 }
 
+function syntheticLock(): Record<string, {
+  version: string;
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}> {
+  return Object.fromEntries(RENDER_DEPENDENCIES.map((name) => [
+    `node_modules/${name}`, { version: '1.0.0' },
+  ]));
+}
+
+function saveLock(packages: ReturnType<typeof syntheticLock>): void {
+  put(join(root, 'apps/web/package-lock.json'), JSON.stringify({
+    lockfileVersion: 3, packages,
+  }));
+}
+
 function chunk(kind: string, data: Buffer): Buffer {
   const bytes = Buffer.concat([Buffer.from(kind), data]);
   let crc = 0xffffffff;
@@ -65,6 +83,9 @@ beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'template-pages-')));
   pages = join(root, 'apps/web/public/templates/pages');
   for (const path of sourcePaths(repository)) {
+    put(join(root, path), readFileSync(join(repository, path)));
+  }
+  for (const path of ['apps/web/package.json', 'apps/web/package-lock.json']) {
     put(join(root, path), readFileSync(join(repository, path)));
   }
   put(join(root, 'Makefile'), readFileSync(join(repository, 'Makefile')));
@@ -136,7 +157,6 @@ describe('template page freshness', () => {
     'packages/schema/gen/ts/templates.ts',
     'packages/schema/samples/ats-plain.en.json',
     'apps/web/nuxt.config.ts',
-    'apps/web/package-lock.json',
     'apps/web/public/csp-bootstrap.js',
     'apps/web/public/theme-bootstrap.js',
     'apps/web/server/plugins/csp-externalize.ts',
@@ -147,6 +167,96 @@ describe('template page freshness', () => {
       readFileSync(join(root, path)), Buffer.from('\n/* changed */'),
     ]));
     expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
+  it('ignores unrelated lockfile versions', () => {
+    const packages = syntheticLock();
+    packages['node_modules/unrelated'] = { version: '1.0.0' };
+    saveLock(packages);
+    const before = sourceFingerprint(root).sha256;
+    packages['node_modules/unrelated']!.version = '2.0.0';
+    saveLock(packages);
+    expect(sourceFingerprint(root).sha256).toBe(before);
+  });
+
+  it('ignores unrelated web package manifest changes', () => {
+    const before = sourceFingerprint(root).sha256;
+    const path = join(root, 'apps/web/package.json');
+    const manifest = JSON.parse(readFileSync(path, 'utf8'));
+    manifest.devDependencies.eslint = '99.0.0';
+    put(path, JSON.stringify(manifest));
+    expect(sourceFingerprint(root).sha256).toBe(before);
+  });
+
+  it('detects changed render dependency versions', () => {
+    const packages = syntheticLock();
+    saveLock(packages);
+    const before = sourceFingerprint(root).sha256;
+    packages['node_modules/vue']!.version = '2.0.0';
+    saveLock(packages);
+    expect(sourceFingerprint(root).sha256).not.toBe(before);
+  });
+
+  it('detects changed transitive dependency versions', () => {
+    const packages = syntheticLock();
+    packages['node_modules/vue']!.dependencies = { child: '1' };
+    packages['node_modules/child'] = {
+      version: '1.0.0',
+      optionalDependencies: { absent: '1' },
+      peerDependencies: { missing: '1' },
+    };
+    saveLock(packages);
+    const before = sourceFingerprint(root).sha256;
+    packages['node_modules/child']!.version = '2.0.0';
+    saveLock(packages);
+    expect(sourceFingerprint(root).sha256).not.toBe(before);
+  });
+
+  it('resolves nested dependencies before top-level copies', () => {
+    const packages = syntheticLock();
+    packages['node_modules/vue']!.dependencies = { vite: '1' };
+    packages['node_modules/vue/node_modules/vite'] = { version: '1.0.0' };
+    saveLock(packages);
+    const before = sourceFingerprint(root).sha256;
+    packages['node_modules/vue/node_modules/vite']!.version = '2.0.0';
+    saveLock(packages);
+    expect(sourceFingerprint(root).sha256).not.toBe(before);
+  });
+
+  it.each([
+    ['optionalDependencies', true],
+    ['peerDependencies', false],
+  ] as const)('follows installed %s: %s', (kind, followed) => {
+    const packages = syntheticLock();
+    packages['node_modules/vue']![kind] = { child: '1' };
+    packages['node_modules/child'] = { version: '1.0.0' };
+    saveLock(packages);
+    const before = sourceFingerprint(root).sha256;
+    packages['node_modules/child']!.version = '2.0.0';
+    saveLock(packages);
+    expect(sourceFingerprint(root).sha256 !== before).toBe(followed);
+  });
+
+  it('rejects a missing render dependency root', () => {
+    const packages = syntheticLock();
+    delete packages['node_modules/vue'];
+    saveLock(packages);
+    expect(() => sourceFingerprint(root)).toThrow(/vue.*root/i);
+  });
+
+  it('rejects an empty render dependency version', () => {
+    const packages = syntheticLock();
+    packages['node_modules/vue']!.version = '';
+    saveLock(packages);
+    expect(() => sourceFingerprint(root)).toThrow(/version.*vue/i);
+  });
+
+  it('rejects a missing required transitive dependency', () => {
+    const packages = syntheticLock();
+    packages['node_modules/vue']!.dependencies = { missing: '1' };
+    saveLock(packages);
+    expect(() => sourceFingerprint(root))
+      .toThrow(/missing.*node_modules\/vue/i);
   });
 
   it.each([

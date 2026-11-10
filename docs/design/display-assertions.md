@@ -290,20 +290,22 @@ source hashes in the manifest and fail stale inputs without comparing pixels.
 Generation uses pinned Linux for consistent delivery and requires manual
 inspection. Keep the manifest's array shape and existing fields; add source and
 output SHA-256 fields per entry. Hash sorted paths and bytes for the generator,
-renderer, render utilities, schema/template/sample inputs, bundled fonts, Nuxt
-configuration and lockfile, plus browser image digest and PDF flags. Exclude
-output PNGs and the manifest from the source hash. Validate each output file's
-hash, dimensions and page order without regenerating images in test mode.
-`make web-template-pages` builds the harness from the clean source archive in
-the pinned Linux image, then runs `node scripts/generate-template-pages.mts`
-from `apps/web`. Output goes only to an explicit candidate directory.
-`template-pages.yml` is manual-dispatch, read-only, with no commit/push step. On
-success it uploads only the validated 26 PNGs, manifest and source metadata for
-14 days. Inspect that exact-commit artifact, copy only product assets and
-manifest into their owned paths, then rerun CI; failed generation uploads none.
-Existing URLs and manifest consumers remain compatible. Eliminating these PNGs
-from Git too requires a separate asset delivery decision; never delete them with
-the test fixtures. Showcase test card images become ephemeral fixtures.
+renderer, render utilities, schema/template/sample inputs, bundled fonts, and
+Nuxt configuration. Include sorted paths and versions from the resolved
+dependency closure of the render packages in the web lockfile, browser image
+digest, browser and PDF flags, and raster DPI. Exclude output PNGs and the
+manifest from the source hash. Validate each file's hash, dimensions and page
+order without regenerating images in test mode. `make web-template-pages` builds
+the harness from the clean source archive in the pinned Linux image, then runs
+`node scripts/generate-template-pages.mts` from `apps/web`. Output goes only to
+an explicit candidate directory. `template-pages.yml` is manual-dispatch,
+read-only, with no commit/push step. On success it uploads only the validated 26
+PNGs, manifest and source metadata for 14 days. Inspect that exact-commit
+artifact, copy only product assets and manifest into their owned paths, then
+rerun CI; failed generation uploads none. Existing URLs and manifest consumers
+remain compatible. Eliminating these PNGs from Git too requires a separate asset
+delivery decision; never delete them with the test fixtures. Showcase test card
+images become ephemeral fixtures.
 
 ## Cutover
 
