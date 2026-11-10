@@ -6,6 +6,7 @@ QA owns proof specs and evidence. Devops owns `Dockerfile` and `run.sh`, the bro
 
 |Path|Role|
 |-|-|
+|`base.Containerfile`|Source for the published browser base image|
 |`playwright.config.ts`, `production.config.ts`|Local and explicitly scoped production proof configuration|
 |`auth.spec.ts`, `password-auth.spec.ts`, `second-factor.spec.ts`, `totp.spec.ts`|Authentication proof groups|
 |`editor.spec.ts`, `entry.spec.ts`, `publish.spec.ts`, `exports.spec.ts`|Editor, entry, publication, and export proofs|

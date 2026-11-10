@@ -11,6 +11,7 @@ readonly SOURCE=$ROOT/deploy/dev-https-browser
 readonly IMAGE=aboutme-dev-https-browser:static-test
 readonly IMAGE_ID=sha256:1111111111111111111111111111111111111111111111111111111111111111
 readonly BASE='mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462'
+readonly BROWSER_BASE='ghcr.io/dannyota/aboutme-browser-base@sha256:861f8413ebeb789736a7223dbff043eea7af3f3e8233f3992fa712d06bba177e'
 
 fail() {
   printf 'dev-https-browser static test: %s\n' "$*" >&2
@@ -46,10 +47,16 @@ readonly -a SPEC_FILES
 for file in "${SPEC_FILES[@]}"; do
   [[ $file =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]] || fail 'invalid spec source name'
 done
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt \
+for file in Dockerfile base.Containerfile package.json package-lock.json run.sh \
+  verify-evidence.mjs spec-sources.txt \
   "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
+grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
+  fail 'published base has the wrong Playwright base'
+grep -Eq 'apt-get install .*libnss3-tools=2:3\.98-1ubuntu0\.3([[:space:]]|$)' \
+  "$SOURCE/base.Containerfile" ||
+  fail 'published base has the wrong libnss3-tools pin'
 for file in \
   packages/publicroots/public-roots.v11.json \
   packages/publicroots/app-build-sources.v1.json \
@@ -132,8 +139,11 @@ build)
   context=${!#}
   [ -d "$context" ]
   [ "$context" != "$FAKE_SOURCE_CONTEXT" ]
-  grep -Fqx "FROM $FAKE_EXPECTED_BASE" "$context/Dockerfile"
-  grep -Fq 'libnss3-tools=2:3.98-1ubuntu0.3' "$context/Dockerfile"
+  grep -Fqx "FROM $FAKE_EXPECTED_BROWSER_BASE" "$context/Dockerfile"
+  [ "$(grep -c '^FROM ' "$context/Dockerfile")" -eq 1 ]
+  if grep -Fq 'apt-get' "$context/Dockerfile"; then
+    exit 1
+  fi
   grep -Fqx 'USER pwuser' "$context/Dockerfile"
   grep -Fqx 'ENTRYPOINT ["/opt/aboutme-auth/run.sh", "--inside"]' \
     "$context/Dockerfile"
@@ -209,6 +219,7 @@ export FAKE_PODMAN_LOG=$CALL_LOG
 export FAKE_IMAGE_META=$IMAGE_META
 export FAKE_SOURCE_CONTEXT=$SOURCE
 export FAKE_EXPECTED_BASE=$BASE
+export FAKE_EXPECTED_BROWSER_BASE=$BROWSER_BASE
 export FAKE_EXPECTED_IMAGE_ID=$IMAGE_ID
 export PATH=$FAKE_BIN:$PATH
 
