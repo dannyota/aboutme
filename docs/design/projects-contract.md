@@ -58,6 +58,7 @@ holds unchanged.
 | ------------------------------------------ | ---------------------------------------- |
 | Text or field edit                         | Non-draining                             |
 | Slug rename, deletion                      | Revoking                                 |
+| Deletion, for each linking draft resume    | Non-draining over that resume            |
 | Any edit of a project no live resume links | None; an ordinary row write              |
 
 Link, unlink, hide, unpublish and sign in to view are existing resume writes and
@@ -77,8 +78,13 @@ the session or token inside the transaction, and one stored replay response.
 **Planning and recheck.** A mutation that needs a transition follows the account
 deletion pattern:
 
-1. Preflight reads the affected set: each linking live resume with its revision.
-2. It acquires those fences in the coordinator's order and closes them.
+1. Preflight reads the affected set: every resume whose revision the mutation
+   will advance, with its revision. For an edit or a rename that is each linking
+   live resume. For a deletion it is every linking resume, live or not.
+2. It acquires those fences in the coordinator's order and closes them: revoking
+   for a live resume under rename or deletion, non-draining otherwise, including
+   every unpublished resume a deletion changes. Each fence reopens at the
+   advanced revision.
 3. Inside the transaction, under the owner lock, it reads the affected set again
    and requires the same resumes at the same revisions.
 4. On any difference it rolls back, reopens the fences and plans again, at most
