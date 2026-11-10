@@ -311,6 +311,8 @@ artifacts.mkdir(parents=True)
 for folder in ["diagnostics", "review-images"]:
     (mode / folder).mkdir()
     (mode / folder / "response.json").write_text("private-token")
+    if os.environ.get("FIXTURE_LOCK"):
+        (mode / folder).chmod(0o555)
 (mode / "harness/results.json").write_text(json.dumps({"suites": [{"specs": [{
     "file": "card.spec.ts", "line": 12, "tests": [{"results": [{
         "status": "failed" if int(os.environ["FIXTURE_STATUS"]) else "passed",
@@ -367,6 +369,21 @@ for status in [42, 0]:
     mode = repo / ".dev/web-e2e-results" / ("a" * 40) / f"unavailable-{status}" / "compare"
     assert not (mode / "diagnostics").exists()
     assert not (mode / "review-images").exists()
+# Evidence the host cannot delete moves out of every upload path.
+result = subprocess.run(["/usr/bin/make", "--no-print-directory", "web-e2e"], cwd=repo, env={
+    **os.environ, "PATH": str(bin_dir) + ":" + os.environ["PATH"],
+    "FIXTURE_COMMIT": "a" * 40, "FIXTURE_ARCHIVE": str(archive),
+    "FIXTURE_PNG": str(work / "fixture.png"), "FIXTURE_STATUS": "0",
+    "FIXTURE_LOCK": "1", "WEB_E2E_RUN_ID": "locked", "WEB_E2E_SHARD": "all",
+}, capture_output=True, timeout=10)
+mode = repo / ".dev/web-e2e-results" / ("a" * 40) / "locked" / "compare"
+rejected = mode.with_name("compare.rejected")
+for folder in ["diagnostics", "review-images"]:
+    (rejected / folder).chmod(0o755)
+assert result.returncode == 0, result.stderr
+assert b"browser evidence unavailable" in result.stderr
+assert not mode.exists()
+assert (rejected / "review-images/response.json").exists()
 (repo / "scripts/collect-browser-diagnostics.py").write_bytes(collector.read_bytes())
 # The shards partition every spec on disk: none skipped, none run twice.
 config = (makefile.parent / "apps/web/e2e/playwright.config.ts").read_text()

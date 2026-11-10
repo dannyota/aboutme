@@ -309,7 +309,7 @@ web-e2e: ## Assert display rules in the pinned AMD64 browser
 	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
 	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
 	umask 077; printf 'commit=%s\nmanifest_sha256=%s\ntar_sha256=%s\n' "$$commit" "$$manifest_sha" "$$tar_sha" >"$$mode_dir/source-metadata.txt"; \
-	collect_diagnostics() { status=$$?; trap - EXIT; python3 -I scripts/collect-browser-diagnostics.py "$$mode_dir" "$$source_tar" "$$commit" '$(lastword $(subst @, ,$(WEB_E2E_IMAGE)))' "$$manifest_sha" "$$tar_sha" "$$status" 2>/dev/null || { rm -rf -- "$$mode_dir/diagnostics" "$$mode_dir/review-images" 2>/dev/null || true; echo "browser evidence unavailable" >&2; }; exit "$$status"; }; \
+	collect_diagnostics() { status=$$?; trap - EXIT; python3 -I scripts/collect-browser-diagnostics.py "$$mode_dir" "$$source_tar" "$$commit" '$(lastword $(subst @, ,$(WEB_E2E_IMAGE)))' "$$manifest_sha" "$$tar_sha" "$$status" 2>/dev/null || { rm -rf -- "$$mode_dir/diagnostics" "$$mode_dir/review-images" 2>/dev/null || mv -- "$$mode_dir" "$$mode_dir.rejected"; echo "browser evidence unavailable" >&2; }; exit "$$status"; }; \
 	trap collect_diagnostics EXIT; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \

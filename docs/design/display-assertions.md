@@ -54,10 +54,10 @@ fourth, and [limits](#platforms-limits-and-artifacts) the fifth.
 The assertions replaced 103 screen, four print and 26 product-page comparisons:
 133 total. The 103 screen and four print PNGs were test baselines, deleted at
 cutover. The 26 product-page PNGs are [product images](#product-images): they
-stay, and only their comparison is removed. Remove `verifyScreenshot` in
-`support.ts`, both print/sample `compareRaster` helpers and unused
-`toHaveScreenshot` configuration after acceptance. Paths in the complete
-inventory below are relative to `apps/web/e2e/`.
+stay, and only their comparison is removed. `verifyScreenshot`, both
+print/sample `compareRaster` helpers and the `toHaveScreenshot` configuration
+are deleted. Paths in the complete inventory below are relative to
+`apps/web/e2e/`.
 
 | Spec and cells                                                                                                                                                                                                                                             | Visual properties guarded                                                                           | Replacement                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
