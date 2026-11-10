@@ -410,7 +410,7 @@ function renderDependencyVersions(lock: {
   const versions: string[] = [];
   const visit = (name: string, importer: string, optional: boolean): void => {
     let path: string | undefined;
-    for (let directory = importer; ; ) {
+    for (let directory = importer; ;) {
       if (posix.basename(directory) !== 'node_modules') {
         const candidate = directory
           ? `${directory}/node_modules/${name}`
