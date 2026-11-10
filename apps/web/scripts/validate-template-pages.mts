@@ -1,19 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
-  constants,
-  closeSync,
-  existsSync,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
+  constants, closeSync, existsSync, fstatSync, lstatSync, openSync,
+  readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { isBuiltin } from 'node:module';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import {
+  dirname, isAbsolute, join, posix, relative, resolve, sep,
+} from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import ts from 'typescript';
@@ -23,51 +16,28 @@ export const REPOSITORY = resolve(import.meta.dirname, '../../..');
 export const PAGES_PATH = 'apps/web/public/templates/pages';
 export const RASTER_DPI = 150;
 export const PDF_FLAGS = {
-  displayHeaderFooter: false,
-  margin: { bottom: 0, left: 0, right: 0, top: 0 },
-  preferCSSPageSize: true,
-  printBackground: true,
-  scale: 1,
+  displayHeaderFooter: false, margin: { bottom: 0, left: 0, right: 0, top: 0 },
+  preferCSSPageSize: true, printBackground: true, scale: 1,
 } as const;
 export const BROWSER_FLAGS = [
-  '--force-color-profile=srgb',
-  '--font-render-hinting=none',
-  '--disable-lcd-text',
-  '--disable-gpu',
-  '--hide-scrollbars',
+  '--force-color-profile=srgb', '--font-render-hinting=none',
+  '--disable-lcd-text', '--disable-gpu', '--hide-scrollbars',
 ];
 export const RENDER_DEPENDENCIES = [
-  '@lucide/vue',
-  '@napi-rs/canvas',
-  '@playwright/test',
-  '@tailwindcss/vite',
-  '@vitejs/plugin-vue',
-  'dompurify',
-  'nuxt',
-  'pdfjs-dist',
-  'playwright',
-  'playwright-core',
-  'tailwindcss',
-  'vite',
-  'vue',
-  'vue-router',
+  '@lucide/vue', '@napi-rs/canvas', '@playwright/test', '@tailwindcss/vite',
+  '@vitejs/plugin-vue', 'dompurify', 'nuxt', 'pdfjs-dist', 'playwright',
+  'playwright-core', 'tailwindcss', 'vite', 'vue', 'vue-router',
 ] as const;
 
 const SOURCE_INPUTS = [
   'apps/web/scripts/generate-template-pages.mts',
   'apps/web/scripts/validate-template-pages.mts',
-  'apps/web/app/assets/fonts',
-  'apps/web/app/templates/samplePages.ts',
-  'apps/web/nuxt.config.ts',
-  'apps/web/tsconfig.json',
-  'apps/web/public/csp-bootstrap.js',
-  'apps/web/public/theme-bootstrap.js',
-  'packages/schema/gen/ts',
-  'packages/schema/resume.schema.json',
-  'packages/schema/package.json',
-  'packages/schema/samples',
-  'packages/schema/validation/store.ts',
-  'packages/schema/fixtures/full.json',
+  'apps/web/app/assets/fonts', 'apps/web/app/templates/samplePages.ts',
+  'apps/web/nuxt.config.ts', 'apps/web/tsconfig.json',
+  'apps/web/public/csp-bootstrap.js', 'apps/web/public/theme-bootstrap.js',
+  'packages/schema/gen/ts', 'packages/schema/resume.schema.json',
+  'packages/schema/package.json', 'packages/schema/samples',
+  'packages/schema/validation/store.ts', 'packages/schema/fixtures/full.json',
   'packages/schema/fixtures/vn-full.json',
 ];
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -85,22 +55,18 @@ export interface ManifestEntry {
   sourceSha256?: string;
   outputSha256?: string[];
 }
-
 export function sha256(bytes: Buffer | string): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
-
 function requireCondition(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
-
 function assertParents(path: string): void {
   const parent = dirname(path);
   if (parent !== path) assertParents(parent);
   const info = lstatSync(path);
   requireCondition(!info.isSymbolicLink(), 'symlink is forbidden');
 }
-
 export function readRegular(path: string, max = MAX_FILE_BYTES): Buffer {
   assertParents(dirname(path));
   requireCondition(lstatSync(path).isFile(), 'expected a regular file');
@@ -432,6 +398,63 @@ export function browserImage(root: string): string {
   return image;
 }
 
+function renderDependencyVersions(lock: {
+  packages?: Record<string, {
+    version?: unknown;
+    dependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+  }>;
+}): string {
+  const packages = lock.packages ?? {};
+  const visited = new Set<string>();
+  const versions: string[] = [];
+  const visit = (name: string, importer: string, optional: boolean): void => {
+    let path: string | undefined;
+    for (let directory = importer; ; ) {
+      if (posix.basename(directory) !== 'node_modules') {
+        const candidate = directory
+          ? `${directory}/node_modules/${name}`
+          : `node_modules/${name}`;
+        if (Object.hasOwn(packages, candidate)) {
+          path = candidate;
+          break;
+        }
+      }
+      if (directory === '') {
+        break;
+      }
+      const parent = posix.dirname(directory);
+      directory = parent === '.' ? '' : parent;
+    }
+    if (path === undefined && optional) {
+      return;
+    }
+    requireCondition(path !== undefined,
+      `missing render dependency: ${name} from ${importer || 'root'}`);
+    if (visited.has(path)) {
+      return;
+    }
+    const entry = packages[path]!;
+    requireCondition(typeof entry.version === 'string'
+      && entry.version.length > 0,
+    `missing render dependency version: ${name} from ${importer || 'root'}`);
+    visited.add(path);
+    versions.push(`${path}@${entry.version}`);
+    const required = entry.dependencies ?? {};
+    const optionalDependencies = entry.optionalDependencies ?? {};
+    for (const dependency of new Set([
+      ...Object.keys(required), ...Object.keys(optionalDependencies),
+    ])) {
+      // Peers are host-provided tools such as linters and type checkers.
+      visit(dependency, path, !Object.hasOwn(required, dependency));
+    }
+  };
+  for (const name of RENDER_DEPENDENCIES) {
+    visit(name, '', false);
+  }
+  return versions.sort().join('\n');
+}
+
 export function sourceFingerprint(root: string): {
   sha256: string;
   browserDigest: string;
@@ -440,12 +463,7 @@ export function sourceFingerprint(root: string): {
   const hash = createHash('sha256');
   const lock = JSON.parse(readRegular(join(root,
     'apps/web/package-lock.json')).toString('utf8'));
-  const versions = RENDER_DEPENDENCIES.map((name) => {
-    const version: unknown = lock.packages?.[`node_modules/${name}`]?.version;
-    requireCondition(typeof version === 'string' && version.length > 0,
-      `missing render dependency version: ${name}`);
-    return `${name}@${version}`;
-  }).sort().join('\n');
+  const versions = renderDependencyVersions(lock);
   const inputs: [string, Buffer][] = [
     ['@browser-image-digest', Buffer.from(digest)],
     ['@browser-flags', Buffer.from(JSON.stringify(BROWSER_FLAGS))],
