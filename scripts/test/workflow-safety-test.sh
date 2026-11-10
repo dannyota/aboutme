@@ -1221,4 +1221,10 @@ expect_security_drift assert_image_scan \
 $TRIVY_INSTALL_STEP" \
   'security-scan must install Trivy before Scan released images'
 
+# A missing database must stop the scheduled scan before Trivy runs.
+SECURITY_DB_DOWNLOAD=$(step_block "Download Trivy database" "$SECURITY_IMAGE_JOB")
+grep -Fq 'name: trivy-db' <<<"$SECURITY_DB_DOWNLOAD" || fail 'security scan must download the database artifact'
+grep -Fq 'path: ${{ runner.temp }}/trivy-cache/db' <<<"$SECURITY_DB_DOWNLOAD" || fail 'security scan must use the database cache directory'
+! grep -Eq 'continue-on-error:|^[[:space:]]+if:' <<<"$SECURITY_DB_DOWNLOAD" || fail 'database download must fail closed'
+
 printf 'hosted workflow safety tests passed\n'

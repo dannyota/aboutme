@@ -25,6 +25,41 @@ permissions:
   packages: read
 
 jobs:
+  trivy-db:
+    name: Prepare Trivy database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-tools
+      - name: Install Trivy
+        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"
+      - name: Set cache date
+        id: date
+        run: echo "day=$(date -u +%F)" >>"$GITHUB_OUTPUT"
+      - name: Cache Trivy database
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache/db
+          key: trivy-db-v2-${{ steps.date.outputs.day }}
+      - name: Fetch Trivy database
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/security-scan.sh fetch-db "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/trivy-cache"
+      - name: Upload Trivy database
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-db
+          path: ${{ runner.temp }}/trivy-cache/db
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
   govulncheck:
     name: Scan Go dependencies
     runs-on: ubuntu-24.04
@@ -86,6 +121,7 @@ jobs:
   # weekly-scan continues past a failing target so one run always reports
   # the complete picture.
   image-scan:
+    needs: trivy-db
     name: Scan release images
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -97,11 +133,17 @@ jobs:
       - uses: ./.github/actions/ci-tools
       - name: Install Trivy
         run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"
+      - name: Download Trivy database
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: trivy-db
+          path: ${{ runner.temp }}/trivy-cache/db
       - name: Scan released images
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           OBSERVER_RELEASE_TAG: ${{ inputs.observer_release_tag }}
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         run: |
           scripts/security-scan.sh weekly-scan \
             "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports" \

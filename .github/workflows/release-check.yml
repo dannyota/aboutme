@@ -8,7 +8,43 @@ permissions:
   contents: read
 
 jobs:
+  trivy-db:
+    name: Prepare Trivy database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-tools
+      - name: Install Trivy
+        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/ci-tools"
+      - name: Set cache date
+        id: date
+        run: echo "day=$(date -u +%F)" >>"$GITHUB_OUTPUT"
+      - name: Cache Trivy database
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache/db
+          key: trivy-db-v2-${{ steps.date.outputs.day }}
+      - name: Fetch Trivy database
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/security-scan.sh fetch-db "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/trivy-cache"
+      - name: Upload Trivy database
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-db
+          path: ${{ runner.temp }}/trivy-cache/db
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
   build:
+    needs: trivy-db
     name: Release checks (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
