@@ -9,6 +9,7 @@ import {
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen,
   measureChromeGrid,
@@ -27,16 +28,7 @@ import {
 import {
   chromeScreenContract,
   prepareScreen,
-  CHROME_PIXEL_TOLERANCE,
-  verifyScreenshot,
-  withBaselineViewport,
 } from './support';
-
-// Application chrome pixel baselines: the signed-out homepage, the login
-// page, and the template gallery, at phone and desktop widths, in both
-// themes (DESIGN.md; ADR 0020). Vietnamese is the default locale, so these
-// baselines pin it rather than English (gallery.spec.ts uses the same
-// cookie pattern).
 
 // Gallery templates with a sample show a stored page image; the others
 // mount a live thumbnail.
@@ -234,7 +226,7 @@ test.describe('Vietnamese chrome', () => {
     for (const theme of THEMES) {
       for (const width of WIDTHS) {
         const title = `chrome ${page.name} ${theme} ${width}px `
-          + 'matches baseline';
+          + 'keeps content and layout';
         test(title, async ({ page: browserPage }, testInfo) => {
           await browserPage.setViewportSize({ width, height: 900 });
           await browserPage.context().addCookies([
@@ -252,9 +244,6 @@ test.describe('Vietnamese chrome', () => {
 
           const response = await browserPage.goto(page.path);
           expect(response?.status()).toBe(200);
-          // Chrome transitions (link and chip colors, hover lifts) must not
-          // be mid-flight at capture; the exact-pixel compare has no
-          // tolerance for a partly blended edge.
           await browserPage.addStyleTag({
             content: '*, *::before, *::after { transition: none !important; '
               + 'animation: none !important; }',
@@ -280,42 +269,29 @@ test.describe('Vietnamese chrome', () => {
             await expect(browserPage.locator('h1')).toHaveCount(1);
           }
 
-          const capture = async () => {
-            if (page.thumbnails > 0) {
-              await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
-                .toHaveCount(page.thumbnails);
-              await expect(browserPage.locator('h1')).toHaveCount(1);
-            }
-            await verifyScreenshot(
-              browserPage,
-              `chrome--${page.name}--${theme}--${width}.png`,
-              testInfo,
-              undefined,
-              CHROME_PIXEL_TOLERANCE,
-            );
-
-            if (page.name === 'home') {
-              const templates = browserPage.locator(
-                '[data-testid="landing-templates"]',
-              );
-              await templates.scrollIntoViewIfNeeded();
-              await expect(
-                browserPage.locator('[data-sheet-thumbnail-render]'),
-              ).toHaveCount(4);
-              await prepareScreen(browserPage);
-              await verifyScreenshot(
-                browserPage,
-                `chrome--home-templates--${theme}--${width}.png`,
-                testInfo,
-                templates,
-                CHROME_PIXEL_TOLERANCE,
-              );
-            }
-          };
           if (page.thumbnails > 0) {
-            await withBaselineViewport(browserPage, capture);
-          } else {
-            await capture();
+            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
+              .toHaveCount(page.thumbnails);
+            await expect(browserPage.locator('h1')).toHaveCount(1);
+          }
+          if (page.name === 'home') {
+            const templates = browserPage.locator(
+              '[data-testid="landing-templates"]',
+            );
+            await templates.scrollIntoViewIfNeeded();
+            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
+              .toHaveCount(4);
+            await prepareScreen(browserPage);
+          }
+          if (page.name === 'home' && theme === 'light' && width === 390) {
+            await captureReviewImage(
+              testInfo, 'home-vi-light-390', async () => {
+                await browserPage.evaluate(() => window.scrollTo(0, 0));
+                return browserPage.screenshot({
+                  animations: 'disabled', timeout: 750,
+                });
+              },
+            );
           }
         });
       }

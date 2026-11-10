@@ -2,9 +2,9 @@
 
 Status: Accepted by the owner, 2026-11-01. Revised with the owner's approval on
 2026-11-10: hosted Linux CI alone gates the cutover, and mutation tests stay in
-CI permanently. Most assertions and mutation tests, and the product image
-generator, have landed beside the pixel comparisons; the [cutover](#cutover)
-closes the remaining gaps and is pending.
+CI permanently. The [cutover](#cutover) landed on 2026-11-10: the assertions,
+mutation tests and review images are the display gate, and the pixel comparisons
+and their baselines are deleted.
 
 ## Decision and authority
 
@@ -22,8 +22,7 @@ fallback.
 [ADR 0019](../adr/0019-application-ui-toolkit.md),
 [ADR 0020](../adr/0020-application-visual-identity.md), and
 [ADR 0024](../adr/0024-delivery-gates.md) record the decision. Preserve renderer
-isolation, visual values, and exact-commit hosted release CI. Existing
-comparisons stay required until the cutover lands.
+isolation, visual values, and exact-commit hosted release CI.
 
 Keep [template contracts](templates/contract.md), [tokens](templates/tokens.md),
 [colors](templates/colors.md), [print rules](templates/print.md),
@@ -52,13 +51,13 @@ fourth, and [limits](#platforms-limits-and-artifacts) the fifth.
 
 ## Complete comparison inventory
 
-Replace 103 screen, four print and 26 product-page comparisons: 133 total. The
-103 screen and four print PNGs are test baselines and are deleted at cutover.
-The 26 product-page PNGs are [product images](#product-images): they stay, and
-only their comparison is removed. Remove `verifyScreenshot` in `support.ts`,
-both print/sample `compareRaster` helpers and unused `toHaveScreenshot`
-configuration after acceptance. Paths in the complete inventory below are
-relative to `apps/web/e2e/`.
+The assertions replaced 103 screen, four print and 26 product-page comparisons:
+133 total. The 103 screen and four print PNGs were test baselines, deleted at
+cutover. The 26 product-page PNGs are [product images](#product-images): they
+stay, and only their comparison is removed. Remove `verifyScreenshot` in
+`support.ts`, both print/sample `compareRaster` helpers and unused
+`toHaveScreenshot` configuration after acceptance. Paths in the complete
+inventory below are relative to `apps/web/e2e/`.
 
 | Spec and cells                                                                                                                                                                                                                                             | Visual properties guarded                                                                           | Replacement                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -266,6 +265,12 @@ paint is wrong. Narrow paint checks reduce that gap but cannot eliminate it.
 [Playwright warns that screenshots vary with the environment](https://playwright.dev/docs/test-snapshots).
 Non-pixel checks remove that source of comparison noise, not all layout drift.
 
+Text containment compares range rectangles with clipping ancestors, with a
+half-leading allowance, and checks line separation. It does not detect a few
+pixels of clipped accent or descender ink, or a heading displaced without
+leaving a clipping ancestor. The owner accepted this limit on 2026-11-10; the
+review images cover it.
+
 The owner accepted eight optional, non-blocking manual-review images per run:
 Vietnamese public modern-sidebar dark 390; English public executive-band light
 1440; Vietnamese home light 390; English showcase dark 1440; English Library
@@ -309,43 +314,22 @@ images become ephemeral fixtures.
 
 ## Cutover
 
-Landed by 2026-11-10: assertions and mutation tests in every inventory spec, and
-the product image generator, validator and manifest hashes. Coverage is partial.
-Known gaps, not a complete list: the guide pages check neither paragraph
-containment, colors nor typography, lack 1440 px cells, and enlarge the viewport
-against the fixed-height rule; `verify.spec.ts` mutates only overlap;
-`print.spec.ts` relies on mutations in sibling specs that are not yet mapped to
-it; `style-mutation.ts` skips its change check for string expectations; some
-mutation tests accept any thrown error. Pixel comparisons still run beside the
-assertions. Three steps remain, and none waits on another platform or tool.
+Landed on 2026-11-10 in three steps, gated by hosted Linux CI alone:
 
-| Step                      | Lane and paths                                                                                                                                                                                                                                                                                      | Done when                                                                                                                                         |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                                                                                                                                                                                                                           | Each inventory row maps to its shared invariants, its surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
-| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`, `scripts/test/makefile-safety-test.sh`; shared: `Makefile` diagnostics trap; devops: `.github/workflows/ci.yml`; frontend: capture helpers and owning specs in `apps/web/e2e/`, with `scripts/web-e2e-source.manifest` regenerated for new files | A failed case uploads only that case; a passing run uploads the eight review images; a failed optional capture cannot change the gate result      |
-| 3. Delete the comparisons | frontend, devops, tooling and the shared `Makefile`, in one pull request                                                                                                                                                                                                                            | Steps 1 and 2 have landed; hosted CI is green on the exact commit                                                                                 |
+1. Coverage: every inventory row has its shared invariants, its surface or PDF
+   checks, and one named mutation test per assertion class.
+2. Diagnostics and review: a failed case uploads only that case through the
+   bounded collector, and a passing shard uploads its review images.
+3. Deletion: `apps/web/e2e/baselines/`, `apps/web/e2e/print-baselines/`,
+   `verifyScreenshot`, both `compareRaster` helpers, the `toHaveScreenshot`
+   configuration, `web-e2e-update`, and `.github/workflows/baselines.yml`.
 
-Step 3 deletes `apps/web/e2e/baselines/` and `apps/web/e2e/print-baselines/`,
-`verifyScreenshot`, both `compareRaster` helpers, the `toHaveScreenshot`
-configuration and snapshot path in `playwright.config.ts`, `web-e2e-update`, and
-`.github/workflows/baselines.yml` together. The same pull request updates every
-consumer:
+`web-e2e`, `web-e2e-fast`, every shard selection, the product images, and Git
+history remain. No baseline update mode exists in either test target.
 
-- `showcase-baselines.spec.ts` reads its card images from ephemeral fixtures,
-  not the deleted directory.
-- `scripts/web-e2e-source.manifest` is regenerated without the deleted PNGs.
-- `scripts/test/workflow-contract.test.mjs` and
-  `scripts/test/makefile-safety-test.sh` drop the Baselines workflow,
-  `web-e2e-update`, and comparison-triplet fixtures.
-- The web, verification and QA instructions and the backlog lines follow.
-
-It keeps `web-e2e`, `web-e2e-fast`, every shard selection, the product images,
-and Git history. No baseline update mode remains in either test target. Release
-only after exact-commit CI.
-
-After cutover, a deliberate display change updates the expected values of the
-affected assertions in the same pull request, and its author looks at the review
-images. Reverting the cutover commit restores the comparisons from Git.
+A deliberate display change updates the expected values of the affected
+assertions in the same pull request, and its author looks at the review images.
+Reverting the deletion commit restores the comparisons from Git.
 
 ## Security and failure boundaries
 

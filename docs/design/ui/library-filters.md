@@ -382,12 +382,11 @@ Tests prove DOM updates and focus, not identical screen-reader wording.
   supplies an actual nonzero inset; do not claim it from a zero-inset baseline.
 
 [Display assertions](../display-assertions.md) owns the accepted Library
-inventory and migration: four chrome Library cells and five sheet/filter/row
-cells. Keep those comparisons until the display cutover lands. After cutover,
-geometry, visible bilingual content, focus/state, colors, image readiness, and
-containment replace PNG comparisons. Preserve shared showcase controls,
-unrelated surfaces, both shard selections, and source-manifest coverage. Product
-template page images remain separate assets.
+inventory: four chrome Library cells and five sheet/filter/row cells. Geometry,
+visible bilingual content, focus/state, colors, image readiness, and containment
+assertions guard these cells. Preserve shared showcase controls, unrelated
+surfaces, both shard selections, and source-manifest coverage. Product template
+page images remain separate assets.
 
 Use existing font/image/thumbnail waits. Sheet fixtures keep a fixed 900 px
 viewport height. Optional review captures follow the display design and do not

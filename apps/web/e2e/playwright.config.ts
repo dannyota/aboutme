@@ -1,5 +1,5 @@
 /**
- * Browser baseline: mcr.microsoft.com/playwright:v1.64.0-noble
+ * Browser image: mcr.microsoft.com/playwright:v1.64.0-noble
  * AMD64 digest:
  * sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
  */
@@ -49,16 +49,6 @@ if (surface === 'harness') buildEnvironment.NUXT_HARNESS = '1';
 else delete buildEnvironment.NUXT_HARNESS;
 
 export default defineConfig({
-  expect: {
-    toHaveScreenshot: {
-      animations: 'disabled',
-      caret: 'hide',
-      maxDiffPixelRatio: 0,
-      maxDiffPixels: 0,
-      scale: 'css',
-      threshold: 0,
-    },
-  },
   forbidOnly: true,
   fullyParallel: false,
   outputDir: resolve(surfaceResults, 'artifacts'),
@@ -69,7 +59,6 @@ export default defineConfig({
     ['json', { outputFile: resolve(surfaceResults, 'results.json') }],
   ],
   retries: 0,
-  snapshotPathTemplate: resolve(import.meta.dirname, 'baselines/{arg}{ext}'),
   testDir: import.meta.dirname,
   testMatch: surface === 'harness'
     ? [

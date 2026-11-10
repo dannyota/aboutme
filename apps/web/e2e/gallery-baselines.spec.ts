@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen, expectScreenClass,
   measureGalleryGrid,
@@ -18,9 +19,6 @@ import {
   filterSheetContract,
   libraryContract,
   prepareScreen,
-  CHROME_PIXEL_TOLERANCE,
-  verifyScreenshot,
-  withBaselineViewport,
 } from './support';
 
 const CASES = [
@@ -38,7 +36,7 @@ for (const { name, locale, theme, width } of CASES) {
   test.describe(`display locale ${locale}`, () => {
     test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
     const title = `Library ${name} ${locale} ${theme} ${width} `
-      + 'matches baseline';
+      + 'keeps content and layout';
     test(title, async ({
       page,
     }, testInfo) => {
@@ -83,24 +81,14 @@ for (const { name, locale, theme, width } of CASES) {
             - document.documentElement.clientWidth,
         ),
       ).toBe(0);
-      const capture = async () => {
-        if (name === 'rows') {
-          await expect(page.locator('[data-sheet-thumbnail-render]'))
-            .toHaveCount(LIVE_THUMBNAILS);
-        }
-        await verifyScreenshot(
-          page,
-          `gallery--${name}--${locale}--${theme}--${width}.png`,
-          testInfo,
-          undefined,
-          CHROME_PIXEL_TOLERANCE,
-          name !== 'sheet',
-        );
-      };
-      if (name === 'sheet') {
-        await capture();
-      } else {
-        await withBaselineViewport(page, capture);
+      if (name === 'rows') {
+        await expect(page.locator('[data-sheet-thumbnail-render]'))
+          .toHaveCount(LIVE_THUMBNAILS);
+      }
+      if (name === 'sheet' && locale === 'en' && theme === 'light'
+        && width === 390) {
+        await captureReviewImage(testInfo, 'library-sheet-en-light-390', () =>
+          page.screenshot({ animations: 'disabled', timeout: 750 }));
       }
     });
   });

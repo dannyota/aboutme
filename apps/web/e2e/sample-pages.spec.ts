@@ -1,7 +1,6 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { expect, test, type TestInfo } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { SAMPLES } from '@aboutme/schema/samples';
 import type { Resume } from '@aboutme/schema';
@@ -26,10 +25,8 @@ import {
 } from './sample-pdf-content';
 import { denyExternalRequests, waitForImages } from './support';
 
-// Samples use the production print flags and retain their product-image
-// comparisons until display cutover (docs/design/display-assertions.md).
+// Samples use production print flags and assert PDF content and layout.
 const PAGES_DIR = resolve(import.meta.dirname, '../public/templates/pages');
-const CANDIDATE_SUBDIR = 'template-pages';
 // About 1240px wide for an A4 page (docs/design/templates/print.md §2):
 // large enough for a library card and the template page, small enough to
 // ship ten-plus documents.
@@ -51,84 +48,10 @@ const manifestEntries: readonly ManifestEntry[] = SAMPLES.map((sample) => ({
   files: [`${sample.templateId}-${sample.lng}-p1.png`],
 }));
 
-function candidateRoot(): string {
-  const root = process.env.PLAYWRIGHT_RESULTS_DIR;
-  if (root === undefined) {
-    throw new Error('PLAYWRIGHT_RESULTS_DIR is required.');
-  }
-  return resolve(root, 'candidate-baselines', CANDIDATE_SUBDIR);
-}
-
-async function compareRaster(
-  actual: Buffer,
-  expected: Buffer,
-  diffPath: string,
-): Promise<void> {
-  const [actualImage, expectedImage] = await Promise.all([
-    loadImage(actual),
-    loadImage(expected),
-  ]);
-  expect(actualImage.width).toBe(expectedImage.width);
-  expect(actualImage.height).toBe(expectedImage.height);
-  const width = actualImage.width;
-  const height = actualImage.height;
-  const actualCanvas = createCanvas(width, height);
-  const expectedCanvas = createCanvas(width, height);
-  actualCanvas.getContext('2d').drawImage(actualImage, 0, 0);
-  expectedCanvas.getContext('2d').drawImage(expectedImage, 0, 0);
-  const actualPixels = actualCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  const expectedPixels = expectedCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  let changed = 0;
-  const diffCanvas = createCanvas(width, height);
-  const diffContext = diffCanvas.getContext('2d');
-  const diff = diffContext.createImageData(width, height);
-  for (let offset = 0; offset < actualPixels.length; offset += 4) {
-    const differs = actualPixels[offset] !== expectedPixels[offset]
-      || actualPixels[offset + 1] !== expectedPixels[offset + 1]
-      || actualPixels[offset + 2] !== expectedPixels[offset + 2]
-      || actualPixels[offset + 3] !== expectedPixels[offset + 3];
-    if (differs) {
-      changed += 1;
-      diff.data.set([255, 0, 0, 255], offset);
-    } else {
-      diff.data.set([255, 255, 255, 255], offset);
-    }
-  }
-  if (changed > 0) {
-    diffContext.putImageData(diff, 0, 0);
-    await writeFile(diffPath, diffCanvas.toBuffer('image/png'));
-  }
-  expect(changed).toBe(0);
-}
-
-async function verifyPageImage(
-  bytes: Buffer,
-  filename: string,
-  testInfo: TestInfo,
-): Promise<void> {
-  await writeFile(testInfo.outputPath(filename), bytes);
-  if (testInfo.config.updateSnapshots !== 'none') {
-    const candidate = resolve(candidateRoot(), filename);
-    await mkdir(resolve(candidate, '..'), { recursive: true });
-    await writeFile(candidate, bytes);
-    return;
-  }
-  const expected = await readFile(resolve(PAGES_DIR, filename));
-  await compareRaster(
-    bytes,
-    expected,
-    testInfo.outputPath(filename.replace(/\.png$/, '-diff.png')),
-  );
-}
-
 test.describe.configure({ mode: 'default' });
 
 for (const { templateId, lng } of SAMPLES) {
-  test(`${templateId} (${lng}) rasterizes its PDF pages`, async (
+  test(`${templateId} (${lng}) keeps PDF content and geometry`, async (
     { page },
     testInfo,
   ) => {
@@ -228,17 +151,7 @@ for (const { templateId, lng } of SAMPLES) {
         const viewport = pdfPage.getViewport({ scale: RASTER_DPI / 72 });
         width = Math.ceil(viewport.width);
         height = Math.ceil(viewport.height);
-        const canvas = createCanvas(width, height);
-        await pdfPage.render({
-          canvas: canvas as unknown as HTMLCanvasElement,
-          canvasContext: (
-            canvas.getContext('2d') as unknown as CanvasRenderingContext2D
-          ),
-          intent: 'print',
-          viewport,
-        }).promise;
         const filename = `${templateId}-${lng}-p${pageNumber}.png`;
-        await verifyPageImage(canvas.toBuffer('image/png'), filename, testInfo);
         expect(Math.abs(textPage.width - 595.28)).toBeLessThanOrEqual(1);
         expect(Math.abs(textPage.height - 841.89)).toBeLessThanOrEqual(1);
         expect(textPage.items.length).toBeGreaterThan(0);
@@ -506,14 +419,6 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
   });
 
 test('gallery sample page manifest stays current', async () => {
-  const testInfo = test.info();
-  const json = `${JSON.stringify(manifestEntries, null, 2)}\n`;
-  if (testInfo.config.updateSnapshots !== 'none') {
-    const candidate = resolve(candidateRoot(), 'manifest.json');
-    await mkdir(resolve(candidate, '..'), { recursive: true });
-    await writeFile(candidate, json);
-    return;
-  }
   const expected = await readFile(resolve(PAGES_DIR, 'manifest.json'), 'utf8');
   const stored: Record<string, unknown>[] = JSON.parse(expected);
   const withHashes = manifestEntries.map((entry, index) => ({

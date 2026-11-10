@@ -5,14 +5,11 @@ import {
 } from './style-mutation';
 import { expectVerifyIcon, expectVerifyStructure } from './verify-details';
 import {
-  CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
   expectCspClean,
   mockSignedOutSession,
   trackCsp,
-  verifyScreenshot,
   waitForImages,
-  withBaselineViewport,
 } from './support';
 import {
   expectVerifyDisplay,
@@ -30,7 +27,7 @@ import {
 // what's running" (docs/design/deployment-transparency/page.md and
 // visual.md). Covers every state the fixtures encode, the copy buttons, the
 // component selector, phone width, dark mode, no-JavaScript degradation, the
-// landing footer link, and pixel baselines for the verified and unavailable
+// landing footer link, and display checks for the verified and unavailable
 // states.
 
 const VERIFIED_TITLE_VI = 'Đang chạy đúng mã nguồn trên GitHub';
@@ -501,21 +498,20 @@ test('the landing footer verify link reads "Verify" in English', async ({
   await expect(page.getByTestId('landing-verify-link')).toHaveText('Verify');
 });
 
-// --- Pixel baselines (ADR 0020; DESIGN.md), Vietnamese locale, at 390px and
-// 1280px in both themes, for the verified and unavailable states. ---
+// Vietnamese verified and unavailable states at 390px and 1280px.
 
-const BASELINE_STATES = [
+const DISPLAY_STATES = [
   { name: 'verified', state: 'verified' },
   { name: 'unavailable', state: 'unavailable' },
 ] as const;
 
-for (const baseline of BASELINE_STATES) {
+for (const cell of DISPLAY_STATES) {
   for (const theme of ['light', 'dark'] as const) {
     for (const width of [390, 1280] as const) {
-      test(`pixel baseline: verify ${baseline.name} ${theme} ${width}`
-        + 'px', async ({ page }, testInfo) => {
+      test(`verify display: ${cell.name} ${theme} ${width}`
+        + 'px', async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
-        if (baseline.name === 'verified') {
+        if (cell.name === 'verified') {
           await serveDeployment(page, { fixture: 'verified' });
         } else {
           await serveDeployment(page, { status: 404, body: '[]' });
@@ -527,44 +523,36 @@ for (const baseline of BASELINE_STATES) {
         // (app/composables/useDeploymentDocument.ts) and from landing
         // mid-way through the "vừa xong" / "just now" relative-age text.
         await expect(page.getByTestId('verify-status')).toHaveAttribute(
-          'data-state', baseline.state);
+          'data-state', cell.state);
         await page.evaluate(() => document.fonts.ready);
         await waitForImages(page);
-        await expectVerifyDisplay(page, baseline.state, 'vi', theme);
+        await expectVerifyDisplay(page, cell.state, 'vi', theme);
 
         expect(await pageOverflow(page)).toBe(0);
-
-        await withBaselineViewport(page, () => verifyScreenshot(
-          page,
-          `verify--${baseline.name}--${theme}--${width}.png`,
-          testInfo,
-          undefined,
-          CHROME_PIXEL_TOLERANCE,
-        ));
       });
     }
   }
 }
 
-for (const baseline of BASELINE_STATES) {
+for (const cell of DISPLAY_STATES) {
   for (const locale of ['vi', 'en'] as const) {
     test.describe(`interface ${locale}`, () => {
       test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
       for (const theme of ['light', 'dark'] as const) {
         for (const width of [390, 1280, 1440] as const) {
-          test(`verify display ${baseline.name} ${locale} ${theme} ${width}`,
+          test(`verify display ${cell.name} ${locale} ${theme} ${width}`,
             async ({ page }) => {
               await page.setViewportSize({ width, height: 900 });
-              if (baseline.name === 'verified') {
+              if (cell.name === 'verified') {
                 await serveDeployment(page, { fixture: 'verified' });
               } else {
                 await serveDeployment(page, { status: 404, body: '[]' });
               }
               await gotoVerify(page, locale, theme);
               await expect(page.getByTestId('verify-status')).toHaveAttribute(
-                'data-state', baseline.state);
+                'data-state', cell.state);
               await page.evaluate(() => document.fonts.ready);
-              await expectVerifyDisplay(page, baseline.state, locale, theme);
+              await expectVerifyDisplay(page, cell.state, locale, theme);
             });
         }
       }

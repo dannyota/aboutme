@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { captureReviewImage } from './review-images';
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 
 import {
@@ -280,7 +281,7 @@ for (const language of ['vi', 'en'] as const) {
           for (const width of [390, 1440]) {
             test(`${template} ${owner} ${viewer} ${width}`, async ({
               page,
-            }) => {
+            }, testInfo) => {
               await page.setViewportSize({ width, height: 900 });
               await page.emulateMedia({ colorScheme: viewer });
               const external = await denyExternalRequests(page);
@@ -330,6 +331,22 @@ for (const language of ['vi', 'en'] as const) {
                 language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace',
               );
               await expectRendererContent(page, language, true, template);
+              if (language === 'vi' && template === 'modern-sidebar'
+                && owner === 'dark' && viewer === 'light' && width === 390) {
+                await captureReviewImage(testInfo,
+                  'public-modern-sidebar-vi-dark-390', () =>
+                    page.screenshot({
+                      animations: 'disabled', timeout: 750,
+                    }));
+              }
+              if (language === 'en' && template === 'executive-band'
+                && owner === 'light' && viewer === 'light' && width === 1440) {
+                await captureReviewImage(testInfo,
+                  'public-executive-band-en-light-1440', () =>
+                    page.screenshot({
+                      animations: 'disabled', timeout: 750,
+                    }));
+              }
               if (template === 'modern-sidebar') {
                 await assertFlow(article.locator('.resume-main'), language,
                   [0, 1, 2, 6, 7]);

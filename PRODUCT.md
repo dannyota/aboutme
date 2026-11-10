@@ -106,7 +106,7 @@ so.
 - Fictional resume fixture: the `full` fixture (Ada Lovelace, Analytical
   Engineer, Hanoi) in `apps/web/test/fixtures/` and the seeded sample resume;
   renders through the real renderer in every preset.
-- Six named presets with golden screenshots in `apps/web/e2e/baselines/`.
+- Six named presets with display assertions in `apps/web/e2e/`.
 - Font catalog manifest with measured Vietnamese coverage:
   `apps/web/app/assets/fonts/catalog.json`.
 - Absent, never to be invented: testimonials, customer logos, user counts, paid

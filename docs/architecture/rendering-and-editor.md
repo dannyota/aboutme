@@ -137,14 +137,14 @@ validated template presets. Template and sample-resume flows start a new resume
 or change its presentation. Byte-exact HTML goldens cover both starting layouts
 and display modes for every preset. Renderer-boundary lint rejects runtime,
 state, network, clock, random, and ambient-locale dependencies. A pinned AMD64
-Chromium harness proves the named screenshot and print baselines at zero
-tolerance, all bundled fonts offline, the hostile corpus in a live DOM, and the
-renderer CSP against both harness and normal Nuxt output. Its reviewed manifest
-builds an immutable source archive from the exact commit and excludes the
-worktree, Git metadata, local state, and secret-like paths.
+Chromium harness proves display assertions and mutation tests, all bundled fonts
+offline, the hostile corpus in a live DOM, and the renderer CSP against both
+harness and normal Nuxt output. Its reviewed manifest builds an immutable source
+archive from the exact commit and excludes the worktree, Git metadata, local
+state, and secret-like paths.
 
-[Display assertions](../design/display-assertions.md) is the accepted
-replacement for these pixel comparisons. Its assertions run beside them; the
-existing gate above remains required until the cutover, which hosted Linux CI
-gates. Golden HTML, renderer isolation, and production determinism stay. Product
-page images remain served assets with their own generator.
+[Display assertions](../design/display-assertions.md) checks layout, style,
+content, accessibility and PDF output. Eight optional sanitized images provide
+manual review evidence for optical defects. Golden HTML, renderer isolation, and
+production determinism stay. Product page images remain served assets with their
+own generator.

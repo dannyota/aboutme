@@ -1,9 +1,9 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { expect, test, type TestInfo } from '@playwright/test';
+import { createCanvas } from '@napi-rs/canvas';
+import { expect, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
 
+import { captureReviewImage } from './review-images';
 import { measurePdfLayout, measurePrintRules } from './display-assertions';
 import { assertPrintDom, assertPrintRules } from './pdf-fonts';
 import { applyStyleMutation } from './style-mutation';
@@ -27,87 +27,6 @@ import {
   photoCropGeometry,
   waitForImages,
 } from './support';
-
-async function compareRaster(
-  actual: Buffer,
-  expected: Buffer,
-  diffPath: string,
-): Promise<void> {
-  const [actualImage, expectedImage] = await Promise.all([
-    loadImage(actual),
-    loadImage(expected),
-  ]);
-  expect(actualImage.width).toBe(expectedImage.width);
-  expect(actualImage.height).toBe(expectedImage.height);
-  const width = actualImage.width;
-  const height = actualImage.height;
-  const actualCanvas = createCanvas(width, height);
-  const expectedCanvas = createCanvas(width, height);
-  actualCanvas.getContext('2d').drawImage(actualImage, 0, 0);
-  expectedCanvas.getContext('2d').drawImage(expectedImage, 0, 0);
-  const actualPixels = actualCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  const expectedPixels = expectedCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  let changed = 0;
-  const diffCanvas = createCanvas(width, height);
-  const diffContext = diffCanvas.getContext('2d');
-  const diff = diffContext.createImageData(width, height);
-  for (let offset = 0; offset < actualPixels.length; offset += 4) {
-    const differs = actualPixels[offset] !== expectedPixels[offset]
-      || actualPixels[offset + 1] !== expectedPixels[offset + 1]
-      || actualPixels[offset + 2] !== expectedPixels[offset + 2]
-      || actualPixels[offset + 3] !== expectedPixels[offset + 3];
-    if (differs) {
-      changed += 1;
-      diff.data.set([255, 0, 0, 255], offset);
-    } else {
-      diff.data.set([255, 255, 255, 255], offset);
-    }
-  }
-  if (changed > 0) {
-    diffContext.putImageData(diff, 0, 0);
-    await writeFile(diffPath, diffCanvas.toBuffer('image/png'));
-  }
-  expect(changed).toBe(0);
-}
-
-async function verifyRaster(
-  bytes: Buffer,
-  filename: string,
-  testInfo: TestInfo,
-): Promise<void> {
-  const actualPath = testInfo.outputPath(filename);
-  await writeFile(actualPath, bytes);
-  const update = testInfo.config.updateSnapshots !== 'none';
-  if (update) {
-    const root = process.env.PLAYWRIGHT_RESULTS_DIR;
-    if (root === undefined) {
-      throw new Error('PLAYWRIGHT_RESULTS_DIR is required.');
-    }
-    const candidate = resolve(
-      root,
-      'candidate-baselines/print-baselines',
-      filename,
-    );
-    await mkdir(resolve(candidate, '..'), { recursive: true });
-    await writeFile(candidate, bytes);
-    return;
-  }
-  const expectedPath = resolve(
-    import.meta.dirname,
-    'print-baselines',
-    filename,
-  );
-  const expected = await readFile(expectedPath);
-  await compareRaster(
-    bytes,
-    expected,
-    testInfo.outputPath(filename.replace(/\.png$/, '-diff.png')),
-  );
-}
 
 test.describe.configure({ mode: 'default' });
 
@@ -219,25 +138,26 @@ for (const printCase of CASES) {
       ) {
         const pdfPage = await document.getPage(pageNumber);
         textPages.push(await pdfTextPage(pdfPage));
+      }
+
+      const review = printCase.fixture === 'print-main-overflow'
+        ? 'print-main-overflow-p2'
+        : 'print-sidebar-overflow-p2';
+      await captureReviewImage(testInfo, review, async () => {
+        const pdfPage = await document.getPage(2);
         const viewport = pdfPage.getViewport({ scale: 96 / 72 });
         const canvas = createCanvas(
-          Math.ceil(viewport.width),
-          Math.ceil(viewport.height),
+          Math.ceil(viewport.width), Math.ceil(viewport.height),
         );
         await pdfPage.render({
           canvas: canvas as unknown as HTMLCanvasElement,
           canvasContext: (
             canvas.getContext('2d') as unknown as CanvasRenderingContext2D
           ),
-          intent: 'print',
-          viewport,
+          intent: 'print', viewport,
         }).promise;
-        await verifyRaster(
-          canvas.toBuffer('image/png'),
-          `${printCase.fixture}-p${pageNumber}.png`,
-          testInfo,
-        );
-      }
+        return canvas.toBuffer('image/png');
+      });
 
       const lastOnFirst = printCase.fixture === 'print-main-overflow' ? 7 : 11;
       const pageMarkers = textPages.map((textPage) => textPage.text);

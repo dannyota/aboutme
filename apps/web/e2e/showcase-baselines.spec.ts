@@ -1,7 +1,7 @@
+import { createCanvas } from '@napi-rs/canvas';
 import { expect, test, type Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen,
   expectScreenClass,
@@ -23,28 +23,23 @@ import { expectSheetStructure, sheetType } from './filter-sheet-details';
 import {
   chromeScreenContract,
   filterSheetContract,
-  CHROME_PIXEL_TOLERANCE,
   mockSignedOutSession,
-  verifyScreenshot,
   waitForImages,
-  withBaselineViewport,
 } from './support';
 
-// Pixel baselines for the community showcase (/showcase) with a stubbed
-// listing: twelve tiles and a pager over three pages, and the empty state,
-// in both languages and themes at phone and desktop width, signed out. Five
-// more cases cover the open filter sheet, three active filters, and the
-// tablet width (docs/design/ui/showcase.md). The card images are stored card
-// baselines, so the tiles hold real card art.
+// Synthetic cards keep the showcase independent of committed test images.
+const CARDS = Array.from({ length: 5 }, (_, index) => {
+  const canvas = createCanvas(1200, 630);
+  const context = canvas.getContext('2d');
+  context.fillStyle = ['#fbfaf8', '#f3f1ec', '#ede9e1',
+    '#ffffff', '#e0e7ff'][index]!;
+  context.fillRect(0, 0, 1200, 630);
+  context.fillStyle = '#101b3f';
+  context.fillRect(120 + index * 30, 100, 300, 430);
+  return canvas.toBuffer('image/png');
+});
 
 const ORIGIN = 'http://127.0.0.1:20092';
-const CARDS = [
-  'card--accent-light',
-  'card--no-photo-en',
-  'card--short-name-en',
-  'card--long-name-vi',
-  'card--cjk-name',
-] as const;
 const TEMPLATES = [
   'engineer-compact',
   'one-page-tight',
@@ -171,15 +166,11 @@ async function openShowcase(
       const index = Number(
         /resume-(\d+)/u.exec(route.request().url())?.[1] ?? '0',
       );
-      const file = CARDS[index % CARDS.length]!;
+      const image = CARDS[index % CARDS.length]!;
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
-        body: await readFile(resolve(
-          import.meta.dirname,
-          'baselines',
-          `${file}.png`,
-        )),
+        body: image,
       });
     },
   );
@@ -352,7 +343,7 @@ for (const { name, path, body, locale, theme, width } of CASES) {
   test.describe(`display locale ${locale}`, () => {
     test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
     const title = `showcase ${name} ${locale} ${theme} ${width}px `
-      + 'matches baseline';
+      + 'keeps content and layout';
     test(title, async ({ page }, testInfo) => {
       test.setTimeout(60_000);
       await openShowcase(page, { name, path, body, locale, theme, width });
@@ -394,26 +385,16 @@ for (const { name, path, body, locale, theme, width } of CASES) {
         await expect(dialog.locator('[data-action="showcase-filters-apply"]'))
           .toHaveText(locale === 'vi' ? 'Xem 30 CV' : 'Show 30 resumes');
         await expect.poll(() => measureShowcaseSheet(dialog)).toBe(true);
-        // The retained sheet baselines are 390 x 844.
-        await page.setViewportSize({ width, height: 844 });
       }
       const overflow = await page.evaluate(() =>
         document.documentElement.scrollWidth
         - document.documentElement.clientWidth);
       expect(overflow).toBe(0);
 
-      const capture = () => verifyScreenshot(
-        page,
-        `showcase--${name}--${locale}--${theme}--${width}.png`,
-        testInfo,
-        undefined,
-        CHROME_PIXEL_TOLERANCE,
-        name !== 'sheet',
-      );
-      if (name === 'filled' || name === 'filtered') {
-        await withBaselineViewport(page, capture);
-      } else {
-        await capture();
+      if (name === 'filled' && locale === 'en' && theme === 'dark'
+        && width === 1440) {
+        await captureReviewImage(testInfo, 'showcase-en-dark-1440', () =>
+          page.screenshot({ animations: 'disabled', timeout: 750 }));
       }
     });
   });

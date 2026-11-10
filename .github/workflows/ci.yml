@@ -635,7 +635,7 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make web-no-eval-check
 
-  # The pinned-browser renderer baselines, as five shards that together run
+  # The pinned-browser display assertions, as five shards that together run
   # every spec once (Makefile WEB_E2E_SHARD), balanced by measured spec and
   # diagnostics time. Each shard builds the Nuxt surfaces it tests from the
   # source manifest inside the pinned image.
@@ -655,7 +655,7 @@ jobs:
         run: |
           grep -qxF '/.dev/' .git/info/exclude ||
             printf '%s\n' '/.dev/' >> .git/info/exclude
-      - name: Compare pinned browser baselines
+      - name: Assert pinned browser display rules
         env:
           WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
           WEB_E2E_SHARD: ${{ matrix.shard }}
@@ -669,6 +669,16 @@ jobs:
         with:
           name: browser-diagnostics-${{ matrix.shard }}
           path: .dev/web-e2e-results/*/*/compare/diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+      - name: Upload display review images
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: display-review-${{ matrix.shard }}
+          path: .dev/web-e2e-results/*/*/compare/review-images/
           if-no-files-found: warn
           retention-days: 14
           include-hidden-files: true

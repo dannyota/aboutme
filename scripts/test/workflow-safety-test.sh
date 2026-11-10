@@ -715,12 +715,9 @@ grep -Fq '        test -z "${UPDATE_GOLDEN+x}"' "$WORKFLOW" ||
 grep -Fq '        test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"' "$WORKFLOW" ||
   fail "pinned browser job does not reject PLAYWRIGHT_UPDATE_SNAPSHOTS by presence"
 grep -Fq '        make web-e2e' "$WORKFLOW" ||
-  fail "pinned browser job does not run the comparison target"
-if grep -Fq 'make web-e2e-update' "$WORKFLOW"; then
-  fail "hosted workflow can update browser baselines"
-fi
+  fail "pinned browser job does not run the display target"
 if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
-  fail "hosted workflow passes a browser baseline update flag"
+  fail "hosted workflow passes a browser snapshot update flag"
 fi
 
 # The matrix runs exactly the Makefile's shards, which together cover every
