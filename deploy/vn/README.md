@@ -324,7 +324,7 @@ fail and holds each package after verifying its version.
 A CrowdSec engine or bouncer pin raise needs a reviewed catalog transition:
 `host/crowdsec-schema-v<version>.tsv` and `host/crowdsec-db.sh` compare the
 catalog exactly. Follow the
-[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md#engine-and-hub-upgrades);
+[CrowdSec PostgreSQL runbook](../../docs/runbooks/crowdsec-postgresql.md#engine-upgrade-to-182);
 changing a version constant and rerunning the installer is not a supported
 CrowdSec upgrade procedure.
 
