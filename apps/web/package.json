@@ -54,7 +54,7 @@
     "@vue/test-utils": "2.5.1",
     "eslint": "10.14.0",
     "fontkit": "2.0.4",
-    "happy-dom": "20.14.5",
+    "happy-dom": "21.0.4",
     "jsdom": "30.1.1",
     "openapi-typescript": "7.13.0",
     "shadcn-nuxt": "2.9.0",
@@ -62,7 +62,7 @@
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vite": "8.3.6",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "vue-tsc": "3.3.14",
     "yaml": "2.9.1"
   },
@@ -75,6 +75,25 @@
     },
     "altcha-lib": {
       "h3": "$h3"
+    },
+    "glob": "14.0.2",
+    "@eslint/config-array": {
+      "minimatch": "11.0.1"
+    },
+    "editorconfig": {
+      "minimatch": "11.0.1"
+    },
+    "eslint": {
+      "minimatch": "11.0.1"
+    },
+    "eslint-plugin-import-x": {
+      "minimatch": "11.0.1"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
     }
   }
 }

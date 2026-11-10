@@ -48,5 +48,11 @@
     "quicktype": "26.0.0",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
+  },
+  "overrides": {
+    "quicktype": {
+      "stream-json": "3.7.0"
+    },
+    "glob": "14.0.2"
   }
 }
