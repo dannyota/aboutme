@@ -17,10 +17,8 @@ outputs:
 runs:
   using: composite
   steps:
-    # Pulls the database image, then the pinned Playwright base image (the
-    # FROM reference in deploy/dev-https-browser/Dockerfile), in the
-    # background. make test-db-up and dev-https-browser-image then find them
-    # local instead of pulling on the critical path.
+    # Pulls the database image and the public GHCR browser base from the
+    # Dockerfile's FROM reference in the background, ahead of the builds.
     - name: Start pulling container images in the background
       shell: bash
       run: |
