@@ -170,7 +170,10 @@ export async function measureScreenText(
         if (!checked.has(element)) {
           checked.add(element);
           const delta = element.scrollWidth - element.clientWidth;
-          if (!allowedX && delta > 1) {
+          // Decoration may overflow a non-clipping ancestor and stay visible.
+          const bounds = element === parent
+            || /^(hidden|clip|auto|scroll)$/u.test(css.overflowX);
+          if (bounds && !allowedX && delta > 1) {
             fail('scroll', path(element), null, rect, 'x', delta);
           }
         }

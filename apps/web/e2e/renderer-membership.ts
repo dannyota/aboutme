@@ -57,16 +57,17 @@ const ENGLISH_TITLES = [
   'Lovelace Medal', 'Hackathon Winner',
 ] as const;
 
-// Approved against hosted Linux output. Executive-band and academic-dense
-// break at the same section as the accepted Vietnamese captures.
+// Approved against hosted Linux output. Executive-band, academic-dense, and
+// consulting-formal break at the same section as the accepted Vietnamese
+// captures.
 const ENGLISH_PAGES: Record<string, readonly (readonly number[])[]> = {
   'classic-serif': [[0, 1, 2, 3, 4, 5, 6], [7, 8, 9]],
   'classic-serif-justify': [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]],
   'engineer-compact': [[0, 7, 8, 9, 2, 3, 6, 4, 5, 1]],
   'modern-sidebar': [[0, 1, 7, 8, 9, 2, 3, 4, 5, 6]],
   'executive-band': [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]],
-  'consulting-formal': [[0, 1, 2, 3, 4, 5, 6, 7, 8], [9]],
-  'consulting-formal-letter': [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
+  'consulting-formal': [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
+  'consulting-formal-letter': [[0, 1, 2, 3, 4, 5, 6], [7, 8, 9]],
   'academic-dense': [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
 };
 
