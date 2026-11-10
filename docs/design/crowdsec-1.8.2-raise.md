@@ -45,7 +45,9 @@ Independently review its complete diff against 1.8.1 and commit the generated
 TSV unchanged. Expect replacement of `decision_value_type_scope_until` by the
 index including `simulated` and its relation metadata, per the [decision
 schema]; investigate any additional changes. Artifact upload precedes
-assertions, so it is not a pass.
+assertions, so it is not a pass. The generated catalog (run 42731076259) also
+adds the nullable `machines.features` jsonb column, which lists the engine's
+enabled features ([PR 4770]); it holds no request data.
 
 Ordinary admission compares exactly one compiled-in 1.8.2 catalog and binds its
 digest into the epoch. Keep ownership, role, statistics, notice, lock, and lease
@@ -125,3 +127,4 @@ Digest, catalog, review, CI, and production proofs remain pending.
 [upstream test]: https://github.com/crowdsecurity/crowdsec/pull/4678/files
 [decision schema]:
   https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/pkg/database/ent/schema/decision.go#L51-L57
+[PR 4770]: https://github.com/crowdsecurity/crowdsec/pull/4770

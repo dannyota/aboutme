@@ -69,12 +69,13 @@ activation skipped after the failed migration. Confirm the installer reports
 ## Engine upgrade to 1.8.2
 
 Follow the [upgrade design](../design/crowdsec-1.8.2-raise.md). Reset loses
-CrowdSec alerts, bans, windows, and registrations; application data stays intact.
-Require independent review, green exact-commit main-push CI, a patch tag, and
-successful release-image publication under the [release rules](../../instructions/releases.md).
-Before installation, take the encrypted incremental backup on the host using the
-workload lock and release annotation. Require completion and healthy WAL archiving;
-keep keys on the host. The deployer's later backup is too late.
+CrowdSec alerts, bans, windows, and registrations; application data stays
+intact. Require independent review, green exact-commit main-push CI, a patch
+tag, and successful release-image publication under the
+[release rules](../../instructions/releases.md). Before installation, take the
+encrypted incremental backup on the host using the workload lock and release
+annotation. Require completion and healthy WAL archiving; keep keys on the host.
+The deployer's later backup is too late.
 
 ```sh
 sudo /usr/local/lib/aboutme/workload-lock.sh 21600 \
@@ -102,15 +103,17 @@ A failed reset revokes its lease, retains failure denial, and stops consumers.
 Diagnose the reported step, repair the cause, rerun `--reset`, restore the
 recorded edge, and finish the installer. Never clear fences or markers by hand.
 
-To roll back, use the reviewed 1.8.1 bundle's installer and authenticated package
-with its matching helpers and catalog. At occupied-catalog refusal, reset under
-that old bundle, restore the recorded edge, and finish its installer. CrowdSec
-state is lost again. Preserve notice and fence fixes; never restore the
-application cluster for CrowdSec. Image rollback alone retains the host bundle.
-Do not refresh the hub as part of this upgrade. The `cscli.hub_branch: master`
-pin selects the branch, not content versions; uncached operations still need
-network. See the [branch selection](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/core/require/branch.go)
-and [hub commands](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/clihub/hub.go).
+To roll back, use the reviewed 1.8.1 bundle's installer and authenticated
+package with its matching helpers and catalog. At occupied-catalog refusal,
+reset under that old bundle, restore the recorded edge, and finish its
+installer. CrowdSec state is lost again. Preserve notice and fence fixes; never
+restore the application cluster for CrowdSec. Image rollback alone retains the
+host bundle. Do not refresh the hub as part of this upgrade. The
+`cscli.hub_branch: master` pin selects the branch, not content versions;
+uncached operations still need network. See the
+[branch selection](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/core/require/branch.go)
+and
+[hub commands](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/clihub/hub.go).
 
 ## Verification
 
