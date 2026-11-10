@@ -67,6 +67,9 @@ beforeEach(() => {
   for (const path of sourcePaths(repository)) {
     put(join(root, path), readFileSync(join(repository, path)));
   }
+  for (const path of ['apps/web/package.json', 'apps/web/package-lock.json']) {
+    put(join(root, path), readFileSync(join(repository, path)));
+  }
   put(join(root, 'Makefile'), readFileSync(join(repository, 'Makefile')));
   put(join(pages, 'manifest.json'), readFileSync(
     join(committed, 'manifest.json'),
@@ -136,7 +139,6 @@ describe('template page freshness', () => {
     'packages/schema/gen/ts/templates.ts',
     'packages/schema/samples/ats-plain.en.json',
     'apps/web/nuxt.config.ts',
-    'apps/web/package-lock.json',
     'apps/web/public/csp-bootstrap.js',
     'apps/web/public/theme-bootstrap.js',
     'apps/web/server/plugins/csp-externalize.ts',
@@ -147,6 +149,41 @@ describe('template page freshness', () => {
       readFileSync(join(root, path)), Buffer.from('\n/* changed */'),
     ]));
     expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
+  it('ignores unrelated lockfile versions', () => {
+    const before = sourceFingerprint(root).sha256;
+    const path = join(root, 'apps/web/package-lock.json');
+    const lock = JSON.parse(readFileSync(path, 'utf8'));
+    lock.packages['node_modules/eslint'].version = '99.0.0';
+    put(path, JSON.stringify(lock));
+    expect(sourceFingerprint(root).sha256).toBe(before);
+  });
+
+  it('ignores unrelated web package manifest changes', () => {
+    const before = sourceFingerprint(root).sha256;
+    const path = join(root, 'apps/web/package.json');
+    const manifest = JSON.parse(readFileSync(path, 'utf8'));
+    manifest.devDependencies.eslint = '99.0.0';
+    put(path, JSON.stringify(manifest));
+    expect(sourceFingerprint(root).sha256).toBe(before);
+  });
+
+  it('detects changed render dependency versions', () => {
+    const before = sourceFingerprint(root).sha256;
+    const path = join(root, 'apps/web/package-lock.json');
+    const lock = JSON.parse(readFileSync(path, 'utf8'));
+    lock.packages['node_modules/vue'].version = '99.0.0';
+    put(path, JSON.stringify(lock));
+    expect(sourceFingerprint(root).sha256).not.toBe(before);
+  });
+
+  it('rejects a missing render dependency version', () => {
+    const path = join(root, 'apps/web/package-lock.json');
+    const lock = JSON.parse(readFileSync(path, 'utf8'));
+    delete lock.packages['node_modules/vue'];
+    put(path, JSON.stringify(lock));
+    expect(() => sourceFingerprint(root)).toThrow(/missing.*vue/i);
   });
 
   it.each([

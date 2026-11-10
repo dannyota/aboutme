@@ -290,9 +290,10 @@ source hashes in the manifest and fail stale inputs without comparing pixels.
 Generation uses pinned Linux for consistent delivery and requires manual
 inspection. Keep the manifest's array shape and existing fields; add source and
 output SHA-256 fields per entry. Hash sorted paths and bytes for the generator,
-renderer, render utilities, schema/template/sample inputs, bundled fonts, Nuxt
-configuration and lockfile, plus browser image digest and PDF flags. Exclude
-output PNGs and the manifest from the source hash. Validate each output file's
+renderer, render utilities, schema/template/sample inputs, bundled fonts, and
+Nuxt configuration. Include sorted resolved render dependency versions from
+the web lockfile, browser image digest, browser and PDF flags, and raster DPI.
+Exclude output PNGs and the manifest from the source hash. Validate each file's
 hash, dimensions and page order without regenerating images in test mode.
 `make web-template-pages` builds the harness from the clean source archive in
 the pinned Linux image, then runs `node scripts/generate-template-pages.mts`

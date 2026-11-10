@@ -36,6 +36,22 @@ export const BROWSER_FLAGS = [
   '--disable-gpu',
   '--hide-scrollbars',
 ];
+export const RENDER_DEPENDENCIES = [
+  '@lucide/vue',
+  '@napi-rs/canvas',
+  '@playwright/test',
+  '@tailwindcss/vite',
+  '@vitejs/plugin-vue',
+  'dompurify',
+  'nuxt',
+  'pdfjs-dist',
+  'playwright',
+  'playwright-core',
+  'tailwindcss',
+  'vite',
+  'vue',
+  'vue-router',
+] as const;
 
 const SOURCE_INPUTS = [
   'apps/web/scripts/generate-template-pages.mts',
@@ -43,8 +59,6 @@ const SOURCE_INPUTS = [
   'apps/web/app/assets/fonts',
   'apps/web/app/templates/samplePages.ts',
   'apps/web/nuxt.config.ts',
-  'apps/web/package.json',
-  'apps/web/package-lock.json',
   'apps/web/tsconfig.json',
   'apps/web/public/csp-bootstrap.js',
   'apps/web/public/theme-bootstrap.js',
@@ -424,11 +438,20 @@ export function sourceFingerprint(root: string): {
 } {
   const digest = browserImage(root).split('@')[1]!;
   const hash = createHash('sha256');
+  const lock = JSON.parse(readRegular(join(root,
+    'apps/web/package-lock.json')).toString('utf8'));
+  const versions = RENDER_DEPENDENCIES.map((name) => {
+    const version: unknown = lock.packages?.[`node_modules/${name}`]?.version;
+    requireCondition(typeof version === 'string' && version.length > 0,
+      `missing render dependency version: ${name}`);
+    return `${name}@${version}`;
+  }).sort().join('\n');
   const inputs: [string, Buffer][] = [
     ['@browser-image-digest', Buffer.from(digest)],
     ['@browser-flags', Buffer.from(JSON.stringify(BROWSER_FLAGS))],
     ['@pdf-flags', Buffer.from(JSON.stringify(PDF_FLAGS))],
     ['@raster-dpi', Buffer.from(String(RASTER_DPI))],
+    ['@render-dependencies', Buffer.from(versions)],
   ];
   let total = 0;
   for (const path of sourcePaths(root)) {
