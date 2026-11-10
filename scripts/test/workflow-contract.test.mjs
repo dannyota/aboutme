@@ -508,6 +508,43 @@ test("selector checks old modes on deletions and renames", () => {
 const imageCheck = "./.github/actions/release-image-check";
 const readImageCheck = () => parseYaml(read(`${imageCheck.slice(2)}/action.yml`), imageCheck).toJS();
 
+test("image scans share one cached vulnerability database per workflow run", () => {
+  for (const workflow of ["release-check", "release-images", "security-scan"]) {
+    const config = readWorkflow(workflow);
+    const fetch = config.jobs["trivy-db"];
+    assert.ok(fetch, `${workflow}: database job`);
+    assert.equal(fetch["timeout-minutes"], 15);
+    assert.deepEqual(fetch.permissions, { contents: "read", packages: "read" });
+    const fetchSteps = Object.values(config.jobs).flatMap((job) => job.steps ?? []).filter((step) => step.run?.includes("fetch-db"));
+    assert.equal(fetchSteps.length, 1, `${workflow}: one fetch command`);
+    assert.equal(fetchSteps[0].if, "steps.cache.outputs.cache-hit != 'true'");
+    assert.ok(fetch.steps.some((step) => step.run?.includes("date -u +%F")));
+    const cache = fetch.steps.find((step) => step.uses?.startsWith("actions/cache@"));
+    assert.equal(cache.with.path, "${{ runner.temp }}/trivy-cache/db");
+    assert.equal(cache.with.key, "trivy-db-v2-${{ steps.date.outputs.day }}");
+    const upload = fetch.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+    assert.equal(upload.with.name, "trivy-db");
+    assert.equal(upload.with["if-no-files-found"], "error");
+    assert.equal(upload.with["retention-days"], 1);
+    assert.equal(upload.with.path, "${{ runner.temp }}/trivy-cache/db");
+    for (const name of workflow === "release-images" ? ["build", "observer-image", "observer-image-amd64"] : [workflow === "release-check" ? "build" : "image-scan"]) {
+      assert.ok([config.jobs[name].needs].flat().includes("trivy-db"), `${workflow}/${name}: database dependency`);
+    }
+  }
+  for (const name of ["build", "observer-image", "observer-image-amd64"]) {
+    const sbom = readWorkflow("release-images").jobs[name].steps.find((step) => step.run?.includes("image --format spdx-json") || step.run?.includes("image --skip-db-update --format spdx-json"));
+    assert.ok(sbom?.run.includes('--cache-dir "$RUNNER_TEMP/trivy-cache" image --skip-db-update --format spdx-json'), `${name}: SBOM skips vulnerability database updates`);
+  }
+  assert.equal(readWorkflow("security-scan").jobs["image-scan"].steps.find((step) => step.name === "Scan released images").env.TRIVY_CACHE_DIR, "${{ runner.temp }}/trivy-cache");
+  for (const steps of [readImageCheck().runs.steps, readWorkflow("security-scan").jobs["image-scan"].steps]) {
+    const download = steps.find((step) => step.uses?.startsWith("actions/download-artifact@") && step.with?.name === "trivy-db");
+    assert.ok(download, "database artifact download");
+    assert.equal(download.with.path, "${{ runner.temp }}/trivy-cache/db");
+    assert.equal(download.if, undefined);
+    assert.equal(download["continue-on-error"], undefined);
+  }
+});
+
 test("manual image checks have no release authority and publication stays bounded", () => {
   checkReleaseContracts(readWorkflow("release-check"), readWorkflow("release-images"), readImageCheck());
 });
@@ -713,8 +750,9 @@ test("app release gate accepts observer-only failures and rejects app failures",
 function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(Object.keys(manual.on), ["workflow_dispatch"], "manual trigger");
   assert.deepEqual(manual.permissions, { contents: "read" }, "manual read-only permissions");
-  assert.deepEqual(Object.keys(manual.jobs), ["build"], "manual build job set");
-  for (const job of Object.values(manual.jobs)) {
+  assert.deepEqual(Object.keys(manual.jobs).sort(), ["build", "trivy-db"], "manual build job set");
+  assert.equal(manual.jobs["trivy-db"]["timeout-minutes"], 15, "database timeout-minutes");
+  for (const job of [manual.jobs.build]) {
     assert.deepEqual(job.permissions, { contents: "read", packages: "read" }, "manual job read-only permissions");
     assert.equal(job["timeout-minutes"], 40, "manual timeout-minutes");
     assert.equal(job.strategy["fail-fast"], false);
@@ -730,14 +768,14 @@ function checkReleaseContracts(manual, release, action) {
   assert.doesNotMatch(JSON.stringify(manual), /secrets\./, "manual secret access");
   assert.deepEqual(release.on, { push: { tags: ["v*"] } }, "publication tag trigger");
   assert.deepEqual(release.concurrency, { group: "release-images-${{ github.ref }}", "cancel-in-progress": false }, "serialize publication for each tag");
-  const timeouts = { eligibility: 5, build: 40, image: 10, "observer-image": 20, "observer-image-amd64": 20, release: 10 };
+  const timeouts = { "trivy-db": 15, eligibility: 5, build: 40, image: 10, "observer-image": 20, "observer-image-amd64": 20, release: 10 };
   assert.deepEqual(Object.keys(release.jobs).sort(), Object.keys(timeouts).sort());
   for (const [name, minutes] of Object.entries(timeouts)) {
     const job = release.jobs[name];
     assert.equal(job["timeout-minutes"], minutes, `${name}: timeout-minutes`);
     assert.equal(job["continue-on-error"], undefined, `${name}: must block on failure`);
   }
-  assert.equal(release.jobs.build.needs, "eligibility", "independent app builds");
+  assert.deepEqual(release.jobs.build.needs, ["eligibility", "trivy-db"], "independent app builds");
   assert.equal(release.jobs.image.needs, "build", "app build gate");
   assert.equal(release.jobs.image.if, "github.event_name == 'push'", "app index success gate");
   assert.deepEqual(release.jobs.release.needs, ["image", "observer-image", "observer-image-amd64"]);
@@ -757,7 +795,7 @@ function checkReleaseContracts(manual, release, action) {
     assert.equal(job.steps[check].if, undefined, `${name}: shared checks unconditional`);
     assert.equal(job.steps[check]["continue-on-error"], undefined, `${name}: must block on check failure`);
     assert.equal(job.steps[push].if, "github.event_name == 'push'", `${name}: push success gate`);
-    assert.equal(job.needs, "eligibility", `${name}: eligibility gate`);
+    assert.deepEqual(job.needs, ["eligibility", "trivy-db"], `${name}: eligibility gate`);
   }
   for (const name of ["build", "image", "observer-image", "observer-image-amd64"]) {
     const job = release.jobs[name];
@@ -781,7 +819,7 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(release.jobs.eligibility.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(release.jobs.release.permissions, { actions: "read", contents: "write" });
   assert.equal(action.runs.using, "composite");
-  assert.deepEqual(action.runs.steps.map((step) => step.id), ["load-ci-tools", "build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "scan-image", "upload-trivy-report"], "shared build-only steps");
+  assert.deepEqual(action.runs.steps.map((step) => step.id), ["load-ci-tools", "build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "download-trivy-db", "scan-image", "upload-trivy-report"], "shared build-only steps");
   assert.equal(action.runs.steps[0].uses, "./.github/actions/ci-tools", "Trivy comes from the ci-tools package");
   for (const step of action.runs.steps) {
     assert.equal(step["continue-on-error"], undefined, `${step.name}: must block on failure`);
@@ -794,6 +832,7 @@ function checkReleaseContracts(manual, release, action) {
   }
   const scan = action.runs.steps.find((step) => step.id === "scan-image");
   assert.equal(scan.env.REPORT_NAME, "${{ inputs.report-name }}");
+  assert.equal(scan.env.TRIVY_CACHE_DIR, "${{ runner.temp }}/trivy-cache");
   assert.equal(scan.run, [
     'scripts/security-scan.sh scan-image \\',
     '  "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$REPORT_NAME.json"',

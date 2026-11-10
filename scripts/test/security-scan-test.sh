@@ -69,6 +69,53 @@ fi
 STUB
 chmod +x "$WORK/bin/gh" "$WORK/bin/git" "$WORK/bin/trivy"
 
+# A failed primary list retries GHCR directly, including on a 404.
+cat >"$WORK/bin/fetch-trivy" <<'STUB'
+#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >>"$FETCH_CALL_LOG"
+case "$*" in
+  *public.ecr.aws*) exit 1 ;;
+esac
+[ "${FAIL_ALL_FETCHES:-0}" = 0 ] || exit 1
+mkdir -p "$TRIVY_CACHE_DIR/db"
+printf fixture >"$TRIVY_CACHE_DIR/db/trivy.db"
+printf fixture >"$TRIVY_CACHE_DIR/db/metadata.json"
+STUB
+chmod +x "$WORK/bin/fetch-trivy"
+export TRIVY_CACHE_DIR="$WORK/fetch-cache" FETCH_CALL_LOG="$WORK/fetch-calls"
+: >"$FETCH_CALL_LOG"
+bash "$ROOT/scripts/security-scan.sh" fetch-db "$WORK/bin/fetch-trivy" "$TRIVY_CACHE_DIR"
+[ "$(wc -l <"$FETCH_CALL_LOG")" -eq 2 ] || fail 'fetch must retry GHCR after a registry error'
+grep -Fq -- '--db-repository public.ecr.aws/aquasecurity/trivy-db:2 --db-repository ghcr.io/aquasecurity/trivy-db:2' "$FETCH_CALL_LOG" || fail 'fetch must order the repositories with GHCR last'
+tail -n 1 "$FETCH_CALL_LOG" | grep -Fq -- '--db-repository ghcr.io/aquasecurity/trivy-db:2' || fail 'fallback must use GHCR directly'
+
+cat >"$WORK/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$WORK/bin/sleep"
+: >"$FETCH_CALL_LOG"
+if FAIL_ALL_FETCHES=1 bash "$ROOT/scripts/security-scan.sh" fetch-db "$WORK/bin/fetch-trivy" "$TRIVY_CACHE_DIR"; then
+  fail 'exhausted database retries must fail'
+fi
+[ "$(wc -l <"$FETCH_CALL_LOG")" -eq 3 ] || fail 'database retries must be bounded'
+rm "$WORK/bin/sleep"
+
+# Scans fail before invoking Trivy if the handed-off database is absent.
+export TRIVY_CACHE_DIR="$WORK/trivy-cache"
+: >"$CALL_LOG"
+if bash "$ROOT/scripts/security-scan.sh" scan-image "$WORK/bin/trivy" fixture "" "$WORK/report.json" >"$WORK/output" 2>&1; then
+  fail 'missing database must fail the scan'
+fi
+[ ! -s "$CALL_LOG" ] || fail 'missing database must not invoke Trivy'
+mkdir -p "$TRIVY_CACHE_DIR/db"
+printf fixture >"$TRIVY_CACHE_DIR/db/trivy.db"
+printf fixture >"$TRIVY_CACHE_DIR/db/metadata.json"
+bash "$ROOT/scripts/security-scan.sh" scan-image "$WORK/bin/trivy" fixture "" "$WORK/report.json"
+grep -Fq -- "--cache-dir $TRIVY_CACHE_DIR" "$CALL_LOG" || fail 'scan must use the handed-off cache'
+grep -Fq -- '--skip-db-update' "$CALL_LOG" || fail 'scan must skip database updates'
+
 fixture() {
   unset FAIL_TARGET FAIL_MODE ASSET_ERROR
   cat >"$WORK/release.json" <<'JSON'

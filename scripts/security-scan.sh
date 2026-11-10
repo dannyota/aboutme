@@ -8,9 +8,12 @@
 #
 # Usage:
 #   security-scan.sh install-trivy DEST ARCHIVE_DIR
+#   security-scan.sh fetch-db TRIVY CACHE_DIR
 #   security-scan.sh scan-image TRIVY REF PLATFORM REPORT
 #   security-scan.sh report REPORT
 #   security-scan.sh weekly-scan TRIVY REPORT_DIR [RELEASE_TAG [OBSERVER_RELEASE_TAG]]
+#
+# Image scans require TRIVY_CACHE_DIR with the vulnerability database.
 #
 # install-trivy never downloads. ARCHIVE_DIR holds the release archive for
 # this machine (trivy_VERSION_Linux-64bit.tar.gz or
@@ -61,6 +64,26 @@ install_trivy() {
   "$dest/trivy" --version
 }
 
+# Retry GHCR directly because Trivy does not fall back on every error.
+fetch_db() {
+  local trivy_bin=${1:?fetch-db needs the trivy binary path}
+  local cache_dir=${2:?fetch-db needs a cache directory}
+  local attempt
+  if ! "$trivy_bin" --cache-dir "$cache_dir" image --download-db-only \
+    --db-repository public.ecr.aws/aquasecurity/trivy-db:2 \
+    --db-repository ghcr.io/aquasecurity/trivy-db:2; then
+    for attempt in 1 2; do
+      if "$trivy_bin" --cache-dir "$cache_dir" image --download-db-only \
+        --db-repository ghcr.io/aquasecurity/trivy-db:2; then
+        break
+      fi
+      [ "$attempt" -lt 2 ] || return 1
+      sleep 5
+    done
+  fi
+  [ -s "$cache_dir/db/trivy.db" ] && [ -s "$cache_dir/db/metadata.json" ]
+}
+
 # Scans one image into a JSON report. Engine errors fail here; `report`
 # below decides pass/fail from findings in that file, so the scan and the
 # failing-findings table read the same data instead of two divergent Trivy
@@ -70,8 +93,11 @@ scan_image() {
   local ref=${2:?scan-image needs an image reference}
   local platform=${3:-}
   local report=${4:?scan-image needs a report output path}
+  local cache_dir=${TRIVY_CACHE_DIR:?scan-image needs TRIVY_CACHE_DIR}
+  [ -s "$cache_dir/db/trivy.db" ] && [ -s "$cache_dir/db/metadata.json" ] ||
+    die "Trivy database is missing from $cache_dir/db"
   local -a args=(
-    image --scanners vuln --ignore-unfixed
+    --cache-dir "$cache_dir" image --skip-db-update --scanners vuln --ignore-unfixed
     --severity 'HIGH,CRITICAL' --format json --output "$report"
   )
   [ -n "$platform" ] && args+=(--platform "$platform")
@@ -234,6 +260,10 @@ install-trivy)
   shift
   install_trivy "$@"
   ;;
+fetch-db)
+  shift
+  fetch_db "$@"
+  ;;
 scan-image)
   shift
   scan_image "$@"
@@ -247,6 +277,6 @@ weekly-scan)
   weekly_scan "$@"
   ;;
 *)
-  die "usage: $0 {install-trivy|scan-image|report|weekly-scan} [args...]; see the header"
+  die "usage: $0 {install-trivy|fetch-db|scan-image|report|weekly-scan} [args...]; see the header"
   ;;
 esac
