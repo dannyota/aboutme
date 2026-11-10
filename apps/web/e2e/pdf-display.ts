@@ -524,7 +524,7 @@ export function checkMembership(
       + JSON.stringify(membership),
     );
   }
-  expect(membership).toStrictEqual(expected);
+  expect(membership, 'PDF approved page membership.').toStrictEqual(expected);
 }
 
 export function expectedEntryIds(printCase: PrintCase): string[] {
@@ -550,7 +550,7 @@ export async function printedDisplayPages(
   }));
 }
 
-async function withPrintedPdf<T>(
+export async function withPrintedPdf<T>(
   page: Page,
   read: (pdfPage: PDFPageProxy) => Promise<T>,
 ): Promise<T[]> {

@@ -1,4 +1,8 @@
+import { expect } from '@playwright/test';
+import type { measurePdfLayout } from './display-assertions';
 import type { PdfInk, PdfPaint } from './pdf-paint';
+import { assertDomInputContent, type SamplePdfChunk }
+  from './pdf-input-content';
 
 interface TextStyle {
   color: string;
@@ -208,5 +212,95 @@ export function pdfTextStyleDiagnostic(
           bold: weightMatches(found, expected.bold),
         }
       : null,
+  });
+}
+
+export function assertOverflowTextStyle(
+  layout: Awaited<ReturnType<typeof measurePdfLayout>>, paint: PdfPaint,
+  chunks: readonly SamplePdfChunk[],
+  assertion?: 'font size' | 'color' | 'icon color',
+): void {
+  const check = (name: string, run: () => void) => {
+    if (assertion === undefined || assertion === name) {
+      run();
+    }
+  };
+  check('typography', () => {
+    expect(layout.family.replaceAll('"', ''), 'Print font family.')
+      .toBe('Be Vietnam Pro, Noto Sans');
+    expect(layout.synthesis, 'Print font synthesis.').toBe('none');
+    expect(layout.lineHeight, 'Print line height.').toBe(21);
+    expect(layout.background, 'Print paper color.').toBe('rgb(255, 255, 255)');
+    expect(layout.headerAlign, 'Print header alignment.').toBe('left');
+  });
+  check('font size', () => {
+    expect(layout.size, 'Print font size.').toBe(14);
+  });
+  for (const icon of layout.icons) {
+    const sidebar = layout.sidebar && icon.left >= layout.sidebar.left - 1
+      && icon.top >= layout.sidebar.top - 1;
+    check('icon color', () => {
+      expect(pdfColorMatches(icon.color, sidebar ? '#4e5b62' : '#556066'),
+        'Print icon color.').toBe(true);
+    });
+  }
+  check('content', () => {
+    assertDomInputContent(layout, chunks);
+  });
+  const expected = chunks.map((chunk, index) => {
+    const measured = layout.chunks[index]!;
+    const heading = ['name', 'heading', 'title'].includes(chunk.role);
+    const scales: Record<string, number> = {
+      name: 2, headline: 1.15, heading: 1.1, meta: 0.9,
+    };
+    const size = 14 * (scales[chunk.role] ?? 1);
+    const color = chunk.linked
+      ? '#0f6b7d'
+      : heading
+        ? '#0e3f52'
+        : chunk.role === 'meta'
+          ? (chunk.region === 'sidebar' ? '#4e5b62' : '#556066')
+          : '#1c2b33';
+    check('typography', () => {
+      expect(Math.abs(measured.size - size), 'Print text size.')
+        .toBeLessThanOrEqual(0.1);
+      expect(measured.weight, 'Print text weight.')
+        .toBe(chunk.role === 'title' && chunk.strong
+          ? '900'
+          : heading || chunk.strong ? '700' : '400');
+    });
+    const channels = measured.color.match(/[\d.]+/gu) ?? [];
+    const hex = '#' + channels.map((channel) => Number(channel)
+      .toString(16).padStart(2, '0')).join('');
+    check('color', () => {
+      expect(pdfColorMatches(hex, color), 'Print text color.').toBe(true);
+    });
+    return {
+      value: chunk.value,
+      expected: { color, size: size * 0.75, family: 'Be Vietnam Pro',
+        bold: heading || chunk.strong },
+    };
+  });
+  const weighted = pdfVariableTextWeights(paint, 'Be Vietnam Pro',
+    expected.filter((chunk) => !chunk.expected.bold).map(({ value }) => value));
+  for (const chunk of expected) {
+    check('pdf typography', () => {
+      expect(pdfTextStyleMatches(weighted, chunk.value, chunk.expected),
+        'PDF print text style. '
+        + pdfTextStyleDiagnostic(weighted, chunk.value, chunk.expected))
+        .toBe(true);
+    });
+  }
+  check('typography', () => {
+    for (const text of layout.text) {
+      if (text.role === 'body') {
+        expect(text.align, 'Print body alignment.').toBe('left');
+      }
+      if (text.role === 'heading') {
+        expect(text.transform, 'Print heading transform.').toBe('uppercase');
+        expect(Math.abs(text.spacing - 14 * 1.1 * 0.06),
+          'Print heading spacing.').toBeLessThanOrEqual(0.1);
+      }
+    }
   });
 }

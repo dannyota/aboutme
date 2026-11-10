@@ -8,6 +8,9 @@ import {
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import type { ScreenContract } from './display-assertions';
+import { expectSheetStructure, sheetType } from './filter-sheet-details';
+
 interface CspViolation {
   readonly blockedURI: string;
   readonly effectiveDirective: string;
@@ -34,7 +37,9 @@ export async function trackCsp(page: Page): Promise<CspProbe> {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text());
+    }
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.exposeFunction(
@@ -215,7 +220,9 @@ export async function photoCropGeometry(
 ): Promise<PhotoCropGeometry> {
   return page.locator('.resume-photo').first().evaluate((frame) => {
     const image = frame.querySelector('img');
-    if (image === null) throw new Error('Photo frame has no image.');
+    if (image === null) {
+      throw new Error('Photo frame has no image.');
+    }
     const outer = frame.getBoundingClientRect();
     const inner = image.getBoundingClientRect();
     return {
@@ -338,3 +345,135 @@ export async function verifyScreenshot(
     maxChangedPixels,
   );
 }
+
+export { assertGalleryDetail, assertLibrary } from './gallery-display';
+
+/** Load lazy content without changing the captured viewport. */
+export async function prepareScreen(page: Page): Promise<void> {
+  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  const frames = page.locator('[data-sheet-thumbnail]:visible');
+  for (const frame of await frames.all()) {
+    await frame.scrollIntoViewIfNeeded();
+    await expect(frame.locator('[data-sheet-thumbnail-render]')).toHaveCount(1);
+  }
+  for (const item of await page.locator('img:visible').all()) {
+    await item.scrollIntoViewIfNeeded();
+    await item.evaluate((node) => (node as HTMLImageElement).decode());
+    await expect.poll(() => item.evaluate((node) => {
+      const image = node as HTMLImageElement;
+      return image.complete && image.naturalWidth > 0
+        && image.naturalHeight > 0;
+    }), 'Visible image readiness.').toBe(true);
+  }
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
+}
+
+/** Retained rasters were captured with the viewport as tall as the page. */
+export async function withBaselineViewport(
+  page: Page, capture: () => Promise<void>,
+): Promise<void> {
+  const viewport = page.viewportSize()!;
+  try {
+    const height = await page.evaluate(() =>
+      document.documentElement.scrollHeight);
+    await page.setViewportSize({ width: viewport.width, height });
+    await prepareScreen(page);
+    const settled = await page.evaluate(() =>
+      document.documentElement.scrollHeight);
+    if (settled !== height) {
+      await page.setViewportSize({ width: viewport.width, height: settled });
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await capture();
+  } finally {
+    await page.setViewportSize(viewport);
+  }
+}
+
+export function chromeScreenContract(
+  root: string,
+  text: string,
+  flow: string,
+  titleSelector: string,
+  title: string,
+  theme: 'light' | 'dark',
+  image?: string,
+): ScreenContract {
+  return {
+    root, text, flow,
+    type: ['body', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
+      'Be Vietnam Pro'],
+    paint: ['body', 'color', theme === 'light'
+      ? 'rgb(16, 27, 63)'
+      : 'rgb(243, 241, 236)'],
+    copy: [titleSelector, title],
+    aria: [titleSelector, `- heading "${title}" [level=1]`],
+    image,
+  };
+}
+
+export function libraryContract(locale: 'vi' | 'en', theme: 'light' | 'dark') {
+  return chromeScreenContract('[data-testid="template-gallery"]',
+    '[data-testid="gallery-header"] h1, [data-testid="gallery-header"] p, '
+    + '.template-card:visible > span > span:first-child',
+    '[data-testid="gallery-header"] h1, [data-testid="gallery-header"] p',
+    '[data-testid="gallery-header"] h1',
+    locale === 'vi' ? 'Thư viện' : 'Library', theme,
+    'img[data-page-image]:visible');
+}
+
+export function galleryDetailContract(
+  locale: 'vi' | 'en', theme: 'light' | 'dark', tab: 'page' | 'pdf' | 'ats',
+) {
+  return chromeScreenContract('[data-testid="template-detail"]',
+    '.template-detail__info :is(h1,p,dt,dd), '
+    + (tab === 'page'
+      ? '.resume-document .entry-body p'
+      : tab === 'ats'
+        ? '[data-ats-text]'
+        : 'figcaption'),
+    '.template-detail__info > :not([hidden])',
+    '.template-detail__info h1',
+    tab === 'page' ? 'Creative Accent' : 'Executive Band', theme,
+    tab === 'pdf' ? 'img[data-pdf-page]' : undefined);
+}
+
+export function filterSheetContract(
+  surface: 'gallery' | 'showcase', locale: 'vi' | 'en', theme: 'light' | 'dark',
+): ScreenContract {
+  const root = `[data-testid="${surface}-filter-sheet"]`;
+  const title = locale === 'vi' ? 'Bộ lọc' : 'Filters';
+  const apply = `[data-action="${surface}-filters-apply"]`;
+  return {
+    ...chromeScreenContract(root,
+      `${root} :is(h2,h3,button,a,label):visible`
+      + `:not([data-action="${surface}-filters-close"])`, `${root} > div`,
+      `${root} h2:first-of-type`, title, theme),
+    scrolling: [`${root} > .overflow-y-auto`],
+    styles: sheetType(surface),
+    structure: (page) => expectSheetStructure(page, surface, locale),
+    controls: [[`${root} [data-action="${surface}-filters-close"]`,
+      locale === 'vi' ? 'Đóng' : 'Close']],
+    paint: [root, 'background-color', theme === 'light'
+      ? 'rgb(255, 255, 255)'
+      : 'rgb(26, 33, 56)'],
+    copy: [apply, surface === 'gallery'
+      ? locale === 'vi'
+        ? 'Xem 20 mẫu'
+        : 'Show 20 templates'
+      : locale === 'vi'
+        ? 'Xem 30 CV'
+        : 'Show 30 resumes'],
+    counts: [
+      [`${root} [data-role]`, surface === 'gallery' ? 10 : 11],
+      [`${root} [data-action="${surface}-filters-close"]`, 1],
+      ...(surface === 'showcase'
+        ? [[`${root} [data-lang]`, 3], [`${root} select`, 1]] as const
+        : []),
+    ],
+    aria: [root, `- dialog "${title}"`],
+  };
+}
+
+export { expectRendererPageMembership } from './renderer-membership';

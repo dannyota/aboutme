@@ -5,20 +5,20 @@ import { resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import {
-  CARD_LINK_PREFIX,
-  CARD_SITE,
-  fitHeadline,
-  fitName,
-} from '../app/components/preview/cardFit';
-import {
   CARD_LAYOUT_VERSION,
   type PreviewCardContent,
 } from '../app/components/preview/cardLayout';
 import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import type { PrintCardEnvelope } from '../server/utils/print/envelope';
 import { PRINT_CONTENT_SECURITY_POLICY } from '../server/utils/print/protocol';
-import { measureCardCrop } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import {
+  expectScreen, expectScreenClass, type ScreenContract, measureCardCrop,
+} from './display-assertions';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import { cardType, expectCardDetails, expectCardLogo } from './card-details';
+import { styleProofs } from './screen-style-proofs';
 import { denyExternalRequests, verifyScreenshot } from './support';
 
 // The harness Nitro output directory (apps/web/nuxt.config.ts sets
@@ -142,11 +142,15 @@ async function expectBoxInSafeSquare(
   hasText: boolean,
 ): Promise<void> {
   const locator = page.locator(selector);
-  if ((await locator.count()) === 0) return;
+  if ((await locator.count()) === 0) {
+    return;
+  }
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
   expectRectInSafeSquare(box!);
-  if (!hasText) return;
+  if (!hasText) {
+    return;
+  }
   // The rects of the text itself, one or more per line box; element boxes
   // are left out so a two-line link counts as two lines, not four rects.
   const lines = await locator.evaluate((element) => {
@@ -161,7 +165,9 @@ async function expectBoxInSafeSquare(
       const range = document.createRange();
       range.selectNodeContents(node);
       for (const rect of range.getClientRects()) {
-        if (rect.width === 0) continue;
+        if (rect.width === 0) {
+          continue;
+        }
         rects.push({
           height: rect.height, width: rect.width, x: rect.x, y: rect.y,
         });
@@ -204,12 +210,18 @@ function normalizeVisibleText(text: string): string {
 function expectedVisibleText(card: PreviewCardContent): string {
   const parts: string[] = [];
   if (card.name === null) {
-    parts.push(CARD_LINK_PREFIX, card.slug);
+    parts.push('aboutme.vn/', card.slug);
   } else {
-    parts.push(fitName(card.name).text);
-    if (card.headline !== null) parts.push(fitHeadline(card.headline));
+    parts.push(card.name.length === 150
+      ? 'Nguyễn Ẩn Ỗn Thị Bích Ngọc Vũ…'
+      : card.name);
+    if (card.headline !== null) {
+      parts.push(card.headline.length === 80
+        ? 'Nguyễn Ẩn Ỗn Thị Bích Ngọc Vũ Phương Nguyễn Ẩn Ỗn…'
+        : card.headline);
+    }
   }
-  parts.push(card.name === null ? CARD_SITE : CARD_LINK_PREFIX + card.slug);
+  parts.push(card.name === null ? 'aboutme.vn' : `aboutme.vn/${card.slug}`);
   return normalizeVisibleText(parts.join(' '));
 }
 
@@ -234,7 +246,9 @@ function longVietnameseText(length: number): string {
   const unit = 'Nguyễn Ẩn Ỗn Thị Bích Ngọc Vũ Phương ';
   const repeated = unit.repeat(Math.ceil(length / [...unit].length) + 2);
   const clusters = [...repeated].slice(0, length);
-  if (clusters.at(-1) === ' ') clusters[clusters.length - 1] = 'x';
+  if (clusters.at(-1) === ' ') {
+    clusters[clusters.length - 1] = 'x';
+  }
   return clusters.join('');
 }
 
@@ -360,6 +374,9 @@ async function expectCardDisplay(
   card: PreviewCardContent,
   name: string,
 ): Promise<void> {
+  await expectScreen(page, cardContract(card));
+  await expectCardDetails(page, name, card.headline !== null
+  && card.name !== null);
   const root = page.locator('.preview-card');
   await expect(root).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(root).toHaveCSS('color', 'rgb(23, 26, 24)');
@@ -433,7 +450,7 @@ async function expectCardDisplay(
         content: decoration.content,
       };
     }, { accent: card.accent, left: x === 0, shares: shares! });
-    expect(paint).toEqual({
+    expect(paint, 'Card decoration.').toEqual({
       gradient: true, dots: true, mask: true, size: '24px 24px',
       position: x === 0 ? '0px 3px' : '-3px 3px', content: '""',
     });
@@ -456,6 +473,8 @@ async function expectCardDisplay(
         : 'rgb(26, 92, 235)');
   const image = photo.locator('img');
   await expect(image).toHaveCSS('object-fit', 'cover');
+  await expect(image, 'Card photo identity.')
+    .toHaveAttribute('src', card.photo.url);
   expect(await image.evaluate((el) => {
     const img = el as HTMLImageElement;
     return img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
@@ -465,25 +484,29 @@ async function expectCardDisplay(
     ? { height: 1, left: 0, top: 0, width: 1 }
     : { height: 1.25, left: -0.125, top: -0.0625, width: 1.25 };
   for (const key of ['height', 'left', 'top', 'width'] as const) {
-    expect(Math.abs(crop[key] - expected[key])).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(crop[key] - expected[key]), 'Card crop geometry.')
+      .toBeLessThanOrEqual(0.001);
   }
 }
 
 for (const { card, name } of CASES) {
-  test(`card--${name}`, async ({ page }, testInfo) => {
-    const external = await denyExternalRequests(page);
-    const html = await renderCardHTML(buildEnvelope(card));
-    await openCard(page, html);
-    await expectGeometry(page);
-    await expectPageContent(page, card);
-    await expectCardDisplay(page, card, name);
-    await verifyScreenshot(
-      page,
-      `card--${name}.png`,
-      testInfo,
-      page.locator('.preview-card'),
-    );
-    expect(external).toEqual([]);
+  test.describe(`display locale ${card.lng}`, () => {
+    test.use({ locale: card.lng === 'vi' ? 'vi-VN' : 'en-US' });
+    test(`card--${name}`, async ({ page }, testInfo) => {
+      const external = await denyExternalRequests(page);
+      const html = await renderCardHTML(buildEnvelope(card));
+      await openCard(page, html);
+      await expectGeometry(page);
+      await expectPageContent(page, card);
+      await expectCardDisplay(page, card, name);
+      await verifyScreenshot(
+        page,
+        `card--${name}.png`,
+        testInfo,
+        page.locator('.preview-card'),
+      );
+      expect(external).toEqual([]);
+    });
   });
 }
 
@@ -519,7 +542,8 @@ test('card crop assertion detects ignored offsets', async ({ page }) => {
   const image = page.locator('.preview-card-photo-image');
   await expectCardDisplay(page, card, 'long-name-vi');
   const restore = await applyStyleMutation(image, { left: '0px' });
-  await expect(expectCardDisplay(page, card, 'long-name-vi')).rejects.toThrow();
+  await expect(expectCardDisplay(page, card, 'long-name-vi'))
+    .rejects.toThrow('Card crop geometry.');
   await restore();
   await expectCardDisplay(page, card, 'long-name-vi');
 });
@@ -541,7 +565,7 @@ for (const [name, selector, styles, pseudo] of [
     const restore = await applyStyleMutation(
       page.locator(selector), styles, pseudo,
     );
-    await expect(assertCard()).rejects.toThrow();
+    await expect(assertCard()).rejects.toThrow('Card decoration.');
     await restore();
     await assertCard();
   });
@@ -593,3 +617,58 @@ test('a noisy photo keeps the rendered card under its byte cap', async ({
   expect(bytes.byteLength).toBeLessThanOrEqual(CARD_MAX_BYTES);
   expect(external).toEqual([]);
 });
+
+function cardContract(card: PreviewCardContent): ScreenContract {
+  return {
+    root: '.preview-card',
+    text: '.preview-card-name, .preview-card-headline, '
+      + '.preview-card-footer-link',
+    flow: '.preview-card-body > *, .preview-card-footer',
+    type: ['.preview-card', '"Be Vietnam Pro", sans-serif', 'Be Vietnam Pro'],
+    paint: ['.preview-card', 'background-color', 'rgb(255, 255, 255)'],
+    copy: ['.preview-card-footer-link', card.name === null
+      ? 'aboutme.vn'
+      : `aboutme.vn/${card.slug}`],
+    aria: ['.preview-card-footer svg', '- img "aboutme.vn"'],
+    image: card.photo === null ? undefined : '.preview-card-photo img',
+  };
+}
+
+screenMutationTests('card', async (page) => {
+  const card = CASES[1]!.card;
+  await openCard(page, await renderCardHTML(buildEnvelope(card)));
+}, cardContract(CASES[1]!.card));
+
+styleProofs('card', async (page) => {
+  const card = CASES[1]!.card;
+  await openCard(page, await renderCardHTML(buildEnvelope(card)));
+}, cardType('short-name-en', true));
+
+for (const defect of ['geometry', 'stroke', 'tilt'] as const) {
+  test(`card rejects changed logo ${defect}`, async ({ page }) => {
+    await openCard(page, await renderCardHTML(buildEnvelope(CASES[1]!.card)));
+    await proveMutation(() => expectCardLogo(page), () => {
+      const logo = page.locator('.preview-card-footer svg');
+      if (defect === 'geometry') {
+        return mutateAttribute(logo.locator('[data-logo-ring="outer"]'),
+          'r', '1');
+      }
+      if (defect === 'tilt') {
+        return mutateAttribute(logo.locator('[data-logo-part="mark"]'),
+          'transform', 'rotate(0 15 16)');
+      }
+      return applyStyleMutation(logo.locator('path'), { stroke: 'none' });
+    }, defect === 'tilt' ? 'Card logo tilt.' : 'Card logo primitives.');
+  });
+}
+
+for (const selector of ['.preview-card-photo img', '.preview-card-photo']) {
+  test(`card rejects invisible photo at ${selector}`, async ({ page }) => {
+    const card = CASES[1]!.card;
+    await openCard(page, await renderCardHTML(buildEnvelope(card)));
+    await proveMutation(() => expectScreenClass(page, cardContract(card),
+      'images'), () => applyStyleMutation(page.locator(selector), {
+      opacity: '0',
+    }), 'Screen images.');
+  });
+}

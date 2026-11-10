@@ -1,12 +1,15 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
-import { measureTextContainment } from './display-assertions';
+import {
+  expectScreen, measureTextContainment, resumeContract,
+} from './display-assertions';
 
 import { applyStyleMutation } from './style-mutation';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
+  expectRendererPageMembership,
   photoCropGeometry,
   verifyScreenshot,
   waitForImages,
@@ -86,7 +89,8 @@ const PAGE_GEOMETRY = {
 } as const;
 
 async function assertRendererText(paragraph: Locator): Promise<void> {
-  await expect.poll(() => measureTextContainment(paragraph)).toEqual({
+  await expect.poll(() => measureTextContainment(paragraph),
+    'Renderer text containment.').toEqual({
     visible: true,
     contained: true,
   });
@@ -98,7 +102,7 @@ test.describe('renderer screenshot subset', () => {
       const preset = TEMPLATES.find(({ id }) => id === cell.template);
       expect(preset, `unknown preset ${cell.template}`).toBeDefined();
       const geometry
-        = PAGE_GEOMETRY[cell.paper ?? preset!.customization.pageFormat];
+        = PAGE_GEOMETRY[cell.paper ?? 'a4'];
       await page.setViewportSize(geometry);
       const external = await denyExternalRequests(page);
 
@@ -183,6 +187,12 @@ test.describe('renderer screenshot subset', () => {
       for (const paragraph of await paragraphs.all()) {
         await assertRendererText(paragraph);
       }
+      await expectScreen(page, resumeContract(cell.template,
+        cell.fixture === 'vn-full' ? 'vi' : 'en'));
+      if (cell.mode === 'paged') {
+        await expectRendererPageMembership(page, cell.template,
+          cell.align === 'justify', cell.paper === 'letter');
+      }
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
@@ -200,7 +210,7 @@ test('renderer text containment detects clipping', async ({ page }) => {
   const restore = await applyStyleMutation(page.locator('.entry-body p'), {
     height: '1px', overflow: 'hidden',
   });
-  await expect(assertContained()).rejects.toThrow();
+  await expect(assertContained()).rejects.toThrow('Renderer text containment.');
   await restore();
   await assertContained();
 });
@@ -224,7 +234,8 @@ for (const [name, styles] of [
     const restore = await applyStyleMutation(
       page.locator('.entry-body'), styles,
     );
-    await expect(assertContained()).rejects.toThrow();
+    await expect(assertContained())
+      .rejects.toThrow('Renderer text containment.');
     await restore();
     await assertContained();
   });
@@ -401,6 +412,7 @@ test.describe('public page measure', () => {
       for (const paragraph of await paragraphs.all()) {
         await assertRendererText(paragraph);
       }
+      await expectScreen(page, resumeContract(cell.template, 'vi', dark));
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
@@ -583,4 +595,23 @@ test.describe('public page color scheme', () => {
     expect(preferred.article).toBe(light.article);
     expect(preferred.bar).toBe(light.bar);
   });
+});
+
+test('renderer crop detects ignored offsets', async ({ page }) => {
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
+    + '&mode=continuous');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  await waitForImages(page);
+  const assertion = async () => {
+    expect(await photoCropGeometry(page), 'Renderer photo crop.')
+      .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
+  };
+  await assertion();
+  const restore = await applyStyleMutation(page.locator('.resume-photo img'), {
+    left: '0px',
+  });
+  await expect(assertion()).rejects.toThrow('Renderer photo crop.');
+  await restore();
+  await assertion();
 });

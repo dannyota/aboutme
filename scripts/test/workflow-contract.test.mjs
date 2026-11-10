@@ -1267,7 +1267,7 @@ function checkJobTimeouts(ci, vn) {
     "server-integration": 20,
     "server-resumeapi": 20,
     web: 20,
-    "web-e2e": 40,
+    "web-e2e": 60,
     "dev-https-proofs": 40,
     ci: 5,
   };

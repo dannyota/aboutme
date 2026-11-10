@@ -4,13 +4,21 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { measurePrintRules } from './display-assertions';
+import { measurePdfLayout, measurePrintRules } from './display-assertions';
+import { assertPrintDom, assertPrintRules } from './pdf-fonts';
+import { applyStyleMutation } from './style-mutation';
+import { pdfPaintPage } from './pdf-paint';
+import { assertOverflowTextStyle } from './pdf-text-style';
+import { overflowPdfChunks } from './pdf-input-content';
+import { assertOverflowPdf } from './sample-pdf-content';
 import {
   attachMembership,
   checkMembership,
   EXPECTED_PAGES,
   pdfMarkerPosition,
   pdfTextPage,
+  printedTextPages,
+  type PdfTextPage,
   PRINT_CASES as CASES,
 } from './pdf-display';
 import {
@@ -137,6 +145,9 @@ for (const printCase of CASES) {
   test(printCase.fixture, async ({ page }, testInfo) => {
     test.setTimeout(20_000);
     const external = await denyExternalRequests(page);
+    await page.setViewportSize({
+      width: Math.round((210 - 28) * 96 / 25.4), height: 1123,
+    });
     const response = await page.goto(
       `/_harness/render?fixture=${printCase.fixture}`
       + '&template=modern-sidebar&mode=continuous',
@@ -150,6 +161,7 @@ for (const printCase of CASES) {
     await waitForImages(page);
     expect(external).toEqual([]);
     await page.emulateMedia({ media: 'print' });
+    await assertPrintDom(page, 'Be Vietnam Pro', 2);
     expect(await photoCropGeometry(page)).toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
     expect(await measurePrintRules(page)).toEqual({
       bodyHeaderAfter: 'avoid',
@@ -188,6 +200,15 @@ for (const printCase of CASES) {
         membershipPages, printCase, testInfo,
       );
       checkMembership(membership, `${printCase.fixture}-vi-a4-light`);
+      const layout = await measurePdfLayout(page, {
+        x: 14 * 72 / 25.4, y: 13 * 72 / 25.4,
+      });
+      const display = await Promise.all(membershipPages.map(async (text, i) =>
+        ({ text, paint: await pdfPaintPage(await document.getPage(i + 1)) })));
+      await assertOverflowPdf(display, layout, printCase, 'vi', 'a4', 'light');
+      assertOverflowTextStyle(layout, {
+        fills: [], images: [], text: display.flatMap(({ paint }) => paint.text),
+      }, await overflowPdfChunks(printCase, 'vi'));
       expect(document.numPages).toBeGreaterThanOrEqual(2);
       expect(document.numPages).toBe(EXPECTED_PAGES);
       const textPages = [];
@@ -261,3 +282,45 @@ for (const printCase of CASES) {
     }
   });
 }
+
+for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
+  test(`${fixture} print rules detect relaxed widows`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    expect((await page.goto(`/_harness/render?fixture=${fixture}`
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await assertPrintRules(page);
+    await applyStyleMutation(page.locator('.entry-body p'), { widows: '1' });
+    await expect(assertPrintRules(page))
+      .rejects.toThrow('Print fragmentation rules.');
+    expect(external).toEqual([]);
+  });
+}
+
+test('PDF membership detects an orphan section heading', async ({ page }) => {
+  const external = await denyExternalRequests(page);
+  await page.emulateMedia({ media: 'print' });
+  expect((await page.goto('/_harness/render?fixture=print-probe-heading'
+    + '&template=modern-sidebar&mode=continuous&paper=a4'))?.ok()).toBe(true);
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const check = (pages: readonly PdfTextPage[]) => {
+    for (const marker of ['KEEP-HEADING', 'KEEP-TITLE', 'KEEP-FIRST']) {
+      expect(pages[1]!.text, 'PDF heading with first body fragment.')
+        .toContain(marker);
+      expect(pages[0]!.text, 'PDF heading with first body fragment.')
+        .not.toContain(marker);
+    }
+  };
+  const baseline = await printedTextPages(page);
+  expect(baseline).toHaveLength(2);
+  check(baseline);
+  await applyStyleMutation(page.locator('.section-heading'), {
+    'break-after': 'auto',
+  });
+  const altered = await printedTextPages(page);
+  expect(altered).not.toEqual(baseline);
+  expect(() => check(altered)).toThrow('PDF heading with first body fragment.');
+  expect(altered).toHaveLength(2);
+  expect(external).toEqual([]);
+});

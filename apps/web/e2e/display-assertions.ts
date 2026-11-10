@@ -1,77 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
 
-/** Measure text against a named container, including clipped text. */
-export async function measureTextContainment(
-  container: Locator,
-  verticalContainer?: string,
-): Promise<{ visible: boolean; contained: boolean }> {
-  return container.evaluate((root, selector) => {
-    const bounds = root.getBoundingClientRect();
-    const outer = selector ? root.closest(selector) : root;
-    if (!outer) return { visible: false, contained: false };
-    const rootStyle = getComputedStyle(root);
-    const rootClipsY = /^(hidden|clip|scroll|auto)$/u.test(rootStyle.overflowY);
-    const next = outer !== root
-      ? root.nextElementSibling?.getBoundingClientRect()
-      : undefined;
-    let visible = bounds.width > 0 && bounds.height > 0;
-    let contained = root.scrollWidth <= root.clientWidth + 1
-      && ((outer !== root && !rootClipsY)
-        || root.scrollHeight <= root.clientHeight + 1);
-    let hasText = false;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      if (!node.textContent?.trim()) continue;
-      hasText = true;
-      const parent = node.parentElement;
-      if (!parent) continue;
-      const clips: { rect: DOMRect; x: boolean; y: boolean }[] = [
-        { rect: bounds, x: true, y: outer === root || rootClipsY },
-      ];
-      if (outer !== root) {
-        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true });
-      }
-      for (
-        let element: Element | null = parent;
-        element;
-        element = element.parentElement
-      ) {
-        const style = getComputedStyle(element);
-        if (style.display === 'none' || style.visibility !== 'visible'
-          || Number(style.opacity) === 0) visible = false;
-        if (element !== root) {
-          clips.push({
-            rect: element.getBoundingClientRect(),
-            x: /^(hidden|clip|scroll|auto)$/u.test(style.overflowX),
-            y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
-          });
-        }
-      }
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const rects = Array.from(range.getClientRects());
-      if (!rects.some((rect) => rect.width > 0 && rect.height > 0)) {
-        visible = false;
-      }
-      for (const rect of rects) {
-        if (next && rect.right > next.left + 1 && rect.left < next.right - 1
-          && rect.bottom > next.top + 1 && rect.top < next.bottom - 1) {
-          contained = false;
-        }
-        for (const clip of clips) {
-          if ((clip.x && (rect.left < clip.rect.left - 1
-            || rect.right > clip.rect.right + 1))
-          || (clip.y && (rect.top < clip.rect.top - 1
-            || rect.bottom > clip.rect.bottom + 1))) {
-            contained = false;
-          }
-        }
-      }
-    }
-    return { visible: visible && hasText, contained };
-  }, verticalContainer);
-}
+import type { ScreenContract } from './screen-contract';
+
+export { measureTextContainment } from './screen-containment';
 
 /** Measure all adjacent boxes at once to avoid mixing layout frames. */
 export async function measureVerticalFlow(items: Locator): Promise<boolean> {
@@ -107,12 +38,16 @@ export async function measureChromeGrid(grid: Locator): Promise<{
       const column = index % columns;
       const rowStart = index - column;
       const row = boxes.slice(rowStart, rowStart + columns);
-      if (Math.abs(box.top - row[0]!.top) > 1) return false;
+      if (Math.abs(box.top - row[0]!.top) > 1) {
+        return false;
+      }
       if (column > 0
         && Math.abs(box.left - boxes[index - 1]!.right - gapX) > 1) {
         return false;
       }
-      if (rowStart === 0) return true;
+      if (rowStart === 0) {
+        return true;
+      }
       const previous = boxes.slice(rowStart - columns, rowStart);
       const bottom = Math.max(...previous.map((item) => item.bottom));
       return Math.abs(box.top - bottom - gapY) <= 1;
@@ -130,7 +65,9 @@ export async function measureChromeSheet(stage: Locator): Promise<boolean> {
   return stage.evaluate((element) => {
     const sheet = element.querySelector('[data-testid="landing-sheet"]');
     const ghost = element.querySelector('[data-testid="landing-ghost"]');
-    if (!sheet || !ghost) return false;
+    if (!sheet || !ghost) {
+      return false;
+    }
     const a = element.getBoundingClientRect();
     const b = sheet.getBoundingClientRect();
     const style = getComputedStyle(ghost);
@@ -149,7 +86,9 @@ export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
   return card.evaluate((element) => {
     const frame = element.querySelector('[data-sheet-thumbnail]');
     const sheet = element.querySelector('.scaled-sheet-content');
-    if (!frame || !sheet) return false;
+    if (!frame || !sheet) {
+      return false;
+    }
     const box = frame.getBoundingClientRect();
     const page = sheet.getBoundingClientRect();
     const transform = new DOMMatrixReadOnly(getComputedStyle(sheet).transform);
@@ -182,15 +121,21 @@ export async function measureGalleryGrid(grid: Locator): Promise<{
       columnGap,
       rowGap,
       ordered: boxes.every((box, index) => {
-        if (box.width <= 0 || box.height <= 0) return false;
+        if (box.width <= 0 || box.height <= 0) {
+          return false;
+        }
         const column = index % columns;
         const rowStart = index - column;
-        if (Math.abs(box.top - boxes[rowStart]!.top) > 1) return false;
+        if (Math.abs(box.top - boxes[rowStart]!.top) > 1) {
+          return false;
+        }
         if (column > 0
           && Math.abs(box.left - boxes[index - 1]!.right - columnGap) > 1) {
           return false;
         }
-        if (rowStart === 0) return true;
+        if (rowStart === 0) {
+          return true;
+        }
         const previous = boxes.slice(rowStart - columns, rowStart);
         const bottom = Math.max(...previous.map((item) => item.bottom));
         return Math.abs(box.top - bottom - rowGap) <= 1;
@@ -313,7 +258,9 @@ export async function measurePrintRules(
   return page.locator('.resume-document').evaluate((root) => {
     const style = (selector: string): CSSStyleDeclaration => {
       const element = root.querySelector(selector);
-      if (element === null) throw new Error('Missing print rule fixture.');
+      if (element === null) {
+        throw new Error('Missing print rule fixture.');
+      }
       return getComputedStyle(element);
     };
     const paragraph = style('.entry-body p');
@@ -361,9 +308,13 @@ export async function measurePdfLayout(
       const matrix = element.getScreenCTM()!;
       return [false, true].flatMap((stroke) => {
         const resolved = stroke ? css.stroke : css.fill;
-        if (resolved === 'none') return [];
+        if (resolved === 'none') {
+          return [];
+        }
         const channels = resolved.match(/[\d.]+/gu);
-        if (channels?.length !== 3) throw new Error('Unsupported icon ink.');
+        if (channels?.length !== 3) {
+          throw new Error('Unsupported icon ink.');
+        }
         const color = '#' + channels.map((channel) => Number(channel)
           .toString(16).padStart(2, '0')).join('');
         const width = stroke ? parseFloat(css.strokeWidth) / 2 : 0;
@@ -381,7 +332,9 @@ export async function measurePdfLayout(
       const node = walker.currentNode;
       const parent = node.parentElement;
       const text = node.textContent?.normalize('NFC').trim();
-      if (!parent || !text || parent.closest('.level-widget')) continue;
+      if (!parent || !text || parent.closest('.level-widget')) {
+        continue;
+      }
       const css = getComputedStyle(parent);
       const roles = [
         ['.resume-name', 'name'], ['.resume-headline', 'headline'],
@@ -489,4 +442,72 @@ export async function measurePdfLayout(
       return title ? box(title) : null;
     }
   }, margins);
+}
+
+export {
+  expectScreen, expectScreenClass, SCREEN_CLASSES,
+} from './screen-contract';
+export type { ScreenContract, ScreenClass } from './screen-contract';
+
+// Preset fixtures, encoded independently of the production token resolver.
+export const RESUME_STYLES = {
+  'classic-serif': [
+    'Roboto Serif', 'Noto Serif', 13, 1.5, 25, 20, 22, 12, '#23262c',
+  ],
+  'engineer-compact': [
+    'Source Sans 3', 'Noto Sans', 13, 1.3, 11, 12, 12, 6, '#1a1f24',
+  ],
+  'modern-sidebar': [
+    'Be Vietnam Pro', 'Noto Sans', 14, 1.5, 14, 13, 20, 10, '#1c2b33',
+  ],
+  'executive-band': [
+    'Be Vietnam Pro', 'Noto Sans', 15, 1.45, 18, 14, 24, 12, '#1f2937',
+  ],
+  'consulting-formal': [
+    'Inter', 'Noto Sans', 13, 1.45, 25, 15, 15, 9, '#33383d',
+  ],
+  'academic-dense': [
+    'Source Sans 3', 'Noto Sans', 13, 1.3, 20, 12, 20, 6, '#1a1e22',
+  ],
+  'editorial-wide': [
+    'Alegreya', 'Noto Serif', 16, 1.65, 35, 22, 32, 16, '#24211c',
+  ],
+  'creative-accent': [
+    'Source Sans 3', 'Noto Sans', 15, 1.5, 22, 18, 20, 10, '#1f1a17',
+  ],
+} as const;
+
+export function resumeContract(
+  template: string, language: 'vi' | 'en', dark = false,
+): ScreenContract {
+  const style = RESUME_STYLES[template as keyof typeof RESUME_STYLES];
+  const document = '.resume-document:not(.pagination-measurement)';
+  const root = `:nth-match(${document}, 1)`;
+  const title = language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace';
+  const grounds: Record<string, string> = {
+    'classic-serif': 'rgb(21, 22, 23)', 'modern-sidebar': 'rgb(15, 23, 27)',
+    'editorial-wide': 'rgb(25, 21, 18)', 'creative-accent': 'rgb(28, 20, 17)',
+    'executive-band': 'rgb(19, 22, 27)',
+  };
+  return {
+    root,
+    text: `${document} :is(.resume-name,.resume-headline,.entry-title,`
+      // Level wrappers may hold only graphics or an absent widget slot.
+      + '.entry-subtitle,.entry-meta > span:not(.level-widget),.level-tag,'
+      + '.entry-body p,.entry-body li,'
+      + '.section-heading h2)',
+    flow: `${document} .pagination-atomic, `
+      + `${document}:not(.resume-page) .resume-section`,
+    constrained: '.resume-page:not(.pagination-measurement)',
+    faces: [style[0], style[1]],
+    type: [root, `"${style[0]}", "${style[1]}"`, style[0]],
+    paint: [root, 'background-color', dark
+      ? grounds[template]!
+      : template === 'editorial-wide'
+        ? 'rgb(250, 248, 243)'
+        : 'rgb(255, 255, 255)'],
+    copy: [`${document} .resume-name`, title],
+    aria: [`${document} .resume-name`, `- heading "${title}" [level=1]`],
+    image: `${document} .resume-photo img`,
+  };
 }
