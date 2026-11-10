@@ -135,4 +135,80 @@ for action in add del; do
     echo 'FAIL smoke-vendor-before-refusal' >&2; exit 1;
   }
 done
+sed -n '/^clear_stale_healthchecks() {/,/^}/p; /^step_timers() {/,/^}/p' "$host" >"$work/timers-functions"
+# shellcheck disable=SC1091
+source "$work/timers-functions"
+checkpoint() { :; }
+say() { printf 'deploy-host: %s\n' "$*" >&2; }
+# shellcheck disable=SC2034 # step_timers in the sourced deploy-host.sh reads it
+jobs=(test)
+stale_id=$(printf '%064d' 1)
+live_id=$(printf '%064d' 2)
+systemctl() {
+  case $* in
+    'enable --now aboutme-job-test.timer') ;;
+    'list-units --failed --type=service --no-legend --no-pager --plain')
+      [[ ${CLEANUP_ERROR:-} != list ]] || return 1
+      printf '%s.service loaded failed failed healthcheck\n' "$stale_id" "$live_id"
+      printf '%s\n' 'other.service loaded failed failed other' \
+        "${stale_id}0.service loaded failed failed other" \
+        "${stale_id:0:63}A.service loaded failed failed other"
+      ;;
+    reset-failed\ *)
+      printf '%s\n' "$2" >>"$work/reset-attempts"
+      [[ $# == 2 && $2 == "$stale_id.service" ]] || return 1
+      [[ ${CLEANUP_ERROR:-} != reset ]] || return 1
+      printf '%s\n' "$2" >>"$work/reset-units"
+      ;;
+    *) echo "unexpected systemctl call: $*" >&2; return 1 ;;
+  esac
+}
+podman() {
+  [[ $1 == container && $2 == exists && $# == 3 ]] || return 125
+  printf '%s\n' "$3" >>"$work/checked-containers"
+  [[ ${CLEANUP_ERROR:-} != exists ]] || return 125
+  case $3 in
+    "$live_id") return 0 ;;
+    "$stale_id") return 1 ;;
+    *) return 125 ;;
+  esac
+}
+: >"$work/reset-units"
+: >"$work/reset-attempts"
+: >"$work/checked-containers"
+step_timers start 2>"$work/timers-out"
+[[ $(cat "$work/reset-units") == "$stale_id.service" ]] || {
+  echo 'stale healthcheck was not the only unit reset' >&2; exit 1;
+}
+[[ $(cat "$work/reset-attempts") == "$stale_id.service" ]] || {
+  echo 'cleanup attempted to reset an unexpected unit' >&2; exit 1;
+}
+[[ $(cat "$work/checked-containers") == "$stale_id"$'\n'"$live_id" ]] || {
+  echo 'healthcheck cleanup inspected an unexpected unit' >&2; exit 1;
+}
+grep -qxF 'deploy-host: cleared 1 stale healthcheck units' "$work/timers-out"
+for CLEANUP_ERROR in list exists reset; do
+  export CLEANUP_ERROR
+  : >"$work/reset-units"
+  : >"$work/reset-attempts"
+  # Run outside any condition so errexit stays active, as in production.
+  set +e
+  (set -euo pipefail; step_timers start) 2>"$work/timers-out"
+  status=$?
+  set -e
+  if [[ $status != 0 ]]; then
+    echo "cleanup $CLEANUP_ERROR error failed timer startup" >&2; exit 1
+  fi
+  [[ ! -s $work/reset-units ]] || { echo 'cleanup reset an unproved unit' >&2; exit 1; }
+  if [[ $CLEANUP_ERROR == reset ]]; then
+    [[ $(cat "$work/reset-attempts") == "$stale_id.service" ]] || exit 1
+  else
+    [[ ! -s $work/reset-attempts ]] || exit 1
+  fi
+  grep -qF 'deploy-host: warning:' "$work/timers-out" || {
+    echo "cleanup $CLEANUP_ERROR error was not reported" >&2; exit 1;
+  }
+  grep -qxF 'deploy-host: cleared 0 stale healthcheck units' "$work/timers-out"
+done
+unset CLEANUP_ERROR
 echo 'host migration, saved release, and socket DSN tests passed'
