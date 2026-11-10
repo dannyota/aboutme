@@ -1,10 +1,11 @@
 # Display assertions
 
 Status: Accepted by the owner, 2026-11-01. Revised with the owner's approval on
-2026-11-10: hosted Linux CI alone gates the cutover, and mutation tests stay in
-CI permanently. The [cutover](#cutover) landed on 2026-11-10: the assertions,
-mutation tests and review images are the display gate, and the pixel comparisons
-and their baselines are deleted.
+2026-11-10: hosted Linux CI alone gates the cutover, and mutation tests stay
+permanently, running whenever the display tests change and nightly. The
+[cutover](#cutover) landed on 2026-11-10: the assertions, mutation tests and
+review images are the display gate, and the pixel comparisons and their
+baselines are deleted.
 
 ## Decision and authority
 
@@ -42,7 +43,7 @@ layers. Together they replace what a pixel comparison caught.
 | Shared invariants | On every tested page: no overflow or clipping, no overlap, text inside its container, requested fonts loaded, images decoded, colors equal token values | A broken page of any kind, on surfaces nobody thought to describe |
 | Surface checks    | What a user would see break on that surface: paper and columns, grid counts, content order, toolbar and sheet placement, crop, fitted names             | A layout that is intact but wrong                                 |
 | PDF checks        | Real Chromium output: page count and size, which entry lands on which page, text with accents, fonts, painted regions and images                        | Print defects that screen checks cannot see                       |
-| Mutation tests    | Seeded defects that each assertion must detect, on every commit                                                                                         | An assertion that silently stopped working                        |
+| Mutation tests    | Seeded defects that each assertion must detect, when display tests change                                                                               | An assertion that silently stopped working                        |
 | Review images     | Eight optional screenshots per run for a person to look at                                                                                              | Kerning, raster and optical defects that no rule describes        |
 
 The [assertion contract](#assertion-contract) defines the first two layers,
@@ -211,10 +212,13 @@ pagination remains advisory and Chromium print remains authoritative.
 ## Proof: mutation tests
 
 A mutation test seeds one defect into a passing page and requires one named
-assertion to fail. Mutation tests run in `web-e2e` on every commit, so an
-assertion that stops detecting its defect turns CI red. `style-mutation.ts`
-applies screen mutations; `print-mutations.spec.ts` and `print-pdf.spec.ts` hold
-the PDF mutations.
+assertion to fail. An assertion can stop detecting its defect only when the
+tests or their helpers change, so mutation tests run when a change touches
+`apps/web/e2e/`, and nightly on `main` (owner, 2026-11-10, to keep the gate
+fast). Every mutation test carries the `@mutation` tag. `WEB_E2E_MUTATIONS=0`
+leaves tagged tests out of `web-e2e`; the default `1` runs everything, so the
+full set stays one flag away. `style-mutation.ts` applies screen mutations;
+`print-mutations.spec.ts` and `print-pdf.spec.ts` hold the PDF mutations.
 
 An assertion class is one row of the [assertion contract](#assertion-contract)
 (geometry, overflow and clipping, overlap, typography, color and decoration,
