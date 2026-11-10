@@ -1,4 +1,4 @@
-"""Select the narrow prose gate. Errors always retain the full gate."""
+"""Select CI jobs and mutation tests. Errors retain the full gate."""
 
 import os
 import re
@@ -9,6 +9,11 @@ import time
 
 MAX_OUTPUT = 16 * 1024 * 1024
 TIME_LIMIT = 30
+MANIFEST = "scripts/web-e2e-source.manifest"
+WEB_FILES = {MANIFEST, "scripts/web-e2e-source.sh",
+             "scripts/generate-web-e2e-source-manifest.sh",
+             "scripts/collect-browser-diagnostics.py", "Makefile", ".tool-versions",
+             "package.json", "package-lock.json"}
 
 
 def git(arguments, deadline):
@@ -94,9 +99,9 @@ def tree(commit, deadline):
     return entries
 
 
-def select(event, base):
-    if event != "pull_request":
-        return "full"
+def classify(event, base):
+    if event not in ("pull_request", "push"):
+        return "full", "1"
     try:
         deadline = time.monotonic() + TIME_LIMIT
         commits = []
@@ -109,12 +114,15 @@ def select(event, base):
             "diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z",
             "--find-renames", *commits, "--",
         ], deadline))
-        if not all(allowed(path) for _, paths in changes for path in paths):
-            return "full"
+        paths = [path for _, names in changes for path in names]
+        for path in paths:
+            name = path.decode("utf-8", errors="strict")
+            if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in name):
+                raise ValueError("invalid path")
         before, after = (tree(commit, deadline) for commit in commits)
         regular = (b"100644", b"blob")
-        for status, paths in changes:
-            old, new = paths[0], paths[-1]
+        for status, changed_paths in changes:
+            old, new = changed_paths[0], changed_paths[-1]
             if status == b"A":
                 valid = old not in before and after.get(new) == regular
             elif status == b"D":
@@ -122,17 +130,32 @@ def select(event, base):
             else:
                 valid = before.get(old) == regular and after.get(new) == regular
             if not valid:
-                return "full"
+                raise ValueError("unsafe mode")
+        with open(MANIFEST, encoding="utf-8") as manifest:
+            contents = manifest.read(MAX_OUTPUT + 1)
+        if not contents or len(contents) > MAX_OUTPUT:
+            raise ValueError("invalid manifest")
+        listed = set(contents.splitlines())
+        names = [path.decode("utf-8") for path in paths]
+        web = any(name.startswith(("apps/web/", "packages/", "docs/api/", ".github/"))
+                  or name in WEB_FILES or name in listed for name in names)
+        mutations = "1" if any(name.startswith("apps/web/e2e/") for name in names) else "0"
         if time.monotonic() >= deadline:
-            return "full"
-        return "prose"
+            raise TimeoutError()
+        if event == "pull_request" and all(allowed(path) for path in paths):
+            return "prose", mutations
+        return ("full" if web else "no-web"), mutations
     except Exception:
-        return "full"
+        return "full", "1"
+
+
+def select(event, base):
+    return classify(event, base)[0]
 
 
 if __name__ == "__main__":
     try:
-        selection = select(sys.argv[1], sys.argv[2]) if len(sys.argv) == 3 else "full"
+        selection, mutations = classify(sys.argv[1], sys.argv[2]) if len(sys.argv) == 3 else ("full", "1")
     except Exception:
-        selection = "full"
-    print(selection)
+        selection, mutations = "full", "1"
+    print(selection, mutations)

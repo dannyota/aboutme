@@ -1,27 +1,36 @@
-# Pull request CI path selection
+# CI path selection
 
-[ADR 0024](../adr/0024-delivery-gates.md) records the owner's 2026-11-01 choice.
-This contract reduces runner demand for prose pull requests. Keep all contracts
-to avoid splitting their checks. A broad docs exemption or dependency-based lane
-selection would need more reader tracking; neither is part of this change.
+[ADR 0024](../adr/0024-delivery-gates.md) records the prose selection. The owner
+extended selection to web E2E on 2026-11-10. Keep all contracts.
 
 ## Selection
 
 Put the selector in `scripts/ci-path-selection.py`, using Python's standard
-library. Preflight publishes `selection`, exactly `full` or `prose`, after its
-existing comparison and immutable-artifact guards succeed. Only `pull_request`
-may emit `prose`; all pushes and manual dispatches emit `full`. Keep workflow
-triggers unfiltered. Branch dispatches stay full; a landing train is a pull
-request and uses the same comparison over its combined change.
+library. Preflight publishes `selection` as `full`, `prose`, or `no-web` after
+the comparison and immutable-artifact guards. PRs compare with the PR base; main
+pushes compare with `before`. Only PRs select `prose`. PRs and main pushes may
+select `no-web`; a push also requires the `before` commit's `ci` check to have
+concluded `success`. Missing or failed checks, API errors, and an all-zero
+`before` select `full`. Dispatch and nightly schedule select `full`. Keep
+workflow triggers unfiltered.
+
+`no-web` requires every changed path to be outside `apps/web/`, `packages/`,
+`docs/api/`, `.github/`, and the paths in `scripts/web-e2e-source.manifest`. The
+manifest itself, `scripts/web-e2e-source.sh`,
+`scripts/generate-web-e2e-source-manifest.sh`,
+`scripts/collect-browser-diagnostics.py`, `Makefile`, `.tool-versions`,
+`package.json`, and `package-lock.json` are also web inputs. Check both sides of
+renames. `prose` takes precedence. Preflight also publishes `mutations=1` for
+changes under `apps/web/e2e/`, schedules, dispatches, or errors; otherwise it
+publishes `0`.
 
 The complete initial allowlist is `docs/adr/[0-9][0-9][0-9][0-9]-*.md` and
 `docs/plans/**/*.md`. Match repository-relative paths case-sensitively: `*`
 cannot cross `/`; `**/` matches zero or more directories. Deny before allowing:
 `docs/plans/traceability/**`, and any basename `AGENTS.md` or `CLAUDE.md`. Only
 regular, nonexecutable Git blobs qualify on every existing side of a change
-(mode `100644`). Symlinks, submodules, mode changes, and unknown paths select
-`full`. Everything outside these patterns selects `full`, including `.github/`,
-`scripts/`, `Makefile`, tool pins, lockfiles, and generated files.
+(mode `100644`). Symlinks, submodules, and mode changes select `full`. Paths
+outside these patterns cannot select `prose`.
 
 Exclusions and repository reader evidence:
 
@@ -54,8 +63,8 @@ or use a merge-base shortcut. Accept A/M/D and R0..R100; inspect both rename
 paths and both tree modes. Control bytes, invalid UTF-8, other statuses, empty
 diffs, malformed/truncated records, and diff/tree-read errors select `full`.
 Abort selection above 16 MiB of diff output or 30 seconds. Catch selector errors
-in preflight and publish `full`; comparison/guard failures still fail preflight.
-Publish only the final enum, never raw paths, to outputs and the step summary.
+in preflight and publish `full` with `mutations=1`; comparison/guard failures
+still fail preflight. Publish only selection and mutations, never raw paths.
 
 ## Jobs and aggregate
 
@@ -64,10 +73,11 @@ jobs (`contracts`, `operational`, and every `dev-https-static` shard), and `ci`.
 It omits exactly `macos-tooling`, `vn-infra`, `server`, `server-integration`,
 `server-resumeapi`, `web`, `web-e2e`, and `dev-https-proofs`. Each retains
 `needs: [preflight]` and runs unless event is `pull_request` and selection is
-`prose`; ordinary success dependency handling stays. No web/server job is
-needed: the contracts jobs already run docs lint, link tests/checks using
-`base_sha`, lengths, full-history gitleaks, schema/API checks, operational
-tests, the dev-https static suite, and npm audits. Keep all those steps.
+`prose`; `web-e2e` also skips for `no-web`. The other jobs run for `no-web`.
+Ordinary success dependency handling stays. No web/server job is needed: the
+contracts jobs already run docs lint, link tests/checks using `base_sha`,
+lengths, full-history gitleaks, schema/API checks, operational tests, the
+dev-https static suite, and npm audits. Keep all those steps.
 
 The accepted
 [runtime-smoke addition](local-tooling-simplification.md#production-runtime-coverage)
@@ -81,13 +91,13 @@ Keep `ci` as the sole check with that name, `if: always()`, and `needs` equal to
 every other job. Validate the complete expected job-key set and every result,
 plus preflight success and a known selection value, before accepting skips.
 Reject `prose` outside PRs even if every result is successful. Success is valid;
-`skipped` is valid only for a named omission in PR `prose`. Missing/null
-results, unknown values, failures, cancellations, and all other skips fail.
-Never treat a missing output as permission to skip. Preserve shard evidence
-downloads and coverage checks whenever `dev-https-proofs` succeeds; omit them
-only when that job is legitimately omitted. Failed coverage still fails the
-aggregate job. Keep reusable VN triggers, read-only permissions, and no
-caller-cancelling group.
+`skipped` is valid only for a named omission in PR `prose`, or `web-e2e` in PR
+or push `no-web`. Missing/null results, unknown values, failures, cancellations,
+and all other skips fail. Never treat a missing output as permission to skip.
+Preserve shard evidence downloads and coverage checks whenever
+`dev-https-proofs` succeeds; omit them only when that job is legitimately
+omitted. Failed coverage still fails the aggregate job. Keep reusable VN
+triggers, read-only permissions, and no caller-cancelling group.
 
 ## Tests and delivery
 
@@ -125,5 +135,4 @@ same change. PR authors can edit the candidate gate itself, so selection is not
 a sandbox: `.github/` changes select full, and gate edits need review before the
 signed merge. Application, session/MCP, network-to-edge, container, database,
 and backup attackers gain no CI authority. No production access or third-party
-action is added. Main may still fail after a reduced PR; its full run remains
-the release boundary.
+action is added. A green main push remains the release boundary.
