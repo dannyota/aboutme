@@ -178,7 +178,16 @@ jobs:
         with:
           light: "true"
       - if: ${{ !cancelled() }}
-        run: npm ci
+        # A degraded registry must not spend the whole job budget: each
+        # attempt gets three minutes, then one retry from a clean tree.
+        timeout-minutes: 7
+        run: |
+          for attempt in 1 2; do
+            timeout 180 npm ci && exit 0
+            echo "npm ci attempt $attempt did not finish" >&2
+            rm -rf node_modules
+          done
+          exit 1
       - if: ${{ !cancelled() }}
         run: make docs-lint
       - if: ${{ !cancelled() }}
@@ -199,7 +208,16 @@ jobs:
       # apps/web. --ignore-scripts skips `nuxt prepare`; the gate needs only
       # the generator binary.
       - if: ${{ !cancelled() }}
-        run: npm ci --ignore-scripts
+        # A degraded registry must not spend the whole job budget: each
+        # attempt gets three minutes, then one retry from a clean tree.
+        timeout-minutes: 7
+        run: |
+          for attempt in 1 2; do
+            timeout 180 npm ci --ignore-scripts && exit 0
+            echo "npm ci attempt $attempt did not finish" >&2
+            rm -rf node_modules
+          done
+          exit 1
         working-directory: apps/web
       - if: ${{ !cancelled() }}
         run: make api-check
