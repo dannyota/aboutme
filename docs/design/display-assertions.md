@@ -91,18 +91,29 @@ retain height 800; fixed invite tests retain height 900. Do not enlarge the
 viewport to load lazy content: scroll each item into view, wait for
 decode/mount, then return to the required position before measuring.
 
-Renderer fixtures run with both resume languages independently of interface
-locale. The nine renderer cells retain their A4 794 × 1123 or Letter 816 × 1056
-viewport, modes and customization, under both viewer schemes. Cards retain 1200
-× 630, the seven cases including CJK, and both viewer schemes; add `vi`/`en`
-variants for the missing-name and missing-photo states. PDFs run both resume
-languages, both A4/Letter for overflow fixtures, and every listed sample in its
-prescribed format. Assert print stays light under dark preference.
+Factors that do not interact are covered by a rotation, not a cross product
+(owner, 2026-11-10, to keep the gate fast). Every value of every factor runs,
+and factors that interact are crossed in full: owner theme with viewer
+preference on public pages, and language, message and providers on gates. The
+rotation is a fixed list or index rule in the spec, never random.
+
+Renderer fixtures run with both resume languages. The nine renderer cells retain
+their A4 794 × 1123 or Letter 816 × 1056 viewport, modes and customization. Each
+cell runs once per resume language, with viewer scheme and interface locale
+rotated so every cell sees both schemes; one continuous cell keeps the full
+product. Cards retain 1200 × 630, the seven cases including CJK, and both viewer
+schemes; add `vi`/`en` variants for the missing-name and missing-photo states.
+PDFs run both resume languages, both A4/Letter for overflow fixtures, and every
+listed sample in its prescribed format. Assert print stays light under dark
+preference.
 
 Public pages cross owner `light`, `dark`, `system` with both viewer preferences
-for the five public templates in the inventory, both languages, 390 and 1440.
-Assert resolved colors against independent expected values, not just inequality.
-Print, cards, gates, thumbnails, template pages and landing samples stay light.
+for the five public templates in the inventory. Language and width (390, 1440)
+rotate across those six cells so each template sees all four pairs. Gates cover
+every language, message and provider combination and every width and viewer
+pair; invites cover every width and language with the viewer alternating. Assert
+resolved colors against independent expected values, not just inequality. Print,
+cards, gates, thumbnails, template pages and landing samples stay light.
 Application chrome still follows its own theme.
 
 Add focused boundary probes in both locales/themes, without repeating PDFs:
