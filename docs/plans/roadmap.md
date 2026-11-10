@@ -1,6 +1,6 @@
 # Roadmap: v0.9 to v1.0
 
-Status: planned. This is a proposal by the primary of 2026-11-10 awaiting owner approval; the [open questions](#open-questions) need his answers. v0.8 is closed.
+Status: planned. Accepted by the owner on 2026-11-10 with the [decisions](#owner-decisions) below. v0.8 is closed.
 
 Direction (owner, 2026-11-09): create a resume, then prove your skills, then improve your career. Each minor version below has one vision. Each patch release ships one feature (AGENTS.md "Small releases"). A feature starts only after its named design or ADR is written and accepted.
 
@@ -30,7 +30,7 @@ Projects and evidence first, then reviewed changes, then assistant-led review. T
 
 |Version|Vision|A developer can|
 |-|-|-|
-|v0.9|Show the work|Give each project its own page and attach GitHub evidence they confirmed|
+|v0.9|Show the work|Write a project once, choose which resumes show it, give it its own page, and attach GitHub evidence they confirmed|
 |v0.10|Changes you approve|See what an assistant or import proposes, accept or reject each change, and restore an earlier version|
 |v0.11|Review with your own AI|Ask their assistant to review a resume, compare it with a job post, and propose changes for approval|
 |v0.12|Plan the next step|Ask their assistant for skill gaps, next steps, and interview practice grounded in their own evidence|
@@ -42,19 +42,20 @@ Vision: a project stops being three lines on a resume and becomes a page that pr
 
 Features, in shipping order:
 
-1. Project detail: a project entry gains role, technologies, outcome, repository link and demo link. The printed resume stays one compact entry.
-2. Project page: each visible project of a published resume has a public page under that resume, following the resume's publish, sign in to view, and indexing settings.
-3. Projects index: the resume's public page links to a list of its project pages.
-4. Connect GitHub: the owner links a GitHub account to their aboutme account for evidence only, separate from sign-in, with no scope beyond public data.
-5. Evidence picker: the owner picks repositories, merged pull requests and releases to attach to a project. aboutme checks each item against the connected account (author id for pull requests and releases; owner or contributor for repositories, as the design defines) and stores a snapshot (title, URL, date, counts) with the time it was checked.
-6. Evidence on the page: attached evidence renders on the project page with its checked date. Disconnecting GitHub removes the "confirmed" mark, and the owner chooses whether the links stay.
-7. MCP: assistants can read and edit project detail. They cannot attach evidence or connect accounts.
+1. Project library: projects live once per account, private, with no public URL of their own. A project has role, technologies, outcome, repository link and demo link, with its text held per resume language.
+2. Projects on a resume: each resume chooses which library projects it shows and in what order. Nothing is shown by default; creating a project asks which resumes get it. The printed resume keeps one compact entry per chosen project.
+3. Project page: each chosen project of a published resume has a public page under that resume, in the resume's language, following its publish, sign in to view, and indexing settings.
+4. Viewer entry points: the resume's public page shows a Projects link and links each project entry to its page; the PDF and print carry a short link to the resume's projects, so a reader of any copy can see the projects the owner chose to show.
+5. Connect GitHub: the owner links a GitHub account to their aboutme account for evidence only, separate from sign-in, with no scope beyond public data.
+6. Evidence picker: the owner picks repositories, merged pull requests and releases to attach to a project. aboutme checks each item against the connected account (author id for pull requests and releases; owner or contributor for repositories, as the design defines) and stores a snapshot (title, URL, date, counts) with the time it was checked. Evidence belongs to the library project, so every resume that shows the project shows it.
+7. Evidence on the page: attached evidence renders on the project page with its checked date. Disconnecting GitHub removes the "confirmed" mark, and the owner chooses whether the links stay.
+8. MCP: assistants can read and edit library projects and a resume's selection. They cannot attach evidence or connect accounts.
 
 Out of scope: private repositories, commit-level evidence, contribution graphs, automatic skill inference, ranking, any score.
 
-Done when: a developer with one published resume can publish two project pages, one with confirmed GitHub evidence, reach them from the projects index, and print the resume with compact project entries; hiding, deleting or renaming a project, sign in to view, indexing opt-out, link previews and unpublish revoke or gate the project pages exactly as the resume page; and a test shows no MCP tool can attach evidence or connect an account.
+Done when: a developer with two resumes can write a project once, show it on one resume and not the other, publish two project pages, one with confirmed GitHub evidence, reach them from the resume page and from the link in its PDF, and print the resume with compact project entries; hiding, deleting or renaming a project, sign in to view, indexing opt-out, link previews and unpublish revoke or gate the project pages exactly as the resume page; and a test shows no MCP tool can attach evidence or connect an account.
 
-Before code: an amendment to ADR 0003 for project routes; a design for project pages and their print mapping that covers every public representation (page, Markdown, JSON, previews, indexing) under ADR 0010 revocation and ADR 0022 viewer privacy; a schema version for project detail (ADR 0004); a design and ADR for GitHub connection and evidence that decide account binding, token lifetime, storage and revocation, what "confirmed" means per item type, snapshot behavior when the upstream item is deleted or made private, retention and removal.
+Before code: an amendment to ADR 0003 for project routes; a design and ADR for the account project library (a new aggregate beside the resume document, its per-language text, limits, export and deletion, and how existing project entries migrate); a design for project pages, viewer entry points and their print mapping that covers every public representation (page, Markdown, JSON, previews, indexing) under ADR 0010 revocation and ADR 0022 viewer privacy; a schema version for project detail (ADR 0004); a design and ADR for GitHub connection and evidence that decide account binding, token lifetime, storage and revocation, what "confirmed" means per item type, snapshot behavior when the upstream item is deleted or made private, retention and removal.
 
 ## v0.10: changes you approve
 
@@ -118,15 +119,15 @@ No features. The owner decides when to cut the first candidate; that commit reco
 - The Flutter app: deferred beyond web v1 (`docs/design/product.md:39`).
 - A publish scope for assistants: deferred, not designed away (`docs/adr/0018-mcp-agent-access.md:93-94`).
 
-## Open questions
+## Owner decisions
 
-Each needs the owner's answer before the named version starts. The first option is the recommendation.
+Decided on 2026-11-10; the designs named under each version follow them.
 
-1. Project URL (v0.9). `aboutme.vn/{slug}/projects` and `aboutme.vn/{slug}/projects/{project}` under the resume, or a separate project namespace. Recommended: under the resume, because the resume already owns publish, privacy and indexing, and people stay without a public page.
-2. Order of v0.10 and v0.11. Reviewed changes before assistant-led review, or review first. Recommended: reviewed changes first, because assistant edits to a live resume are public at once today.
-3. GitHub connection (v0.9). A separate "connect for evidence" link with no scope, or turning on GitHub sign-in and reusing it. Recommended: separate connection, so sign-in policy and evidence stay independent.
-4. Proposals by default (v0.10). On by default for published resumes, or off. Recommended: on.
-5. ChatGPT directory (v0.11). Submit an aboutme app for review, or stay with user-added connectors. Recommended: decide after the client proofs, because documented custom connectors exclude most personal plans.
+1. Projects (v0.9): written once in an account library; each resume chooses which projects it shows. Project pages live under the resume, as `aboutme.vn/{slug}/projects` and `aboutme.vn/{slug}/projects/{project}`. The resume shows viewers where to find the chosen projects.
+2. Order: reviewed changes (v0.10) before assistant-led review (v0.11).
+3. GitHub (v0.9): a separate connection for evidence with no scope, independent of sign-in.
+4. Proposals (v0.10): on by default for published resumes.
+5. ChatGPT directory (v0.11): decide after the client proofs.
 
 ## Document conflicts found
 
