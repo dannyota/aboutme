@@ -39,7 +39,7 @@ backup age; alert count is not a hard size cap.
 Before every schema-capable `cscli` or CrowdSec action, including flushes,
 starts, config checks, and registration, run side-effect-free `psql -X` with
 `ON_ERROR_STOP=1` in a read-only transaction. Check database identity, current
-role, the CrowdSec 1.8.1 catalog manifest (tables, columns, types, constraints,
+role, the CrowdSec 1.8.2 catalog manifest (tables, columns, types, constraints,
 and indexes), ownership, grants, logging, and statistics policy; the reviewed
 manifest and pinned binary identify the version without a vendor schema-version
 table. Failure prevents the binary action. Repeat preflight before SQL cleanup;
@@ -80,7 +80,7 @@ harm to shared addresses. The status scenario counts 400, 404, 405, and
 unknown-route scanner signals; rate detection excludes static assets and health
 checks; the HTTP profile precedes and stops catch-all evaluation. The host
 targets records older than 23 hours. Effective engine settings are
-`db_config.flush.max_age: 0s` and `max_items: null`: pinned CrowdSec 1.8.1 skips
+`db_config.flush.max_age: 0s` and `max_items: null`: pinned CrowdSec 1.8.2 skips
 age and count deletion with those values, so its minute flush cannot delete
 decisions before bouncer reconciliation; its orphan cleanup still runs, and
 orphan decisions are invalid state, not a delivery mechanism. Re-prove these
@@ -267,10 +267,10 @@ API traffic; a TCP probe or missing credentials file alone is insufficient.
 
 ## Sources
 
-- [CrowdSec 1.8.1 database configuration](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/csconfig/database.go)
-- [CrowdSec 1.8.1 schema initialization](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/database.go)
-- [CrowdSec 1.8.1 flush implementation](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/flush.go)
-- [CrowdSec 1.8.1 decision expiry and deletion](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/decisions.go)
+- [CrowdSec 1.8.2 database configuration](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/pkg/csconfig/database.go)
+- [CrowdSec 1.8.2 schema initialization](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/pkg/database/database.go)
+- [CrowdSec 1.8.2 flush implementation](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/pkg/database/flush.go)
+- [CrowdSec 1.8.2 decision expiry and deletion](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/pkg/database/decisions.go)
 - [Caddy access logging and file rotation](https://caddyserver.com/docs/caddyfile/directives/log)
 - [CrowdSec database backends and backend switch](https://docs.crowdsec.net/docs/local_api/database)
 - [CrowdSec `db_config` reference](https://docs.crowdsec.net/docs/configuration/crowdsec_configuration)

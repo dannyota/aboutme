@@ -308,7 +308,7 @@ so.
 | `postgresql-18`, `postgresql-client-18`, `libpq5` | `18.6-1.pgdg24.04+2`   | PGDG key `host/keys/pgdg.asc`, fingerprint `B97B0AFC…ACCC4CF8`         |
 | `postgresql-common`                               | `293.pgdg24.04+1`      | the same PGDG key                                                      |
 | `pgbackrest`                                      | `2.59.3-1.pgdg24.04+1` | the same PGDG key                                                      |
-| `crowdsec`                                        | `1.8.1`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`              |
+| `crowdsec`                                        | `1.8.2`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`              |
 | `crowdsec-firewall-bouncer-nftables`              | `0.0.36`               | the same CrowdSec key                                                  |
 | `age`, `msmtp`                                    | Ubuntu archive         | Ubuntu archive signature; security updates through unattended-upgrades |
 

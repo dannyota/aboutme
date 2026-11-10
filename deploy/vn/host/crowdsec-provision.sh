@@ -75,7 +75,7 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 COMMIT;
 SQL
   fi
-  [[ $(dpkg-query -W -f='${Version}' crowdsec 2>/dev/null) == 1.8.1 ]] || return 1
+  [[ $(dpkg-query -W -f='${Version}' crowdsec 2>/dev/null) == 1.8.2 ]] || return 1
   # Failure cleanup removes private logs before an explicit reset can run.
   [[ ! -L /run/aboutme/crowdsec ]] || return 1
   if [[ ! -e /run/aboutme/crowdsec ]]; then

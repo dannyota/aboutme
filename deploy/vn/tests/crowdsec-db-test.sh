@@ -27,7 +27,7 @@ check() {
 static_tests() {
   check provisioner-present test -f "$host/crowdsec-provision.sh"
   check gate-present test -f "$host/crowdsec-db.sh"
-  check reviewed-manifest-present test -s "$host/crowdsec-schema-v1.8.1.tsv"
+  check reviewed-manifest-present test -s "$host/crowdsec-schema-v1.8.2.tsv"
   check candidate-socket-config python3 - "$candidate" <<'PY'
 import sys
 import yaml
@@ -110,7 +110,7 @@ start_harness() {
   [[ $("$pgbin/postgres" --version) == 'postgres (PostgreSQL) 18.'* ]] || {
     printf 'FAIL postgresql-version\n'; exit 1;
   }
-  crowdsec -version 2>&1 | grep -qF v1.8.1 || {
+  crowdsec -version 2>&1 | grep -qF v1.8.2 || {
     printf 'FAIL crowdsec-version\n'; exit 1;
   }
   mount -t tmpfs -o size=256m,mode=0755 tmpfs /run/postgresql
@@ -329,7 +329,7 @@ prepare_installed_fixture() {
     install -m 0755 "$host/$script" "$scratch/lib/$script"
   done
   install -m 0755 "$repo_root/deploy/vn/scripts/fence.sh" "$scratch/lib/fence.sh"
-  install -m 0644 "$host/crowdsec-schema-v1.8.1.tsv" "$scratch/lib/"
+  install -m 0644 "$host/crowdsec-schema-v1.8.2.tsv" "$scratch/lib/"
   mount --bind "$scratch/lib" /usr/local/lib/aboutme
   install -m 0644 "$candidate" /etc/crowdsec/config.yaml.postgresql
   install -d -m 0755 /run/aboutme
@@ -465,11 +465,11 @@ database_owner_rejected() {
   ((rc != 0))
 }
 manifest_rejected() {
-  cp /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv "$scratch/manifest"
-  printf 'relation\tunexpected\tr\tcrowdsec\t\n' >>/usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv
+  cp /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv "$scratch/manifest"
+  printf 'relation\tunexpected\tr\tcrowdsec\t\n' >>/usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv
   local rc=0
   gate preflight-ready </dev/null || rc=$?
-  cp "$scratch/manifest" /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv
+  cp "$scratch/manifest" /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv
   ((rc != 0))
 }
 config_overlay_rejected() {
@@ -589,9 +589,9 @@ case $mode in
   static) static_tests ;;
   derive)
     start_harness
-    printf 'BEGIN crowdsec-v1.8.1-postgresql18-catalog\n'
+    printf 'BEGIN crowdsec-v1.8.2-postgresql18-catalog\n'
     catalog 2>/dev/null | LC_ALL=C sort
-    printf 'END crowdsec-v1.8.1-postgresql18-catalog\n'
+    printf 'END crowdsec-v1.8.2-postgresql18-catalog\n'
     ;;
   integration)
     static_tests

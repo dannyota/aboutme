@@ -455,6 +455,9 @@ retention_fixture_case=real-migration-failure-requires-explicit-reset
 integration_stage=failure-injection
 touch "$retention_fixture/register-fail-once"
 migration_refused caddy-register --reset
+integration_stage=failure-denies-startup
+[[ -e /run/aboutme/crowdsec-retention-failed && ! -e /run/aboutme/crowdsec-retention-ok ]]
+if "$lib/crowdsec-retention-lease-check.sh"; then exit 1; fi
 integration_stage=failure-injection-consumed
 [[ ! -e $retention_fixture/register-fail-once ]]
 # The injection ran after catalog initialization and machine registration.
@@ -1014,7 +1017,7 @@ printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-d
   exit 1
 }
 
-echo "CrowdSec 1.8.1 integration tests passed"
+echo "CrowdSec 1.8.2 integration tests passed"
 }
 export -f integration_body sql retention_fixture_sql retention_fixture_admin \
   retention_fixture_time retention_fixture_stream_proxy \

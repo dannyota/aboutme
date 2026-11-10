@@ -17,7 +17,7 @@ vacuum_main() {
   trap "rm -rf -- '$work'" EXIT
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null \
     3>"$work/epoch" >/dev/null 2>&1 || return 1
-  python3 -I - /usr/local/lib/aboutme/crowdsec-schema-v1.8.1.tsv <<'PY' >"$work/tables" || return 1
+  python3 -I - /usr/local/lib/aboutme/crowdsec-schema-v1.8.2.tsv <<'PY' >"$work/tables" || return 1
 import pathlib,re,sys
 rows=[row.split('\t') for row in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 tables=sorted(row[1] for row in rows if row[0]=='relation' and row[2]=='r')

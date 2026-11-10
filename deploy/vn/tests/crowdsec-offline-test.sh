@@ -24,13 +24,13 @@ if [[ ${1:-} == packages ]]; then
     postgresql-client-18=18.6-1.pgdg24.04+2 python3-yaml nftables gettext-base strace >/dev/null 2>&1
   (
     cd "$proof"
-    apt-get download crowdsec=1.8.1 crowdsec-firewall-bouncer-nftables=0.0.36 >/dev/null 2>&1
+    apt-get download crowdsec=1.8.2 crowdsec-firewall-bouncer-nftables=0.0.36 >/dev/null 2>&1
   )
   printf '%s\n' \
-    "d639e87924abe497618795378c13a425e0ffab2bbaecbf50900fae55cbed0ad0  $proof/crowdsec_1.8.1_amd64.deb" \
+    "d534ad21e6eed3d82a8fd748fa19f34970e95bfccd99735c0ebebcbad1e6366e  $proof/crowdsec_1.8.2_amd64.deb" \
     "fb3f38d222793cd031dac7e2b33076033a05c5bb476f323129d431cdc8b69b78  $proof/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" |
     sha256sum --check --status
-  for spec in crowdsec:1.8.1 crowdsec-firewall-bouncer-nftables:0.0.36; do
+  for spec in crowdsec:1.8.2 crowdsec-firewall-bouncer-nftables:0.0.36; do
     name=${spec%:*}; version=${spec#*:}; archive=$proof/${name}_${version}_amd64.deb
     [[ $(dpkg-deb -f "$archive" Package) == "$name" ]]
     [[ $(dpkg-deb -f "$archive" Version) == "$version" ]]
@@ -94,8 +94,8 @@ PY
   [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -h /run/postgresql -p 5432 -d postgres \
     -c "SELECT count(*) FROM pg_database WHERE datname='crowdsec';" 2>/dev/null) == 0 ]]
   crowdsec_install_offline apt-get -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
-    -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.1
-  [[ $(dpkg-query -W -f='${Status}\t${Version}' crowdsec) == $'install ok installed\t1.8.1' ]]
+    -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.2
+  [[ $(dpkg-query -W -f='${Status}\t${Version}' crowdsec) == $'install ok installed\t1.8.2' ]]
   # Read loaded command metadata only. Services stay disabled and the missing
   # startup gate still denies starts; restore runtime denial before assertions.
   systemctl unmask --runtime crowdsec.service >/dev/null 2>&1
@@ -228,14 +228,14 @@ install_stub() {
 
 printf '#!/usr/bin/env bash\necho original-policy\n' >"$CROWDSEC_POLICY_RC_D"
 chmod 0700 "$CROWDSEC_POLICY_RC_D"
-crowdsec_install_offline install_stub crowdsec=1.8.1 crowdsec-firewall-bouncer-nftables=0.0.36
+crowdsec_install_offline install_stub crowdsec=1.8.2 crowdsec-firewall-bouncer-nftables=0.0.36
 grep -qxF 'crowdsec crowdsec/capi boolean false' "$work/preseed" || {
   echo "CrowdSec was not opted out before package install" >&2
   exit 1
 }
 grep -qxF 'crowdsec crowdsec/lapi boolean false' "$work/preseed"
 grep -qxF 'crowdsec crowdsec/lapi_host string 127.0.0.1:8095' "$work/preseed"
-grep -qxF 'crowdsec=1.8.1' "$work/packages" || { echo "pinned CrowdSec package was not installed" >&2; exit 1; }
+grep -qxF 'crowdsec=1.8.2' "$work/packages" || { echo "pinned CrowdSec package was not installed" >&2; exit 1; }
 grep -qxF 'echo original-policy' <(tail -n 1 "$CROWDSEC_POLICY_RC_D") || {
   echo "existing policy-rc.d was not restored" >&2
   exit 1
@@ -262,7 +262,7 @@ fi
 
 : >"$CROWDSEC_TEST_SYSTEMCTL"
 export CROWDSEC_TEST_BOUNCER_ABSENT=yes
-crowdsec_install_offline install_stub crowdsec=1.8.1
+crowdsec_install_offline install_stub crowdsec=1.8.2
 unset CROWDSEC_TEST_BOUNCER_ABSENT
 mapfile -t systemctl_calls <"$CROWDSEC_TEST_SYSTEMCTL"
 [[ ${systemctl_calls[8]} == 'disable crowdsec.service' ]] || {
@@ -282,14 +282,14 @@ install_must_not_run() {
   : >"$work/install-ran"
 }
 export CROWDSEC_TEST_BAD_SELECTION=yes
-if crowdsec_install_offline install_must_not_run crowdsec=1.8.1; then
+if crowdsec_install_offline install_must_not_run crowdsec=1.8.2; then
   echo "package install accepted inconsistent suppression" >&2
   exit 1
 fi
 unset CROWDSEC_TEST_BAD_SELECTION
 [[ ! -e $work/install-ran ]] || { echo "package install ran after suppression refusal" >&2; exit 1; }
 export CROWDSEC_TEST_STOP_FAIL=yes CROWDSEC_TEST_SHOW_FAIL=yes
-if crowdsec_install_offline install_must_not_run crowdsec=1.8.1; then
+if crowdsec_install_offline install_must_not_run crowdsec=1.8.2; then
   echo "package install continued after service state query failure" >&2
   exit 1
 else
@@ -308,7 +308,7 @@ printf '#!/usr/bin/env bash\necho symlink-policy\n' >"$policy_target"
 rm -f "$CROWDSEC_POLICY_RC_D"
 ln -s "$policy_target" "$CROWDSEC_POLICY_RC_D"
 : >"$CROWDSEC_TEST_SYSTEMCTL"
-if crowdsec_install_offline install_failure_stub crowdsec=1.8.1; then
+if crowdsec_install_offline install_failure_stub crowdsec=1.8.2; then
   echo "failed package install returned success" >&2
   exit 1
 else
@@ -332,7 +332,7 @@ fi
 }
 
 export CROWDSEC_TEST_CLEANUP_MASK_FAIL=yes
-if crowdsec_install_offline install_failure_stub crowdsec=1.8.1; then
+if crowdsec_install_offline install_failure_stub crowdsec=1.8.2; then
   echo "cleanup failure returned success" >&2
   exit 1
 else

@@ -66,38 +66,51 @@ After recovery, copy the reviewed fixed bundle and rerun
 activation skipped after the failed migration. Confirm the installer reports
 `install: done`, the intended edge serves, and the timers are active.
 
-## Engine and hub upgrades
+## Engine upgrade to 1.8.2
 
-`deploy/vn/edge/crowdsec/config.yaml.local` pins `cscli.hub_branch: master` so
-offline activation can reuse cached detection without calling
-`https://version.crowdsec.net/latest` to select a branch. The pin selects a
-branch, not content versions, and does not make uncached operations work
-offline. `cscli hub update` needs network and fetches the `master` index
-regardless of the installed engine version; `cscli hub upgrade` needs network
-for downloads and uses that index. See the CrowdSec 1.8.1
-[branch selection](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/cmd/crowdsec-cli/core/require/branch.go)
-and
-[hub commands](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/cmd/crowdsec-cli/clihub/hub.go).
+Follow the [upgrade design](../design/crowdsec-1.8.2-raise.md). Reset loses
+CrowdSec alerts, bans, windows, and registrations; application data stays intact.
+Require independent review, green exact-commit main-push CI, a patch tag, and
+successful release-image publication under the [release rules](../../instructions/releases.md).
+Before installation, take the encrypted incremental backup on the host using the
+workload lock and release annotation. Require completion and healthy WAL archiving;
+keep keys on the host. The deployer's later backup is too late.
 
-Refresh the hub only with a reviewed engine package upgrade, never during a
-release switch. Re-prove the
-[version-specific behavior](../design/crowdsec-http-privacy.md#live-retention-and-failure)
-for that upgrade. On the host:
+```sh
+sudo /usr/local/lib/aboutme/workload-lock.sh 21600 \
+  runuser -u postgres -- pgbackrest --stanza=aboutme --type=incr \
+  --annotation="aboutme-release=<tag>" backup
+```
 
-1. Hold `/srv/data/host-operations/.bundle.lock` and use the existing fence and
-   operation admission rules. Follow the privacy design's
-   [stop and startup order](../design/crowdsec-http-privacy.md#migration-loss-and-release-order):
-   record the active edge, stop both edge modes, the firewall bouncer, CrowdSec,
-   the watcher, and maintenance timers, then join services and verify
-   quiescence.
-2. Upgrade the reviewed engine package with package startup suppressed as in the
-   documented installation path.
-3. Run `sudo cscli hub update`, then `sudo cscli hub upgrade`.
-4. Confirm `sudo cscli hub list`. Resume startup retention, maintenance timers,
-   and the engine through the documented guards; confirm
-   `sudo cscli lapi status` before starting the firewall bouncer and recorded
-   edge and resuming the watcher through that path. A migration no-op leaves
-   stopped services stopped.
+1. Record the active edge and keep the reviewed 1.8.1 bundle and package. Copy
+   `deploy/vn` from clean reviewed main and run
+   `sudo bash <bundle>/host/install.sh <bundle>`. Accept only
+   `crowdsec_migrate_refused step=fresh-admission`, after checking 1.8.2 is
+   installed and held, its helpers and catalog match the bundle, and consumers
+   are stopped. Diagnose any other failure before proceeding.
+2. After the installer exits and releases its lock, run
+   `sudo /usr/local/lib/aboutme/crowdsec-migrate.sh --reset`. Restore only the
+   recorded edge through normal guards, for example
+   `sudo systemctl start aboutme-caddy.service`.
+3. Rerun the same installer until `install: done`. Allow for a brief PostgreSQL
+   restart. Run `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>`.
+4. Run the checks below. Verify the package and hold, public readiness, ban
+   enforcement and removal, PostgreSQL health, backup and WAL state, and a
+   successful scheduled retention and vacuum.
+
+A failed reset revokes its lease, retains failure denial, and stops consumers.
+Diagnose the reported step, repair the cause, rerun `--reset`, restore the
+recorded edge, and finish the installer. Never clear fences or markers by hand.
+
+To roll back, use the reviewed 1.8.1 bundle's installer and authenticated package
+with its matching helpers and catalog. At occupied-catalog refusal, reset under
+that old bundle, restore the recorded edge, and finish its installer. CrowdSec
+state is lost again. Preserve notice and fence fixes; never restore the
+application cluster for CrowdSec. Image rollback alone retains the host bundle.
+Do not refresh the hub as part of this upgrade. The `cscli.hub_branch: master`
+pin selects the branch, not content versions; uncached operations still need
+network. See the [branch selection](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/core/require/branch.go)
+and [hub commands](https://github.com/crowdsecurity/crowdsec/blob/v1.8.2/cmd/crowdsec-cli/clihub/hub.go).
 
 ## Verification
 

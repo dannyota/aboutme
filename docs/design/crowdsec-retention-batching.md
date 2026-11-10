@@ -187,7 +187,7 @@ and
 [count query](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/database/decisions.go)
 own that behavior. Local 1.7.8 source shows the active helper selecting
 `CountDecisionsByValue(..., nil, true)` and `UntilGT(time.Now().UTC())`; verify
-that contract and expression registration on 1.8.1 before release. A helper or
+that contract and expression registration on 1.8.2 before release. A helper or
 query error must fail the proof, never justify reverting to all retained rows.
 The supplied review confirms that pinned 1.8.1 returns count-query errors;
 [duration evaluation](https://github.com/crowdsecurity/crowdsec/blob/v1.8.1/pkg/csprofiles/csprofiles.go#L110)
@@ -227,7 +227,7 @@ Only these implementation files need edits; none are edited by this proposal:
 - `deploy/vn/tests/crowdsec-config-test.sh`: timer accuracy and the exact active
   helper expression, keeping the three duration values and profile order.
 
-Use pinned engine 1.8.1 with a controlled clock/replay to feed one qualifying
+Use pinned engine 1.8.2 with a controlled clock/replay to feed one qualifying
 404 every 10 seconds for 25 hours, then a 21-request burst. Prove the old first
 timestamp survives despite `cache_size: 5`; a capacity-times-leakspeed assertion
 alone is insufficient. Pass the resulting graph through retention with and
@@ -243,7 +243,7 @@ zero/one/two active prior decisions, `until` just before/equal/after evaluation
 time, revocation, overlapping active and expired decisions, and before/after a
 batch. The active-only expression must produce the same duration before and
 after physical deletion of expired rows. Prove expression compilation and
-evaluation on 1.8.1; missing helper or count-query failure blocks rollout. Add
+evaluation on 1.8.2; missing helper or count-query failure blocks rollout. Add
 an expiry-between-calls regression: return one active decision on the first
 helper call, then advance the controlled clock past its expiry before the second
 comparison, so a second call would return zero. Assert exactly one helper call

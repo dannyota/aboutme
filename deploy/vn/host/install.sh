@@ -24,7 +24,7 @@ CROWDSEC_SIGNER_FPR=6A89E3C2303A901A889971D3376ED5326E93CD0C
 POSTGRESQL_COMMON_VERSION=293.pgdg24.04+1
 POSTGRESQL_VERSION=18.6-1.pgdg24.04+2
 PGBACKREST_VERSION=2.59.3-1.pgdg24.04+1
-CROWDSEC_VERSION=1.8.1
+CROWDSEC_VERSION=1.8.2
 CROWDSEC_BOUNCER_VERSION=0.0.36
 
 die() {
@@ -466,7 +466,7 @@ install -d -m 0755 "$lib"
 for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-migrate; do
   install --compare -m 0755 "$bundle/host/$helper.sh" "$lib/$helper.sh"
 done
-install --compare -m 0644 "$bundle/host/crowdsec-schema-v1.8.1.tsv" "$lib/crowdsec-schema-v1.8.1.tsv"
+install --compare -m 0644 "$bundle/host/crowdsec-schema-v1.8.2.tsv" "$lib/crowdsec-schema-v1.8.2.tsv"
 install --compare -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
 install --compare -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
