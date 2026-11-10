@@ -199,7 +199,8 @@ proof_stop_observed() {
 proof_health() {
   local file=$1 allow_stop=$2 stopped='' ready='' health_marker='' reason=7
   [[ ${file##*/} =~ ^proof\.[A-Za-z0-9]{10}$ ]] && [ "${file%/*}" = "$RUN_DIR" ] || return 2
-  (validate_state_path_integrity "$allow_stop") || return 2
+  # Integrity rejection exits, so callers never clean up through a rejected path.
+  validate_state_path_integrity "$allow_stop"
   [ -f "$file" ] || return 2
   [ ! -e "$file.failed" ] || return 3
   [ ! -f "$file.stopped" ] || stopped=$(<"$file.stopped")
@@ -255,10 +256,10 @@ def interrupted(*_):
     raise KeyboardInterrupt
 signal.signal(signal.SIGTERM, interrupted)
 signal.signal(signal.SIGINT, interrupted)
-def health_status():
+def health_status(limit):
     try:
         return subprocess.run(["bash", script, "proof-health", marker, allow_stop],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15).returncode
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=limit).returncode
     except (OSError, subprocess.SubprocessError):
         return 1
 reasons = {1: "probe-error", 2: "integrity", 3: "marker-failed", 4: "session-health",
@@ -271,7 +272,9 @@ try:
     os.close(writer)
     while anchor.poll() is None:
         ready, _, _ = select.select([reader], [], [], 1)
-        status = health_status()
+        # Once unhealthy, a probe may use only the time left before the 20 s cap.
+        limit = 15 if first_failure is None else max(1, min(15, first_failure + 20 - time.monotonic()))
+        status = health_status(limit)
         if status == 0:
             failures = 0
             first_failure = None
@@ -280,7 +283,9 @@ try:
             failures += 1
             if first_failure is None:
                 first_failure = now
-            if status == 3 or (failures >= 5 and now - first_failure >= 10):
+            # Tolerate a short transition, but stop a broken harness within
+            # about 10 s, or 20 s when probes are slow.
+            if status == 3 or (failures >= 5 and now - first_failure >= 10) or (failures >= 2 and now - first_failure >= 20):
                 print(f"proof guard: reason={reasons.get(status, 'probe-error')} samples={failures}",
                     file=sys.stderr, flush=True)
                 break
