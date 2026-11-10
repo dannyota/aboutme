@@ -492,7 +492,9 @@ export function resumeContract(
   return {
     root,
     text: `${document} :is(.resume-name,.resume-headline,.entry-title,`
-      + '.entry-subtitle,.entry-meta,.entry-body p,.entry-body li,'
+      // Level wrappers may hold only graphics or an absent widget slot.
+      + '.entry-subtitle,.entry-meta > span:not(.level-widget),.level-tag,'
+      + '.entry-body p,.entry-body li,'
       + '.section-heading h2)',
     flow: `${document} .pagination-atomic, `
       + `${document}:not(.resume-page) .resume-section`,

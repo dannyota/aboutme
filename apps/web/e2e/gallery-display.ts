@@ -61,6 +61,15 @@ export async function assertGalleryDetail(
     await expect(article).toHaveCSS('color', 'rgb(31, 26, 23)');
     await expect(article.locator('.resume-header')).toHaveCSS(
       'background-color', 'rgb(255, 240, 235)');
+    // The fixture uses the primary face; browsers load unused fallbacks lazily.
+    await expect.poll(() => page.evaluate(async () => {
+      const faces = await Promise.all(['Source Sans 3', 'Noto Sans'].flatMap(
+        (family) => [400, 700].map((weight) =>
+          document.fonts.load(`${weight} 15px "${family}"`)),
+      ));
+      return faces.every((loaded) => loaded.length > 0
+        && loaded.every((face) => face.status === 'loaded'));
+    }), 'Template document fonts.').toBe(true);
     await expect.poll(() => page.evaluate(() =>
       ['Source Sans 3', 'Noto Sans'].every((family) =>
         Array.from(document.fonts).some((face) =>

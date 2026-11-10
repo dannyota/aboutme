@@ -32,10 +32,11 @@ const compact = (value: string) => value.normalize('NFC').replace(/\s+/gu, '');
 
 // Expectations use sample fields and the template contract, never render
 // output.
-export function samplePdfChunks(
+function sampleContent(
   sample: Resume, lng: 'en' | 'vi',
-): SamplePdfChunk[] {
+) {
   const chunks: SamplePdfChunk[] = [];
+  const paragraphs: { text: string }[] = [];
   let region: Region = 'header';
   const add = (text: string | undefined, role: string,
     linked = false, strong = false) => {
@@ -72,6 +73,7 @@ export function samplePdfChunks(
   };
   const html = (value: string | undefined) => {
     const stack: string[] = [];
+    let paragraph = '';
     for (const token of value?.match(/<[^>]*>|[^<]+/gu) ?? []) {
       if (token.startsWith('<')) {
         const tag = /^<(\/?)([a-z]+)(?:\s[^>]*)?>$/iu.exec(token);
@@ -87,8 +89,14 @@ export function samplePdfChunks(
           if (stack.pop() !== name) {
             throw new Error('Invalid sample rich text.');
           }
+          if (name === 'p' && paragraph.trim()) {
+            paragraphs.push({ text: paragraph.normalize('NFC').trim() });
+          }
         } else {
           stack.push(name);
+          if (name === 'p') {
+            paragraph = '';
+          }
         }
       } else {
         const text = token.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/giu,
@@ -106,6 +114,9 @@ export function samplePdfChunks(
           });
         add(text, 'body', stack.includes('a'),
           stack.includes('b') || stack.includes('strong'));
+        if (stack.includes('p')) {
+          paragraph += text;
+        }
       }
     }
     if (stack.length > 0) {
@@ -192,7 +203,17 @@ export function samplePdfChunks(
       }
     }
   }
-  return chunks;
+  return { chunks, paragraphs };
+}
+
+export function samplePdfChunks(
+  sample: Resume, lng: 'en' | 'vi',
+): SamplePdfChunk[] {
+  return sampleContent(sample, lng).chunks;
+}
+
+export function samplePdfParagraphs(sample: Resume, lng: 'en' | 'vi') {
+  return sampleContent(sample, lng).paragraphs;
 }
 
 function contactLinked(detail: PersonalDetail): boolean {

@@ -20,6 +20,7 @@ import {
   prepareScreen,
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
+  withBaselineViewport,
 } from './support';
 
 const CASES = [
@@ -71,7 +72,7 @@ for (const { name, locale, theme, width } of CASES) {
       } else {
         await prepareScreen(page);
         if (name === 'rows') {
-          await expect(page.locator('[data-sheet-thumbnail-render]'))
+          await expect(page.locator('[data-sheet-thumbnail]'))
             .toHaveCount(LIVE_THUMBNAILS);
         }
       }
@@ -82,14 +83,25 @@ for (const { name, locale, theme, width } of CASES) {
             - document.documentElement.clientWidth,
         ),
       ).toBe(0);
-      await verifyScreenshot(
-        page,
-        `gallery--${name}--${locale}--${theme}--${width}.png`,
-        testInfo,
-        undefined,
-        CHROME_PIXEL_TOLERANCE,
-        name !== 'sheet',
-      );
+      const capture = async () => {
+        if (name === 'rows') {
+          await expect(page.locator('[data-sheet-thumbnail-render]'))
+            .toHaveCount(LIVE_THUMBNAILS);
+        }
+        await verifyScreenshot(
+          page,
+          `gallery--${name}--${locale}--${theme}--${width}.png`,
+          testInfo,
+          undefined,
+          CHROME_PIXEL_TOLERANCE,
+          name !== 'sheet',
+        );
+      };
+      if (name === 'sheet') {
+        await capture();
+      } else {
+        await withBaselineViewport(page, capture);
+      }
     });
   });
 }

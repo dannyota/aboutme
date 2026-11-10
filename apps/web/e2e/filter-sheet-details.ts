@@ -18,8 +18,15 @@ export function sheetType(surface: 'gallery' | 'showcase'): StyleRule[] {
         'line-height': '22.5px', 'letter-spacing': 'normal' },
     },
     {
-      selector: `${root} [data-role]`, message: 'Sheet option typography',
+      selector: `${root} [data-role]:not([aria-pressed="true"])`,
+      message: 'Sheet option typography',
       css: { 'font-size': '14px', 'font-weight': '500',
+        'line-height': '21px', 'letter-spacing': 'normal' },
+    },
+    {
+      selector: `${root} [data-role][aria-pressed="true"]`,
+      message: 'Sheet selected option typography',
+      css: { 'font-size': '14px', 'font-weight': '600',
         'line-height': '21px', 'letter-spacing': 'normal' },
     },
   ];

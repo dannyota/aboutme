@@ -18,7 +18,7 @@ import { pdfVariableTextWeights } from './pdf-text-style';
 
 import {
   assertDomInputContent, assertPdfInputOccurrences, overflowPdfChunks,
-  samplePdfChunks, samplePdfContentMatches,
+  samplePdfChunks, samplePdfContentMatches, samplePdfParagraphs,
 } from './pdf-input-content';
 
 export { samplePdfChunks, samplePdfContentMatches, type SamplePdfChunk }
@@ -251,9 +251,10 @@ export async function assertSampleStyle(
       .toEqual({ contained: true, separated: true });
   });
   check('line spacing', () => {
+    const expected = samplePdfParagraphs(sample, lng);
     const paragraphs = assertion === 'line spacing'
-      ? layout.paragraphs.slice(0, 1)
-      : layout.paragraphs;
+      ? expected.slice(0, 1)
+      : expected;
     expect(pdfParagraphGeometry(display.text, paragraphs.map((part) => ({
       ...part, pitch: base * spacing.lineHeight * 0.75,
     }))), 'PDF paragraph line pitch.').toBe(true);

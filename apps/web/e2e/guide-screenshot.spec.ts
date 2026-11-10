@@ -23,6 +23,7 @@ import {
   mockSignedOutSession,
   verifyScreenshot,
   waitForImages,
+  withBaselineViewport,
 } from './support';
 
 const GUIDE_BASE_URL = 'http://127.0.0.1:20090';
@@ -108,13 +109,13 @@ test.describe('guide page pixel baselines', () => {
         await assertGuide(page, cell.locale, cell.theme, cell.width);
         expect(external).toEqual([]);
 
-        await verifyScreenshot(
+        await withBaselineViewport(page, () => verifyScreenshot(
           page,
           cell.name,
           testInfo,
           undefined,
           CHROME_PIXEL_TOLERANCE,
-        );
+        ));
       });
     });
   }

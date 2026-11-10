@@ -2,10 +2,9 @@ import type { Path2D } from '@napi-rs/canvas';
 import { expect, type Page } from '@playwright/test';
 import { OPS, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-import {
-  measurePrintRules, measureTextContainment,
-} from './display-assertions';
+import { measurePrintRules } from './display-assertions';
 import { pdfDrawing } from './pdf-paint';
+import { measurePrintTextContainment } from './print-text-containment';
 import { photoCropGeometry } from './support';
 
 interface Extent {
@@ -246,36 +245,12 @@ export async function assertPrintDom(
         return Math.abs(value - target) <= 1;
       });
     });
-    const textContained = (() => {
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const node = walker.currentNode;
-        if (!node.textContent?.trim()) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        for (let parent = node.parentElement; parent && parent !== element;
-          parent = parent.parentElement) {
-          if (!parent.matches('.entry-body, .entry-body p, .entry-body li, '
-            + '.entry-header, .entry-title, .entry-subtitle, .entry-meta, '
-            + '.resume-name, .resume-headline, .contact-chip')) continue;
-          const bounds = parent.getBoundingClientRect();
-          if (parent.scrollWidth > parent.clientWidth + 1) return false;
-          if (Array.from(range.getClientRects()).some((rect) =>
-            rect.left < bounds.left - 1 || rect.right > bounds.right + 1
-            || rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1)) {
-            return false;
-          }
-        }
-      }
-      return true;
-    })();
     return {
       overflow: element.scrollWidth <= element.clientWidth + 1
         && document.documentElement.scrollWidth
         <= document.documentElement.clientWidth + 1,
       separated,
       gaps: gaps.every(Boolean),
-      textContained,
       columns: expected.columns === 1
         ? !sidebar
         : Boolean(sidebar && main
@@ -298,16 +273,11 @@ export async function assertPrintDom(
   check('Print entry and section spacing.', () => {
     expect(geometry.gaps, 'Print entry and section spacing.').toBe(true);
   });
-  check('Print text containment.', () => {
-    expect(geometry.textContained, 'Print text containment.').toBe(true);
-  });
   if (assertion === undefined || assertion === 'Print text containment.') {
-    for (const container of await root.locator(
-      '.resume-header, .section-heading, .entry',
-    ).all()) {
-      expect(await measureTextContainment(container), 'Print text containment.')
-        .toEqual({ visible: true, contained: true });
-    }
+    const text = await measurePrintTextContainment(root);
+    expect(text, 'Print text containment.').toEqual({
+      visible: true, contained: true, failures: [],
+    });
   }
   if (assertion === undefined
     || assertion === 'Print images decoded and visible.') {

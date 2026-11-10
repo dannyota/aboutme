@@ -18,6 +18,7 @@ import {
 import { pdfPaintPage, pdfTextStyleMatches, pdfTextStyleDiagnostic }
   from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
+import { samplePdfParagraphs } from './pdf-input-content';
 import {
   assertPdfPageGeometry, assertSampleFill, assertSampleStyle, FAMILIES,
   samplePdfChunks, textFill,
@@ -268,6 +269,66 @@ for (const { templateId, lng } of SAMPLES) {
   });
 }
 
+test('sample paragraphs preserve input text across inline markup', async () => {
+  const sample: Resume = JSON.parse(await readFile(resolve(
+    import.meta.dirname,
+    '../../../packages/schema/samples/modern-sidebar.vi.json',
+  ), 'utf8'));
+  const profile = sample.content.profile!;
+  expect(profile.sectionType).toBe('profile');
+  if (profile.sectionType !== 'profile') {
+    throw new Error('Expected profile input fixture.');
+  }
+  sample.customization.layout.sections = { main: ['profile'], sidebar: [] };
+  profile.entries[0]!.text = '<p>Nội dung <strong>đầu tiên</strong>.</p>'
+    + '<ul><li>Nội dung trong danh sách.</li></ul><p>Đoạn thứ hai.</p>';
+  expect(samplePdfParagraphs(sample, 'vi')).toEqual([
+    { text: 'Nội dung đầu tiên.' }, { text: 'Đoạn thứ hai.' },
+  ]);
+});
+
+for (const templateId of ['ats-plain', 'elegant-serif-two']) {
+  test(`${templateId} print ink fits tall metrics and rejects clipping`,
+    async ({ page }) => {
+      const external = await denyExternalRequests(page);
+      await page.emulateMedia({ media: 'print' });
+      const sample: Resume = JSON.parse(await readFile(resolve(
+        import.meta.dirname, '../../../packages/schema/samples',
+        `${templateId}.vi.json`,
+      ), 'utf8'));
+      const margins = sample.customization.spacing.pageMargin!;
+      await page.setViewportSize({
+        width: Math.round((210 - 2 * margins.x) * 96 / 25.4), height: 1123,
+      });
+      expect((await page.goto(`/_harness/render?fixture=sample-${templateId}-vi`
+        + `&template=${templateId}&mode=continuous&print=1`))?.ok()).toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      const nominalOverflow = await page.locator(
+        '.resume-name, .section-heading h2',
+      ).evaluateAll((elements) => elements.some((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const box = element.getBoundingClientRect();
+        return Array.from(range.getClientRects()).some((rect) =>
+          rect.top < box.top - 1 || rect.bottom > box.bottom + 1);
+      }));
+      expect(nominalOverflow, 'Font metrics exceed nominal heading boxes.')
+        .toBe(true);
+      const [family] = FAMILIES[sample.customization.font.family]!;
+      const check = () => assertPrintDom(page, family,
+        sample.customization.layout.columns, sample.customization.spacing,
+        'Print text containment.',
+      );
+      await check();
+      const name = page.locator('.resume-name');
+      await applyStyleMutation(name, { height: '1px', overflow: 'hidden' });
+      expect(await name.evaluate((element) =>
+        element.scrollHeight > element.clientHeight + 1)).toBe(true);
+      await expect(check()).rejects.toThrow('Print text containment.');
+      expect(external).toEqual([]);
+    });
+}
+
 test('sample print DOM and PDF detect dropped bold with shared glyphs',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
@@ -464,16 +525,30 @@ for (const boundary of ['minimum', 'maximum'] as const) {
     const baseline = await withPrintedPdf(page, (part) => textFill(part, 13));
     expect(baseline).toHaveLength(1);
     assertSampleFill(baseline[0]!);
-    const scale = boundary === 'minimum' ? 0.8 : 0.99 / baseline[0]!;
-    await applyStyleMutation(page.locator('.resume-document'), {
-      'transform-origin': '0px 0px',
-      'transform': [`scaleY(${scale})`, /^matrix\(/u],
-    });
+    if (boundary === 'minimum') {
+      await applyStyleMutation(page.locator('.resume-document'), {
+        'transform-origin': '0px 0px',
+        'transform': ['scaleY(0.8)', /^matrix\(/u],
+      });
+    } else {
+      // Scaling the whole root can add a page containing only empty overflow.
+      // Move only the sample's final text, keeping it inside the paper margins.
+      const shift = (0.99 - baseline[0]!) * (297 - 2 * 13) * 96 / 25.4;
+      await applyStyleMutation(
+        page.locator('.resume-main .entry-meta').last(), {
+          transform: [`translateY(${shift}px)`, /^matrix\(/u],
+        },
+      );
+    }
     const altered = await withPrintedPdf(page, (part) => textFill(part, 13));
+    expect(altered, 'Fill mutation keeps the one-page sample.')
+      .toHaveLength(1);
     expect(altered[0]).not.toBe(baseline[0]);
     expect(() => assertSampleFill(altered[0]!))
       .toThrow(`PDF sample ${boundary} fill.`);
-    expect(altered).toHaveLength(1);
+    if (boundary === 'maximum') {
+      expect(Math.abs(altered[0]! - 0.99)).toBeLessThanOrEqual(0.002);
+    }
     expect(external).toEqual([]);
   });
 }

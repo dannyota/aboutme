@@ -633,6 +633,7 @@ apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
 apps/web/e2e/print-mutations.spec.ts
 apps/web/e2e/print-pdf.spec.ts
+apps/web/e2e/print-text-containment.ts
 apps/web/e2e/print.spec.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts

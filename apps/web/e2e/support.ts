@@ -369,6 +369,28 @@ export async function prepareScreen(page: Page): Promise<void> {
   await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
 }
 
+/** Retained rasters were captured with the viewport as tall as the page. */
+export async function withBaselineViewport(
+  page: Page, capture: () => Promise<void>,
+): Promise<void> {
+  const viewport = page.viewportSize()!;
+  try {
+    const height = await page.evaluate(() =>
+      document.documentElement.scrollHeight);
+    await page.setViewportSize({ width: viewport.width, height });
+    await prepareScreen(page);
+    const settled = await page.evaluate(() =>
+      document.documentElement.scrollHeight);
+    if (settled !== height) {
+      await page.setViewportSize({ width: viewport.width, height: settled });
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await capture();
+  } finally {
+    await page.setViewportSize(viewport);
+  }
+}
+
 export function chromeScreenContract(
   root: string,
   text: string,

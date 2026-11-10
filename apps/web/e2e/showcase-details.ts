@@ -2,6 +2,16 @@ import { expect, type Page } from '@playwright/test';
 
 import { expectStyleRules, type StyleRule } from './screen-expectations';
 
+export async function expectShowcaseHeading(
+  page: Page, property: 'color' | 'font-family', theme: 'light' | 'dark',
+): Promise<void> {
+  const expected = property === 'font-family'
+    ? '"Be Vietnam Pro", Inter, system-ui, sans-serif'
+    : theme === 'light' ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)';
+  await expect(page.getByTestId('showcase-header').locator('h1'),
+    `Showcase heading ${property}.`).toHaveCSS(property, expected);
+}
+
 export function showcaseType(width: number, empty: boolean): StyleRule[] {
   return [
     {

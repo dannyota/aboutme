@@ -182,7 +182,9 @@ export function screenMutationTests(
         const styles: StyleMutation = kind === 'geometry'
           ? { transform: ['translateX(2000px)', /matrix/u] }
           : kind === 'containment'
-            ? { height: '1px', overflow: 'hidden' }
+            ? { 'display': 'block', 'min-height': '0px', 'padding': '0px',
+                'box-sizing': 'content-box', 'height': '1px',
+                'overflow': 'hidden' }
             : kind === 'typography'
               ? { 'font-family': 'monospace' }
               : { [contract.paint[1]]: 'rgb(255, 0, 0)' };

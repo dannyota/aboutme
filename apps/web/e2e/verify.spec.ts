@@ -12,6 +12,7 @@ import {
   trackCsp,
   verifyScreenshot,
   waitForImages,
+  withBaselineViewport,
 } from './support';
 import {
   expectVerifyDisplay,
@@ -533,13 +534,13 @@ for (const baseline of BASELINE_STATES) {
 
         expect(await pageOverflow(page)).toBe(0);
 
-        await verifyScreenshot(
+        await withBaselineViewport(page, () => verifyScreenshot(
           page,
           `verify--${baseline.name}--${theme}--${width}.png`,
           testInfo,
           undefined,
           CHROME_PIXEL_TOLERANCE,
-        );
+        ));
       });
     }
   }

@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import {
   expectScreen,
+  expectScreenClass,
   measureShowcaseGrid,
   measureShowcaseSheet,
   measureTextContainment,
@@ -12,7 +13,8 @@ import {
   applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
 } from './style-mutation';
 import {
-  expectShowcaseDetails, expectShowcaseFlow, expectShowcaseList,
+  expectShowcaseDetails, expectShowcaseFlow, expectShowcaseHeading,
+  expectShowcaseList,
   expectShowcasePager, showcaseType,
 } from './showcase-details';
 import { styleProofs } from './screen-style-proofs';
@@ -25,6 +27,7 @@ import {
   mockSignedOutSession,
   verifyScreenshot,
   waitForImages,
+  withBaselineViewport,
 } from './support';
 
 // Pixel baselines for the community showcase (/showcase) with a stubbed
@@ -215,16 +218,12 @@ async function assertShowcase(
   await expect(header.locator('p')).toHaveText(lead);
   await expect.poll(() => measureTextContainment(header))
     .toEqual({ visible: true, contained: true });
-  await expect(header.locator('h1')).toHaveCSS(
-    'color', theme === 'light' ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)',
-  );
+  await expectShowcaseHeading(page, 'color', theme);
   await expect(header.locator('h1')).toHaveCSS('font-weight', '700');
   await expect(header.locator('h1')).toHaveCSS(
     'font-size', width >= 1024 ? '40px' : width >= 641 ? '32px' : '28px',
   );
-  await expect(header.locator('h1')).toHaveCSS(
-    'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-  );
+  await expectShowcaseHeading(page, 'font-family', theme);
   expect(await page.evaluate(() => (
     document.fonts.check('700 28px "Be Vietnam Pro"', 'CV từ cộng đồng')
     && Array.from(document.fonts).some((face) =>
@@ -403,7 +402,7 @@ for (const { name, path, body, locale, theme, width } of CASES) {
         - document.documentElement.clientWidth);
       expect(overflow).toBe(0);
 
-      await verifyScreenshot(
+      const capture = () => verifyScreenshot(
         page,
         `showcase--${name}--${locale}--${theme}--${width}.png`,
         testInfo,
@@ -411,6 +410,11 @@ for (const { name, path, body, locale, theme, width } of CASES) {
         CHROME_PIXEL_TOLERANCE,
         name !== 'sheet',
       );
+      if (name === 'filled' || name === 'filtered') {
+        await withBaselineViewport(page, capture);
+      } else {
+        await capture();
+      }
     });
   });
 }
@@ -496,18 +500,28 @@ for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
     const assertClean = () =>
       assertShowcase(page, 'filled', 'vi', 'light', 390);
     await assertClean();
-    const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow(
-      name === 'columns' || name === 'row gap'
-        ? 'Showcase grid geometry.'
-        : name === 'clipped heading'
-          ? 'Screen containment.'
-          : name === 'heading color'
-            ? 'color'
-            : name === 'heading font'
-              ? 'font-family'
-              : 'toBeVisible');
-    await restore();
+    const grid = name === 'columns' || name === 'row gap';
+    const property = name === 'heading color' ? 'color' : 'font-family';
+    const message = grid
+      ? 'Showcase grid geometry.'
+      : name === 'clipped heading'
+        ? 'Screen containment.'
+        : name === 'hidden filter'
+          ? 'Showcase filter visibility.'
+          : `Showcase heading ${property}.`;
+    const assertion = () => grid
+      ? expect.poll(() => measureShowcaseGrid(
+          page.locator('.showcase-grid'), 1, 16,
+        ), message).toBe(true)
+      : name === 'clipped heading'
+        ? expectScreenClass(page, showcaseContract('vi', 'light'),
+            'containment')
+        : name === 'hidden filter'
+          ? expect(page.locator(selector), message).toBeVisible()
+          : expectShowcaseHeading(page, property, 'light');
+    await proveMutation(assertion, () => applyStyleMutation(
+      page.locator(selector), styles,
+    ), message);
     await assertClean();
   });
 }

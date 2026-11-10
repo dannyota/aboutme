@@ -29,6 +29,7 @@ import {
   prepareScreen,
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
+  withBaselineViewport,
 } from './support';
 
 // Application chrome pixel baselines: the signed-out homepage, the login
@@ -83,7 +84,8 @@ async function expectChrome(
     : 'rgb(20, 26, 46)');
   await expect(page.locator('body')).toHaveCSS('background-color',
     theme === 'light' ? 'rgb(249, 248, 245)' : 'rgb(12, 16, 32)');
-  await expect(page.locator('body')).toHaveCSS('font-size', '15px');
+  await expect(page.locator('body'), 'Chrome body font-size.')
+    .toHaveCSS('font-size', '15px');
   await expect(page.locator('body')).toHaveCSS('line-height', '22.5px');
   await expect(page.locator('body')).toHaveCSS('color', theme === 'light'
     ? 'rgb(16, 27, 63)'
@@ -266,37 +268,49 @@ test.describe('Vietnamese chrome', () => {
 
           if (page.thumbnails > 0) {
             await prepareScreen(browserPage);
-            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
+            await expect(browserPage.locator('[data-sheet-thumbnail]'))
               .toHaveCount(page.thumbnails);
             // Each embedded sheet's name renders as a p, not an h1, so the
             // page keeps exactly one h1 once every thumbnail has mounted.
             await expect(browserPage.locator('h1')).toHaveCount(1);
           }
 
-          await verifyScreenshot(
-            browserPage,
-            `chrome--${page.name}--${theme}--${width}.png`,
-            testInfo,
-            undefined,
-            CHROME_PIXEL_TOLERANCE,
-          );
-
-          if (page.name === 'home') {
-            const templates = browserPage.locator(
-              '[data-testid="landing-templates"]',
-            );
-            await templates.scrollIntoViewIfNeeded();
-            await expect(
-              browserPage.locator('[data-sheet-thumbnail-render]'),
-            ).toHaveCount(4);
-            await prepareScreen(browserPage);
+          const capture = async () => {
+            if (page.thumbnails > 0) {
+              await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
+                .toHaveCount(page.thumbnails);
+              await expect(browserPage.locator('h1')).toHaveCount(1);
+            }
             await verifyScreenshot(
               browserPage,
-              `chrome--home-templates--${theme}--${width}.png`,
+              `chrome--${page.name}--${theme}--${width}.png`,
               testInfo,
-              templates,
+              undefined,
               CHROME_PIXEL_TOLERANCE,
             );
+
+            if (page.name === 'home') {
+              const templates = browserPage.locator(
+                '[data-testid="landing-templates"]',
+              );
+              await templates.scrollIntoViewIfNeeded();
+              await expect(
+                browserPage.locator('[data-sheet-thumbnail-render]'),
+              ).toHaveCount(4);
+              await prepareScreen(browserPage);
+              await verifyScreenshot(
+                browserPage,
+                `chrome--home-templates--${theme}--${width}.png`,
+                testInfo,
+                templates,
+                CHROME_PIXEL_TOLERANCE,
+              );
+            }
+          };
+          if (page.thumbnails > 0) {
+            await withBaselineViewport(browserPage, capture);
+          } else {
+            await capture();
           }
         });
       }

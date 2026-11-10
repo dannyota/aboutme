@@ -4,7 +4,7 @@ import { expectStyleRules, type StyleRule } from './screen-expectations';
 
 import { visiblePaint } from './screen-paint';
 import {
-  measureTextContainment, rejectAncestorClipping,
+  measureTextContainment, preserveScreenScroll, rejectAncestorClipping,
 } from './screen-containment';
 
 export interface ScreenContract {
@@ -33,6 +33,15 @@ export type ScreenClass = typeof SCREEN_CLASSES[number];
 
 /** Use the same named checks for captured cells and their seeded defects. */
 export async function expectScreenClass(
+  page: Page,
+  contract: ScreenContract,
+  kind: ScreenClass,
+): Promise<void> {
+  await preserveScreenScroll(page, () =>
+    checkScreenClass(page, contract, kind));
+}
+
+async function checkScreenClass(
   page: Page,
   contract: ScreenContract,
   kind: ScreenClass,
@@ -72,11 +81,12 @@ export async function expectScreenClass(
           && box.top >= root.top - 1 && box.bottom <= root.bottom + 1;
       }, contract.root), 'Screen control box.').toBe(true);
     }
-    for (const node of await text.all()) {
+    for (const [index, node] of (await text.all()).entries()) {
       if (await node.isVisible()) {
         await node.scrollIntoViewIfNeeded();
       }
-      await expect.poll(() => measureTextContainment(node), message)
+      await expect.poll(() => measureTextContainment(node),
+        `${message} Text box ${index}.`)
         .toEqual({ visible: true, contained: true });
     }
   } else if (kind === 'overlap') {
@@ -154,23 +164,9 @@ export async function expectScreen(
   page: Page,
   contract: ScreenContract,
 ): Promise<void> {
-  const positions = await page.evaluateHandle(() =>
-    Array.from(document.querySelectorAll('*')).filter((node) =>
-      node.scrollHeight > node.clientHeight
-      || node.scrollWidth > node.clientWidth).map((node) =>
-      ({ node, top: node.scrollTop, left: node.scrollLeft })));
-  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
-  try {
+  await preserveScreenScroll(page, async () => {
     for (const kind of SCREEN_CLASSES) {
-      await expectScreenClass(page, contract, kind);
+      await checkScreenClass(page, contract, kind);
     }
-  } finally {
-    await positions.evaluate((records) => {
-      for (const { node, top, left } of records) {
-        node.scrollTo(left, top);
-      }
-    });
-    await positions.dispose();
-    await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
-  }
+  });
 }

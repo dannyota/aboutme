@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import {
-  expectScreenClass, type ScreenContract,
+  expectScreenClass, measureTextContainment, resumeContract,
+  type ScreenContract,
 } from './display-assertions';
 import { expectSvg } from './screen-paint';
 import { applyStyleMutation, proveMutation } from './style-mutation';
@@ -15,6 +16,74 @@ const CONTRACT: ScreenContract = {
 };
 
 export function screenRegressionTests(): void {
+  test('screen text allows clipped decorative siblings', async ({ page }) => {
+    await page.setContent('<main id="surface"><div id="clip" '
+      + 'style="position:relative;height:24px;overflow:hidden">'
+      + '<p style="margin:0">First line</p><span aria-hidden="true" '
+      + 'style="position:absolute;top:100px">Decoration</span></div></main>');
+    const assertion = () => expectScreenClass(page, CONTRACT, 'containment');
+    await assertion();
+    await proveMutation(assertion, () => applyStyleMutation(
+      page.locator('p'), {
+        transform: ['translateY(100px)', 'matrix(1, 0, 0, 1, 0, 100)'],
+      },
+    ), 'Screen ancestor clipping.');
+  });
+
+  test('screen text allows font leading but rejects clipped ink', async ({
+    page,
+  }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'font:16px/12px Arial">xxxx</p></main>');
+    const text = page.locator('p');
+    const assertion = () => expect.poll(() => measureTextContainment(text),
+      'Screen containment.').toEqual({ visible: true, contained: true });
+    await assertion();
+    await proveMutation(assertion, () => applyStyleMutation(text, {
+      height: '1px', overflow: 'hidden',
+    }), 'Screen containment.');
+  });
+
+  test('screen text rejects a fixed height with visible overflow', async ({
+    page,
+  }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'font:16px/24px Arial">First line<br>Last line</p></main>');
+    const assertion = () => expectScreenClass(page, CONTRACT, 'containment');
+    await assertion();
+    await proveMutation(assertion, () => applyStyleMutation(
+      page.locator('p'), { height: '24px' },
+    ), 'Screen containment.');
+  });
+
+  test('renderer text excludes wrappers with graphical or absent levels',
+    async ({ page }) => {
+      await page.goto('/_harness/render?fixture=print-probe-widgets-dots'
+        + '&template=modern-sidebar&mode=continuous&lng=vi');
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await expect(page.locator('.entry-meta .level-dots')).toHaveCount(12);
+      const contract = resumeContract('modern-sidebar', 'vi');
+      const assertion = () => expectScreenClass(page, contract, 'containment');
+      await assertion();
+      await proveMutation(assertion, () => applyStyleMutation(
+        page.locator('.entry-title').first(), { opacity: '0' },
+      ), 'Screen containment.');
+    });
+
+  test('screen text restores scrolling after a named class check', async ({
+    page,
+  }) => {
+    await page.setContent('<style>p{height:20px;margin:0}</style>'
+      + '<main id="surface"><div id="sheet-body" '
+      + 'style="height:24px;overflow-y:auto">'
+      + '<p>First line</p><p>Last line</p></div></main>');
+    await expectScreenClass(page, {
+      ...CONTRACT, scrolling: ['#sheet-body'],
+    }, 'containment');
+    expect(await page.locator('#sheet-body').evaluate((node) => node.scrollTop))
+      .toBe(0);
+  });
+
   test('screen containment rejects ancestor clipping before scrolling', async ({
     page,
   }) => {

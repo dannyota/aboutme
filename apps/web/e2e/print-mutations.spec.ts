@@ -505,9 +505,16 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
         expect(await page.evaluate(() => {
           const faces = [...document.fonts].filter((face) =>
             face.family.replaceAll('"', '') === 'Be Vietnam Pro');
-          faces.forEach((face) => document.fonts.delete(face));
+          // CSS-connected faces cannot be deleted from document.fonts.
+          // Rename the descriptors so the requested family becomes absent.
+          faces.forEach((face) => {
+            face.family = 'Unavailable Print Font';
+          });
           return faces.length;
         })).toBeGreaterThan(0);
+        await expect.poll(() => page.evaluate(() => [...document.fonts]
+          .filter((face) => face.family.replaceAll('"', '')
+            === 'Be Vietnam Pro').length)).toBe(0);
         message = 'Print requested fonts loaded.';
       } else if (defect === 'overlap') {
         const entries = page.locator('.resume-main .entry');
