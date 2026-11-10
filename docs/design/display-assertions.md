@@ -1,28 +1,28 @@
 # Display assertions
 
-Status: Accepted by the owner, 2026-11-01; implementation pending. Owner
-direction: test display with Playwright without pixel comparisons. Accepted: the
-assertion contract and ADR 0019, 0020, and 0024 amendments; delete the 107
-test-only PNGs after replacement proofs; keep 26 product images and eight
-optional 14-day review screenshots; keep Git history.
-[Merged owner choices and delivery jobs](local-tooling-simplification.md#owner-choices-and-combined-jobs)
-cover both proposals; this document owns the display replacement contract.
+Status: Accepted by the owner, 2026-11-01. Revised with the owner's approval on
+2026-11-10: hosted Linux CI alone gates the cutover, and mutation tests stay in
+CI permanently. The assertions, mutation tests and product image generator have
+landed beside the pixel comparisons; the [cutover](#cutover) is pending.
 
 ## Decision and authority
 
-Replace pixel equality with explicit layout, style, content, accessibility, and
-PDF assertions. Keep the `web-e2e` gate, both build surfaces, and existing
-non-pixel checks. No product layout, copy, API, schema, or runtime browser
-change is proposed. Older clients and saved resumes need no migration or
+Test display with rules, not pictures. A pixel comparison fails on any change,
+including harmless differences between machines, and never says what broke. A
+display assertion states one rule the product must keep, such as "columns do not
+overlap" or "page two repeats the sidebar tint", and names the rule that failed.
+
+Replace every pixel comparison with explicit layout, style, content,
+accessibility, and PDF assertions. Keep the `web-e2e` gate, both build surfaces,
+and existing non-pixel checks. No product layout, copy, API, schema, or runtime
+browser change is proposed. Older clients and saved resumes need no migration or
 fallback.
 
 [ADR 0019](../adr/0019-application-ui-toolkit.md),
 [ADR 0020](../adr/0020-application-visual-identity.md), and
-[ADR 0024](../adr/0024-delivery-gates.md) record the owner-approved amendments
-with History entries dated 2026-11-01. Preserve renderer isolation, visual
-values, and exact-commit hosted release CI. Implementation remains pending;
-existing comparisons stay required until the replacement passes acceptance and
-cutover lands. The authority update authorizes no execution.
+[ADR 0024](../adr/0024-delivery-gates.md) record the decision. Preserve renderer
+isolation, visual values, and exact-commit hosted release CI. Existing
+comparisons stay required until the cutover lands.
 
 Keep [template contracts](templates/contract.md), [tokens](templates/tokens.md),
 [colors](templates/colors.md), [print rules](templates/print.md),
@@ -32,18 +32,38 @@ values. Tests encode those values independently of the production resolver.
 Reading a CSS variable and comparing it only to its own consumer is
 insufficient: a wrong variable would pass both sides.
 
+## How the tests protect the product
+
+Every cell of the [matrix](#matrix-and-stable-inputs) passes through these
+layers. Together they replace what a pixel comparison caught.
+
+| Layer             | What it checks                                                                                                                                          | Catches                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Shared invariants | On every tested page: no overflow or clipping, no overlap, text inside its container, requested fonts loaded, images decoded, colors equal token values | A broken page of any kind, on surfaces nobody thought to describe |
+| Surface checks    | What a user would see break on that surface: paper and columns, grid counts, content order, toolbar and sheet placement, crop, fitted names             | A layout that is intact but wrong                                 |
+| PDF checks        | Real Chromium output: page count and size, which entry lands on which page, text with accents, fonts, painted regions and images                        | Print defects that screen checks cannot see                       |
+| Mutation tests    | Seeded defects that each assertion must detect, on every commit                                                                                         | An assertion that silently stopped working                        |
+| Review images     | Eight optional screenshots per run for a person to look at                                                                                              | Kerning, raster and optical defects that no rule describes        |
+
+The [assertion contract](#assertion-contract) defines the first two layers,
+[print and PDF](#print-and-pdf) the third, [proof](#proof-mutation-tests) the
+fourth, and [limits](#platforms-limits-and-artifacts) the fifth.
+
 ## Complete comparison inventory
 
-Replace 103 screen, four print and 26 product-page comparisons: 133 total.
-Remove `verifyScreenshot` in `support.ts`, both print/sample `compareRaster`
-helpers and unused `toHaveScreenshot` configuration after acceptance. Paths in
-the complete inventory below are relative to `apps/web/e2e/`.
+Replace 103 screen, four print and 26 product-page comparisons: 133 total. The
+103 screen and four print PNGs are test baselines and are deleted at cutover.
+The 26 product-page PNGs are [product images](#product-images): they stay, and
+only their comparison is removed. Remove `verifyScreenshot` in `support.ts`,
+both print/sample `compareRaster` helpers and unused `toHaveScreenshot`
+configuration after acceptance. Paths in the complete inventory below are
+relative to `apps/web/e2e/`.
 
 | Spec and cells                                                                                                                                                                                                                                             | Visual properties guarded                                                                           | Replacement                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `screenshot.spec.ts`: nine renderer cells: `vn-full` paged classic-serif, classic-serif justify, engineer-compact, modern-sidebar, executive-band, consulting-formal A4 and Letter, academic-dense; `full` continuous modern-sidebar                       | Paper, margins, columns, section order, wrapping, headings, photo crop, surface tint, justification | Paper and column geometry; ordered visible content; text containment; computed typography, alignment and region colors; crop ratios; page membership    |
 | Same spec: nine public cells: classic-serif and modern-sidebar at 2560; those two plus editorial-wide at 390; dark modern-sidebar at 390, creative-accent and executive-band at 1440; system classic-serif at 1440 with dark preference                    | Centered reading measure, phone gutters, toolbar, column stacking, owner dark theme                 | Center and padding equations; toolbar alignment and print hiding; column order and no overlap; explicit owner/preference color matrix                   |
-| Same spec: eight guide cells: `vi` and `en`, light and dark, 390 and 1280                                                                                                                                                                                  | Guide hierarchy, instructions, code wrapping, CTA and footer                                        | Scoped ARIA, exact localized text/order, code-block scrolling exceptions, box and token checks                                                          |
+| `guide-screenshot.spec.ts`: eight guide cells: `vi` and `en`, light and dark, 390 and 1280                                                                                                                                                                 | Guide hierarchy, instructions, code wrapping, CTA and footer                                        | Scoped ARIA, exact localized text/order, code-block scrolling exceptions, box and token checks                                                          |
 | `chrome.spec.ts`: home, login, templates, and home-template region, each light/dark at 390/1440, `vi`: 16 images                                                                                                                                           | Header, form, hero sheet and ghost, cards, spacing, glows and colors                                | Header/form structure, sheet alignment, grid dimensions, image readiness, token and pseudo-element styles; retain Chromium/WebKit phone centering tests |
 | `gallery.spec.ts`: creative-accent Page light 390; executive-band PDF light/dark 390/1440; ATS dark 390/1440, all `vi`: seven                                                                                                                              | Page/info stacking, PDF image sequence and fit, ATS readability, tab chrome                         | Tab roles and selected state; document/info boxes; decoded ordered page images and aspect ratio; ATS text/order, wrap and colors                        |
 | `gallery-baselines.spec.ts`: sheet `vi` dark 390 / `en` light 390; filtered same phone cell / `en` light 1440; rows `vi` light 1024: five                                                                                                                  | Filter sheet, chips, desktop rows, result grid                                                      | Modal bounds, focus, scrolling; chip wrapping; row spacing; correct grid count, gaps and order                                                          |
@@ -94,12 +114,12 @@ for 2/3 columns. Preserve existing 360/375/390/414/430 hero checks and
 container width: probe `36 × container fontSize` minus 1 px and exactly that
 width, using the fixture's independently specified font size.
 
-Use the locked Playwright 1.64.0 and its bundled browsers on both platforms,
-UTC, device scale 1, reduced motion, explicit locale (`vi-VN` or `en-US`), and
-fixed clocks/data. Wait for fonts, decoded images, hydration and pagination
-settled markers. Verify requested bundled font faces loaded without errors;
-retain offline font/fallback tests. `document.fonts.ready` alone cannot prove
-the requested face was used. Keep renderer synthesis disabled.
+Use the locked Playwright 1.64.0 and its bundled browsers, UTC, device scale 1,
+reduced motion, explicit locale (`vi-VN` or `en-US`), and fixed clocks/data.
+Wait for fonts, decoded images, hydration and pagination settled markers. Verify
+requested bundled font faces loaded without errors; retain offline font/fallback
+tests. `document.fonts.ready` alone cannot prove the requested face was used.
+Keep renderer synthesis disabled.
 
 ## Assertion contract
 
@@ -143,7 +163,7 @@ and language levels 0–5, absent level and all four modes in both languages.
 
 CSS print emulation does not expose actual page fragments. Keep it for computed
 `break-*`, `orphans: 2`, `widows: 2`, print colors and hidden toolbar checks;
-use headless Chromium `page.pdf()` for actual output on both platforms.
+use headless Chromium `page.pdf()` for actual output.
 [Playwright PDF options](https://playwright.dev/docs/api/class-page#page-pdf)
 support print media, CSS page size and backgrounds. Preserve production flags:
 zero job margins, `preferCSSPageSize: true`, `printBackground: true`,
@@ -177,33 +197,54 @@ Keep preview/PDF count agreement for the existing long sample fixtures and the
 preview-gap gate. Do not promote that agreement into a product guarantee: editor
 pagination remains advisory and Chromium print remains authoritative.
 
+## Proof: mutation tests
+
+A mutation test seeds one defect into a passing page, confirms the defect took
+effect, and requires the named assertion to fail. Mutation tests run in
+`web-e2e` on every commit, so an assertion that stops detecting its defect turns
+CI red. `style-mutation.ts` applies screen mutations and proves the computed
+value changed; `print-mutations.spec.ts` holds the PDF mutations.
+
+- Every spec in the inventory has at least one mutation test for each assertion
+  class it relies on. A new display assertion lands with its mutation test.
+- A mutation that crashes setup, or that leaves the computed value or PDF output
+  unchanged, does not count.
+- No per-image record, second platform, or proof that the old comparison caught
+  the mutation is required. A pixel comparison fails on every visible change by
+  construction, so that proof adds no information.
+
+| Mutation                                                               | Required failure                                    |
+| ---------------------------------------------------------------------- | --------------------------------------------------- |
+| Shift column or toolbar by 4 px; change grid count                     | Alignment, column/grid geometry                     |
+| Disable wrapping; give body fixed height and hidden overflow           | Range containment and scroll bounds                 |
+| Negative margin causing 4 px overlap                                   | Sibling separation                                  |
+| Swap font, increase base by 2 px, drop bold or justification           | Font readiness, computed type/alignment             |
+| Remove dark selector or change foreground/surface token                | Independent computed color expectations             |
+| Hide, duplicate or reorder an entry; remove Vietnamese accents         | Visible content/count/order and PDF text            |
+| Add forced break; make every entry unbreakable                         | Per-page membership/count; no blank page            |
+| Move second-page sidebar into main; drop continuation tint/photo       | PDF column bounds and paint/image assertions        |
+| Hide filter control; remove heading role or provider error             | ARIA plus explicit visibility/state/copy            |
+| Force `.level-fill { width: 20% !important }` for level 4              | Expected 80% screen/PDF fill length                 |
+| Paint all dots filled; change a level-4 tag to `3/5`                   | Exact filled count/order and tag text in screen/PDF |
+| Ignore crop offsets or change thumbnail scale without changing its box | Input-derived crop/scale equations                  |
+
+Mutation tests show that each rule detects its defect. They do not show that the
+rules cover every defect; the review images and the limits below cover that gap.
+PDF generation, two builds and the added checks may offset the removed PNG work,
+so no speedup is claimed. Measure time and artifact bytes before changing
+shards.
+
 ## Platforms, limits and artifacts
 
-Linux CI keeps its pinned browser image initially. Add a native macOS arm64
-runner path for the same specs, inputs and expectations, without Podman or
-`uname -m = x86_64`. Use Playwright's installed executable rather than a Linux
-path. Both native runners follow
-[native admission and account](local-tooling-simplification.md#native-admission-and-account):
-owner-written/reviewed commits, disposable builds/profiles, explicit environment
-and test credentials. Contributor heads use hosted CI. Resource changes follow
-the accepted tooling amendment; existing callers retain their lock/cap behavior
-until wrapper integration lands.
-[Playwright supports macOS and Linux](https://playwright.dev/docs/intro#system-requirements);
-the repository's native run and these tolerances are not yet proven.
+Hosted Linux CI in the pinned browser image is the display gate and the only
+gate for cutover. It is the environment that produces production PDFs. Keep
+production browser pins and same-environment output determinism rules unchanged.
 
-`make web-e2e` and `make web-e2e-fast` cover the display HTTP harnesses on
-20090/20092, including direct Chromium PDFs on Mac. Functional HTTPS is a
-separate requirement: the combined native HTTPS runner job owns `make dev-https`
-and `make dev-https-*-check`, strict profile CA trust, exact platform
-exclusions, evidence and cleanup. Its server PDF/PNG skips do not apply to
-display harness PDFs. Native HTTP WebKit needs no local CA; HTTPS WebKit remains
-explicitly skipped as specified there.
-
-Validate all cells on both platforms before deleting comparisons. Record maximum
-geometry deltas, browser revision and font hashes. Never use OS-specific
-expected layouts, skip Mac PDFs, widen tolerance to a line/page, or accept
-missing fonts. Resolve reproducible failures before cutover. Keep production
-browser pins and same-environment output determinism rules unchanged.
+A native macOS run of the same specs is an optional follow-up under
+[local tooling](local-tooling-simplification.md#native-admission-and-account).
+It never blocks cutover or a release. If it is added, it uses the same inputs
+and expectations: no OS-specific expected layouts, skipped PDFs, tolerance
+widened to a line or page, or accepted missing fonts.
 
 Chromium may embed variable fonts under the `-Regular` instance name, so PDF
 weight evidence is advisory and rejects only contradictions supported by at
@@ -230,20 +271,14 @@ failure summaries retain only spec, line and fixed status; local reports may
 carry measured boxes. Keep commit, source-manifest/archive hashes and browser
 identity in sanitized metadata. Do not upload arbitrary attachments by glob.
 
-## Migration
-
-Authority amendments are accepted. Add replacement assertions alongside the
-existing gate. Prove every inventory cell and mutation below; validate native
-and Linux runs. Split product image generation before removing `web-e2e-update`.
-Then delete test baselines, comparison helpers and Baselines workflow together;
-retain `web-e2e` and `web-e2e-fast` names and every shard selection. No baseline
-update mode remains in either test target. Release only after exact-commit CI.
+## Product images
 
 Product PNGs in `public/templates/pages/` are served by Library and PDF tabs.
 Keep those 26 committed assets, outside baseline testing, with a separate
-explicit generator, as accepted by the owner. Record renderer, sample, font, and
-browser source hashes in the manifest and fail stale inputs without comparing
-pixels. Generation uses pinned Linux for consistent delivery and requires manual
+explicit generator, as accepted by the owner. The generator, the validator and
+the manifest hashes have landed. Record renderer, sample, font, and browser
+source hashes in the manifest and fail stale inputs without comparing pixels.
+Generation uses pinned Linux for consistent delivery and requires manual
 inspection. Keep the manifest's array shape and existing fields; add source and
 output SHA-256 fields per entry. Hash sorted paths and bytes for the generator,
 renderer, render utilities, schema/template/sample inputs, bundled fonts, Nuxt
@@ -261,35 +296,30 @@ Existing URLs and manifest consumers remain compatible. Eliminating these PNGs
 from Git too requires a separate asset delivery decision; never delete them with
 the test fixtures. Showcase test card images become ephemeral fixtures.
 
-## Proof and cost
+## Cutover
 
-For each cell, record removed filename, property, replacement, mutation and
-observed failure. Temporary mutations must fail the intended assertion on Linux
-and Mac; a setup crash does not count. Before deletion, also confirm the old
-Linux comparison caught the mutation, then restore a passing clean fixture.
-Replay available historical defects. Mutation examples alone do not establish
-equivalent coverage.
+Landed by 2026-11-10: the shared invariants, surface checks, PDF checks and
+mutation tests in every inventory spec; the product image generator, validator
+and manifest hashes. Pixel comparisons still run beside them. Three steps
+remain, and none waits on another platform or tool.
 
-| Mutation                                                               | Required failure                                    |
-| ---------------------------------------------------------------------- | --------------------------------------------------- |
-| Shift column or toolbar by 4 px; change grid count                     | Alignment, column/grid geometry                     |
-| Disable wrapping; give body fixed height and hidden overflow           | Range containment and scroll bounds                 |
-| Negative margin causing 4 px overlap                                   | Sibling separation                                  |
-| Swap font, increase base by 2 px, drop bold or justification           | Font readiness, computed type/alignment             |
-| Remove dark selector or change foreground/surface token                | Independent computed color expectations             |
-| Hide, duplicate or reorder an entry; remove Vietnamese accents         | Visible content/count/order and PDF text            |
-| Add forced break; make every entry unbreakable                         | Per-page membership/count; no blank page            |
-| Move second-page sidebar into main; drop continuation tint/photo       | PDF column bounds and paint/image assertions        |
-| Hide filter control; remove heading role or provider error             | ARIA plus explicit visibility/state/copy            |
-| Force `.level-fill { width: 20% !important }` for level 4              | Expected 80% screen/PDF fill length                 |
-| Paint all dots filled; change a level-4 tag to `3/5`                   | Exact filled count/order and tag text in screen/PDF |
-| Ignore crop offsets or change thumbnail scale without changing its box | Input-derived crop/scale equations                  |
+| Step                      | Lane and paths                                                                                          | Done when                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                               | Each inventory row maps to its invariants, surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
+| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`; devops: `.github/workflows/ci.yml`; frontend capture | A failed case uploads only that case; a passing run uploads the eight review images; neither can change the gate result                |
+| 3. Delete the comparisons | frontend, devops and the shared `Makefile`, in one pull request                                         | Hosted CI is green on the exact commit                                                                                                 |
 
-PDF generation, two builds and expanded coverage may offset removed PNG work.
-Measure wall/test time, artifact bytes and case counts before changing shards;
-no speedup is claimed. Deletion preserves old Git objects; product images still
-add history bytes. Geometry-only checks miss paint/pagination; blocking PNGs
-conflict with owner direction. The merged choices cover assets and history.
+Step 3 deletes `apps/web/e2e/baselines/` and `apps/web/e2e/print-baselines/`,
+`verifyScreenshot`, both `compareRaster` helpers, the unused `toHaveScreenshot`
+configuration, `web-e2e-update`, and `.github/workflows/baselines.yml` together.
+It keeps `web-e2e`, `web-e2e-fast`, every shard selection, the product images,
+and Git history. No baseline update mode remains in either test target. The same
+pull request updates the web and verification instructions and removes the
+matching backlog lines. Release only after exact-commit CI.
+
+After cutover, a deliberate display change updates the expected values of the
+affected assertions in the same pull request, and its author looks at the review
+images. Reverting the cutover commit restores the comparisons from Git.
 
 ## Security and failure boundaries
 
