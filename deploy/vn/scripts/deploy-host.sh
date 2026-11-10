@@ -281,6 +281,31 @@ step_backup() {
   say "backup for $tag done"
 }
 
+clear_stale_healthchecks() {
+  local units unit rest id status count=0 LC_ALL=C
+  if units=$(systemctl list-units --failed --type=service --no-legend --no-pager --plain); then
+    while read -r unit rest; do
+      [[ $unit =~ ^[0-9a-f]{64}\.service$ ]] || continue
+      id=${unit%.service}
+      if podman container exists "$id" >/dev/null 2>&1; then
+        continue
+      else
+        status=$?
+      fi
+      if [[ $status != 1 ]]; then
+        say "warning: could not check a healthcheck container"
+      elif systemctl reset-failed "$unit" >/dev/null; then
+        count=$((count + 1))
+      else
+        say "warning: could not reset a stale healthcheck unit"
+      fi
+    done <<<"$units"
+  else
+    say "warning: could not list failed healthcheck units"
+  fi
+  say "cleared $count stale healthcheck units"
+}
+
 step_timers() { # stop|start
   local j
   if [[ $1 == stop ]]; then
@@ -290,6 +315,7 @@ step_timers() { # stop|start
     checkpoint
     for j in "${jobs[@]}"; do systemctl enable --now "aboutme-job-$j.timer" >/dev/null; done
     say "job timers started"
+    clear_stale_healthchecks
   fi
 }
 
