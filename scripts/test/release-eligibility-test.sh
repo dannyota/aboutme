@@ -26,7 +26,9 @@ write_jobs=$(awk '
 # The release job's image dependency preserves the optional observer policy.
 for job in build observer-image observer-image-amd64; do
   body=$(job_body "$job")
-  grep -Eq '^    needs: eligibility$' <<<"$body" || fail "$job can start before eligibility"
+  # trivy-db is read-only (the write-job list above excludes it) and only
+  # prepares the scan database; eligibility must stay a direct dependency.
+  grep -Fxq '    needs: [eligibility, trivy-db]' <<<"$body" || fail "$job can start before eligibility"
   ! grep -Eq '^    (if:|continue-on-error:)' <<<"$body" || fail "$job overrides dependency success"
 done
 body=$(job_body image)
@@ -37,6 +39,10 @@ grep -Fxq "    if: \${{ !cancelled() && needs.image.result == 'success' }}" <<<"
   fail 'release must require image success'
 grep -Fxq '    needs: [image, observer-image, observer-image-amd64]' <<<"$body" ||
   fail 'release must wait for image and collect observer evidence'
+body=$(job_body trivy-db)
+[[ -n $body ]] || fail 'missing trivy-db job'
+! grep -Eq ': write|^    if:|continue-on-error:' <<<"$body" ||
+  fail 'trivy-db must be read-only and fail closed'
 body=$(job_body eligibility)
 [[ -n $body ]] || fail 'missing eligibility job'
 ! grep -Eq '^    if:' <<<"$body" || fail 'eligibility must not skip the dependency gate'
