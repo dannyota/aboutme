@@ -482,7 +482,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- Serialize per-owner (D7). The lock blocks a competing writer; the
+    -- Serialize per owner. The lock blocks a competing writer; the
     -- count that follows then takes a FRESH snapshot and sees the row
     -- that writer committed. This holds even for writers that bypass the
     -- store layer -- but only under READ COMMITTED, which is Postgres's
