@@ -275,7 +275,9 @@ export async function assertPrintDom(
   });
   if (assertion === undefined || assertion === 'Print text containment.') {
     const text = await measurePrintTextContainment(root);
-    expect(text, 'Print text containment.').toEqual({
+    expect({ visible: text.visible, contained: text.contained,
+      failures: text.failures }, 'Print text containment. '
+      + JSON.stringify(text.failures)).toEqual({
       visible: true, contained: true, failures: [],
     });
   }

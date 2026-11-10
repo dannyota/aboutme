@@ -558,7 +558,8 @@ for (const kind of ['shadow', 'gradient'] as const) {
         ? 'landing-sheet'
         : 'landing-glow'), kind === 'shadow'
         ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px' }
-        : { 'background-image': 'radial-gradient(red, blue)' }),
+        : { 'background-image':
+            'radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))' }),
       kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome hero gradient.');
   });
 }
@@ -574,7 +575,7 @@ for (const kind of ['navigation', 'template list'] as const) {
     await proveMutation(assertion, () => mutateAttribute(
       kind === 'navigation'
         ? page.getByTestId('app-shell').locator('nav')
-        : page.getByTestId('landing-template-grid'), 'role', 'presentation',
+        : page.getByTestId('landing-template-grid'), 'role', 'group',
     ), kind === 'navigation'
       ? 'Chrome navigation structure.'
       : 'Chrome template list structure.');

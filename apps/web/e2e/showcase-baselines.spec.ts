@@ -648,7 +648,7 @@ for (const scope of ['list', 'pager'] as const) {
     () => mutateAttribute(scope === 'list'
       ? page.locator('.showcase-grid')
       : page.getByTestId('showcase-pager'),
-    'role', 'presentation'), scope === 'list'
+    'role', 'group'), scope === 'list'
       ? 'Showcase accessible list.'
       : 'Showcase pager structure.');
   });

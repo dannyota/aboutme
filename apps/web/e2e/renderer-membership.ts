@@ -57,17 +57,17 @@ const ENGLISH_TITLES = [
   'Lovelace Medal', 'Hackathon Winner',
 ] as const;
 
-// Fixture-derived candidates using the renderer's heading and entry breaks.
-// Hosted output must be approved before these replace retained comparisons.
+// Approved against hosted Linux output. Executive-band and academic-dense
+// break at the same section as the accepted Vietnamese captures.
 const ENGLISH_PAGES: Record<string, readonly (readonly number[])[]> = {
   'classic-serif': [[0, 1, 2, 3, 4, 5, 6], [7, 8, 9]],
   'classic-serif-justify': [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]],
   'engineer-compact': [[0, 7, 8, 9, 2, 3, 6, 4, 5, 1]],
   'modern-sidebar': [[0, 1, 7, 8, 9, 2, 3, 4, 5, 6]],
-  'executive-band': [[0, 1, 2, 3, 4, 5, 6], [7, 8, 9]],
+  'executive-band': [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]],
   'consulting-formal': [[0, 1, 2, 3, 4, 5, 6, 7, 8], [9]],
   'consulting-formal-letter': [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
-  'academic-dense': [[0, 1, 2, 3, 4, 5, 6, 7, 8], [9]],
+  'academic-dense': [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
 };
 
 async function expectEnglishMembership(

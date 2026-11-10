@@ -61,21 +61,40 @@ export async function measureTextContainment(
   visible: boolean;
   contained: boolean;
 }> {
+  const result = await measurePaintedText(container, verticalContainer);
+  return {
+    visible: result.visible,
+    contained: result.contained && result.separated,
+  };
+}
+
+/** Keep painted bounds and distinct-line separation independently testable. */
+export async function measurePaintedText(
+  container: Locator, verticalContainer?: string,
+): Promise<{ visible: boolean; contained: boolean; separated: boolean }> {
   return container.evaluate((root, selector) => {
     const bounds = root.getBoundingClientRect();
     const outer = selector ? root.closest(selector) : root;
+    const invalid = { visible: false, contained: false, separated: false };
     if (!outer) {
-      return { visible: false, contained: false };
+      return invalid;
     }
     const rootStyle = getComputedStyle(root);
     const rootClipsY = /^(hidden|clip|scroll|auto)$/u.test(rootStyle.overflowY);
-    const next = outer !== root
-      ? root.nextElementSibling?.getBoundingClientRect()
-      : undefined;
+    const next = root.nextElementSibling?.getBoundingClientRect();
     let visible = bounds.width > 0 && bounds.height > 0;
     let contained = root.scrollWidth <= root.clientWidth + 1;
     let hasText = false;
-    const context = document.createElement('canvas').getContext('2d')!;
+    let separated = true;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d')!;
+    const inkLines: {
+      baseline: number; left: number; right: number;
+      top: number; bottom: number;
+    }[] = [];
+    const segmenter = new Intl.Segmenter(undefined, {
+      granularity: 'grapheme',
+    });
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode;
@@ -91,14 +110,11 @@ export async function measureTextContainment(
         rect: DOMRect;
         x: boolean;
         y: boolean;
-        ink: boolean;
       }[] = [
-        { rect: bounds, x: true, y: outer === root || rootClipsY,
-          ink: rootClipsY || rootStyle.display === 'inline' },
+        { rect: bounds, x: true, y: outer === root || rootClipsY },
       ];
       if (outer !== root) {
-        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true,
-          ink: false });
+        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true });
       }
       for (
         let element: Element | null = parent;
@@ -115,7 +131,6 @@ export async function measureTextContainment(
             rect: element.getBoundingClientRect(),
             x: /^(hidden|clip|scroll|auto)$/u.test(style.overflowX),
             y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
-            ink: true,
           });
         }
       }
@@ -127,49 +142,153 @@ export async function measureTextContainment(
         visible = false;
       }
       const css = getComputedStyle(parent);
+      // Preserve the DOM's shaping state, including properties that do not
+      // serialize into the font shorthand. Range advances retain justification.
+      for (const property of Array.from(css)) {
+        canvas.style.setProperty(property, css.getPropertyValue(property));
+      }
+      canvas.lang = parent.closest('[lang]')?.getAttribute('lang')
+        ?? document.documentElement.lang;
       context.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} `
         + css.fontFamily;
-      const content = css.textTransform === 'uppercase'
-        ? node.textContent!.toUpperCase()
-        : css.textTransform === 'lowercase'
-          ? node.textContent!.toLowerCase()
-          : node.textContent!;
-      const metrics = context.measureText(content);
-      if (!Number.isFinite(metrics.fontBoundingBoxAscent
-        + metrics.fontBoundingBoxDescent + metrics.actualBoundingBoxAscent
-        + metrics.actualBoundingBoxDescent)
-      || metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent <= 0) {
-        return { visible: false, contained: false };
+      const stretches: Record<string, string> = {
+        '50%': 'ultra-condensed', '62.5%': 'extra-condensed',
+        '75%': 'condensed', '87.5%': 'semi-condensed', '100%': 'normal',
+        '112.5%': 'semi-expanded', '125%': 'expanded',
+        '150%': 'extra-expanded', '200%': 'ultra-expanded',
+      };
+      const rendering: Record<string, string> = {
+        optimizespeed: 'optimizeSpeed',
+        optimizelegibility: 'optimizeLegibility',
+        geometricprecision: 'geometricPrecision',
+      };
+      const state: Record<string, string> = {
+        fontKerning: css.fontKerning,
+        fontStretch: stretches[css.fontStretch] ?? css.fontStretch,
+        fontVariantCaps: css.fontVariantCaps,
+        letterSpacing: css.letterSpacing === 'normal'
+          ? '0px'
+          : css.letterSpacing,
+        wordSpacing: css.wordSpacing === 'normal' ? '0px' : css.wordSpacing,
+        textRendering: rendering[css.textRendering.toLowerCase()]
+          ?? css.textRendering,
+        direction: css.direction,
+      };
+      const drawing = context as unknown as Record<string, string>;
+      for (const [key, value] of Object.entries(state)) {
+        if (!(key in context)) {
+          return invalid;
+        }
+        drawing[key] = value;
+        if (drawing[key] !== value) {
+          return invalid;
+        }
       }
-      for (const rect of rects) {
-        // Range boxes include the font's unused ascent and descent. Compare
-        // line boxes for flow and painted ink for clips, without extra slack.
-        const scale = rect.height
-          / (metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent);
-        const baseline = rect.top + metrics.fontBoundingBoxAscent * scale;
+      // Canvas has no feature/variation override API. Reject unsupported
+      // overrides rather than measuring glyphs with a different face.
+      if (css.fontFeatureSettings !== 'normal'
+        || css.fontVariationSettings !== 'normal'
+        || css.fontVariantAlternates !== 'normal'
+        || css.fontVariantEastAsian !== 'normal'
+        || css.fontVariantPosition !== 'normal'
+        || !['normal', 'tabular-nums'].includes(css.fontVariantNumeric)
+        || !['normal', 'none', 'no-common-ligatures']
+          .includes(css.fontVariantLigatures)
+          || css.fontOpticalSizing !== 'auto'
+          || css.fontSizeAdjust !== 'none'
+          || !['none', 'uppercase', 'lowercase'].includes(css.textTransform)) {
+        return invalid;
+      }
+      context.textAlign = 'left';
+      context.textBaseline = 'alphabetic';
+      const transformText = (value: string) => css.textTransform === 'uppercase'
+        ? value.toLocaleUpperCase(canvas.lang || undefined)
+        : css.textTransform === 'lowercase'
+          ? value.toLocaleLowerCase(canvas.lang || undefined)
+          : value;
+      const lines: {
+        rect: DOMRect; content: string;
+        glyphs: { text: string; rect: DOMRect }[];
+      }[] = [];
+      for (const { index, segment } of segmenter.segment(node.textContent!)) {
+        range.setStart(node, index);
+        range.setEnd(node, index + segment.length);
+        const rect = Array.from(range.getClientRects()).find((item) =>
+          item.width > 0 && item.height > 0);
+        if (!rect) {
+          continue;
+        }
+        let line = lines.find((item) => Math.abs(item.rect.top - rect.top) < 0.1
+          && Math.abs(item.rect.bottom - rect.bottom) < 0.1);
+        if (!line) {
+          line = { rect, content: '', glyphs: [] };
+          lines.push(line);
+        }
+        line.content += segment;
+        line.glyphs.push({ text: segment, rect });
+      }
+      for (const line of lines) {
+        const metrics = context.measureText(transformText(line.content));
+        const height = metrics.fontBoundingBoxAscent
+          + metrics.fontBoundingBoxDescent;
+        if (!Number.isFinite(height + metrics.actualBoundingBoxAscent
+          + metrics.actualBoundingBoxDescent + metrics.actualBoundingBoxLeft
+          + metrics.actualBoundingBoxRight) || height <= 0) {
+          return invalid;
+        }
+        const scale = line.rect.height / height;
+        const baseline = line.rect.top + metrics.fontBoundingBoxAscent * scale;
         const ink = {
           top: baseline - metrics.actualBoundingBoxAscent * scale,
           bottom: baseline + metrics.actualBoundingBoxDescent * scale,
+          left: Infinity, right: -Infinity,
         };
-        const leading = Number.isFinite(parseFloat(css.lineHeight))
-          ? (rect.height - parseFloat(css.lineHeight) * scale) / 2
-          : 0;
-        const line = { top: rect.top + leading, bottom: rect.bottom - leading };
-        if (next && rect.right > next.left + 1 && rect.left < next.right - 1
+        // Measure edge glyphs at their actual DOM advances. This retains
+        // spacing, numeric advances and disabled common ligatures, and includes
+        // italic overhang rather than treating Range advances as painted ink.
+        for (const glyph of line.glyphs) {
+          if (!glyph.text.trim()) {
+            continue;
+          }
+          const metric = context.measureText(transformText(glyph.text));
+          if (css.fontVariantLigatures !== 'normal') {
+            ink.top = Math.min(ink.top,
+              baseline - metric.actualBoundingBoxAscent * scale);
+            ink.bottom = Math.max(ink.bottom,
+              baseline + metric.actualBoundingBoxDescent * scale);
+          }
+          ink.left = Math.min(ink.left,
+            glyph.rect.left - metric.actualBoundingBoxLeft * scale);
+          ink.right = Math.max(ink.right,
+            glyph.rect.left + metric.actualBoundingBoxRight * scale);
+        }
+        if (!Number.isFinite(ink.left + ink.right)) {
+          continue;
+        }
+        if (next && ink.right > next.left + 1 && ink.left < next.right - 1
           && ink.bottom > next.top + 1 && ink.top < next.bottom - 1) {
           contained = false;
         }
         for (const clip of clips) {
-          const vertical = clip.ink ? ink : line;
-          if ((clip.x && (rect.left < clip.rect.left - 1
-            || rect.right > clip.rect.right + 1))
-          || (clip.y && (vertical.top < clip.rect.top - 1
-            || vertical.bottom > clip.rect.bottom + 1))) {
+          if ((clip.x && (ink.left < clip.rect.left - 1
+            || ink.right > clip.rect.right + 1))
+          || (clip.y && (ink.top < clip.rect.top - 1
+            || ink.bottom > clip.rect.bottom + 1))) {
             contained = false;
           }
         }
+        for (const previous of inkLines) {
+          if (Math.abs(previous.baseline - baseline) > 0.1
+            && Math.min(previous.right, ink.right)
+            > Math.max(previous.left, ink.left) + 1
+            && Math.min(previous.bottom, ink.bottom)
+            > Math.max(previous.top, ink.top) + 1) {
+            separated = false;
+          }
+        }
+        inkLines.push({ ...ink, baseline });
       }
     }
-    return { visible: visible && hasText, contained };
+    return { visible: visible && hasText, contained, separated };
   }, verticalContainer);
 }

@@ -35,7 +35,7 @@ function changedStyle(property: string, expected: string): string {
     return expected === '400' ? '700' : '400';
   }
   if (expected.endsWith('px')) {
-    return `${parseFloat(expected) + 1}px`;
+    return `${Number((parseFloat(expected) + 1).toFixed(4))}px`;
   }
   if (property === 'font-family') {
     return 'monospace';

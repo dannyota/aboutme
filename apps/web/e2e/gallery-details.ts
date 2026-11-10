@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { TEMPLATES } from '@aboutme/schema/templates';
 import type { Resume } from '@aboutme/schema';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -92,10 +93,7 @@ export async function expectLibraryStructure(
       ];
   const cards = grid.locator('[data-template]:visible');
   for (const [index, id] of ids.entries()) {
-    const fixture = JSON.parse(await readFile(resolve(import.meta.dirname,
-      `../../../packages/schema/templates/${id}.json`), 'utf8')) as {
-      readonly name: string;
-    };
+    const fixture = TEMPLATES.find((template) => template.id === id)!;
     const card = cards.nth(index);
     await expect(card, message).toHaveRole('link');
     await expect(card.locator(':scope > span > span:first-child'), message)

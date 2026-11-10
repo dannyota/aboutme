@@ -16,8 +16,12 @@ export async function expectStyleRule(
       const message = `${rule.message} ${property}.`;
       if (['font-size', 'line-height', 'letter-spacing'].includes(property)
         && value.endsWith('px')) {
-        await expect.poll(() => node.evaluate((element, key) =>
-          parseFloat(getComputedStyle(element).getPropertyValue(key)),
+        await expect.poll(() => node.evaluate((element, key) => {
+          const computed = getComputedStyle(element).getPropertyValue(key);
+          return key === 'letter-spacing' && computed === 'normal'
+            ? 0
+            : parseFloat(computed);
+        },
         property), message).toBeCloseTo(parseFloat(value), 1);
       } else {
         await expect(node, message).toHaveCSS(property, value);

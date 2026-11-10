@@ -58,7 +58,8 @@ export async function expectShowcaseFlow(page: Page): Promise<void> {
       `[data-testid="showcase-${id}"]`,
     )!.getBoundingClientRect();
     const header = rect('header');
-    const bar = rect('filter-bar');
+    // The desktop bar is display:contents; its count owns the grid cell.
+    const bar = rect(innerWidth < 1024 ? 'filter-bar' : 'count');
     const results = rect('results');
     if (innerWidth < 1024) {
       if (bar.top < header.bottom - 1 || results.top < bar.bottom - 1) {
@@ -101,7 +102,7 @@ export async function expectShowcaseList(
   const languages = locale === 'vi'
     ? ['Tiếng Việt', 'Tiếng Anh', 'Ngôn ngữ khác']
     : ['Vietnamese', 'English', 'Other language'];
-  const templates = ['Engineer Compact', 'One Page Tight',
+  const templates = ['Engineer Compact', 'One-Page Tight',
     locale === 'vi' ? 'Thiết kế riêng' : 'Custom design', 'Nordic Muted',
     'Executive Band', 'Modern Sidebar'];
   const tiles = page.locator('[data-showcase-slug]');

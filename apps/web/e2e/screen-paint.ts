@@ -26,6 +26,42 @@ export async function visiblePaint(target: Locator): Promise<boolean> {
   });
 }
 
+/** Include every clipping ancestor and the widget's own frame. */
+export async function containedPaint(
+  target: Locator, frame: string, empty = false,
+): Promise<boolean> {
+  return target.evaluate((node, options) => {
+    const box = node.getBoundingClientRect();
+    const owner = node.parentElement?.closest(options.frame);
+    if (!owner || box.height <= 0
+      || (options.empty ? box.width < 0 : box.width <= 0)) {
+      return false;
+    }
+    const inside = (rect: DOMRect, x: boolean, y: boolean) =>
+      (!x || (box.left >= rect.left - 1 && box.right <= rect.right + 1))
+      && (!y || (box.top >= rect.top - 1 && box.bottom <= rect.bottom + 1));
+    if (!inside(owner.getBoundingClientRect(), true, true)) {
+      return false;
+    }
+    for (let element: Element | null = node; element;
+      element = element.parentElement) {
+      const css = getComputedStyle(element);
+      if (css.display === 'none' || css.visibility !== 'visible'
+        || Number(css.opacity) <= 0) {
+        return false;
+      }
+      if (element !== node && element !== document.documentElement
+        && element !== document.body
+        && !inside(element.getBoundingClientRect(),
+          /^(hidden|clip|auto|scroll)$/u.test(css.overflowX),
+          /^(hidden|clip|auto|scroll)$/u.test(css.overflowY))) {
+        return false;
+      }
+    }
+    return true;
+  }, { frame, empty });
+}
+
 interface SvgPrimitive {
   readonly selector: string;
   readonly attributes: Readonly<Record<string, string>>;

@@ -27,9 +27,50 @@ import {
 } from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
 import { assertPdfPageGeometry } from './sample-pdf-content';
+import { measurePrintTextContainment } from './print-text-containment';
 
 sampleInputMutationTests();
 overflowInputMutationTests();
+
+test('print ink rejects italic overhang while advance bounds fit',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    const text = page.locator('.entry-body p').first();
+    await text.evaluate((element) => {
+      element.textContent = 'fff';
+    });
+    await expect(text).toHaveText('fff');
+    await applyStyleMutation(text, {
+      'font-family': 'serif', 'font-style': 'italic', 'font-size': '64px',
+      'font-synthesis': 'style', 'line-height': '96px',
+      'white-space': 'nowrap', 'width': ['max-content', /^[\d.]+px$/u],
+      'padding': '16px',
+    });
+    const check = async () => {
+      const measured = await measurePrintTextContainment(text);
+      expect({ visible: measured.visible, contained: measured.contained,
+        failures: measured.failures }, 'Print italic ink containment.')
+        .toEqual({ visible: true, contained: true, failures: [] });
+    };
+    await check();
+    const clean = await measurePrintTextContainment(text);
+    expect(clean.lines[0]!.metrics.right - clean.lines[0]!.advance,
+      'Italic glyphs overhang their advances.').toBeGreaterThan(1);
+    const restore = await applyStyleMutation(text, { 'padding-right': '0px' });
+    const altered = await measurePrintTextContainment(text);
+    expect(altered.failures.length).toBeGreaterThan(0);
+    expect(altered.failures.every((failure) => failure.kind === 'ink'
+      && failure.axis === 'x'), 'Only horizontal ink rejects this mutation.')
+      .toBe(true);
+    await expect(check()).rejects.toThrow('Print italic ink containment.');
+    await restore();
+    await check();
+    expect(external).toEqual([]);
+  });
 
 test('PDF columns reject a main entry moved into the page-two sidebar',
   async ({ page }) => {

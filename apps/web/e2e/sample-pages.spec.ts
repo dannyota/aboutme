@@ -18,6 +18,7 @@ import {
 import { pdfPaintPage, pdfTextStyleMatches, pdfTextStyleDiagnostic }
   from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
+import { measurePrintTextContainment } from './print-text-containment';
 import { samplePdfParagraphs } from './pdf-input-content';
 import {
   assertPdfPageGeometry, assertSampleFill, assertSampleStyle, FAMILIES,
@@ -328,6 +329,129 @@ for (const templateId of ['ats-plain', 'elegant-serif-two']) {
       expect(external).toEqual([]);
     });
 }
+
+test('print heading accents reject clipping without scroll overflow',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: 688, height: 1123 });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    const root = page.locator('.resume-document');
+    const heading = page.locator('.section-heading')
+      .filter({ hasText: 'Học vấn' });
+    const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2, undefined,
+      'Print text containment.');
+    await check();
+    const clean = await measurePrintTextContainment(root);
+    const accent = clean.lines.find((line) => line.text === 'HỌC VẤN')!;
+    expect(accent, 'Measured uppercase heading ink.').toBeDefined();
+    const box = await heading.boundingBox();
+    expect(accent.ink.top, 'Accents paint above the nominal heading box.')
+      .toBeLessThan(box!.y - 1);
+    const restore = await applyStyleMutation(heading, { overflow: 'hidden' });
+    await expect.poll(() => heading.evaluate((element) => ({
+      x: element.scrollWidth <= element.clientWidth + 1,
+      y: element.scrollHeight <= element.clientHeight + 1,
+      overflow: getComputedStyle(element).overflow,
+    })), 'Clipping changes paint while scroll bounds still pass.').toEqual({
+      x: true, y: true, overflow: 'hidden',
+    });
+    const clipped = await measurePrintTextContainment(root);
+    expect(clipped.failures.length).toBeGreaterThan(0);
+    expect(clipped.failures.every((failure) => failure.kind === 'ink'
+      && failure.axis === 'y' && failure.text === 'HỌC VẤN'
+      && failure.container.includes('.section-heading')),
+    'Only the accent ink rejects the clipping mutation.').toBe(true);
+    await expect(check()).rejects.toThrow('Print text containment.');
+    await restore();
+    await check();
+    expect(external).toEqual([]);
+  });
+
+test('visible print heading ink rejects a collision with body text',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: 688, height: 1123 });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    const root = page.locator('.resume-document');
+    const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2, undefined,
+      'Print text containment.');
+    await check();
+    const clean = await measurePrintTextContainment(root);
+    const heading = clean.lines.find((line) => line.text === 'HỌC VẤN')!;
+    const title = clean.lines.find((line) =>
+      line.text === 'Cử nhân Marketing')!;
+    const shift = title.ink.top - heading.ink.top;
+    const target = page.locator('.section-heading')
+      .filter({ hasText: 'Học vấn' });
+    const restore = await applyStyleMutation(target, {
+      transform: [`translateY(${shift}px)`, /^matrix\(/u],
+    });
+    const altered = await measurePrintTextContainment(root);
+    expect(altered.failures.length).toBeGreaterThan(0);
+    expect(altered.failures.every((failure) => failure.kind === 'overlap'),
+      'Only painted heading/body collision rejects this mutation.').toBe(true);
+    await expect(check()).rejects.toThrow('Print text containment.');
+    await restore();
+    await check();
+    expect(external).toEqual([]);
+  });
+
+test('print ink follows each line and its complete shaping style',
+  async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    const paragraph = page.locator('.entry-body p').first();
+    await paragraph.evaluate((element) => {
+      element.textContent = 'xxxx 123\nẤgj 456';
+    });
+    await expect(paragraph).toHaveText('xxxx 123\nẤgj 456');
+    await applyStyleMutation(paragraph, {
+      'font-size': '32px', 'line-height': '48px', 'white-space': 'pre',
+      'font-variant-caps': 'small-caps', 'font-variant-numeric': 'tabular-nums',
+      'font-feature-settings': '"kern" 0',
+      'font-variation-settings': '"wght" 550',
+      'letter-spacing': '2px', 'word-spacing': '3px',
+      'padding': '16px', 'width': '400px',
+    });
+    const measured = await measurePrintTextContainment(paragraph);
+    expect({ visible: measured.visible, contained: measured.contained,
+      failures: measured.failures }).toEqual({
+      visible: true, contained: true, failures: [],
+    });
+    expect(measured.lines.map((line) => line.text))
+      .toEqual(['xxxx 123', 'Ấgj 456']);
+    expect(measured.lines[0]!.metrics.ascent)
+      .toBeLessThan(measured.lines[1]!.metrics.ascent);
+    for (const line of measured.lines) {
+      expect(Math.abs(line.advance - line.referenceWidth),
+        'Canvas and DOM use the same complete shaping state.')
+        .toBeLessThanOrEqual(1);
+    }
+    await paragraph.evaluate((element) => {
+      element.textContent = element.textContent!.replace('\n', ' ');
+    });
+    const width = Math.ceil(Math.max(...measured.lines.map((line) =>
+      line.referenceWidth))) + 32;
+    await applyStyleMutation(paragraph, {
+      'white-space': 'normal', 'width': `${width}px`,
+    });
+    const wrapped = await measurePrintTextContainment(paragraph);
+    expect(wrapped.failures).toEqual([]);
+    expect(wrapped.lines.map((line) => line.text.trim()))
+      .toEqual(['xxxx 123', 'Ấgj 456']);
+    expect(wrapped.lines[0]!.metrics.ascent)
+      .toBeLessThan(wrapped.lines[1]!.metrics.ascent);
+    expect(external).toEqual([]);
+  });
 
 test('sample print DOM and PDF detect dropped bold with shared glyphs',
   async ({ page }) => {

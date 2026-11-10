@@ -3,7 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, proveMutation } from './style-mutation';
+import { containedPaint } from './screen-paint';
 
 async function assertWidgets(
   page: Page, mode: 'bar' | 'dots' | 'tag' | 'text',
@@ -34,6 +35,8 @@ async function assertWidgets(
       await expect(widget, 'Widget accessible role.').toHaveRole('img');
       await expect(widget, 'Widget visibility.').toBeVisible();
       await expect(widget, 'Widget visibility.').toHaveCSS('opacity', '1');
+      await expect.poll(() => containedPaint(widget, '.entry'),
+        'Widget painted containment.').toBe(true);
       if (mode === 'bar') {
         const track = widget.locator('.level-track');
         const fill = widget.locator('.level-fill');
@@ -42,6 +45,11 @@ async function assertWidgets(
           trackColor(prefix));
         await expect(fill, 'Widget fill color.')
           .toHaveCSS('background-color', solid);
+        for (const part of [track, fill]) {
+          await expect.poll(() => containedPaint(part, '.level-widget',
+            part === fill && level === 0),
+          'Widget painted containment.').toBe(true);
+        }
         const geometry = await widget.evaluate((element) => {
           const track = element.querySelector('.level-track')!
             .getBoundingClientRect();
@@ -60,6 +68,8 @@ async function assertWidgets(
         const dots = widget.locator('.level-dot');
         await expect(dots, 'Widget dot count.').toHaveCount(5);
         for (let index = 0; index < 5; index++) {
+          await expect.poll(() => containedPaint(dots.nth(index),
+            '.level-widget'), 'Widget painted containment.').toBe(true);
           await expect(dots.nth(index), 'Widget dot diameter.')
             .toHaveCSS('width', '7px');
           await expect(dots.nth(index), 'Widget dot diameter.')
@@ -124,6 +134,34 @@ export function rendererWidgetTests(): void {
           await assertWidgets(page, mode, template === 'engineer-compact');
         });
       }
+    }
+  }
+
+  for (const mode of ['bar', 'dots', 'tag'] as const) {
+    for (const defect of ['wrapper opacity', 'part opacity', 'clipping']) {
+      test(`screen ${mode} widgets reject ${defect}`, async ({ page }) => {
+        await page.goto('/_harness/render?template=modern-sidebar'
+          + `&mode=continuous&fixture=print-probe-widgets-${mode}`);
+        await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+        const widget = page.getByRole('img', {
+          name: 'SKILL-4: 4 of 5', exact: true,
+        });
+        const part = widget.locator(mode === 'bar'
+          ? '.level-fill'
+          : mode === 'dots'
+            ? '.level-dot:first-child'
+            : ':scope > span');
+        const wrapper = widget.locator('..');
+        const assertion = () => assertWidgets(page, mode);
+        await proveMutation(assertion, () => applyStyleMutation(
+          defect === 'part opacity' ? part : wrapper,
+          defect === 'clipping'
+            ? { height: '1px', overflow: 'hidden' }
+            : { opacity: '0' },
+        ), mode === 'tag' && defect === 'part opacity'
+          ? 'Widget tag containment.'
+          : 'Widget painted containment.');
+      });
     }
   }
 

@@ -158,6 +158,10 @@ export function screenMutationTests(
               node.setAttribute(input.attribute, input.original);
             }
           }, { content: kind === 'content', attribute, original });
+          if (kind === 'images') {
+            // A failed image also sets component state; remount its clean page.
+            await open(page);
+          }
         };
       } else if (kind === 'overlap') {
         const nodes = page.locator(contract.flow);
@@ -227,6 +231,10 @@ export async function mutateAttribute(
     node.setAttribute(input.attribute, input.value);
   }, { attribute, value });
   await expect(target).toHaveAttribute(attribute, value);
+  if (attribute === 'role' && value === 'group') {
+    await expect(target, 'Role mutation changes accessible semantics.')
+      .toHaveRole('group');
+  }
   return async () => {
     await target.evaluate((node, input) => {
       if (input.original === null) {

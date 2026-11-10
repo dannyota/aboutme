@@ -177,7 +177,8 @@ for (const mutation of ['drop', 'reorder'] as const) {
       }
     }, mutation);
     expect(await page.locator('.resume-main').innerHTML()).not.toBe(before);
-    await expect(assertClean()).rejects.toThrow('Renderer section order.');
+    await expect(assertFlow(page.locator('.resume-main'), 'vi',
+      [0, 1, 2, 6, 7])).rejects.toThrow('Renderer section order.');
     await page.reload();
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     await assertClean();

@@ -5,6 +5,8 @@ import {
   type ScreenContract,
 } from './display-assertions';
 import { expectSvg } from './screen-paint';
+import { measurePaintedText } from './screen-containment';
+import { expectStyleRule } from './screen-expectations';
 import { applyStyleMutation, proveMutation } from './style-mutation';
 
 const CONTRACT: ScreenContract = {
@@ -16,6 +18,19 @@ const CONTRACT: ScreenContract = {
 };
 
 export function screenRegressionTests(): void {
+  test('screen styles recognize normal letter spacing as zero', async ({
+    page,
+  }) => {
+    await page.setContent('<p>First line</p>');
+    const assertion = () => expectStyleRule(page, {
+      selector: 'p', message: 'Screen zero letter spacing',
+      css: { 'letter-spacing': '0px' },
+    });
+    await proveMutation(assertion, () => applyStyleMutation(page.locator('p'), {
+      'letter-spacing': '1px',
+    }), 'Screen zero letter spacing letter-spacing.');
+  });
+
   test('screen text allows clipped decorative siblings', async ({ page }) => {
     await page.setContent('<main id="surface"><div id="clip" '
       + 'style="position:relative;height:24px;overflow:hidden">'
@@ -44,6 +59,79 @@ export function screenRegressionTests(): void {
     }), 'Screen containment.');
   });
 
+  test('screen blocks contain descenders and stacked accents', async ({
+    page,
+  }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'font:32px/48px Arial">gẤ<br>gẤ</p></main>');
+    const text = page.locator('p');
+    const assertion = () => expect.poll(() => measureTextContainment(text),
+      'Screen painted ink containment.')
+      .toEqual({ visible: true, contained: true });
+    await proveMutation(assertion, () => applyStyleMutation(text, {
+      'line-height': '1px',
+    }), 'Screen painted ink containment.');
+  });
+
+  test('screen blocks reject overlapping painted lines', async ({ page }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'height:160px;padding:48px 8px;font:32px/48px Arial">'
+      + 'gẤ<br>gẤ</p></main>');
+    const text = page.locator('p');
+    const assertion = () => expect.poll(async () =>
+      (await measurePaintedText(text)).separated,
+    'Screen painted line separation.').toBe(true);
+    await proveMutation(assertion, async () => {
+      const restore = await applyStyleMutation(text, { 'line-height': '1px' });
+      const painted = await measurePaintedText(text);
+      expect(painted.visible).toBe(true);
+      expect(painted.contained).toBe(true);
+      return restore;
+    }, 'Screen painted line separation.');
+  });
+
+  test('screen ink uses the glyphs on each individual line', async ({
+    page,
+  }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'height:128px;width:300px;text-indent:100px;'
+      + 'font:32px/28px Arial">x<br>gẤ</p></main>');
+    const text = page.locator('p');
+    const assertion = () => expect.poll(() => measureTextContainment(text),
+      'Screen per-line ink containment.')
+      .toEqual({ visible: true, contained: true });
+    await proveMutation(assertion, async () => {
+      const original = await text.innerHTML();
+      await text.evaluate((node) => {
+        node.innerHTML = 'gẤ<br>x';
+      });
+      await expect(text).toHaveText('gẤx');
+      expect(await text.evaluate((node) =>
+        node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+      return async () => {
+        await text.evaluate((node, html) => {
+          node.innerHTML = html;
+        }, original);
+      };
+    }, 'Screen per-line ink containment.');
+  });
+
+  test('screen ink measures each wrapped line with its shaping', async ({
+    page,
+  }) => {
+    await page.setContent('<main id="surface"><p style="margin:0;'
+      + 'width:150px;padding:8px;font:italic small-caps 32px/48px Arial;'
+      + 'letter-spacing:2px;word-spacing:3px;overflow-wrap:anywhere">'
+      + 'gẤ gẤ gẤ gẤ gẤ gẤ</p></main>');
+    const text = page.locator('p');
+    const assertion = () => expect.poll(() => measureTextContainment(text),
+      'Screen shaped ink containment.')
+      .toEqual({ visible: true, contained: true });
+    await proveMutation(assertion, () => applyStyleMutation(text, {
+      'line-height': '1px',
+    }), 'Screen shaped ink containment.');
+  });
+
   test('screen text rejects a fixed height with visible overflow', async ({
     page,
   }) => {
@@ -61,7 +149,11 @@ export function screenRegressionTests(): void {
       await page.goto('/_harness/render?fixture=print-probe-widgets-dots'
         + '&template=modern-sidebar&mode=continuous&lng=vi');
       await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-      await expect(page.locator('.entry-meta .level-dots')).toHaveCount(12);
+      const document = page.locator(
+        '.resume-document:not(.pagination-measurement)',
+      );
+      await expect(document.locator('.level-widget > .level-dots'))
+        .toHaveCount(12);
       const contract = resumeContract('modern-sidebar', 'vi');
       const assertion = () => expectScreenClass(page, contract, 'containment');
       await assertion();

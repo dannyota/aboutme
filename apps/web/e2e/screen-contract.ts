@@ -71,8 +71,6 @@ async function checkScreenClass(
       const control = page.locator(selector);
       await expect(control, 'Screen control name.')
         .toHaveAccessibleName(name);
-      await expect.poll(() => visiblePaint(control),
-        'Screen control visibility.').toBe(true);
       await expect.poll(() => control.evaluate((node, selector) => {
         const box = node.getBoundingClientRect();
         const root = document.querySelector(selector)!
@@ -80,6 +78,8 @@ async function checkScreenClass(
         return box.left >= root.left - 1 && box.right <= root.right + 1
           && box.top >= root.top - 1 && box.bottom <= root.bottom + 1;
       }, contract.root), 'Screen control box.').toBe(true);
+      await expect.poll(() => visiblePaint(control),
+        'Screen control visibility.').toBe(true);
     }
     for (const [index, node] of (await text.all()).entries()) {
       if (await node.isVisible()) {

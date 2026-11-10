@@ -11,7 +11,16 @@ async function expectDeclaration(
     const expected = getComputedStyle(reference)
       .getPropertyValue(input.property);
     reference.remove();
-    return getComputedStyle(node).getPropertyValue(input.property) === expected;
+    const actual = getComputedStyle(node).getPropertyValue(input.property);
+    const paintedShadows = (value: string) =>
+      (value.match(/(?:[^,(]|\([^)]*\))+/gu) ?? [])
+        .map((shadow) => shadow.trim())
+        // Tailwind composes four transparent, zero-size ring placeholders.
+        .filter((shadow) =>
+          shadow !== 'rgba(0, 0, 0, 0) 0px 0px 0px 0px').join(', ');
+    return input.property === 'box-shadow'
+      ? paintedShadows(actual) === paintedShadows(expected)
+      : actual === expected;
   }, { property, value }), message).toBe(true);
 }
 

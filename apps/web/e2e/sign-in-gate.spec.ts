@@ -409,7 +409,7 @@ for (const lng of ['vi', 'en'] as const) {
 
 styleProofs('gate', async (page) => {
   await page.goto('/_harness/render?mode=gate&lng=vi'
-    + '&providers=google,linkedin');
+    + '&providers=google,linkedin&message=none');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
 }, GATE_TYPE);
 
@@ -438,7 +438,9 @@ for (const placement of ['bar', 'card'] as const) {
 }
 
 test('gate rejects unexpected provider artwork', async ({ page }) => {
-  await page.goto('/_harness/render?mode=gate&lng=vi&providers=google');
+  await page.goto('/_harness/render?mode=gate&lng=vi&providers=google'
+    + '&message=none');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
   await expectGateProviders(page);
   await page.locator('.gate-provider').evaluate((node) => {
     node.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24"/>');
