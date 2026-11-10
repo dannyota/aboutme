@@ -132,7 +132,7 @@ PY
   [[ -z $(find /var/lib/crowdsec -type f -name '*.db*' -print -quit) ]]
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
   install -m 0644 "$repo_root/deploy/vn/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
-  printf 'PASS signed-pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
+  printf 'PASS pinned-artifacts-and-generated-controls\nPASS suppressed-package-and-pure-calls-without-database\n'
   exit 0
 fi
 

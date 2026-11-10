@@ -1246,7 +1246,7 @@ test("VN CrowdSec jobs load verified packages before the package proof", () => {
   for (const name of ["crowdsec-integration", "crowdsec-postgresql"]) {
     const steps = vn.jobs[name].steps;
     const loader = steps.findIndex((step) => step.uses === "./.github/actions/vn-infra-debs");
-    const proof = steps.findIndex((step) => step.name === "Inspect signed packages and prove suppressed engine setup");
+    const proof = steps.findIndex((step) => step.name === "Inspect pinned packages and prove suppressed engine setup");
     assert.ok(loader >= 0 && proof > loader, `${name}: load packages before the proof`);
     for (const step of [steps[loader], steps[proof]]) {
       assert.equal(step.if, undefined, `${name}: package steps are unconditional`);
