@@ -17,8 +17,8 @@
 ## Commands
 
 - Before every push: `make pre-push` (static checks only; transition rules in resources).
-- Owner landing gate: `make ci-local` under the managed lock and timeout; the existing watchdog remains until wrapper integration; follow [workflow](instructions/workflow.md#flow).
-- Land: `gh pr create --draft --base main` while iterating; `gh pr ready <n>` when complete. Follow [workflow](instructions/workflow.md#flow) for the landing gates, independent Codex review, and the signed local merge or train.
+- Owner landing gate: the [local gate](instructions/verification.md#local-gate) on the Ubuntu host for the paths a change touches; follow [workflow](instructions/workflow.md#flow).
+- Land: push a branch without a pull request; after review where required and a passing local gate, merge with a signed `--no-ff` merge and push `main`. Follow [workflow](instructions/workflow.md#flow).
 - Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
 - Troubleshoot: save each failing job's whole log with `gh run view <run> --job <job> --log > <scratchpad>/run-<run>-<job>.log` and the run's artifacts with `gh run download <run> -D <scratchpad>/run-<run>`, then dispatch `troubleshooter` with those paths.
 - Find a commit's runs with `gh api "repos/dannyota/aboutme/actions/runs?head_sha=<sha>"`; `gh run list --branch` lags after a push.

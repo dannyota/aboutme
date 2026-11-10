@@ -39,18 +39,19 @@ Status: Accepted (2026-08-11, 2026-08-12, 2026-09-19, 2026-09-20, 2026-10-10,
   failures, cancellations, missing outputs, and unexplained skips fail it.
 - **Exact green commit.** A release commit is pushed alone to `main`. Tagging
   and deployment wait for a green main push run on that exact commit.
-- **Owner local landing gate.** Accepted 2026-11-01: the owner may land after a
-  passing `make ci-local` on his Mac under the managed lock and timeout, using
-  the always-on repository admin bypass on `main-required-ci`. The separate
-  `main-history` ruleset blocks force pushes and deletion of `main` without a
-  bypass. Other contributors need a pull request and green CI. Opt-in native
-  proofs follow the amendment below; VN infrastructure checks remain hosted.
-  Main push failures are fixed forward. The local gate does not authorize a tag
-  or deployment without green CI on the exact main push commit. Run
-  `make ci-local` only on commits the owner wrote or has reviewed, because it
-  executes scripts and npm lifecycle hooks with the owner's privileges. Review
-  gate script, Makefile, workflow, and dependency changes before a local run;
-  send contributor heads through hosted CI.
+- **Owner local landing gate.** Accepted 2026-11-01 and changed 2026-11-10 (see
+  History): the owner's work lands after the checks for the paths it touches
+  pass on the owner's Ubuntu host, without pull request CI, using the always-on
+  repository admin bypass on `main-required-ci`. The separate `main-history`
+  ruleset blocks force pushes and deletion of `main` without a bypass. Other
+  contributors need a pull request and green CI. Opt-in native proofs follow the
+  amendment below; VN infrastructure checks remain hosted. Main push failures
+  are fixed forward. The local gate does not authorize a tag or deployment
+  without green CI on the exact main push commit. Run the gate only on commits
+  the owner wrote or has reviewed, because it executes scripts and npm lifecycle
+  hooks with the owner's privileges. Review gate script, Makefile, workflow, and
+  dependency changes before a local run; send contributor heads through hosted
+  CI.
 - **Bounded local work.** Remove laptop RSS and nice enforcement and the numeric
   agent-job ceiling. Keep memory hints, managed locks, deadlines, owned-child
   cleanup, and separate writer worktrees under the
@@ -123,6 +124,18 @@ the shared laptop.
 - An independent acceptance pass returns only through a new ADR.
 
 ## History
+
+### Amendment: Local gate on the Ubuntu host (2026-11-10)
+
+Accepted by the owner. Pull request CI for the owner's work is replaced by the
+[local gate](../../instructions/verification.md#local-gate): the owner's Ubuntu
+host runs the checks for the paths a change touches, and the primary lands on
+that evidence. The owner's work is pushed as branches without pull requests. The
+full hosted gate still runs once on every `main` push and still gates tags and
+deployments on the exact commit; nobody waits for it after landing. Contributors
+keep pull request CI. The owner rejected using that host as a self-hosted
+runner. Reviews follow the author's model: `gpt-6.1-sol` reviews Terra work and
+`gpt-6-astra` reviews Sol work.
 
 ### Amendment: Tooling and display checks (2026-11-01)
 

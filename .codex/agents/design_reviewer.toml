@@ -1,7 +1,7 @@
 name = "design_reviewer"
 description = "Independent read-only review of aboutme designs, ADRs, schemas, and API contract proposals before implementation."
-model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 developer_instructions = """
 # Shared instructions
