@@ -39,6 +39,8 @@ Dependabot checks GitHub Actions, both Go modules, and all four npm lockfile roo
 
 CI references no stored secrets, except the three renewal secrets in the `vmonitor-renew` environment under the [ADR 0026 amendment](../docs/adr/0026-vietnam-hosted-production.md#amendment-synthetic-quota-renewal-in-github-actions-2026-11-01). CodeQL runs separately on main pushes and weekly; review its non-blocking code-scanning alerts in the Security tab.
 
+Toolchain versions (owner, 2026-11-10): `.tool-versions` pins exact versions of Node, Go, sqlc, gitleaks, golangci-lint, govulncheck, and Caddy. Every machine that runs checks, including the Ubuntu gate host, uses those pins, never its default; host Node 26 failed 249 web tests that pass on the pinned 24. Raising a pin within its major version is routine: change the pin and every place that mirrors it (CI images, Dockerfiles, workflow setup) in one change and run the gate. A major version change is a separate, deliberate change with its own review and a full test run. For Node, follow even-numbered LTS lines.
+
 The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [display checks and interim baselines](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright caches never reach main.
 
 ### Runs and evidence
