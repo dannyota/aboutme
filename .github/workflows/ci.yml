@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 19 * * *'
   workflow_dispatch:
     inputs:
       base_sha:
@@ -36,9 +38,13 @@ jobs:
     name: CI preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
     outputs:
       base_sha: ${{ steps.comparison.outputs.base_sha }}
       selection: ${{ steps.selection.outputs.selection }}
+      mutations: ${{ steps.selection.outputs.mutations }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,6 +58,8 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
             base=$(bash scripts/check-migrations-append-only.sh --dispatch-base "$BASE_SHA" HEAD origin/main)
+          elif [ "$GITHUB_EVENT_NAME" = schedule ] || { [ "$GITHUB_EVENT_NAME" = push ] && [[ "$base" =~ ^0+$ ]]; }; then
+            base=HEAD
           fi
           bash scripts/check-migrations-append-only.sh --commits "$base" HEAD
           bash scripts/check-released-schemas.sh --commits "$base" HEAD
@@ -60,14 +68,32 @@ jobs:
         id: selection
         env:
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          selection=$(python3 -I scripts/ci-path-selection.py "$GITHUB_EVENT_NAME" "$BASE_SHA" 2>/dev/null) || selection=full
-          case "$selection" in
-            full|prose) ;;
-            *) selection=full ;;
+          result=$(python3 -I scripts/ci-path-selection.py "$GITHUB_EVENT_NAME" "$BASE_SHA" 2>/dev/null) || result='full 1'
+          case "$result" in
+            'full 0'|'full 1'|'prose 0'|'prose 1'|'no-web 0'|'no-web 1') ;;
+            *) result='full 1' ;;
           esac
+          read -r selection mutations <<< "$result"
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$selection" = no-web ]; then
+            if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
+              selection=full
+            elif ! checks=$(timeout 30s gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE_SHA/check-runs?check_name=ci" 2>/dev/null); then
+              selection=full
+              mutations=1
+            elif ! printf '%s\n' "$checks" | jq -e '.check_runs | type == "array"' >/dev/null 2>&1; then
+              selection=full
+              mutations=1
+            elif ! printf '%s\n' "$checks" | jq -e 'any(.check_runs[]; .conclusion == "success")' >/dev/null 2>&1; then
+              selection=full
+            fi
+          fi
           printf 'selection=%s\n' "$selection" >> "$GITHUB_OUTPUT"
           printf 'selection=%s\n' "$selection" >> "$GITHUB_STEP_SUMMARY"
+          printf 'mutations=%s\n' "$mutations" >> "$GITHUB_OUTPUT"
+          printf 'mutations=%s\n' "$mutations" >> "$GITHUB_STEP_SUMMARY"
 
   macos-tooling:
     name: macOS tooling
@@ -642,7 +668,7 @@ jobs:
   web-e2e:
     name: Web E2E (${{ matrix.shard }})
     needs: [preflight]
-    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'
+    if: (github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose') && needs.preflight.outputs.selection != 'no-web'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -659,6 +685,7 @@ jobs:
         env:
           WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
           WEB_E2E_SHARD: ${{ matrix.shard }}
+          WEB_E2E_MUTATIONS: ${{ needs.preflight.outputs.mutations }}
         run: |
           test -z "${UPDATE_GOLDEN+x}"
           test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
@@ -817,7 +844,7 @@ jobs:
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded or has an explicit prose omission.
+  # job above succeeded or has an explicit omission.
   ci:
     name: ci
     if: always()
@@ -879,12 +906,14 @@ jobs:
                 "dev-https-proofs"] | sort)
               and .preflight.result == "success"
               and (.preflight.outputs.selection as $selection
-                | ($selection == "full" or ($selection == "prose" and $event == "pull_request"))
+                | ($selection == "full" or ($selection == "prose" and $event == "pull_request")
+                  or ($selection == "no-web" and ($event == "pull_request" or $event == "push")))
                 and (to_entries | all(
                   .value.result == "success" or
                   (.value.result == "skipped" and (
                     ($selection == "prose" and $event == "pull_request"
                       and (.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs")))
+                    or ($selection == "no-web" and ($event == "pull_request" or $event == "push") and .key == "web-e2e")
                   )))))
             ' >/dev/null; then
             echo "ci: invalid selection or required job results" >&2

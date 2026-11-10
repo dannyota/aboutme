@@ -81,21 +81,30 @@ test("approval probe rejects trigger, authority, gate, and execution drift", () 
 const proseJobs = ["macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"];
 const contractJobs = ["contracts", "operational", "dev-https-static"];
 const selectionCondition = "github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'";
+const webE2eCondition = `(${selectionCondition}) && needs.preflight.outputs.selection != 'no-web'`;
 
 function checkSelection(ci) {
   const preflight = ci.jobs.preflight;
   assert.equal(preflight.outputs.selection, "${{ steps.selection.outputs.selection }}");
+  assert.equal(preflight.outputs.mutations, "${{ steps.selection.outputs.mutations }}");
+  assert.deepEqual(preflight.permissions, { contents: "read", checks: "read" });
+  assert.deepEqual(ci.on.schedule, [{ cron: "17 19 * * *" }]);
   const index = preflight.steps.findIndex((step) => step.id === "selection");
   const comparison = preflight.steps.findIndex((step) => step.id === "comparison");
   assert.ok(comparison >= 0 && index > comparison, "guards precede selection");
   const step = preflight.steps[index];
   assert.equal(step.if, undefined, "selection requires successful guards");
   assert.equal(step.env.BASE_SHA, "${{ steps.comparison.outputs.base_sha }}");
+  assert.equal(step.env.BEFORE_SHA, "${{ github.event.before }}");
+  assert.equal(step.env.GH_TOKEN, "${{ github.token }}");
+  assert.match(step.run, /gh api "repos\/\$GITHUB_REPOSITORY\/commits\/\$BEFORE_SHA\/check-runs\?check_name=ci"/);
   assert.match(step.run, /python3 -I scripts\/ci-path-selection.py/);
   for (const name of proseJobs) {
     assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
-    assert.equal(ci.jobs[name].if, selectionCondition, `${name}: exact selection condition`);
+    assert.equal(ci.jobs[name].if, name === "web-e2e" ? webE2eCondition : selectionCondition, `${name}: exact selection condition`);
   }
+  assert.equal(ci.jobs["web-e2e"].steps.find((step) => step.run?.includes("make web-e2e")).env.WEB_E2E_MUTATIONS,
+    "${{ needs.preflight.outputs.mutations }}");
   for (const name of contractJobs) {
     assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
     assert.equal(ci.jobs[name].if, undefined, `${name}: all contracts always run`);
@@ -137,14 +146,19 @@ test("selection retains guards, all contracts, and explicit PR omissions", () =>
 });
 
 function selector(directory, base, event = "pull_request") {
+  return selectionResult(directory, base, event).selection;
+}
+
+function selectionResult(directory, base, event = "pull_request") {
   const result = spawnSync("python3", ["-I", join(root, "scripts/ci-path-selection.py"), event, base], {
     cwd: directory, encoding: "utf8", timeout: 5000,
   });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "", "paths and errors stay out of logs");
-  assert.match(result.stdout, /^(full|prose)\n$/);
-  return result.stdout.trim();
+  assert.match(result.stdout, /^(full|prose|no-web) [01]\n$/);
+  const [selection, mutations] = result.stdout.trim().split(" ");
+  return { selection, mutations };
 }
 
 function withRepository(run) {
@@ -163,30 +177,94 @@ function withRepository(run) {
   try {
     git("init", "-q"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.invalid");
     git("config", "core.filemode", "true");
-    put("seed", "seed\n"); commit();
+    put("seed", "seed\n"); put("scripts/web-e2e-source.manifest", "fixtures/web-input.txt\n"); commit();
     run({ directory, git, put, commit });
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
+
+test("web selection covers input roots, manifest paths, and mutation sources", () => {
+  for (const [name, selection, mutations] of [
+    ["apps/server/main.go", "no-web", "0"], ["fixtures/web-input.txt", "full", "0"],
+    ["apps/web/unlisted.ts", "full", "0"], ["apps/web/e2e/example.spec.ts", "full", "1"],
+    ["packages/example.txt", "full", "0"], ["docs/api/example.txt", "full", "0"],
+    [".github/example.txt", "full", "0"], ["scripts/web-e2e-source.sh", "full", "0"],
+    ["scripts/generate-web-e2e-source-manifest.sh", "full", "0"],
+    ["scripts/collect-browser-diagnostics.py", "full", "0"], ["package.json", "full", "0"],
+    ["scripts/web-e2e-source.manifest", "full", "0"],
+  ]) {
+    withRepository(({ directory, git, put, commit }) => {
+      const base = git("rev-parse", "HEAD"); put(name); commit();
+      assert.deepEqual(selectionResult(directory, base), { selection, mutations }, name);
+      assert.deepEqual(selectionResult(directory, base, "push"), { selection, mutations }, name);
+      assert.deepEqual(selectionResult(directory, base, "schedule"), { selection: "full", mutations: "1" });
+      assert.deepEqual(selectionResult(directory, base, "workflow_dispatch"), { selection: "full", mutations: "1" });
+    });
+  }
+});
+
+test("web selection checks both rename paths and fails closed on errors", () => {
+  for (const [before, after, mutations] of [
+    ["fixtures/web-input.txt", "outside.txt", "0"],
+    ["apps/web/e2e/old.ts", "outside.txt", "1"],
+  ]) {
+    withRepository(({ directory, git, put, commit }) => {
+      put(before); const base = commit(); git("mv", before, after); commit();
+      assert.deepEqual(selectionResult(directory, base), { selection: "full", mutations });
+    });
+  }
+  withRepository(({ directory }) => {
+    assert.deepEqual(selectionResult(directory, "missing"), { selection: "full", mutations: "1" });
+  });
+  withRepository(({ directory, git, put, commit }) => {
+    const base = git("rev-parse", "HEAD");
+    put("apps/web/e2e/example.ts"); put("docs/plans/entry.md"); commit();
+    assert.deepEqual(selectionResult(directory, base), { selection: "full", mutations: "1" });
+  });
+});
+
+test("push selection requires a successful previous ci check", () => {
+  const step = readWorkflow("ci").jobs.preflight.steps.find((item) => item.id === "selection");
+  for (const [response, before, expected] of [
+    ['{"check_runs":[{"conclusion":"success"}]}', "a".repeat(40), "no-web"],
+    ['{"check_runs":[{"conclusion":"failure"}]}', "a".repeat(40), "full"],
+    ['{"check_runs":[]}', "a".repeat(40), "full"],
+    ["invalid", "a".repeat(40), "full"],
+    ['{"check_runs":[{"conclusion":"success"}]}', "0".repeat(40), "full"],
+    [null, "a".repeat(40), "full"],
+  ]) {
+    withRepository(({ directory }) => {
+      const output = join(directory, "output"); const summary = join(directory, "summary");
+      const script = `timeout() { shift; "$@"; }\npython3() { printf 'no-web 0\\n'; }\ngh() { ${response === null ? "return 1" : "printf '%s' \"$FIXTURE_RESPONSE\""}; }\n${step.run}`;
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+        cwd: directory, encoding: "utf8", env: { ...process.env, GITHUB_EVENT_NAME: "push",
+          GITHUB_REF: "refs/heads/main", GITHUB_REPOSITORY: "owner/repo", BEFORE_SHA: before,
+          BASE_SHA: before, FIXTURE_RESPONSE: response ?? "", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\nmutations=${response === null || response === "invalid" ? "1" : "0"}\n`);
+    });
+  }
+});
 
 test("selector classifies real Git paths and every event conservatively", () => {
   for (const [name, expected] of [
     ["docs/adr/1234-choice.md", "prose"], ["docs/plans/root.md", "prose"], ["docs/plans/.md", "prose"],
     ["docs/plans/nested/deep/entry.md", "prose"], ["docs/plans/Unicode tiếng Việt.md", "prose"],
-    ["docs/plans/traceability/entry.md", "full"], ["docs/plans/AGENTS.md", "full"],
-    ["docs/plans/nested/CLAUDE.md", "full"], ["docs/adr/README.md", "full"],
-    ["docs/adr/1234-dir/entry.md", "full"], ["docs/adr/123-choice.md", "full"],
-    ["docs/design/entry.md", "full"], ["docs/api/entry.md", "full"],
-    ["docs/brand/entry.md", "full"], ["docs/other.md", "full"],
+    ["docs/plans/traceability/entry.md", "no-web"], ["docs/plans/AGENTS.md", "no-web"],
+    ["docs/plans/nested/CLAUDE.md", "no-web"], ["docs/adr/README.md", "no-web"],
+    ["docs/adr/1234-dir/entry.md", "no-web"], ["docs/adr/123-choice.md", "no-web"],
+    ["docs/design/entry.md", "no-web"], ["docs/api/entry.md", "full"],
+    ["docs/brand/entry.md", "no-web"], ["docs/other.md", "no-web"],
     ["docs/plans/line\nbreak.md", "full"], ["docs/plans/tab\tname.md", "full"],
-    ["Docs/plans/entry.md", "full"], ["docs/plans/entry.MD", "full"],
-    [".github/workflows/ci.yml", "full"], ["scripts/entry.py", "full"],
+    ["Docs/plans/entry.md", "no-web"], ["docs/plans/entry.MD", "no-web"],
+    [".github/workflows/ci.yml", "full"], ["scripts/entry.py", "no-web"],
     ["Makefile", "full"], [".tool-versions", "full"], ["package-lock.json", "full"],
-    ["apps/web/generated.ts", "full"], ["unknown", "full"],
+    ["apps/web/generated.ts", "full"], ["unknown", "no-web"],
   ]) {
     withRepository(({ directory, git, put, commit }) => {
       const base = git("rev-parse", "HEAD"); put(name); commit();
       for (const event of ["pull_request", "push", "workflow_dispatch", "unknown"]) {
-        assert.equal(selector(directory, base, event), event === "pull_request" ? expected : "full", `${event}/${name}`);
+        assert.equal(selector(directory, base, event), event === "pull_request" ? expected : event === "push" ? (expected === "prose" ? "no-web" : expected) : "full", `${event}/${name}`);
       }
     });
   }
@@ -195,9 +273,9 @@ test("selector classifies real Git paths and every event conservatively", () => 
 test("selector checks deletions, modifications, rename sides, and mixed changes", () => {
   for (const [before, after, expected] of [
     ["docs/plans/old.md", "docs/adr/1234-new.md", "prose"],
-    ["docs/plans/old.md", "outside.md", "full"],
-    ["outside.md", "docs/plans/new.md", "full"],
-    ["docs/plans/old.md", null, "prose"], ["outside.md", null, "full"],
+    ["docs/plans/old.md", "outside.md", "no-web"],
+    ["outside.md", "docs/plans/new.md", "no-web"],
+    ["docs/plans/old.md", null, "prose"], ["outside.md", null, "no-web"],
   ]) {
     withRepository(({ directory, git, put, commit }) => {
       put(before); const base = commit();
@@ -209,7 +287,7 @@ test("selector checks deletions, modifications, rename sides, and mixed changes"
     put("docs/plans/entry.md"); const base = commit();
     put("docs/plans/entry.md", "changed\n"); commit();
     assert.equal(selector(directory, base), "prose");
-    put("unknown"); commit(); assert.equal(selector(directory, base), "full");
+    put("unknown"); commit(); assert.equal(selector(directory, base), "no-web");
   });
 });
 
@@ -309,8 +387,8 @@ for error in [OSError(), ValueError(), subprocess.TimeoutExpired("git", 30)]:
   });
   withRepository(({ directory, git }) => {
     for (const [command, expected] of [
-      ["printf prose; exit 1", "full"], ["printf unknown", "full"], ["exit 0", "full"],
-      ["printf 'prose\\nextra=value'", "full"], ["printf prose", "prose"], ["printf full", "full"],
+      ["printf prose; exit 1", "full 1"], ["printf unknown", "full 1"], ["exit 0", "full 1"],
+      ["printf 'prose\\nextra=value'", "full 1"], ["printf 'prose 0'", "prose 0"], ["printf 'full 1'", "full 1"],
     ]) {
       const step = readWorkflow("ci").jobs.preflight.steps.find((step) => step.id === "selection");
       const output = join(directory, "output"); const summary = join(directory, "summary");
@@ -319,8 +397,9 @@ for error in [OSError(), ValueError(), subprocess.TimeoutExpired("git", 30)]:
         cwd: directory, env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: git("rev-parse", "HEAD"), GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary }, encoding: "utf8",
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\n`);
-      assert.equal(readFileSync(summary, "utf8"), `selection=${expected}\n`);
+      const [selection, mutations] = expected.split(" ");
+      assert.equal(readFileSync(output, "utf8"), `selection=${selection}\nmutations=${mutations}\n`);
+      assert.equal(readFileSync(summary, "utf8"), `selection=${selection}\nmutations=${mutations}\n`);
       assert.equal(result.stdout, "");
       assert.equal(result.stderr, "");
     }
@@ -399,7 +478,7 @@ test("selector compares the candidate trees directly for merges and nonancestor 
     assert.equal(selector(directory, base), "prose", "train merge candidate");
     git("checkout", "-qb", "mixed", second); put("unknown"); const mixed = commit();
     git("checkout", "first"); git("merge", "--no-ff", "-qm", "Mixed candidate", mixed);
-    assert.equal(selector(directory, base), "full", "combined change includes unknown paths");
+    assert.equal(selector(directory, base), "no-web", "combined change includes unknown paths");
   });
 });
 
@@ -1188,7 +1267,7 @@ function checkPreflightBases(ci) {
   assert.equal(step.env.BASE_SHA, "${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}", "event-provided comparison bases");
   assert.match(
     step.run,
-    /if \[ "\$GITHUB_EVENT_NAME" = workflow_dispatch \]; then\s+git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main\s+base=\$\(bash scripts\/check-migrations-append-only\.sh --dispatch-base "\$BASE_SHA" HEAD origin\/main\)\s+fi/,
+    /if \[ "\$GITHUB_EVENT_NAME" = workflow_dispatch \]; then\s+git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main\s+base=\$\(bash scripts\/check-migrations-append-only\.sh --dispatch-base "\$BASE_SHA" HEAD origin\/main\)\s+elif/,
     "dispatch event guard must enclose fetched-main merge-base validation",
   );
   const directory = mkdtempSync(join(tmpdir(), "preflight-contract-"));
@@ -1207,6 +1286,7 @@ function checkPreflightBases(ci) {
       ["pull_request", "a".repeat(40), "a".repeat(40)],
       ["push", "b".repeat(40), "b".repeat(40)],
       ["workflow_dispatch", "c".repeat(40), "d".repeat(40)],
+      ["schedule", "", "HEAD"], ["push", "0".repeat(40), "HEAD"],
     ]) {
       rmSync(trace, { force: true });
       rmSync(output, { force: true });
@@ -1344,15 +1424,16 @@ function checkAggregateResults(ci) {
     return result.status;
   };
   for (const [context, event] of [
-    ["main push", "push"], ["main dispatch", "workflow_dispatch"],
+    ["main push", "push"], ["main dispatch", "workflow_dispatch"], ["schedule", "schedule"],
     ["branch push", "push"], ["branch dispatch", "workflow_dispatch"],
     ["unknown event", "unknown"],
     ...["same repository", "fork", "Dependabot", "train"].map((name) => [name, "pull_request"]),
   ]) {
-    for (const selection of ["full", "prose", "unknown", "", undefined]) {
+    for (const selection of ["full", "prose", "no-web", "unknown", "", undefined]) {
       const successful = Object.fromEntries(jobs.map((job) => [job, { result: "success" }]));
       successful.preflight.outputs = { selection };
-      const valid = selection === "full" || (selection === "prose" && event === "pull_request");
+      const valid = selection === "full" || (selection === "prose" && event === "pull_request") ||
+        (selection === "no-web" && ["push", "pull_request"].includes(event));
       assert.equal(run(successful, event), valid ? 0 : 1, `${context}/${selection}: all success`);
       if (!valid) continue;
       const omitted = structuredClone(successful);
@@ -1362,7 +1443,7 @@ function checkAggregateResults(ci) {
         for (const result of ["success", "skipped", "cancelled", "failure", "unknown", null, undefined]) {
           const needs = structuredClone(successful); needs[job].result = result;
           const allowed = result === "success" || (result === "skipped" && (
-            (selection === "prose" && proseJobs.includes(job))));
+            (selection === "prose" && proseJobs.includes(job)) || (selection === "no-web" && job === "web-e2e")));
           assert.equal(run(needs, event), allowed ? 0 : 1, `${context}/${selection}: ${job}=${result}`);
         }
         const missing = structuredClone(successful); delete missing[job];

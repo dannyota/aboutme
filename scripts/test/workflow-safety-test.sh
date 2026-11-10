@@ -855,18 +855,19 @@ grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs passkey \' <<<"
 grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
   fail "ci gate does not require the dev-https-proofs job"
 
-# The gate permits only named prose omissions on pull requests.
+# The gate permits only named prose omissions and the web-only omission.
 assert_skip_permissions() { # aggregate-job-body
   grep -Fq '$selection == "prose" and $event == "pull_request"' <<<"$1" &&
-    grep -Fq '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))' <<<"$1" ||
-    fail "ci gate does not enforce named pull request prose skips"
+    grep -Fq '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))' <<<"$1" &&
+    grep -Fq '$selection == "no-web" and ($event == "pull_request" or $event == "push") and .key == "web-e2e"' <<<"$1" ||
+    fail "ci gate does not enforce named selection skips"
   [ "$(grep -Fc '.value.result == "skipped"' <<<"$1")" -eq 1 ] ||
     fail "ci gate accepts a skipped result in more than one place"
 }
 assert_skip_permissions "$CI_JOB"
-for pattern in '$selection == "prose" and $event == "pull_request"' '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))'; do
+for pattern in '$selection == "prose" and $event == "pull_request"' '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))' '$selection == "no-web" and ($event == "pull_request" or $event == "push") and .key == "web-e2e"'; do
   expect_guard_drift assert_skip_permissions "$(grep -Fv "$pattern" <<<"$CI_JOB")" \
-    'ci gate does not enforce named pull request prose skips'
+    'ci gate does not enforce named selection skips'
 done
 
 assert_vn_selection() { # caller-job-body
