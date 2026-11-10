@@ -1,45 +1,71 @@
 # Projects
 
-Status: Proposed (2026-11-10), awaiting owner approval.
+Status: Proposed (2026-11-10, revised 2026-11-11), awaiting owner approval.
 [ADR 0029](../adr/0029-account-project-library.md) records the decision and the
-[roadmap](../plans/roadmap.md#v09-show-the-work) the order. This design covers
-the library, selection, project pages and viewer entry points. GitHub connection
-and evidence get their own design.
+[roadmap](../plans/roadmap.md#v09-show-the-work) the order. This document covers
+the product, the library and selection. The
+[projects contract](projects-contract.md) covers routes, delivery, revocation,
+the API, agents, export and print. GitHub connection and evidence get their own
+design.
 
 ## What a person does
 
 1. Opens Projects in the workspace and writes a project once: name, role,
-   technologies, outcome, links, dates and a description, in Vietnamese, English
-   or both.
-2. Adds it to a resume. The resume gets a compact project entry, prefilled, that
-   they may shorten for that audience.
-3. Publishes the resume as today. Each linked, visible project now has a page,
-   and the resume shows viewers how to reach it.
+   technologies, outcome, links, dates and a description.
+2. Chooses, in the same step, which of their resumes show it. Each chosen resume
+   gets a compact project entry, prefilled, that they may shorten for that
+   audience.
+3. Publishes the resume as today. Every linked, visible project of a published
+   resume has a page, and the resume shows viewers how to reach it.
 
 Nothing is shown by default. A project appears only on resumes it was added to.
 
 ## Library
 
-A library project belongs to one account and is private.
+A library project belongs to one account and is private. It has no public URL of
+its own and is never listed across accounts.
 
-| Field                      | Rule                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `id`                       | Server UUIDv7                                                                           |
-| `slug`                     | Unique per account, same grammar as a resume slug, 2 to 40 characters                   |
-| `dates`                    | Same date range as a resume entry                                                       |
-| `repositoryUrl`, `demoUrl` | Optional, `https` only                                                                  |
-| `technologies`             | Ordered list of plain strings                                                           |
-| `text`                     | Map of language (`vi`, `en`) to name, role, summary, outcome, and rich-text description |
-| `revision`                 | Compare-and-swap counter, as on a resume                                                |
+| Field                      | Rule                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `id`                       | Server UUIDv7; never sent to a public viewer                                     |
+| `slug`                     | Unique within the account; resume slug grammar; 2 to 40 characters               |
+| `revision`                 | Compare-and-swap counter, advanced by every write                                |
+| `dates`                    | The resume entry date range                                                      |
+| `repositoryUrl`, `demoUrl` | Optional; `https` only                                                           |
+| `technologies`             | Ordered plain strings                                                            |
+| `defaultLanguage`          | A language key present in `text`                                                 |
+| `text`                     | Map from language key to `name`, `role`, `summary`, `outcome`, and `description` |
 
-Rich text passes the same sanitizer and size bound as resume rich text. A
-project needs a name in at least one language to be saved and is otherwise
-draft-permissive. Numeric limits (projects per account, technologies per
-project, field lengths) are set in [budgets](budgets.md) with this change.
+A language key is the lowercase primary subtag of a BCP 47 tag (`vi`, `en`,
+`ja`). `description` is rich text and passes the resume sanitizer. A project
+needs a non-blank `name` in its default language to be saved and is otherwise
+draft-permissive, like a resume entry.
 
-Renaming a project slug changes its page address on every resume at once; the
-old address returns 404. No tombstone is kept, because the address is scoped to
-a resume slug that already has one.
+### Proposed limits
+
+These move to [budgets](budgets.md) when the owner approves them.
+
+| Limit                                 | Value                                   |
+| ------------------------------------- | --------------------------------------- |
+| Projects per account                  | 30                                      |
+| Languages per project                 | 4                                       |
+| Technologies per project              | 20, each at most 40 characters          |
+| `name`, `role`                        | 120 characters each                     |
+| `summary` / `outcome`                 | 300 / 600 characters                    |
+| `description`                         | 16 KiB, as resume rich text             |
+| One stored project                    | 96 KiB                                  |
+| Project reads and writes              | Count against the resume route limiters |
+| Project slug changes                  | Count against the slug claim limiter    |
+| Released project slug held from reuse | 180 days, within the account            |
+
+## Language
+
+A resume's language is a BCP 47 tag or `und`
+([localization](localization.md#resume-language)). A project page under a resume
+uses the text whose key equals the resume language's primary subtag, and
+otherwise the project's default language. A resume with `und` uses the default
+language. Every linked project therefore has a page. The editor marks a linked
+project whose page falls back to another language.
 
 ## Selection
 
@@ -47,90 +73,60 @@ The resume document stays the only authority for what a resume shows.
 
 - A project entry gains an optional `projectId`. An entry with it is linked; one
   without it behaves as today.
-- Adding a library project to a resume inserts a linked entry in the resume's
-  project section, creating the section if needed, with `title`, `subtitle`,
-  `link`, `dates` and `description` prefilled from the library text in the
-  resume's language, or left empty when that language has no text.
-- The entry's text is the resume's own. "Refresh from library" overwrites it on
-  request; nothing overwrites it otherwise.
-- Order, hiding and removal use the existing entry operations. One library
-  project is linked at most once per resume.
-- Deleting a library project clears `projectId` from every entry that names it,
-  in the same transaction, and leaves the entry text.
+- Every write of a resume document checks that each `projectId` names a project
+  of the same account and that no two entries of the resume name the same
+  project. The check runs under the owner lock that every resume write already
+  takes, on create, entry upsert, import and agent writes alike.
+- Linking inserts an entry in the resume's project section. When the resume has
+  none, linking creates a section with key `projects` at the end of the main
+  column, through the existing structure command.
+- Prefill from the text chosen by the [language rule](#language): `title` from
+  `name`, `subtitle` from `role`, `link` from `repositoryUrl` or else `demoUrl`,
+  `dates` from `dates`, `description` from `summary` as one paragraph.
+- The entry's text is the resume's own. "Refresh from library" repeats the
+  prefill on request; nothing else overwrites it.
+- Order, hiding and removal use the existing entry operations.
 
-This needs a new resume document version for the optional field
-([ADR 0004](../adr/0004-resume-document-contract.md)). No stored document is
-rewritten.
+This adds resume document version 6
+([ADR 0004](../adr/0004-resume-document-contract.md)). `projectId` is optional;
+emitting version 5 drops it, and a version 5 write keeps the stored value by
+entry id, as the version 3 `subtitle` rule does. No stored document is rewritten
+by the upgrade.
 
-## Project pages
+## Project pages and entry points
 
-| Route                             | Serves                                          |
-| --------------------------------- | ----------------------------------------------- |
-| `/{slug}/projects`                | The resume's available projects, in entry order |
-| `/{slug}/projects/{project-slug}` | One project                                     |
+- `/{slug}/projects` lists the resume's available projects in entry order;
+  `/{slug}/projects/{project-slug}` shows one.
+- A project is available on a resume when the resume is live and the linked
+  entry is visible. Any other state answers exactly as an unknown resume.
+- The page shows name, role, dates, technologies, outcome, description, the
+  repository and demo links, and a link back to the resume. It shows no contact
+  details beyond the resume page and no account data.
+- The public resume page shows "Projects" in the page bar when a project is
+  available, and a linked, available entry's title links to its project page.
+  The entry's own `link` then appears only on the project page.
+- In the PDF and print, the same title is a link to the project page. No line is
+  added, so layout and pagination do not change. A printed address line is the
+  owner's open point 2.
 
-A project is available on a resume when the resume is live, the linked entry is
-visible, and the library project has a name in the resume's language. Any other
-state returns the same 404 as an unknown resume.
+The page uses the public page bar and theme of its resume. Layout, the workspace
+Projects screen, the resume picker and bilingual copy are specified with the UI
+work in [shell and editor](ui/shell-and-editor.md) and
+[localization](localization.md).
 
-- **Gate.** Each request checks the live state, sign in to view and availability
-  in one read. No project page is cached past the rules the resume page already
-  has, so unpublish, hide, unlink and delete take effect at once
-  ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
-- **Sign in to view.** A project page gates exactly as its resume page and
-  stores nothing about the viewer
-  ([ADR 0022](../adr/0022-viewer-privacy-and-counting.md)).
-- **Indexing.** Project pages follow the resume's SEO and GEO setting and are
-  otherwise `noindex`. They are never listed on `/showcase`.
-- **Representations.** HTML only. No Markdown, JSON or PDF of a project page.
-  The link preview reuses the resume's stored card.
-- **Content.** Name, role, dates, technologies, outcome, description, repository
-  and demo links, and a link back to the resume. No contact details beyond what
-  the resume page already shows; no account data.
-- **Counting.** A project page view is not counted in v0.9.
+## Privacy
 
-The page uses the public page bar and theme of its resume. Its layout is
-specified with the UI work, not here.
-
-## Viewer entry points
-
-- **Public page.** The page bar shows "Projects" when at least one project is
-  available. A linked, available entry's title links to its project page; the
-  entry's own `link` field keeps its meaning.
-- **PDF and print.** When the resume is live and has an available project, the
-  projects section prints one line with the address `aboutme.vn/{slug}/projects`
-  under its heading, as a link in the PDF. The owner can turn the line off per
-  resume. Templates define its type and spacing with the template work, and the
-  pagination checks cover it.
-- **Editor.** The preview shows the line and the links as the public page will.
-
-## Agents
-
-MCP gains tools to list, read, create, update and delete library projects and to
-link a project to a resume, under the existing scopes. A tool cannot publish,
-attach evidence or connect an account. Until reviewed changes ship (v0.10), an
-agent edit to a library project of a published resume is public at once, as an
-agent edit to the resume is today; the MCP guide says so.
-
-## Data, export and deletion
-
-- New table for library projects, owned by a user and cascading with the
-  account.
-- The account export includes the library. Account deletion removes it.
+- The same project slug, text and evidence may appear under two resumes of one
+  account, so a reader of both can connect them. The owner chooses this per
+  resume; the editor says so when a project is added to a second published
+  resume. No other account identifier and no cross-resume list is ever public.
+- A project page gates, indexes and revokes exactly as its resume
+  ([contract](projects-contract.md#representations)).
 - Project text is user content: it never enters logs or telemetry.
-
-## Checks
-
-- A project page is served only in the available state; each transition out of
-  it (unpublish, sign in to view on, hide, unlink, delete, slug rename, language
-  text removed) returns 404 or the gate on the next request.
-- A resume with unlinked project entries renders and prints exactly as before.
-- Deleting a library project leaves every resume valid.
-- No route returns a project without a live resume slug in the path.
-- Two accounts may use the same project slug.
 
 ## Open points for the owner
 
-1. Limits: 30 projects per account and 20 technologies per project
-   (recommended), or other values.
-2. The printed line: on by default (recommended), or off by default.
+1. The proposed limits above.
+2. Print: the project title as a link only (proposed, no layout change), or an
+   added line with the address of the resume's project list, which changes the
+   renderer contract, pagination and the product images.
