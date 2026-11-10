@@ -17,7 +17,7 @@ The table names required verification, not commands every worker must run locall
 |Go server|`make server-build server-vet server-test` and `golangci-lint run ./...` over touched packages, tests included|
 |Store or migrations|Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`|
 |Nuxt/Vue|`make web-lint web-typecheck web-test web-build`; after adding a web file, `make web-source-manifest-update`|
-|Renderer or public page|Nuxt gate plus `make web-e2e`; display assertions and interim comparisons as in [web rules](web.md) and [Releases](releases.md#releases)|
+|Renderer or public page|Nuxt gate plus `make web-e2e`; display assertions and mutation tests as in [web rules](web.md) and [Releases](releases.md#releases)|
 |Production runtime startup|After smoke integration, `server-runtime-smoke` in full hosted CI; see [runtime contract](../docs/design/local-tooling-simplification.md#production-runtime-coverage)|
 |Authenticated UI|`make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check`|
 |Public surface|`make native-http-check` and `make dev-https-public-check`|

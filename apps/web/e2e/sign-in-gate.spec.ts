@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen,
   type ScreenContract,
@@ -18,7 +19,6 @@ import { styleProofs } from './screen-style-proofs';
 
 import {
   denyExternalRequests,
-  verifyScreenshot,
   waitForImages,
 } from './support';
 
@@ -79,7 +79,11 @@ test.describe('sign-in gate', () => {
         expect(external).toEqual([]);
 
         await assertGate(page, cell);
-        await verifyScreenshot(page, gateName(cell), testInfo);
+        if (cell.lng === 'vi' && cell.message === 'failed'
+          && cell.width === 390 && cell.providers === 'google') {
+          await captureReviewImage(testInfo, 'sign-in-error-vi-390', () =>
+            page.screenshot({ animations: 'disabled', timeout: 750 }));
+        }
       });
     });
   }
@@ -107,10 +111,8 @@ test.describe('join invite', () => {
   for (const cell of INVITE_CELLS) {
     test.describe(`interface ${cell.lng}`, () => {
       test.use({ locale: cell.lng === 'vi' ? 'vi-VN' : 'en-US' });
-      test(inviteName(cell), async ({ page }, testInfo) => {
+      test(inviteName(cell), async ({ page }) => {
         await openAndAssertInvite(page, cell);
-        await verifyScreenshot(page, inviteName(cell), testInfo,
-          page.locator('.join-invite'));
       });
     });
   }

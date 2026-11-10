@@ -1,12 +1,4 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import {
-  expect,
-  type Locator,
-  type Page,
-  type TestInfo,
-} from '@playwright/test';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { expect, type Page } from '@playwright/test';
 
 import type { ScreenContract } from './display-assertions';
 import { expectSheetStructure, sheetType } from './filter-sheet-details';
@@ -181,12 +173,6 @@ export async function denyExternalRequests(page: Page): Promise<string[]> {
   return attempted;
 }
 
-// Renderer baselines stay exact (ADR 0019). Chrome captures allow a few
-// hundred pixels: Chromium's software raster anti-aliases rounded corners
-// two ways between runs on a tall page, about 200 pixels. chrome.spec.ts and
-// gallery.spec.ts share it so their chrome captures use one tolerance.
-export const CHROME_PIXEL_TOLERANCE = 400;
-
 // A loaded image is not yet a painted one: `complete` turns true when the
 // bytes arrive, and an image marked `decoding="async"` (the library cards)
 // may still be left out of the next frames until its decode finishes.
@@ -245,108 +231,30 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
   objectFit: 'cover',
 };
 
-/**
- * Diffs `actual` against `expected` pixel by pixel, writing a red/white
- * diff image to `diffPath` when they differ. Baselines are pinned exactly
- * (DESIGN.md; ADR 0020): any difference fails the assertion below.
- */
-async function compareRaster(
-  actual: Buffer,
-  expected: Buffer,
-  diffPath: string,
-  maxChangedPixels = 0,
-): Promise<void> {
-  const [actualImage, expectedImage] = await Promise.all([
-    loadImage(actual),
-    loadImage(expected),
-  ]);
-  expect(actualImage.width).toBe(expectedImage.width);
-  expect(actualImage.height).toBe(expectedImage.height);
-  const width = actualImage.width;
-  const height = actualImage.height;
-  const actualCanvas = createCanvas(width, height);
-  const expectedCanvas = createCanvas(width, height);
-  actualCanvas.getContext('2d').drawImage(actualImage, 0, 0);
-  expectedCanvas.getContext('2d').drawImage(expectedImage, 0, 0);
-  const actualPixels = actualCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  const expectedPixels = expectedCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  let changed = 0;
-  const diffCanvas = createCanvas(width, height);
-  const diffContext = diffCanvas.getContext('2d');
-  const diff = diffContext.createImageData(width, height);
-  for (let offset = 0; offset < actualPixels.length; offset += 4) {
-    const differs = actualPixels[offset] !== expectedPixels[offset]
-      || actualPixels[offset + 1] !== expectedPixels[offset + 1]
-      || actualPixels[offset + 2] !== expectedPixels[offset + 2]
-      || actualPixels[offset + 3] !== expectedPixels[offset + 3];
-    if (differs) {
-      changed += 1;
-      diff.data.set([255, 0, 0, 255], offset);
-    } else {
-      diff.data.set([255, 255, 255, 255], offset);
-    }
-  }
-  if (changed > 0) {
-    diffContext.putImageData(diff, 0, 0);
-    await writeFile(diffPath, diffCanvas.toBuffer('image/png'));
-  }
-  expect(changed).toBeLessThanOrEqual(maxChangedPixels);
-}
-
-/**
- * Captures a full-page screenshot, or an element screenshot when `locator`
- * is given, and either writes it as an update candidate under
- * `PLAYWRIGHT_RESULTS_DIR/candidate-baselines/baselines`
- * (`make web-e2e-update`) or compares it against the pinned baseline of the
- * same name in `apps/web/e2e/baselines`.
- */
-export async function verifyScreenshot(
-  page: Page,
-  filename: string,
-  testInfo: TestInfo,
-  locator?: Locator,
-  maxChangedPixels = 0,
-  /** False captures only the viewport, as for a fixed overlay. */
-  fullPage = true,
-): Promise<void> {
-  const options = {
-    animations: 'disabled',
-    caret: 'hide',
-    scale: 'css',
-    type: 'png',
-  } as const;
-  const bytes = locator === undefined
-    ? await page.screenshot({ ...options, fullPage })
-    : await locator.screenshot(options);
-  await writeFile(testInfo.outputPath(filename), bytes);
-  if (testInfo.config.updateSnapshots !== 'none') {
-    const root = process.env.PLAYWRIGHT_RESULTS_DIR;
-    if (root === undefined) {
-      throw new Error('PLAYWRIGHT_RESULTS_DIR is required.');
-    }
-    const candidate = resolve(root, 'candidate-baselines/baselines', filename);
-    await mkdir(resolve(candidate, '..'), { recursive: true });
-    await writeFile(candidate, bytes);
-    return;
-  }
-  const expected = await readFile(resolve(
-    import.meta.dirname,
-    'baselines',
-    filename,
-  ));
-  await compareRaster(
-    bytes,
-    expected,
-    testInfo.outputPath(filename.replace(/\.png$/, '-diff.png')),
-    maxChangedPixels,
-  );
-}
-
 export { assertGalleryDetail, assertLibrary } from './gallery-display';
+
+/** Count live renders while each thumbnail is mounted in the viewport. */
+export async function expectThumbnailRenders(
+  page: Page, count: number,
+): Promise<void> {
+  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  const frames = page.locator('[data-sheet-thumbnail]');
+  await expect(frames).toHaveCount(count);
+  try {
+    for (const frame of await frames.all()) {
+      await frame.scrollIntoViewIfNeeded();
+      const render = frame.locator('[data-sheet-thumbnail-render]');
+      await expect(render).toHaveCount(1);
+      await expect(render.locator('h1')).toHaveCount(0);
+      for (const image of await render.locator('img').all()) {
+        await image.evaluate((node) => (node as HTMLImageElement).decode());
+      }
+      await page.evaluate(() => document.fonts.ready);
+    }
+  } finally {
+    await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
+  }
+}
 
 /** Load lazy content without changing the captured viewport. */
 export async function prepareScreen(page: Page): Promise<void> {
@@ -367,28 +275,6 @@ export async function prepareScreen(page: Page): Promise<void> {
   }
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
-}
-
-/** Retained rasters were captured with the viewport as tall as the page. */
-export async function withBaselineViewport(
-  page: Page, capture: () => Promise<void>,
-): Promise<void> {
-  const viewport = page.viewportSize()!;
-  try {
-    const height = await page.evaluate(() =>
-      document.documentElement.scrollHeight);
-    await page.setViewportSize({ width: viewport.width, height });
-    await prepareScreen(page);
-    const settled = await page.evaluate(() =>
-      document.documentElement.scrollHeight);
-    if (settled !== height) {
-      await page.setViewportSize({ width: viewport.width, height: settled });
-    }
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await capture();
-  } finally {
-    await page.setViewportSize(viewport);
-  }
 }
 
 export function chromeScreenContract(

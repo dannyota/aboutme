@@ -94,93 +94,163 @@ def pixel_png(content):
     except (ValueError, struct.error, zlib.error):
         return None
 
+# IDs name synthetic fixture families. Result attachments select the case.
+FIXTURES = {
+    "screenshot.spec.ts": "renderer",
+    "resume-screen.spec.ts": "resume-screen",
+    "guide-screenshot.spec.ts": "guide",
+    "chrome.spec.ts": "chrome",
+    "gallery.spec.ts": "gallery-detail",
+    "gallery-baselines.spec.ts": "library",
+    "verify.spec.ts": "deployment",
+    "card.spec.ts": "card",
+    "sign-in-gate.spec.ts": "sign-in",
+    "showcase.spec.ts": "showcase",
+    "showcase-baselines.spec.ts": "showcase-display",
+    "print.spec.ts": "overflow-pdf",
+    "print-pdf.spec.ts": "print-pdf",
+    "print-mutations.spec.ts": "print-mutations",
+    "sample-pages.spec.ts": "sample-pages",
+    "samples.spec.ts": "samples",
+    "fonts-offline.spec.ts": "fonts",
+    "corpus.spec.ts": "corpus",
+    "normal-csp.spec.ts": "normal-csp",
+    "preview-gap.spec.ts": "preview-gap",
+}
+REVIEWS = {
+    "public-modern-sidebar-vi-dark-390": "resume-screen.spec.ts",
+    "public-executive-band-en-light-1440": "resume-screen.spec.ts",
+    "home-vi-light-390": "chrome.spec.ts",
+    "showcase-en-dark-1440": "showcase-baselines.spec.ts",
+    "library-sheet-en-light-390": "gallery-baselines.spec.ts",
+    "sign-in-error-vi-390": "sign-in-gate.spec.ts",
+    "print-main-overflow-p2": "print.spec.ts",
+    "print-sidebar-overflow-p2": "print.spec.ts",
+}
+
+
+def regular(path):
+    return (all(not parent.is_symlink() for parent in [path, *path.parents])
+            and stat.S_ISREG(path.stat().st_mode))
+
+
+def clear(path):
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def attachment_png(attachment, surface):
+    if attachment.get("contentType") != "image/png":
+        return None
+    value = attachment.get("path")
+    if not isinstance(value, str):
+        return None
+    path = Path(value)
+    if ".." in path.parts:
+        return None
+    roots = [Path("/results") / surface / "artifacts",
+             mode.absolute() / surface / "artifacts"]
+    for root in roots:
+        if path.is_relative_to(root):
+            local = mode / surface / "artifacts" / path.relative_to(root)
+            try:
+                if regular(local) and local.stat().st_size <= 32 * 1024 * 1024:
+                    return pixel_png(local.read_bytes())
+            except OSError:
+                return None
+    return None
+
+
 mode, archive = map(Path, sys.argv[1:3])
 commit, digest, manifest_hash, tar_hash = sys.argv[3:7]
 status = int(sys.argv[7])
 destination = mode / "diagnostics"
-if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
-    destination.unlink()
-elif destination.exists():
-    shutil.rmtree(destination)
+review_destination = mode / "review-images"
+clear(destination)
+clear(review_destination)
+if not (re.fullmatch(r"[0-9a-f]{40}", commit)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+        and all(re.fullmatch(r"[0-9a-f]{64}", value)
+                for value in [manifest_hash, tar_hash])):
+    raise ValueError("invalid source identity")
 staged = Path(tempfile.mkdtemp(prefix="diagnostics-", dir=mode.parent))
+review = Path(tempfile.mkdtemp(prefix="review-", dir=mode.parent))
 try:
     with tarfile.open(archive) as tar:
-        baselines = {}
-        specs = set()
-        for member in tar.getmembers():
-            path = Path(member.name)
-            if not member.isfile():
-                continue
-            if str(path.parent) in ["apps/web/e2e/baselines", "apps/web/e2e/print-baselines", "apps/web/public/templates/pages"] and re.fullmatch(r"[a-z0-9_-]+\.png", path.name):
-                if member.size <= 32 * 1024 * 1024:
-                    baselines[path.stem] = tar.extractfile(member).read()
-            if str(path.parent) == "apps/web/e2e" and path.name.endswith(".spec.ts"):
-                specs.add(path.name)
-    def regular(path):
-        return all(not parent.is_symlink() for parent in [path, *path.parents]) and stat.S_ISREG(path.stat().st_mode)
+        specs = {Path(member.name).name for member in tar.getmembers()
+                 if member.isfile() and str(Path(member.name).parent)
+                 == "apps/web/e2e" and Path(member.name).name in FIXTURES}
     summary = {"exit_status": status, "surfaces": {}}
+    available = {}
     for surface in ["harness", "normal"]:
         facts = {"report": "unavailable", "failures": []}
         report = mode / surface / "results.json"
         if report.exists() and regular(report) and report.stat().st_size <= 16 * 1024 * 1024:
             try:
                 data = json.loads(report.read_text())
-                def failures(suites):
+
+                def cases(suites):
                     for suite in suites:
-                        for spec in suite.get("specs", []):
-                            file = Path(spec.get("file", "")).name
-                            line = spec.get("line")
-                            if file not in specs or type(line) is not int or not 0 < line < 100000:
+                        yield from suite.get("specs", [])
+                        yield from cases(suite.get("suites", []))
+
+                # Validate before publishing any images from this report.
+                selected = []
+                for spec in cases(data.get("suites", [])):
+                    file = Path(spec.get("file", "")).name
+                    line = spec.get("line")
+                    if file not in specs or type(line) is not int or not 0 < line < 100000:
+                        continue
+                    for test in spec.get("tests", []):
+                        for result in test.get("results", []):
+                            state = result.get("status")
+                            attachments = result.get("attachments", [])
+                            if not isinstance(attachments, list) or not all(isinstance(item, dict) for item in attachments):
+                                raise ValueError("invalid attachments")
+                            selected.append((file, line, state, attachments))
+                for index, (file, line, state, attachments) in enumerate(selected):
+                    if state in ["failed", "timedOut", "interrupted"]:
+                        facts["failures"].append({"file": file, "line": line, "status": state})
+                        for attachment in attachments:
+                            if attachment.get("name") != "screenshot":
                                 continue
-                            for test in spec.get("tests", []):
-                                for result in test.get("results", []):
-                                    state = result.get("status")
-                                    if state in ["failed", "timedOut", "interrupted"]:
-                                        facts["failures"].append({"file": file, "line": line, "status": state})
-                        failures(suite.get("suites", []))
-                failures(data.get("suites", []))
+                            content = attachment_png(attachment, surface)
+                            if content is not None:
+                                image_directory = staged / surface / str(index)
+                                image_directory.mkdir(parents=True, exist_ok=True)
+                                (image_directory / f"{FIXTURES[file]}.png").write_bytes(content)
+                                break
+                    if status == 0 and state == "passed":
+                        for fixture, owner in REVIEWS.items():
+                            if owner != file:
+                                continue
+                            available.setdefault(fixture, "unavailable")
+                            for attachment in attachments:
+                                name = attachment.get("name")
+                                if name not in [f"review-{fixture}", f"review-{fixture}-unavailable"]:
+                                    continue
+                                available.setdefault(fixture, "unavailable")
+                                if name == f"review-{fixture}":
+                                    content = attachment_png(attachment, surface)
+                                    if content is not None:
+                                        (review / f"{fixture}.png").write_bytes(content)
+                                        available[fixture] = "available"
                 facts["report"] = "available"
             except (ValueError, TypeError, AttributeError, RecursionError):
                 facts["failures"] = []
         summary["surfaces"][surface] = facts
-        artifacts = mode / surface / "artifacts"
-        if not artifacts.is_dir() or artifacts.is_symlink():
-            continue
-        for index, directory in enumerate(sorted(artifacts.iterdir())):
-            if not directory.is_dir() or directory.is_symlink():
-                continue
-            for stem, expected in baselines.items():
-                names = [f"{stem}-{kind}.png" for kind in ["expected", "actual", "diff"]]
-                # Print and template page comparators write the actual raster without a suffix.
-                names.append(f"{stem}.png")
-                images = {}
-                for name in names:
-                    path = directory / name
-                    if not path.exists() or not regular(path) or path.stat().st_size > 32 * 1024 * 1024:
-                        continue
-                    content = pixel_png(path.read_bytes())
-                    if content is not None:
-                        kind = "actual" if name == f"{stem}.png" else name[len(stem) + 1:-4]
-                        images[kind] = content
-                if not images:
-                    continue
-                if "expected" not in images:
-                    content = pixel_png(expected)
-                    if content is not None:
-                        images["expected"] = content
-                image_directory = staged / surface / str(index)
-                image_directory.mkdir(parents=True, exist_ok=True)
-                for kind, content in images.items():
-                    (image_directory / f"{stem}-{kind}.png").write_bytes(content)
+    metadata = (f"commit={commit}\nmanifest_sha256={manifest_hash}\n"
+                f"tar_sha256={tar_hash}\nbrowser_image_digest={digest}\n")
     (staged / "failure-summary.json").write_text(json.dumps(summary, sort_keys=True) + "\n")
-    (staged / "source-metadata.txt").write_text(f"commit={commit}\nmanifest_sha256={manifest_hash}\ntar_sha256={tar_hash}\nbrowser_image_digest={digest}\n")
+    (staged / "source-metadata.txt").write_text(metadata)
     staged.rename(destination)
-    if status == 0 and mode.name == "update":
-        candidate = mode / "candidate-baselines"
-        if not candidate.is_dir() or candidate.is_symlink():
-            raise ValueError("candidate baseline directory is missing or unsafe")
-        with (candidate / "source-metadata.txt").open("x") as metadata:
-            metadata.write((destination / "source-metadata.txt").read_text())
+    if status == 0:
+        (review / "source-metadata.txt").write_text(metadata)
+        (review / "capture-summary.json").write_text(json.dumps(available, sort_keys=True) + "\n")
+        review.rename(review_destination)
 finally:
-    if staged.exists():
-        shutil.rmtree(staged)
+    for directory in [staged, review]:
+        if directory.exists():
+            shutil.rmtree(directory)

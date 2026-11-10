@@ -19,7 +19,7 @@ import {
 } from './style-mutation';
 import { cardType, expectCardDetails, expectCardLogo } from './card-details';
 import { styleProofs } from './screen-style-proofs';
-import { denyExternalRequests, verifyScreenshot } from './support';
+import { denyExternalRequests } from './support';
 
 // The harness Nitro output directory (apps/web/nuxt.config.ts sets
 // nitro.output.dir to '.output/harness' when NUXT_HARNESS=1) holds the print
@@ -492,19 +492,13 @@ async function expectCardDisplay(
 for (const { card, name } of CASES) {
   test.describe(`display locale ${card.lng}`, () => {
     test.use({ locale: card.lng === 'vi' ? 'vi-VN' : 'en-US' });
-    test(`card--${name}`, async ({ page }, testInfo) => {
+    test(`card--${name}`, async ({ page }) => {
       const external = await denyExternalRequests(page);
       const html = await renderCardHTML(buildEnvelope(card));
       await openCard(page, html);
       await expectGeometry(page);
       await expectPageContent(page, card);
       await expectCardDisplay(page, card, name);
-      await verifyScreenshot(
-        page,
-        `card--${name}.png`,
-        testInfo,
-        page.locator('.preview-card'),
-      );
       expect(external).toEqual([]);
     });
   });

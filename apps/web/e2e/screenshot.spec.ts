@@ -11,7 +11,6 @@ import {
   FIXTURE_PHOTO_CROP_GEOMETRY,
   expectRendererPageMembership,
   photoCropGeometry,
-  verifyScreenshot,
   waitForImages,
 } from './support';
 
@@ -96,9 +95,9 @@ async function assertRendererText(paragraph: Locator): Promise<void> {
   });
 }
 
-test.describe('renderer screenshot subset', () => {
+test.describe('renderer layout subset', () => {
   for (const cell of CELLS) {
-    test(cell.name, async ({ page }, testInfo) => {
+    test(cell.name, async ({ page }) => {
       const preset = TEMPLATES.find(({ id }) => id === cell.template);
       expect(preset, `unknown preset ${cell.template}`).toBeDefined();
       const geometry
@@ -193,7 +192,6 @@ test.describe('renderer screenshot subset', () => {
         await expectRendererPageMembership(page, cell.template,
           cell.align === 'justify', cell.paper === 'letter');
       }
-      await verifyScreenshot(page, cell.name, testInfo);
     });
   }
 });
@@ -283,7 +281,7 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
     width: 390,
   },
   // The dark and Match device schemes (docs/design/public-page-theme.md,
-  // "Baselines and tests"): a plain, a tinted-sidebar, and a tinted-band
+  // "Display checks and tests"): a plain, a tinted-sidebar, and a tinted-band
   // template, plus a Match device page under a dark preference.
   {
     name: 'public--modern-sidebar--dark--390.png',
@@ -314,7 +312,7 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
 
 test.describe('public page measure', () => {
   for (const cell of PUBLIC_CELLS) {
-    test(cell.name, async ({ page }, testInfo) => {
+    test(cell.name, async ({ page }) => {
       await page.setViewportSize({ width: cell.width, height: 900 });
       const external = await denyExternalRequests(page);
       if (cell.colorPreference !== undefined) {
@@ -413,7 +411,6 @@ test.describe('public page measure', () => {
         await assertRendererText(paragraph);
       }
       await expectScreen(page, resumeContract(cell.template, 'vi', dark));
-      await verifyScreenshot(page, cell.name, testInfo);
     });
   }
 });
@@ -525,8 +522,7 @@ async function readSurfaces(page: Page): Promise<PublicSurfaces> {
 
 // The scheme CSS is screen only and keys off the owner's choice plus, for
 // Match device, the viewer's preference (docs/design/public-page-theme.md,
-// "What stays light"). These checks compare computed colors across renders,
-// so they need no baseline.
+// "What stays light"). These checks compare computed colors across renders.
 test.describe('public page color scheme', () => {
   for (const template of ['classic-serif', 'executive-band']) {
     test(`a dark ${template} page turns dark on screen and light in print`,

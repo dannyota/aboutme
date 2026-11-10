@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen, expectScreenClass, measureVerticalFlow,
 } from './display-assertions';
@@ -9,7 +11,7 @@ import {
 } from './style-mutation';
 import {
   expectGuideCodeScroll, expectGuideDetails, expectGuideIcons,
-  expectGuideInstructions,
+  expectGuideInstructions, expectGuideInstructionIcons,
   expectGuideLists, GUIDE_TYPE,
 } from './guide-details';
 import { styleProofs } from './screen-style-proofs';
@@ -17,13 +19,10 @@ import { expectGuideProse } from './guide-prose';
 import { screenRegressionTests } from './screen-regressions';
 import {
   chromeScreenContract,
-  CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
   mockSignedInSession,
   mockSignedOutSession,
-  verifyScreenshot,
   waitForImages,
-  withBaselineViewport,
 } from './support';
 
 const GUIDE_BASE_URL = 'http://127.0.0.1:20090';
@@ -74,11 +73,11 @@ const GUIDE_CELLS: readonly GuideCell[] = [
   },
 ];
 
-test.describe('guide page pixel baselines', () => {
+test.describe('guide page content and layout', () => {
   for (const cell of GUIDE_CELLS) {
     test.describe(`display locale ${cell.locale}`, () => {
       test.use({ locale: cell.locale === 'vi' ? 'vi-VN' : 'en-US' });
-      test(cell.name, async ({ page }, testInfo) => {
+      test(cell.name, async ({ page }) => {
         await page.setViewportSize({ width: cell.width, height: 900 });
         await page.context().addCookies([
           { name: 'aboutme-locale', value: cell.locale, url: GUIDE_BASE_URL },
@@ -89,8 +88,6 @@ test.describe('guide page pixel baselines', () => {
 
         const response = await page.goto('/guide/mcp');
         expect(response?.status()).toBe(200);
-        // Chrome transitions must not be mid-flight at capture (chrome.spec.ts
-        // carries the same reasoning).
         await page.addStyleTag({
           content: '*, *::before, *::after { transition: none !important; '
             + 'animation: none !important; }',
@@ -108,14 +105,6 @@ test.describe('guide page pixel baselines', () => {
 
         await assertGuide(page, cell.locale, cell.theme, cell.width);
         expect(external).toEqual([]);
-
-        await withBaselineViewport(page, () => verifyScreenshot(
-          page,
-          cell.name,
-          testInfo,
-          undefined,
-          CHROME_PIXEL_TOLERANCE,
-        ));
       });
     });
   }
@@ -392,24 +381,7 @@ async function assertGuide(
         : Math.abs(cannot.left - can.right - 32) <= 1
           && Math.abs(can.top - cannot.top) <= 1;
     }, width < 672), 'Guide capability layout.').toBe(true);
-  for (const [id, icon, color] of [
-    ['guide-can', '.lucide-check', theme === 'light'
-      ? 'rgb(35, 57, 154)'
-      : 'rgb(163, 182, 245)'],
-    ['guide-cannot', '.lucide-minus', theme === 'light'
-      ? 'rgb(92, 97, 120)'
-      : 'rgb(165, 171, 191)'],
-  ] as const) {
-    const icons = page.getByTestId(id).locator(icon);
-    await expect(icons, 'Guide instruction icons.').toHaveCount(5);
-    for (const glyph of await icons.all()) {
-      await expect(glyph, 'Guide instruction icons.')
-        .toHaveCSS('width', '16px');
-      await expect(glyph, 'Guide instruction icons.')
-        .toHaveCSS('height', '16px');
-      await expect(glyph, 'Guide instruction icons.').toHaveCSS('color', color);
-    }
-  }
+  await expectGuideInstructionIcons(page, theme);
   const header = page.getByTestId('guide-header');
   await expect(header).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(236, 238, 247)'
@@ -553,7 +525,8 @@ test('guide rejects a changed instruction icon', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await mockSignedOutSession(page);
   await page.goto('/guide/mcp');
-  const assertion = () => assertGuide(page, 'vi', 'light', 390);
+  await assertGuide(page, 'vi', 'light', 390);
+  const assertion = () => expectGuideInstructionIcons(page, 'light');
   await assertion();
   const icon = page.getByTestId('guide-can').locator('svg').first();
   const original = await icon.getAttribute('class');
@@ -647,4 +620,42 @@ test('guide rejects an unreachable code block', async ({ page }) => {
     () => applyStyleMutation(page.getByTestId('guide-mcp-page')
       .locator('pre').nth(1), { 'overflow-x': 'hidden' }),
     'Guide code scrolling.');
+});
+
+test('optional capture failure reports unavailable evidence', async () => {
+  const info = test.info();
+  const errors = [...info.errors];
+  await captureReviewImage(info, 'home-vi-light-390', async () => {
+    throw new Error('Capture fixture failure.');
+  });
+  expect(info.errors).toEqual(errors);
+  expect(info.annotations).toContainEqual({
+    type: 'evidence', description: 'review-home-vi-light-390-unavailable',
+  });
+});
+
+test('optional capture attaches a file the collector can read', async () => {
+  const info = test.info();
+  const body = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQMgn7'
+    + 'DwAClAGcHVtGXwAAAABJRU5ErkJggg==', 'base64',
+  );
+  await captureReviewImage(info, 'home-vi-light-390', async () => body);
+  const attachment = info.attachments.find(({ name }) =>
+    name === 'review-home-vi-light-390');
+  expect(attachment?.contentType).toBe('image/png');
+  expect(attachment?.body).toBeUndefined();
+  expect(attachment?.path).toBeDefined();
+  expect(await readFile(attachment!.path!)).toEqual(body);
+});
+
+test('optional capture timeout reports unavailable evidence', async () => {
+  const info = test.info();
+  const errors = [...info.errors];
+  await captureReviewImage(info, 'home-vi-light-390', () =>
+    new Promise<Buffer>(() => {}));
+  expect(info.errors).toEqual(errors);
+  expect(info.annotations).toContainEqual({
+    type: 'evidence', description: 'review-home-vi-light-390-unavailable',
+  });
 });

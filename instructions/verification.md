@@ -41,7 +41,7 @@ CI references no stored secrets, except the three renewal secrets in the `vmonit
 
 Toolchain versions (owner, 2026-11-10): `.tool-versions` pins exact versions of Node, Go, sqlc, gitleaks, golangci-lint, govulncheck, and Caddy. Every machine that runs checks, including the Ubuntu gate host, uses those pins, never its default; host Node 26 failed 249 web tests that pass on the pinned 24. Raising a pin within its major version is routine: change the pin and every place that mirrors it (CI images, Dockerfiles, workflow setup) in one change and run the gate. A major version change is a separate, deliberate change with its own review and a full test run. For Node, follow even-numbered LTS lines.
 
-The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [display checks and interim baselines](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright caches never reach main.
+The repository owner reviews pins outside that automation on the first working day of each month: `.tool-versions` and its mirrors, runner labels, Python and OpenTofu versions, container image digests, and Playwright versions and browser-image digests. Record the review date, checked pins, and any deferred upgrade with its reason in a tracking issue. Each upgrade needs green CI and every affected workflow before landing, including [display checks](web.md) and [image checks](releases.md#releases). Preserve cache trust boundaries: only main saves Go and tool caches; branch Playwright caches never reach main.
 
 ### Runs and evidence
 
@@ -64,9 +64,29 @@ A dispatch run tests a branch only. It never satisfies the main ruleset's requir
 3. Dispatch once and wait; do not dispatch again on the same branch while a run is in progress.
 4. Read results for the exact head SHA (`gh run list --branch <branch>` shows `headSha`); a green run on an older commit proves nothing about the head.
 
-CI concurrency groups include the event name. Pull requests and dispatches cancel superseded runs for their own ref; each main push uses its run ID and never cancels another push. Preflight and the aggregate gate have 5-minute timeouts. Contracts, operational tests, dev-https static shards, server, server integration, resume API, and web have 20-minute timeouts. Web E2E and HTTPS proofs have 40-minute timeouts. The reusable VN workflow bounds its own jobs.
+CI concurrency groups include the event name. Pull requests and dispatches
+cancel superseded runs for their own ref; each main push uses its run ID and
+never cancels another push. Preflight and the aggregate gate have 5-minute
+timeouts. Contracts, operational tests, dev-https static shards, server, server
+integration, resume API, and web have 20-minute timeouts. Web E2E has a
+60-minute timeout; HTTPS proofs have 40-minute timeouts. The reusable VN
+workflow bounds its own jobs.
 
-Until display cutover, each web-e2e shard uploads `browser-diagnostics-<shard>` even when comparison fails. The allowlist covers committed renderer, print, and template page baseline names with expected, actual, and difference PNGs. The collector decodes bounded, non-interlaced 8-bit RGB/RGBA PNGs and re-encodes pixels without metadata or appended bytes. Diagnostics include source commit, source manifest and tar hashes, browser-image digest, and redacted failure summaries with spec file, line, and fixed status only. Test titles, error messages, console output, raw responses, traces, and HTML reports stay out of diagnostics. The existing preview-gap report and HTTPS proof-evidence redaction remain unchanged. `Baselines` uploads the same diagnostics on failure and includes `source-metadata.txt` with successful `candidate-baselines`; failed generation never uploads candidates. The interim gate forbids snapshot updates and uses exact pixel comparison. After cutover, [display assertions](../docs/design/display-assertions.md) replaces comparisons and baseline-directory allowlists with closed fixture IDs; optional sanitized review images are non-blocking, retained 14 days. Raw traces, HTML, console, and PDFs remain unuploaded.
+Each web-e2e shard uploads `browser-diagnostics-<shard>` from the staged
+diagnostics directory, including on failure. The collector selects only
+screenshot attachments of failed cases with closed fixture IDs independent of
+PNG directories. It decodes bounded, non-interlaced 8-bit RGB/RGBA PNGs and
+re-encodes pixels without metadata or appended bytes. Public failure summaries
+contain only spec file, line and fixed status. Sanitized metadata keeps the
+source commit, source manifest and archive hashes, and browser-image digest.
+
+Passing shards upload `display-review-<shard>` from the sanitized review
+directory for 14 days. Across the run, eight fixed review images cover the cases
+in [display assertions](../docs/design/display-assertions.md). Optional capture
+or review-upload failure reports unavailable evidence without failing the gate.
+Diagnostics collection preserves the original browser exit status. Test titles,
+errors, raw responses, console output, traces, HTML and PDFs stay unuploaded.
+The preview-gap report and HTTPS proof-evidence redaction remain unchanged.
 
 After smoke integration, full CI also requires `server-runtime-smoke`, with `needs: [preflight, server, web]`, same-run build artifacts, bounded sanitized evidence, and cleanup. Add its key to `ci.needs`, expected results, and the ninth permitted prose omission together; until then the existing eight-job omission set remains. [Runtime coverage](../docs/design/local-tooling-simplification.md#production-runtime-coverage) owns the exact limits and failure contract. Native HTTPS partial evidence never satisfies the full Linux aggregate.
 

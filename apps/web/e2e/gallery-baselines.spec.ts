@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { captureReviewImage } from './review-images';
 import {
   expectScreen, expectScreenClass,
   measureGalleryGrid,
@@ -11,16 +12,15 @@ import {
   screenMutationTests,
 } from './style-mutation';
 import { expectLibraryStructure } from './gallery-details';
+import { expectLibraryGrid } from './gallery-display';
 import { expectSheetStructure, sheetType } from './filter-sheet-details';
 import { styleProofs } from './screen-style-proofs';
 import {
   assertLibrary,
   filterSheetContract,
+  expectThumbnailRenders,
   libraryContract,
   prepareScreen,
-  CHROME_PIXEL_TOLERANCE,
-  verifyScreenshot,
-  withBaselineViewport,
 } from './support';
 
 const CASES = [
@@ -38,7 +38,7 @@ for (const { name, locale, theme, width } of CASES) {
   test.describe(`display locale ${locale}`, () => {
     test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
     const title = `Library ${name} ${locale} ${theme} ${width} `
-      + 'matches baseline';
+      + 'keeps content and layout';
     test(title, async ({
       page,
     }, testInfo) => {
@@ -72,8 +72,7 @@ for (const { name, locale, theme, width } of CASES) {
       } else {
         await prepareScreen(page);
         if (name === 'rows') {
-          await expect(page.locator('[data-sheet-thumbnail]'))
-            .toHaveCount(LIVE_THUMBNAILS);
+          await expectThumbnailRenders(page, LIVE_THUMBNAILS);
         }
       }
       expect(
@@ -83,24 +82,10 @@ for (const { name, locale, theme, width } of CASES) {
             - document.documentElement.clientWidth,
         ),
       ).toBe(0);
-      const capture = async () => {
-        if (name === 'rows') {
-          await expect(page.locator('[data-sheet-thumbnail-render]'))
-            .toHaveCount(LIVE_THUMBNAILS);
-        }
-        await verifyScreenshot(
-          page,
-          `gallery--${name}--${locale}--${theme}--${width}.png`,
-          testInfo,
-          undefined,
-          CHROME_PIXEL_TOLERANCE,
-          name !== 'sheet',
-        );
-      };
-      if (name === 'sheet') {
-        await capture();
-      } else {
-        await withBaselineViewport(page, capture);
+      if (name === 'sheet' && locale === 'en' && theme === 'light'
+        && width === 390) {
+        await captureReviewImage(testInfo, 'library-sheet-en-light-390', () =>
+          page.screenshot({ animations: 'disabled', timeout: 750 }));
       }
     });
   });
@@ -240,12 +225,10 @@ for (const [name, selector, styles] of [
   test(`Library assertions reject changed ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
-    const assertClean = () => assertLibrary(page, 'vi', 'light', 390, false);
-    await assertClean();
-    const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow('Library grid geometry.');
-    await restore();
-    await assertClean();
+    await assertLibrary(page, 'vi', 'light', 390, false);
+    await proveMutation(() => expectLibraryGrid(page, 390), () =>
+      applyStyleMutation(page.locator(selector), styles),
+    'Library grid geometry.');
   });
 }
 

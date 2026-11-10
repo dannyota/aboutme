@@ -153,12 +153,12 @@ exact skips.
 | HTTPS lifecycle static cases                                                                                                         | Port portable session/listener cases; exercise them natively.                                            | Keep every static shard and completeness.                                   |
 | `server-runtime-smoke`, `renderprocess` Linux `/proc` tests, cgroup budget probes, `vn-infra`                                        | Explicit Linux-only skip.                                                                                | Linux kernel/container checks; smoke runs hosted amd64.                     |
 
-Display assertions owns removal of `web-e2e-update` and `Baselines`, product
-asset generation and diagnostic images. Harness PDFs use native Chromium and do
-not call the Linux server render queue. Only the explicit HTTPS trust/rendering
-exclusions apply; Mac evidence cannot certify Linux fonts, rendering, cgroups or
-production teardown. Keep `ci-local` separate from opt-in functional proofs;
-hosted CI remains mandatory for release. Extend `macos-tooling` with portable
+Display assertions owns product asset generation, failed-case diagnostics and
+optional review images. Harness PDFs use native Chromium and do not call the
+Linux server render queue. Only the explicit HTTPS trust/rendering exclusions
+apply; Mac evidence cannot certify Linux fonts, rendering, cgroups or production
+teardown. Keep `ci-local` separate from opt-in functional proofs; hosted CI
+remains mandatory for release. Extend `macos-tooling` with portable
 helper/runner contracts; real native browser acceptance needs a separately
 authorized bounded Mac proof.
 

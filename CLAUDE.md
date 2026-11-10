@@ -23,7 +23,7 @@
 - Troubleshoot: save each failing job's whole log with `gh run view <run> --job <job> --log > <scratchpad>/run-<run>-<job>.log` and the run's artifacts with `gh run download <run> -D <scratchpad>/run-<run>`, then dispatch `troubleshooter` with those paths.
 - Find a commit's runs with `gh api "repos/dannyota/aboutme/actions/runs?head_sha=<sha>"`; `gh run list --branch` lags after a push.
 - For a finished job while its run is still in progress, get its log with `gh api --allow-escape-sequences repos/dannyota/aboutme/actions/jobs/<job-id>/logs` and strip ANSI codes; `gh run view --log` refuses until the run completes.
-- Display checks: follow [web rules](instructions/web.md) for the accepted assertion replacement and interim hosted Baselines command. Native Mac proofs remain pending runner acceptance; contributor heads use hosted CI.
+- Display checks: follow [web rules](instructions/web.md) for display assertions, mutation tests and optional review images. Native Mac proofs remain pending runner acceptance; contributor heads use hosted CI.
 - Release: `gh workflow run release-check.yml --ref main`; when green, `git tag -s vX.Y.Z <sha>`, push the tag, wait for `release-images`, then deploy ([releases](instructions/releases.md)).
 - Deploy: `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh vX.Y.Z` after green `main` CI and release-images ([releases](instructions/releases.md)).
 
