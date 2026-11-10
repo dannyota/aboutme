@@ -91,9 +91,44 @@ function mutationHeaderPresence(request: Request) {
   };
 }
 
+let currentStage = "setup";
+let failedStage: string | undefined;
+
 function stage(name: string): void {
+  currentStage = name;
   console.log(`publish-stage:${name}`);
 }
+
+test.beforeEach(() => {
+  currentStage = "setup";
+  failedStage = undefined;
+});
+
+test.afterEach(async ({}, info) => {
+  if (info.status === info.expectedStatus) return;
+  const messages = info.errors.map((error) => error.message ?? "").join("\n");
+  const failureStage = failedStage ?? currentStage;
+  const reason =
+    info.status === "timedOut" ||
+    /timed out|timeout of \d+ms exceeded|timeout \d+ms exceeded/iu.test(messages)
+      ? "timeout"
+      : /expect\(/u.test(messages)
+        ? failureStage.endsWith("-status")
+          ? "wrong-status"
+          : "wrong-content"
+        : "error";
+  const marker = `fail-${failureStage}-${reason}`;
+  stage(marker);
+  const journey =
+    info.title === "proves native HTTPS publish, discovery, and revocation"
+      ? "publish"
+      : "showcase";
+  await writeFile(
+    `/evidence/${journey}-diagnostic.json`,
+    `${JSON.stringify({ marker })}\n`,
+    { flag: "wx", mode: 0o600 },
+  );
+});
 
 function stageNavigationFailure(error: unknown): void {
   const message = error instanceof Error ? error.message : "";
@@ -827,6 +862,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     loggedIn = false;
     stage("signed-out");
   } catch (error) {
+    failedStage = currentStage;
     const sourceLine =
       error instanceof Error
         ? /publish\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? "")?.[1]
@@ -841,6 +877,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     }
   }
 
+  stage("final-diagnostics");
   if (counters.certificateErrors !== 0) stage("certificate-errors");
   if (counters.consoleErrors !== 0) stage(consoleFailure ?? "console-errors");
   if (counters.externalRequests !== 0) stage("external-requests");
@@ -859,14 +896,21 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   ] as const) {
     if (!present) stage(`missing-${name}`);
   }
+  stage("final-mutation-count");
   expect(publishMutationCount).toBe(3);
+  stage("final-certificate-errors");
   expect(counters.certificateErrors).toBe(0);
+  stage("final-console-errors");
   expect(counters.consoleErrors).toBe(0);
+  stage("final-external-requests");
   expect(counters.externalRequests).toBe(0);
+  stage("final-page-errors");
   expect(counters.pageErrors).toBe(0);
+  stage("final-steps");
   expect(steps).toEqual(
     Object.fromEntries(Object.keys(steps).map((key) => [key, true])),
   );
+  stage("final-evidence");
   await writeFile(
     EVIDENCE_PATH,
     `${JSON.stringify({
@@ -905,12 +949,16 @@ async function submitPublishDialog(
   dialog: Locator,
   resumeID: string,
 ): Promise<void> {
+  const publishStage = currentStage;
+  stage(`${publishStage}-submit`);
   const accepted = page.waitForResponse(isPublishResponse(resumeID));
   await dialog.locator('[data-action="publish-submit"]').press("Enter");
+  stage(`${publishStage}-status`);
   expect((await accepted).status()).toBe(200);
 }
 
 async function openPublishDialog(page: Page) {
+  stage(`${currentStage}-open-dialog`);
   await page.locator('[data-action="publish"]').press("Enter");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -922,6 +970,8 @@ async function openPublishDialog(page: Page) {
 async function readListing(
   page: Page,
 ): Promise<{ document: Response; listing: Response; slugs: string[] }> {
+  const listingStage = currentStage;
+  stage(`${listingStage}-navigation`);
   const read = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === SHOWCASE_LISTING_PATH &&
@@ -929,9 +979,13 @@ async function readListing(
   );
   const document = await page.goto("/showcase");
   if (document === null) throw new Error("showcase document is unavailable");
+  stage(`${listingStage}-response`);
   const listing = await read;
+  stage(`${listingStage}-document-status`);
   expect(document.status()).toBe(200);
+  stage(`${listingStage}-status`);
   expect(listing.status()).toBe(200);
+  stage(`${listingStage}-content`);
   const body = (await listing.json()) as { items?: { slug?: string }[] };
   expect(Array.isArray(body.items)).toBe(true);
   return {
@@ -946,6 +1000,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   context,
   page,
 }) => {
+  stage("showcase-setup");
   await pinEnglish(context);
   const counters = newDiagnosticCounters();
   const slug = `showcase-${crypto.randomUUID().slice(0, 8)}`;
@@ -960,8 +1015,10 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   pageDiagnosticsAttacher(counters, hooks)(page);
 
   try {
+    stage("showcase-login-navigation");
     await page.goto("/login");
     await waitForHydration(page);
+    stage("showcase-login-submit");
     await page.getByRole("textbox", { name: "Email" }).fill(SEED_EMAIL);
     await page
       .getByRole("textbox", { name: "Password", exact: true })
@@ -972,6 +1029,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     );
     loggedIn = true;
 
+    stage("showcase-create-resume");
     const created = await createBlankResume(
       page,
       `Showcase proof ${crypto.randomUUID()}`,
@@ -982,6 +1040,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     );
     resumeID = created.metadata.id;
     const id = resumeID;
+    stage("showcase-complete-resume");
     await page.locator('[data-action="open-document"]').press("Enter");
     await page.getByLabel("Full name").fill("Showcase proof resume");
     await page.getByLabel("Full name").press("Tab");
@@ -1006,6 +1065,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
 
     // AC-SHOW-001: the switch is off by default and needs a public resume.
     let dialog = await openPublishDialog(page);
+    stage("showcase-opt-in-controls");
     await dialog.getByLabel("Slug", { exact: true }).fill(slug);
     const showcaseSwitch = dialog.getByLabel("Show in the community showcase", {
       exact: true,
@@ -1030,6 +1090,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       .selectOption("backend");
     await submitPublishDialog(page, dialog, id);
 
+    stage("showcase-opt-in-message");
     // AC-SHOW-001, AC-SHOW-006: the opt-in lists the resume at once; the
     // dialog shows the Listed line.
     const status = dialog.getByTestId("publish-showcase-status");
@@ -1039,7 +1100,9 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await installPublicGuards(publicContext, counters);
     const anonymous = await publicContext.newPage();
     pageDiagnosticsAttacher(counters, hooks)(anonymous);
+    stage("showcase-initial-listing");
     const listed = await readListing(anonymous);
+    stage("showcase-listed-content");
     expect(listed.slugs).toContain(slug);
     await expect(
       anonymous.locator(`[data-showcase-slug="${slug}"]`),
@@ -1047,6 +1110,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await expect(anonymous.locator('[data-state="empty"]')).toHaveCount(0);
 
     // AC-SHOW-008, AC-SHOW-014: delivery rules of the page and the listing.
+    stage("showcase-delivery-headers");
     expect(listed.document.headers()["x-robots-tag"]).toBe("noindex, nofollow");
     expect(Object.keys(await listed.document.allHeaders())).not.toContain(
       "set-cookie",
@@ -1063,6 +1127,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
 
     // AC-SHOW-001, AC-SHOW-014: turning on sign in to view ends the opt-in
     // and the next listing read omits the resume.
+    stage("showcase-sign-in-controls");
     await signInSwitch.press("Space");
     await expect(showcaseSwitch).not.toBeChecked();
     await expect(showcaseSwitch).toBeDisabled();
@@ -1070,6 +1135,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       "Not available while Require sign-in to view is on.",
     );
     await submitPublishDialog(page, dialog, id);
+    stage("showcase-sign-in-reload");
     await page.reload();
     await waitForHydration(page);
     dialog = await openPublishDialog(page);
@@ -1080,57 +1146,78 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       "Not available while Require sign-in to view is on.",
     );
     await expect(dialog.getByTestId("publish-showcase-status")).toHaveCount(0);
+    stage("showcase-sign-in-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
     // Turning sign in to view off leaves the switch off and the resume
     // unlisted (AC-SHOW-014).
+    stage("showcase-sign-in-off-controls");
     await signInSwitch.press("Space");
     await expect(signInSwitch).not.toBeChecked();
     await expect(showcaseSwitch).toBeEnabled();
     await expect(showcaseSwitch).not.toBeChecked();
     await submitPublishDialog(page, dialog, id);
+    stage("showcase-sign-in-off-reload");
     await page.reload();
     await waitForHydration(page);
     dialog = await openPublishDialog(page);
     await expect(showcaseSwitch).toBeEnabled();
     await expect(showcaseSwitch).not.toBeChecked();
+    stage("showcase-sign-in-off-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
     // AC-SHOW-001, AC-SHOW-006: opting in again lists the resume at once;
     // unpublishing ends the opt-in and publishing again starts off.
+    stage("showcase-reopt-in-controls");
     await showcaseSwitch.press("Space");
     await expect(showcaseSwitch).toBeChecked();
     await submitPublishDialog(page, dialog, id);
+    stage("showcase-reopt-in-message");
     await expect(dialog.getByTestId("publish-showcase-status")).toContainText(
       "Shown in the community showcase.",
     );
+    stage("showcase-reopt-in-listing");
     expect((await readListing(anonymous)).slugs).toContain(slug);
+    stage("showcase-unpublish-controls");
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeDisabled();
     await submitPublishDialog(page, dialog, id);
     // AC-SHOW-014: unpublishing removes the resume from the next read.
+    stage("showcase-unpublished-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
+    stage("showcase-republish-controls");
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeEnabled();
     await expect(showcaseSwitch).not.toBeChecked();
     await submitPublishDialog(page, dialog, id);
+    stage("showcase-republish-reload");
     await expect(dialog.getByTestId("publish-showcase-status")).toHaveCount(0);
     await page.reload();
     await waitForHydration(page);
     dialog = await openPublishDialog(page);
     await expect(publicSwitch).toBeChecked();
     await expect(showcaseSwitch).not.toBeChecked();
+    stage("showcase-republished-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
+  } catch (error) {
+    failedStage = currentStage;
+    throw error;
   } finally {
+    stage("showcase-cleanup-public-context");
     if (publicContext !== undefined) await publicContext.close();
     if (resumeID !== undefined && loggedIn) {
+      stage("showcase-cleanup-resume");
       await page.goto(`${ORIGIN}/app/resumes`);
       await deleteRecordedResume(page, resumeID);
     }
   }
 
+  stage("showcase-final-certificate-errors");
   expect(counters.certificateErrors).toBe(0);
+  stage("showcase-final-console-errors");
   expect(counters.consoleErrors).toBe(0);
+  stage("showcase-final-external-requests");
   expect(counters.externalRequests).toBe(0);
+  stage("showcase-final-page-errors");
   expect(counters.pageErrors).toBe(0);
 });

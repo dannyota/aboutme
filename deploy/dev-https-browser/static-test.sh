@@ -1164,8 +1164,9 @@ mcp-sdk-fail)
   ;;
 publish-fail)
   printf '%s\n' 'browser-secret-must-not-escape'
-  printf '%s\n' 'publish-stage:login-form'
-  printf '%s\n' 'publish-stage:credentials-filled'
+  printf '%s\n' 'publish-stage:signed-out'
+  printf '%s\n' 'publish-stage:fail-showcase-initial-listing-status-wrong-status'
+  printf '%s\n' 'publish-stage:showcase-cleanup'
   exit 1
   ;;
 public-fail)
@@ -1669,10 +1670,11 @@ if output=$(FAKE_BROWSER_MODE=publish-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside publish 2>&1); then
   fail 'publish browser failure was accepted'
 fi
-grep -Fxq 'dev-https-browser: publish-stage:credentials-filled' <<<"$output" ||
-  fail 'publish failure did not expose its last bounded stage'
-if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
-  fail 'publish failure leaked volatile output'
+grep -Fxq 'dev-https-browser: publish-stage:fail-showcase-initial-listing-status-wrong-status' <<<"$output" ||
+  fail 'publish failure did not expose its bounded failure marker'
+if grep -Fq 'browser-secret-must-not-escape' <<<"$output" ||
+  grep -Fq 'publish-stage:showcase-cleanup' <<<"$output"; then
+  fail 'publish failure exposed volatile output or a later stage'
 fi
 
 reset_inside
