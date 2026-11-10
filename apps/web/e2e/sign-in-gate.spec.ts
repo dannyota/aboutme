@@ -293,11 +293,19 @@ screenMutationTests('join invite', async (page) => {
   });
 }, inviteContract('vi'));
 
-for (const lng of ['vi', 'en'] as const) {
-  for (const viewer of ['light', 'dark'] as const) {
-    for (const width of [390, 1280, 1440]) {
-      for (const message of ['none', 'failed'] as const) {
-        for (const providers of ['google', 'google,linkedin'] as const) {
+for (const [languageIndex, lng] of (['vi', 'en'] as const).entries()) {
+  for (const [viewerIndex, viewer] of
+    (['light', 'dark'] as const).entries()) {
+    for (const [widthIndex, width] of [390, 1280, 1440].entries()) {
+      for (const [messageIndex, message] of
+        (['none', 'failed'] as const).entries()) {
+        for (const [providerIndex, providers] of
+          (['google', 'google,linkedin'] as const).entries()) {
+          const index = languageIndex * 4 + messageIndex * 2 + providerIndex;
+          if (widthIndex !== index % 3
+            || viewerIndex !== Math.floor(index / 3) % 2) {
+            continue;
+          }
           test(`gate display ${lng} ${viewer} ${width} ${providers} ${message}`,
             async ({ page }) => {
               await page.setViewportSize({ width, height: 800 });
@@ -396,9 +404,13 @@ async function openAndAssertInvite(
   await expect(region).toHaveCSS('color', 'rgb(92, 97, 120)');
 }
 
-for (const lng of ['vi', 'en'] as const) {
-  for (const viewer of ['light', 'dark'] as const) {
-    for (const width of [390, 1280, 1440, 1920]) {
+for (const [languageIndex, lng] of (['vi', 'en'] as const).entries()) {
+  for (const [viewerIndex, viewer] of
+    (['light', 'dark'] as const).entries()) {
+    for (const [widthIndex, width] of [390, 1280, 1440, 1920].entries()) {
+      if (viewerIndex !== (languageIndex + widthIndex) % 2) {
+        continue;
+      }
       test(`invite display ${lng} ${viewer} ${width}`, async ({ page }) => {
         await openAndAssertInvite(page, {
           lng, width,

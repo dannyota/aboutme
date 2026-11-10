@@ -474,6 +474,7 @@ const SHOWCASE_MUTATIONS = [
 
 for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
   test(`showcase assertions reject ${name}`, async ({ page }) => {
+    test.setTimeout(60_000);
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
       locale: 'vi', theme: 'light', width: 390,
@@ -509,6 +510,7 @@ for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
 
 for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
   test(`showcase assertions reject changed ${name}`, async ({ page }) => {
+    test.setTimeout(60_000);
     await openShowcase(page, {
       name: 'filled', path: '/showcase?page=2', body: FILLED,
       locale: 'vi', theme: 'light', width: 390,

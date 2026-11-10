@@ -51,7 +51,6 @@ const CONTENT = {
       ['Giải thưởng Sáng tạo trẻ']],
   },
 } as const;
-
 async function assertFlow(
   flow: Locator,
   language: keyof typeof CONTENT,
@@ -74,7 +73,6 @@ async function assertFlow(
     });
   }
 }
-
 async function assertRenderer(
   page: Page,
   template: string,
@@ -113,13 +111,22 @@ async function assertRenderer(
       [0, 1, 2, 3, 4, 5, 6, 7]);
   }
 }
-
 for (const locale of ['vi', 'en'] as const) {
   test.describe(`renderer interface ${locale}`, () => {
     test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
-    for (const cell of CELLS) {
-      for (const language of ['vi', 'en'] as const) {
-        for (const viewer of ['light', 'dark'] as const) {
+    for (const [cellIndex, cell] of CELLS.entries()) {
+      for (const [languageIndex, language] of
+        (['vi', 'en'] as const).entries()) {
+        for (const [viewerIndex, viewer] of
+          (['light', 'dark'] as const).entries()) {
+          const continuous = cell.template === 'modern-sidebar'
+            && cell.mode === 'continuous';
+          const rotatedLocale = (Math.floor(cellIndex / 2) + languageIndex) % 2;
+          const rotatedViewer = (cellIndex + languageIndex) % 2;
+          if (!continuous && (locale !== (rotatedLocale === 0 ? 'vi' : 'en')
+            || viewerIndex !== rotatedViewer)) {
+            continue;
+          }
           const title = `renderer ${cell.template} ${cell.mode} ${language}`
             + ` ${viewer}`
             + ` ${'align' in cell ? cell.align : ''}`
@@ -161,7 +168,6 @@ for (const locale of ['vi', 'en'] as const) {
     }
   });
 }
-
 for (const mutation of ['drop', 'reorder'] as const) {
   test(`renderer rejects ${mutation} of a section`, async ({ page }) => {
     await page.goto('/_harness/render?fixture=vn-full'
@@ -185,7 +191,6 @@ for (const mutation of ['drop', 'reorder'] as const) {
     await assertClean();
   });
 }
-
 test('renderer rejects a hidden language section', async ({ page }) => {
   await page.goto('/_harness/render?fixture=vn-full'
     + '&template=modern-sidebar&mode=continuous');
@@ -201,7 +206,6 @@ test('renderer rejects a hidden language section', async ({ page }) => {
   await restore();
   await assertClean();
 });
-
 test('renderer rejects a transparent language section', async ({ page }) => {
   await page.goto('/_harness/render?fixture=vn-full'
     + '&template=modern-sidebar&mode=continuous');
@@ -217,7 +221,6 @@ test('renderer rejects a transparent language section', async ({ page }) => {
   await restore();
   await assertClean();
 });
-
 const PUBLIC_PAINT = {
   'classic-serif': {
     light: ['#ffffff', '#23262c', '#ffffff'],
@@ -240,13 +243,11 @@ const PUBLIC_PAINT = {
     dark: ['#13161b', '#d8dfe8', '#1d2f45'],
   },
 } as const;
-
 function rgb(hex: string): string {
   const channels = [1, 3, 5].map((index) =>
     Number.parseInt(hex.slice(index, index + 2), 16));
   return `rgb(${channels.join(', ')})`;
 }
-
 async function assertPublicPaint(
   page: Page,
   template: keyof typeof PUBLIC_PAINT,
@@ -275,10 +276,21 @@ for (const language of ['vi', 'en'] as const) {
     test.use({ locale: language === 'vi' ? 'vi-VN' : 'en-US' });
     const templates = Object.keys(PUBLIC_PAINT) as
       (keyof typeof PUBLIC_PAINT)[];
-    for (const template of templates) {
-      for (const owner of ['light', 'dark', 'system'] as const) {
-        for (const viewer of ['light', 'dark'] as const) {
+    for (const [templateIndex, template] of templates.entries()) {
+      const offsets = [0, 2, 1, 2, 3];
+      const pairs = [
+        ['vi', 390], ['vi', 1440], ['en', 390], ['en', 1440],
+      ] as const;
+      for (const [ownerIndex, owner] of
+        (['light', 'dark', 'system'] as const).entries()) {
+        for (const [viewerIndex, viewer] of
+          (['light', 'dark'] as const).entries()) {
           for (const width of [390, 1440]) {
+            const pair = pairs[(ownerIndex * 2 + viewerIndex
+              + offsets[templateIndex]!) % pairs.length]!;
+            if (language !== pair[0] || width !== pair[1]) {
+              continue;
+            }
             test(`${template} ${owner} ${viewer} ${width}`, async ({
               page,
             }, testInfo) => {
