@@ -7,7 +7,7 @@ import {
 import { writeFile } from 'node:fs/promises';
 
 import { measurePdfLayout } from './display-assertions';
-import { applyStyleMutation, mutationTest } from './style-mutation';
+import { applyStyleMutation } from './style-mutation';
 import { assertPrintDom } from './pdf-fonts';
 import { assertOverflowTextStyle } from './pdf-text-style';
 import { overflowPdfChunks } from './pdf-input-content';
@@ -414,8 +414,7 @@ test('a section heading stays with the entry and its first body fragment',
     expect(external).toEqual([]);
   });
 
-mutationTest(
-  'header-only entries break within both columns without blank pages',
+test('header-only entries break within both columns without blank pages',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -460,7 +459,7 @@ for (const rule of ['orphan', 'widow'] as const) {
   const title = rule === 'widow'
     ? 'widow rules protect two-line and longer paragraphs'
     : 'the orphan rule moves a two-line paragraph';
-  mutationTest(title, async ({ page }) => {
+  test(title, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
     expect((await page.goto(`${PROBE_ROUTE}${rule}`))?.ok())
