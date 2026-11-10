@@ -8,8 +8,8 @@ closes the remaining gaps and is pending.
 
 ## Decision and authority
 
-Test display with rules, not pictures. A pixel comparison fails on any change,
-including harmless differences between machines, and never says what broke. A
+Test display with rules, not pictures. A pixel comparison can fail on harmless
+rendering differences between machines and never names the rule that broke. A
 display assertion states one rule the product must keep, such as "columns do not
 overlap" or "page two repeats the sidebar tint", and names the rule that failed.
 
@@ -216,7 +216,8 @@ glyph bounds, paint and images, widgets).
   class it relies on. A mutation for a spec's fixture may live in a sibling
   spec. A new display assertion lands with its mutation test.
 - Each mutation test shows three things: the clean page passes; the defect took
-  effect, as a changed computed value or changed PDF output; and the named
+  effect, as changed DOM content, order, attributes or accessibility state,
+  changed computed style or geometry, or changed PDF output; and the named
   assertion fails. A setup crash or an unspecific thrown error does not count.
 - No per-image record, second platform, or replay against the old comparison is
   required.
@@ -308,18 +309,19 @@ the test fixtures. Showcase test card images become ephemeral fixtures.
 
 Landed by 2026-11-10: assertions and mutation tests in every inventory spec, and
 the product image generator, validator and manifest hashes. Coverage is partial.
-Known gaps: the guide pages check neither paragraph containment nor colors;
-`verify.spec.ts` mutates only overlap; `print.spec.ts` relies on mutations in
-sibling specs that are not yet mapped to it; `style-mutation.ts` skips its
-change check for string expectations; some mutation tests accept any thrown
-error. Pixel comparisons still run beside the assertions. Three steps remain,
-and none waits on another platform or tool.
+Known gaps, not a complete list: the guide pages check neither paragraph
+containment, colors nor typography, lack 1440 px cells, and enlarge the viewport
+against the fixed-height rule; `verify.spec.ts` mutates only overlap;
+`print.spec.ts` relies on mutations in sibling specs that are not yet mapped to
+it; `style-mutation.ts` skips its change check for string expectations; some
+mutation tests accept any thrown error. Pixel comparisons still run beside the
+assertions. Three steps remain, and none waits on another platform or tool.
 
-| Step                      | Lane and paths                                                                                                                                                                       | Done when                                                                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                                                                                                            | Each inventory row maps to its shared invariants, its surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
-| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`, `scripts/test/makefile-safety-test.sh`; shared: `Makefile` diagnostics trap; devops: `.github/workflows/ci.yml`; frontend capture | A failed case uploads only that case; a passing run uploads the eight review images; a failed optional capture cannot change the gate result      |
-| 3. Delete the comparisons | frontend, devops, tooling and the shared `Makefile`, in one pull request                                                                                                             | Steps 1 and 2 have landed; hosted CI is green on the exact commit                                                                                 |
+| Step                      | Lane and paths                                                                                                                                                                                                                                                                                      | Done when                                                                                                                                         |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Coverage audit         | frontend: `apps/web/e2e/`                                                                                                                                                                                                                                                                           | Each inventory row maps to its shared invariants, its surface or PDF checks, and one mutation test per assertion class; gaps are filled; CI green |
+| 2. Diagnostics and review | tooling: `scripts/collect-browser-diagnostics.py`, `scripts/test/makefile-safety-test.sh`; shared: `Makefile` diagnostics trap; devops: `.github/workflows/ci.yml`; frontend: capture helpers and owning specs in `apps/web/e2e/`, with `scripts/web-e2e-source.manifest` regenerated for new files | A failed case uploads only that case; a passing run uploads the eight review images; a failed optional capture cannot change the gate result      |
+| 3. Delete the comparisons | frontend, devops, tooling and the shared `Makefile`, in one pull request                                                                                                                                                                                                                            | Steps 1 and 2 have landed; hosted CI is green on the exact commit                                                                                 |
 
 Step 3 deletes `apps/web/e2e/baselines/` and `apps/web/e2e/print-baselines/`,
 `verifyScreenshot`, both `compareRaster` helpers, the `toHaveScreenshot`
