@@ -87,7 +87,7 @@ function checkSelection(ci) {
   const preflight = ci.jobs.preflight;
   assert.equal(preflight.outputs.selection, "${{ steps.selection.outputs.selection }}");
   assert.equal(preflight.outputs.mutations, "${{ steps.selection.outputs.mutations }}");
-  assert.deepEqual(preflight.permissions, { contents: "read", checks: "read" });
+  assert.deepEqual(preflight.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(ci.on.schedule, [{ cron: "17 19 * * *" }]);
   const index = preflight.steps.findIndex((step) => step.id === "selection");
   const comparison = preflight.steps.findIndex((step) => step.id === "comparison");
@@ -97,7 +97,7 @@ function checkSelection(ci) {
   assert.equal(step.env.BASE_SHA, "${{ steps.comparison.outputs.base_sha }}");
   assert.equal(step.env.BEFORE_SHA, "${{ github.event.before }}");
   assert.equal(step.env.GH_TOKEN, "${{ github.token }}");
-  assert.match(step.run, /gh api "repos\/\$GITHUB_REPOSITORY\/commits\/\$BEFORE_SHA\/check-runs\?check_name=ci"/);
+  assert.match(step.run, /gh api "repos\/\$GITHUB_REPOSITORY\/actions\/workflows\/ci\.yml\/runs\?head_sha=\$BEFORE_SHA&event=push&per_page=50"/);
   assert.match(step.run, /python3 -I scripts\/ci-path-selection.py/);
   for (const name of proseJobs) {
     assert.deepEqual(ci.jobs[name].needs, ["preflight"], `${name}: required preflight`);
@@ -222,14 +222,18 @@ test("web selection checks both rename paths and fails closed on errors", () => 
   });
 });
 
-test("push selection requires a successful previous ci check", () => {
+test("push selection requires a successful previous main ci workflow run", () => {
   const step = readWorkflow("ci").jobs.preflight.steps.find((item) => item.id === "selection");
   for (const [response, before, expected] of [
-    ['{"check_runs":[{"conclusion":"success"}]}', "a".repeat(40), "no-web"],
-    ['{"check_runs":[{"conclusion":"failure"}]}', "a".repeat(40), "full"],
+    ['{"workflow_runs":[{"conclusion":"success","path":".github/workflows/ci.yml","head_branch":"main","event":"push"}]}', "a".repeat(40), "no-web"],
+    ['{"workflow_runs":[{"conclusion":"failure","path":".github/workflows/ci.yml","head_branch":"main","event":"push"}]}', "a".repeat(40), "full"],
+    ['{"workflow_runs":[{"conclusion":"success","path":".github/workflows/other.yml","head_branch":"main","event":"push"}]}', "a".repeat(40), "full"],
+    ['{"workflow_runs":[{"conclusion":"success","path":".github/workflows/ci.yml","head_branch":"main","event":"pull_request"}]}', "a".repeat(40), "full"],
+    ['{"workflow_runs":["invalid"]}', "a".repeat(40), "full"],
+    ['{"workflow_runs":[]}', "a".repeat(40), "full"],
     ['{"check_runs":[]}', "a".repeat(40), "full"],
     ["invalid", "a".repeat(40), "full"],
-    ['{"check_runs":[{"conclusion":"success"}]}', "0".repeat(40), "full"],
+    ['{"workflow_runs":[{"conclusion":"success","path":".github/workflows/ci.yml","head_branch":"main","event":"push"}]}', "0".repeat(40), "full"],
     [null, "a".repeat(40), "full"],
   ]) {
     withRepository(({ directory }) => {
@@ -241,7 +245,7 @@ test("push selection requires a successful previous ci check", () => {
           BASE_SHA: before, FIXTURE_RESPONSE: response ?? "", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\nmutations=${response === null || response === "invalid" ? "1" : "0"}\n`);
+      assert.equal(readFileSync(output, "utf8"), `selection=${expected}\nmutations=${response === null || response === "invalid" || response.startsWith('{"check_runs"') ? "1" : "0"}\n`);
     });
   }
 });
@@ -258,7 +262,7 @@ test("selector classifies real Git paths and every event conservatively", () => 
     ["docs/plans/line\nbreak.md", "full"], ["docs/plans/tab\tname.md", "full"],
     ["Docs/plans/entry.md", "no-web"], ["docs/plans/entry.MD", "no-web"],
     [".github/workflows/ci.yml", "full"], ["scripts/entry.py", "no-web"],
-    ["Makefile", "full"], [".tool-versions", "full"], ["package-lock.json", "full"],
+    ["Makefile", "full"], [".tool-versions", "full"], [".gitignore", "full"], ["package-lock.json", "full"],
     ["apps/web/generated.ts", "full"], ["unknown", "no-web"],
   ]) {
     withRepository(({ directory, git, put, commit }) => {
