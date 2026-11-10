@@ -625,7 +625,7 @@ test('guide rejects clipping in an instruction ancestor', async ({ page }) => {
     guideContract('vi', 'light'), 'containment'),
   () => applyStyleMutation(page.getByTestId('guide-can').locator('ul'), {
     height: '24px', overflow: 'hidden',
-  }), 'Screen ancestor clipping.');
+  }), 'Screen containment.');
 });
 
 for (const [selector, message] of [

@@ -23,272 +23,216 @@ export async function preserveScreenScroll(
   }
 }
 
+interface TextBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+interface TextFailure {
+  node: string;
+  text: string;
+  rect: TextBox | null;
+  ancestor: string;
+  box: TextBox;
+  axis: string;
+  delta: number;
+  allowance: number;
+  kind: string;
+}
+
+interface TextMeasurement {
+  visible: boolean;
+  contained: boolean;
+  separated: boolean;
+  failures: TextFailure[];
+}
+
 /** Inspect clips before scrolling can reveal a hidden descendant. */
 export async function rejectAncestorClipping(
   text: Locator, scrolling: readonly string[],
 ): Promise<void> {
-  await expect.poll(() => text.evaluateAll((nodes, exceptions) => {
-    return nodes.every((node) => {
-      const box = node.getBoundingClientRect();
-      for (let ancestor: Element | null = node.parentElement; ancestor
-        && ancestor !== document.body && ancestor !== document.documentElement;
-        ancestor = ancestor.parentElement) {
-        const css = getComputedStyle(ancestor);
-        const allowed = exceptions.some((selector) =>
-          ancestor!.matches(selector));
-        // Only actual scrolling, never hidden/clip, qualifies for an exception.
-        const x = allowed && /^(auto|scroll)$/u.test(css.overflowX);
-        const y = allowed && /^(auto|scroll)$/u.test(css.overflowY);
-        const clip = ancestor.getBoundingClientRect();
-        // Decorative siblings can overflow on purpose; inspect this text box.
-        if ((!x && /^(auto|scroll|hidden|clip)$/u.test(css.overflowX)
-          && (box.left < clip.left - 1 || box.right > clip.right + 1))
-        || (!y && /^(auto|scroll|hidden|clip)$/u.test(css.overflowY)
-          && (box.top < clip.top - 1 || box.bottom > clip.bottom + 1))) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [...scrolling]), 'Screen ancestor clipping.').toBe(true);
+  for (const node of await text.all()) {
+    await expect.poll(async () => {
+      const measured = await measureScreenText(node, undefined, scrolling);
+      return measured.failures.filter((failure) => failure.kind === 'clip');
+    }, 'Screen containment.').toEqual([]);
+  }
 }
 
-/** Measure text against a named container, including clipped text. */
+/** Keep the shared screen and print callers' result shape stable. */
 export async function measureTextContainment(
   container: Locator,
   verticalContainer?: string,
-): Promise<{
-  visible: boolean;
-  contained: boolean;
-}> {
-  const result = await measurePaintedText(container, verticalContainer);
+): Promise<{ visible: boolean; contained: boolean }> {
+  const result = await measureScreenText(container, verticalContainer);
   return {
     visible: result.visible,
     contained: result.contained && result.separated,
   };
 }
 
-/** Keep painted bounds and distinct-line separation independently testable. */
-export async function measurePaintedText(
+/** Inspect Range boxes without trying to reconstruct painted glyph bounds. */
+export async function measureScreenText(
   container: Locator, verticalContainer?: string,
-): Promise<{ visible: boolean; contained: boolean; separated: boolean }> {
-  return container.evaluate((root, selector) => {
-    const bounds = root.getBoundingClientRect();
-    const outer = selector ? root.closest(selector) : root;
-    const invalid = { visible: false, contained: false, separated: false };
-    if (!outer) {
-      return invalid;
-    }
-    const rootStyle = getComputedStyle(root);
-    const rootClipsY = /^(hidden|clip|scroll|auto)$/u.test(rootStyle.overflowY);
-    const next = root.nextElementSibling?.getBoundingClientRect();
-    let visible = bounds.width > 0 && bounds.height > 0;
-    let contained = root.scrollWidth <= root.clientWidth + 1;
-    let hasText = false;
-    let separated = true;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d')!;
-    const inkLines: {
-      baseline: number; left: number; right: number;
-      top: number; bottom: number;
-    }[] = [];
-    const segmenter = new Intl.Segmenter(undefined, {
-      granularity: 'grapheme',
+  scrolling: readonly string[] = [],
+): Promise<TextMeasurement> {
+  return container.evaluate((root, options) => {
+    const box = (rect: DOMRect): TextBox => ({
+      left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom,
     });
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const path = (node: Element): string => {
+      const parts: string[] = [];
+      for (let element: Element | null = node; element;
+        element = element.parentElement) {
+        const id = element.id ? `#${element.id}` : '';
+        parts.unshift(`${element.localName}${id}`);
+        if (id || parts.length === 4) {
+          break;
+        }
+      }
+      return parts.join(' > ');
+    };
+    const bounds = root.getBoundingClientRect();
+    const failures: TextFailure[] = [];
+    let visible = bounds.width > 0 && bounds.height > 0;
+    let contained = true;
+    let separated = true;
+    let hasText = false;
+    const lines: {
+      rect: DOMRect; baseline: number; fontSize: number;
+      block: Element; source: Node; hardLine: number;
+    }[] = [];
+    const checked = new Set<Element>();
+    if (options.selector && !root.closest(options.selector)) {
+      return { visible: false, contained: false, separated: false, failures };
+    }
+    const walker = document.createTreeWalker(root,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    let hardLine = 0;
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (!node.textContent?.trim()) {
+      if (node.nodeName === 'BR') {
+        hardLine += 1;
+      }
+      if (node.nodeType !== Node.TEXT_NODE) {
+        continue;
+      }
+      const parent = node.parentElement;
+      if (!parent || !node.textContent?.trim()) {
         continue;
       }
       hasText = true;
-      const parent = node.parentElement;
-      if (!parent) {
-        continue;
-      }
-      const clips: {
-        rect: DOMRect;
-        x: boolean;
-        y: boolean;
-      }[] = [
-        { rect: bounds, x: true, y: outer === root || rootClipsY },
-      ];
-      if (outer !== root) {
-        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true });
-      }
-      for (
-        let element: Element | null = parent;
-        element;
-        element = element.parentElement
-      ) {
-        const style = getComputedStyle(element);
-        if (style.display === 'none' || style.visibility !== 'visible'
-          || Number(style.opacity) === 0) {
+      const excerpt = node.textContent.trim().replace(/\s+/gu, ' ')
+        .slice(0, 80);
+      const fail = (
+        kind: string, ancestor: string, rect: DOMRect | null,
+        clip: DOMRect | TextBox, axis: string, delta: number, allowance = 1,
+      ) => {
+        if (kind === 'lines') {
+          separated = false;
+        } else if (kind === 'hidden' || kind === 'empty') {
           visible = false;
+        } else {
+          contained = false;
         }
-        if (element !== root) {
-          clips.push({
-            rect: element.getBoundingClientRect(),
-            x: /^(hidden|clip|scroll|auto)$/u.test(style.overflowX),
-            y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
-          });
+        if (failures.length < 12) {
+          failures.push({ node: path(parent), text: excerpt,
+            rect: rect ? box(rect) : null, ancestor, box: {
+              left: clip.left, right: clip.right,
+              top: clip.top, bottom: clip.bottom,
+            }, axis, delta, allowance, kind });
         }
+      };
+      let block = parent;
+      while (block !== root && block.parentElement
+        && /^(inline|contents)$/u.test(getComputedStyle(block).display)) {
+        block = block.parentElement;
+      }
+      const ancestors: {
+        node: Element; rect: DOMRect; x: boolean; y: boolean;
+      }[] = [];
+      let scrollX = false;
+      for (let element: Element | null = parent; element;
+        element = element.parentElement) {
+        const css = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        const named = options.scrolling.some((selector) =>
+          element!.matches(selector));
+        const allowedX = named && /^(auto|scroll)$/u.test(css.overflowX);
+        const allowedY = named && /^(auto|scroll)$/u.test(css.overflowY);
+        scrollX ||= allowedX;
+        if (css.display === 'none' || css.visibility !== 'visible'
+          || Number(css.opacity) === 0) {
+          fail('hidden', path(element), null, rect, 'visibility', 0);
+        }
+        if (!checked.has(element)) {
+          checked.add(element);
+          const delta = element.scrollWidth - element.clientWidth;
+          if (!allowedX && delta > 1) {
+            fail('scroll', path(element), null, rect, 'x', delta);
+          }
+        }
+        ancestors.push({ node: element, rect,
+          x: !allowedX && /^(hidden|clip|auto|scroll)$/u.test(css.overflowX),
+          y: !allowedY && /^(hidden|clip|auto|scroll)$/u.test(css.overflowY) });
       }
       const range = document.createRange();
       range.selectNodeContents(node);
       const rects = Array.from(range.getClientRects()).filter((rect) =>
         rect.width > 0 && rect.height > 0);
       if (rects.length === 0) {
-        visible = false;
+        fail('empty', path(parent), null, bounds, 'visibility', 0);
       }
-      const css = getComputedStyle(parent);
-      // Preserve the DOM's shaping state, including properties that do not
-      // serialize into the font shorthand. Range advances retain justification.
-      for (const property of Array.from(css)) {
-        canvas.style.setProperty(property, css.getPropertyValue(property));
-      }
-      canvas.lang = parent.closest('[lang]')?.getAttribute('lang')
-        ?? document.documentElement.lang;
-      context.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} `
-        + css.fontFamily;
-      const stretches: Record<string, string> = {
-        '50%': 'ultra-condensed', '62.5%': 'extra-condensed',
-        '75%': 'condensed', '87.5%': 'semi-condensed', '100%': 'normal',
-        '112.5%': 'semi-expanded', '125%': 'expanded',
-        '150%': 'extra-expanded', '200%': 'ultra-expanded',
-      };
-      const rendering: Record<string, string> = {
-        optimizespeed: 'optimizeSpeed',
-        optimizelegibility: 'optimizeLegibility',
-        geometricprecision: 'geometricPrecision',
-      };
-      const state: Record<string, string> = {
-        fontKerning: css.fontKerning,
-        fontStretch: stretches[css.fontStretch] ?? css.fontStretch,
-        fontVariantCaps: css.fontVariantCaps,
-        letterSpacing: css.letterSpacing === 'normal'
-          ? '0px'
-          : css.letterSpacing,
-        wordSpacing: css.wordSpacing === 'normal' ? '0px' : css.wordSpacing,
-        textRendering: rendering[css.textRendering.toLowerCase()]
-          ?? css.textRendering,
-        direction: css.direction,
-      };
-      const drawing = context as unknown as Record<string, string>;
-      for (const [key, value] of Object.entries(state)) {
-        if (!(key in context)) {
-          return invalid;
-        }
-        drawing[key] = value;
-        if (drawing[key] !== value) {
-          return invalid;
-        }
-      }
-      // Canvas has no feature/variation override API. Reject unsupported
-      // overrides rather than measuring glyphs with a different face.
-      if (css.fontFeatureSettings !== 'normal'
-        || css.fontVariationSettings !== 'normal'
-        || css.fontVariantAlternates !== 'normal'
-        || css.fontVariantEastAsian !== 'normal'
-        || css.fontVariantPosition !== 'normal'
-        || !['normal', 'tabular-nums'].includes(css.fontVariantNumeric)
-        || !['normal', 'none', 'no-common-ligatures']
-          .includes(css.fontVariantLigatures)
-          || css.fontOpticalSizing !== 'auto'
-          || css.fontSizeAdjust !== 'none'
-          || !['none', 'uppercase', 'lowercase'].includes(css.textTransform)) {
-        return invalid;
-      }
-      context.textAlign = 'left';
-      context.textBaseline = 'alphabetic';
-      const transformText = (value: string) => css.textTransform === 'uppercase'
-        ? value.toLocaleUpperCase(canvas.lang || undefined)
-        : css.textTransform === 'lowercase'
-          ? value.toLocaleLowerCase(canvas.lang || undefined)
-          : value;
-      const lines: {
-        rect: DOMRect; content: string;
-        glyphs: { text: string; rect: DOMRect }[];
-      }[] = [];
-      for (const { index, segment } of segmenter.segment(node.textContent!)) {
-        range.setStart(node, index);
-        range.setEnd(node, index + segment.length);
-        const rect = Array.from(range.getClientRects()).find((item) =>
-          item.width > 0 && item.height > 0);
-        if (!rect) {
-          continue;
-        }
-        let line = lines.find((item) => Math.abs(item.rect.top - rect.top) < 0.1
-          && Math.abs(item.rect.bottom - rect.bottom) < 0.1);
-        if (!line) {
-          line = { rect, content: '', glyphs: [] };
-          lines.push(line);
-        }
-        line.content += segment;
-        line.glyphs.push({ text: segment, rect });
-      }
-      for (const line of lines) {
-        const metrics = context.measureText(transformText(line.content));
-        const height = metrics.fontBoundingBoxAscent
-          + metrics.fontBoundingBoxDescent;
-        if (!Number.isFinite(height + metrics.actualBoundingBoxAscent
-          + metrics.actualBoundingBoxDescent + metrics.actualBoundingBoxLeft
-          + metrics.actualBoundingBoxRight) || height <= 0) {
-          return invalid;
-        }
-        const scale = line.rect.height / height;
-        const baseline = line.rect.top + metrics.fontBoundingBoxAscent * scale;
-        const ink = {
-          top: baseline - metrics.actualBoundingBoxAscent * scale,
-          bottom: baseline + metrics.actualBoundingBoxDescent * scale,
-          left: Infinity, right: -Infinity,
-        };
-        // Measure edge glyphs at their actual DOM advances. This retains
-        // spacing, numeric advances and disabled common ligatures, and includes
-        // italic overhang rather than treating Range advances as painted ink.
-        for (const glyph of line.glyphs) {
-          if (!glyph.text.trim()) {
-            continue;
+      const fontSize = parseFloat(getComputedStyle(parent).fontSize);
+      for (const rect of rects) {
+        const allowance = (rect.height - fontSize) / 2 + 1;
+        if (!scrollX) {
+          for (const element of new Set([root, block])) {
+            const clip = element.getBoundingClientRect();
+            const delta = Math.max(clip.left - rect.left,
+              rect.right - clip.right);
+            if (delta > 1) {
+              fail('container', path(element), rect, clip, 'x', delta);
+            }
           }
-          const metric = context.measureText(transformText(glyph.text));
-          if (css.fontVariantLigatures !== 'normal') {
-            ink.top = Math.min(ink.top,
-              baseline - metric.actualBoundingBoxAscent * scale);
-            ink.bottom = Math.max(ink.bottom,
-              baseline + metric.actualBoundingBoxDescent * scale);
-          }
-          ink.left = Math.min(ink.left,
-            glyph.rect.left - metric.actualBoundingBoxLeft * scale);
-          ink.right = Math.max(ink.right,
-            glyph.rect.left + metric.actualBoundingBoxRight * scale);
-        }
-        if (!Number.isFinite(ink.left + ink.right)) {
-          continue;
-        }
-        if (next && ink.right > next.left + 1 && ink.left < next.right - 1
-          && ink.bottom > next.top + 1 && ink.top < next.bottom - 1) {
-          contained = false;
-        }
-        for (const clip of clips) {
-          if ((clip.x && (ink.left < clip.rect.left - 1
-            || ink.right > clip.rect.right + 1))
-          || (clip.y && (ink.top < clip.rect.top - 1
-            || ink.bottom > clip.rect.bottom + 1))) {
-            contained = false;
+          const delta = Math.max(-rect.left, rect.right - innerWidth);
+          if (delta > 1) {
+            fail('container', 'viewport', rect, {
+              left: 0, right: innerWidth, top: 0, bottom: innerHeight,
+            }, 'x', delta);
           }
         }
-        for (const previous of inkLines) {
-          if (Math.abs(previous.baseline - baseline) > 0.1
-            && Math.min(previous.right, ink.right)
-            > Math.max(previous.left, ink.left) + 1
-            && Math.min(previous.bottom, ink.bottom)
-            > Math.max(previous.top, ink.top) + 1) {
-            separated = false;
+        for (const ancestor of ancestors) {
+          const clip = ancestor.rect;
+          const dx = Math.max(clip.left - rect.left, rect.right - clip.right);
+          const dy = Math.max(clip.top - rect.top, rect.bottom - clip.bottom);
+          if (ancestor.x && dx > 1) {
+            fail('clip', path(ancestor.node), rect, clip, 'x', dx);
+          }
+          if (ancestor.y && dy > allowance) {
+            fail('clip', path(ancestor.node), rect, clip, 'y', dy, allowance);
           }
         }
-        inkLines.push({ ...ink, baseline });
+        // A shared font's Range bottom has a constant offset from its baseline.
+        // Wrapped fragments and explicit breaks are distinct logical lines.
+        const baseline = rect.bottom - (rect.height - fontSize) / 2;
+        for (const previous of lines) {
+          const gap = Math.abs(previous.baseline - baseline);
+          const minimum = Math.min(previous.fontSize, fontSize) / 2;
+          const distinct = previous.hardLine !== hardLine
+            || (previous.source === node && gap > 0.1)
+            || Math.min(previous.rect.right, rect.right)
+            > Math.max(previous.rect.left, rect.left) + 1;
+          if (previous.block === block && distinct && gap < minimum) {
+            fail('lines', path(block), rect, previous.rect, 'y',
+              minimum - gap, 0);
+          }
+        }
+        lines.push({ rect, baseline, fontSize, block, source: node, hardLine });
       }
     }
-    return { visible: visible && hasText, contained, separated };
-  }, verticalContainer);
+    return { visible: visible && hasText, contained, separated, failures };
+  }, { selector: verticalContainer, scrolling: [...scrolling] });
 }

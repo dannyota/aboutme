@@ -140,6 +140,11 @@ async function expectChrome(
   await expect(title).toHaveCSS('font-size', name === 'home'
     ? (width < 1024 ? '48px' : '60px')
     : (width < 640 ? '40px' : '48px'));
+  await expect.poll(() => title.evaluate((node) => {
+    const css = getComputedStyle(node);
+    const line = parseFloat(css.lineHeight) || parseFloat(css.fontSize);
+    return node.getBoundingClientRect().height >= line - 1;
+  }), 'Chrome heading line box.').toBe(true);
   const titleContainer = name === 'home'
     ? '[data-testid="landing-hero"]'
     : '[data-testid="gallery-header"]';
@@ -438,7 +443,9 @@ for (const path of ['/', '/templates'] as const) {
       const restore = await applyStyleMutation(page.locator('h1'), {
         height: '20px', overflow,
       });
-      await expect(assertClean()).rejects.toThrow('Screen containment.');
+      await expect(assertClean()).rejects.toThrow(overflow === 'visible'
+        ? 'Chrome heading line box.'
+        : 'Screen containment.');
       await restore();
       await assertClean();
     });
@@ -557,7 +564,7 @@ for (const kind of ['shadow', 'gradient'] as const) {
       () => applyStyleMutation(page.getByTestId(kind === 'shadow'
         ? 'landing-sheet'
         : 'landing-glow'), kind === 'shadow'
-        ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px' }
+        ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px 0px' }
         : { 'background-image':
             'radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))' }),
       kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome hero gradient.');

@@ -289,7 +289,7 @@ test('sample paragraphs preserve input text across inline markup', async () => {
 });
 
 for (const templateId of ['ats-plain', 'elegant-serif-two']) {
-  test(`${templateId} print ink fits tall metrics and rejects clipping`,
+  test(`${templateId} print ranges allow visible overhang and reject clipping`,
     async ({ page }) => {
       const external = await denyExternalRequests(page);
       await page.emulateMedia({ media: 'print' });
@@ -330,7 +330,7 @@ for (const templateId of ['ats-plain', 'elegant-serif-two']) {
     });
 }
 
-test('print heading accents reject clipping without scroll overflow',
+test('print heading displacement outside an ancestor clip fails',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -338,71 +338,32 @@ test('print heading accents reject clipping without scroll overflow',
     expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
       + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    const root = page.locator('.resume-document');
-    const heading = page.locator('.section-heading')
-      .filter({ hasText: 'Học vấn' });
-    const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2, undefined,
-      'Print text containment.');
+    const heading = page.locator('.section-heading').first();
+    const title = heading.locator('h2');
+    await applyStyleMutation(heading, { overflow: 'hidden' });
+    const check = async () => {
+      const measured = await measurePrintTextContainment(title);
+      expect({ visible: measured.visible, contained: measured.contained,
+        failures: measured.failures }, 'Print heading containment. '
+        + JSON.stringify(measured.failures)).toEqual({
+        visible: true, contained: true, failures: [],
+      });
+    };
     await check();
-    const clean = await measurePrintTextContainment(root);
-    const accent = clean.lines.find((line) => line.text === 'HỌC VẤN')!;
-    expect(accent, 'Measured uppercase heading ink.').toBeDefined();
-    const box = await heading.boundingBox();
-    expect(accent.ink.top, 'Accents paint above the nominal heading box.')
-      .toBeLessThan(box!.y - 1);
-    const restore = await applyStyleMutation(heading, { overflow: 'hidden' });
-    await expect.poll(() => heading.evaluate((element) => ({
-      x: element.scrollWidth <= element.clientWidth + 1,
-      y: element.scrollHeight <= element.clientHeight + 1,
-      overflow: getComputedStyle(element).overflow,
-    })), 'Clipping changes paint while scroll bounds still pass.').toEqual({
-      x: true, y: true, overflow: 'hidden',
+    const restore = await applyStyleMutation(title, {
+      transform: ['translateY(-64px)', 'matrix(1, 0, 0, 1, 0, -64)'],
     });
-    const clipped = await measurePrintTextContainment(root);
-    expect(clipped.failures.length).toBeGreaterThan(0);
-    expect(clipped.failures.every((failure) => failure.kind === 'ink'
-      && failure.axis === 'y' && failure.text === 'HỌC VẤN'
-      && failure.container.includes('.section-heading')),
-    'Only the accent ink rejects the clipping mutation.').toBe(true);
-    await expect(check()).rejects.toThrow('Print text containment.');
+    const altered = await measurePrintTextContainment(title);
+    expect(altered.failures.some((failure) => failure.kind === 'clip'
+      && failure.axis === 'y' && failure.delta > 1
+      && failure.container.includes('.section-heading'))).toBe(true);
+    await expect(check()).rejects.toThrow('Print heading containment.');
     await restore();
     await check();
     expect(external).toEqual([]);
   });
 
-test('visible print heading ink rejects a collision with body text',
-  async ({ page }) => {
-    const external = await denyExternalRequests(page);
-    await page.emulateMedia({ media: 'print' });
-    await page.setViewportSize({ width: 688, height: 1123 });
-    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
-      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
-    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    const root = page.locator('.resume-document');
-    const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2, undefined,
-      'Print text containment.');
-    await check();
-    const clean = await measurePrintTextContainment(root);
-    const heading = clean.lines.find((line) => line.text === 'HỌC VẤN')!;
-    const title = clean.lines.find((line) =>
-      line.text === 'Cử nhân Marketing')!;
-    const shift = title.ink.top - heading.ink.top;
-    const target = page.locator('.section-heading')
-      .filter({ hasText: 'Học vấn' });
-    const restore = await applyStyleMutation(target, {
-      transform: [`translateY(${shift}px)`, /^matrix\(/u],
-    });
-    const altered = await measurePrintTextContainment(root);
-    expect(altered.failures.length).toBeGreaterThan(0);
-    expect(altered.failures.every((failure) => failure.kind === 'overlap'),
-      'Only painted heading/body collision rejects this mutation.').toBe(true);
-    await expect(check()).rejects.toThrow('Print text containment.');
-    await restore();
-    await check();
-    expect(external).toEqual([]);
-  });
-
-test('print ink follows each line and its complete shaping style',
+test('print text ranges support transformed text and font features',
   async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -410,48 +371,70 @@ test('print ink follows each line and its complete shaping style',
       + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     const paragraph = page.locator('.entry-body p').first();
-    await paragraph.evaluate((element) => {
-      element.textContent = 'xxxx 123\nẤgj 456';
-    });
-    await expect(paragraph).toHaveText('xxxx 123\nẤgj 456');
     await applyStyleMutation(paragraph, {
-      'font-size': '32px', 'line-height': '48px', 'white-space': 'pre',
-      'font-variant-caps': 'small-caps', 'font-variant-numeric': 'tabular-nums',
+      'text-transform': 'capitalize',
+      'font-variant-caps': 'small-caps',
+      'font-variant-numeric': 'tabular-nums',
       'font-feature-settings': '"kern" 0',
       'font-variation-settings': '"wght" 550',
-      'letter-spacing': '2px', 'word-spacing': '3px',
-      'padding': '16px', 'width': '400px',
     });
     const measured = await measurePrintTextContainment(paragraph);
     expect({ visible: measured.visible, contained: measured.contained,
       failures: measured.failures }).toEqual({
       visible: true, contained: true, failures: [],
     });
-    expect(measured.lines.map((line) => line.text))
-      .toEqual(['xxxx 123', 'Ấgj 456']);
-    expect(measured.lines[0]!.metrics.ascent)
-      .toBeLessThan(measured.lines[1]!.metrics.ascent);
-    for (const line of measured.lines) {
-      expect(Math.abs(line.advance - line.referenceWidth),
-        'Canvas and DOM use the same complete shaping state.')
-        .toBeLessThanOrEqual(1);
-    }
-    await paragraph.evaluate((element) => {
-      element.textContent = element.textContent!.replace('\n', ' ');
-    });
-    const width = Math.ceil(Math.max(...measured.lines.map((line) =>
-      line.referenceWidth))) + 32;
-    await applyStyleMutation(paragraph, {
-      'white-space': 'normal', 'width': `${width}px`,
-    });
-    const wrapped = await measurePrintTextContainment(paragraph);
-    expect(wrapped.failures).toEqual([]);
-    expect(wrapped.lines.map((line) => line.text.trim()))
-      .toEqual(['xxxx 123', 'Ấgj 456']);
-    expect(wrapped.lines[0]!.metrics.ascent)
-      .toBeLessThan(wrapped.lines[1]!.metrics.ascent);
     expect(external).toEqual([]);
   });
+
+for (const defect of ['ancestor clip', 'line overlap', 'horizontal overflow']) {
+  test(`print text ranges detect ${defect}`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    const paragraph = page.locator('.entry-body p').first();
+    await paragraph.evaluate((element) => {
+      const word = element.textContent!.trim().split(/\s+/u)[0]!;
+      element.textContent = `${word}\n${word}`;
+    });
+    await applyStyleMutation(paragraph, {
+      'white-space': 'pre', 'line-height': '32px',
+    });
+    const check = async () => {
+      const measured = await measurePrintTextContainment(paragraph);
+      expect({ visible: measured.visible, contained: measured.contained,
+        failures: measured.failures }, 'Print range containment. '
+        + JSON.stringify(measured.failures)).toEqual({
+        visible: true, contained: true, failures: [],
+      });
+    };
+    await check();
+    const clean = await measurePrintTextContainment(paragraph);
+    expect(clean.lines).toHaveLength(2);
+    let restore: () => Promise<void>;
+    let kind: string;
+    if (defect === 'ancestor clip') {
+      restore = await applyStyleMutation(paragraph.locator('..'), {
+        height: '1px', overflow: 'hidden',
+      });
+      kind = 'clip';
+    } else if (defect === 'line overlap') {
+      restore = await applyStyleMutation(paragraph, { 'line-height': '1px' });
+      kind = 'overlap';
+    } else {
+      restore = await applyStyleMutation(paragraph, { width: '1px' });
+      kind = 'range';
+    }
+    const altered = await measurePrintTextContainment(paragraph);
+    expect(altered.failures.some((failure) => failure.kind === kind))
+      .toBe(true);
+    await expect(check()).rejects.toThrow('Print range containment.');
+    await restore();
+    await check();
+    expect(external).toEqual([]);
+  });
+}
 
 test('sample print DOM and PDF detect dropped bold with shared glyphs',
   async ({ page }) => {

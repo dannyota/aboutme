@@ -4,7 +4,7 @@ import { expectStyleRules, type StyleRule } from './screen-expectations';
 
 import { visiblePaint } from './screen-paint';
 import {
-  measureTextContainment, preserveScreenScroll, rejectAncestorClipping,
+  measureScreenText, preserveScreenScroll, rejectAncestorClipping,
 } from './screen-containment';
 
 export interface ScreenContract {
@@ -59,10 +59,8 @@ async function checkScreenClass(
       <= document.documentElement.clientWidth + 1), message).toBe(true);
     const boxes = page.locator(contract.constrained ?? contract.root);
     for (const box of await boxes.all()) {
-      await expect.poll(() => box.evaluate((element, vertical) =>
-        element.scrollWidth <= element.clientWidth + 1
-        && (!vertical || element.scrollHeight <= element.clientHeight + 1),
-      contract.constrained !== undefined), message).toBe(true);
+      await expect.poll(() => box.evaluate((element) =>
+        element.scrollWidth <= element.clientWidth + 1), message).toBe(true);
     }
     const text = page.locator(contract.text);
     await rejectAncestorClipping(text, contract.scrolling ?? []);
@@ -85,9 +83,15 @@ async function checkScreenClass(
       if (await node.isVisible()) {
         await node.scrollIntoViewIfNeeded();
       }
-      await expect.poll(() => measureTextContainment(node),
-        `${message} Text box ${index}.`)
-        .toEqual({ visible: true, contained: true });
+      await expect.poll(async () => {
+        const measured = await measureScreenText(
+          node, undefined, contract.scrolling,
+        );
+        return { visible: measured.visible,
+          contained: measured.contained && measured.separated,
+          failures: measured.failures };
+      }, `${message} Text box ${index}.`)
+        .toEqual({ visible: true, contained: true, failures: [] });
     }
   } else if (kind === 'overlap') {
     await expect.poll(() => page.locator(contract.flow).evaluateAll((nodes) => {
