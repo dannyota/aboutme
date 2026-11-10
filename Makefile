@@ -9,16 +9,18 @@ WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
 WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # Renderer specs per Playwright surface (apps/web/e2e/playwright.config.ts).
-# make web-e2e runs every spec unless WEB_E2E_SHARD names one of four shards
+# make web-e2e runs every spec unless WEB_E2E_SHARD names one of five shards
 # that together run each spec once, sized by measured test and diagnostics
 # time to run in about the same time: preview-gap holds the slowest harness
-# specs, rest-1 the remaining harness specs, and rest-2 and rest-3 split the
-# normal surface. A shard builds only the Nuxt surfaces it tests.
-# rest-1 and rest-3 take whatever the other shard of their surface leaves.
+# specs, rest-4 the resume screen specs, rest-1 the remaining harness specs,
+# and rest-2 and rest-3 split the normal surface. A shard builds only the Nuxt
+# surfaces it tests. rest-1 and rest-3 take whatever the other shards of
+# their surface leave.
 WEB_E2E_HARNESS_SPECS := screenshot.spec.ts guide-screenshot.spec.ts resume-screen.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
 WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts
 WEB_E2E_PREVIEW_GAP_SPECS := preview-gap.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts
 WEB_E2E_REST_2_SPECS := chrome.spec.ts gallery.spec.ts verify.spec.ts normal-csp.spec.ts
+WEB_E2E_REST_4_SPECS := resume-screen.spec.ts
 
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
 DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
@@ -286,10 +288,11 @@ web-e2e: ## Compare renderer baselines in the pinned AMD64 browser
 	case $${WEB_E2E_SHARD-all} in \
 	all) harness_specs='$(WEB_E2E_HARNESS_SPECS)'; normal_specs='$(WEB_E2E_NORMAL_SPECS)' ;; \
 	preview-gap) harness_specs='$(WEB_E2E_PREVIEW_GAP_SPECS)'; normal_specs='' ;; \
-	rest-1) harness_specs='$(filter-out $(WEB_E2E_PREVIEW_GAP_SPECS),$(WEB_E2E_HARNESS_SPECS))'; normal_specs='' ;; \
+	rest-1) harness_specs='$(filter-out $(WEB_E2E_PREVIEW_GAP_SPECS) $(WEB_E2E_REST_4_SPECS),$(WEB_E2E_HARNESS_SPECS))'; normal_specs='' ;; \
 	rest-2) harness_specs=''; normal_specs='$(WEB_E2E_REST_2_SPECS)' ;; \
 	rest-3) harness_specs=''; normal_specs='$(filter-out $(WEB_E2E_REST_2_SPECS),$(WEB_E2E_NORMAL_SPECS))' ;; \
-	*) echo 'WEB_E2E_SHARD must be all, preview-gap, rest-1, rest-2, or rest-3' >&2; exit 64 ;; \
+	rest-4) harness_specs='$(WEB_E2E_REST_4_SPECS)'; normal_specs='' ;; \
+	*) echo 'WEB_E2E_SHARD must be all, preview-gap, rest-1, rest-2, rest-3, or rest-4' >&2; exit 64 ;; \
 	esac; \
 	test "$$(uname -m)" = x86_64 || { echo 'web-e2e requires a native x86_64 host' >&2; exit 1; }; \
 	commit='$(WEB_E2E_COMMIT)'; \

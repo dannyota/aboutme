@@ -93,7 +93,7 @@ assert_web_e2e_rejected playwright-update-present web-e2e \
   WEB_E2E_RUN_ID=valid PLAYWRIGHT_UPDATE_SNAPSHOTS=
 for shard in harness rest; do
   assert_web_e2e_rejected "unknown-shard-$shard" web-e2e \
-    'WEB_E2E_SHARD must be all, preview-gap, rest-1, rest-2, or rest-3' \
+    'WEB_E2E_SHARD must be all, preview-gap, rest-1, rest-2, rest-3, or rest-4' \
     WEB_E2E_RUN_ID=valid WEB_E2E_SHARD="$shard"
 done
 
@@ -264,7 +264,7 @@ if mode.name == "update":
 sys.exit(int(os.environ["FIXTURE_STATUS"]))
 """)
 (work / "fixture.png").write_bytes(png)
-shards = ["preview-gap", "rest-1", "rest-2", "rest-3"]
+shards = ["preview-gap", "rest-1", "rest-2", "rest-3", "rest-4"]
 selections = {}
 for target, shard in [*[("web-e2e", shard) for shard in ["all", *shards]], ("web-e2e-update", "all")]:
     for status in [42, 0]:

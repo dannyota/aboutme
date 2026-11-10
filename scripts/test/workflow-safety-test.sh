@@ -727,7 +727,7 @@ fi
 # spec once (scripts/test/makefile-safety-test.sh checks the partition).
 assert_web_e2e_shards() { # job-body makefile-recipe
   local matrix make_shards
-  grep -Fxq '        shard: [preview-gap, rest-1, rest-2, rest-3]' <<<"$1" ||
+  grep -Fxq '        shard: [preview-gap, rest-1, rest-2, rest-3, rest-4]' <<<"$1" ||
     fail "pinned browser job does not run every shard that together covers every spec"
   matrix=$(sed -n 's/^        shard: \[\(.*\)\]$/\1/p' <<<"$1")
   make_shards=$(awk -F '[)] harness_specs=' '/^\t[a-z0-9-]+\) harness_specs=/ {
@@ -739,14 +739,14 @@ WEB_E2E_RECIPE=$(awk '/^web-e2e:/{flag=1; next} /^[^\t]/{flag=0} flag' "$ROOT/Ma
 assert_web_e2e_job_shards() { assert_web_e2e_shards "$1" "$WEB_E2E_RECIPE"; }
 assert_web_e2e_recipe_shards() { assert_web_e2e_shards "$WEB_E2E_JOB" "$1"; }
 assert_web_e2e_shards "$WEB_E2E_JOB" "$WEB_E2E_RECIPE"
-expect_guard_drift assert_web_e2e_job_shards "$(sed 's/, rest-3\]/]/' <<<"$WEB_E2E_JOB")" \
+expect_guard_drift assert_web_e2e_job_shards "$(sed 's/, rest-4\]/]/' <<<"$WEB_E2E_JOB")" \
   'pinned browser job does not run every shard that together covers every spec'
 expect_guard_drift assert_web_e2e_recipe_shards \
   "$(grep -v 'rest-3) harness_specs=' <<<"$WEB_E2E_RECIPE")" \
   'pinned browser matrix does not list exactly the Makefile web-e2e shards'
 expect_guard_drift assert_web_e2e_recipe_shards \
   "$WEB_E2E_RECIPE
-$(printf '\t%s' "rest-4) harness_specs=''; normal_specs='' ;; \\")" \
+$(printf '\t%s' "rest-5) harness_specs=''; normal_specs='' ;; \\")" \
   'pinned browser matrix does not list exactly the Makefile web-e2e shards'
 grep -Fq '          WEB_E2E_SHARD: ${{ matrix.shard }}' <<<"$WEB_E2E_JOB" ||
   fail "pinned browser job does not pass its shard to make web-e2e"
