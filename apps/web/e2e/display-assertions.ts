@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Measure text against a named container, including clipped text. */
 export async function measureTextContainment(
@@ -489,4 +489,206 @@ export async function measurePdfLayout(
       return title ? box(title) : null;
     }
   }, margins);
+}
+
+export interface ScreenContract {
+  readonly root: string;
+  readonly text: string;
+  readonly flow: string;
+  readonly type: readonly [selector: string, family: string, face: string];
+  readonly paint: readonly [selector: string, property: string, value: string];
+  readonly copy: readonly [selector: string, text: string];
+  readonly aria: readonly [selector: string, snapshot: string];
+  readonly image?: string;
+  readonly faces?: readonly string[];
+  readonly constrained?: string;
+  readonly counts?: readonly (readonly [selector: string, count: number])[];
+}
+
+export const SCREEN_CLASSES = [
+  'geometry', 'containment', 'overlap', 'typography', 'color', 'content',
+  'accessibility', 'images',
+] as const;
+export type ScreenClass = typeof SCREEN_CLASSES[number];
+
+/** Use the same named checks for captured cells and their seeded defects. */
+export async function expectScreenClass(
+  page: Page,
+  contract: ScreenContract,
+  kind: ScreenClass,
+): Promise<void> {
+  const message = `Screen ${kind}.`;
+  if (kind === 'geometry') {
+    await expect.poll(() => page.locator(contract.root).evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0 && box.left >= -1
+        && box.right <= innerWidth + 1;
+    }), message).toBe(true);
+  } else if (kind === 'containment') {
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement.scrollWidth
+      <= document.documentElement.clientWidth + 1), message).toBe(true);
+    const boxes = page.locator(contract.constrained ?? contract.root);
+    for (const box of await boxes.all()) {
+      await expect.poll(() => box.evaluate((element, vertical) =>
+        element.scrollWidth <= element.clientWidth + 1
+        && (!vertical || element.scrollHeight <= element.clientHeight + 1),
+      contract.constrained !== undefined), message).toBe(true);
+    }
+    const text = page.locator(contract.text);
+    expect(await text.count(), message).toBeGreaterThan(0);
+    for (const node of await text.all()) {
+      if (await node.isVisible()) await node.scrollIntoViewIfNeeded();
+      await expect.poll(() => measureTextContainment(node), message)
+        .toEqual({ visible: true, contained: true });
+    }
+  } else if (kind === 'overlap') {
+    await expect.poll(() => page.locator(contract.flow).evaluateAll((nodes) => {
+      const boxes = nodes.map((node) => node.getBoundingClientRect());
+      return boxes.length > 0 && boxes.every((box, index) =>
+        box.width > 0 && box.height > 0
+        && boxes.slice(index + 1).every((other) =>
+          Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
+          || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
+          <= 1));
+    }), message).toBe(true);
+  } else if (kind === 'typography') {
+    const families = (value: string) => value.split(',').map((family) =>
+      family.trim().replaceAll('"', ''));
+    await expect.poll(() => page.locator(contract.type[0]).evaluate((node) =>
+      getComputedStyle(node).fontFamily.split(',').map((family) =>
+        family.trim().replaceAll('"', ''))), message)
+      .toEqual(families(contract.type[1]));
+    await expect.poll(() => page.locator(contract.type[0]).evaluate(
+      (element, face) => {
+        const style = getComputedStyle(element);
+        return document.fonts.check(`${style.fontWeight} ${style.fontSize} `
+          + `"${face}"`, element.textContent ?? '')
+        && Array.from(document.fonts).some((font) =>
+          font.family.replaceAll('"', '') === face
+          && font.status === 'loaded')
+        && !Array.from(document.fonts).some((font) =>
+          font.status === 'error');
+      }, contract.type[2]), message).toBe(true);
+    for (const face of contract.faces ?? []) {
+      await expect.poll(() => page.evaluate((family) =>
+        Array.from(document.fonts).some((font) =>
+          font.family.replaceAll('"', '') === family
+          && font.status === 'loaded')
+        && [400, 700].every((weight) =>
+          document.fonts.check(`${weight} 14px "${family}"`)), face),
+      message).toBe(true);
+    }
+  } else if (kind === 'color') {
+    await expect(page.locator(contract.paint[0]), message)
+      .toHaveCSS(contract.paint[1], contract.paint[2]);
+  } else if (kind === 'content') {
+    await expect(page.locator(contract.copy[0]), message)
+      .toHaveText(contract.copy[1]);
+    for (const [selector, count] of contract.counts ?? []) {
+      await expect(page.locator(selector), message).toHaveCount(count);
+    }
+  } else if (kind === 'accessibility') {
+    await expect(page.locator(contract.aria[0]), message)
+      .toMatchAriaSnapshot(contract.aria[1]);
+  } else if (contract.image) {
+    const images = page.locator(contract.image);
+    expect(await images.count(), message).toBeGreaterThan(0);
+    for (const image of await images.all()) {
+      await image.scrollIntoViewIfNeeded();
+      await expect.poll(() => image.evaluate(async (element) => {
+        const img = element as HTMLImageElement;
+        try {
+          await img.decode();
+        } catch {
+          return false;
+        }
+        return img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+      }), message).toBe(true);
+    }
+  }
+}
+
+export async function expectScreen(
+  page: Page,
+  contract: ScreenContract,
+): Promise<void> {
+  const positions = await page.evaluateHandle(() =>
+    Array.from(document.querySelectorAll('*')).filter((node) =>
+      node.scrollHeight > node.clientHeight
+      || node.scrollWidth > node.clientWidth).map((node) =>
+      ({ node, top: node.scrollTop, left: node.scrollLeft })));
+  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  try {
+    for (const kind of SCREEN_CLASSES) {
+      await expectScreenClass(page, contract, kind);
+    }
+  } finally {
+    await positions.evaluate((records) => {
+      for (const { node, top, left } of records) node.scrollTo(left, top);
+    });
+    await positions.dispose();
+    await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
+  }
+}
+
+// Preset fixtures, encoded independently of the production token resolver.
+export const RESUME_STYLES = {
+  'classic-serif': [
+    'Roboto Serif', 'Noto Serif', 13, 1.5, 25, 20, 22, 12, '#23262c',
+  ],
+  'engineer-compact': [
+    'Source Sans 3', 'Noto Sans', 13, 1.3, 11, 12, 12, 6, '#1a1f24',
+  ],
+  'modern-sidebar': [
+    'Be Vietnam Pro', 'Noto Sans', 14, 1.5, 14, 13, 20, 10, '#1c2b33',
+  ],
+  'executive-band': [
+    'Be Vietnam Pro', 'Noto Sans', 15, 1.45, 18, 14, 24, 12, '#1f2937',
+  ],
+  'consulting-formal': [
+    'Inter', 'Noto Sans', 13, 1.45, 25, 15, 15, 9, '#33383d',
+  ],
+  'academic-dense': [
+    'Source Sans 3', 'Noto Sans', 13, 1.3, 20, 12, 20, 6, '#1a1e22',
+  ],
+  'editorial-wide': [
+    'Alegreya', 'Noto Serif', 16, 1.65, 35, 22, 32, 16, '#24211c',
+  ],
+  'creative-accent': [
+    'Source Sans 3', 'Noto Sans', 15, 1.5, 22, 18, 20, 10, '#1f1a17',
+  ],
+} as const;
+
+export function resumeContract(
+  template: string, language: 'vi' | 'en', dark = false,
+): ScreenContract {
+  const style = RESUME_STYLES[template as keyof typeof RESUME_STYLES];
+  const document = '.resume-document:not(.pagination-measurement)';
+  const root = `:nth-match(${document}, 1)`;
+  const title = language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace';
+  const grounds: Record<string, string> = {
+    'classic-serif': 'rgb(21, 22, 23)', 'modern-sidebar': 'rgb(15, 23, 27)',
+    'editorial-wide': 'rgb(25, 21, 18)', 'creative-accent': 'rgb(28, 20, 17)',
+    'executive-band': 'rgb(19, 22, 27)',
+  };
+  return {
+    root,
+    text: `${document} :is(.resume-name,.resume-headline,.entry-title,`
+      + '.entry-subtitle,.entry-meta,.entry-body p,.entry-body li,'
+      + '.section-heading h2)',
+    flow: `${document} .pagination-atomic, `
+      + `${document}:not(.resume-page) .resume-section`,
+    constrained: '.resume-page:not(.pagination-measurement)',
+    faces: [style[0], style[1]],
+    type: [root, `"${style[0]}", "${style[1]}"`, style[0]],
+    paint: [root, 'background-color', dark
+      ? grounds[template]!
+      : template === 'editorial-wide'
+        ? 'rgb(250, 248, 243)'
+        : 'rgb(255, 255, 255)'],
+    copy: [`${document} .resume-name`, title],
+    aria: [`${document} .resume-name`, `- heading "${title}" [level=1]`],
+    image: `${document} .resume-photo img`,
+  };
 }

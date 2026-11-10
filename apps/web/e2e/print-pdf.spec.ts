@@ -8,6 +8,9 @@ import { writeFile } from 'node:fs/promises';
 
 import { measurePdfLayout } from './display-assertions';
 import { applyStyleMutation } from './style-mutation';
+import { assertPrintDom } from './pdf-fonts';
+import { assertOverflowTextStyle } from './pdf-text-style';
+import { assertOverflowPdf } from './sample-pdf-content';
 import {
   attachMembership,
   checkMembership,
@@ -198,6 +201,7 @@ for (const printCase of CASES) {
               page.locator('[data-fonts-ready="true"]'),
             ).toHaveCount(1);
             await waitForImages(page);
+            await assertPrintDom(page, 'Be Vietnam Pro', 2);
             const pdf = await page.pdf({
               displayHeaderFooter: false,
               margin: { bottom: 0, left: 0, right: 0, top: 0 },
@@ -234,6 +238,16 @@ for (const printCase of CASES) {
                 .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
               const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
               const layout = await measurePdfLayout(page, margins);
+              const display = await Promise.all(pages.map(async (text, i) =>
+                ({ text, paint: await pdfPaintPage(
+                  await document.getPage(i + 1),
+                ) })));
+              await assertOverflowPdf(display, layout, printCase,
+                lng, paper, scheme);
+              assertOverflowTextStyle(layout, {
+                fills: [], images: [],
+                text: display.flatMap(({ paint }) => paint.text),
+              });
               expect(Math.abs(layout.width - (width * 0.75 - 2 * margins.x)))
                 .toBeLessThanOrEqual(1);
               const sidebarHeadings = layout.text.filter((item) =>
@@ -259,9 +273,7 @@ for (const printCase of CASES) {
               }
               for (let index = 0; index < pages.length; index += 1) {
                 const textPage = pages[index]!;
-                const paint = await pdfPaintPage(await document.getPage(
-                  index + 1,
-                ));
+                const paint = display[index]!.paint;
                 expect(pdfColumnsMatch(textPage, layout, margins, index === 0))
                   .toBe(true);
                 expect(pdfSidebarPaint(paint, textPage, layout.sidebar!,
@@ -429,6 +441,16 @@ test('header-only entries break within both columns without blank pages',
       expect(Math.abs(positions[0]!.x - positions[1]!.x))
         .toBeLessThanOrEqual(1);
     }
+    const headers = page.locator('.entry-header');
+    const check = async () => {
+      expect(await headers.evaluateAll((elements) => elements.every((element) =>
+        getComputedStyle(element).breakAfter === 'auto')),
+      'Print header-only break opportunities.').toBe(true);
+    };
+    await check();
+    await applyStyleMutation(headers, { 'break-after': 'avoid' });
+    await expect(check())
+      .rejects.toThrow('Print header-only break opportunities.');
     expect(external).toEqual([]);
   });
 
@@ -479,7 +501,12 @@ for (const rule of ['orphan', 'widow'] as const) {
     if (rule === 'orphan') {
       await applyStyleMutation(paragraph, { widows: '1' });
     }
+    const check = (parts: readonly PdfTextPage[]) => {
+      expect(parts[0]!.text, `PDF ${rule} paragraph membership.`)
+        .not.toContain(`${rule.toUpperCase()}-FIRST`);
+    };
     const pages = await printedTextPages(page);
+    check(pages);
     expect(pages).toHaveLength(2);
     expect(pages[0]!.text).not.toContain(`${rule.toUpperCase()}-FIRST`);
     expect(pages[1]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
@@ -491,6 +518,7 @@ for (const rule of ['orphan', 'widow'] as const) {
     await applyStyleMutation(paragraph, { orphans: '1', widows: '1' });
     const split = await printedTextPages(page);
     expect(split).toHaveLength(2);
+    expect(() => check(split)).toThrow(`PDF ${rule} paragraph membership.`);
     expect(split[0]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
     expect(split[1]!.text).toContain(`${rule.toUpperCase()}-SECOND`);
     if (rule === 'widow') {

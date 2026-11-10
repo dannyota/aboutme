@@ -3,13 +3,16 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
+  expectScreen,
   measureShowcaseGrid,
   measureShowcaseSheet,
   measureTextContainment,
 } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, screenMutationTests } from './style-mutation';
 
 import {
+  chromeScreenContract,
+  filterSheetContract,
   CHROME_PIXEL_TOLERANCE,
   mockSignedOutSession,
   verifyScreenshot,
@@ -85,11 +88,14 @@ for (const [name, path, body] of [
   ['empty', '/showcase', EMPTY],
 ] as const) {
   for (const locale of ['vi', 'en'] as const) {
-    for (const theme of ['light', 'dark'] as const) {
-      for (const width of [390, 1440]) {
-        CASES.push({ name, path, body, locale, theme, width });
+    test.describe(`interface ${locale}`, () => {
+      test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+      for (const theme of ['light', 'dark'] as const) {
+        for (const width of [390, 1440]) {
+          CASES.push({ name, path, body, locale, theme, width });
+        }
       }
-    }
+    });
   }
 }
 CASES.push(
@@ -178,8 +184,8 @@ async function openShowcase(
       + 'animation: none !important; }',
   });
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await expect(page.locator(`[data-state="${
-    body.items.length === 0 ? 'empty' : 'list'}"]`)).toBeVisible();
+  const state = body.items.length === 0 ? 'empty' : 'list';
+  await expect(page.locator(`[data-state="${state}"]`)).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -190,6 +196,7 @@ async function assertShowcase(
   theme: Case['theme'],
   width: number,
 ): Promise<void> {
+  await expectScreen(page, showcaseContract(locale, theme, name === 'empty'));
   const header = page.getByTestId('showcase-header');
   const title = locale === 'vi' ? 'CV từ cộng đồng' : 'Community resumes';
   const lead = locale === 'vi'
@@ -305,7 +312,8 @@ async function assertShowcase(
     ? 1
     : width >= 1024 && resultsWidth >= 860 ? 3 : 2;
   const gap = width >= 1024 ? 28 : width >= 641 ? 24 : 16;
-  await expect.poll(() => measureShowcaseGrid(grid, columns, gap)).toBe(true);
+  await expect.poll(() => measureShowcaseGrid(grid, columns, gap),
+    'Showcase grid geometry.').toBe(true);
   const invite = page.getByTestId('showcase-invite');
   await expect(invite.getByRole('heading')).toHaveText(locale === 'vi'
     ? 'Muốn CV của bạn ở đây?'
@@ -329,138 +337,118 @@ async function assertShowcase(
 }
 
 for (const { name, path, body, locale, theme, width } of CASES) {
-  const title = `showcase ${name} ${locale} ${theme} ${width}px `
-    + 'matches baseline';
-  test(title, async ({ page }, testInfo) => {
-    test.setTimeout(60_000);
-    await openShowcase(page, { name, path, body, locale, theme, width });
-    await assertShowcase(page, name, locale, theme, width);
+  test.describe(`display locale ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    const title = `showcase ${name} ${locale} ${theme} ${width}px `
+      + 'matches baseline';
+    test(title, async ({ page }, testInfo) => {
+      test.setTimeout(60_000);
+      await openShowcase(page, { name, path, body, locale, theme, width });
+      await assertShowcase(page, name, locale, theme, width);
 
-    if (name !== 'empty') {
-      await expect(page.locator('[data-showcase-slug]')).toHaveCount(12);
-      // Load every lazy card, so the capture never depends on scroll or
-      // decode timing.
-      await page.locator('img[loading="lazy"]').evaluateAll((images) => {
-        for (const image of images) {
-          (image as HTMLImageElement).loading = 'eager';
-        }
-      });
-      await waitForImages(page);
-    }
-    if (name === 'filled' || name === 'filtered') {
-      // Grow the viewport to the page, so the capture holds every tile.
-      const height = await page.evaluate(() =>
-        document.documentElement.scrollHeight);
-      await page.setViewportSize({ width, height });
-    }
-    if (name === 'sheet') {
-      // The sheet is a fixed overlay: a phone-height viewport, captured
-      // without the full page, shows it as a visitor sees it.
-      await page.locator('[data-action="showcase-filters-open"]').click();
-      await expect(page.getByRole('dialog')).toBeVisible();
-      await expect(page.getByTestId('showcase-filter-sheet')).toBeVisible();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toMatchAriaSnapshot(locale === 'vi'
-        ? '- dialog "Bộ lọc"'
-        : '- dialog "Filters"');
-      await expect.poll(() => measureShowcaseSheet(dialog)).toBe(true);
-      await expect.poll(() => dialog.evaluate((node) =>
-        node.contains(document.activeElement))).toBe(true);
-      await expect(dialog.getByTestId('showcase-roles')).toBeVisible();
-      await expect(dialog.getByTestId('showcase-languages')).toBeVisible();
-      await expect(dialog.getByRole('combobox')).toBeVisible();
-      expect(await dialog.evaluate((node) => {
-        const body = node.querySelector<HTMLElement>('.overflow-y-auto');
-        if (!body) return false;
-        body.scrollTop = body.scrollHeight;
-        const reachesEnd = body.scrollTop + body.clientHeight
-          >= body.scrollHeight - 1;
-        body.scrollTop = 0;
-        return reachesEnd;
-      })).toBe(true);
-      await expect(dialog.locator('[data-action="showcase-filters-apply"]'))
-        .toHaveText(locale === 'vi' ? 'Xem 30 CV' : 'Show 30 resumes');
-      await page.setViewportSize({ width, height: 844 });
-      // Wait for the slide to end: the sheet's box holds still over frames.
-      await page.getByRole('dialog').evaluate((node) =>
-        new Promise<void>((done) => {
-          let last = node.getBoundingClientRect().top;
-          let still = 0;
-          const frame = () => {
-            const top = node.getBoundingClientRect().top;
-            still = top === last ? still + 1 : 0;
-            last = top;
-            if (still >= 3) done();
-            else requestAnimationFrame(frame);
-          };
-          requestAnimationFrame(frame);
-        }));
-    }
-    await page.evaluate(() => new Promise<void>((done) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => done()));
-    }));
+      if (name !== 'empty') {
+        await expect(page.locator('[data-showcase-slug]')).toHaveCount(12);
+        await waitForImages(page);
+      }
+      if (name === 'sheet') {
+        // The sheet is a fixed overlay: a phone-height viewport, captured
+        // without the full page, shows it as a visitor sees it.
+        await page.locator('[data-action="showcase-filters-open"]').click();
+        await expect(page.getByRole('dialog')).toBeVisible();
+        await expect(page.getByTestId('showcase-filter-sheet')).toBeVisible();
+        const dialog = page.getByRole('dialog');
+        await expectScreen(page,
+          filterSheetContract('showcase', locale, theme));
+        await expect(dialog).toMatchAriaSnapshot(locale === 'vi'
+          ? '- dialog "Bộ lọc"'
+          : '- dialog "Filters"');
+        await expect.poll(() => measureShowcaseSheet(dialog)).toBe(true);
+        await expect.poll(() => dialog.evaluate((node) =>
+          node.contains(document.activeElement))).toBe(true);
+        await expect(dialog.getByTestId('showcase-roles')).toBeVisible();
+        await expect(dialog.getByTestId('showcase-languages')).toBeVisible();
+        await expect(dialog.getByRole('combobox')).toBeVisible();
+        expect(await dialog.evaluate((node) => {
+          const body = node.querySelector<HTMLElement>('.overflow-y-auto');
+          if (!body) return false;
+          body.scrollTop = body.scrollHeight;
+          const reachesEnd = body.scrollTop + body.clientHeight
+            >= body.scrollHeight - 1;
+          body.scrollTop = 0;
+          return reachesEnd;
+        })).toBe(true);
+        await expect(dialog.locator('[data-action="showcase-filters-apply"]'))
+          .toHaveText(locale === 'vi' ? 'Xem 30 CV' : 'Show 30 resumes');
+        await expect.poll(() => measureShowcaseSheet(dialog)).toBe(true);
+        // The retained sheet baselines are 390 x 844.
+        await page.setViewportSize({ width, height: 844 });
+      }
+      const overflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth
+        - document.documentElement.clientWidth);
+      expect(overflow).toBe(0);
 
-    const overflow = await page.evaluate(() =>
-      document.documentElement.scrollWidth
-      - document.documentElement.clientWidth);
-    expect(overflow).toBe(0);
-
-    await verifyScreenshot(
-      page,
-      `showcase--${name}--${locale}--${theme}--${width}.png`,
-      testInfo,
-      undefined,
-      CHROME_PIXEL_TOLERANCE,
-      name !== 'sheet',
-    );
+      await verifyScreenshot(
+        page,
+        `showcase--${name}--${locale}--${theme}--${width}.png`,
+        testInfo,
+        undefined,
+        CHROME_PIXEL_TOLERANCE,
+        name !== 'sheet',
+      );
+    });
   });
 }
 
 for (const locale of ['vi', 'en'] as const) {
-  for (const theme of ['light', 'dark'] as const) {
-    for (const width of [640, 641, 1023, 1024]) {
-      test(`showcase grid boundary ${locale} ${theme} ${width}`, async ({
-        page,
-      }) => {
-        await openShowcase(page, {
-          name: 'filled', path: '/showcase?page=2', body: FILLED,
-          locale, theme, width,
+  test.describe(`interface ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [640, 641, 1023, 1024]) {
+        test(`showcase grid boundary ${locale} ${theme} ${width}`, async ({
+          page,
+        }) => {
+          await openShowcase(page, {
+            name: 'filled', path: '/showcase?page=2', body: FILLED,
+            locale, theme, width,
+          });
+          const grid = page.locator('.showcase-grid');
+          const columns = width < 641 ? 1 : 2;
+          const gap = width >= 1024 ? 28 : width >= 641 ? 24 : 16;
+          await expect.poll(() => measureShowcaseGrid(grid, columns, gap),
+            'Showcase grid geometry.')
+            .toBe(true);
+          const filter = page.locator('[data-action="showcase-filters-open"]');
+          if (width < 1024) {
+            await expect(filter).toBeVisible();
+            await filter.click();
+            await expect.poll(() => measureShowcaseSheet(
+              page.getByRole('dialog'),
+            )).toBe(true);
+          } else {
+            await expect(filter).toBeHidden();
+            await expect(page.getByRole('dialog')).toHaveCount(0);
+          }
         });
-        const grid = page.locator('.showcase-grid');
-        const columns = width < 641 ? 1 : 2;
-        const gap = width >= 1024 ? 28 : width >= 641 ? 24 : 16;
-        await expect.poll(() => measureShowcaseGrid(grid, columns, gap))
-          .toBe(true);
-        const filter = page.locator('[data-action="showcase-filters-open"]');
-        if (width < 1024) {
-          await expect(filter).toBeVisible();
-          await filter.click();
-          await expect.poll(() => measureShowcaseSheet(
-            page.getByRole('dialog'),
+      }
+      for (const size of [859, 860]) {
+        test(`showcase container boundary ${locale} ${theme} ${size}`, async ({
+          page,
+        }) => {
+          await openShowcase(page, {
+            name: 'filled', path: '/showcase?page=2', body: FILLED,
+            locale, theme, width: 1440,
+          });
+          await page.getByTestId('showcase-results').evaluate((node, value) => {
+            (node as HTMLElement).style.width = `${value}px`;
+          }, size);
+          await expect.poll(() => measureShowcaseGrid(
+            page.locator('.showcase-grid'), size === 859 ? 2 : 3, 28,
           )).toBe(true);
-        } else {
-          await expect(filter).toBeHidden();
-          await expect(page.getByRole('dialog')).toHaveCount(0);
-        }
-      });
-    }
-    for (const size of [859, 860]) {
-      test(`showcase container boundary ${locale} ${theme} ${size}`, async ({
-        page,
-      }) => {
-        await openShowcase(page, {
-          name: 'filled', path: '/showcase?page=2', body: FILLED,
-          locale, theme, width: 1440,
         });
-        await page.getByTestId('showcase-results').evaluate((node, value) => {
-          (node as HTMLElement).style.width = `${value}px`;
-        }, size);
-        await expect.poll(() => measureShowcaseGrid(
-          page.locator('.showcase-grid'), size === 859 ? 2 : 3, 28,
-        )).toBe(true);
-      });
+      }
     }
-  }
+  });
 }
 
 const SHOWCASE_MUTATIONS = [
@@ -494,7 +482,14 @@ for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
       assertShowcase(page, 'filled', 'vi', 'light', 390);
     await assertClean();
     const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow();
+    await expect(assertClean()).rejects.toThrow(
+      name === 'columns' || name === 'row gap'
+        ? 'Showcase grid geometry.'
+        : name === 'clipped heading'
+          ? 'Screen containment.'
+          : name === 'heading color'
+            ? 'color'
+            : name === 'heading font' ? 'font-family' : 'toBeVisible');
     await restore();
     await assertClean();
   });
@@ -509,6 +504,7 @@ for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
     const assertClean = () =>
       assertShowcase(page, 'filled', 'vi', 'light', 390);
     await assertClean();
+    const before = await page.locator('.showcase-wrap').innerHTML();
     await page.evaluate((kind) => {
       const grid = document.querySelector('.showcase-grid')!;
       const heading = document.querySelector(
@@ -519,8 +515,68 @@ for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
       if (kind === 'copy') heading.textContent = 'CV tu cong dong';
       if (kind === 'heading role') heading.setAttribute('role', 'presentation');
     }, name);
-    await expect(assertClean()).rejects.toThrow();
+    expect(await page.locator('.showcase-wrap').innerHTML()).not.toBe(before);
+    await expect(assertClean()).rejects.toThrow(
+      name === 'copy'
+        ? 'Screen content.'
+        : name === 'heading role'
+          ? 'Screen accessibility.'
+          : name === 'order' ? 'toHaveAttribute' : 'toHaveCount');
     await page.reload();
     await assertClean();
   });
 }
+
+function showcaseContract(
+  locale: 'vi' | 'en', theme: 'light' | 'dark', empty = false,
+) {
+  return chromeScreenContract('[data-testid="showcase-page"]',
+    '[data-testid="showcase-header"] :is(h1,p), '
+    + '.showcase-tile__meta, [data-testid="showcase-invite"] :is(h2,p,a), '
+    + '[data-state="empty"] p',
+    '[data-testid="showcase-header"] h1, [data-testid="showcase-header"] p',
+    '[data-testid="showcase-header"] h1', locale === 'vi'
+      ? 'CV từ cộng đồng'
+      : 'Community resumes', theme,
+    empty ? undefined : '[data-showcase-slug] img');
+}
+
+screenMutationTests('showcase', async (page) => {
+  await openShowcase(page, {
+    name: 'filled', path: '/showcase?page=2', body: FILLED,
+    locale: 'vi', theme: 'light', width: 390,
+  });
+}, showcaseContract('vi', 'light'));
+
+for (const locale of ['vi', 'en'] as const) {
+  test.describe(`interface ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [390, 1440]) {
+        test(`showcase filtered display ${locale} ${theme} ${width}`, async ({
+          page,
+        }) => {
+          await openShowcase(page, {
+            name: 'filtered', path: FILTERED_PATH, body: FILLED,
+            locale, theme, width,
+          });
+          await assertShowcase(page, 'filtered', locale, theme, width);
+          if (width === 390) {
+            await page.locator('[data-action="showcase-filters-open"]').click();
+            await expect.poll(() =>
+              measureShowcaseSheet(page.getByRole('dialog')))
+              .toBe(true);
+          } else await expect(page.getByRole('dialog')).toHaveCount(0);
+        });
+      }
+    }
+  });
+}
+
+screenMutationTests('showcase sheet', async (page) => {
+  await openShowcase(page, {
+    name: 'filled', path: '/showcase?page=2', body: FILLED,
+    locale: 'vi', theme: 'light', width: 390,
+  });
+  await page.locator('[data-action="showcase-filters-open"]').click();
+}, filterSheetContract('showcase', 'vi', 'light'));

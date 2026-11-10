@@ -3,16 +3,17 @@ import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
-  galleryFontLoaded,
+  expectScreen,
   measureGalleryGrid,
-  measureTextContainment,
-  measureVerticalFlow,
 } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, screenMutationTests } from './style-mutation';
 import {
+  assertLibrary,
+  filterSheetContract,
+  libraryContract,
+  prepareScreen,
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
-  waitForImages,
 } from './support';
 
 const CASES = [
@@ -27,184 +28,63 @@ const LIVE_THUMBNAILS
     - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
 
 for (const { name, locale, theme, width } of CASES) {
-  test(`Library ${name} ${locale} ${theme} ${width} matches baseline`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.context().addCookies([
-      { name: 'aboutme-locale', value: locale, url: 'http://127.0.0.1:20092' },
-      { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
-    ]);
-    const path
-      = name === 'filtered'
-        ? '/templates?role=backend&filter=technical'
-        : '/templates';
-    const response = await page.goto(path);
-    expect(response?.status()).toBe(200);
-    await page.addStyleTag({
-      content:
-        '*, *::before, *::after { transition: none !important; '
-        + 'animation: none !important; }',
-    });
-    await page.evaluate(() => document.fonts.ready);
-    await assertLibrary(page, locale, theme, width, name === 'filtered');
-    await page.locator('img[loading="lazy"]').evaluateAll((images) => {
-      for (const image of images) (image as HTMLImageElement).loading = 'eager';
-    });
-    await waitForImages(page);
-    if (name === 'sheet') {
-      await page.locator('[data-action="gallery-filters-open"]').click();
-      await expect(page.getByTestId('gallery-filter-sheet')).toBeVisible();
-      await expect(
-        page.locator('[data-action="gallery-filters-close"]'),
-      ).toBeFocused();
-      await assertLibrarySheet(page, locale, theme);
-    } else {
-      const height = await page.evaluate(
-        () => document.documentElement.scrollHeight,
-      );
-      await page.setViewportSize({ width, height });
-      if (name === 'rows') {
-        await expect(page.locator('[data-sheet-thumbnail-render]')).toHaveCount(
-          LIVE_THUMBNAILS,
-        );
-      }
-      const settled = await page.evaluate(
-        () => document.documentElement.scrollHeight,
-      );
-      if (settled !== height) {
-        await page.setViewportSize({ width, height: settled });
-      }
-      await page.evaluate(() => document.fonts.ready);
-      await waitForImages(page);
-    }
-    await page.evaluate(
-      () =>
-        new Promise<void>((done) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => done()));
-        }),
-    );
-    expect(
-      await page.evaluate(
-        () =>
-          document.documentElement.scrollWidth
-          - document.documentElement.clientWidth,
-      ),
-    ).toBe(0);
-    await verifyScreenshot(
+  test.describe(`display locale ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    const title = `Library ${name} ${locale} ${theme} ${width} `
+      + 'matches baseline';
+    test(title, async ({
       page,
-      `gallery--${name}--${locale}--${theme}--${width}.png`,
-      testInfo,
-      undefined,
-      CHROME_PIXEL_TOLERANCE,
-      name !== 'sheet',
-    );
-  });
-}
-
-async function assertLibrary(
-  page: Page,
-  locale: 'vi' | 'en',
-  theme: 'light' | 'dark',
-  width: number,
-  filtered: boolean,
-): Promise<void> {
-  await expect.poll(() => galleryFontLoaded(page.locator('html'))).toBe(true);
-  await expect(page.getByTestId('gallery-header').getByRole('heading'))
-    .toHaveCSS(
-      'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-    );
-  const grid = page.locator('.gallery-grid');
-  const columns = width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5;
-  await expect.poll(() => measureGalleryGrid(grid)).toEqual({
-    columns,
-    columnGap: width < 641 ? 14 : 28,
-    rowGap: width < 641 ? 24 : 40,
-    ordered: true,
-  });
-  if (width >= 1024) {
-    const fields = page.locator('.gallery-desktop');
-    await expect(fields).toBeVisible();
-    await expect(page.locator('[data-action="gallery-filters-open"]'))
-      .toBeHidden();
-    await expect(fields.locator('.library-filters'))
-      .toHaveCSS('row-gap', '12px');
-    await expect.poll(() =>
-      measureVerticalFlow(fields.locator('.library-filters > section')),
-    ).toBe(true);
-    await expect(fields.locator('[data-role="'
-      + (filtered ? 'backend' : 'all') + '"]')).toHaveCSS(
-      'background-color', theme === 'light'
-        ? 'rgb(38, 64, 156)'
-        : 'rgb(143, 166, 240)',
-    );
-  }
-  const cards = page.locator('[data-template]:visible');
-  await expect(cards).toHaveCount(filtered ? 1 : 20);
-  if (filtered) {
-    await expect(cards).toHaveAttribute('data-template', 'one-page-tight');
-    await expect(cards).toHaveAttribute('href', '/templates/one-page-tight');
-    await expect(page.getByTestId('gallery-count')).toHaveText(
-      locale === 'vi' ? '1 mẫu' : '1 template',
-    );
-    if (width < 1024) {
-      const chips = page.getByTestId('gallery-active-filters');
-      await expect(chips.locator('[data-action="gallery-filter-remove"]'))
-        .toHaveText(['Backend', locale === 'vi' ? 'Kỹ thuật' : 'Technical']);
-      await expect.poll(() => measureTextContainment(chips))
-        .toEqual({ visible: true, contained: true });
-    }
-  } else {
-    const ids = [
-      'one-page-tight', 'engineer-compact', 'creative-accent', 'nordic-muted',
-      'elegant-serif-two', 'mono-print', 'minimal-air', 'international-lang',
-      'consulting-formal', 'ats-plain', 'graduate-friendly', 'executive-band',
-      'modern-sidebar', 'academic-dense', 'classic-serif', 'designer-tag',
-      'editorial-wide', 'government-formal', 'high-contrast', 'startup-bold',
-    ];
-    await expect(cards).toHaveCount(ids.length);
-    for (let index = 0; index < ids.length; index += 1) {
-      await expect(cards.nth(index))
-        .toHaveAttribute('data-template', ids[index]!);
-      await expect(cards.nth(index)).toHaveAttribute(
-        'href', `/templates/${ids[index]}`,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.context().addCookies([
+        { name: 'aboutme-locale', value: locale, url: 'http://127.0.0.1:20092' },
+        { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
+      ]);
+      const path
+        = name === 'filtered'
+          ? '/templates?role=backend&filter=technical'
+          : '/templates';
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(200);
+      await page.addStyleTag({
+        content:
+          '*, *::before, *::after { transition: none !important; '
+          + 'animation: none !important; }',
+      });
+      await page.evaluate(() => document.fonts.ready);
+      await assertLibrary(page, locale, theme, width, name === 'filtered');
+      await prepareScreen(page);
+      if (name === 'sheet') {
+        await page.locator('[data-action="gallery-filters-open"]').click();
+        await expect(page.getByTestId('gallery-filter-sheet')).toBeVisible();
+        await expect(
+          page.locator('[data-action="gallery-filters-close"]'),
+        ).toBeFocused();
+        await assertLibrarySheet(page, locale, theme);
+      } else {
+        await prepareScreen(page);
+        if (name === 'rows') {
+          await expect(page.locator('[data-sheet-thumbnail-render]'))
+            .toHaveCount(LIVE_THUMBNAILS);
+        }
+      }
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth
+            - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
+      await verifyScreenshot(
+        page,
+        `gallery--${name}--${locale}--${theme}--${width}.png`,
+        testInfo,
+        undefined,
+        CHROME_PIXEL_TOLERANCE,
+        name !== 'sheet',
       );
-    }
-  }
-  for (const card of await cards.all()) {
-    await card.scrollIntoViewIfNeeded();
-    const image = card.locator('img[data-page-image]');
-    if (await image.count()) {
-      const id = await card.getAttribute('data-template');
-      await expect(image).toHaveAttribute(
-        'src', `/templates/pages/${id}-${locale}-p1.png`,
-      );
-      await image.evaluate((node) => (node as HTMLImageElement).decode());
-      await expect.poll(() => image.evaluate((node) => {
-        const img = node as HTMLImageElement;
-        const box = img.getBoundingClientRect();
-        return img.naturalWidth === 1240 && img.naturalHeight === 1754
-          && Math.abs(box.width / box.height - 1240 / 1754) <= 0.001;
-      })).toBe(true);
-    } else {
-      const thumbnail = card.locator('[data-sheet-thumbnail]');
-      await expect(thumbnail.locator('[data-sheet-thumbnail-render]'))
-        .toHaveCount(1);
-      await expect.poll(() => thumbnail.evaluate((node) => {
-        const box = node.getBoundingClientRect();
-        const content = node.querySelector('.scaled-sheet-content')!;
-        const transform = new DOMMatrixReadOnly(
-          getComputedStyle(content).transform,
-        );
-        return Math.abs(transform.a - box.width / 794) <= 0.001
-          && Math.abs(box.width / box.height - 794 / 1123) <= 0.001;
-      })).toBe(true);
-    }
-  }
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await expect.poll(() => page.evaluate(() =>
-    document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )).toBeLessThanOrEqual(1);
+    });
+  });
 }
 
 async function assertLibrarySheet(
@@ -212,6 +92,7 @@ async function assertLibrarySheet(
   locale: 'vi' | 'en',
   theme: 'light' | 'dark',
 ): Promise<void> {
+  await expectScreen(page, filterSheetContract('gallery', locale, theme));
   const sheet = page.getByTestId('gallery-filter-sheet');
   const heading = locale === 'vi' ? 'Bộ lọc' : 'Filters';
   await expect(sheet).toHaveRole('dialog');
@@ -283,40 +164,43 @@ async function assertLibrarySheet(
 }
 
 for (const locale of ['vi', 'en'] as const) {
-  for (const theme of ['light', 'dark'] as const) {
-    for (const width of [390, 1440]) {
-      for (const filtered of [false, true]) {
-        for (const viewer of ['light', 'dark'] as const) {
-          test(`Library assertions ${locale} ${theme} ${viewer} ${width} `
-            + `${filtered}`, async ({ page }) => {
-            await page.setViewportSize({ width, height: 900 });
-            await page.emulateMedia({
-              colorScheme: viewer, reducedMotion: 'reduce',
+  test.describe(`interface ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [390, 1440]) {
+        for (const filtered of [false, true]) {
+          for (const viewer of ['light', 'dark'] as const) {
+            test(`Library assertions ${locale} ${theme} ${viewer} ${width} `
+              + `${filtered}`, async ({ page }) => {
+              await page.setViewportSize({ width, height: 900 });
+              await page.emulateMedia({
+                colorScheme: viewer, reducedMotion: 'reduce',
+              });
+              await page.context().addCookies([
+                {
+                  name: 'aboutme-locale', value: locale,
+                  url: 'http://127.0.0.1:20092',
+                },
+                {
+                  name: 'aboutme-theme', value: theme,
+                  url: 'http://127.0.0.1:20092',
+                },
+              ]);
+              await page.goto(filtered
+                ? '/templates?role=backend&filter=technical'
+                : '/templates');
+              await assertLibrary(page, locale, theme, width, filtered);
+              if (width === 390 && !filtered) {
+                await page.locator('[data-action="gallery-filters-open"]')
+                  .click();
+                await assertLibrarySheet(page, locale, theme);
+              }
             });
-            await page.context().addCookies([
-              {
-                name: 'aboutme-locale', value: locale,
-                url: 'http://127.0.0.1:20092',
-              },
-              {
-                name: 'aboutme-theme', value: theme,
-                url: 'http://127.0.0.1:20092',
-              },
-            ]);
-            await page.goto(filtered
-              ? '/templates?role=backend&filter=technical'
-              : '/templates');
-            await assertLibrary(page, locale, theme, width, filtered);
-            if (width === 390 && !filtered) {
-              await page.locator('[data-action="gallery-filters-open"]')
-                .click();
-              await assertLibrarySheet(page, locale, theme);
-            }
-          });
+          }
         }
       }
     }
-  }
+  });
 }
 
 for (const [name, selector, styles] of [
@@ -336,7 +220,7 @@ for (const [name, selector, styles] of [
     const assertClean = () => assertLibrary(page, 'vi', 'light', 390, false);
     await assertClean();
     const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow();
+    await expect(assertClean()).rejects.toThrow('Library grid geometry.');
     await restore();
     await assertClean();
   });
@@ -362,9 +246,311 @@ for (const name of ['control', 'heading'] as const) {
     if (name === 'heading') {
       await target.evaluate((element) =>
         element.setAttribute('aria-hidden', 'true'));
+      await expect(target).toHaveAttribute('aria-hidden', 'true');
     }
-    await expect(assertSheet()).rejects.toThrow();
+    await expect(assertSheet()).rejects.toThrow(name === 'control'
+      ? 'toBeVisible'
+      : 'toMatchAriaSnapshot');
     await restore();
     await assertSheet();
   });
 }
+
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [390, 1440]) {
+    test(`Role chips have their size and selected colors in ${theme} ${width}`,
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.context().addCookies([
+          {
+            name: 'aboutme-theme',
+            value: theme,
+            url: 'http://127.0.0.1:20092',
+          },
+        ]);
+        await page.goto('/templates?role=backend');
+        if (width === 390) {
+          await page.locator('[data-action="gallery-filters-open"]').click();
+        }
+        const fields = width === 390
+          ? page.getByTestId('gallery-filter-sheet')
+          : page.locator('.gallery-desktop');
+        const roles = fields.locator('[data-role]');
+        await expect(roles).toHaveCount(10);
+        const sizes = await roles.evaluateAll((nodes) => nodes.map((node) => {
+          const style = getComputedStyle(node);
+          return {
+            height: style.height,
+            paddingLeft: style.paddingLeft,
+            paddingRight: style.paddingRight,
+            borderRadius: style.borderRadius,
+            fontSize: style.fontSize,
+          };
+        }));
+        for (const size of sizes) {
+          expect(size).toEqual({
+            height: width === 390 ? '40px' : '36px',
+            paddingLeft: width === 390 ? '14px' : '16px',
+            paddingRight: width === 390 ? '14px' : '16px',
+            borderRadius: '9999px',
+            fontSize: '14px',
+          });
+        }
+        const colors = theme === 'light'
+          ? { background: 'rgb(38, 64, 156)', text: 'rgb(255, 255, 255)' }
+          : { background: 'rgb(143, 166, 240)', text: 'rgb(12, 16, 32)' };
+        for (const role of ['backend', 'frontend']) {
+          const selected = fields.locator(`[data-role="${role}"]`);
+          if (role === 'frontend') await selected.click();
+          await expect(selected).toHaveAttribute('aria-pressed', 'true');
+          await expect(selected).toHaveCSS(
+            'background-color', colors.background,
+          );
+          await expect(selected).toHaveCSS(
+            'border-top-color', colors.background,
+          );
+          await expect(selected).toHaveCSS('color', colors.text);
+          await expect(selected).toHaveCSS(
+            'font-weight', width === 390 ? '600' : '500',
+          );
+        }
+        if (width === 1440) {
+          const divider = fields.locator('.library-divider');
+          await expect(divider).toHaveCSS('margin-left', '4px');
+          await expect(divider).toHaveCSS('margin-right', '4px');
+        }
+      });
+  }
+}
+test('gallery header at 360 px fits the viewport in English', async ({
+  page,
+}) => {
+  // The narrowest supported phone width; the English header labels are the
+  // longer ones, so English is the tighter fit.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  const response = await page.goto('/templates');
+  expect(response?.status()).toBe(200);
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+  const header = await page.locator('[data-testid="app-shell"]').boundingBox();
+  expect(header).not.toBeNull();
+  if (header !== null) expect(header.x + header.width).toBeLessThanOrEqual(360);
+});
+
+for (const locale of ['vi', 'en'] as const) {
+  test.describe(`interface ${locale}`, () => {
+    test.use({ locale: locale === 'vi' ? 'vi-VN' : 'en-US' });
+    for (const theme of ['light', 'dark'] as const) {
+      test(`Library layouts fit in ${locale} ${theme}`, async ({ page }) => {
+        await page.context().addCookies([
+          {
+            name: 'aboutme-locale',
+            value: locale,
+            url: 'http://127.0.0.1:20092',
+          },
+          { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
+        ]);
+        await page.goto('/templates?role=fresher&filter=first-job');
+        for (const width of [
+          360, 390, 640, 641, 768, 899, 900, 1023, 1024, 1179, 1180, 1440,
+        ]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await page.evaluate(
+              () =>
+                document.documentElement.scrollWidth
+                - document.documentElement.clientWidth,
+            ),
+          ).toBe(0);
+          const trigger = page.locator('[data-action="gallery-filters-open"]');
+          if (width < 1024) {
+            await expect(trigger).toBeVisible();
+            await expect(
+              page.getByTestId('gallery-active-filters'),
+            ).toBeVisible();
+            await expect(page.locator('.gallery-desktop')).toBeHidden();
+            await trigger.click();
+            const sheet = page.getByTestId('gallery-filter-sheet');
+            await expect(sheet).toBeVisible();
+            expect(
+              await sheet.evaluate((node) =>
+                node.scrollWidth > node.clientWidth),
+            ).toBe(false);
+            await sheet.locator('[data-action="gallery-filters-close"]')
+              .click();
+          } else {
+            await expect(trigger).toBeHidden();
+            await expect(page.getByTestId('gallery-active-filters'))
+              .toBeHidden();
+            await expect(page.locator('.gallery-desktop')).toBeVisible();
+          }
+          const expected
+            = width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5;
+          expect(
+            await page
+              .locator('.gallery-grid')
+              .evaluate(
+                (node) =>
+                  getComputedStyle(node).gridTemplateColumns.split(' ').length,
+              ),
+          ).toBe(expected);
+          await expect.poll(() =>
+            measureGalleryGrid(page.locator('.gallery-grid')),
+          ).toEqual({
+            columns: expected,
+            columnGap: width < 641 ? 14 : 28,
+            rowGap: width < 641 ? 24 : 40,
+            ordered: true,
+          });
+        }
+      });
+    }
+  });
+}
+
+test('incoming URLs and history derive both groups without remounting', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
+  }]);
+  await page.goto(
+    '/templates?role=backend&filter=technical&source=a%20%26%20b',
+  );
+  const fields = page.locator('.gallery-desktop');
+  const count = page.getByTestId('gallery-count');
+  await fields.locator('[data-filter="ats"]').click();
+  await expect(page).toHaveURL(
+    /source=a(?:%20|\+)%(?:26)(?:%20|\+)b&role=backend&filter=ats$/u,
+  );
+  await expect(count).toContainText('0');
+  await page.evaluate(() => {
+    const node = document.querySelector('[data-testid="gallery-count"] span')!;
+    (window as Window & { countNode?: Element }).countNode = node;
+  });
+  await fields.locator('[data-filter="ats"]').click();
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector('[data-testid="gallery-count"] span')
+        === (window as Window & { countNode?: Element }).countNode,
+    ),
+  ).toBe(true);
+  await page.locator('[data-template="one-page-tight"]').evaluate((node) => {
+    node.setAttribute('data-retained', 'true');
+  });
+  await page
+    .getByRole('link', { name: 'Library', exact: true })
+    .first()
+    .click();
+  await expect(page.locator('[data-template]:visible')).toHaveCount(20);
+  await page.goBack();
+  await expect(count).toContainText('0');
+  await expect(fields.locator('[data-role="backend"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(fields.locator('[data-filter="ats"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await page.goForward();
+  await expect(fields.locator('[data-role="all"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.locator('[data-template="one-page-tight"]'),
+  ).toHaveAttribute('data-retained', 'true');
+});
+
+test('sheet traps links and resize repairs hidden focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await page.goto('/templates?role=backend&filter=technical');
+  const trigger = page.locator('[data-action="gallery-filters-open"]');
+  await trigger.click();
+  const sheet = page.getByTestId('gallery-filter-sheet');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-close"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.locator('[data-role="backend"]')).toBeFocused();
+  for (const value of [
+    'all',
+    'sample',
+    'ats',
+    'one-page',
+    'photo',
+    'first-job',
+    'technical',
+    'management',
+  ]) {
+    await page.keyboard.press('Tab');
+    await expect(sheet.locator(`[data-filter="${value}"]`)).toBeFocused();
+  }
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-clear"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-apply"]'),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    sheet.locator('[data-action="gallery-filters-close"]'),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(sheet).toHaveCount(0);
+  await expect(
+    page.locator('.gallery-desktop [data-role="backend"]'),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await expect(trigger).toBeFocused();
+  const roleChip = page.locator(
+    '[data-action="gallery-filter-remove"][data-filter="role"]',
+  );
+  const styleChip = page.locator(
+    '[data-action="gallery-filter-remove"][data-filter="style"]',
+  );
+  await roleChip.click();
+  await expect(styleChip).toBeFocused();
+  await styleChip.click();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await sheet.locator('[data-filter="technical"]').click();
+  await page
+    .locator('[data-slot="sheet-overlay"]')
+    .click({ position: { x: 1, y: 1 } });
+  await expect(sheet).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(page).toHaveURL(/filter=technical$/u);
+  const card = page.locator('[data-template]:visible').first();
+  await card.focus();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(card).toBeFocused();
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await expect(card).toBeFocused();
+});
+
+screenMutationTests('Library', async (page) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/templates');
+  await prepareScreen(page);
+}, libraryContract('vi', 'light'));
+
+screenMutationTests('Library sheet', async (page) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/templates');
+  await page.locator('[data-action="gallery-filters-open"]').click();
+}, filterSheetContract('gallery', 'vi', 'light'));

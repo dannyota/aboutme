@@ -1,4 +1,8 @@
-import { expect, type Locator } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
+
+import {
+  expectScreen, expectScreenClass, SCREEN_CLASSES, type ScreenContract,
+} from './display-assertions';
 
 export type StyleMutation = Readonly<Record<string,
   string | readonly [value: string, computed: string | RegExp]>>;
@@ -60,14 +64,20 @@ export async function applyStyleMutation(
           : null);
         return {
           values,
-          changed: !options.requireChange || records.some((record, index) =>
-            values[index] !== record.before[options.property]),
         };
-      }, { property, pseudo, requireChange: typeof expected !== 'string' }),
+      }, { property, pseudo }),
       `Style mutation computed ${property}.`).toEqual({
-        values: Array.from({ length: count }, () => matcher), changed: true,
+        values: Array.from({ length: count }, () => matcher),
       });
     }
+    // Companion declarations and already-correct siblings may already match.
+    await expect.poll(() => saved.evaluate((records, options) =>
+      records.some(({ element, before }) => element.isConnected
+        && options.properties.some((property) =>
+          getComputedStyle(element, options.pseudo).getPropertyValue(property)
+          !== before[property])),
+    { properties: Object.keys(styles), pseudo }),
+    'Style mutation changed computed values.').toBe(true);
   } catch (error) {
     await restore();
     throw error;
@@ -88,5 +98,89 @@ export async function applyStyleMutation(
       }
     });
     await saved.dispose();
+  }
+}
+
+/** Register a real surface's proof for each shared assertion class. */
+export function screenMutationTests(
+  name: string,
+  open: (page: Page) => Promise<void>,
+  contract: ScreenContract,
+): void {
+  for (const kind of SCREEN_CLASSES) {
+    if (kind === 'images' && !contract.image) continue;
+    test(`${name} rejects ${kind} mutation`, async ({ page }) => {
+      test.setTimeout(60_000);
+      await open(page);
+      await expectScreen(page, contract);
+      const assertion = () => expectScreenClass(page, contract, kind);
+      let restore: () => Promise<void>;
+      if (kind === 'content' || kind === 'accessibility' || kind === 'images') {
+        const selector = kind === 'content'
+          ? contract.copy[0]
+          : kind === 'accessibility' ? contract.aria[0] : contract.image!;
+        const target = page.locator(selector).first();
+        const attribute = kind === 'images' ? 'src' : 'aria-hidden';
+        const original = kind === 'content'
+          ? await target.innerHTML()
+          : await target.getAttribute(attribute);
+        if (kind === 'content') {
+          await target.evaluate((node) => {
+            node.textContent = 'MUTATED';
+          });
+          await expect(target).toHaveText('MUTATED');
+        } else {
+          const value = kind === 'images'
+            ? '/missing-display-fixture.png'
+            : 'true';
+          await target.evaluate((node, input) => {
+            node.setAttribute(input.attribute, input.value);
+          }, { attribute, value });
+          await expect(target).toHaveAttribute(attribute, value);
+        }
+        restore = async () => {
+          await target.evaluate((node, input) => {
+            if (input.content) node.innerHTML = input.original!;
+            else if (input.original === null) {
+              node.removeAttribute(input.attribute);
+            } else node.setAttribute(input.attribute, input.original);
+          }, { content: kind === 'content', attribute, original });
+        };
+      } else if (kind === 'overlap') {
+        const nodes = page.locator(contract.flow);
+        expect(await nodes.count(), 'Overlap mutation targets.')
+          .toBeGreaterThanOrEqual(2);
+        const offset = await nodes.evaluateAll((elements) => {
+          const first = elements[0]!.getBoundingClientRect();
+          const second = elements[1]!.getBoundingClientRect();
+          return { x: first.left - second.left, y: first.top - second.top };
+        });
+        restore = await applyStyleMutation(nodes.nth(1), {
+          transform: [`translate(${offset.x}px, ${offset.y}px)`, /matrix/u],
+        });
+      } else {
+        const selector = kind === 'geometry'
+          ? contract.root
+          : kind === 'containment'
+            ? contract.text
+            : kind === 'typography' ? contract.type[0] : contract.paint[0];
+        const styles: StyleMutation = kind === 'geometry'
+          ? { transform: ['translateX(2000px)', /matrix/u] }
+          : kind === 'containment'
+            ? { height: '1px', overflow: 'hidden' }
+            : kind === 'typography'
+              ? { 'font-family': 'monospace' }
+              : { [contract.paint[1]]: 'rgb(255, 0, 0)' };
+        restore = await applyStyleMutation(
+          page.locator(selector).first(), styles,
+        );
+      }
+      try {
+        await expect(assertion()).rejects.toThrow(`Screen ${kind}.`);
+      } finally {
+        await restore();
+      }
+      await assertion();
+    });
   }
 }

@@ -1,3 +1,5 @@
+import { expect } from '@playwright/test';
+import type { measurePdfLayout } from './display-assertions';
 import type { PdfInk, PdfPaint } from './pdf-paint';
 
 interface TextStyle {
@@ -209,4 +211,71 @@ export function pdfTextStyleDiagnostic(
         }
       : null,
   });
+}
+
+export function assertOverflowTextStyle(
+  layout: Awaited<ReturnType<typeof measurePdfLayout>>, paint: PdfPaint,
+): void {
+  expect(layout.family.replaceAll('"', ''), 'Print font family.')
+    .toBe('Be Vietnam Pro, Noto Sans');
+  expect(layout.synthesis, 'Print font synthesis.').toBe('none');
+  expect(layout.size, 'Print font size.').toBe(14);
+  expect(layout.lineHeight, 'Print line height.').toBe(21);
+  expect(layout.background, 'Print paper color.').toBe('rgb(255, 255, 255)');
+  expect(layout.headerAlign, 'Print header alignment.').toBe('left');
+  for (const icon of layout.icons) {
+    const sidebar = layout.sidebar && icon.left >= layout.sidebar.left - 1
+      && icon.top >= layout.sidebar.top - 1;
+    expect(pdfColorMatches(icon.color, sidebar ? '#4e5b62' : '#556066'),
+      'Print icon color.').toBe(true);
+  }
+  const expected = layout.chunks.map((chunk) => {
+    const heading = ['name', 'heading', 'title'].includes(chunk.role);
+    const scales: Record<string, number> = {
+      name: 2, headline: 1.15, heading: 1.1, meta: 0.9,
+    };
+    const size = 14 * (scales[chunk.role] ?? 1);
+    const color = chunk.linked
+      ? '#0f6b7d'
+      : heading
+        ? '#0e3f52'
+        : chunk.role === 'meta'
+          ? (chunk.region === 'sidebar' ? '#4e5b62' : '#556066')
+          : '#1c2b33';
+    expect(Math.abs(chunk.size - size), 'Print text size.')
+      .toBeLessThanOrEqual(0.1);
+    expect(chunk.weight, 'Print text weight.')
+      .toBe(chunk.role === 'title' && chunk.strong
+        ? '900'
+        : heading || chunk.strong ? '700' : '400');
+    const channels = chunk.color.match(/[\d.]+/gu) ?? [];
+    const hex = '#' + channels.map((channel) => Number(channel)
+      .toString(16).padStart(2, '0')).join('');
+    expect(pdfColorMatches(hex, color), 'Print text color.').toBe(true);
+    return {
+      value: chunk.role === 'heading'
+        ? chunk.text.toLocaleUpperCase('en-US')
+        : chunk.text,
+      expected: { color, size: size * 0.75, family: 'Be Vietnam Pro',
+        bold: heading || chunk.strong },
+    };
+  });
+  const weighted = pdfVariableTextWeights(paint, 'Be Vietnam Pro',
+    expected.filter((chunk) => !chunk.expected.bold).map(({ value }) => value));
+  for (const chunk of expected) {
+    expect(pdfTextStyleMatches(weighted, chunk.value, chunk.expected),
+      'PDF print text style. '
+      + pdfTextStyleDiagnostic(weighted, chunk.value, chunk.expected))
+      .toBe(true);
+  }
+  for (const text of layout.text) {
+    if (text.role === 'body') {
+      expect(text.align, 'Print body alignment.').toBe('left');
+    }
+    if (text.role === 'heading') {
+      expect(text.transform, 'Print heading transform.').toBe('uppercase');
+      expect(Math.abs(text.spacing - 14 * 1.1 * 0.06), 'Print heading spacing.')
+        .toBeLessThanOrEqual(0.1);
+    }
+  }
 }

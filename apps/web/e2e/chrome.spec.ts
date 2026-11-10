@@ -10,18 +10,20 @@ import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
+  expectScreen,
   measureChromeGrid,
   measureChromeSheet,
   measureChromeThumbnail,
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
-import { applyStyleMutation } from './style-mutation';
+import { applyStyleMutation, screenMutationTests } from './style-mutation';
 
 import {
+  chromeScreenContract,
+  prepareScreen,
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
-  waitForImages,
 } from './support';
 
 // Application chrome pixel baselines: the signed-out homepage, the login
@@ -54,6 +56,8 @@ async function expectChrome(
   theme: Theme,
   width: number,
 ) {
+  await prepareScreen(page);
+  await expectScreen(page, chromeContract(name, locale, theme));
   const vi = locale === 'vi';
   const header = page.getByTestId('app-shell');
   const nav = header.getByRole('navigation', {
@@ -98,6 +102,8 @@ async function expectChrome(
       ? '- textbox "Email"\n- button "Hiện mật khẩu"\n- button "Đăng nhập"'
       : '- textbox "Email"\n- button "Show password"\n- button "Sign in"');
     await expect(form.locator('input')).toHaveCount(2);
+    await expect.poll(() => measureTextContainment(form),
+      'Chrome form containment.').toEqual({ visible: true, contained: true });
     await expect(form.getByRole('button', {
       name: vi ? 'Đăng nhập' : 'Sign in', exact: true,
     })).toBeEnabled();
@@ -129,13 +135,14 @@ async function expectChrome(
   const titleContainer = name === 'home'
     ? '[data-testid="landing-hero"]'
     : '[data-testid="gallery-header"]';
-  await expect.poll(() => measureTextContainment(title, titleContainer))
+  await expect.poll(() => measureTextContainment(title, titleContainer),
+    'Chrome text containment.')
     .toEqual({ visible: true, contained: true });
 
   if (name === 'home') {
     await expect.poll(() => measureChromeSheet(
       page.getByTestId('landing-stage'),
-    )).toBe(true);
+    ), 'Chrome sheet alignment.').toBe(true);
     await expect(page.getByTestId('landing-sheet'))
       .toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(page.getByTestId('landing-sheet'))
@@ -153,12 +160,13 @@ async function expectChrome(
       cards.map((card) => card.getAttribute('data-template')))).toEqual([
       'ats-plain', 'engineer-compact', 'graduate-friendly', 'executive-band',
     ]);
-    await expect.poll(() => measureChromeGrid(grid)).toEqual({
-      columns: width < 1024 ? 2 : 4,
-      gapX: width < 1024 ? 16 : 24,
-      gapY: 32,
-      separated: true,
-    });
+    await expect.poll(() => measureChromeGrid(grid), 'Chrome grid geometry.')
+      .toEqual({
+        columns: width < 1024 ? 2 : 4,
+        gapX: width < 1024 ? 16 : 24,
+        gapY: 32,
+        separated: true,
+      });
     const cards = grid.locator('[data-template]');
     for (let index = 0; index < 4; index += 1) {
       const card = cards.nth(index);
@@ -173,12 +181,13 @@ async function expectChrome(
     await expect(galleryHeader).toHaveCSS('border-radius', '20px');
     const grid = page.locator('.gallery-grid');
     await expect(grid.locator(':scope > li')).toHaveCount(TEMPLATES.length);
-    await expect.poll(() => measureChromeGrid(grid)).toEqual({
-      columns: width < 641 ? 2 : 5,
-      gapX: width < 641 ? 14 : 28,
-      gapY: width < 641 ? 24 : 40,
-      separated: true,
-    });
+    await expect.poll(() => measureChromeGrid(grid), 'Chrome grid geometry.')
+      .toEqual({
+        columns: width < 641 ? 2 : 5,
+        gapX: width < 641 ? 14 : 28,
+        gapY: width < 641 ? 24 : 40,
+        separated: true,
+      });
     const images = grid.locator('img[data-page-image]');
     await expect(images).toHaveCount(TEMPLATES.length - LIVE_THUMBNAILS);
     for (let index = 0; index < await images.count(); index += 1) {
@@ -204,114 +213,88 @@ async function expectChrome(
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-for (const page of PAGES) {
-  for (const theme of THEMES) {
-    for (const width of WIDTHS) {
-      const title = `chrome ${page.name} ${theme} ${width}px matches baseline`;
-      test(title, async ({ page: browserPage }, testInfo) => {
-        await browserPage.setViewportSize({ width, height: 900 });
-        await browserPage.context().addCookies([
-          {
-            name: 'aboutme-locale',
-            value: 'vi',
-            url: 'http://127.0.0.1:20092',
-          },
-          {
-            name: 'aboutme-theme',
-            value: theme,
-            url: 'http://127.0.0.1:20092',
-          },
-        ]);
-
-        const response = await browserPage.goto(page.path);
-        expect(response?.status()).toBe(200);
-        // Chrome transitions (link and chip colors, hover lifts) must not
-        // be mid-flight at capture; the exact-pixel compare has no
-        // tolerance for a partly blended edge.
-        await browserPage.addStyleTag({
-          content: '*, *::before, *::after { transition: none !important; '
-            + 'animation: none !important; }',
-        });
-        await expect(browserPage.locator('[data-testid="app-shell"]'))
-          .toBeVisible();
-        await browserPage.evaluate(() => document.fonts.ready);
-        await waitForImages(browserPage);
-
-        const overflow = await browserPage.evaluate(() =>
-          document.documentElement.scrollWidth
-          - document.documentElement.clientWidth);
-        expect(overflow).toBe(0);
-
-        await expectChrome(browserPage, page.name, 'vi', theme, width);
-
-        if (page.thumbnails > 0) {
-          // Template thumbnails mount only near the viewport, so a full-page
-          // capture of a short viewport shows empty sheets. Grow the viewport
-          // to the whole page and wait for every thumbnail render.
-          const height = await browserPage.evaluate(() =>
-            document.documentElement.scrollHeight);
-          await browserPage.setViewportSize({ width, height });
-          await expect(
-            browserPage.locator('[data-sheet-thumbnail-render]'),
-          ).toHaveCount(page.thumbnails);
-          // Mounted thumbnails can change the page height; match the
-          // viewport to the settled height so layout does not move again.
-          const settled = await browserPage.evaluate(() =>
-            document.documentElement.scrollHeight);
-          if (settled !== height) {
-            await browserPage.setViewportSize({ width, height: settled });
-          }
-          await browserPage.evaluate(() => document.fonts.ready);
-          // Stored sample page images below the first rows load lazily, and
-          // a lazy image can still be blank at capture on a tall page. Load
-          // every image now so the capture never depends on that timing.
-          await browserPage.locator('img[loading="lazy"]').evaluateAll(
-            (images) => {
-              for (const image of images) {
-                (image as HTMLImageElement).loading = 'eager';
-              }
+test.describe('Vietnamese chrome', () => {
+  test.use({ locale: 'vi-VN' });
+  for (const page of PAGES) {
+    for (const theme of THEMES) {
+      for (const width of WIDTHS) {
+        const title = `chrome ${page.name} ${theme} ${width}px `
+          + 'matches baseline';
+        test(title, async ({ page: browserPage }, testInfo) => {
+          await browserPage.setViewportSize({ width, height: 900 });
+          await browserPage.context().addCookies([
+            {
+              name: 'aboutme-locale',
+              value: 'vi',
+              url: 'http://127.0.0.1:20092',
             },
-          );
-          await waitForImages(browserPage);
-          // Thumbnails measure their width after mounting; let two frames
-          // pass so every zoom has settled before the capture.
-          await browserPage.evaluate(() => new Promise<void>((done) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => done()));
-          }));
-          // Each embedded sheet's name renders as a p, not an h1, so the
-          // page keeps exactly one h1 once every thumbnail has mounted.
-          await expect(browserPage.locator('h1')).toHaveCount(1);
-        }
+            {
+              name: 'aboutme-theme',
+              value: theme,
+              url: 'http://127.0.0.1:20092',
+            },
+          ]);
 
-        await verifyScreenshot(
-          browserPage,
-          `chrome--${page.name}--${theme}--${width}.png`,
-          testInfo,
-          undefined,
-          CHROME_PIXEL_TOLERANCE,
-        );
+          const response = await browserPage.goto(page.path);
+          expect(response?.status()).toBe(200);
+          // Chrome transitions (link and chip colors, hover lifts) must not
+          // be mid-flight at capture; the exact-pixel compare has no
+          // tolerance for a partly blended edge.
+          await browserPage.addStyleTag({
+            content: '*, *::before, *::after { transition: none !important; '
+              + 'animation: none !important; }',
+          });
+          await expect(browserPage.locator('[data-testid="app-shell"]'))
+            .toBeVisible();
+          await browserPage.evaluate(() => document.fonts.ready);
+          await prepareScreen(browserPage);
 
-        if (page.name === 'home') {
-          const templates = browserPage.locator(
-            '[data-testid="landing-templates"]',
-          );
-          await templates.scrollIntoViewIfNeeded();
-          await expect(
-            browserPage.locator('[data-sheet-thumbnail-render]'),
-          ).toHaveCount(4);
-          await waitForImages(browserPage);
+          const overflow = await browserPage.evaluate(() =>
+            document.documentElement.scrollWidth
+            - document.documentElement.clientWidth);
+          expect(overflow).toBe(0);
+
+          await expectChrome(browserPage, page.name, 'vi', theme, width);
+
+          if (page.thumbnails > 0) {
+            await prepareScreen(browserPage);
+            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
+              .toHaveCount(page.thumbnails);
+            // Each embedded sheet's name renders as a p, not an h1, so the
+            // page keeps exactly one h1 once every thumbnail has mounted.
+            await expect(browserPage.locator('h1')).toHaveCount(1);
+          }
+
           await verifyScreenshot(
             browserPage,
-            `chrome--home-templates--${theme}--${width}.png`,
+            `chrome--${page.name}--${theme}--${width}.png`,
             testInfo,
-            templates,
+            undefined,
             CHROME_PIXEL_TOLERANCE,
           );
-        }
-      });
+
+          if (page.name === 'home') {
+            const templates = browserPage.locator(
+              '[data-testid="landing-templates"]',
+            );
+            await templates.scrollIntoViewIfNeeded();
+            await expect(
+              browserPage.locator('[data-sheet-thumbnail-render]'),
+            ).toHaveCount(4);
+            await prepareScreen(browserPage);
+            await verifyScreenshot(
+              browserPage,
+              `chrome--home-templates--${theme}--${width}.png`,
+              testInfo,
+              templates,
+              CHROME_PIXEL_TOLERANCE,
+            );
+          }
+        });
+      }
     }
   }
-}
+});
 
 for (const entry of PAGES) {
   for (const theme of THEMES) {
@@ -331,7 +314,7 @@ for (const entry of PAGES) {
         expect((await page.goto(entry.path))?.status()).toBe(200);
         await expect(page.getByTestId('app-shell')).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
-        await waitForImages(page);
+        await prepareScreen(page);
         await expectChrome(page, entry.name, 'en', theme, width);
       });
     }
@@ -398,7 +381,16 @@ for (const [name, selector, styles] of [
     const assertClean = () => expectChrome(page, 'home', 'vi', 'light', 390);
     await assertClean();
     const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow();
+    await expect(assertClean()).rejects.toThrow(
+      name === 'sheet alignment'
+        ? 'Chrome sheet alignment.'
+        : ['columns', 'card overlap', 'row gap'].includes(name)
+            ? 'Chrome grid geometry.'
+            : name === 'title clipping'
+              ? 'Screen containment.'
+              : name === 'body color'
+                ? 'Screen color.'
+                : name === 'navigation' ? 'toMatchAriaSnapshot' : 'font-size');
     await restore();
     await assertClean();
   });
@@ -419,7 +411,7 @@ for (const path of ['/', '/templates'] as const) {
       const restore = await applyStyleMutation(page.locator('h1'), {
         height: '20px', overflow,
       });
-      await expect(assertClean()).rejects.toThrow();
+      await expect(assertClean()).rejects.toThrow('Screen containment.');
       await restore();
       await assertClean();
     });
@@ -485,7 +477,10 @@ for (const engine of ['chromium', 'webkit'] as const) {
             + `${locale} ${width}px`;
           test(title, async ({ baseURL }) => {
             const origin = baseURL ?? 'http://127.0.0.1:20092';
-            const context = await browser.newContext({ baseURL: origin });
+            const context = await browser.newContext({
+              baseURL: origin, locale: locale === 'vi' ? 'vi-VN' : 'en-US',
+              timezoneId: 'UTC', deviceScaleFactor: 1, reducedMotion: 'reduce',
+            });
             try {
               await context.addCookies([
                 { name: 'aboutme-locale', value: locale, url: origin },
@@ -501,4 +496,27 @@ for (const engine of ['chromium', 'webkit'] as const) {
       }
     }
   });
+}
+
+function chromeContract(name: ChromePage, locale: Locale, theme: Theme) {
+  const vi = locale === 'vi';
+  const title = name === 'home'
+    ? vi
+      ? 'CV của bạn. Chia sẻ theo cách của bạn.'
+      : 'Your resume. Your link. Your control.'
+    : name === 'login'
+      ? vi ? 'Đăng nhập' : 'Sign in'
+      : vi ? 'Thư viện' : 'Library';
+  return chromeScreenContract('body',
+    'main :is(h1,h2,p):visible:not(.sr-only):not(.resume-document *)',
+    '[data-testid="app-shell"] nav a:visible', 'h1', title, theme,
+    name === 'templates' ? 'img[data-page-image]:visible' : undefined);
+}
+
+for (const entry of PAGES) {
+  screenMutationTests(`chrome ${entry.name}`, async (page) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto(entry.path);
+    await prepareScreen(page);
+  }, chromeContract(entry.name, 'vi', 'light'));
 }

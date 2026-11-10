@@ -1,58 +1,30 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { expect, test, type TestInfo } from '@playwright/test';
-import {
-  getDocument,
-  type PDFPageProxy,
-} from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { SAMPLES } from '@aboutme/schema/samples';
 import type { Resume } from '@aboutme/schema';
 
+import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { measurePdfLayout } from './display-assertions';
 import { applyStyleMutation } from './style-mutation';
-import { pdfFontFacesLoaded } from './pdf-fonts';
+import { assertPrintDom, assertPhotoCrop, assertPrintRules } from './pdf-fonts';
 import {
-  pdfGlyphGeometry,
-  pdfParagraphGeometry,
-  pdfSurfacePaint,
-  pdfTextPage,
-  pdfWidgetMatches,
-  pdfWidgetDiagnostic,
-  printedDisplayPages,
-  type PdfDisplayPage,
+  pdfTextPage, printedDisplayPages, withPrintedPdf, type PdfDisplayPage,
 } from './pdf-display';
-import {
-  fixturePhotoIdentity,
-  pdfImageMatches,
-  pdfImageDiagnostic,
-  pdfColorMatches,
-  pdfPaintMatch,
-  pdfPaintPage,
-  pdfTextStyleMatches,
-  pdfTextStyleDiagnostic,
-  type PdfBox,
-  type PdfFill,
-} from './pdf-paint';
+import { pdfPaintPage, pdfTextStyleMatches, pdfTextStyleDiagnostic }
+  from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
-import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
+import {
+  assertPdfPageGeometry, assertSampleFill, assertSampleStyle, FAMILIES,
+  textFill,
+} from './sample-pdf-content';
 import { denyExternalRequests, waitForImages } from './support';
 
-// Every gallery sample's PDF pages, rasterized through the same print path
-// that produces the real PDF: the harness in continuous mode, print media,
-// and page.pdf() with the production print flags (docs/design/templates/
-// print.md). The template gallery shows these images on the cards of the
-// templates with a sample (DESIGN.md, Library); this spec only produces and
-// checks them. Compare mode fails on the first stale file; update mode
-// writes review-only candidates plus the manifest that lists them, for the
-// manager to commit exactly like a pixel baseline.
-//
-// A sample is a model resume, so it prints on one page and fills it: its
-// text must reach between MIN_FILL and MAX_FILL of the usable page height.
-// A short sample makes its template look empty; a sample at the very bottom
-// leaves no room for the reader's own longer entries.
-
+// Samples use the production print flags and retain their product-image
+// comparisons until display cutover (docs/design/display-assertions.md).
 const PAGES_DIR = resolve(import.meta.dirname, '../public/templates/pages');
 const CANDIDATE_SUBDIR = 'template-pages';
 // About 1240px wide for an A4 page (docs/design/templates/print.md §2):
@@ -60,265 +32,6 @@ const CANDIDATE_SUBDIR = 'template-pages';
 // ship ten-plus documents.
 const RASTER_DPI = 150;
 const POINTS_PER_MM = 72 / 25.4;
-const MIN_FILL = 0.9;
-const MAX_FILL = 0.98;
-// pdf.js reports no descent for Type 3 fonts; a quarter em is close to the
-// descent of every catalog face.
-const FALLBACK_DESCENT = -0.25;
-
-const FAMILIES: Readonly<Record<string, readonly [string, string]>> = {
-  'be-vietnam-pro': ['Be Vietnam Pro', 'Noto Sans'],
-  'source-sans-3': ['Source Sans 3', 'Noto Sans'],
-  'inter': ['Inter', 'Noto Sans'],
-  'alegreya': ['Alegreya', 'Noto Serif'],
-};
-const META_COLORS: Readonly<Record<string, readonly [string, string]>> = {
-  'ats-plain': ['#404040', '#404040'],
-  'consulting-formal': ['#666a6e', '#666a6e'],
-  'creative-accent': ['#575351', '#57504c'],
-  'elegant-serif-two': ['#605c59', '#5d5751'],
-  'engineer-compact': ['#53575b', '#53575b'],
-  'executive-band': ['#575f69', '#808ea2'],
-  'graduate-friendly': ['#635f5c', '#615a53'],
-  'international-lang': ['#5f5d5b', '#5c5955'],
-  'minimal-air': ['#5b5d61', '#5b5d61'],
-  'modern-sidebar': ['#556066', '#4e5b62'],
-  'mono-print': ['#404040', '#404040'],
-  'nordic-muted': ['#666b71', '#63686f'],
-  'one-page-tight': ['#55595c', '#55595c'],
-};
-
-function cssHex(color: string): string {
-  const channels = color.match(/[\d.]+/gu);
-  if (!channels || channels.length !== 3) {
-    throw new Error('Unsupported sample color.');
-  }
-  return '#' + channels.map((channel) => Number(channel)
-    .toString(16).padStart(2, '0')).join('');
-}
-
-function mixedColor(accent: string, surface: string, share: number): string {
-  return '#' + [1, 3, 5].map((offset) => Math.round(
-    parseInt(accent.slice(offset, offset + 2), 16) * (1 - share)
-    + parseInt(surface.slice(offset, offset + 2), 16) * share,
-  ).toString(16).padStart(2, '0')).join('');
-}
-
-async function assertSampleStyle(
-  sample: Resume,
-  templateId: string,
-  lng: 'en' | 'vi',
-  layout: Awaited<ReturnType<typeof measurePdfLayout>>,
-  display: PdfDisplayPage,
-): Promise<void> {
-  const { font, spacing, colors, heading, sectionDisplay }
-    = sample.customization;
-  const base = font.baseSizePx;
-  const [family, fallback] = FAMILIES[font.family]!;
-  expect(layout.family.replaceAll('"', '')).toBe(`${family}, ${fallback}`);
-  expect(layout.synthesis).toBe('none');
-  expect(Math.abs(layout.size - base)).toBeLessThanOrEqual(0.1);
-  expect(Math.abs(layout.lineHeight - base * spacing.lineHeight))
-    .toBeLessThanOrEqual(0.1);
-  expect(layout.background).toBe('rgb(255, 255, 255)');
-  const target = sample.customization.layout.surfaceTarget ?? 'none';
-  const accent = colors.accent ?? colors.primary;
-  const foreground: PdfFill[] = [];
-  expect(layout.headerAlign).toBe(sample.customization.header?.align ?? 'left');
-  for (const gap of layout.entryGaps) {
-    expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
-  }
-  for (const gap of layout.sectionGaps) {
-    expect(Math.abs(gap - spacing.sectionGap)).toBeLessThanOrEqual(1);
-  }
-  for (const decoration of layout.headings) {
-    const surface = target === 'sidebar' && decoration.sidebar
-      ? colors.surface!
-      : '#ffffff';
-    expect(decoration.rule).toBe(heading.showRule ? 1 : 0);
-    expect(Math.abs(decoration.gap - spacing.sectionGap * 0.4))
-      .toBeLessThanOrEqual(1);
-    if (heading.showRule) {
-      const color = mixedColor(accent, surface, 0.6);
-      expect(decoration.ruleStyle).toBe('solid');
-      expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
-      const fill = pdfPaintMatch(display.paint, decoration.ruleBox,
-        color, true);
-      expect(fill).toBeDefined();
-      foreground.push(fill!);
-    }
-  }
-  let transform = 'none';
-  if (heading.style === 'uppercase') transform = 'uppercase';
-  if (heading.style === 'titlecase' && lng === 'en') transform = 'capitalize';
-  const chunks = samplePdfChunks(sample, lng);
-  const content = ({ text, role, region, linked, strong }:
-    typeof chunks[number]) => ({ text, role, region, linked, strong });
-  expect(layout.chunks.map((chunk) => ({
-    text: chunk.text, role: chunk.role, region: chunk.region,
-    linked: chunk.linked, strong: chunk.strong,
-  })), 'Print DOM text and occurrences from sample input.')
-    .toEqual(chunks.map(content));
-  expect(samplePdfContentMatches(display.text, chunks, layout),
-    'PDF sample input content, occurrences and column order.').toBe(true);
-  const expectedChunks = [];
-  for (const [index, chunk] of chunks.entries()) {
-    const measured = layout.chunks[index]!;
-    const region = target !== 'none' && chunk.region === target;
-    const darkHeader = templateId === 'executive-band' && region;
-    const isHeading = ['name', 'heading', 'title'].includes(chunk.role!);
-    let color = darkHeader ? '#e3e5e8' : colors.text;
-    if (chunk.role === 'meta') {
-      color = META_COLORS[templateId]![region ? 1 : 0];
-    }
-    if (isHeading) color = darkHeader ? '#ffffff' : colors.primary;
-    if (chunk.linked) color = darkHeader ? '#b6834a' : accent;
-    const sizes: Readonly<Record<string, number>> = {
-      name: 2, headline: 1.15, heading: 1.1, meta: 0.9,
-    };
-    const size = base * (sizes[chunk.role!] ?? 1);
-    const bold = isHeading || chunk.strong;
-    expect(Math.abs(measured.size - size)).toBeLessThanOrEqual(0.1);
-    let weight = bold ? '700' : '400';
-    if (chunk.role === 'title' && chunk.strong) weight = '900';
-    expect(measured.weight, 'Print DOM text weight.').toBe(weight);
-    expect(pdfColorMatches(cssHex(measured.color), color)).toBe(true);
-    const expected = { color, size: size * 0.75, family, bold };
-    expectedChunks.push({ value: chunk.value, expected });
-  }
-  const paint = pdfVariableTextWeights(display.paint, family,
-    expectedChunks.filter(({ expected }) => !expected.bold)
-      .map(({ value }) => value));
-  for (const { value, expected } of expectedChunks) {
-    const matches = pdfTextStyleMatches(paint, value, expected);
-    expect(matches, matches
-      ? undefined
-      : pdfTextStyleDiagnostic(paint, value, expected)).toBe(true);
-  }
-  for (const text of layout.text) {
-    if (text.role === 'heading') {
-      expect(text.transform).toBe(transform);
-      expect(Math.abs(text.spacing - (transform === 'uppercase'
-        ? base * 1.1 * 0.06
-        : 0))).toBeLessThanOrEqual(0.1);
-      expect(Math.abs(text.lineHeight - base * 1.1 * 1.2))
-        .toBeLessThanOrEqual(0.1);
-    }
-    if (text.role === 'body') expect(text.align).toBe(font.textAlign ?? 'left');
-  }
-  const inset = spacing.pageMargin ?? { x: 15, y: 15 };
-  const margins = { x: inset.x * POINTS_PER_MM, y: inset.y * POINTS_PER_MM };
-  const boxes = display.text.items.flatMap(({ bounds }) => bounds
-    ? [bounds]
-    : []);
-  const overflow = {
-    left: Math.max(0, ...boxes.map((box) => margins.x - box.left)),
-    right: Math.max(0, ...boxes.map((box) => box.right
-      - display.text.width + margins.x)),
-    top: Math.max(0, ...boxes.map((box) => margins.y - box.top)),
-    bottom: Math.max(0, ...boxes.map((box) => box.bottom
-      - display.text.height + margins.y)),
-  };
-  expect(pdfGlyphGeometry(display.text, margins),
-    `PDF glyph overflow in points: ${JSON.stringify(overflow)}`)
-    .toEqual({ contained: true, separated: true });
-  expect(pdfParagraphGeometry(display.text, layout.paragraphs.map((part) => ({
-    ...part, pitch: base * spacing.lineHeight * 0.75,
-  })))).toBe(true);
-  if (sample.customization.layout.columns === 2) {
-    expect(layout.sidebar).not.toBeNull();
-    expect(Math.abs(layout.sidebar!.right - layout.sidebar!.left
-      - layout.width * 0.32)).toBeLessThanOrEqual(1);
-    expect(Math.abs(layout.sidebar!.right - display.text.width + margins.x))
-      .toBeLessThanOrEqual(1);
-  } else expect(layout.sidebar).toBeNull();
-  expect(display.paint.images)
-    .toHaveLength(sample.personalDetails.photo ? 1 : 0);
-  if (sample.personalDetails.photo) {
-    const identity = await fixturePhotoIdentity();
-    expect(pdfImageMatches(display.paint.images[0], identity, layout.photo!),
-      pdfImageDiagnostic(display.paint.images[0], identity, layout.photo!))
-      .toBe(true);
-  }
-  const sections = Object.values(sample.content);
-  for (const section of sections) {
-    if (section.sectionType !== 'skill' && section.sectionType !== 'language') {
-      continue;
-    }
-    const sidebar = sample.customization.layout.sections.sidebar
-      .some((key) => sample.content[key] === section);
-    const surface = target === 'sidebar' && sidebar
-      ? colors.surface!
-      : '#ffffff';
-    for (const entry of section.entries.filter((entry) => !entry.isHidden)) {
-      const widget = layout.widgets.find(({ name }) => name === entry.name);
-      expect(widget).toBeDefined();
-      const mode = sectionDisplay[section.sectionType].style;
-      expect(pdfWidgetMatches(display, widget!, entry.level,
-        mode, {
-          solid: accent,
-          track: mixedColor(accent, surface, 0.8),
-          onAccent: '#ffffff',
-          fontSize: base * 0.9,
-        }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
-      if (entry.level !== undefined && mode !== 'text') {
-        const match = (box: PdfBox, color: string, exposed?: PdfBox) => {
-          const fill = pdfPaintMatch(display.paint, box, color,
-            false, exposed);
-          expect(fill).toBeDefined();
-          foreground.push(fill!);
-        };
-        if (mode === 'dots') {
-          widget!.dots.forEach((dot, index) => match(dot,
-            index < entry.level! ? accent : mixedColor(accent, surface, 0.8)));
-        } else if (mode === 'bar') {
-          const track = widget!.track!;
-          const fill = { ...track,
-            right: track.left + (track.right - track.left) * entry.level / 5 };
-          if (entry.level < 5) {
-            match(track, mixedColor(accent, surface, 0.8),
-              { ...track, left: fill.right });
-          }
-          if (entry.level > 0) match(fill, accent);
-        } else match(widget!.widget!, accent);
-      }
-    }
-  }
-  if (target === 'sidebar' || target === 'header') {
-    const box = target === 'sidebar' ? layout.sidebar : layout.header;
-    expect(box).not.toBeNull();
-    expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
-      foreground, layout.icons)).toBe(true);
-  }
-}
-
-/**
- * How far down a PDF page its text reaches: the lowest glyph bottom below
- * the top margin, as a share of the usable height between the margins.
- * Glyph bottoms use each font's descent, so a descender counts.
- */
-async function textFill(
-  pdfPage: PDFPageProxy,
-  marginYmm: number,
-): Promise<number> {
-  const [, bottom, , top] = pdfPage.view;
-  const pageHeight = top! - bottom!;
-  const margin = marginYmm * POINTS_PER_MM;
-  const content = await pdfPage.getTextContent();
-  let lowest = 0;
-  for (const item of content.items) {
-    if (!('str' in item) || item.str.trim() === '') continue;
-    const reported = content.styles[item.fontName]?.descent;
-    const descent = Number.isFinite(reported) ? reported! : FALLBACK_DESCENT;
-    const size = Number.isFinite(item.height) && item.height > 0
-      ? item.height
-      : Math.abs(item.transform[3]!);
-    const glyphBottom = item.transform[5]! + (descent * size);
-    lowest = Math.max(lowest, top! - glyphBottom);
-  }
-  return (lowest - margin) / (pageHeight - (2 * margin));
-}
-
 interface ManifestEntry {
   readonly templateId: string;
   readonly lng: 'en' | 'vi';
@@ -444,11 +157,12 @@ for (const { templateId, lng } of SAMPLES) {
       x: margins.x * POINTS_PER_MM, y: margins.y * POINTS_PER_MM,
     });
     const [family] = FAMILIES[sample.customization.font.family]!;
-    const faces = await page.evaluate(() => Array.from(document.fonts)
-      .map(({ family, status, weight, style }) => ({
-        family, status, weight, style,
-      })));
-    expect(pdfFontFacesLoaded(faces, family)).toBe(true);
+    await assertPrintDom(page, family, sample.customization.layout.columns,
+      sample.customization.spacing);
+    await assertPrintRules(page);
+    if (sample.personalDetails.photo) {
+      await assertPhotoCrop(page, sample.personalDetails.photo.crop);
+    }
     const sections = sample.customization.layout.sections;
     const visible = [...sections.main, ...sections.sidebar]
       .map((key) => sample.content[key]!)
@@ -493,8 +207,7 @@ for (const { templateId, lng } of SAMPLES) {
       );
       expect.soft(document.numPages).toBe(1);
       expect.soft(SAMPLE_PAGES[templateId]).toBe(1);
-      expect.soft(firstFill).toBeGreaterThanOrEqual(MIN_FILL);
-      expect.soft(firstFill).toBeLessThanOrEqual(MAX_FILL);
+      assertSampleFill(firstFill);
       const files: string[] = [];
       let width = 0;
       let height = 0;
@@ -505,6 +218,7 @@ for (const { templateId, lng } of SAMPLES) {
       ) {
         const pdfPage = await document.getPage(pageNumber);
         const textPage = await pdfTextPage(pdfPage);
+        assertPdfPageGeometry([textPage], 1, 'a4');
         await assertSampleStyle(sample, templateId, lng, layout, {
           text: textPage, paint: await pdfPaintPage(pdfPage),
         });
@@ -634,3 +348,116 @@ test('gallery sample page manifest stays current', async () => {
   }));
   expect(`${JSON.stringify(withHashes, null, 2)}\n`).toBe(expected);
 });
+
+for (const defect of ['font size', 'text color', 'icon color',
+  'sidebar tint', 'level bar',
+  'photo', 'margin', 'heading rule', 'line spacing'] as const) {
+  test(`sample PDF contract detects changed ${defect}`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+    const sample: Resume = JSON.parse(await readFile(resolve(
+      import.meta.dirname,
+      '../../../packages/schema/samples/modern-sidebar.vi.json',
+    ), 'utf8'));
+    const margin = sample.customization.spacing.pageMargin!;
+    const margins = { x: margin.x * POINTS_PER_MM,
+      y: margin.y * POINTS_PER_MM };
+    await page.setViewportSize({
+      width: Math.round((210 - 2 * margin.x) * 96 / 25.4), height: 1123,
+    });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const check = async (display?: PdfDisplayPage[]) => {
+      display ??= await printedDisplayPages(page);
+      assertPdfPageGeometry(display.map(({ text }) => text), 1, 'a4');
+      await assertSampleStyle(sample, 'modern-sidebar', 'vi',
+        await measurePdfLayout(page, margins), display[0]!);
+      return display;
+    };
+    const baseline = await check();
+    let message: string;
+    if (defect === 'font size') {
+      await applyStyleMutation(page.locator('.resume-document'), {
+        'font-size': '16px',
+      });
+      message = 'Print DOM font size.';
+    } else if (defect === 'text color') {
+      await applyStyleMutation(page.locator('.entry-body'), {
+        color: 'rgb(0, 0, 0)',
+      });
+      message = 'Print DOM text color.';
+    } else if (defect === 'icon color') {
+      await applyStyleMutation(page.locator('.resume-icon'), {
+        color: 'rgb(0, 0, 0)',
+      });
+      message = 'Print icon color.';
+    } else if (defect === 'sidebar tint') {
+      await applyStyleMutation(page.locator('.resume-sidebar'), {
+        'background-color': 'rgb(0, 0, 0)',
+      });
+      message = 'PDF sample surface paint.';
+    } else if (defect === 'level bar') {
+      await applyStyleMutation(page.locator('.level-fill'), {
+        width: ['20%', /^\d+(?:\.\d+)?px$/u],
+      });
+      message = 'PDF widget measurements:';
+    } else if (defect === 'photo') {
+      await page.locator('.resume-header').evaluate(async (header, src) => {
+        const image = document.createElement('img');
+        image.src = src;
+        image.style.cssText = 'position: absolute; width: 96px; height: 96px';
+        header.append(image);
+        await image.decode();
+      }, FIXED_PHOTO_DATA_URL);
+      await expect(page.locator('.resume-header img')).toHaveCount(1);
+      message = 'PDF sample photo count.';
+    } else if (defect === 'margin') {
+      await applyStyleMutation(page.locator('.resume-name'), {
+        transform: ['translateX(-8px)', 'matrix(1, 0, 0, 1, -8, 0)'],
+      });
+      message = 'PDF glyph overflow in points:';
+    } else if (defect === 'heading rule') {
+      await applyStyleMutation(page.locator('.section-heading'), {
+        'border-bottom-width': '0px',
+      });
+      message = 'Print heading rule.';
+    } else {
+      await applyStyleMutation(page.locator('.entry-body p').first(), {
+        'line-height': '23px',
+      });
+      message = 'PDF paragraph line pitch.';
+    }
+    const altered = await printedDisplayPages(page);
+    expect(altered).not.toEqual(baseline);
+    await expect(check(altered)).rejects.toThrow(message);
+    expect(external).toEqual([]);
+  });
+}
+
+for (const boundary of ['minimum', 'maximum'] as const) {
+  test(`sample PDF fill detects a broken ${boundary}`, async ({ page }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: 688, height: 1123 });
+    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
+      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const baseline = await withPrintedPdf(page, (part) => textFill(part, 13));
+    expect(baseline).toHaveLength(1);
+    assertSampleFill(baseline[0]!);
+    const scale = boundary === 'minimum' ? 0.8 : 0.99 / baseline[0]!;
+    await applyStyleMutation(page.locator('.resume-document'), {
+      'transform-origin': '0px 0px',
+      'transform': [`scaleY(${scale})`, /^matrix\(/u],
+    });
+    const altered = await withPrintedPdf(page, (part) => textFill(part, 13));
+    expect(altered).toHaveLength(1);
+    expect(altered[0]).not.toBe(baseline[0]);
+    expect(() => assertSampleFill(altered[0]!))
+      .toThrow(`PDF sample ${boundary} fill.`);
+    expect(external).toEqual([]);
+  });
+}

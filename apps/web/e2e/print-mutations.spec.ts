@@ -4,8 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { measurePdfLayout } from './display-assertions';
+import { assertPhotoCrop, assertPrintDom } from './pdf-fonts';
+import { assertOverflowTextStyle } from './pdf-text-style';
 import { applyStyleMutation } from './style-mutation';
 import {
+  checkMembership,
   expectedEntryIds,
   EXPECTED_PAGES,
   pdfEntryIds,
@@ -23,9 +26,12 @@ import {
   fixturePhotoIdentity, pdfImageDiagnostic, pdfImageMatches,
 } from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
-import { samplePdfChunks, samplePdfContentMatches } from './sample-pdf-content';
+import {
+  assertPdfPageGeometry, samplePdfChunks, samplePdfContentMatches,
+} from './sample-pdf-content';
 
-for (const mutation of ['accents', 'replacement', 'reorder'] as const) {
+for (const mutation of ['accents', 'replacement', 'reorder',
+  'hide', 'duplicate'] as const) {
   test(`sample PDF input expectations detect ${mutation}`, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -46,13 +52,20 @@ for (const mutation of ['accents', 'replacement', 'reorder'] as const) {
     const expected = samplePdfChunks(sample, 'vi');
     const baseline = await printedTextPages(page);
     expect(baseline).toHaveLength(1);
-    expect(samplePdfContentMatches(baseline[0]!, expected, layout)).toBe(true);
+    expect(samplePdfContentMatches(baseline[0]!, expected, layout),
+      'PDF sample input content, occurrences and column order.').toBe(true);
     const section = page.locator('.resume-main .resume-section').nth(1);
     await expect(section.locator('.entry')).toHaveCount(3);
+    if (mutation === 'hide') {
+      await applyStyleMutation(section.locator('.entry').first(), {
+        display: 'none',
+      });
+    }
     await section.evaluate((element, change) => {
       const first = element.querySelector('.entry')!;
       if (change === 'reorder') first.before(first.nextElementSibling!);
-      else {
+      else if (change === 'duplicate') first.after(first.cloneNode(true));
+      else if (change !== 'hide') {
         const body = first.querySelector('.entry-body')!;
         if (change === 'replacement') body.textContent = 'Nội dung thay thế.';
         else {
@@ -66,8 +79,11 @@ for (const mutation of ['accents', 'replacement', 'reorder'] as const) {
       }
     }, mutation);
     const altered = await printedTextPages(page);
-    expect(altered).toHaveLength(1);
-    expect(samplePdfContentMatches(altered[0]!, expected, layout)).toBe(false);
+    if (mutation === 'duplicate') expect(altered.length).toBeGreaterThan(0);
+    else expect(altered).toHaveLength(1);
+    expect(altered).not.toEqual(baseline);
+    expect(samplePdfContentMatches(altered[0]!, expected, layout),
+      'PDF sample input content, occurrences and column order.').toBe(false);
     expect(external).toEqual([]);
   });
 }
@@ -105,7 +121,8 @@ test('PDF columns reject a main entry moved into the page-two sidebar',
     expect(external).toEqual([]);
   });
 
-for (const mutation of ['coincident text', 'cross-column collision'] as const) {
+for (const mutation of ['margin', 'coincident text',
+  'cross-column collision'] as const) {
   test(`PDF glyph bounds reject ${mutation}`, async ({ page }) => {
     const external = await denyExternalRequests(page);
     await page.emulateMedia({ media: 'print' });
@@ -120,9 +137,14 @@ for (const mutation of ['coincident text', 'cross-column collision'] as const) {
     const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
     const baseline = await printedTextPages(page);
     expect(baseline).toHaveLength(2);
-    expect(pdfGlyphGeometry(baseline[0]!, margins).separated).toBe(true);
+    expect(pdfGlyphGeometry(baseline[0]!, margins))
+      .toEqual({ contained: true, separated: true });
     const title = page.locator('.resume-main .entry-title').first();
-    if (mutation === 'coincident text') {
+    if (mutation === 'margin') {
+      await applyStyleMutation(title, {
+        transform: ['translateX(-8px)', 'matrix(1, 0, 0, 1, -8, 0)'],
+      });
+    } else if (mutation === 'coincident text') {
       await title.evaluate((element) => {
         const clone = element.cloneNode(true) as HTMLElement;
         clone.dataset.overlapProbe = 'true';
@@ -147,7 +169,10 @@ for (const mutation of ['coincident text', 'cross-column collision'] as const) {
     }
     const altered = await printedTextPages(page);
     expect(altered).toHaveLength(2);
-    expect(pdfGlyphGeometry(altered[0]!, margins).separated).toBe(false);
+    expect(altered).not.toEqual(baseline);
+    const geometry = pdfGlyphGeometry(altered[0]!, margins);
+    expect(mutation === 'margin' ? geometry.contained : geometry.separated,
+      'PDF glyph bounds.').toBe(false);
     expect(external).toEqual([]);
   });
 }
@@ -214,12 +239,15 @@ test('PDF membership detects forced break', async ({ page }) => {
   await waitForImages(page);
   await page.emulateMedia({ media: 'print' });
   const baseline = pdfMembership(await printedTextPages(page), printCase);
+  checkMembership(baseline, 'print-main-overflow-vi-a4-light');
   expect(baseline.pageCount).toBe(EXPECTED_PAGES);
   const entries = page.locator('.resume-main .entry');
   await expect(entries).toHaveCount(printCase.total);
   await applyStyleMutation(entries.nth(3), { 'break-before': 'page' });
   const altered = pdfMembership(await printedTextPages(page), printCase);
   expect(altered).not.toEqual(baseline);
+  expect(() => checkMembership(altered, 'print-main-overflow-vi-a4-light'))
+    .toThrow('PDF approved page membership.');
   expect(external).toEqual([]);
 });
 
@@ -262,7 +290,8 @@ test('PDF membership detects unbreakable entries', async ({ page }) => {
 });
 
 const PAINT_MUTATIONS = [
-  'sidebar position', 'continuation tint', 'photo', 'substituted photo',
+  'sidebar position', 'continuation tint', 'level bar',
+  'photo', 'substituted photo',
 ] as const;
 for (const mutation of PAINT_MUTATIONS) {
   test(`PDF measurements detect a changed ${mutation}`, async ({ page }) => {
@@ -332,6 +361,10 @@ for (const mutation of PAINT_MUTATIONS) {
       await applyStyleMutation(sidebar.locator('.resume-section'), {
         position: 'relative',
       });
+    } else if (mutation === 'level bar') {
+      await applyStyleMutation(page.locator('.level-fill'), {
+        width: ['20%', /^\d+(?:\.\d+)?px$/u],
+      });
     } else if (mutation === 'photo') {
       await applyStyleMutation(page.locator('.resume-photo img'), {
         visibility: 'hidden',
@@ -351,10 +384,13 @@ for (const mutation of PAINT_MUTATIONS) {
     }
     const altered = await printedDisplayPages(page);
     expect(altered).toHaveLength(2);
+    expect(altered).not.toEqual(baseline);
     if (mutation === 'sidebar position') expect(columns(altered)).toBe(false);
     else if (mutation === 'continuation tint') {
       expect(tint(altered, 0)).toBe(true);
       expect(tint(altered, 1)).toBe(false);
+    } else if (mutation === 'level bar') {
+      expect(tint(altered, 0), 'PDF sidebar paint and level bars.').toBe(false);
     } else expect(photo(altered)).toBe(false);
     expect(external).toEqual([]);
   });
@@ -415,8 +451,175 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
     }
     const altered = await printedDisplayPages(page);
     expect(altered).toHaveLength(1);
+    expect(altered).not.toEqual(baseline);
     expect(correct(altered), pdfWidgetDiagnostic(altered[0]!, widget!))
       .toBe(false);
+    expect(external).toEqual([]);
+  });
+}
+
+for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
+  for (const defect of ['clipping', 'overflow', 'overlap', 'spacing', 'font',
+    'unloaded font', 'image', 'columns']) {
+    if (fixture.startsWith('sample-') && defect === 'image') continue;
+    test(`${fixture} print DOM detects ${defect}`, async ({ page }) => {
+      const external = await denyExternalRequests(page);
+      await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+      await page.setViewportSize({ width: 688, height: 1123 });
+      expect((await page.goto(`/_harness/render?fixture=${fixture}`
+        + '&template=modern-sidebar&mode=continuous&print=1'))?.ok())
+        .toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await waitForImages(page);
+      const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2);
+      await check();
+      let message: string;
+      if (defect === 'clipping') {
+        const body = page.locator('.entry-body').first();
+        await applyStyleMutation(body, { height: '1px', overflow: 'hidden' });
+        expect(await body.evaluate((element) =>
+          element.scrollHeight > element.clientHeight + 1)).toBe(true);
+        message = 'Print text containment.';
+      } else if (defect === 'overflow') {
+        const body = page.locator('.entry-body p').first();
+        await body.evaluate((element) => {
+          element.textContent = 'x'.repeat(2048);
+        });
+        await expect(body).toHaveText('x'.repeat(2048));
+        await applyStyleMutation(body, { 'white-space': 'nowrap' });
+        message = 'Print horizontal overflow.';
+      } else if (defect === 'unloaded font') {
+        expect(await page.evaluate(() => {
+          const faces = [...document.fonts].filter((face) =>
+            face.family.replaceAll('"', '') === 'Be Vietnam Pro');
+          faces.forEach((face) => document.fonts.delete(face));
+          return faces.length;
+        })).toBeGreaterThan(0);
+        message = 'Print requested fonts loaded.';
+      } else if (defect === 'overlap') {
+        const entries = page.locator('.resume-main .entry');
+        const gap = await entries.nth(1).evaluate((element) =>
+          element.getBoundingClientRect().top
+          - element.previousElementSibling!.getBoundingClientRect().bottom);
+        const shift = Math.ceil(gap + 4);
+        await applyStyleMutation(entries.nth(1), {
+          transform: [`translateY(-${shift}px)`,
+            `matrix(1, 0, 0, 1, 0, -${shift})`],
+        });
+        message = 'Print sibling separation.';
+      } else if (defect === 'spacing') {
+        await applyStyleMutation(page.locator('.resume-main .entry').nth(2), {
+          'margin-top': '14px',
+        });
+        message = 'Print entry and section spacing.';
+      } else if (defect === 'font') {
+        await applyStyleMutation(page.locator('.resume-document'), {
+          'font-family': 'serif',
+        });
+        message = 'Print requested font family.';
+      } else if (defect === 'image') {
+        await applyStyleMutation(page.locator('.resume-photo img'), {
+          visibility: 'hidden',
+        });
+        message = 'Print images decoded and visible.';
+      } else {
+        await applyStyleMutation(page.locator('.resume-sidebar'), {
+          transform: ['translateX(4px)', 'matrix(1, 0, 0, 1, 4, 0)'],
+        });
+        message = 'Print column geometry.';
+      }
+      await expect(check()).rejects.toThrow(message);
+      expect(external).toEqual([]);
+    });
+  }
+}
+
+for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
+  for (const defect of ['count', 'size'] as const) {
+    test(`${fixture} PDF page geometry detects changed ${defect}`, async ({
+      page,
+    }) => {
+      const external = await denyExternalRequests(page);
+      await page.emulateMedia({ media: 'print' });
+      expect((await page.goto(`/_harness/render?fixture=${fixture}`
+        + '&template=modern-sidebar&mode=continuous&print=1'))?.ok())
+        .toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await waitForImages(page);
+      const count = fixture.startsWith('sample-') ? 1 : 2;
+      const baseline = await printedTextPages(page);
+      assertPdfPageGeometry(baseline, count, 'a4');
+      if (defect === 'count') {
+        await page.locator('.resume-document').evaluate((element) => {
+          const extra = document.createElement('div');
+          extra.textContent = 'EXTRA-PAGE';
+          extra.style.breakBefore = 'page';
+          element.append(extra);
+        });
+        await expect(page.getByText('EXTRA-PAGE', { exact: true }))
+          .toHaveCount(1);
+      } else {
+        await page.addStyleTag({ content: '@page { size: 180mm 320mm; }' });
+      }
+      const altered = await printedTextPages(page);
+      expect(altered).not.toEqual(baseline);
+      if (defect === 'count') {
+        expect(() => assertPdfPageGeometry(altered, count, 'a4'))
+          .toThrow('PDF page count.');
+      } else {
+        expect(altered[0]!.width).not.toBe(baseline[0]!.width);
+        expect(() => assertPdfPageGeometry(altered, altered.length, 'a4'))
+          .toThrow('PDF page size.');
+      }
+      expect(external).toEqual([]);
+    });
+  }
+}
+
+for (const defect of ['font size', 'color', 'icon color', 'crop'] as const) {
+  test(`overflow print contract detects changed ${defect}`, async ({
+    page,
+  }) => {
+    const external = await denyExternalRequests(page);
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: 688, height: 1123 });
+    expect((await page.goto('/_harness/render?fixture=print-main-overflow'
+      + '&template=modern-sidebar&mode=continuous'))?.ok()).toBe(true);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await waitForImages(page);
+    const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
+    const crop = { x: 0.1, y: 0.05, width: 0.8, height: 0.8 };
+    const baseline = await printedDisplayPages(page);
+    const check = async () => {
+      const layout = await measurePdfLayout(page, margins);
+      assertOverflowTextStyle(layout, {
+        fills: [], images: [],
+        text: baseline.flatMap(({ paint }) => paint.text),
+      });
+      await assertPhotoCrop(page, crop);
+    };
+    await check();
+    if (defect === 'crop') {
+      await applyStyleMutation(page.locator('.resume-photo img'), {
+        left: '0px', top: '0px',
+      });
+    } else if (defect === 'icon color') {
+      await applyStyleMutation(page.locator('.resume-icon'), {
+        color: 'rgb(0, 0, 0)',
+      });
+    } else {
+      await applyStyleMutation(page.locator('.resume-document'),
+        defect === 'color'
+          ? { color: 'rgb(0, 0, 0)' }
+          : { 'font-size': '16px' });
+    }
+    await expect(check()).rejects.toThrow(defect === 'crop'
+      ? 'Print photo crop.'
+      : defect === 'icon color'
+        ? 'Print icon color.'
+        : defect === 'color'
+          ? 'Print text color.'
+          : 'Print font size.');
     expect(external).toEqual([]);
   });
 }
