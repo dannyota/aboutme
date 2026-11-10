@@ -53,7 +53,7 @@ export interface Diagnostics {
   assertTemplateFailureSecondChild(): void;
   armPhotoReadFailure(): void;
   armTemplateFailure(): void;
-  expectHTTPFailure(method: string, pathname: string, status: 401 | 412): void;
+  expectHTTPFailure(method: string, pathname: string, status: 401 | 412): () => void;
   pauseNextMutation(method: string, pathname: string): PausedPhotoRequest;
   pauseNextPhotoCrop(): PausedPhotoRequest;
   pauseNextPhotoUpload(): PausedPhotoUpload;
@@ -127,24 +127,33 @@ export async function expectNoPersistenceWrites(
   });
 }
 
+export function safeSaveState(saveState: string | null): string {
+  return saveState !== null && [
+    'conflict',
+    'dirty',
+    'error',
+    'offline',
+    'saved',
+    'saving',
+    'session-lost',
+  ].includes(saveState) ? saveState : 'other';
+}
+
 export async function expectSavedOrDiagnose(
   state: EditorProofState,
   page: Page,
-  boundary: 'template-keep-partial' | 'photo-upload' | 'photo-crop',
+  boundary:
+    | 'template-keep-partial'
+    | 'photo-upload'
+    | 'photo-default-crop'
+    | 'photo-crop'
+    | 'session-resume',
 ): Promise<void> {
   try {
     await expect(page.locator('[data-state="saved"]')).toBeVisible();
   } catch (error) {
     const saveState = await page.getByTestId('save-status').getAttribute('data-state');
-    const safeState = [
-      'conflict',
-      'dirty',
-      'error',
-      'offline',
-      'saved',
-      'saving',
-      'session-lost',
-    ].includes(saveState ?? '') ? saveState : 'other';
+    const safeState = safeSaveState(saveState);
     const conflict = page.locator('[data-conflict]').first();
     const category = await conflict.count() > 0
       ? classifyConflict(await conflict.getAttribute('data-conflict'))

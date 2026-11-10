@@ -50,12 +50,21 @@ export async function installDiagnostics(
     readonly method: string;
     readonly pathname: string;
     readonly status: 401 | 412;
+    cancelConsole?: () => void;
   }[] = [];
-  const expectedConsoleFailures = new Map<string, number[]>();
-  const expectConsoleFailure = (url: string, status: number): void => {
+  const expectedConsoleFailures = new Map<string, { status: number }[]>();
+  const expectConsoleFailure = (url: string, status: number): (() => void) => {
     const pending = expectedConsoleFailures.get(url) ?? [];
-    pending.push(status);
+    const expected = { status };
+    pending.push(expected);
     expectedConsoleFailures.set(url, pending);
+    return (): void => {
+      const index = pending.indexOf(expected);
+      if (index !== -1) pending.splice(index, 1);
+      if (pending.length === 0 && expectedConsoleFailures.get(url) === pending) {
+        expectedConsoleFailures.delete(url);
+      }
+    };
   };
   const consumeExpectedConsoleFailure = (
     url: string,
@@ -63,7 +72,7 @@ export async function installDiagnostics(
   ): boolean => {
     if (status === null) return false;
     const pending = expectedConsoleFailures.get(url);
-    if (pending?.[0] !== status) return false;
+    if (pending?.[0]?.status !== status) return false;
     pending.shift();
     if (pending.length === 0) expectedConsoleFailures.delete(url);
     return true;
@@ -123,7 +132,7 @@ export async function installDiagnostics(
     );
     if (expectedRequestIndex !== -1) {
       const [expected] = expectedRequestFailures.splice(expectedRequestIndex, 1);
-      expectConsoleFailure(request.url(), expected!.status);
+      expected!.cancelConsole = expectConsoleFailure(request.url(), expected!.status);
     }
     if (
       pausedMutation !== undefined
@@ -212,8 +221,19 @@ export async function installDiagnostics(
       method: string,
       pathname: string,
       status: 401 | 412,
-    ): void => {
-      expectedRequestFailures.push({ method, pathname, status });
+    ): (() => void) => {
+      const expected = {
+        method,
+        pathname,
+        status,
+        cancelConsole: undefined as (() => void) | undefined,
+      };
+      expectedRequestFailures.push(expected);
+      return (): void => {
+        const index = expectedRequestFailures.indexOf(expected);
+        if (index !== -1) expectedRequestFailures.splice(index, 1);
+        expected.cancelConsole?.();
+      };
     },
     pauseNextMutation: (
       method: string,
@@ -223,8 +243,15 @@ export async function installDiagnostics(
         throw new Error('mutation pause already armed');
       }
       const gate = createPendingRequestGate();
-      pausedMutation = { ...gate.pending, method, pathname };
-      return gate.control;
+      const pending = { ...gate.pending, method, pathname };
+      pausedMutation = pending;
+      return {
+        ...gate.control,
+        release: (): void => {
+          if (pausedMutation === pending) pausedMutation = undefined;
+          gate.control.release();
+        },
+      };
     },
     pauseNextPhotoCrop: (): PausedPhotoRequest => {
       if (pausedPhotoCrop !== undefined) {
