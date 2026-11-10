@@ -1,7 +1,20 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { expectScreen, measureVerticalFlow } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  expectScreen, expectScreenClass, measureVerticalFlow,
+} from './display-assertions';
+import {
+  applyStyleMutation, mutateAttribute, mutateText, proveMutation,
+  screenMutationTests,
+} from './style-mutation';
+import {
+  expectGuideCodeScroll, expectGuideDetails, expectGuideIcons,
+  expectGuideInstructions,
+  expectGuideLists, GUIDE_TYPE,
+} from './guide-details';
+import { styleProofs } from './screen-style-proofs';
+import { expectGuideProse } from './guide-prose';
+import { screenRegressionTests } from './screen-regressions';
 import {
   chromeScreenContract,
   CHROME_PIXEL_TOLERANCE,
@@ -219,9 +232,13 @@ async function describeHeader(page: Page): Promise<string> {
     };
     walk(shell, 'shell > ');
     const nav = shell.querySelector('nav');
-    if (nav !== null) walk(nav, 'nav > ');
+    if (nav !== null) {
+      walk(nav, 'nav > ');
+    }
     const right = shell.querySelector(':scope > div');
-    if (right !== null) walk(right, 'right > ');
+    if (right !== null) {
+      walk(right, 'right > ');
+    }
     return `\n${rows.join('\n')}`;
   });
 }
@@ -351,6 +368,7 @@ async function assertGuide(
   );
 
   await expectScreen(page, guideContract(locale, theme));
+  await expectGuideDetails(page, locale, theme);
   expect(await page.evaluate(() => document.documentElement.scrollWidth
     - document.documentElement.clientWidth)).toBe(0);
   await expect.poll(() => guide.evaluate((element, viewport) => {
@@ -462,7 +480,8 @@ async function assertGuide(
         ]);
   await expect(guide.locator('pre code')).toHaveText([
     'https://aboutme.vn/mcp',
-    '$ claude mcp add --transport http --scope user aboutme https://aboutme.vn/mcp',
+    '$ claude mcp add --transport http --scope user aboutme '
+    + 'https://aboutme.vn/mcp',
     '$ claude mcp login aboutme',
   ]);
   const blocks = guide.locator('pre');
@@ -544,4 +563,87 @@ test('guide rejects a changed instruction icon', async ({ page }) => {
     node.setAttribute('class', value!);
   }, original);
   await assertion();
+});
+
+async function openGuide(page: Page): Promise<void> {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await mockSignedOutSession(page);
+  await page.goto('/guide/mcp');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+styleProofs('guide', openGuide, GUIDE_TYPE);
+
+for (const [name, selector, message] of [
+  ['web instruction', '[data-testid="guide-claude"] ol:first-of-type li p',
+    'Guide web instruction order.'],
+  ['code instruction', '[data-testid="guide-claude"] ol:last-of-type li p',
+    'Guide code instruction order.'],
+  ['troubleshooting', '[data-testid="guide-troubleshooting"] dd',
+    'Guide troubleshooting order.'],
+  ['request', '[data-testid="guide-try-request"] li', 'Guide request order.'],
+  ['privacy', '[data-testid="guide-privacy"] li', 'Guide privacy order.'],
+] as const) {
+  test(`guide rejects changed ${name} content`, async ({ page }) => {
+    await openGuide(page);
+    await proveMutation(() => expectGuideInstructions(page, 'vi'),
+      () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
+  });
+}
+
+for (const selector of [
+  '[data-testid="guide-can"] ul', '[data-testid="guide-cannot"] ul',
+  '[data-testid="guide-claude"] ol:first-of-type',
+  '[data-testid="guide-claude"] ol:last-of-type',
+  '[data-testid="guide-try-request"] ul', '[data-testid="guide-privacy"] ul',
+]) {
+  test(`guide rejects missing list semantics at ${selector}`, async ({
+    page,
+  }) => {
+    await openGuide(page);
+    await proveMutation(() => expectGuideLists(page), () => mutateAttribute(
+      page.locator(selector), 'role', 'presentation',
+    ), 'Guide list structure.');
+  });
+}
+
+for (const defect of ['geometry', 'stroke'] as const) {
+  test(`guide rejects changed SVG ${defect}`, async ({ page }) => {
+    await openGuide(page);
+    const path = page.getByTestId('guide-can').locator('path').first();
+    await proveMutation(() => expectGuideIcons(page, 'light'), () =>
+      defect === 'geometry'
+        ? mutateAttribute(path, 'd', 'M0 0h100')
+        : applyStyleMutation(path, { stroke: 'none' }), 'Guide SVG paint.');
+  });
+}
+
+test('guide rejects clipping in an instruction ancestor', async ({ page }) => {
+  await openGuide(page);
+  await proveMutation(() => expectScreenClass(page,
+    guideContract('vi', 'light'), 'containment'),
+  () => applyStyleMutation(page.getByTestId('guide-can').locator('ul'), {
+    height: '24px', overflow: 'hidden',
+  }), 'Screen ancestor clipping.');
+});
+
+for (const [selector, message] of [
+  ['[data-testid="guide-plan-note"]', 'Guide explanatory copy.'],
+  ['[data-testid="guide-other-apps"] p', 'Guide other apps copy.'],
+] as const) {
+  test(`guide rejects replaced prose at ${selector}`, async ({ page }) => {
+    await openGuide(page);
+    await proveMutation(() => expectGuideProse(page, 'vi'),
+      () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
+  });
+}
+
+screenRegressionTests();
+
+test('guide rejects an unreachable code block', async ({ page }) => {
+  await openGuide(page);
+  await proveMutation(() => expectGuideCodeScroll(page),
+    () => applyStyleMutation(page.getByTestId('guide-mcp-page')
+      .locator('pre').nth(1), { 'overflow-x': 'hidden' }),
+    'Guide code scrolling.');
 });

@@ -9,6 +9,7 @@ import { assertPrintDom, assertPrintRules } from './pdf-fonts';
 import { applyStyleMutation } from './style-mutation';
 import { pdfPaintPage } from './pdf-paint';
 import { assertOverflowTextStyle } from './pdf-text-style';
+import { overflowPdfChunks } from './pdf-input-content';
 import { assertOverflowPdf } from './sample-pdf-content';
 import {
   attachMembership,
@@ -207,7 +208,7 @@ for (const printCase of CASES) {
       await assertOverflowPdf(display, layout, printCase, 'vi', 'a4', 'light');
       assertOverflowTextStyle(layout, {
         fills: [], images: [], text: display.flatMap(({ paint }) => paint.text),
-      });
+      }, await overflowPdfChunks(printCase, 'vi'));
       expect(document.numPages).toBeGreaterThanOrEqual(2);
       expect(document.numPages).toBe(EXPECTED_PAGES);
       const textPages = [];
@@ -318,8 +319,8 @@ test('PDF membership detects an orphan section heading', async ({ page }) => {
     'break-after': 'auto',
   });
   const altered = await printedTextPages(page);
-  expect(altered).toHaveLength(2);
   expect(altered).not.toEqual(baseline);
   expect(() => check(altered)).toThrow('PDF heading with first body fragment.');
+  expect(altered).toHaveLength(2);
   expect(external).toEqual([]);
 });

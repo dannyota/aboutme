@@ -3,10 +3,16 @@ import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
-  expectScreen,
+  expectScreen, expectScreenClass,
   measureGalleryGrid,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, mutateText, proveMutation,
+  screenMutationTests,
+} from './style-mutation';
+import { expectLibraryStructure } from './gallery-details';
+import { expectSheetStructure, sheetType } from './filter-sheet-details';
+import { styleProofs } from './screen-style-proofs';
 import {
   assertLibrary,
   filterSheetContract,
@@ -37,7 +43,8 @@ for (const { name, locale, theme, width } of CASES) {
     }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
       await page.context().addCookies([
-        { name: 'aboutme-locale', value: locale, url: 'http://127.0.0.1:20092' },
+        { name: 'aboutme-locale', value: locale,
+          url: 'http://127.0.0.1:20092' },
         { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
       ]);
       const path
@@ -127,7 +134,9 @@ async function assertLibrarySheet(
       expect(await control.evaluate((element) => {
         const box = element.getBoundingClientRect();
         const sheet = element.closest('[data-testid="gallery-filter-sheet"]');
-        if (!sheet || box.width <= 0 || box.height <= 0) return false;
+        if (!sheet || box.width <= 0 || box.height <= 0) {
+          return false;
+        }
         for (let parent = element.parentElement; parent;
           parent = parent.parentElement) {
           const bounds = parent.getBoundingClientRect();
@@ -142,7 +151,9 @@ async function assertLibrarySheet(
             || box.bottom > bounds.bottom + 1))) {
             return false;
           }
-          if (parent === sheet) break;
+          if (parent === sheet) {
+            break;
+          }
         }
         return true;
       })).toBe(true);
@@ -237,6 +248,10 @@ for (const name of ['control', 'heading'] as const) {
       ? sheet.locator('[data-filter="ats"]')
       : sheet.locator('h2').first();
     await assertSheet();
+    const assertion = () => name === 'control'
+      ? expect(target, 'Library sheet control visibility.').toBeVisible()
+      : expectSheetStructure(page, 'gallery', 'vi');
+    await assertion();
     const restore = name === 'control'
       ? await applyStyleMutation(target, { display: 'none' })
       : async () => {
@@ -248,9 +263,9 @@ for (const name of ['control', 'heading'] as const) {
         element.setAttribute('aria-hidden', 'true'));
       await expect(target).toHaveAttribute('aria-hidden', 'true');
     }
-    await expect(assertSheet()).rejects.toThrow(name === 'control'
-      ? 'toBeVisible'
-      : 'toMatchAriaSnapshot');
+    await expect(assertion()).rejects.toThrow(name === 'control'
+      ? 'Library sheet control visibility.'
+      : 'Sheet accessible structure.');
     await restore();
     await assertSheet();
   });
@@ -301,7 +316,9 @@ for (const theme of ['light', 'dark'] as const) {
           : { background: 'rgb(143, 166, 240)', text: 'rgb(12, 16, 32)' };
         for (const role of ['backend', 'frontend']) {
           const selected = fields.locator(`[data-role="${role}"]`);
-          if (role === 'frontend') await selected.click();
+          if (role === 'frontend') {
+            await selected.click();
+          }
           await expect(selected).toHaveAttribute('aria-pressed', 'true');
           await expect(selected).toHaveCSS(
             'background-color', colors.background,
@@ -341,7 +358,9 @@ test('gallery header at 360 px fits the viewport in English', async ({
   expect(overflow).toBe(0);
   const header = await page.locator('[data-testid="app-shell"]').boundingBox();
   expect(header).not.toBeNull();
-  if (header !== null) expect(header.x + header.width).toBeLessThanOrEqual(360);
+  if (header !== null) {
+    expect(header.x + header.width).toBeLessThanOrEqual(360);
+  }
 });
 
 for (const locale of ['vi', 'en'] as const) {
@@ -355,7 +374,8 @@ for (const locale of ['vi', 'en'] as const) {
             value: locale,
             url: 'http://127.0.0.1:20092',
           },
-          { name: 'aboutme-theme', value: theme, url: 'http://127.0.0.1:20092' },
+          { name: 'aboutme-theme', value: theme,
+            url: 'http://127.0.0.1:20092' },
         ]);
         await page.goto('/templates?role=fresher&filter=first-job');
         for (const width of [
@@ -554,3 +574,60 @@ screenMutationTests('Library sheet', async (page) => {
   await page.goto('/templates');
   await page.locator('[data-action="gallery-filters-open"]').click();
 }, filterSheetContract('gallery', 'vi', 'light'));
+
+for (const defect of ['name', 'visibility', 'box'] as const) {
+  test(`Library sheet rejects changed Close ${defect}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/templates');
+    await page.locator('[data-action="gallery-filters-open"]').click();
+    const contract = filterSheetContract('gallery', 'vi', 'light');
+    await expectScreen(page, contract);
+    const close = page.locator('[data-action="gallery-filters-close"]');
+    await expect(close).toHaveText('');
+    await proveMutation(() => expectScreenClass(page, contract, 'containment'),
+      () => defect === 'name'
+        ? mutateAttribute(close, 'aria-label', 'MUTATED')
+        : applyStyleMutation(close, defect === 'visibility'
+            ? { opacity: '0' }
+            : { transform: ['translateY(-500px)', /matrix/u] }),
+      defect === 'name'
+        ? 'Screen control name.'
+        : defect === 'visibility'
+          ? 'Screen control visibility.'
+          : 'Screen control box.');
+  });
+}
+
+test('Library rejects missing list semantics', async ({ page }) => {
+  await page.goto('/templates');
+  await prepareScreen(page);
+  await proveMutation(() => expectLibraryStructure(page, false),
+    () => mutateAttribute(page.locator('.gallery-grid'),
+      'role', 'presentation'),
+    'Library accessible list.');
+});
+
+styleProofs('Library sheet', async (page) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/templates');
+  await page.locator('[data-action="gallery-filters-open"]').click();
+}, sheetType('gallery'));
+
+test('Library sheet rejects missing option semantics', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/templates');
+  await page.locator('[data-action="gallery-filters-open"]').click();
+  await proveMutation(() => expectSheetStructure(page, 'gallery', 'vi'),
+    () => mutateAttribute(page.getByTestId('gallery-filter-sheet')
+      .getByTestId('gallery-roles'), 'role', 'presentation'),
+    'Sheet accessible structure.');
+});
+
+test('Library rejects changed accessible template names', async ({ page }) => {
+  await page.goto('/templates');
+  await prepareScreen(page);
+  await proveMutation(() => expectLibraryStructure(page, false),
+    () => mutateText(page.locator('[data-template]').first()
+      .locator(':scope > span > span:first-child'), 'MUTATED'),
+    'Library accessible list.');
+});

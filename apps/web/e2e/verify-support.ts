@@ -7,6 +7,7 @@ import {
 } from './display-assertions';
 
 import { chromeScreenContract } from './support';
+import { expectVerifyIcon, expectVerifyStructure } from './verify-details';
 
 // Fixture and route helpers for verify.spec.ts
 // (docs/design/deployment-transparency/page.md,
@@ -131,6 +132,8 @@ export async function expectVerifyDisplay(
   theme: 'light' | 'dark',
 ): Promise<void> {
   await expectScreen(page, verifyContract(locale, theme, state));
+  await expectVerifyStructure(page, state, locale);
+  await expectVerifyIcon(page, state, theme);
   const title = locale === 'vi'
     ? 'Kiểm chứng phiên bản đang chạy'
     : 'Verify what\'s running';

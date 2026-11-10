@@ -12,14 +12,15 @@ import { measurePdfLayout } from './display-assertions';
 import { applyStyleMutation } from './style-mutation';
 import { assertPrintDom, assertPhotoCrop, assertPrintRules } from './pdf-fonts';
 import {
-  pdfTextPage, printedDisplayPages, withPrintedPdf, type PdfDisplayPage,
+  pdfParagraphGeometry, pdfTextPage, printedDisplayPages, withPrintedPdf,
+  type PdfDisplayPage,
 } from './pdf-display';
 import { pdfPaintPage, pdfTextStyleMatches, pdfTextStyleDiagnostic }
   from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
 import {
   assertPdfPageGeometry, assertSampleFill, assertSampleStyle, FAMILIES,
-  textFill,
+  samplePdfChunks, textFill,
 } from './sample-pdf-content';
 import { denyExternalRequests, waitForImages } from './support';
 
@@ -304,16 +305,21 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
       family: 'Inter', bold: true };
     const correct = pdfVariableTextWeights(baseline[0]!.paint, 'Inter',
       [regular]);
-    expect(pdfTextStyleMatches(correct, heading, expected),
-      pdfTextStyleDiagnostic(correct, heading, expected)).toBe(true);
+    const checkPdf = (paint: typeof correct) => {
+      expect(pdfTextStyleMatches(paint, heading, expected),
+        'PDF heading weight. '
+        + pdfTextStyleDiagnostic(paint, heading, expected)).toBe(true);
+    };
+    checkPdf(correct);
     const restore = await applyStyleMutation(name, { 'font-weight': '400' });
     const alteredLayout = await measurePdfLayout(page, inset);
     expect(alteredLayout.chunks.find(({ role }) => role === 'name')?.weight)
       .toBe('400');
     await expect(assertSampleStyle(sample, 'minimal-air', 'en',
-      alteredLayout, baseline[0]!)).rejects.toThrow('Print DOM text weight.');
+      alteredLayout, baseline[0]!, 'text weight'))
+      .rejects.toThrow('Print DOM text weight.');
     const altered = await printedDisplayPages(page);
-    expect(altered).toHaveLength(1);
+    expect(altered).not.toEqual(baseline);
     const dropped = pdfVariableTextWeights(altered[0]!.paint, 'Inter',
       [regular]);
     const diagnostic = pdfTextStyleDiagnostic(dropped, heading, expected);
@@ -321,8 +327,10 @@ test('sample print DOM and PDF detect dropped bold with shared glyphs',
     expect(measurements.found).toMatchObject({ bold: false,
       weightEvidence: 'not-wider' });
     expect(measurements.found.advanceWeight.shared).toBeGreaterThanOrEqual(3);
+    expect(() => checkPdf(dropped)).toThrow('PDF heading weight.');
     expect(pdfTextStyleMatches(dropped, heading, expected), diagnostic)
       .toBe(false);
+    expect(altered).toHaveLength(1);
     await restore();
     await assertSampleStyle(sample, 'minimal-air', 'en',
       await measurePdfLayout(page, inset), baseline[0]!);
@@ -369,14 +377,15 @@ for (const defect of ['font size', 'text color', 'icon color',
       + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     await waitForImages(page);
-    const check = async (display?: PdfDisplayPage[]) => {
-      display ??= await printedDisplayPages(page);
-      assertPdfPageGeometry(display.map(({ text }) => text), 1, 'a4');
+    const baseline = await printedDisplayPages(page);
+    assertPdfPageGeometry(baseline.map(({ text }) => text), 1, 'a4');
+    const check = async (display: PdfDisplayPage[], focused = false) => {
       await assertSampleStyle(sample, 'modern-sidebar', 'vi',
-        await measurePdfLayout(page, margins), display[0]!);
-      return display;
+        await measurePdfLayout(page, margins), display[0]!,
+        focused ? defect : undefined);
     };
-    const baseline = await check();
+    await check(baseline);
+    await check(baseline, true);
     let message: string;
     if (defect === 'font size') {
       await applyStyleMutation(page.locator('.resume-document'), {
@@ -431,7 +440,14 @@ for (const defect of ['font size', 'text color', 'icon color',
     }
     const altered = await printedDisplayPages(page);
     expect(altered).not.toEqual(baseline);
-    await expect(check(altered)).rejects.toThrow(message);
+    if (defect === 'line spacing') {
+      const paragraph = samplePdfChunks(sample, 'vi').find((chunk) =>
+        chunk.region === 'main' && chunk.role === 'body')!.value;
+      expect(pdfParagraphGeometry(altered[0]!.text, [{
+        text: paragraph, pitch: 23 * 0.75,
+      }]), 'Mutated paragraph remains complete at changed pitch.').toBe(true);
+    }
+    await expect(check(altered, true)).rejects.toThrow(message);
     expect(external).toEqual([]);
   });
 }
@@ -454,10 +470,10 @@ for (const boundary of ['minimum', 'maximum'] as const) {
       'transform': [`scaleY(${scale})`, /^matrix\(/u],
     });
     const altered = await withPrintedPdf(page, (part) => textFill(part, 13));
-    expect(altered).toHaveLength(1);
     expect(altered[0]).not.toBe(baseline[0]);
     expect(() => assertSampleFill(altered[0]!))
       .toThrow(`PDF sample ${boundary} fill.`);
+    expect(altered).toHaveLength(1);
     expect(external).toEqual([]);
   });
 }

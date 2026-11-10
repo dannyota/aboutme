@@ -1,6 +1,9 @@
 import { expect, type Page, test } from '@playwright/test';
 
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import { expectVerifyIcon, expectVerifyStructure } from './verify-details';
 import {
   CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
@@ -606,3 +609,35 @@ test('verify status rejects a missing status icon', async ({ page }) => {
   await restore();
   await assertion();
 });
+
+for (const scope of ['chain', 'components', 'limits'] as const) {
+  test(`verify rejects changed ${scope} semantics`, async ({ page }) => {
+    await serveDeployment(page, { fixture: 'verified' });
+    await gotoVerify(page, 'vi', 'light');
+    await expect(page.getByTestId('verify-status'))
+      .toHaveAttribute('data-state', 'verified');
+    await proveMutation(() =>
+      expectVerifyStructure(page, 'verified', 'vi', scope),
+    () => mutateAttribute(page.getByTestId(`verify-${scope}`)
+      .locator('ol,ul').first(), 'role', 'presentation'),
+    `Verify ${scope} structure.`);
+  });
+}
+
+for (const state of ['verified', 'unavailable'] as const) {
+  for (const defect of ['geometry', 'stroke'] as const) {
+    test(`verify ${state} rejects SVG ${defect}`, async ({ page }) => {
+      await serveDeployment(page, state === 'verified'
+        ? { fixture: 'verified' }
+        : { status: 404, body: '[]' });
+      await gotoVerify(page, 'vi', 'light');
+      await expect(page.getByTestId('verify-status'))
+        .toHaveAttribute('data-state', state);
+      const path = page.locator('.verify-mark path').first();
+      await proveMutation(() => expectVerifyIcon(page, state, 'light'),
+        () => defect === 'geometry'
+          ? mutateAttribute(path, 'd', 'M0 0h100')
+          : applyStyleMutation(path, { stroke: 'none' }), 'Verify status SVG.');
+    });
+  }
+}

@@ -17,7 +17,12 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import {
+  expectChromeDecoration, expectChromeList, expectChromeNavigation,
+} from './chrome-details';
 
 import {
   chromeScreenContract,
@@ -58,6 +63,7 @@ async function expectChrome(
 ) {
   await prepareScreen(page);
   await expectScreen(page, chromeContract(name, locale, theme));
+  await expectChromeNavigation(page, locale, width, name === 'templates');
   const vi = locale === 'vi';
   const header = page.getByTestId('app-shell');
   const nav = header.getByRole('navigation', {
@@ -140,6 +146,8 @@ async function expectChrome(
     .toEqual({ visible: true, contained: true });
 
   if (name === 'home') {
+    await expectChromeDecoration(page, theme);
+    await expectChromeList(page);
     await expect.poll(() => measureChromeSheet(
       page.getByTestId('landing-stage'),
     ), 'Chrome sheet alignment.').toBe(true);
@@ -349,8 +357,11 @@ for (const locale of ['vi', 'en'] as const) {
         const button = page.getByRole('button', {
           name: locale === 'vi' ? 'Bộ lọc' : 'Filters', exact: true,
         });
-        if (width < 1024) await expect(button).toBeVisible();
-        else await expect(button).toBeHidden();
+        if (width < 1024) {
+          await expect(button).toBeVisible();
+        } else {
+          await expect(button).toBeHidden();
+        }
       }
     });
   }
@@ -390,7 +401,9 @@ for (const [name, selector, styles] of [
               ? 'Screen containment.'
               : name === 'body color'
                 ? 'Screen color.'
-                : name === 'navigation' ? 'toMatchAriaSnapshot' : 'font-size');
+                : name === 'navigation'
+                  ? 'Chrome navigation structure.'
+                  : 'font-size');
     await restore();
     await assertClean();
   });
@@ -432,7 +445,9 @@ async function expectCenteredSheet(page: Page, width: number) {
   const boxes = await page.evaluate(() => {
     const box = (id: string) => {
       const element = document.querySelector(`[data-testid="${id}"]`);
-      if (element === null) throw new Error(`missing ${id}`);
+      if (element === null) {
+        throw new Error(`missing ${id}`);
+      }
       const rect = element.getBoundingClientRect();
       return {
         left: rect.left,
@@ -519,4 +534,35 @@ for (const entry of PAGES) {
     await page.goto(entry.path);
     await prepareScreen(page);
   }, chromeContract(entry.name, 'vi', 'light'));
+}
+
+for (const kind of ['shadow', 'gradient'] as const) {
+  test(`chrome rejects changed ${kind} values`, async ({ page }) => {
+    await page.goto('/');
+    await proveMutation(() => expectChromeDecoration(page, 'light', kind),
+      () => applyStyleMutation(page.getByTestId(kind === 'shadow'
+        ? 'landing-sheet'
+        : 'landing-glow'), kind === 'shadow'
+        ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px' }
+        : { 'background-image': 'radial-gradient(red, blue)' }),
+      kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome hero gradient.');
+  });
+}
+
+for (const kind of ['navigation', 'template list'] as const) {
+  test(`chrome rejects changed ${kind} semantics`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/');
+    await prepareScreen(page);
+    const assertion = () => kind === 'navigation'
+      ? expectChromeNavigation(page, 'vi', 390, false)
+      : expectChromeList(page);
+    await proveMutation(assertion, () => mutateAttribute(
+      kind === 'navigation'
+        ? page.getByTestId('app-shell').locator('nav')
+        : page.getByTestId('landing-template-grid'), 'role', 'presentation',
+    ), kind === 'navigation'
+      ? 'Chrome navigation structure.'
+      : 'Chrome template list structure.');
+  });
 }

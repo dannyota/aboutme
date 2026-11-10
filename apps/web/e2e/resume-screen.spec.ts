@@ -6,7 +6,15 @@ import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import {
   expectScreen, RESUME_STYLES, resumeContract, measureTextContainment,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, mutateText, proveMutation,
+  screenMutationTests,
+} from './style-mutation';
+import { expectRendererContent } from './renderer-content';
+import { rendererWidgetTests } from './renderer-widgets';
+import { expectRendererPaint, rendererTypeRules } from './renderer-details';
+import { expectStyleRules } from './screen-expectations';
+import { styleProofs } from './screen-style-proofs';
 import {
   denyExternalRequests, expectRendererPageMembership, waitForImages,
 } from './support';
@@ -74,6 +82,7 @@ async function assertRenderer(
 ): Promise<void> {
   await expectScreen(page, resumeContract(template, language));
   await assertRendererStyles(page, template, language, justify);
+  await expectRendererContent(page, language, justify, template);
   const documents = page.locator(
     '.resume-document:not(.pagination-measurement)',
   );
@@ -140,9 +149,9 @@ for (const locale of ['vi', 'en'] as const) {
             await waitForImages(page);
             await assertRenderer(page, cell.template, language,
               'align' in cell && cell.align === 'justify');
-            if (cell.mode === 'paged' && language === 'vi') {
+            if (cell.mode === 'paged') {
               await expectRendererPageMembership(page, cell.template,
-                'align' in cell, 'paper' in cell);
+                'align' in cell, 'paper' in cell, language);
             }
             expect(external).toEqual([]);
           });
@@ -161,8 +170,11 @@ for (const mutation of ['drop', 'reorder'] as const) {
     await assertClean();
     const before = await page.locator('.resume-main').innerHTML();
     await page.locator('.resume-main').evaluate((flow, kind) => {
-      if (kind === 'drop') flow.children[1]!.remove();
-      else flow.prepend(flow.children[1]!);
+      if (kind === 'drop') {
+        flow.children[1]!.remove();
+      } else {
+        flow.prepend(flow.children[1]!);
+      }
     }, mutation);
     expect(await page.locator('.resume-main').innerHTML()).not.toBe(before);
     await expect(assertClean()).rejects.toThrow('Renderer section order.');
@@ -316,6 +328,16 @@ for (const language of ['vi', 'en'] as const) {
               await expect(article.locator('.resume-name')).toHaveText(
                 language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace',
               );
+              await expectRendererContent(page, language, true, template);
+              if (template === 'modern-sidebar') {
+                await assertFlow(article.locator('.resume-main'), language,
+                  [0, 1, 2, 6, 7]);
+                await assertFlow(article.locator('.resume-sidebar'), language,
+                  [3, 4, 5]);
+              } else {
+                await assertFlow(article.locator('.layout-one-column'),
+                  language, [0, 1, 2, 3, 4, 5, 6, 7]);
+              }
               const paragraphs = article.locator('.entry-body p');
               expect(await paragraphs.count()).toBeGreaterThan(0);
               for (const paragraph of await paragraphs.all()) {
@@ -406,6 +428,10 @@ async function assertRendererStyles(
   const documents = page.locator(
     '.resume-document:not(.pagination-measurement)',
   );
+  await expectStyleRules(page, rendererTypeRules(template));
+  if (!publicPage) {
+    await expectRendererPaint(page, template);
+  }
   for (const root of await documents.all()) {
     await expect.poll(() => root.evaluate((node) =>
       getComputedStyle(node).fontFamily.split(',').map((name) =>
@@ -505,161 +531,7 @@ for (const mode of ['continuous', 'public'] as const) {
   }, resumeContract('modern-sidebar', 'vi'));
 }
 
-async function assertWidgets(
-  page: Page, mode: 'bar' | 'dots' | 'tag' | 'text',
-  engineer = false,
-): Promise<void> {
-  const entries = page.locator('.resume-document .entry');
-  await expect(entries, 'Widget entry count.').toHaveCount(14);
-  const solid = engineer ? 'rgb(13, 90, 115)' : 'rgb(15, 107, 125)';
-  const trackColor = (prefix: string) => engineer
-    ? 'rgb(207, 222, 227)'
-    : prefix === 'SKILL' ? 'rgb(207, 225, 229)' : 'rgb(185, 210, 217)';
-  for (const prefix of ['SKILL', 'LANGUAGE']) {
-    for (let level = 0; level <= 6; level++) {
-      const entry = entries.filter({
-        has: page.getByText(
-          `${prefix}-${level === 6 ? 'NONE' : level}`, { exact: true }),
-      });
-      const widget = entry.locator('.level-widget');
-      await expect(entry, 'Widget entry identity.').toHaveCount(1);
-      if (level === 6 || mode === 'text') {
-        await expect(widget, 'Widget absence.').toHaveCount(0);
-        continue;
-      }
-      await expect(widget, 'Widget accessible level.').toHaveAccessibleName(
-        `${prefix}-${level}: ${level} of 5`);
-      await expect(widget, 'Widget accessible role.').toHaveRole('img');
-      await expect(widget, 'Widget visibility.').toBeVisible();
-      await expect(widget, 'Widget visibility.').toHaveCSS('opacity', '1');
-      if (mode === 'bar') {
-        const track = widget.locator('.level-track');
-        const fill = widget.locator('.level-fill');
-        await expect(track, 'Widget track height.').toHaveCSS('height', '4px');
-        await expect(track, 'Widget track color.').toHaveCSS('background-color',
-          trackColor(prefix));
-        await expect(fill, 'Widget fill color.')
-          .toHaveCSS('background-color', solid);
-        const geometry = await widget.evaluate((element) => {
-          const track = element.querySelector('.level-track')!
-            .getBoundingClientRect();
-          const fill = element.querySelector('.level-fill')!
-            .getBoundingClientRect();
-          return {
-            width: track.width, fill: fill.width,
-            left: fill.left - track.left,
-          };
-        });
-        expect(Math.abs(geometry.fill - geometry.width * level / 5),
-          'Widget bar length.').toBeLessThanOrEqual(1);
-        expect(Math.abs(geometry.left), 'Widget bar start.')
-          .toBeLessThanOrEqual(1);
-      } else if (mode === 'dots') {
-        const dots = widget.locator('.level-dot');
-        await expect(dots, 'Widget dot count.').toHaveCount(5);
-        for (let index = 0; index < 5; index++) {
-          await expect(dots.nth(index), 'Widget dot diameter.')
-            .toHaveCSS('width', '7px');
-          await expect(dots.nth(index), 'Widget dot diameter.')
-            .toHaveCSS('height', '7px');
-          await expect(dots.nth(index), 'Widget dot paint.').toHaveCSS(
-            'background-color', index < level
-              ? solid
-              : trackColor(prefix));
-        }
-        await expect(widget.locator('.level-dots'), 'Widget dot gap.')
-          .toHaveCSS('gap', '4px');
-      } else {
-        await expect(widget, 'Widget tag label.').toHaveText(`${level}/5`);
-        await expect(widget, 'Widget tag paint.')
-          .toHaveCSS('background-color', solid);
-        await expect(widget, 'Widget tag ink.')
-          .toHaveCSS('color', 'rgb(255, 255, 255)');
-        const padding = await widget.evaluate((element) => {
-          const css = getComputedStyle(element);
-          return {
-            x: parseFloat(css.paddingLeft),
-            y: parseFloat(css.paddingTop),
-          };
-        });
-        const size = engineer ? 11.7 : 12.6;
-        expect(Math.abs(padding.x - size * 0.5), 'Widget tag padding.')
-          .toBeLessThanOrEqual(0.1);
-        expect(Math.abs(padding.y - size * 0.15), 'Widget tag padding.')
-          .toBeLessThanOrEqual(0.1);
-        await expect(widget, 'Widget tag border.')
-          .toHaveCSS('border-top-width', '0px');
-        await expect(widget, 'Widget tag radius.')
-          .toHaveCSS('border-radius', '3px');
-        await expect.poll(() => measureTextContainment(widget),
-          'Widget tag containment.')
-          .toEqual({ visible: true, contained: true });
-      }
-    }
-  }
-}
-
-for (const template of ['modern-sidebar', 'engineer-compact']) {
-  for (const language of ['vi', 'en'] as const) {
-    for (const mode of ['bar', 'dots', 'tag', 'text'] as const) {
-      test(`screen widget inputs ${template} ${language} ${mode}`, async ({
-        page,
-      }) => {
-        await page.setViewportSize({ width: 794, height: 1123 });
-        await page.goto(`/_harness/render?template=${template}&mode=continuous`
-          + `&fixture=print-probe-widgets-${mode}&lng=${language}`);
-        await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-        const heading = language === 'vi' ? 'Kỹ năng' : 'Skills';
-        const selector = '.resume-main .section-heading h2';
-        await expectScreen(page, {
-          ...resumeContract(template, language), image: undefined,
-          copy: [selector, heading],
-          aria: [selector, `- heading "${heading}" [level=2]`],
-        });
-        await assertWidgets(page, mode, template === 'engineer-compact');
-      });
-    }
-  }
-}
-
-for (const mode of ['bar', 'dots', 'tag'] as const) {
-  test(`screen widgets reject changed ${mode}`, async ({ page }) => {
-    await page.goto('/_harness/render?template=modern-sidebar&mode=continuous'
-      + `&fixture=print-probe-widgets-${mode}`);
-    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    const assertion = () => assertWidgets(page, mode);
-    await assertion();
-    const widget = page.getByRole('img', {
-      name: 'SKILL-4: 4 of 5', exact: true,
-    });
-    let restore: () => Promise<void>;
-    if (mode === 'tag') {
-      await widget.locator('span').evaluate((node) => {
-        node.textContent = '3/5';
-      });
-      await expect(widget).toHaveText('3/5');
-      restore = async () => {
-        await widget.locator('span').evaluate((node) => {
-          node.textContent = '4/5';
-        });
-      };
-    } else {
-      const target = widget.locator(mode === 'bar'
-        ? '.level-fill'
-        : '.level-dot:last-child');
-      restore = await applyStyleMutation(target, mode === 'bar'
-        ? { width: ['20%', /^\d+(?:\.\d+)?px$/u] }
-        : { 'background-color': 'rgb(15, 107, 125)' });
-    }
-    await expect(assertion()).rejects.toThrow(mode === 'bar'
-      ? 'Widget bar length.'
-      : mode === 'dots'
-        ? 'Widget dot paint.'
-        : 'Widget tag label.');
-    await restore();
-    await assertion();
-  });
-}
+rendererWidgetTests();
 
 test('renderer rejects moving an entry to another page', async ({ page }) => {
   await page.setViewportSize({ width: 794, height: 1123 });
@@ -678,4 +550,121 @@ test('renderer rejects moving an entry to another page', async ({ page }) => {
   await expect(page.locator('.resume-page:not(.pagination-measurement)')
     .nth(1).getByText('Tiếng Anh', { exact: true })).toHaveCount(1);
   await expect(assertion()).rejects.toThrow('Renderer page membership.');
+});
+
+for (const mode of ['continuous', 'public'] as const) {
+  test(`renderer ${mode} rejects replaced body content`, async ({ page }) => {
+    await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
+      + `&mode=${mode}`);
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await proveMutation(() =>
+      expectRendererContent(page, 'en', mode === 'public'),
+    () => mutateText(page.locator('.entry-body p').last(), 'MUTATED'),
+    'Renderer body content.');
+  });
+}
+
+for (const template of ['modern-sidebar', 'executive-band']) {
+  styleProofs(`renderer ${template}`, async (page) => {
+    await page.goto(`/_harness/render?fixture=full&template=${template}`
+      + '&mode=continuous');
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  }, rendererTypeRules(template));
+}
+
+test('public rejects changed section order', async ({ page }) => {
+  await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
+    + '&mode=public');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const flow = page.locator('.resume-main');
+  const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
+  await assertion();
+  await flow.evaluate((node) => node.prepend(node.children[1]!));
+  await expect(flow.locator('.section-heading h2').first())
+    .toHaveText('Experience');
+  await expect(assertion()).rejects.toThrow('Renderer section order.');
+});
+
+for (const [selector, message] of [
+  ['.resume-headline', 'Renderer headline content.'],
+  ['.contact-chip a', 'Renderer contact content.'],
+  ['.contact-label', 'Renderer contact label.'],
+] as const) {
+  test(`renderer rejects replaced ${selector} content`, async ({ page }) => {
+    await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
+      + '&mode=continuous');
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await proveMutation(() => expectRendererContent(page, 'vi'),
+      () => mutateText(page.locator(selector).first(), 'MUTATED'), message);
+  });
+}
+
+for (const [selector, property, message] of [
+  ['.section-heading h2', 'color', 'Renderer heading paint.'],
+  ['.resume-sidebar', 'background-color', 'Renderer region paint.'],
+  ['.resume-name', 'color', 'Renderer name paint.'],
+] as const) {
+  test(`renderer rejects changed ${message}`, async ({ page }) => {
+    await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
+      + '&mode=continuous');
+    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+    await proveMutation(() => expectRendererPaint(page, 'modern-sidebar'),
+      () => applyStyleMutation(page.locator(selector).first(), {
+        [property]: 'rgb(255, 0, 0)',
+      }), message);
+  });
+}
+
+test('renderer rejects changed English page membership', async ({ page }) => {
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.goto('/_harness/render?fixture=full&template=classic-serif'
+    + '&mode=paged');
+  await expect(page.locator('[data-pagination-settled="true"]')).toHaveCount(1);
+  const assertion = () => expectRendererPageMembership(page, 'classic-serif',
+    false, false, 'en');
+  await assertion();
+  const pages = page.locator('.resume-page:not(.pagination-measurement)');
+  const entry = pages.nth(0).locator('.entry').filter({
+    hasText: 'Vietnamese',
+  });
+  await expect(entry).toHaveCount(1);
+  await entry.evaluate((node) => {
+    document.querySelectorAll('.resume-page:not(.pagination-measurement)')[1]!
+      .querySelector('.layout-one-column')!.append(node);
+  });
+  await expect(pages.nth(1).getByText('Vietnamese', { exact: true }))
+    .toHaveCount(1);
+  await expect(assertion()).rejects.toThrow('Renderer page membership.');
+});
+
+test('renderer rejects a changed contact destination', async ({ page }) => {
+  await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
+    + '&mode=continuous');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  await proveMutation(() => expectRendererContent(page, 'vi'),
+    () => mutateAttribute(page.locator('.contact-chip a').first(), 'href',
+      'mailto:mutated@example.invalid'), 'Renderer contact link.');
+});
+
+test('public rejects changed entry order', async ({ page }) => {
+  await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
+    + '&mode=public');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  const flow = page.locator('.resume-main');
+  const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
+  await assertion();
+  const entries = flow.locator('.entry').filter({
+    has: page.locator('.entry-title'),
+  });
+  const first = await entries.nth(0).innerHTML();
+  const second = await entries.nth(1).innerHTML();
+  await entries.nth(0).evaluate((node, html) => {
+    node.innerHTML = html;
+  }, second);
+  await entries.nth(1).evaluate((node, html) => {
+    node.innerHTML = html;
+  }, first);
+  await expect(entries.first().locator('.entry-title'))
+    .toHaveText('B.Sc. Mathematics');
+  await expect(assertion()).rejects.toThrow('Renderer entry order.');
 });

@@ -1,77 +1,8 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
-/** Measure text against a named container, including clipped text. */
-export async function measureTextContainment(
-  container: Locator,
-  verticalContainer?: string,
-): Promise<{ visible: boolean; contained: boolean }> {
-  return container.evaluate((root, selector) => {
-    const bounds = root.getBoundingClientRect();
-    const outer = selector ? root.closest(selector) : root;
-    if (!outer) return { visible: false, contained: false };
-    const rootStyle = getComputedStyle(root);
-    const rootClipsY = /^(hidden|clip|scroll|auto)$/u.test(rootStyle.overflowY);
-    const next = outer !== root
-      ? root.nextElementSibling?.getBoundingClientRect()
-      : undefined;
-    let visible = bounds.width > 0 && bounds.height > 0;
-    let contained = root.scrollWidth <= root.clientWidth + 1
-      && ((outer !== root && !rootClipsY)
-        || root.scrollHeight <= root.clientHeight + 1);
-    let hasText = false;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      if (!node.textContent?.trim()) continue;
-      hasText = true;
-      const parent = node.parentElement;
-      if (!parent) continue;
-      const clips: { rect: DOMRect; x: boolean; y: boolean }[] = [
-        { rect: bounds, x: true, y: outer === root || rootClipsY },
-      ];
-      if (outer !== root) {
-        clips.push({ rect: outer.getBoundingClientRect(), x: false, y: true });
-      }
-      for (
-        let element: Element | null = parent;
-        element;
-        element = element.parentElement
-      ) {
-        const style = getComputedStyle(element);
-        if (style.display === 'none' || style.visibility !== 'visible'
-          || Number(style.opacity) === 0) visible = false;
-        if (element !== root) {
-          clips.push({
-            rect: element.getBoundingClientRect(),
-            x: /^(hidden|clip|scroll|auto)$/u.test(style.overflowX),
-            y: /^(hidden|clip|scroll|auto)$/u.test(style.overflowY),
-          });
-        }
-      }
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const rects = Array.from(range.getClientRects());
-      if (!rects.some((rect) => rect.width > 0 && rect.height > 0)) {
-        visible = false;
-      }
-      for (const rect of rects) {
-        if (next && rect.right > next.left + 1 && rect.left < next.right - 1
-          && rect.bottom > next.top + 1 && rect.top < next.bottom - 1) {
-          contained = false;
-        }
-        for (const clip of clips) {
-          if ((clip.x && (rect.left < clip.rect.left - 1
-            || rect.right > clip.rect.right + 1))
-          || (clip.y && (rect.top < clip.rect.top - 1
-            || rect.bottom > clip.rect.bottom + 1))) {
-            contained = false;
-          }
-        }
-      }
-    }
-    return { visible: visible && hasText, contained };
-  }, verticalContainer);
-}
+import type { ScreenContract } from './screen-contract';
+
+export { measureTextContainment } from './screen-containment';
 
 /** Measure all adjacent boxes at once to avoid mixing layout frames. */
 export async function measureVerticalFlow(items: Locator): Promise<boolean> {
@@ -107,12 +38,16 @@ export async function measureChromeGrid(grid: Locator): Promise<{
       const column = index % columns;
       const rowStart = index - column;
       const row = boxes.slice(rowStart, rowStart + columns);
-      if (Math.abs(box.top - row[0]!.top) > 1) return false;
+      if (Math.abs(box.top - row[0]!.top) > 1) {
+        return false;
+      }
       if (column > 0
         && Math.abs(box.left - boxes[index - 1]!.right - gapX) > 1) {
         return false;
       }
-      if (rowStart === 0) return true;
+      if (rowStart === 0) {
+        return true;
+      }
       const previous = boxes.slice(rowStart - columns, rowStart);
       const bottom = Math.max(...previous.map((item) => item.bottom));
       return Math.abs(box.top - bottom - gapY) <= 1;
@@ -130,7 +65,9 @@ export async function measureChromeSheet(stage: Locator): Promise<boolean> {
   return stage.evaluate((element) => {
     const sheet = element.querySelector('[data-testid="landing-sheet"]');
     const ghost = element.querySelector('[data-testid="landing-ghost"]');
-    if (!sheet || !ghost) return false;
+    if (!sheet || !ghost) {
+      return false;
+    }
     const a = element.getBoundingClientRect();
     const b = sheet.getBoundingClientRect();
     const style = getComputedStyle(ghost);
@@ -149,7 +86,9 @@ export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
   return card.evaluate((element) => {
     const frame = element.querySelector('[data-sheet-thumbnail]');
     const sheet = element.querySelector('.scaled-sheet-content');
-    if (!frame || !sheet) return false;
+    if (!frame || !sheet) {
+      return false;
+    }
     const box = frame.getBoundingClientRect();
     const page = sheet.getBoundingClientRect();
     const transform = new DOMMatrixReadOnly(getComputedStyle(sheet).transform);
@@ -182,15 +121,21 @@ export async function measureGalleryGrid(grid: Locator): Promise<{
       columnGap,
       rowGap,
       ordered: boxes.every((box, index) => {
-        if (box.width <= 0 || box.height <= 0) return false;
+        if (box.width <= 0 || box.height <= 0) {
+          return false;
+        }
         const column = index % columns;
         const rowStart = index - column;
-        if (Math.abs(box.top - boxes[rowStart]!.top) > 1) return false;
+        if (Math.abs(box.top - boxes[rowStart]!.top) > 1) {
+          return false;
+        }
         if (column > 0
           && Math.abs(box.left - boxes[index - 1]!.right - columnGap) > 1) {
           return false;
         }
-        if (rowStart === 0) return true;
+        if (rowStart === 0) {
+          return true;
+        }
         const previous = boxes.slice(rowStart - columns, rowStart);
         const bottom = Math.max(...previous.map((item) => item.bottom));
         return Math.abs(box.top - bottom - rowGap) <= 1;
@@ -313,7 +258,9 @@ export async function measurePrintRules(
   return page.locator('.resume-document').evaluate((root) => {
     const style = (selector: string): CSSStyleDeclaration => {
       const element = root.querySelector(selector);
-      if (element === null) throw new Error('Missing print rule fixture.');
+      if (element === null) {
+        throw new Error('Missing print rule fixture.');
+      }
       return getComputedStyle(element);
     };
     const paragraph = style('.entry-body p');
@@ -361,9 +308,13 @@ export async function measurePdfLayout(
       const matrix = element.getScreenCTM()!;
       return [false, true].flatMap((stroke) => {
         const resolved = stroke ? css.stroke : css.fill;
-        if (resolved === 'none') return [];
+        if (resolved === 'none') {
+          return [];
+        }
         const channels = resolved.match(/[\d.]+/gu);
-        if (channels?.length !== 3) throw new Error('Unsupported icon ink.');
+        if (channels?.length !== 3) {
+          throw new Error('Unsupported icon ink.');
+        }
         const color = '#' + channels.map((channel) => Number(channel)
           .toString(16).padStart(2, '0')).join('');
         const width = stroke ? parseFloat(css.strokeWidth) / 2 : 0;
@@ -381,7 +332,9 @@ export async function measurePdfLayout(
       const node = walker.currentNode;
       const parent = node.parentElement;
       const text = node.textContent?.normalize('NFC').trim();
-      if (!parent || !text || parent.closest('.level-widget')) continue;
+      if (!parent || !text || parent.closest('.level-widget')) {
+        continue;
+      }
       const css = getComputedStyle(parent);
       const roles = [
         ['.resume-name', 'name'], ['.resume-headline', 'headline'],
@@ -491,146 +444,10 @@ export async function measurePdfLayout(
   }, margins);
 }
 
-export interface ScreenContract {
-  readonly root: string;
-  readonly text: string;
-  readonly flow: string;
-  readonly type: readonly [selector: string, family: string, face: string];
-  readonly paint: readonly [selector: string, property: string, value: string];
-  readonly copy: readonly [selector: string, text: string];
-  readonly aria: readonly [selector: string, snapshot: string];
-  readonly image?: string;
-  readonly faces?: readonly string[];
-  readonly constrained?: string;
-  readonly counts?: readonly (readonly [selector: string, count: number])[];
-}
-
-export const SCREEN_CLASSES = [
-  'geometry', 'containment', 'overlap', 'typography', 'color', 'content',
-  'accessibility', 'images',
-] as const;
-export type ScreenClass = typeof SCREEN_CLASSES[number];
-
-/** Use the same named checks for captured cells and their seeded defects. */
-export async function expectScreenClass(
-  page: Page,
-  contract: ScreenContract,
-  kind: ScreenClass,
-): Promise<void> {
-  const message = `Screen ${kind}.`;
-  if (kind === 'geometry') {
-    await expect.poll(() => page.locator(contract.root).evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      return box.width > 0 && box.height > 0 && box.left >= -1
-        && box.right <= innerWidth + 1;
-    }), message).toBe(true);
-  } else if (kind === 'containment') {
-    await expect.poll(() => page.evaluate(() =>
-      document.documentElement.scrollWidth
-      <= document.documentElement.clientWidth + 1), message).toBe(true);
-    const boxes = page.locator(contract.constrained ?? contract.root);
-    for (const box of await boxes.all()) {
-      await expect.poll(() => box.evaluate((element, vertical) =>
-        element.scrollWidth <= element.clientWidth + 1
-        && (!vertical || element.scrollHeight <= element.clientHeight + 1),
-      contract.constrained !== undefined), message).toBe(true);
-    }
-    const text = page.locator(contract.text);
-    expect(await text.count(), message).toBeGreaterThan(0);
-    for (const node of await text.all()) {
-      if (await node.isVisible()) await node.scrollIntoViewIfNeeded();
-      await expect.poll(() => measureTextContainment(node), message)
-        .toEqual({ visible: true, contained: true });
-    }
-  } else if (kind === 'overlap') {
-    await expect.poll(() => page.locator(contract.flow).evaluateAll((nodes) => {
-      const boxes = nodes.map((node) => node.getBoundingClientRect());
-      return boxes.length > 0 && boxes.every((box, index) =>
-        box.width > 0 && box.height > 0
-        && boxes.slice(index + 1).every((other) =>
-          Math.min(box.right, other.right) - Math.max(box.left, other.left) <= 1
-          || Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top)
-          <= 1));
-    }), message).toBe(true);
-  } else if (kind === 'typography') {
-    const families = (value: string) => value.split(',').map((family) =>
-      family.trim().replaceAll('"', ''));
-    await expect.poll(() => page.locator(contract.type[0]).evaluate((node) =>
-      getComputedStyle(node).fontFamily.split(',').map((family) =>
-        family.trim().replaceAll('"', ''))), message)
-      .toEqual(families(contract.type[1]));
-    await expect.poll(() => page.locator(contract.type[0]).evaluate(
-      (element, face) => {
-        const style = getComputedStyle(element);
-        return document.fonts.check(`${style.fontWeight} ${style.fontSize} `
-          + `"${face}"`, element.textContent ?? '')
-        && Array.from(document.fonts).some((font) =>
-          font.family.replaceAll('"', '') === face
-          && font.status === 'loaded')
-        && !Array.from(document.fonts).some((font) =>
-          font.status === 'error');
-      }, contract.type[2]), message).toBe(true);
-    for (const face of contract.faces ?? []) {
-      await expect.poll(() => page.evaluate((family) =>
-        Array.from(document.fonts).some((font) =>
-          font.family.replaceAll('"', '') === family
-          && font.status === 'loaded')
-        && [400, 700].every((weight) =>
-          document.fonts.check(`${weight} 14px "${family}"`)), face),
-      message).toBe(true);
-    }
-  } else if (kind === 'color') {
-    await expect(page.locator(contract.paint[0]), message)
-      .toHaveCSS(contract.paint[1], contract.paint[2]);
-  } else if (kind === 'content') {
-    await expect(page.locator(contract.copy[0]), message)
-      .toHaveText(contract.copy[1]);
-    for (const [selector, count] of contract.counts ?? []) {
-      await expect(page.locator(selector), message).toHaveCount(count);
-    }
-  } else if (kind === 'accessibility') {
-    await expect(page.locator(contract.aria[0]), message)
-      .toMatchAriaSnapshot(contract.aria[1]);
-  } else if (contract.image) {
-    const images = page.locator(contract.image);
-    expect(await images.count(), message).toBeGreaterThan(0);
-    for (const image of await images.all()) {
-      await image.scrollIntoViewIfNeeded();
-      await expect.poll(() => image.evaluate(async (element) => {
-        const img = element as HTMLImageElement;
-        try {
-          await img.decode();
-        } catch {
-          return false;
-        }
-        return img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
-      }), message).toBe(true);
-    }
-  }
-}
-
-export async function expectScreen(
-  page: Page,
-  contract: ScreenContract,
-): Promise<void> {
-  const positions = await page.evaluateHandle(() =>
-    Array.from(document.querySelectorAll('*')).filter((node) =>
-      node.scrollHeight > node.clientHeight
-      || node.scrollWidth > node.clientWidth).map((node) =>
-      ({ node, top: node.scrollTop, left: node.scrollLeft })));
-  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
-  try {
-    for (const kind of SCREEN_CLASSES) {
-      await expectScreenClass(page, contract, kind);
-    }
-  } finally {
-    await positions.evaluate((records) => {
-      for (const { node, top, left } of records) node.scrollTo(left, top);
-    });
-    await positions.dispose();
-    await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
-  }
-}
+export {
+  expectScreen, expectScreenClass, SCREEN_CLASSES,
+} from './screen-contract';
+export type { ScreenContract, ScreenClass } from './screen-contract';
 
 // Preset fixtures, encoded independently of the production token resolver.
 export const RESUME_STYLES = {

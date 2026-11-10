@@ -88,12 +88,18 @@ export async function applyStyleMutation(
     await saved.evaluate((records) => {
       for (const record of records) {
         const { element, original, attribute, previous, sheet } = record;
-        if (original === null) element.removeAttribute('style');
-        else element.setAttribute('style', original);
+        if (original === null) {
+          element.removeAttribute('style');
+        } else {
+          element.setAttribute('style', original);
+        }
         sheet?.remove();
         if (sheet !== undefined) {
-          if (previous === null) element.removeAttribute(attribute);
-          else element.setAttribute(attribute, previous);
+          if (previous === null) {
+            element.removeAttribute(attribute);
+          } else {
+            element.setAttribute(attribute, previous);
+          }
         }
       }
     });
@@ -108,7 +114,9 @@ export function screenMutationTests(
   contract: ScreenContract,
 ): void {
   for (const kind of SCREEN_CLASSES) {
-    if (kind === 'images' && !contract.image) continue;
+    if (kind === 'images' && !contract.image) {
+      continue;
+    }
     test(`${name} rejects ${kind} mutation`, async ({ page }) => {
       test.setTimeout(60_000);
       await open(page);
@@ -118,7 +126,9 @@ export function screenMutationTests(
       if (kind === 'content' || kind === 'accessibility' || kind === 'images') {
         const selector = kind === 'content'
           ? contract.copy[0]
-          : kind === 'accessibility' ? contract.aria[0] : contract.image!;
+          : kind === 'accessibility'
+            ? contract.aria[0]
+            : contract.image!;
         const target = page.locator(selector).first();
         const attribute = kind === 'images' ? 'src' : 'aria-hidden';
         const original = kind === 'content'
@@ -140,10 +150,13 @@ export function screenMutationTests(
         }
         restore = async () => {
           await target.evaluate((node, input) => {
-            if (input.content) node.innerHTML = input.original!;
-            else if (input.original === null) {
+            if (input.content) {
+              node.innerHTML = input.original!;
+            } else if (input.original === null) {
               node.removeAttribute(input.attribute);
-            } else node.setAttribute(input.attribute, input.original);
+            } else {
+              node.setAttribute(input.attribute, input.original);
+            }
           }, { content: kind === 'content', attribute, original });
         };
       } else if (kind === 'overlap') {
@@ -163,7 +176,9 @@ export function screenMutationTests(
           ? contract.root
           : kind === 'containment'
             ? contract.text
-            : kind === 'typography' ? contract.type[0] : contract.paint[0];
+            : kind === 'typography'
+              ? contract.type[0]
+              : contract.paint[0];
         const styles: StyleMutation = kind === 'geometry'
           ? { transform: ['translateX(2000px)', /matrix/u] }
           : kind === 'containment'
@@ -183,4 +198,55 @@ export function screenMutationTests(
       await assertion();
     });
   }
+}
+
+/** Prove one added assertion without running unrelated surface checks first. */
+export async function proveMutation(
+  assertion: () => Promise<void>,
+  mutate: () => Promise<() => Promise<void>>,
+  message: string,
+): Promise<void> {
+  await assertion();
+  const restore = await mutate();
+  try {
+    await expect(assertion()).rejects.toThrow(message);
+  } finally {
+    await restore();
+  }
+  await assertion();
+}
+
+export async function mutateAttribute(
+  target: Locator, attribute: string, value: string,
+): Promise<() => Promise<void>> {
+  const original = await target.getAttribute(attribute);
+  expect(original, 'Attribute mutation changes the fixture.').not.toBe(value);
+  await target.evaluate((node, input) => {
+    node.setAttribute(input.attribute, input.value);
+  }, { attribute, value });
+  await expect(target).toHaveAttribute(attribute, value);
+  return async () => {
+    await target.evaluate((node, input) => {
+      if (input.original === null) {
+        node.removeAttribute(input.attribute);
+      } else {
+        node.setAttribute(input.attribute, input.original);
+      }
+    }, { attribute, original });
+  };
+}
+
+export async function mutateText(
+  target: Locator, value: string,
+): Promise<() => Promise<void>> {
+  const original = await target.innerHTML();
+  await target.evaluate((node, text) => {
+    node.textContent = text;
+  }, value);
+  await expect(target).toHaveText(value);
+  return async () => {
+    await target.evaluate((node, html) => {
+      node.innerHTML = html;
+    }, original);
+  };
 }

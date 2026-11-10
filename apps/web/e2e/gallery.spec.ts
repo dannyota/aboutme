@@ -6,6 +6,7 @@ import {
   measureGalleryDetail,
 } from './display-assertions';
 import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import { galleryDetailProofs } from './gallery-detail-proofs';
 import {
   assertGalleryDetail,
   galleryDetailContract,
@@ -84,7 +85,9 @@ for (const width of [390, 1440]) {
     ]);
     await page.goto('/templates?role=backend');
     const trigger = page.locator('[data-action="gallery-filters-open"]');
-    if (width === 390) await trigger.click();
+    if (width === 390) {
+      await trigger.click();
+    }
     const fields
       = width === 390
         ? page.getByTestId('gallery-filter-sheet')
@@ -274,7 +277,9 @@ test('the executive band PDF tab shows every stored page', async ({
       (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     const geometry = await image.evaluate((element) => {
       const sheet = element.closest('.template-paper');
-      if (sheet === null) throw new Error('PDF page sheet is missing.');
+      if (sheet === null) {
+        throw new Error('PDF page sheet is missing.');
+      }
       return {
         image: element.getBoundingClientRect().width,
         sheet: sheet.getBoundingClientRect().width,
@@ -673,3 +678,5 @@ for (const tab of ['page', 'pdf', 'ats'] as const) {
     }
   }, galleryDetailContract('vi', 'light', tab));
 }
+
+galleryDetailProofs();

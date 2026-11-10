@@ -1,7 +1,6 @@
 import { expect } from '@playwright/test';
 import type { PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { DateRange, PersonalDetail, Resume, Section, YearMonth }
-  from '@aboutme/schema';
+import type { Resume } from '@aboutme/schema';
 
 import type { measurePdfLayout } from './display-assertions';
 import {
@@ -17,208 +16,13 @@ import {
 } from './pdf-paint';
 import { pdfVariableTextWeights } from './pdf-text-style';
 
-type Region = 'header' | 'main' | 'sidebar';
-export interface SamplePdfChunk {
-  readonly text: string;
-  readonly value: string;
-  readonly role: string;
-  readonly region: Region;
-  readonly linked: boolean;
-  readonly strong: boolean;
-}
+import {
+  assertDomInputContent, assertPdfInputOccurrences, overflowPdfChunks,
+  samplePdfChunks, samplePdfContentMatches,
+} from './pdf-input-content';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const LABELS = {
-  en: { email: 'Email', phone: 'Phone', location: 'Location',
-    website: 'Website', linkedin: 'LinkedIn', github: 'GitHub',
-    twitter: 'X', custom: 'Detail' },
-  vi: { email: 'Email', phone: 'Điện thoại', location: 'Địa chỉ',
-    website: 'Website', linkedin: 'LinkedIn', github: 'GitHub',
-    twitter: 'X', custom: 'Thông tin' },
-};
-const compact = (value: string) => value.normalize('NFC').replace(/\s+/gu, '');
-
-// Expectations use sample fields and the template contract, never render
-// output.
-export function samplePdfChunks(
-  sample: Resume, lng: 'en' | 'vi',
-): SamplePdfChunk[] {
-  const chunks: SamplePdfChunk[] = [];
-  let region: Region = 'header';
-  const add = (text: string | undefined, role: string,
-    linked = false, strong = false) => {
-    if (!text?.trim()) return;
-    text = text.normalize('NFC').trim();
-    let value = text;
-    if (role === 'heading') {
-      if (sample.customization.heading.style === 'uppercase') {
-        value = text.toLocaleUpperCase(lng);
-      } else if (lng === 'en'
-        && sample.customization.heading.style === 'titlecase') {
-        value = text.replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase());
-      }
-    }
-    chunks.push({ text, value, role, region, linked, strong });
-  };
-  const date = (value: YearMonth): string => {
-    const format = sample.customization.dateFormat;
-    if (value.m === undefined || format === 'YYYY') return String(value.y);
-    return format === 'MM/YYYY'
-      ? `${String(value.m).padStart(2, '0')}/${value.y}`
-      : `${lng === 'vi' ? `thg ${value.m}` : MONTHS[value.m - 1]} ${value.y}`;
-  };
-  const range = (value: DateRange): string => {
-    const start = date(value.start);
-    const end = value.present
-      ? (lng === 'vi' ? 'Hiện tại' : 'Present')
-      : value.end ? date(value.end) : '';
-    return end === '' || start === end ? start : `${start} – ${end}`;
-  };
-  const html = (value: string | undefined) => {
-    const stack: string[] = [];
-    for (const token of value?.match(/<[^>]*>|[^<]+/gu) ?? []) {
-      if (token.startsWith('<')) {
-        const tag = /^<(\/?)([a-z]+)(?:\s[^>]*)?>$/iu.exec(token);
-        if (!tag || !['p', 'ul', 'ol', 'li', 'strong', 'b', 'a', 'em', 'i',
-          'u', 's', 'br'].includes(tag[2]!.toLowerCase())) {
-          throw new Error('Unsupported sample rich text.');
-        }
-        const name = tag[2]!.toLowerCase();
-        if (name === 'br') continue;
-        if (tag[1] === '/') {
-          if (stack.pop() !== name) {
-            throw new Error('Invalid sample rich text.');
-          }
-        } else stack.push(name);
-      } else {
-        const text = token.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/giu,
-          (_, entity: string) => {
-            if (entity.startsWith('#')) {
-              return String.fromCodePoint(
-                entity[1]?.toLowerCase() === 'x'
-                  ? parseInt(entity.slice(2), 16)
-                  : Number(entity.slice(1)));
-            }
-            const named: Record<string, string> = {
-              amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'',
-            };
-            return named[entity.toLowerCase()]!;
-          });
-        add(text, 'body', stack.includes('a'),
-          stack.includes('b') || stack.includes('strong'));
-      }
-    }
-    if (stack.length > 0) throw new Error('Invalid sample rich text.');
-  };
-  add(sample.personalDetails.fullName, 'name');
-  add(sample.personalDetails.headline, 'headline');
-  for (const detail of sample.personalDetails.details ?? []) {
-    if (detail.isHidden) continue;
-    const label = detail.label || LABELS[lng][detail.type];
-    const web = detail.type !== 'email' && detail.type !== 'phone'
-      && detail.type !== 'location' && detail.value.startsWith('https://');
-    const display = web ? detail.display ?? 'short' : 'short';
-    const iconless = sample.customization.header?.iconStyle === 'none';
-    if (display !== 'label'
-      && (iconless || detail.type === 'custom' || detail.label)) {
-      add(`${label}:`, 'body');
-    }
-    const shown = display === 'label'
-      ? label
-      : web && display === 'short'
-        ? detail.value.slice(8).replace(/\/$/u, '') || detail.value
-        : detail.value;
-    add(shown, 'body', web || contactLinked(detail));
-  }
-  for (const column of ['main', 'sidebar'] as const) {
-    region = column === 'sidebar' && sample.customization.layout.columns === 1
-      ? 'main'
-      : column;
-    for (const key of sample.customization.layout.sections[column]) {
-      const section = sample.content[key];
-      if (!section?.entries.some((entry) => !entry.isHidden)) continue;
-      add(section.displayName, 'heading');
-      for (const entry of section.entries) {
-        if (entry.isHidden) continue;
-        const fields = entry as Section['entries'][number] & {
-          jobTitle?: string; degree?: string; name?: string; title?: string;
-          employer?: string; school?: string; subtitle?: string;
-          issuer?: string;
-          employerLink?: string; schoolLink?: string; titleLink?: string;
-          link?: string; dates?: DateRange; date?: YearMonth;
-          city?: string; country?: string; text?: string;
-          description?: string; infoHtml?: string;
-        };
-        const title = fields.jobTitle ?? fields.degree ?? fields.name
-          ?? fields.title;
-        const titleLink = fields.titleLink ?? fields.link;
-        add(title, 'title', Boolean(titleLink), !titleLink);
-        const subtitle = fields.employer ?? fields.school ?? fields.subtitle
-          ?? fields.issuer;
-        add(subtitle, 'subtitle',
-          Boolean(fields.employerLink || fields.schoolLink));
-        const meta = [
-          fields.dates ? range(fields.dates) : undefined,
-          fields.date ? date(fields.date) : undefined,
-          fields.city, fields.country,
-        ].filter((text): text is string => Boolean(text));
-        meta.forEach((text, index) => {
-          if (index > 0) add('·', 'meta');
-          add(text, 'meta');
-        });
-        html(fields.text ?? fields.description ?? fields.infoHtml);
-      }
-    }
-  }
-  return chunks;
-}
-
-function contactLinked(detail: PersonalDetail): boolean {
-  if (detail.type === 'phone') {
-    return /^\+?\d{3,20}$/u.test(detail.value.replace(/[ .()-]/gu, ''));
-  }
-  return detail.type === 'email' && detail.value.length <= 254
-    && /^[^\s@<>"'`()\\,;:?#%]+@[^\s@.]+(?:\.[^\s@.]+)+$/u.test(detail.value);
-}
-
-export function samplePdfContentMatches(
-  page: PdfTextPage,
-  chunks: readonly SamplePdfChunk[],
-  layout: { sidebar: PdfBox | null; header: PdfBox | null },
-): boolean {
-  if (!layout.header || page.items.some((item) => !item.bounds)) return false;
-  const regions = { header: '', main: '', sidebar: '' };
-  const ordered = [...page.items].sort((a, b) => b.y - a.y || a.x - b.x);
-  for (const item of ordered) {
-    const box = item.bounds!;
-    const region = box.top < layout.header.bottom - 1
-      ? 'header'
-      : layout.sidebar && box.left >= layout.sidebar.left - 1
-        ? 'sidebar'
-        : 'main';
-    regions[region] += compact(item.text);
-  }
-  return (['header', 'main', 'sidebar'] as const).every((region) => {
-    const values = chunks.filter((chunk) => chunk.region === region)
-      .map((chunk) => compact(chunk.value));
-    const expected = values.join('');
-    const actual = regions[region];
-    const count = (text: string, value: string) => text.split(value).length - 1;
-    const same = (value: string) =>
-      count(actual, value) === count(expected, value);
-    if (!values.every(same)) {
-      return false;
-    }
-    let cursor = 0;
-    return values.every((value) => {
-      const index = actual.indexOf(value, cursor);
-      if (index === -1) return false;
-      cursor = index + value.length;
-      return true;
-    });
-  });
-}
+export { samplePdfChunks, samplePdfContentMatches, type SamplePdfChunk }
+  from './pdf-input-content';
 
 // Type 3 text may omit descent; every catalog face fits within a quarter em.
 const FALLBACK_DESCENT = -0.25;
@@ -268,18 +72,32 @@ export async function assertSampleStyle(
   lng: 'en' | 'vi',
   layout: Awaited<ReturnType<typeof measurePdfLayout>>,
   display: PdfDisplayPage,
+  assertion?: 'font size' | 'text color' | 'icon color' | 'sidebar tint'
+    | 'level bar' | 'photo' | 'margin' | 'heading rule' | 'line spacing'
+    | 'text weight',
 ): Promise<void> {
+  const check = (name: string, run: () => void) => {
+    if (assertion === undefined || assertion === name) {
+      run();
+    }
+  };
   const { font, spacing, colors, heading, sectionDisplay }
     = sample.customization;
   const base = font.baseSizePx;
   const [family, fallback] = FAMILIES[font.family]!;
-  expect(layout.family.replaceAll('"', '')).toBe(`${family}, ${fallback}`);
-  expect(layout.synthesis).toBe('none');
-  expect(Math.abs(layout.size - base), 'Print DOM font size.')
-    .toBeLessThanOrEqual(0.1);
-  expect(Math.abs(layout.lineHeight - base * spacing.lineHeight))
-    .toBeLessThanOrEqual(0.1);
-  expect(layout.background).toBe('rgb(255, 255, 255)');
+  check('typography', () => {
+    expect(layout.family.replaceAll('"', '')).toBe(`${family}, ${fallback}`);
+    expect(layout.synthesis).toBe('none');
+  });
+  check('font size', () => {
+    expect(Math.abs(layout.size - base), 'Print DOM font size.')
+      .toBeLessThanOrEqual(0.1);
+  });
+  check('typography', () => {
+    expect(Math.abs(layout.lineHeight - base * spacing.lineHeight))
+      .toBeLessThanOrEqual(0.1);
+    expect(layout.background).toBe('rgb(255, 255, 255)');
+  });
   const target = sample.customization.layout.surfaceTarget ?? 'none';
   const accent = colors.accent ?? colors.primary;
   const foreground: PdfFill[] = [];
@@ -292,46 +110,64 @@ export async function assertSampleStyle(
       && icon.top >= surfaceBox.top - 1
       && icon.bottom <= surfaceBox.bottom + 1;
     const color = META_COLORS[templateId]![tinted ? 1 : 0];
-    expect(pdfColorMatches(icon.color, color), 'Print icon color.').toBe(true);
+    check('icon color', () => {
+      expect(pdfColorMatches(icon.color, color), 'Print icon color.')
+        .toBe(true);
+    });
   }
-  expect(layout.headerAlign).toBe(sample.customization.header?.align ?? 'left');
-  for (const gap of layout.entryGaps) {
-    expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
-  }
-  for (const gap of layout.sectionGaps) {
-    expect(Math.abs(gap - spacing.sectionGap)).toBeLessThanOrEqual(1);
-  }
+  check('geometry', () => {
+    expect(layout.headerAlign)
+      .toBe(sample.customization.header?.align ?? 'left');
+    for (const gap of layout.entryGaps) {
+      expect(Math.abs(gap - spacing.entryGap)).toBeLessThanOrEqual(1);
+    }
+    for (const gap of layout.sectionGaps) {
+      expect(Math.abs(gap - spacing.sectionGap)).toBeLessThanOrEqual(1);
+    }
+  });
   for (const decoration of layout.headings) {
     const surface = target === 'sidebar' && decoration.sidebar
       ? colors.surface!
       : '#ffffff';
-    expect(decoration.rule, 'Print heading rule.')
-      .toBe(heading.showRule ? 1 : 0);
-    expect(Math.abs(decoration.gap - spacing.sectionGap * 0.4))
-      .toBeLessThanOrEqual(1);
+    check('heading rule', () => {
+      expect(decoration.rule, 'Print heading rule.')
+        .toBe(heading.showRule ? 1 : 0);
+      expect(Math.abs(decoration.gap - spacing.sectionGap * 0.4))
+        .toBeLessThanOrEqual(1);
+    });
     if (heading.showRule) {
       const color = mixedColor(accent, surface, 0.6);
-      expect(decoration.ruleStyle).toBe('solid');
-      expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
+      check('heading rule', () => {
+        expect(decoration.ruleStyle).toBe('solid');
+        expect(pdfColorMatches(cssHex(decoration.color), color)).toBe(true);
+      });
       const fill = pdfPaintMatch(display.paint, decoration.ruleBox,
         color, true);
-      expect(fill).toBeDefined();
+      check('heading rule', () => {
+        expect(fill).toBeDefined();
+      });
       foreground.push(fill!);
     }
   }
   let transform = 'none';
-  if (heading.style === 'uppercase') transform = 'uppercase';
-  if (heading.style === 'titlecase' && lng === 'en') transform = 'capitalize';
+  if (heading.style === 'uppercase') {
+    transform = 'uppercase';
+  }
+  if (heading.style === 'titlecase' && lng === 'en') {
+    transform = 'capitalize';
+  }
   const chunks = samplePdfChunks(sample, lng);
   const content = ({ text, role, region, linked, strong }:
     typeof chunks[number]) => ({ text, role, region, linked, strong });
-  expect(layout.chunks.map((chunk) => ({
-    text: chunk.text, role: chunk.role, region: chunk.region,
-    linked: chunk.linked, strong: chunk.strong,
-  })), 'Print DOM text and occurrences from sample input.')
-    .toEqual(chunks.map(content));
-  expect(samplePdfContentMatches(display.text, chunks, layout),
-    'PDF sample input content, occurrences and column order.').toBe(true);
+  check('content', () => {
+    expect(layout.chunks.map((chunk) => ({
+      text: chunk.text, role: chunk.role, region: chunk.region,
+      linked: chunk.linked, strong: chunk.strong,
+    })), 'Print DOM text and occurrences from sample input.')
+      .toEqual(chunks.map(content));
+    expect(samplePdfContentMatches(display.text, chunks, layout),
+      'PDF sample input content, occurrences and column order.').toBe(true);
+  });
   const expectedChunks = [];
   for (const [index, chunk] of chunks.entries()) {
     const measured = layout.chunks[index]!;
@@ -342,19 +178,31 @@ export async function assertSampleStyle(
     if (chunk.role === 'meta') {
       color = META_COLORS[templateId]![region ? 1 : 0];
     }
-    if (isHeading) color = darkHeader ? '#ffffff' : colors.primary;
-    if (chunk.linked) color = darkHeader ? '#b6834a' : accent;
+    if (isHeading) {
+      color = darkHeader ? '#ffffff' : colors.primary;
+    }
+    if (chunk.linked) {
+      color = darkHeader ? '#b6834a' : accent;
+    }
     const sizes: Readonly<Record<string, number>> = {
       name: 2, headline: 1.15, heading: 1.1, meta: 0.9,
     };
     const size = base * (sizes[chunk.role!] ?? 1);
     const bold = isHeading || chunk.strong;
-    expect(Math.abs(measured.size - size)).toBeLessThanOrEqual(0.1);
+    check('font size', () => {
+      expect(Math.abs(measured.size - size)).toBeLessThanOrEqual(0.1);
+    });
     let weight = bold ? '700' : '400';
-    if (chunk.role === 'title' && chunk.strong) weight = '900';
-    expect(measured.weight, 'Print DOM text weight.').toBe(weight);
-    expect(pdfColorMatches(cssHex(measured.color), color),
-      'Print DOM text color.').toBe(true);
+    if (chunk.role === 'title' && chunk.strong) {
+      weight = '900';
+    }
+    check('text weight', () => {
+      expect(measured.weight, 'Print DOM text weight.').toBe(weight);
+    });
+    check('text color', () => {
+      expect(pdfColorMatches(cssHex(measured.color), color),
+        'Print DOM text color.').toBe(true);
+    });
     const expected = { color, size: size * 0.75, family, bold };
     expectedChunks.push({ value: chunk.value, expected });
   }
@@ -363,21 +211,27 @@ export async function assertSampleStyle(
       .map(({ value }) => value));
   for (const { value, expected } of expectedChunks) {
     const matches = pdfTextStyleMatches(paint, value, expected);
-    expect(matches, matches
-      ? undefined
-      : pdfTextStyleDiagnostic(paint, value, expected)).toBe(true);
+    check('pdf typography', () => {
+      expect(matches, matches
+        ? undefined
+        : pdfTextStyleDiagnostic(paint, value, expected)).toBe(true);
+    });
   }
-  for (const text of layout.text) {
-    if (text.role === 'heading') {
-      expect(text.transform).toBe(transform);
-      expect(Math.abs(text.spacing - (transform === 'uppercase'
-        ? base * 1.1 * 0.06
-        : 0))).toBeLessThanOrEqual(0.1);
-      expect(Math.abs(text.lineHeight - base * 1.1 * 1.2))
-        .toBeLessThanOrEqual(0.1);
+  check('typography', () => {
+    for (const text of layout.text) {
+      if (text.role === 'heading') {
+        expect(text.transform).toBe(transform);
+        expect(Math.abs(text.spacing - (transform === 'uppercase'
+          ? base * 1.1 * 0.06
+          : 0))).toBeLessThanOrEqual(0.1);
+        expect(Math.abs(text.lineHeight - base * 1.1 * 1.2))
+          .toBeLessThanOrEqual(0.1);
+      }
+      if (text.role === 'body') {
+        expect(text.align).toBe(font.textAlign ?? 'left');
+      }
     }
-    if (text.role === 'body') expect(text.align).toBe(font.textAlign ?? 'left');
-  }
+  });
   const inset = spacing.pageMargin ?? { x: 15, y: 15 };
   const margins = { x: inset.x * POINTS_PER_MM, y: inset.y * POINTS_PER_MM };
   const boxes = display.text.items.flatMap(({ bounds }) => bounds
@@ -391,26 +245,41 @@ export async function assertSampleStyle(
     bottom: Math.max(0, ...boxes.map((box) => box.bottom
       - display.text.height + margins.y)),
   };
-  expect(pdfGlyphGeometry(display.text, margins),
-    `PDF glyph overflow in points: ${JSON.stringify(overflow)}`)
-    .toEqual({ contained: true, separated: true });
-  expect(pdfParagraphGeometry(display.text, layout.paragraphs.map((part) => ({
-    ...part, pitch: base * spacing.lineHeight * 0.75,
-  }))), 'PDF paragraph line pitch.').toBe(true);
-  if (sample.customization.layout.columns === 2) {
-    expect(layout.sidebar).not.toBeNull();
-    expect(Math.abs(layout.sidebar!.right - layout.sidebar!.left
-      - layout.width * 0.32)).toBeLessThanOrEqual(1);
-    expect(Math.abs(layout.sidebar!.right - display.text.width + margins.x))
-      .toBeLessThanOrEqual(1);
-  } else expect(layout.sidebar).toBeNull();
-  expect(display.paint.images, 'PDF sample photo count.')
-    .toHaveLength(sample.personalDetails.photo ? 1 : 0);
+  check('margin', () => {
+    expect(pdfGlyphGeometry(display.text, margins),
+      `PDF glyph overflow in points: ${JSON.stringify(overflow)}`)
+      .toEqual({ contained: true, separated: true });
+  });
+  check('line spacing', () => {
+    const paragraphs = assertion === 'line spacing'
+      ? layout.paragraphs.slice(0, 1)
+      : layout.paragraphs;
+    expect(pdfParagraphGeometry(display.text, paragraphs.map((part) => ({
+      ...part, pitch: base * spacing.lineHeight * 0.75,
+    }))), 'PDF paragraph line pitch.').toBe(true);
+  });
+  check('geometry', () => {
+    if (sample.customization.layout.columns === 2) {
+      expect(layout.sidebar).not.toBeNull();
+      expect(Math.abs(layout.sidebar!.right - layout.sidebar!.left
+        - layout.width * 0.32)).toBeLessThanOrEqual(1);
+      expect(Math.abs(layout.sidebar!.right - display.text.width + margins.x))
+        .toBeLessThanOrEqual(1);
+    } else {
+      expect(layout.sidebar).toBeNull();
+    }
+  });
+  check('photo', () => {
+    expect(display.paint.images, 'PDF sample photo count.')
+      .toHaveLength(sample.personalDetails.photo ? 1 : 0);
+  });
   if (sample.personalDetails.photo) {
     const identity = await fixturePhotoIdentity();
-    expect(pdfImageMatches(display.paint.images[0], identity, layout.photo!),
-      pdfImageDiagnostic(display.paint.images[0], identity, layout.photo!))
-      .toBe(true);
+    check('photo', () => {
+      expect(pdfImageMatches(display.paint.images[0], identity, layout.photo!),
+        pdfImageDiagnostic(display.paint.images[0], identity, layout.photo!))
+        .toBe(true);
+    });
   }
   const sections = Object.values(sample.content);
   for (const section of sections) {
@@ -424,20 +293,26 @@ export async function assertSampleStyle(
       : '#ffffff';
     for (const entry of section.entries.filter((entry) => !entry.isHidden)) {
       const widget = layout.widgets.find(({ name }) => name === entry.name);
-      expect(widget).toBeDefined();
+      check('level bar', () => {
+        expect(widget).toBeDefined();
+      });
       const mode = sectionDisplay[section.sectionType].style;
-      expect(pdfWidgetMatches(display, widget!, entry.level,
-        mode, {
-          solid: accent,
-          track: mixedColor(accent, surface, 0.8),
-          onAccent: '#ffffff',
-          fontSize: base * 0.9,
-        }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
+      check('level bar', () => {
+        expect(pdfWidgetMatches(display, widget!, entry.level,
+          mode, {
+            solid: accent,
+            track: mixedColor(accent, surface, 0.8),
+            onAccent: '#ffffff',
+            fontSize: base * 0.9,
+          }), pdfWidgetDiagnostic(display, widget!)).toBe(true);
+      });
       if (entry.level !== undefined && mode !== 'text') {
         const match = (box: PdfBox, color: string, exposed?: PdfBox) => {
           const fill = pdfPaintMatch(display.paint, box, color,
             false, exposed);
-          expect(fill).toBeDefined();
+          check('level bar', () => {
+            expect(fill).toBeDefined();
+          });
           foreground.push(fill!);
         };
         if (mode === 'dots') {
@@ -451,16 +326,22 @@ export async function assertSampleStyle(
             match(track, mixedColor(accent, surface, 0.8),
               { ...track, left: fill.right });
           }
-          if (entry.level > 0) match(fill, accent);
-        } else match(widget!.widget!, accent);
+          if (entry.level > 0) {
+            match(fill, accent);
+          }
+        } else {
+          match(widget!.widget!, accent);
+        }
       }
     }
   }
   if (target === 'sidebar' || target === 'header') {
     const box = target === 'sidebar' ? layout.sidebar : layout.header;
-    expect(box).not.toBeNull();
-    expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
-      foreground, layout.icons), 'PDF sample surface paint.').toBe(true);
+    check('sidebar tint', () => {
+      expect(box).not.toBeNull();
+      expect(pdfSurfacePaint(display.paint, display.text, box!, colors.surface!,
+        foreground, layout.icons), 'PDF sample surface paint.').toBe(true);
+    });
   }
 }
 
@@ -479,7 +360,9 @@ export async function textFill(
   const content = await pdfPage.getTextContent();
   let lowest = 0;
   for (const item of content.items) {
-    if (!('str' in item) || item.str.trim() === '') continue;
+    if (!('str' in item) || item.str.trim() === '') {
+      continue;
+    }
     const reported = content.styles[item.fontName]?.descent;
     const descent = Number.isFinite(reported) ? reported! : FALLBACK_DESCENT;
     const size = Number.isFinite(item.height) && item.height > 0
@@ -517,6 +400,11 @@ export async function assertOverflowPdf(
   scheme: 'light' | 'dark',
 ): Promise<void> {
   const text = pages.map((page) => page.text);
+  const chunks = await overflowPdfChunks(printCase, lng);
+  assertDomInputContent(layout, chunks);
+  assertPdfInputOccurrences(text, chunks, layout);
+  expect(samplePdfContentMatches(text, chunks, layout),
+    'PDF overflow input content and column order.').toBe(true);
   assertPdfPageGeometry(text, 2, paper);
   checkMembership(pdfMembership(text, printCase),
     `${printCase.fixture}-${lng}-${paper}-${scheme}`);

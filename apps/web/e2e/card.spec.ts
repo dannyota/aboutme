@@ -12,9 +12,13 @@ import { FIXED_PHOTO_DATA_URL } from '../app/pages/_harness/photo-fixture';
 import type { PrintCardEnvelope } from '../server/utils/print/envelope';
 import { PRINT_CONTENT_SECURITY_POLICY } from '../server/utils/print/protocol';
 import {
-  expectScreen, type ScreenContract, measureCardCrop,
+  expectScreen, expectScreenClass, type ScreenContract, measureCardCrop,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import { cardType, expectCardDetails, expectCardLogo } from './card-details';
+import { styleProofs } from './screen-style-proofs';
 import { denyExternalRequests, verifyScreenshot } from './support';
 
 // The harness Nitro output directory (apps/web/nuxt.config.ts sets
@@ -138,11 +142,15 @@ async function expectBoxInSafeSquare(
   hasText: boolean,
 ): Promise<void> {
   const locator = page.locator(selector);
-  if ((await locator.count()) === 0) return;
+  if ((await locator.count()) === 0) {
+    return;
+  }
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
   expectRectInSafeSquare(box!);
-  if (!hasText) return;
+  if (!hasText) {
+    return;
+  }
   // The rects of the text itself, one or more per line box; element boxes
   // are left out so a two-line link counts as two lines, not four rects.
   const lines = await locator.evaluate((element) => {
@@ -157,7 +165,9 @@ async function expectBoxInSafeSquare(
       const range = document.createRange();
       range.selectNodeContents(node);
       for (const rect of range.getClientRects()) {
-        if (rect.width === 0) continue;
+        if (rect.width === 0) {
+          continue;
+        }
         rects.push({
           height: rect.height, width: rect.width, x: rect.x, y: rect.y,
         });
@@ -236,7 +246,9 @@ function longVietnameseText(length: number): string {
   const unit = 'Nguyễn Ẩn Ỗn Thị Bích Ngọc Vũ Phương ';
   const repeated = unit.repeat(Math.ceil(length / [...unit].length) + 2);
   const clusters = [...repeated].slice(0, length);
-  if (clusters.at(-1) === ' ') clusters[clusters.length - 1] = 'x';
+  if (clusters.at(-1) === ' ') {
+    clusters[clusters.length - 1] = 'x';
+  }
   return clusters.join('');
 }
 
@@ -363,6 +375,8 @@ async function expectCardDisplay(
   name: string,
 ): Promise<void> {
   await expectScreen(page, cardContract(card));
+  await expectCardDetails(page, name, card.headline !== null
+  && card.name !== null);
   const root = page.locator('.preview-card');
   await expect(root).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(root).toHaveCSS('color', 'rgb(23, 26, 24)');
@@ -624,3 +638,37 @@ screenMutationTests('card', async (page) => {
   const card = CASES[1]!.card;
   await openCard(page, await renderCardHTML(buildEnvelope(card)));
 }, cardContract(CASES[1]!.card));
+
+styleProofs('card', async (page) => {
+  const card = CASES[1]!.card;
+  await openCard(page, await renderCardHTML(buildEnvelope(card)));
+}, cardType('short-name-en', true));
+
+for (const defect of ['geometry', 'stroke', 'tilt'] as const) {
+  test(`card rejects changed logo ${defect}`, async ({ page }) => {
+    await openCard(page, await renderCardHTML(buildEnvelope(CASES[1]!.card)));
+    await proveMutation(() => expectCardLogo(page), () => {
+      const logo = page.locator('.preview-card-footer svg');
+      if (defect === 'geometry') {
+        return mutateAttribute(logo.locator('[data-logo-ring="outer"]'),
+          'r', '1');
+      }
+      if (defect === 'tilt') {
+        return mutateAttribute(logo.locator('[data-logo-part="mark"]'),
+          'transform', 'rotate(0 15 16)');
+      }
+      return applyStyleMutation(logo.locator('path'), { stroke: 'none' });
+    }, defect === 'tilt' ? 'Card logo tilt.' : 'Card logo primitives.');
+  });
+}
+
+for (const selector of ['.preview-card-photo img', '.preview-card-photo']) {
+  test(`card rejects invisible photo at ${selector}`, async ({ page }) => {
+    const card = CASES[1]!.card;
+    await openCard(page, await renderCardHTML(buildEnvelope(card)));
+    await proveMutation(() => expectScreenClass(page, cardContract(card),
+      'images'), () => applyStyleMutation(page.locator(selector), {
+      opacity: '0',
+    }), 'Screen images.');
+  });
+}

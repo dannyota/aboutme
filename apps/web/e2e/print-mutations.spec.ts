@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { Resume } from '@aboutme/schema';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
 import { measurePdfLayout } from './display-assertions';
 import { assertPhotoCrop, assertPrintDom } from './pdf-fonts';
 import { assertOverflowTextStyle } from './pdf-text-style';
+import { overflowPdfChunks } from './pdf-input-content';
+import { sampleInputMutationTests, overflowInputMutationTests }
+  from './pdf-input-mutations';
 import { applyStyleMutation } from './style-mutation';
 import {
   checkMembership,
@@ -26,67 +26,10 @@ import {
   fixturePhotoIdentity, pdfImageDiagnostic, pdfImageMatches,
 } from './pdf-paint';
 import { denyExternalRequests, waitForImages } from './support';
-import {
-  assertPdfPageGeometry, samplePdfChunks, samplePdfContentMatches,
-} from './sample-pdf-content';
+import { assertPdfPageGeometry } from './sample-pdf-content';
 
-for (const mutation of ['accents', 'replacement', 'reorder',
-  'hide', 'duplicate'] as const) {
-  test(`sample PDF input expectations detect ${mutation}`, async ({ page }) => {
-    const external = await denyExternalRequests(page);
-    await page.emulateMedia({ media: 'print' });
-    const sample: Resume = JSON.parse(await readFile(resolve(
-      import.meta.dirname,
-      '../../../packages/schema/samples/modern-sidebar.vi.json',
-    ), 'utf8'));
-    const margin = sample.customization.spacing.pageMargin!;
-    const margins = { x: margin.x * 72 / 25.4, y: margin.y * 72 / 25.4 };
-    await page.setViewportSize({
-      width: Math.round((210 - 2 * margin.x) * 96 / 25.4), height: 1123,
-    });
-    expect((await page.goto('/_harness/render?fixture=sample-modern-sidebar-vi'
-      + '&template=modern-sidebar&mode=continuous&print=1'))?.ok()).toBe(true);
-    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    await waitForImages(page);
-    const layout = await measurePdfLayout(page, margins);
-    const expected = samplePdfChunks(sample, 'vi');
-    const baseline = await printedTextPages(page);
-    expect(baseline).toHaveLength(1);
-    expect(samplePdfContentMatches(baseline[0]!, expected, layout),
-      'PDF sample input content, occurrences and column order.').toBe(true);
-    const section = page.locator('.resume-main .resume-section').nth(1);
-    await expect(section.locator('.entry')).toHaveCount(3);
-    if (mutation === 'hide') {
-      await applyStyleMutation(section.locator('.entry').first(), {
-        display: 'none',
-      });
-    }
-    await section.evaluate((element, change) => {
-      const first = element.querySelector('.entry')!;
-      if (change === 'reorder') first.before(first.nextElementSibling!);
-      else if (change === 'duplicate') first.after(first.cloneNode(true));
-      else if (change !== 'hide') {
-        const body = first.querySelector('.entry-body')!;
-        if (change === 'replacement') body.textContent = 'Nội dung thay thế.';
-        else {
-          const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-          while (walker.nextNode()) {
-            const node = walker.currentNode;
-            node.textContent = node.textContent!.normalize('NFD')
-              .replace(/\p{M}/gu, '').replace(/đ/gu, 'd').replace(/Đ/gu, 'D');
-          }
-        }
-      }
-    }, mutation);
-    const altered = await printedTextPages(page);
-    if (mutation === 'duplicate') expect(altered.length).toBeGreaterThan(0);
-    else expect(altered).toHaveLength(1);
-    expect(altered).not.toEqual(baseline);
-    expect(samplePdfContentMatches(altered[0]!, expected, layout),
-      'PDF sample input content, occurrences and column order.').toBe(false);
-    expect(external).toEqual([]);
-  });
-}
+sampleInputMutationTests();
+overflowInputMutationTests();
 
 test('PDF columns reject a main entry moved into the page-two sidebar',
   async ({ page }) => {
@@ -104,7 +47,11 @@ test('PDF columns reject a main entry moved into the page-two sidebar',
     const layout = await measurePdfLayout(page, margins);
     const baseline = await printedTextPages(page);
     expect(baseline).toHaveLength(2);
-    expect(pdfColumnsMatch(baseline[1]!, layout, margins, false)).toBe(true);
+    const check = (parts: typeof baseline) => {
+      expect(pdfColumnsMatch(parts[1]!, layout, margins, false),
+        'PDF column positions.').toBe(true);
+    };
+    check(baseline);
     const last = page.locator('.resume-main .entry').last();
     await expect(last).toContainText('MAIN-ENTRY-09');
     const shift = Math.round((layout.sidebar!.left - margins.x) / 0.75);
@@ -113,6 +60,8 @@ test('PDF columns reject a main entry moved into the page-two sidebar',
       width: '100px',
     });
     const altered = await printedTextPages(page);
+    expect(altered).not.toEqual(baseline);
+    expect(() => check(altered)).toThrow('PDF column positions.');
     expect(altered).toHaveLength(2);
     expect(altered[1]!.text).toContain('MAIN-ENTRY-09');
     expect(pdfMembership(altered, CASES[1]!))
@@ -139,6 +88,12 @@ for (const mutation of ['margin', 'coincident text',
     expect(baseline).toHaveLength(2);
     expect(pdfGlyphGeometry(baseline[0]!, margins))
       .toEqual({ contained: true, separated: true });
+    const check = (parts: typeof baseline) => {
+      const geometry = pdfGlyphGeometry(parts[0]!, margins);
+      expect(mutation === 'margin' ? geometry.contained : geometry.separated,
+        'PDF glyph bounds.').toBe(true);
+    };
+    check(baseline);
     const title = page.locator('.resume-main .entry-title').first();
     if (mutation === 'margin') {
       await applyStyleMutation(title, {
@@ -168,8 +123,9 @@ for (const mutation of ['margin', 'coincident text',
       });
     }
     const altered = await printedTextPages(page);
-    expect(altered).toHaveLength(2);
     expect(altered).not.toEqual(baseline);
+    expect(() => check(altered)).toThrow('PDF glyph bounds.');
+    expect(altered).toHaveLength(2);
     const geometry = pdfGlyphGeometry(altered[0]!, margins);
     expect(mutation === 'margin' ? geometry.contained : geometry.separated,
       'PDF glyph bounds.').toBe(false);
@@ -197,6 +153,17 @@ test('PDF content measurements detect entry and accent mutations', async ({
     expect(pdfEntryIds(baseline, 'MAIN')).toEqual(expected);
     expect(baseline.map((part) => part.text).join(' '))
       .toContain('Nội dung kiểm tra phân trang bản in');
+    const check = (parts: typeof baseline) => {
+      if (mutation === 'accents') {
+        expect(parts.map((part) => part.text).join(' '),
+          'PDF accented body text.')
+          .toContain('Nội dung kiểm tra phân trang bản in');
+      } else {
+        expect(pdfEntryIds(parts, 'MAIN'), 'PDF entry occurrences and order.')
+          .toEqual(expected);
+      }
+    };
+    check(baseline);
     const entries = page.locator('.resume-main .entry');
     await expect(entries).toHaveCount(printCase.total);
     if (mutation === 'hide') {
@@ -204,8 +171,12 @@ test('PDF content measurements detect entry and accent mutations', async ({
     }
     await entries.first().evaluate((first, change) => {
       const next = first.nextElementSibling;
-      if (change === 'duplicate') first.after(first.cloneNode(true));
-      if (change === 'reorder' && next !== null) first.before(next);
+      if (change === 'duplicate') {
+        first.after(first.cloneNode(true));
+      }
+      if (change === 'reorder' && next !== null) {
+        first.before(next);
+      }
       if (change === 'accents') {
         first.closest('.resume-main')!.querySelectorAll('.entry-body')
           .forEach((body) => {
@@ -216,6 +187,10 @@ test('PDF content measurements detect entry and accent mutations', async ({
       }
     }, mutation);
     const mutated = await printedTextPages(page);
+    expect(mutated).not.toEqual(baseline);
+    expect(() => check(mutated)).toThrow(mutation === 'accents'
+      ? 'PDF accented body text.'
+      : 'PDF entry occurrences and order.');
     if (mutation === 'accents') {
       expect(mutated.map((part) => part.text).join(' '))
         .not.toContain('Nội dung kiểm tra phân trang bản in');
@@ -270,11 +245,18 @@ test('PDF membership detects unbreakable entries', async ({ page }) => {
   expect(pdfEntryIds(baselinePages, 'MAIN'))
     .toEqual(['MAIN-ENTRY-01', 'MAIN-ENTRY-02']);
   const baseline = pdfMembership(baselinePages, CASES[1]!);
+  const check = (parts: typeof baselinePages) => {
+    expect(pdfMembership(parts, CASES[1]!).pages[0]!.main.first,
+      'PDF breakable entry membership.').toBe('MAIN-ENTRY-01');
+  };
+  check(baselinePages);
   await applyStyleMutation(page.locator('.entry'), {
     'break-inside': 'avoid',
   });
   await expect(entries.first()).toHaveCSS('break-inside', 'avoid');
   const alteredPages = await printedTextPages(page);
+  expect(alteredPages).not.toEqual(baselinePages);
+  expect(() => check(alteredPages)).toThrow('PDF breakable entry membership.');
   expect(alteredPages).toHaveLength(2);
   expect(alteredPages[0]!.text).toContain('BOUNDARY-ANCHOR');
   expect(alteredPages[0]!.text).not.toContain('MAIN-ENTRY-01');
@@ -335,6 +317,24 @@ for (const mutation of PAINT_MUTATIONS) {
     expect(tint(baseline, 1)).toBe(true);
     expect(photo(baseline), pdfImageDiagnostic(baseline[0]!.paint.images[0],
       identity, layout.photo!)).toBe(true);
+    const message = mutation === 'sidebar position'
+      ? 'PDF column positions.'
+      : mutation === 'continuation tint'
+        ? 'PDF continuation sidebar tint.'
+        : mutation === 'level bar'
+          ? 'PDF sidebar paint and level bars.'
+          : 'PDF photo identity.';
+    const check = (parts: typeof baseline) => {
+      const valid = mutation === 'sidebar position'
+        ? columns(parts)
+        : mutation === 'continuation tint'
+          ? tint(parts, 1)
+          : mutation === 'level bar'
+            ? tint(parts, 0)
+            : photo(parts);
+      expect(valid, message).toBe(true);
+    };
+    check(baseline);
     if (mutation === 'sidebar position') {
       await applyStyleMutation(
         page.locator('.resume-sidebar .entry:nth-of-type(n+12)'), {
@@ -383,15 +383,19 @@ for (const mutation of PAINT_MUTATIONS) {
       });
     }
     const altered = await printedDisplayPages(page);
-    expect(altered).toHaveLength(2);
     expect(altered).not.toEqual(baseline);
-    if (mutation === 'sidebar position') expect(columns(altered)).toBe(false);
-    else if (mutation === 'continuation tint') {
+    expect(() => check(altered)).toThrow(message);
+    expect(altered).toHaveLength(2);
+    if (mutation === 'sidebar position') {
+      expect(columns(altered)).toBe(false);
+    } else if (mutation === 'continuation tint') {
       expect(tint(altered, 0)).toBe(true);
       expect(tint(altered, 1)).toBe(false);
     } else if (mutation === 'level bar') {
       expect(tint(altered, 0), 'PDF sidebar paint and level bars.').toBe(false);
-    } else expect(photo(altered)).toBe(false);
+    } else {
+      expect(photo(altered)).toBe(false);
+    }
     expect(external).toEqual([]);
   });
 }
@@ -423,6 +427,11 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
     );
     expect(correct(baseline), pdfWidgetDiagnostic(baseline[0]!, widget!))
       .toBe(true);
+    const check = (parts: typeof baseline) => {
+      expect(correct(parts), 'PDF level widget. '
+      + pdfWidgetDiagnostic(parts[0]!, widget!)).toBe(true);
+    };
+    check(baseline);
     if (mutation === 'overpaint') {
       const track = page.locator('.level-track');
       await applyStyleMutation(track, { position: 'relative' });
@@ -450,8 +459,9 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
         .locator('span').evaluate((label) => { label.textContent = '3/5'; });
     }
     const altered = await printedDisplayPages(page);
-    expect(altered).toHaveLength(1);
     expect(altered).not.toEqual(baseline);
+    expect(() => check(altered)).toThrow('PDF level widget.');
+    expect(altered).toHaveLength(1);
     expect(correct(altered), pdfWidgetDiagnostic(altered[0]!, widget!))
       .toBe(false);
     expect(external).toEqual([]);
@@ -461,7 +471,9 @@ for (const mutation of ['bar', 'dots', 'tag', 'overpaint'] as const) {
 for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
   for (const defect of ['clipping', 'overflow', 'overlap', 'spacing', 'font',
     'unloaded font', 'image', 'columns']) {
-    if (fixture.startsWith('sample-') && defect === 'image') continue;
+    if (fixture.startsWith('sample-') && defect === 'image') {
+      continue;
+    }
     test(`${fixture} print DOM detects ${defect}`, async ({ page }) => {
       const external = await denyExternalRequests(page);
       await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
@@ -471,7 +483,8 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
         .toBe(true);
       await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
       await waitForImages(page);
-      const check = () => assertPrintDom(page, 'Be Vietnam Pro', 2);
+      const check = (assertion?: string) =>
+        assertPrintDom(page, 'Be Vietnam Pro', 2, undefined, assertion);
       await check();
       let message: string;
       if (defect === 'clipping') {
@@ -528,7 +541,7 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
         });
         message = 'Print column geometry.';
       }
-      await expect(check()).rejects.toThrow(message);
+      await expect(check(message)).rejects.toThrow(message);
       expect(external).toEqual([]);
     });
   }
@@ -590,13 +603,20 @@ for (const defect of ['font size', 'color', 'icon color', 'crop'] as const) {
     const margins = { x: 14 * 72 / 25.4, y: 13 * 72 / 25.4 };
     const crop = { x: 0.1, y: 0.05, width: 0.8, height: 0.8 };
     const baseline = await printedDisplayPages(page);
-    const check = async () => {
+    const expected = await overflowPdfChunks(CASES[1]!, 'vi');
+    const check = async (focused = false) => {
+      if (focused && defect === 'crop') {
+        await assertPhotoCrop(page, crop);
+        return;
+      }
       const layout = await measurePdfLayout(page, margins);
       assertOverflowTextStyle(layout, {
         fills: [], images: [],
         text: baseline.flatMap(({ paint }) => paint.text),
-      });
-      await assertPhotoCrop(page, crop);
+      }, expected, focused && defect !== 'crop' ? defect : undefined);
+      if (!focused) {
+        await assertPhotoCrop(page, crop);
+      }
     };
     await check();
     if (defect === 'crop') {
@@ -613,7 +633,7 @@ for (const defect of ['font size', 'color', 'icon color', 'crop'] as const) {
           ? { color: 'rgb(0, 0, 0)' }
           : { 'font-size': '16px' });
     }
-    await expect(check()).rejects.toThrow(defect === 'crop'
+    await expect(check(true)).rejects.toThrow(defect === 'crop'
       ? 'Print photo crop.'
       : defect === 'icon color'
         ? 'Print icon color.'

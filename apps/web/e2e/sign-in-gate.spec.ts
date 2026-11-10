@@ -6,7 +6,15 @@ import {
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import {
+  expectGateDetails, expectGateProviders, expectInviteText, GATE_TYPE,
+  inviteType, pauseInviteClock,
+} from './gate-details';
+import { expectStyleRules } from './screen-expectations';
+import { styleProofs } from './screen-style-proofs';
 
 import {
   denyExternalRequests,
@@ -226,6 +234,7 @@ async function assertGate(page: Page, cell: GateCell): Promise<void> {
         && Math.abs(box.width - boxes[0]!.width) <= 1);
     });
   expect(alignment, 'Gate provider alignment.').toBe(true);
+  await expectGateDetails(page);
   await expect(page.locator('.gate-title')).toHaveCSS('font-size', '20px');
   await expect(page.locator('.gate-text')).toHaveCSS('line-height', '22.5px');
 }
@@ -270,7 +279,7 @@ screenMutationTests('sign-in gate', async (page) => {
 }, gateContract('vi'));
 
 screenMutationTests('join invite', async (page) => {
-  await page.clock.install();
+  await pauseInviteClock(page);
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto('/_harness/render?fixture=vn-full&template=classic-serif'
     + '&mode=public&invite=register');
@@ -309,7 +318,7 @@ async function openAndAssertInvite(
   await page.emulateMedia({ colorScheme: viewer });
   // Fake timers before the page loads: the 20 s dwell floor then runs
   // from the clock, not from the wall.
-  await page.clock.install();
+  await pauseInviteClock(page);
   await page.setViewportSize({ width: cell.width, height: 900 });
   const external = await denyExternalRequests(page);
   const response = await page.goto(
@@ -327,6 +336,8 @@ async function openAndAssertInvite(
 
   const region = page.locator('.join-invite');
   await expect(region).toHaveCount(0);
+  expect(await page.evaluate(() => Date.now()), 'Invite paused origin.')
+    .toBe(Date.parse('2026-01-01T00:00:01Z'));
   await page.clock.runFor(19_999);
   await expect(region).toHaveCount(0);
   await page.clock.runFor(1);
@@ -366,6 +377,8 @@ async function openAndAssertInvite(
     expect(box!.y + box!.height).toBe(900);
   }
   await expectScreen(page, inviteContract(cell.lng));
+  await expectStyleRules(page, inviteType(cell.placement));
+  await expectInviteText(page, cell.lng, cell.placement);
 
   await expect(region.getByRole('button')).toHaveAccessibleName(
     cell.lng === 'vi' ? 'Đóng' : 'Close');
@@ -393,3 +406,44 @@ for (const lng of ['vi', 'en'] as const) {
     }
   }
 }
+
+styleProofs('gate', async (page) => {
+  await page.goto('/_harness/render?mode=gate&lng=vi'
+    + '&providers=google,linkedin');
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+}, GATE_TYPE);
+
+for (const placement of ['bar', 'card'] as const) {
+  const open = async (page: Page) => {
+    await openAndAssertInvite(page, {
+      lng: 'vi', placement, width: placement === 'bar' ? 390 : 1920,
+    });
+  };
+  styleProofs(`invite ${placement}`, open, inviteType(placement));
+  test(`invite ${placement} rejects clipped paragraph`, async ({ page }) => {
+    await open(page);
+    await proveMutation(() => expectInviteText(page, 'vi', placement),
+      () => applyStyleMutation(page.locator('.join-invite p'), {
+        transform: ['translateY(-100px)', /matrix/u],
+      }), 'Invite paragraph containment.');
+  });
+  test(`invite ${placement} rejects hidden accessible text`, async ({
+    page,
+  }) => {
+    await open(page);
+    await proveMutation(() => expectInviteText(page, 'vi', placement),
+      () => mutateAttribute(page.locator('.join-invite p'), 'aria-hidden',
+        'true'), 'Invite full accessible paragraph.');
+  });
+}
+
+test('gate rejects unexpected provider artwork', async ({ page }) => {
+  await page.goto('/_harness/render?mode=gate&lng=vi&providers=google');
+  await expectGateProviders(page);
+  await page.locator('.gate-provider').evaluate((node) => {
+    node.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24"/>');
+  });
+  await expect(page.locator('.gate-provider svg')).toHaveCount(1);
+  await expect(expectGateProviders(page)).rejects.toThrow(
+    'Gate provider artwork.');
+});

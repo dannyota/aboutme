@@ -8,7 +8,15 @@ import {
   measureShowcaseSheet,
   measureTextContainment,
 } from './display-assertions';
-import { applyStyleMutation, screenMutationTests } from './style-mutation';
+import {
+  applyStyleMutation, mutateAttribute, proveMutation, screenMutationTests,
+} from './style-mutation';
+import {
+  expectShowcaseDetails, expectShowcaseFlow, expectShowcaseList,
+  expectShowcasePager, showcaseType,
+} from './showcase-details';
+import { styleProofs } from './screen-style-proofs';
+import { expectSheetStructure, sheetType } from './filter-sheet-details';
 
 import {
   chromeScreenContract,
@@ -260,7 +268,7 @@ async function assertShowcase(
   }
   const tiles = page.locator('[data-showcase-slug]');
   if (name === 'empty') {
-    await expect(tiles).toHaveCount(0);
+    await expect(tiles, 'Showcase tile count.').toHaveCount(0);
     await expect(page.getByTestId('showcase-invite')).toHaveCount(0);
     await expect(page.getByTestId('showcase-pager')).toHaveCount(0);
     await expect(page.locator('[data-state="empty"] p')).toHaveText(
@@ -272,12 +280,14 @@ async function assertShowcase(
     );
     await expect(page.locator('[data-action="showcase-empty-action"]'))
       .toHaveText(locale === 'vi' ? 'Tạo CV' : 'Create your resume');
+    await expectShowcaseDetails(page, locale, width, true, false);
     return;
   }
-  await expect(tiles).toHaveCount(12);
+  await expect(tiles, 'Showcase tile count.').toHaveCount(12);
   for (let index = 0; index < 12; index++) {
     const tile = tiles.nth(index);
-    await expect(tile).toHaveAttribute('data-showcase-slug', `resume-${index}`);
+    await expect(tile, 'Showcase tile order.').toHaveAttribute(
+      'data-showcase-slug', `resume-${index}`);
     await expect(tile.locator('[data-showcase-tile]'))
       .toHaveAttribute('href', `/resume-${index}`);
     const image = tile.locator('img');
@@ -310,7 +320,9 @@ async function assertShowcase(
     .evaluate((element) => element.getBoundingClientRect().width);
   const columns = width < 641
     ? 1
-    : width >= 1024 && resultsWidth >= 860 ? 3 : 2;
+    : width >= 1024 && resultsWidth >= 860
+      ? 3
+      : 2;
   const gap = width >= 1024 ? 28 : width >= 641 ? 24 : 16;
   await expect.poll(() => measureShowcaseGrid(grid, columns, gap),
     'Showcase grid geometry.').toBe(true);
@@ -334,6 +346,7 @@ async function assertShowcase(
     .toHaveText(locale === 'vi' ? 'Trang trước' : 'Previous');
   await expect(pager.locator('[data-action="showcase-next"]'))
     .toHaveText(locale === 'vi' ? 'Trang sau' : 'Next');
+  await expectShowcaseDetails(page, locale, width, false, name === 'filtered');
 }
 
 for (const { name, path, body, locale, theme, width } of CASES) {
@@ -370,7 +383,9 @@ for (const { name, path, body, locale, theme, width } of CASES) {
         await expect(dialog.getByRole('combobox')).toBeVisible();
         expect(await dialog.evaluate((node) => {
           const body = node.querySelector<HTMLElement>('.overflow-y-auto');
-          if (!body) return false;
+          if (!body) {
+            return false;
+          }
           body.scrollTop = body.scrollHeight;
           const reachesEnd = body.scrollTop + body.clientHeight
             >= body.scrollHeight - 1;
@@ -489,7 +504,9 @@ for (const [name, selector, styles] of SHOWCASE_MUTATIONS) {
           ? 'Screen containment.'
           : name === 'heading color'
             ? 'color'
-            : name === 'heading font' ? 'font-family' : 'toBeVisible');
+            : name === 'heading font'
+              ? 'font-family'
+              : 'toBeVisible');
     await restore();
     await assertClean();
   });
@@ -510,10 +527,18 @@ for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
       const heading = document.querySelector(
         '[data-testid="showcase-header"] h1',
       )!;
-      if (kind === 'order') grid.prepend(grid.children[1]!);
-      if (kind === 'count') grid.append(grid.children[0]!.cloneNode(true));
-      if (kind === 'copy') heading.textContent = 'CV tu cong dong';
-      if (kind === 'heading role') heading.setAttribute('role', 'presentation');
+      if (kind === 'order') {
+        grid.prepend(grid.children[1]!);
+      }
+      if (kind === 'count') {
+        grid.append(grid.children[0]!.cloneNode(true));
+      }
+      if (kind === 'copy') {
+        heading.textContent = 'CV tu cong dong';
+      }
+      if (kind === 'heading role') {
+        heading.setAttribute('role', 'presentation');
+      }
     }, name);
     expect(await page.locator('.showcase-wrap').innerHTML()).not.toBe(before);
     await expect(assertClean()).rejects.toThrow(
@@ -521,7 +546,9 @@ for (const name of ['order', 'count', 'copy', 'heading role'] as const) {
         ? 'Screen content.'
         : name === 'heading role'
           ? 'Screen accessibility.'
-          : name === 'order' ? 'toHaveAttribute' : 'toHaveCount');
+          : name === 'order'
+            ? 'Showcase tile order.'
+            : 'Showcase tile count.');
     await page.reload();
     await assertClean();
   });
@@ -580,3 +607,49 @@ screenMutationTests('showcase sheet', async (page) => {
   });
   await page.locator('[data-action="showcase-filters-open"]').click();
 }, filterSheetContract('showcase', 'vi', 'light'));
+
+async function openFilledShowcase(page: Page): Promise<void> {
+  await openShowcase(page, {
+    name: 'filled', path: '/showcase?page=2', body: FILLED,
+    locale: 'vi', theme: 'light', width: 390,
+  });
+}
+
+styleProofs('showcase', openFilledShowcase, showcaseType(390, false));
+
+test('showcase rejects displaced result flow', async ({ page }) => {
+  await openFilledShowcase(page);
+  await proveMutation(() => expectShowcaseFlow(page),
+    () => applyStyleMutation(page.getByTestId('showcase-results'), {
+      transform: ['translateY(-1000px)', /matrix/u],
+    }), 'Showcase flow separation.');
+});
+
+for (const scope of ['list', 'pager'] as const) {
+  test(`showcase rejects changed ${scope} semantics`, async ({ page }) => {
+    await openFilledShowcase(page);
+    await proveMutation(() => scope === 'list'
+      ? expectShowcaseList(page, 'vi')
+      : expectShowcasePager(page, 'vi', false),
+    () => mutateAttribute(scope === 'list'
+      ? page.locator('.showcase-grid')
+      : page.getByTestId('showcase-pager'),
+    'role', 'presentation'), scope === 'list'
+      ? 'Showcase accessible list.'
+      : 'Showcase pager structure.');
+  });
+}
+
+styleProofs('showcase sheet', async (page) => {
+  await openFilledShowcase(page);
+  await page.locator('[data-action="showcase-filters-open"]').click();
+}, sheetType('showcase'));
+
+test('showcase sheet rejects missing option semantics', async ({ page }) => {
+  await openFilledShowcase(page);
+  await page.locator('[data-action="showcase-filters-open"]').click();
+  await proveMutation(() => expectSheetStructure(page, 'showcase', 'vi'),
+    () => mutateAttribute(page.getByTestId('showcase-filter-sheet')
+      .getByTestId('showcase-roles'), 'role', 'presentation'),
+    'Sheet accessible structure.');
+});

@@ -10,6 +10,7 @@ import { measurePdfLayout } from './display-assertions';
 import { applyStyleMutation } from './style-mutation';
 import { assertPrintDom } from './pdf-fonts';
 import { assertOverflowTextStyle } from './pdf-text-style';
+import { overflowPdfChunks } from './pdf-input-content';
 import { assertOverflowPdf } from './sample-pdf-content';
 import {
   attachMembership,
@@ -247,7 +248,7 @@ for (const printCase of CASES) {
               assertOverflowTextStyle(layout, {
                 fills: [], images: [],
                 text: display.flatMap(({ paint }) => paint.text),
-              });
+              }, await overflowPdfChunks(printCase, lng));
               expect(Math.abs(layout.width - (width * 0.75 - 2 * margins.x)))
                 .toBeLessThanOrEqual(1);
               const sidebarHeadings = layout.text.filter((item) =>
@@ -517,8 +518,9 @@ for (const rule of ['orphan', 'widow'] as const) {
     }])).toBe(true);
     await applyStyleMutation(paragraph, { orphans: '1', widows: '1' });
     const split = await printedTextPages(page);
-    expect(split).toHaveLength(2);
+    expect(split).not.toEqual(pages);
     expect(() => check(split)).toThrow(`PDF ${rule} paragraph membership.`);
+    expect(split).toHaveLength(2);
     expect(split[0]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
     expect(split[1]!.text).toContain(`${rule.toUpperCase()}-SECOND`);
     if (rule === 'widow') {
@@ -559,9 +561,20 @@ for (const rule of ['orphan', 'widow'] as const) {
           text: markers.slice(index * 2, index * 2 + 2).join(' '), pitch: 18,
         }])).toBe(true);
       }
+      const checkWidow = (parts: readonly PdfTextPage[]) => {
+        for (const [index, marker] of markers.entries()) {
+          const membership = index < 2 ? 0 : 1;
+          expect(parts[membership]!.text, 'PDF widow two-line fragments.')
+            .toContain(marker);
+        }
+      };
+      checkWidow(guarded);
       await applyStyleMutation(paragraph, { widows: '1' });
       await expect(paragraph).toHaveCSS('orphans', '2');
       const relaxed = await printedTextPages(page);
+      expect(relaxed).not.toEqual(guarded);
+      expect(() => checkWidow(relaxed))
+        .toThrow('PDF widow two-line fragments.');
       expect(relaxed).toHaveLength(2);
       for (const [index, marker] of markers.entries()) {
         const membership = index < 3 ? 0 : 1;
