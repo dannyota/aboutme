@@ -635,7 +635,7 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make web-no-eval-check
 
-  # The pinned-browser renderer baselines, as four shards that together run
+  # The pinned-browser renderer baselines, as five shards that together run
   # every spec once (Makefile WEB_E2E_SHARD), balanced by measured spec and
   # diagnostics time. Each shard builds the Nuxt surfaces it tests from the
   # source manifest inside the pinned image.
