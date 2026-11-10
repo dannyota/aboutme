@@ -181,7 +181,9 @@ PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=empty platform_listener_p
 [ "$status" = 1 ]
 # Force the Python detach path and verify complete argv and UID checks.
 mkdir "$work/fallback"
-ln -s "$(command -v python3)" "$work/fallback/python3"
+# Link the real interpreter: a version-manager shim such as pyenv's is a
+# bash script and cannot run with only this directory on PATH.
+ln -s "$(python3 -c 'import sys; print(sys.executable)')" "$work/fallback/python3"
 cat >"$work/anchor with spaces.sh" <<'EOF'
 #!/bin/bash
 trap 'exit 0' TERM
