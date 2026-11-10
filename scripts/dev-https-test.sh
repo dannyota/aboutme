@@ -1549,8 +1549,38 @@ PY
   }
   cat >"$ROOT/scripts/dev-https.sh" <<'EOF'
 #!/usr/bin/env bash
-[ "$1" = proof-health ] && [ ! -e "$PROOF_FIXTURE/unhealthy" ]
+[ "$1" = proof-health ] || exit 1
+if [ -e "$PROOF_FIXTURE/transient" ]; then
+  if [ ! -e "$PROOF_FIXTURE/sampled" ]; then
+    : >"$PROOF_FIXTURE/sampled"
+    exit 4
+  fi
+  : >"$PROOF_FIXTURE/recovered"
+fi
+[ ! -e "$PROOF_FIXTURE/persistent" ] || exit 4
+[ ! -e "$PROOF_FIXTURE/unhealthy" ] || exit 3
 EOF
+  if [ "${PROOF_GUARD_CASE:-all}" != persistent ]; then
+    : >"$fixture/transient"
+    status=0
+    cmd_guard -- bash -c 'deadline=$((SECONDS + 20)); while [ ! -e "$1/recovered" ]; do
+      [ "$SECONDS" -lt "$deadline" ] || exit 9; sleep 0.1; done; : >"$1/completed"' \
+      proof "$fixture" >"$fixture/output" 2>&1 || status=$?
+    [ "$status" = 0 ] && [ -e "$fixture/completed" ] || fail 'guard killed a transiently unhealthy command'
+    rm -f -- "$fixture/transient" "$fixture/sampled" "$fixture/recovered"
+  fi
+  if [ "${PROOF_GUARD_CASE:-all}" != transient ]; then
+    : >"$fixture/persistent"
+    status=0
+    local started=$SECONDS elapsed
+    cmd_guard -- bash -c 'sleep 60; : >"$1/completed-late"' proof "$fixture" >"$fixture/output" 2>"$fixture/error" || status=$?
+    elapsed=$((SECONDS - started))
+    [ "$status" = 1 ] && [ ! -e "$fixture/completed-late" ] || fail 'guard allowed a persistently unhealthy command'
+    [ "$elapsed" -ge 10 ] && [ "$elapsed" -le 30 ] || fail 'persistent failure was not bounded by the health window'
+    grep -Eq '^proof guard: reason=session-health samples=([5-9]|[1-9][0-9]+)$' "$fixture/error" ||
+      fail 'persistent failure lacked its fixed health reason and sample count'
+    rm -f -- "$fixture/persistent"
+  fi
   status=0
   cmd_guard -- bash -c 'exit 7' >"$fixture/output" 2>&1 || status=$?
   [ "$status" = 7 ] || fail 'guard lost the command failure status without a stack'
@@ -1582,6 +1612,7 @@ PY
     status=0
     cmd_guard -- python3 -I "$fixture/command.py" "$fixture" >"$fixture/output" 2>&1 || status=$?
     [ "$status" = 1 ] || fail "$scenario unhealthy proof command returned $status"
+    grep -Fxq 'proof guard: reason=marker-failed samples=1' "$fixture/output" || fail 'failed marker did not stop immediately'
     [ -s "$fixture/child-pid" ] && [ -e "$fixture/child-ready" ] || fail 'guard cancellation did not reach the child handshake'
     [ "$scenario" = rejected ] || [ -e "$fixture/drain-signalled" ] || fail "$scenario did not reach cleanup"
     assert_not_contains "$(cat "$fixture/output")" BrokenPipeError

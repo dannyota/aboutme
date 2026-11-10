@@ -197,21 +197,28 @@ proof_stop_observed() {
 }
 
 proof_health() {
-  local file=$1 allow_stop=$2 stopped='' ready='' health_marker=''
-  [[ ${file##*/} =~ ^proof\.[A-Za-z0-9]{10}$ ]] && [ "${file%/*}" = "$RUN_DIR" ] || return 1
-  validate_state_path_integrity "$allow_stop"
-  [ -f "$file" ] && [ ! -e "$file.failed" ] || return 1
+  local file=$1 allow_stop=$2 stopped='' ready='' health_marker='' reason=7
+  [[ ${file##*/} =~ ^proof\.[A-Za-z0-9]{10}$ ]] && [ "${file%/*}" = "$RUN_DIR" ] || return 2
+  (validate_state_path_integrity "$allow_stop") || return 2
+  [ -f "$file" ] || return 2
+  [ ! -e "$file.failed" ] || return 3
   [ ! -f "$file.stopped" ] || stopped=$(<"$file.stopped")
   if [ -e "$RUN_DIR/session.ready" ]; then
     ready=$(cat "$RUN_DIR/session.ready" 2>/dev/null) || ready=
     [ "$allow_stop" != 1 ] || health_marker=$file
-    if session_health "$health_marker" "$stopped" && session_ready && validate_effective_config && [ ! -e "$file.failed" ]; then
-      return 0
+    if ! session_health "$health_marker" "$stopped"; then reason=4
+    elif ! session_ready; then reason=5
+    elif ! validate_effective_config; then reason=6
+    else reason=0
     fi
-    [ "$allow_stop" = 1 ] && proof_stop_observed "$file" "$stopped" "$ready"
+    [ ! -e "$file.failed" ] || return 3
+    [ "$reason" != 0 ] || return 0
+    if [ "$allow_stop" = 1 ] && proof_stop_observed "$file" "$stopped" "$ready"; then return 0; fi
   else
-    [ "$allow_stop" = 1 ] && proof_stop_observed "$file" ''
+    if [ "$allow_stop" = 1 ] && proof_stop_observed "$file" ''; then return 0; fi
   fi
+  [ ! -e "$file.failed" ] || return 3
+  return "$reason"
 }
 
 cmd_guard() {
@@ -248,20 +255,35 @@ def interrupted(*_):
     raise KeyboardInterrupt
 signal.signal(signal.SIGTERM, interrupted)
 signal.signal(signal.SIGINT, interrupted)
-def healthy():
+def health_status():
     try:
         return subprocess.run(["bash", script, "proof-health", marker, allow_stop],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15).returncode == 0
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15).returncode
     except (OSError, subprocess.SubprocessError):
-        return False
+        return 1
+reasons = {1: "probe-error", 2: "integrity", 3: "marker-failed", 4: "session-health",
+    5: "session-ready", 6: "effective-config", 7: "stop-not-observed"}
+failures = 0
+first_failure = None
 try:
     anchor = subprocess.Popen([sys.executable, "-I", "-c", anchor_code, str(writer), *sys.argv[4:]],
         start_new_session=True, pass_fds=(writer,))
     os.close(writer)
     while anchor.poll() is None:
         ready, _, _ = select.select([reader], [], [], 1)
-        if not healthy():
-            break
+        status = health_status()
+        if status == 0:
+            failures = 0
+            first_failure = None
+        else:
+            now = time.monotonic()
+            failures += 1
+            if first_failure is None:
+                first_failure = now
+            if status == 3 or (failures >= 5 and now - first_failure >= 10):
+                print(f"proof guard: reason={reasons.get(status, 'probe-error')} samples={failures}",
+                    file=sys.stderr, flush=True)
+                break
         if ready:
             value = os.read(reader, 32).strip()
             if value and value.lstrip(b"-").isdigit():
