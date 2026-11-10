@@ -14,5 +14,13 @@
     "prettier": "3.9.10",
     "vitest": "5.1.0",
     "yaml": "2.9.1"
+  },
+  "overrides": {
+    "markdownlint": {
+      "re2js": "2.8.7"
+    },
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
   }
 }
