@@ -191,7 +191,12 @@ for CLEANUP_ERROR in list exists reset; do
   export CLEANUP_ERROR
   : >"$work/reset-units"
   : >"$work/reset-attempts"
-  if ! (step_timers start) 2>"$work/timers-out"; then
+  # Run outside any condition so errexit stays active, as in production.
+  set +e
+  (set -euo pipefail; step_timers start) 2>"$work/timers-out"
+  status=$?
+  set -e
+  if [[ $status != 0 ]]; then
     echo "cleanup $CLEANUP_ERROR error failed timer startup" >&2; exit 1
   fi
   [[ ! -s $work/reset-units ]] || { echo 'cleanup reset an unproved unit' >&2; exit 1; }
