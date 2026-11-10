@@ -338,6 +338,7 @@ for target, shard in [("web-e2e", shard) for shard in ["all", *shards]]:
         assert result.returncode == (2 if status else 0), result.stderr
         if target == "web-e2e":
             args = json.loads(calls.read_text())
+            assert not [arg for arg in args if arg.startswith("--net")], f"{shard}: web-e2e must use the default private network so shards can share a host"
             env = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "-e")
             selections.setdefault(shard, []).append(
                 (env["WEB_E2E_HARNESS_SPECS"].split(), env["WEB_E2E_NORMAL_SPECS"].split()))

@@ -313,7 +313,7 @@ web-e2e: ## Assert display rules in the pinned AMD64 browser
 	trap collect_diagnostics EXIT; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \
-	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
+	podman run --rm --platform linux/amd64 --security-opt label=disable \
 	  -v "$$PWD/$$source_tar:/candidate.tar:ro" \
 	  -v "$$PWD/$$mode_dir:/results:rw" \
 	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
