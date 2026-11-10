@@ -1,6 +1,7 @@
 # 0003: Resume slugs as the public namespace, and no operator surface
 
-Status: Accepted (2026-08-01, 2026-09-02).
+Status: Accepted (2026-08-01, 2026-09-02). An amendment for project routes is
+proposed (2026-11-10) and awaits the owner's approval.
 
 ## Context
 
@@ -21,6 +22,13 @@ credential attacks, for no need.
 **Resume slugs.** A resume's `slug` is globally unique, and `aboutme.vn/{slug}`
 addresses exactly one resume. No `users.username` column exists; users have no
 public page or public identifier.
+
+**Project routes (proposed).** A resume may serve pages below its own slug:
+`/{slug}/projects` and `/{slug}/projects/{project-slug}`
+([ADR 0029](0029-account-project-library.md)). A project slug is unique within
+an account, not globally, and addresses nothing without a live resume slug
+before it. These pages add no public identifier for a person and no root
+segment.
 
 **No operator surface.** The public application has no platform-admin page, no
 privileged role, no operator session class, and no route that reads or changes
@@ -57,3 +65,6 @@ is never added as a hidden or undocumented route.
 
 Consolidates former ADRs 0004 (resume slugs, 2026-08-01) and 0028 (no operator
 surface, 2026-09-02), both unchanged in substance.
+
+2026-11-10: proposed project routes below a resume slug, for the owner's roadmap
+decision that each project gets a page under the resume.
