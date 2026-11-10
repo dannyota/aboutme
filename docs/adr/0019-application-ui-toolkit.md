@@ -113,7 +113,8 @@ Accepted by the owner: replace pixel comparisons with the reviewed display
 assertion contract, preserving renderer isolation and golden HTML. This avoids
 environment-dependent pixel failures while retaining explicit layout and paint
 checks. Subtle optical defects remain a manual-review limit. Delete comparisons
-only after the contract's Linux and macOS coverage and mutation proofs pass.
+only after the contract's coverage and mutation tests pass in hosted Linux CI;
+the owner dropped the macOS condition on 2026-11-10.
 
 - Former ADR 0029 (2026-09-02): the toolkit and renderer isolation. Its "keep
   the zinc and emerald values" clause was replaced by the visual identity

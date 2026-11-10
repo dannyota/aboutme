@@ -144,7 +144,7 @@ builds an immutable source archive from the exact commit and excludes the
 worktree, Git metadata, local state, and secret-like paths.
 
 [Display assertions](../design/display-assertions.md) is the accepted
-replacement for these pixel comparisons. Implementation and Linux/macOS
-acceptance remain pending; the existing gate above remains required until
-cutover. Golden HTML, renderer isolation, and production determinism stay.
-Product page images remain served assets with a separate generator planned.
+replacement for these pixel comparisons. Its assertions run beside them; the
+existing gate above remains required until the cutover, which hosted Linux CI
+gates. Golden HTML, renderer isolation, and production determinism stay. Product
+page images remain served assets with their own generator.

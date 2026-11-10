@@ -193,10 +193,10 @@ general outbound network access. Everything the page needs must arrive with it.
 
 Golden HTML and same-environment output determinism remain required. The
 accepted [display assertions](../display-assertions.md) replace pixel
-comparisons after Linux/macOS acceptance, using semantic PDF text, page
-membership, geometry, and narrow paint checks. Existing comparisons remain until
-cutover. Pin every varying input; cross-platform assertions do not promise
-byte-identical PDFs across operating systems.
+comparisons at the display cutover, using semantic PDF text, page membership,
+geometry, and narrow paint checks. Existing comparisons remain until cutover.
+Pin every varying input; cross-platform assertions do not promise byte-identical
+PDFs across operating systems.
 
 | Input              | Pin                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |

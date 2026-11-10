@@ -195,8 +195,8 @@ the DOM order, text, or hidden state.
 
 [Display assertions](display-assertions.md) owns the accepted screen/PDF
 inventory, owner-scheme/viewer-preference matrix, and independent expected
-colors. It replaces public page PNG comparisons only after Linux/macOS
-acceptance. Until cutover, keep the existing light, dark, and system comparisons
+colors. It replaces public page PNG comparisons at its cutover, gated by hosted
+Linux CI. Until cutover, keep the existing light, dark, and system comparisons
 and golden HTML. Paged, print, template, card, gate, and landing surfaces remain
 light; the assertion change does not alter visual values or schema behavior.
 

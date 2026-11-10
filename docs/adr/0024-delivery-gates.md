@@ -130,10 +130,12 @@ Accepted by the owner after independent review of
 [local tooling](../design/local-tooling-simplification.md) and
 [display assertions](../design/display-assertions.md):
 
-- Replace pixel comparisons with explicit display assertions after Linux and
-  macOS acceptance proves the full inventory. Keep renderer isolation, golden
-  HTML, production browser pins, and output determinism. Optional sanitized
-  images support manual review; they do not gate delivery.
+- Replace pixel comparisons with explicit display assertions once hosted Linux
+  CI passes the full inventory and its mutation tests. The owner dropped the
+  macOS acceptance condition on 2026-11-10; a native macOS run is an optional
+  follow-up. Keep renderer isolation, golden HTML, production browser pins, and
+  output determinism. Optional sanitized images support manual review; they do
+  not gate delivery.
 - Permit opt-in native macOS functional proofs in the owner's account, only for
   owner-written or owner-reviewed clean commits. Review runner, spec,
   configuration, workflow, and dependency changes before admission; contributor
