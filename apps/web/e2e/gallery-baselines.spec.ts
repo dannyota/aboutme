@@ -12,11 +12,13 @@ import {
   screenMutationTests,
 } from './style-mutation';
 import { expectLibraryStructure } from './gallery-details';
+import { expectLibraryGrid } from './gallery-display';
 import { expectSheetStructure, sheetType } from './filter-sheet-details';
 import { styleProofs } from './screen-style-proofs';
 import {
   assertLibrary,
   filterSheetContract,
+  expectThumbnailRenders,
   libraryContract,
   prepareScreen,
 } from './support';
@@ -70,8 +72,7 @@ for (const { name, locale, theme, width } of CASES) {
       } else {
         await prepareScreen(page);
         if (name === 'rows') {
-          await expect(page.locator('[data-sheet-thumbnail]'))
-            .toHaveCount(LIVE_THUMBNAILS);
+          await expectThumbnailRenders(page, LIVE_THUMBNAILS);
         }
       }
       expect(
@@ -81,10 +82,6 @@ for (const { name, locale, theme, width } of CASES) {
             - document.documentElement.clientWidth,
         ),
       ).toBe(0);
-      if (name === 'rows') {
-        await expect(page.locator('[data-sheet-thumbnail-render]'))
-          .toHaveCount(LIVE_THUMBNAILS);
-      }
       if (name === 'sheet' && locale === 'en' && theme === 'light'
         && width === 390) {
         await captureReviewImage(testInfo, 'library-sheet-en-light-390', () =>
@@ -228,12 +225,10 @@ for (const [name, selector, styles] of [
   test(`Library assertions reject changed ${name}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto('/templates');
-    const assertClean = () => assertLibrary(page, 'vi', 'light', 390, false);
-    await assertClean();
-    const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow('Library grid geometry.');
-    await restore();
-    await assertClean();
+    await assertLibrary(page, 'vi', 'light', 390, false);
+    await proveMutation(() => expectLibraryGrid(page, 390), () =>
+      applyStyleMutation(page.locator(selector), styles),
+    'Library grid geometry.');
   });
 }
 

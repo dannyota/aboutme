@@ -233,6 +233,29 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
 
 export { assertGalleryDetail, assertLibrary } from './gallery-display';
 
+/** Count live renders while each thumbnail is mounted in the viewport. */
+export async function expectThumbnailRenders(
+  page: Page, count: number,
+): Promise<void> {
+  const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  const frames = page.locator('[data-sheet-thumbnail]');
+  await expect(frames).toHaveCount(count);
+  try {
+    for (const frame of await frames.all()) {
+      await frame.scrollIntoViewIfNeeded();
+      const render = frame.locator('[data-sheet-thumbnail-render]');
+      await expect(render).toHaveCount(1);
+      await expect(render.locator('h1')).toHaveCount(0);
+      for (const image of await render.locator('img').all()) {
+        await image.evaluate((node) => (node as HTMLImageElement).decode());
+      }
+      await page.evaluate(() => document.fonts.ready);
+    }
+  } finally {
+    await page.evaluate(({ x, y }) => window.scrollTo(x, y), position);
+  }
+}
+
 /** Load lazy content without changing the captured viewport. */
 export async function prepareScreen(page: Page): Promise<void> {
   const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));

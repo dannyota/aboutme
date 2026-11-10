@@ -187,6 +187,29 @@ export async function expectGuideLists(page: Page): Promise<void> {
   }
 }
 
+export async function expectGuideInstructionIcons(
+  page: Page, theme: 'light' | 'dark',
+): Promise<void> {
+  for (const [id, icon, color] of [
+    ['guide-can', '.lucide-check', theme === 'light'
+      ? 'rgb(35, 57, 154)'
+      : 'rgb(163, 182, 245)'],
+    ['guide-cannot', '.lucide-minus', theme === 'light'
+      ? 'rgb(92, 97, 120)'
+      : 'rgb(165, 171, 191)'],
+  ] as const) {
+    const icons = page.getByTestId(id).locator(icon);
+    await expect(icons, 'Guide instruction icons.').toHaveCount(5);
+    for (const glyph of await icons.all()) {
+      await expect(glyph, 'Guide instruction icons.')
+        .toHaveCSS('width', '16px');
+      await expect(glyph, 'Guide instruction icons.')
+        .toHaveCSS('height', '16px');
+      await expect(glyph, 'Guide instruction icons.').toHaveCSS('color', color);
+    }
+  }
+}
+
 export async function expectGuideIcons(
   page: Page, theme: 'light' | 'dark',
 ): Promise<void> {

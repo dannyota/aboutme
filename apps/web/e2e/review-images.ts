@@ -1,4 +1,5 @@
 import type { TestInfo } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 export type ReviewImage
   = | 'public-modern-sidebar-vi-dark-390'
@@ -29,8 +30,10 @@ export async function captureReviewImage(
       (async () => {
         const body = await capture();
         if (!expired) {
+          const path = testInfo.outputPath(`review-${id}.png`);
+          await writeFile(path, body);
           await testInfo.attach(`review-${id}`, {
-            body, contentType: 'image/png',
+            path, contentType: 'image/png',
           });
         }
       })(),

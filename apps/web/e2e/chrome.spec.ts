@@ -27,6 +27,7 @@ import {
 
 import {
   chromeScreenContract,
+  expectThumbnailRenders,
   prepareScreen,
 } from './support';
 
@@ -42,6 +43,30 @@ const PAGES = [
 ] as const;
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
+
+test('live thumbnails are checked at the requested viewport', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/');
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.dataset.maxViewportHeight = String(innerHeight);
+    addEventListener('resize', () => {
+      root.dataset.maxViewportHeight = String(Math.max(innerHeight,
+        Number(root.dataset.maxViewportHeight)));
+    });
+  });
+  await expect(page.locator('[data-sheet-thumbnail-render]')).toHaveCount(0);
+  await expectThumbnailRenders(page, 4);
+  expect(page.viewportSize()).toEqual({ width: 390, height: 900 });
+  await expect(page.locator('html'))
+    .toHaveAttribute('data-max-viewport-height', '900');
+  expect(await page.evaluate(() => ({ x: scrollX, y: scrollY })))
+    .toEqual({ x: 0, y: 0 });
+  await expect(page.locator('h1')).toHaveCount(1);
+});
 
 type ChromePage = typeof PAGES[number]['name'];
 type Locale = 'vi' | 'en';
@@ -261,26 +286,17 @@ test.describe('Vietnamese chrome', () => {
           await expectChrome(browserPage, page.name, 'vi', theme, width);
 
           if (page.thumbnails > 0) {
-            await prepareScreen(browserPage);
-            await expect(browserPage.locator('[data-sheet-thumbnail]'))
-              .toHaveCount(page.thumbnails);
-            // Each embedded sheet's name renders as a p, not an h1, so the
-            // page keeps exactly one h1 once every thumbnail has mounted.
+            await expectThumbnailRenders(browserPage, page.thumbnails);
+            // Embedded names stay out of the page's heading outline.
             await expect(browserPage.locator('h1')).toHaveCount(1);
           }
 
-          if (page.thumbnails > 0) {
-            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
-              .toHaveCount(page.thumbnails);
-            await expect(browserPage.locator('h1')).toHaveCount(1);
-          }
           if (page.name === 'home') {
             const templates = browserPage.locator(
               '[data-testid="landing-templates"]',
             );
             await templates.scrollIntoViewIfNeeded();
-            await expect(browserPage.locator('[data-sheet-thumbnail-render]'))
-              .toHaveCount(4);
+            await expectThumbnailRenders(browserPage, 4);
             await prepareScreen(browserPage);
           }
           if (page.name === 'home' && theme === 'light' && width === 390) {

@@ -142,15 +142,7 @@ export async function assertLibrary(
     .toHaveCSS(
       'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
     );
-  const grid = page.locator('.gallery-grid');
-  const columns = width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5;
-  await expect.poll(() => measureGalleryGrid(grid), 'Library grid geometry.')
-    .toEqual({
-      columns,
-      columnGap: width < 641 ? 14 : 28,
-      rowGap: width < 641 ? 24 : 40,
-      ordered: true,
-    });
+  await expectLibraryGrid(page, width);
   if (width >= 1024) {
     const fields = page.locator('.gallery-desktop');
     await expect(fields).toBeVisible();
@@ -234,4 +226,18 @@ export async function assertLibrary(
   await expect.poll(() => page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth,
   )).toBeLessThanOrEqual(1);
+}
+
+export async function expectLibraryGrid(
+  page: Page, width: number,
+): Promise<void> {
+  const grid = page.locator('.gallery-grid');
+  const columns = width < 641 ? 2 : width < 900 ? 3 : width < 1180 ? 4 : 5;
+  await expect.poll(() => measureGalleryGrid(grid), 'Library grid geometry.')
+    .toEqual({
+      columns,
+      columnGap: width < 641 ? 14 : 28,
+      rowGap: width < 641 ? 24 : 40,
+      ordered: true,
+    });
 }
