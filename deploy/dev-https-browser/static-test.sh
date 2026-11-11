@@ -246,7 +246,19 @@ assert.match(cleanup, /const cleanupContext = await browser\.newContext\(\);/);
 assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);/);
 assert.doesNotMatch(cleanup, /\bcounters\b|hooks|pageDiagnosticsAttacher/);
 assert.equal(count(spec, /deleteRecordedResume\(/g), 1);
-assert.equal(count(spec, /await page\.close\(\);\n\s*await deleteOutsideCounters\(browser, resumeID\);/g), 3);
+// Each test cleans up whenever it recorded a resume, whatever its own steps
+// returned; the helper treats an already deleted resume as done.
+for (const title of [
+  '"proves native HTTPS publish, discovery, and revocation"',
+  '"proves the showcase opt-in, its revocations, and delivery rules"',
+  'DELETION_TEST_TITLE',
+]) {
+  assert.match(
+    testBody(title),
+    /\} finally \{\n(?:(?!\n {2}\}\n)[^])*\n {4}if \(resumeID !== undefined\) \{\n(?: {6}stage\("[a-z-]+"\);\n)? {6}await page\.close\(\);\n {6}await deleteOutsideCounters\(browser, resumeID\);/,
+    title,
+  );
+}
 assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 3);
 NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||

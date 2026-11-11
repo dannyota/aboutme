@@ -1456,7 +1456,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   // Set just before the delete request: from then on, and only for this
   // resume's own routes, a 401 or 404 is the expected answer.
   let deleting = false;
-  let deleted = false;
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
       !isExpectedAnonymousMeConsole(message.text(), message.location().url) &&
@@ -1513,7 +1512,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
     stage("deletion-request-status");
     deleting = true;
     expect(await ownerDelete(page, id)).toEqual({ read: 200, deleted: 204 });
-    deleted = true;
     stage("deletion-owner-read-status");
     expect(await ownerReadStatus(page, id)).toBe(404);
     stage("deletion-public-status");
@@ -1529,7 +1527,7 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   } finally {
     stage("deletion-cleanup");
     if (publicContext !== undefined) await publicContext.close();
-    if (resumeID !== undefined && !deleted) {
+    if (resumeID !== undefined) {
       await page.close();
       await deleteOutsideCounters(browser, resumeID);
     }
