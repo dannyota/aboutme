@@ -77,7 +77,7 @@ error summary above the form that links to each one.
 | Rate limited or unavailable         | Keeps the typed text and says to try again                              |
 | `project_limit` on create           | Says the limit of 30 is reached                                         |
 | `project_slug_taken` or `…_held`    | Says the address is in use, or was used by this account recently        |
-| `reauth_required` on address/delete | Opens the reauthentication step, then repeats the action once           |
+| `reauth_required` on address/delete | Reauthenticates, with any second factor in a new tab, then repeats once |
 
 Change address opens a dialog with the new slug, its grammar hint, and a note
 that links to the old address stop working. Delete opens a confirmation naming

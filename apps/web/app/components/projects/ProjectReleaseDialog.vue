@@ -31,6 +31,10 @@ const method = computed(() =>
 const passwordReauth = computed(() => method.value === 'password');
 const providerStep = computed(() =>
   method.value === 'provider' || state.value.kind === 'provider-started');
+const secondFactorStep = computed(() =>
+  state.value.kind === 'reauth-second-factor');
+const reauthStep = computed(() =>
+  passwordReauth.value || providerStep.value || secondFactorStep.value);
 const name = computed(() =>
   props.project === null
     ? ''
@@ -86,6 +90,11 @@ function submitPassword(): void {
     password.value = '';
   });
 }
+
+function close(): void {
+  props.action.reset();
+  emit('close');
+}
 </script>
 
 <template>
@@ -98,7 +107,7 @@ function submitPassword(): void {
     :close-label="copy.close"
     :busy="busy"
     :restore-focus="false"
-    @cancel="emit('close')"
+    @cancel="close"
     @submit="submit"
   >
     <template v-if="kind === 'address'">
@@ -108,7 +117,7 @@ function submitPassword(): void {
         :label="copy.newAddress"
         :hint="copy.addressHint"
         :error="slugError"
-        :disabled="busy || passwordReauth || providerStep"
+        :disabled="busy || reauthStep"
         autocomplete="off"
         name="slug"
         :control-attrs="{ 'data-action': 'project-new-address' }"
@@ -118,7 +127,7 @@ function submitPassword(): void {
       </p>
     </template>
     <p
-      v-if="passwordReauth || providerStep"
+      v-if="reauthStep"
       class="text-sm"
     >
       {{ copy.reauthIntro }}
@@ -134,6 +143,7 @@ function submitPassword(): void {
       @submit-password="submitPassword"
       @start-provider="action.startProviderReauth()"
       @retry-provider="action.retryAfterProviderReauth()"
+      @continue-second-factor="action.continueAfterSecondFactor()"
     />
     <StatusBanner
       v-if="message !== null"
@@ -156,7 +166,7 @@ function submitPassword(): void {
         variant="outline"
         data-action="project-release-cancel"
         :disabled="busy"
-        @click="emit('close')"
+        @click="close"
       >
         {{ copy.cancel }}
       </Button>
@@ -171,7 +181,7 @@ function submitPassword(): void {
         {{ copy.reauth.providerRetryAction }}
       </Button>
       <Button
-        v-if="!passwordReauth && !providerStep"
+        v-if="!reauthStep"
         type="submit"
         :data-action="`project-${kind}-submit`"
         :disabled="busy || !canSubmit"

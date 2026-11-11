@@ -53,6 +53,8 @@ interface MutateOptions {
   method: 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   query?: Record<string, string>;
+  /** Receives the HTTP status of the response `mutate` resolves with. */
+  onStatus?: (status: number) => void;
 }
 
 export interface UseAuthReturn {
@@ -201,14 +203,17 @@ export function useAuth(): UseAuthReturn {
     url: string,
     options: MutateOptions,
   ): Promise<T> {
+    const { onStatus, ...request } = options;
     const attempt = (): Promise<T> => {
       const chosen = readLocaleCookie();
       return $fetch<T, string>(url, {
-        ...options,
+        ...request,
         credentials: 'include',
-        headers: csrfHeaders(csrfToken.value, options.body !== undefined),
+        headers: csrfHeaders(csrfToken.value, request.body !== undefined),
         onResponse: ({ response }) => {
-          if (response.ok && chosen !== undefined) restoreLocaleCookie(chosen);
+          if (!response.ok) return;
+          if (chosen !== undefined) restoreLocaleCookie(chosen);
+          onStatus?.(response.status);
         },
       });
     };
