@@ -9,7 +9,7 @@ import { ALLOWED_ORIGIN } from './network-policy';
 
 export const ORIGIN = ALLOWED_ORIGIN;
 export const EVIDENCE_PATH = '/evidence/editor-proof.json';
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '6';
 export const VALID_PNG_BASE64
   = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAANElEQVR4nOzNsQkA'
     + 'MAwDQRWGrJn9pwjZweruEWpvknuS3uZfMwAAAAAAAAAAALDVCwAA///3/wKTiM0y'

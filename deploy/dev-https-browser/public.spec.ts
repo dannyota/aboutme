@@ -35,7 +35,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
@@ -798,7 +798,7 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(detailWrite.status).toBe(200);
     expect(typeof detailWrite.revision).toBe('string');
 
-    // The owner picks the dark scheme. Only a v5 client can write it
+    // The owner picks the dark scheme. Only a v5 or later client can write it
     // (docs/design/public-page-theme.md); the public page below must carry it.
     stage('write-color-scheme');
     const schemeCSRF = await freshCSRF(page);

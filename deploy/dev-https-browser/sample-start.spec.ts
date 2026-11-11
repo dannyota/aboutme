@@ -43,7 +43,7 @@ function sampleLocation(document: {
 // Mirrors RESUME_CAP in apps/web/app/composables/useResumeList.ts; the
 // browser proof runs isolated from the web app source.
 const RESUME_CAP = 3;
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 
 interface CapturedMessage {
   kind: string;
