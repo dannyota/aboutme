@@ -1,6 +1,12 @@
 package migrations_test
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+
+	"danny.vn/aboutme/apps/server/migrations"
+)
 
 // unindexedForeignKeys names each foreign key that no index leads, with the
 // reason a scan of the referencing table is acceptable.
@@ -53,13 +59,28 @@ ORDER BY c.conname`
 // and lookups by its referencing columns would scan the whole child table.
 func TestForeignKeys_LeadingIndexCoversReferencingColumns(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	// A fresh database migrated from the embedded files, so the check sees
+	// exactly this tree's schema, not whatever a shared database holds.
+	db := openTestDB(t, newTestDatabase(t))
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		t.Fatalf("new migration provider: %v", err)
+	}
+	if _, upErr := provider.Up(ctx); upErr != nil {
+		t.Fatalf("apply migrations: %v", upErr)
+	}
 
-	rows, err := tx.Query(ctx, uncoveredForeignKeysQuery)
+	rows, err := db.QueryContext(ctx, uncoveredForeignKeysQuery)
 	if err != nil {
 		t.Fatalf("query uncovered foreign keys: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			t.Errorf("close rows: %v", closeErr)
+		}
+	}()
 	uncovered := map[string]bool{}
 	for rows.Next() {
 		var name, table string
