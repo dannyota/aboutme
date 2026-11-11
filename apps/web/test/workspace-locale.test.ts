@@ -26,6 +26,8 @@ describe('workspace locale', () => {
     '/app/views',
     '/app/views/',
     '/app/views/resume-1',
+    '/app/projects',
+    '/app/projects/project-1',
     '/authorize',
     '/app/import/linkedin',
   ])('localizes %s', (path) => {
@@ -46,6 +48,8 @@ describe('workspace locale', () => {
     '/app/views/resume-1/x',
     '/app/views/%2e%2e',
     '/app/views-lookalike',
+    '/app/projects/project-1/x',
+    '/app/projects-lookalike',
   ])('keeps %s English-only', (path) => {
     expect(isLocalizedPath(path)).toBe(false);
   });
@@ -71,6 +75,11 @@ describe('workspace locale', () => {
     expect(Object.keys(workspaceTitles.vi)).toEqual(
       Object.keys(workspaceTitles.en),
     );
+  });
+
+  it('provides localized project titles', () => {
+    expect(workspaceTitles.vi.projects).toBe('Dự án · aboutme.vn');
+    expect(workspaceTitles.en.projects).toBe('Projects · aboutme.vn');
   });
 
   it('provides localized settings and authorization titles', () => {

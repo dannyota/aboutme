@@ -23,6 +23,7 @@ Localized routes are the homepage, authentication and recovery pages, legal
 pages, template gallery, the verify page (`/verify`), the MCP guide
 (`/guide/mcp`), the resume workspace (`/app/resumes`, `/app/new`, and the editor
 below `/app/resumes/`), the Views pages (`/app/views` and `/app/views/{id}`),
+the Projects pages (`/app/projects` and `/app/projects/{id}`),
 `/app/settings/sessions`, and `/authorize`. Route classification in
 `useRouteLocale()` names these paths exactly. It excludes `/oauth/*`, the MCP
 endpoint (`/mcp`), API, and public resume routes. A new settings route joins

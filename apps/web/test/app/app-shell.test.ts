@@ -197,6 +197,7 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
+    expect(found['Projects']).toBe('/app/projects');
     expect(found['Views']).toBe('/app/views');
     expect(found['Settings']).toBe('/app/settings/sessions');
     expect(found['Library']).toBe('/templates');
@@ -207,6 +208,22 @@ describe('AppShell', () => {
       document.body.querySelector('[data-testid="account-menu"] [onerror]'),
     ).toBeNull();
     me.data.user.name = originalName;
+    wrapper.unmount();
+  });
+  it('puts Projects right after Resumes, marked on its pages', async () => {
+    meStatus = 200;
+    const wrapper = await mountShell('/app/projects/project-1');
+    await flushPromises();
+    const nav = wrapper.findAll('nav a').map((a) => a.attributes('href'));
+    const resumes = nav.indexOf('/app/resumes');
+    expect(nav.slice(resumes, resumes + 2))
+      .toEqual(['/app/resumes', '/app/projects']);
+    const projects = wrapper.findAll('a')
+      .find((a) => a.attributes('href') === '/app/projects');
+    expect(projects?.attributes('aria-current')).toBe('page');
+    // The signed-in English bar fits Projects only from 768 px.
+    expect(projects?.classes()).toContain('max-md:hidden');
+    expect(projects?.classes()).not.toContain('max-sm:hidden');
     wrapper.unmount();
   });
   it(
@@ -253,6 +270,24 @@ describe('AppShell', () => {
     },
   );
 
+  it('lists Projects above Views in the account menu', async () => {
+    meStatus = 200;
+    const wrapper = await mountShell();
+    await flushPromises();
+    await wrapper.get('[data-testid="account-menu"]').trigger('click');
+    await flushPromises();
+    const items = [...document.body.querySelectorAll<HTMLElement>(
+      '[data-testid^="account-menu-"]',
+    )].map((item) => item.dataset.testid);
+    expect(items.slice(0, 2))
+      .toEqual(['account-menu-projects', 'account-menu-views']);
+    document.body
+      .querySelector<HTMLElement>('[data-testid="account-menu-projects"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/projects');
+    wrapper.unmount();
+  });
   it('navigates from account menu and logs out', async () => {
     meStatus = 200;
     const wrapper = await mountShell();

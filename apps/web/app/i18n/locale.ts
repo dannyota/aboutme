@@ -1,7 +1,7 @@
 // Site languages. The homepage, account pages, the Privacy Policy, Terms,
 // Verify, and MCP guide pages, the Library, resume workspace, Views,
-// settings, and authorization are bilingual and default to Vietnamese
-// (docs/design/localization.md).
+// Projects, settings, and authorization are bilingual and default to
+// Vietnamese (docs/design/localization.md).
 
 export const locales = ['vi', 'en'] as const;
 
@@ -52,7 +52,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
 /** The Library, /templates, and its template pages. */
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;
 const WORKSPACE_PATH
-  = /^\/app\/(?:new|(?:resumes|views)(?:\/[^/.\\?#%][^/\\?#%]*|))$/u;
+  = /^\/app\/(?:new|(?:resumes|views|projects)(?:\/[^/.\\?#%][^/\\?#%]*|))$/u;
 
 /** Whether a route path renders in the chosen language. */
 export function isLocalizedPath(path: string): boolean {

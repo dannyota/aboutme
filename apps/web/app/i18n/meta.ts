@@ -44,6 +44,7 @@ type WorkspaceTitles = {
   readonly settings: string;
   readonly authorize: string;
   readonly views: string;
+  readonly projects: string;
 };
 
 export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
@@ -54,6 +55,7 @@ export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
     settings: pageTitle('Cài đặt'),
     authorize: pageTitle('Cấp quyền cho tác nhân'),
     views: pageTitle('Lượt xem'),
+    projects: pageTitle('Dự án'),
   },
   en: {
     resumes: pageTitle('Resumes'),
@@ -62,6 +64,7 @@ export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
     settings: pageTitle('Settings'),
     authorize: pageTitle('Authorize an agent'),
     views: pageTitle('Views'),
+    projects: pageTitle('Projects'),
   },
 };
 

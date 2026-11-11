@@ -90,6 +90,7 @@ export default defineConfig({
         'verify.spec.ts',
         'showcase.spec.ts',
         'showcase-baselines.spec.ts',
+        'projects.spec.ts',
       ],
   timeout: 20_000,
   updateSnapshots: 'none',

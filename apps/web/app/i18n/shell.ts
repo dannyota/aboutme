@@ -13,6 +13,8 @@ export type ShellCopy = {
   /** Header link to the MCP guide (docs/design/mcp-guide.md Navigation). */
   readonly guideMcp: string;
   readonly resumes: string;
+  /** Header link to the project library, right after Resumes. */
+  readonly projects: string;
   readonly views: string;
   readonly settings: string;
   readonly localeLabel: string;
@@ -37,6 +39,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     community: 'Cộng đồng',
     guideMcp: 'Kết nối AI',
     resumes: 'CV',
+    projects: 'Dự án',
     views: 'Lượt xem',
     settings: 'Cài đặt',
     localeLabel: 'Ngôn ngữ',
@@ -59,6 +62,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     community: 'Community',
     guideMcp: 'Connect AI',
     resumes: 'Resumes',
+    projects: 'Projects',
     views: 'Views',
     settings: 'Settings',
     localeLabel: 'Language',

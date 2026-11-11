@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import TextField from '@/components/app/TextField.vue';
 import { Button } from '@/components/ui/button';
-import type { PublishControllerState } from '../../editor/publishController';
 import type { PublishCopy } from '../../i18n/publish';
 
-defineProps<{
-  readonly state: PublishControllerState;
-  readonly copy: PublishCopy;
+type ReauthenticationCopyKey
+  = | 'currentPassword' | 'passwordAction' | 'providerContinue'
+    | 'providerStart' | 'providerLink' | 'providerReturn' | 'providerRetry'
+    | 'wrongPassword' | 'reauthRateLimited' | 'reauthUnavailable';
+
+// Projects reuse this step for address changes and deletion, so it reads
+// only the state fields and copy it shows.
+withDefaults(defineProps<{
+  readonly state: {
+    readonly kind: string;
+    readonly method?: 'password' | 'provider';
+    readonly authorizeUrl?: string;
+  };
+  readonly copy: Pick<PublishCopy, ReauthenticationCopyKey>;
   readonly busy: boolean;
   readonly passwordReauth: boolean;
   readonly password: string;
   readonly providerLinkActivated: boolean;
-}>();
+  readonly actionPrefix?: string;
+}>(), { actionPrefix: 'publish' });
 const emit = defineEmits<{
   'update:password': [value: string];
   'update:providerLinkActivated': [value: boolean];
@@ -32,12 +43,12 @@ const emit = defineEmits<{
       type="password"
       autocomplete="current-password"
       :disabled="busy"
-      :control-attrs="{ 'data-action': 'publish-password' }"
+      :control-attrs="{ 'data-action': `${actionPrefix}-password` }"
       @update:model-value="(value) => emit('update:password', value)"
     />
     <Button
       type="button"
-      data-action="publish-password-reauth"
+      :data-action="`${actionPrefix}-password-reauth`"
       :disabled="busy || password === ''"
       @click="emit('submit-password')"
     >
@@ -56,7 +67,7 @@ const emit = defineEmits<{
     <p>{{ copy.providerContinue }}</p>
     <Button
       type="button"
-      data-action="publish-provider-start"
+      :data-action="`${actionPrefix}-provider-start`"
       :disabled="busy"
       @click="emit('start-provider')"
     >
@@ -71,7 +82,7 @@ const emit = defineEmits<{
     <a
       :href="state.authorizeUrl"
       class="text-link underline underline-offset-4"
-      data-action="publish-provider-link"
+      :data-action="`${actionPrefix}-provider-link`"
       target="_blank"
       rel="noopener noreferrer"
       @click="emit('update:providerLinkActivated', true)"
@@ -84,7 +95,7 @@ const emit = defineEmits<{
     <Button
       v-if="providerLinkActivated"
       type="button"
-      data-action="publish-provider-retry"
+      :data-action="`${actionPrefix}-provider-retry`"
       :disabled="busy"
       @click="emit('retry-provider')"
     >

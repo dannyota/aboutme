@@ -19,7 +19,9 @@ Sign in button, and a primary create button. The create button reads Create your
 resume on the home page, the Library, template pages, the showcase, Terms,
 Privacy, and the MCP guide, and Create account elsewhere. On localized routes,
 both account buttons hide below 44 rem, where the page's own links take over.
-Signed-in navigation also shows Resumes, Settings, and an account menu. The
+Signed-in navigation also shows Resumes, Settings, and an account menu. A
+Projects link (“Dự án”) follows Resumes, hides below 768 px, and is also in the
+account menu above Views ([projects workspace](projects.md#navigation)). The
 account menu contains Settings, theme switching, and Log out. On signed-in
 screens below 640 px, the direct Library, Community, and Settings links are
 hidden; Settings remains in the account menu. The guide link hides below 44 rem

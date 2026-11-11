@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {
-  ChartColumn, LogOut, Moon, Settings2, Sun, UserRound,
+  ChartColumn, FolderKanban, LogOut, Moon, Settings2, Sun, UserRound,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import IconButton from '@/components/app/IconButton.vue';
@@ -38,6 +38,12 @@ function signOut(): void {
       </IconButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
+      <DropdownMenuItem
+        data-testid="account-menu-projects"
+        @select="navigateTo('/app/projects')"
+      >
+        <FolderKanban aria-hidden="true" />{{ copy.projects }}
+      </DropdownMenuItem>
       <DropdownMenuItem
         data-testid="account-menu-views"
         @select="navigateTo('/app/views')"

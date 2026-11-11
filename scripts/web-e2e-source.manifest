@@ -146,6 +146,15 @@ apps/web/app/components/preview/cardLayout.ts
 apps/web/app/components/preview/preview-card.css
 apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
+apps/web/app/components/projects/ProjectCreateDialog.vue
+apps/web/app/components/projects/ProjectLanguageDialog.vue
+apps/web/app/components/projects/ProjectLeaveDialog.vue
+apps/web/app/components/projects/ProjectList.vue
+apps/web/app/components/projects/ProjectReleaseDialog.vue
+apps/web/app/components/projects/ProjectTechnologies.vue
+apps/web/app/components/projects/ProjectTextFields.vue
+apps/web/app/components/projects/projectDocument.ts
+apps/web/app/components/projects/projectIssues.ts
 apps/web/app/components/public/JoinInvite.vue
 apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicMark.vue
@@ -320,6 +329,7 @@ apps/web/app/composables/agentGrants.ts
 apps/web/app/composables/identitySettings.ts
 apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/privacySettings.ts
+apps/web/app/composables/projectsApi.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/secondFactorPending.ts
 apps/web/app/composables/secondFactorSettings.ts
@@ -332,6 +342,7 @@ apps/web/app/composables/useLocale.ts
 apps/web/app/composables/useNow.ts
 apps/web/app/composables/useOAuthConsent.ts
 apps/web/app/composables/usePasswordAuth.ts
+apps/web/app/composables/useProjects.ts
 apps/web/app/composables/useResizablePanel.ts
 apps/web/app/composables/useResumeEditor.ts
 apps/web/app/composables/useResumeList.ts
@@ -401,6 +412,7 @@ apps/web/app/i18n/meta.ts
 apps/web/app/i18n/password-settings.ts
 apps/web/app/i18n/pdf.ts
 apps/web/app/i18n/privacy-settings.ts
+apps/web/app/i18n/projects.ts
 apps/web/app/i18n/publish.ts
 apps/web/app/i18n/resume-create.ts
 apps/web/app/i18n/resume-list.ts
@@ -440,6 +452,8 @@ apps/web/app/pages/_harness/render.vue
 apps/web/app/pages/_harness/sample-fixtures.ts
 apps/web/app/pages/app/import/linkedin.vue
 apps/web/app/pages/app/new.vue
+apps/web/app/pages/app/projects/[id].vue
+apps/web/app/pages/app/projects/index.vue
 apps/web/app/pages/app/resumes/[id].vue
 apps/web/app/pages/app/resumes/index.vue
 apps/web/app/pages/app/settings/sessions.vue
@@ -528,6 +542,7 @@ apps/web/e2e/print-mutations.spec.ts
 apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print-text-containment.ts
 apps/web/e2e/print.spec.ts
+apps/web/e2e/projects.spec.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

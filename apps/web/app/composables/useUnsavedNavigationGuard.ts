@@ -41,14 +41,24 @@ export function useUnsavedNavigationGuard(
   record: Readonly<Ref<ResumeRecord | undefined>>,
   drafts?: FieldDrafts,
 ): void {
-  const unsafe = (): boolean => flushAndCheckUnsaved(record.value, drafts);
+  useLeaveGuard(() => flushAndCheckUnsaved(record.value, drafts));
+}
+
+/**
+ * Holds route changes and asks before unload while `unsafe` is true. With
+ * `confirmLeave`, a route change waits for its answer instead of stopping.
+ */
+export function useLeaveGuard(
+  unsafe: () => boolean,
+  confirmLeave?: () => Promise<boolean>,
+): void {
   const beforeUnload = (event: BeforeUnloadEvent): void => {
     if (!unsafe()) return;
     event.preventDefault();
     event.returnValue = '';
   };
 
-  onBeforeRouteLeave(() => !unsafe());
+  onBeforeRouteLeave(() => !unsafe() || (confirmLeave?.() ?? false));
   onMounted(() => window.addEventListener('beforeunload', beforeUnload));
   onBeforeUnmount(() =>
     window.removeEventListener('beforeunload', beforeUnload),
