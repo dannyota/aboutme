@@ -1446,6 +1446,120 @@ async function ownerReadStatus(page: Page, id: string): Promise<number> {
   );
 }
 
+// ownerCreate creates a resume that publishing accepts, a full name and one
+// work entry, through the owner API. It returns the status and the new ID.
+async function ownerCreate(
+  page: Page,
+  title: string,
+): Promise<{ status: number; id: string | undefined }> {
+  const token = await freshCSRF(page);
+  return page.evaluate(
+    async ({ schemaVersion, title, token }) => {
+      const created = await fetch("/api/v1/resumes", {
+        body: JSON.stringify({
+          title,
+          document: {
+            schemaVersion: Number(schemaVersion),
+            personalDetails: {
+              fullName: "Deletion proof resume",
+              details: [],
+            },
+            content: {
+              work: {
+                sectionType: "work",
+                iconKey: "briefcase",
+                entries: [
+                  {
+                    id: crypto.randomUUID(),
+                    jobTitle: "Engineer",
+                    employer: "Example Corp",
+                  },
+                ],
+              },
+            },
+            customization: {
+              font: { family: "inter", baseSizePx: 14 },
+              colors: {
+                primary: "#1a1a1a",
+                text: "#1a1a1a",
+                background: "#ffffff",
+              },
+              spacing: { sectionGap: 16, entryGap: 8, lineHeight: 1.4 },
+              heading: { style: "normal", showRule: false },
+              layout: {
+                columns: 1,
+                sections: { main: ["work"], sidebar: [] },
+              },
+              sectionDisplay: {
+                skill: { style: "text" },
+                language: { style: "text" },
+              },
+              pageFormat: "a4",
+              dateFormat: "MM/YYYY",
+            },
+          },
+        }),
+        cache: "no-store",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+          "X-CSRF-Token": token,
+          "X-Resume-Schema-Version": schemaVersion,
+        },
+        method: "POST",
+      });
+      const body = (await created.json()) as { data?: { id?: unknown } };
+      const id = body.data?.id;
+      return {
+        status: created.status,
+        id: typeof id === "string" ? id : undefined,
+      };
+    },
+    { schemaVersion: SCHEMA_VERSION, title, token },
+  );
+}
+
+// ownerPublish reads the resume for its revision and publishes it live at
+// slug through the owner API. It returns the publish status.
+async function ownerPublish(
+  page: Page,
+  id: string,
+  slug: string,
+): Promise<number> {
+  const token = await freshCSRF(page);
+  return page.evaluate(
+    async ({ id, schemaVersion, slug, token }) => {
+      const path = `/api/v1/resumes/${encodeURIComponent(id)}`;
+      const read = await fetch(path, {
+        cache: "no-store",
+        credentials: "include",
+        headers: { "X-Resume-Schema-Version": schemaVersion },
+      });
+      const published = await fetch(`${path}/publish`, {
+        body: JSON.stringify({
+          slug,
+          live: true,
+          downloadEnabled: false,
+          seoGeoEnabled: false,
+        }),
+        cache: "no-store",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+          "If-Match": read.headers.get("etag") ?? "",
+          "X-CSRF-Token": token,
+          "X-Resume-Schema-Version": schemaVersion,
+        },
+        method: "POST",
+      });
+      return published.status;
+    },
+    { id, schemaVersion: SCHEMA_VERSION, slug, token },
+  );
+}
+
 test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   stage("deletion-setup");
   await pinEnglish(context);
@@ -1474,24 +1588,18 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   try {
     stage("deletion-login");
     await signInWithPassword(page);
-    stage("deletion-create-resume");
-    const created = await createBlankResume(
+    // The setup goes through the owner API: this test proves deletion, not
+    // the editor.
+    stage("deletion-create-status");
+    const created = await ownerCreate(
       page,
       `Deletion proof ${crypto.randomUUID()}`,
-      undefined,
-      (accepted) => {
-        resumeID = accepted.metadata.id;
-      },
     );
-    resumeID = created.metadata.id;
-    const id = resumeID;
-    stage("deletion-complete-resume");
-    await completeResume(page, "Deletion proof resume");
-    const dialog = await openPublishDialog(page);
-    stage("deletion-publish");
-    await dialog.getByLabel("Slug", { exact: true }).fill(slug);
-    await dialog.getByLabel("Public resume", { exact: true }).press("Space");
-    await submitPublishDialog(page, dialog, id);
+    resumeID = created.id;
+    expect(created.status).toBe(201);
+    const id = created.id ?? "";
+    stage("deletion-publish-status");
+    expect(await ownerPublish(page, id, slug)).toBe(200);
 
     stage("deletion-public-before-status");
     publicContext = await browser.newContext();
@@ -1504,11 +1612,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
     await publicContext.close();
     publicContext = undefined;
 
-    stage("deletion-owner-list");
-    await page.goto(`${ORIGIN}/app/resumes`);
-    await expect(
-      page.getByRole("heading", { name: "Resumes", exact: true }),
-    ).toBeVisible();
     stage("deletion-request-status");
     deleting = true;
     expect(await ownerDelete(page, id)).toEqual({ read: 200, deleted: 204 });

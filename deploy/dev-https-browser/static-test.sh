@@ -238,6 +238,12 @@ const deletion = testBody('DELETION_TEST_TITLE');
 assert.match(deletion, /deleting &&\s*resumeID !== undefined &&\s*isExpectedDeletedConsole\(message, resumeID, slug\)/);
 assert.match(deletion, /deleting = true;\n\s*expect\(await ownerDelete\(page, id\)\)\.toEqual\(\{ read: 200, deleted: 204 \}\);/);
 assert.match(deletion, /expect\(REVOKED_PUBLIC_STATUSES\)\.toContain\(gone\?\.status\(\) \?\? 0\);/);
+// The deletion test sets its resume up through the owner API: the editor is
+// not what it proves.
+assert.doesNotMatch(deletion, /createBlankResume|completeResume|openPublishDialog|submitPublishDialog|\/app\/resumes\//);
+assert.match(deletion, /resumeID = created\.id;\n\s*expect\(created\.status\)\.toBe\(201\);/);
+assert.match(deletion, /expect\(await ownerPublish\(page, id, slug\)\)\.toBe\(200\);/);
+assert.match(fn('ownerPublish'), /slug,\n\s*live: true,/);
 
 // Cleanup: one deletion helper, in its own context with its own counters,
 // after each test closes its counted page.
