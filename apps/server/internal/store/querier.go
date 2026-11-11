@@ -14,10 +14,12 @@ import (
 type Querier interface {
 	AcceptPrivacyNoticeRecipient(ctx context.Context, arg AcceptPrivacyNoticeRecipientParams) (int64, error)
 	ActivatePrivacyNoticeCampaign(ctx context.Context, arg ActivatePrivacyNoticeCampaignParams) (int64, error)
+	// Locks the parent resumes the same way as AddResumeViewDays.
 	AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error
-	// Target-list unnest zips the equal-length arrays row by row. The join
-	// skips a resume deleted since the view; the cascade removes its rows
-	// otherwise.
+	// Target-list unnest zips the equal-length arrays row by row. The parent
+	// CTE key-share locks each surviving resume in id order before the insert:
+	// a resume whose deletion commits first is skipped rather than failing the
+	// foreign key for the whole batch, and a locked resume stays until commit.
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error)

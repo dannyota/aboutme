@@ -13,6 +13,12 @@ import (
 )
 
 const addResumeShareSignalDays = `-- name: AddResumeShareSignalDays :exec
+WITH parent AS MATERIALIZED (
+    SELECT id FROM resumes
+    WHERE id = ANY($1::uuid[])
+    ORDER BY id
+    FOR KEY SHARE
+)
 INSERT INTO resume_share_signal_days AS s (resume_id, day, platform, fetches)
 SELECT cell.resume_id, cell.day, cell.platform, cell.fetches
 FROM (
@@ -21,7 +27,7 @@ FROM (
            unnest($3::text[]) AS platform,
            unnest($4::int[]) AS fetches
 ) AS cell
-JOIN resumes ON resumes.id = cell.resume_id
+JOIN parent ON parent.id = cell.resume_id
 ORDER BY cell.resume_id, cell.day, cell.platform
 ON CONFLICT (resume_id, day, platform) DO UPDATE SET
     fetches = s.fetches + EXCLUDED.fetches
@@ -34,6 +40,7 @@ type AddResumeShareSignalDaysParams struct {
 	Fetches   []int32
 }
 
+// Locks the parent resumes the same way as AddResumeViewDays.
 func (q *Queries) AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error {
 	_, err := q.db.Exec(ctx, addResumeShareSignalDays,
 		arg.ResumeIds,
@@ -45,6 +52,12 @@ func (q *Queries) AddResumeShareSignalDays(ctx context.Context, arg AddResumeSha
 }
 
 const addResumeViewDays = `-- name: AddResumeViewDays :exec
+WITH parent AS MATERIALIZED (
+    SELECT id FROM resumes
+    WHERE id = ANY($1::uuid[])
+    ORDER BY id
+    FOR KEY SHARE
+)
 INSERT INTO resume_view_days AS d (resume_id, day, counted, bot, datacenter, anomaly, invalid, crawler)
 SELECT cell.resume_id, cell.day, cell.counted, cell.bot, cell.datacenter, cell.anomaly, cell.invalid, cell.crawler
 FROM (
@@ -57,7 +70,7 @@ FROM (
            unnest($7::int[]) AS invalid,
            unnest($8::int[]) AS crawler
 ) AS cell
-JOIN resumes ON resumes.id = cell.resume_id
+JOIN parent ON parent.id = cell.resume_id
 ORDER BY cell.resume_id, cell.day
 ON CONFLICT (resume_id, day) DO UPDATE SET
     counted = d.counted + EXCLUDED.counted,
@@ -79,9 +92,10 @@ type AddResumeViewDaysParams struct {
 	Crawler    []int32
 }
 
-// Target-list unnest zips the equal-length arrays row by row. The join
-// skips a resume deleted since the view; the cascade removes its rows
-// otherwise.
+// Target-list unnest zips the equal-length arrays row by row. The parent
+// CTE key-share locks each surviving resume in id order before the insert:
+// a resume whose deletion commits first is skipped rather than failing the
+// foreign key for the whole batch, and a locked resume stays until commit.
 func (q *Queries) AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error {
 	_, err := q.db.Exec(ctx, addResumeViewDays,
 		arg.ResumeIds,

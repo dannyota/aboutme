@@ -11,9 +11,16 @@ SELECT id, user_id FROM resumes
 WHERE id = sqlc.arg(id)::uuid AND live = true;
 
 -- name: AddResumeViewDays :exec
--- Target-list unnest zips the equal-length arrays row by row. The join
--- skips a resume deleted since the view; the cascade removes its rows
--- otherwise.
+-- Target-list unnest zips the equal-length arrays row by row. The parent
+-- CTE key-share locks each surviving resume in id order before the insert:
+-- a resume whose deletion commits first is skipped rather than failing the
+-- foreign key for the whole batch, and a locked resume stays until commit.
+WITH parent AS MATERIALIZED (
+    SELECT id FROM resumes
+    WHERE id = ANY(sqlc.arg(resume_ids)::uuid[])
+    ORDER BY id
+    FOR KEY SHARE
+)
 INSERT INTO resume_view_days AS d (resume_id, day, counted, bot, datacenter, anomaly, invalid, crawler)
 SELECT cell.resume_id, cell.day, cell.counted, cell.bot, cell.datacenter, cell.anomaly, cell.invalid, cell.crawler
 FROM (
@@ -26,7 +33,7 @@ FROM (
            unnest(sqlc.arg(invalid)::int[]) AS invalid,
            unnest(sqlc.arg(crawler)::int[]) AS crawler
 ) AS cell
-JOIN resumes ON resumes.id = cell.resume_id
+JOIN parent ON parent.id = cell.resume_id
 ORDER BY cell.resume_id, cell.day
 ON CONFLICT (resume_id, day) DO UPDATE SET
     counted = d.counted + EXCLUDED.counted,
@@ -37,6 +44,13 @@ ON CONFLICT (resume_id, day) DO UPDATE SET
     crawler = d.crawler + EXCLUDED.crawler;
 
 -- name: AddResumeShareSignalDays :exec
+-- Locks the parent resumes the same way as AddResumeViewDays.
+WITH parent AS MATERIALIZED (
+    SELECT id FROM resumes
+    WHERE id = ANY(sqlc.arg(resume_ids)::uuid[])
+    ORDER BY id
+    FOR KEY SHARE
+)
 INSERT INTO resume_share_signal_days AS s (resume_id, day, platform, fetches)
 SELECT cell.resume_id, cell.day, cell.platform, cell.fetches
 FROM (
@@ -45,7 +59,7 @@ FROM (
            unnest(sqlc.arg(platforms)::text[]) AS platform,
            unnest(sqlc.arg(fetches)::int[]) AS fetches
 ) AS cell
-JOIN resumes ON resumes.id = cell.resume_id
+JOIN parent ON parent.id = cell.resume_id
 ORDER BY cell.resume_id, cell.day, cell.platform
 ON CONFLICT (resume_id, day, platform) DO UPDATE SET
     fetches = s.fetches + EXCLUDED.fetches;
