@@ -1,6 +1,6 @@
 # GitHub evidence
 
-Status: Proposed (2026-11-11), awaiting owner approval.
+Status: Accepted by the owner (2026-11-11); not yet implemented.
 [ADR 0030](../adr/0030-github-evidence.md) records the decision. This design
 covers roadmap features "Connect GitHub", "Evidence picker" and "Evidence on the
 page" ([roadmap](../plans/roadmap.md#v09-show-the-work)). It builds on the
@@ -239,8 +239,8 @@ project changes through one library mutation.
 - Evidence changes reach the project page on the next request and are revoked
   with it.
 
-## Open points for the owner
+## Owner action before release
 
-1. Limit of 10 items per project (recommended), or another value.
-2. A second GitHub OAuth application for production: the owner creates it and
-   supplies its credentials before the feature can be turned on.
+The owner creates a second GitHub OAuth application for production, for evidence
+only, and supplies its client id, secret and callback URL. Until then the
+feature stays off. The limits above were approved with this design.

@@ -47,7 +47,7 @@ record may change until accepted.
 | [0027](0027-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                          |
 | [0028](0028-community-showcase.md)                       | Accepted | Opt-in, uncached, never-indexed showcase of published resumes                        |
 | [0029](0029-account-project-library.md)                  | Accepted | Private account project library, selection in the resume, pages under the resume     |
-| [0030](0030-github-evidence.md)                          | Proposed | GitHub connection for project evidence: no scope, no stored token, checked snapshots |
+| [0030](0030-github-evidence.md)                          | Accepted | GitHub connection for project evidence: no scope, no stored token, checked snapshots |
 
 The [historical AWS production decision](history/aws-production.md) is an
 unnumbered appendix.

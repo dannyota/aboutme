@@ -5,7 +5,7 @@ project library and project pages ([design](../../design/projects.md),
 [contract](../../design/projects-contract.md),
 [ADR 0029](../../adr/0029-account-project-library.md)), and for GitHub
 evidence ([design](../../design/github-evidence.md),
-[ADR 0030](../../adr/0030-github-evidence.md), proposed). The owner approved
+[ADR 0030](../../adr/0030-github-evidence.md)). The owner approved
 the design on 2026-11-11; nothing is implemented, so every row is `PLANNED` and
 names no test yet. See [README.md](./README.md) for matrix rules and the full prefix index.
 
