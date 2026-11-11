@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	// ErrNotFound means the resume is not live under that slug.
+	// ErrNotFound means the resume is not live.
 	ErrNotFound = errors.New("viewcount: resume not found")
 	// ErrBusy means the one-time token store is full, so no token is issued.
 	ErrBusy = errors.New("viewcount: busy")
@@ -46,8 +46,6 @@ type LiveResume struct {
 
 // Store is the database boundary.
 type Store interface {
-	// LiveResumeBySlug returns ErrNotFound unless the slug names a live resume.
-	LiveResumeBySlug(ctx context.Context, slug string) (LiveResume, error)
 	// LiveResumeByID returns ErrNotFound unless the resume is live.
 	LiveResumeByID(ctx context.Context, id uuid.UUID) (LiveResume, error)
 	// AddCounts adds the cells to the daily rows in one statement per table.
@@ -167,14 +165,11 @@ type StartResult struct {
 	Challenge Challenge
 }
 
-// Start issues a one-time token and a proof-of-work challenge for a live
-// resume. The owner gets no token, and the owner's network is excluded from
-// the resume's count for the rest of the day.
-func (c *Counter) Start(ctx context.Context, slug string, viewer Viewer) (StartResult, error) {
-	resume, err := c.store.LiveResumeBySlug(ctx, slug)
-	if err != nil {
-		return StartResult{}, err
-	}
+// Start issues a one-time token and a proof-of-work challenge for resume,
+// which the caller has just read through the live-state gate; Collect checks
+// that gate again before it counts. The owner gets no token, and the owner's
+// network is excluded from the resume's count for the rest of the day.
+func (c *Counter) Start(resume LiveResume, viewer Viewer) (StartResult, error) {
 	now := c.now()
 	if viewer.owns(resume) {
 		c.mu.Lock()

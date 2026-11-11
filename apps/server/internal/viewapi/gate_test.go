@@ -6,12 +6,12 @@ package viewapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	mathrand "math/rand/v2"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -23,17 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
-
-// signInQueries answers GetPublicResumeBySlug with a fixed sign-in-to-view
-// resume; every other OwnerQueries method is unused.
-type signInQueries struct {
-	noOwnerQueries
-	resume store.Resume
-}
-
-func (q signInQueries) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return q.resume, nil
-}
 
 func newSignInGateFixture(t *testing.T, key []byte) (*routeFixture, *http.ServeMux) {
 	t.Helper()
@@ -51,12 +40,9 @@ func newSignInGateFixture(t *testing.T, key []byte) (*routeFixture, *http.ServeM
 		t.Fatalf("viewcount.New: %v", err)
 	}
 	f.counter = counter
-	slug := "ada-lovelace"
-	queries := signInQueries{resume: store.Resume{
-		ID: f.store.resume.ID, Slug: &slug, Live: true, SignInToView: true, ViewPassEpoch: 1,
-	}}
+	f.queries = liveRow(f.store.resume, true, 1)
 	service, err := New(Dependencies{
-		Counter: counter, Queries: queries, Sessions: auth.NewSessionManager(nil), PublicOrigin: testOrigin,
+		Counter: counter, Queries: f.queries, Sessions: auth.NewSessionManager(nil), PublicOrigin: testOrigin,
 		TrustedProxies: api.LoopbackTrustedProxies(), Now: func() time.Time { return f.now }, Logger: logger,
 		ViewPassKey: key,
 	})
@@ -110,5 +96,77 @@ func TestPublicStart_SignedInField_FalseWithNoSession(t *testing.T) {
 	}
 	if response.SignedIn {
 		t.Error("signedIn = true with no session cookie, want false")
+	}
+}
+
+// TestPublicStart_StatusesAndCounting pins the start route's statuses for each
+// state its live read can return, and counts a view only when the start
+// succeeded. Each start costs exactly one live read, so the counter makes no
+// second lookup. An unpublished slug has no live row, the same as an unknown
+// one; the live filter itself is the query's.
+func TestPublicStart_StatusesAndCounting(t *testing.T) {
+	key := bytes.Repeat([]byte{0x44}, 32)
+	tests := []struct {
+		name         string
+		signInToView bool
+		path         string
+		withPass     bool
+		wantStatus   int
+		wantCounted  int32
+	}{
+		{"public resume", false, startPath, false, http.StatusOK, 1},
+		{"sign-in resume without a pass", true, startPath, false, http.StatusNotFound, 0},
+		{"sign-in resume with a valid pass", true, startPath, true, http.StatusOK, 1},
+		{"unpublished slug", false, "/api/v1/public/resumes/ada-unpublished/views/start", false, http.StatusNotFound, 0},
+		{"unknown slug", true, "/api/v1/public/resumes/nobody-here/views/start", true, http.StatusNotFound, 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var f *routeFixture
+			if test.signInToView {
+				f, _ = newSignInGateFixture(t, key)
+			} else {
+				f = newRouteFixture(t)
+			}
+			var edit func(*http.Request)
+			if test.withPass {
+				edit = func(r *http.Request) {
+					r.AddCookie(&http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(key, f.store.resume.ID, 1, f.now.Add(time.Hour))})
+				}
+			}
+			if test.wantStatus != http.StatusOK {
+				w := f.request(http.MethodPost, test.path, "{}", edit)
+				if w.Code != test.wantStatus || errorCode(t, w) != "public_not_found" {
+					t.Fatalf("start = %d %s, want %d public_not_found", w.Code, w.Body.String(), test.wantStatus)
+				}
+			} else {
+				body := f.startAndSolve(t, edit)
+				f.now = f.now.Add(9 * time.Second)
+				if w := f.request(http.MethodPost, collectPath, body, edit); w.Code != http.StatusNoContent {
+					t.Fatalf("collect = %d, want 204", w.Code)
+				}
+			}
+			if f.queries.reads != 1 {
+				t.Errorf("live reads = %d, want 1", f.queries.reads)
+			}
+			if total := f.totals(t); total.Counted != test.wantCounted {
+				t.Errorf("counted = %d, want %d", total.Counted, test.wantCounted)
+			}
+		})
+	}
+}
+
+// TestOwnerQueriesReadNoWholeResume keeps the view routes off the full resume
+// row, documents included: no method of their query subset returns one.
+func TestOwnerQueriesReadNoWholeResume(t *testing.T) {
+	queries := reflect.TypeFor[OwnerQueries]()
+	whole := reflect.TypeFor[store.Resume]()
+	for i := range queries.NumMethod() {
+		method := queries.Method(i)
+		for j := range method.Type.NumOut() {
+			if method.Type.Out(j) == whole {
+				t.Errorf("OwnerQueries.%s returns store.Resume", method.Name)
+			}
+		}
 	}
 }

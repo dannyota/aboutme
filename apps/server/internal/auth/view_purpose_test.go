@@ -114,8 +114,9 @@ func TestViewStart_GitHub_BadRequest(t *testing.T) {
 	}
 }
 
-// TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction covers both a
-// missing slug and a live resume with the switch off.
+// TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction covers a
+// missing slug, a live resume with the switch off, and an unpublished resume
+// with the switch on.
 func TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -136,6 +137,17 @@ func TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction(t *testing.T) {
 	assertRedirectPath(t, resp2.Header.Get("Location"), "/"+off.slug)
 	if extractCookie(resp2, auth.OAuthTxCookieName) != nil {
 		t.Error("view start on a switch-off resume set a transaction cookie, want none")
+	}
+
+	unpublished := newViewFixture(t, q, true)
+	unpublished.republish(t, q, false, true)
+	resp3 := doGet(t, handler, viewStartPath(auth.GoogleStartPath, unpublished.slug)) //nolint:bodyclose // doGet closes the body itself before returning.
+	if resp3.StatusCode != http.StatusFound {
+		t.Fatalf("unpublished status = %d, want 302", resp3.StatusCode)
+	}
+	assertRedirectPath(t, resp3.Header.Get("Location"), "/"+unpublished.slug)
+	if extractCookie(resp3, auth.OAuthTxCookieName) != nil {
+		t.Error("view start on an unpublished resume set a transaction cookie, want none")
 	}
 }
 

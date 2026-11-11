@@ -49,13 +49,13 @@ func (op personalDetailsMutation) Run(ctx context.Context, qtx *store.Queries, m
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	if _, saveErr := op.service.resumes.SaveDocumentTx(
+	updated, err := op.service.resumes.SaveDocumentTx(
 		ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision,
-	); saveErr != nil {
-		return mutationRunResult{}, saveErr
-	}
-	updated, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	)
 	if err != nil {
+		return mutationRunResult{}, err
+	}
+	if err = requireNextRevision(updated, *mutation.ExpectedRevision); err != nil {
 		return mutationRunResult{}, err
 	}
 	response, err := input.Response(updated, updated.Doc, mutation.WireVersion)

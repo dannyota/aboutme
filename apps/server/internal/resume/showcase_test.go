@@ -61,10 +61,11 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 	}
 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		revision, saveErr := s.SaveDocumentTx(ctx, q.WithTx(tx), userID, created.ID, doc, created.Revision)
+		saved, saveErr := s.SaveDocumentTx(ctx, q.WithTx(tx), userID, created.ID, doc, created.Revision)
 		if saveErr != nil {
 			return saveErr
 		}
+		revision := saved.Revision
 		if revision != created.Revision+1 || sync.calls != 1 || sync.resumeID != created.ID || sync.revision != revision {
 			t.Errorf("revision %d, sync calls %d id %v saw revision %d, want one sync that saw %d", revision, sync.calls, sync.resumeID, sync.revision, created.Revision+1)
 		}

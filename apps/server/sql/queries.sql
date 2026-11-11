@@ -248,15 +248,15 @@ SELECT count(*) FROM resumes WHERE user_id = $1;
 DELETE FROM resumes WHERE id = $1 AND user_id = $2;
 
 -- name: UpdateResumeDocumentCAS :one
--- The returned revision is the NEW revision (revision + 1), never the
--- caller's expected one. A stale or non-matching $3 updates zero rows and
--- surfaces as pgx.ErrNoRows, which internal/resume turns into
--- *RevisionMismatchError or ErrNotFound.
+-- Returns the stored row, so the caller needs no reread; its revision is the
+-- NEW revision (revision + 1), never the caller's expected one. A stale or
+-- non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
+-- internal/resume turns into *RevisionMismatchError or ErrNotFound.
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
     schema_version = $7, revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING revision;
+RETURNING *;
 
 -- name: UpdateResumeTitleCAS :one
 -- The returned revision is the NEW revision (revision + 1), never the

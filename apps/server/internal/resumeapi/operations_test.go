@@ -56,7 +56,7 @@ func (s documentAwareOperationStore) GetTx(context.Context, *store.Queries, uuid
 
 func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.Queries, _ uuid.UUID,
 	_ uuid.UUID, doc schema.Resume, expected int64,
-) (int64, error) {
+) (resume.Resume, error) {
 	s.calls = append(s.calls, "save-document")
 	s.completeWrites++
 	s.savedDoc = doc
@@ -64,7 +64,19 @@ func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.
 	s.current.Revision = expected + 1
 	s.current.Doc = doc
 	s.current.UpdatedAt = time.Unix(2, 0).UTC()
-	return expected + 1, s.saveErr
+	return s.current, s.saveErr
+}
+
+// skewedSaveStore returns a saved row whose revision is not the expected
+// revision plus one.
+type skewedSaveStore struct{ documentAwareOperationStore }
+
+func (s skewedSaveStore) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID,
+	id uuid.UUID, doc schema.Resume, expected int64,
+) (resume.Resume, error) {
+	saved, err := s.documentAwareOperationStore.SaveDocumentTx(ctx, qtx, userID, id, doc, expected)
+	saved.Revision++
+	return saved, err
 }
 
 func (s documentAwareOperationStore) SaveMetadataAndDocumentTx(_ context.Context, _ *store.Queries, _ uuid.UUID,
@@ -151,7 +163,7 @@ func TestMutationOperationsPersistOnlyCompleteDocuments(t *testing.T) {
 					Response: operationResponse,
 				}}
 			},
-			wantCalls: []string{"get", "apply", "save-document", "get"},
+			wantCalls: []string{"get", "apply", "save-document"},
 		},
 		{
 			name: "metadata sanitizes validates and rereads fresh metadata",
@@ -257,5 +269,76 @@ func TestBeforeSaveCannotMutateTheValidatedStoredDocument(t *testing.T) {
 	assertStoredDocumentSanitizedAndValid(t, spy.savedDoc)
 	if sanitizerCalls != 1 {
 		t.Fatalf("sanitizer calls = %d, want exactly 1", sanitizerCalls)
+	}
+}
+
+// TestDocumentSaveOperationsRespondWithTheSavedRow proves the aggregate and
+// personal-details saves answer with the row the write returned, without a
+// reread, and fail when that row's revision is not the expected revision plus
+// one.
+func TestDocumentSaveOperationsRespondWithTheSavedRow(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	resumeID := uuid.New()
+	expected := int64(4)
+	for _, test := range []struct {
+		name     string
+		run      func(*Service) mutationOperation
+		prepared func(mutationResponseBuilder) any
+	}{
+		{
+			name: "aggregate",
+			run:  func(service *Service) mutationOperation { return aggregateOperation{service: service} },
+			prepared: func(response mutationResponseBuilder) any {
+				return aggregatePreparedInput{
+					ResumeID: resumeID, Response: response,
+					Apply: func(raw json.RawMessage) (json.RawMessage, error) { return raw, nil },
+				}
+			},
+		},
+		{
+			name: "personal details",
+			run:  func(service *Service) mutationOperation { return personalDetailsMutation{service: service} },
+			prepared: func(response mutationResponseBuilder) any {
+				return personalDetailsPrepared{
+					ResumeID: resumeID, Response: response,
+					Replacement: map[string]json.RawMessage{"fullName": json.RawMessage(`"Ada"`), "details": json.RawMessage(`[]`)},
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			run := func(boundary resumeBoundary, spy *operationStoreSpy) (resume.Resume, error) {
+				spy.current = resume.Resume{ID: resumeID, UserID: userID, Revision: expected, Doc: loadMinimalDocument(t)}
+				var responded resume.Resume
+				respond := func(row resume.Resume, _ schema.Resume, _ int32) (resume.StoredResponse, error) {
+					responded = row
+					return resume.StoredResponse{Status: http.StatusOK}, nil
+				}
+				service := &Service{projector: docmigrate.NewIdentityProjector(), resumes: boundary}
+				_, err := test.run(service).Run(context.Background(), nil, mutationContext{
+					UserID: userID, ExpectedRevision: &expected, WireVersion: docmigrate.CurrentVersion,
+				}, preparedInput{Value: test.prepared(respond)})
+				return responded, err
+			}
+
+			spy := &operationStoreSpy{}
+			responded, err := run(documentAwareOperationStore{operationStoreSpy: spy}, spy)
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if !reflect.DeepEqual(spy.calls, []string{"get", "save-document"}) {
+				t.Fatalf("calls = %v, want one read before the save and none after", spy.calls)
+			}
+			if responded.Revision != expected+1 || !responded.UpdatedAt.Equal(time.Unix(2, 0)) {
+				t.Fatalf("response row = revision %d updated %v, want the saved row", responded.Revision, responded.UpdatedAt)
+			}
+
+			skewed := &operationStoreSpy{}
+			if _, err := run(skewedSaveStore{documentAwareOperationStore{operationStoreSpy: skewed}}, skewed); err == nil {
+				t.Fatal("Run accepted a saved revision that is not the expected revision plus one")
+			}
+		})
 	}
 }

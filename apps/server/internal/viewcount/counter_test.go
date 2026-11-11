@@ -27,14 +27,6 @@ type fakeStore struct {
 	fail    error
 }
 
-func (s *fakeStore) LiveResumeBySlug(_ context.Context, slug string) (LiveResume, error) {
-	resume, ok := s.resumes[slug]
-	if !ok {
-		return LiveResume{}, ErrNotFound
-	}
-	return resume, nil
-}
-
 func (s *fakeStore) LiveResumeByID(_ context.Context, id uuid.UUID) (LiveResume, error) {
 	for _, resume := range s.resumes {
 		if resume.ID == id && !s.gone[id] {
@@ -110,7 +102,7 @@ func (f *fixture) view(viewer Viewer, wait time.Duration, labels EdgeLabels) Out
 
 func (f *fixture) started(viewer Viewer) CollectInput {
 	f.t.Helper()
-	result, err := f.counter.Start(context.Background(), "ada-lovelace", viewer)
+	result, err := f.counter.Start(f.resume, viewer)
 	if err != nil || result.Owner {
 		f.t.Fatalf("Start = %+v, %v", result, err)
 	}
@@ -252,7 +244,7 @@ func TestCollectEdgeLabels(t *testing.T) {
 func TestOwnerIsNeverCounted(t *testing.T) {
 	f := newFixture(t, 0)
 	owner := Viewer{Addr: netip.MustParseAddr("203.0.113.9"), Account: &f.owner}
-	result, err := f.counter.Start(context.Background(), "ada-lovelace", owner)
+	result, err := f.counter.Start(f.resume, owner)
 	if err != nil || !result.Owner || result.Token != "" {
 		t.Fatalf("owner Start = %+v, %v; want owner flag and no token", result, err)
 	}
@@ -302,9 +294,6 @@ func TestCollectRechecksTheLiveGate(t *testing.T) {
 	if got := f.counter.Collect(context.Background(), in, anon("203.0.113.20"), EdgeLabels{}); got != OutcomeNone {
 		t.Fatalf("unpublished resume = %q, want none", got)
 	}
-	if _, err := f.counter.Start(context.Background(), "missing", anon("203.0.113.20")); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("Start(missing) = %v, want ErrNotFound", err)
-	}
 }
 
 func TestStartFailsClosedWhenTheNonceSetIsFull(t *testing.T) {
@@ -315,11 +304,11 @@ func TestStartFailsClosedWhenTheNonceSetIsFull(t *testing.T) {
 			t.Fatalf("view %d = %q, want counted", i, got)
 		}
 	}
-	if _, err := f.counter.Start(context.Background(), "ada-lovelace", anon("10.0.3.9")); !errors.Is(err, ErrBusy) {
+	if _, err := f.counter.Start(f.resume, anon("10.0.3.9")); !errors.Is(err, ErrBusy) {
 		t.Fatalf("Start with a full nonce set = %v, want ErrBusy", err)
 	}
 	f.now = f.now.Add(31 * time.Minute)
-	if _, err := f.counter.Start(context.Background(), "ada-lovelace", anon("10.0.3.9")); err != nil {
+	if _, err := f.counter.Start(f.resume, anon("10.0.3.9")); err != nil {
 		t.Fatalf("Start after expiry = %v", err)
 	}
 }
@@ -414,7 +403,7 @@ func TestJunkCollectsCannotFillTheUsedSet(t *testing.T) {
 			t.Fatalf("junk collect %d counted", i)
 		}
 	}
-	if _, err := f.counter.Start(context.Background(), "ada-lovelace", anon("10.0.4.2")); err != nil {
+	if _, err := f.counter.Start(f.resume, anon("10.0.4.2")); err != nil {
 		t.Fatalf("Start after junk collects = %v, want a token", err)
 	}
 }
@@ -422,7 +411,7 @@ func TestJunkCollectsCannotFillTheUsedSet(t *testing.T) {
 func TestReplayedTokensCannotEvictOwnerMarks(t *testing.T) {
 	f := newFixture(t, 10)
 	owner := Viewer{Addr: netip.MustParseAddr("203.0.113.9"), Account: &f.owner}
-	if result, err := f.counter.Start(context.Background(), "ada-lovelace", owner); err != nil || !result.Owner {
+	if result, err := f.counter.Start(f.resume, owner); err != nil || !result.Owner {
 		t.Fatalf("owner Start = %+v, %v", result, err)
 	}
 	used := f.started(anon("10.0.5.1"))

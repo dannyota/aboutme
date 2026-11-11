@@ -14,6 +14,7 @@ import (
 
 	altcha "github.com/altcha-org/altcha-lib-go/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"danny.vn/aboutme/apps/server/internal/api"
@@ -30,13 +31,6 @@ const testOrigin = "https://aboutme.vn"
 type memoryStore struct {
 	resume viewcount.LiveResume
 	days   []viewcount.DayCell
-}
-
-func (s *memoryStore) LiveResumeBySlug(_ context.Context, slug string) (viewcount.LiveResume, error) {
-	if slug != "ada-lovelace" {
-		return viewcount.LiveResume{}, viewcount.ErrNotFound
-	}
-	return s.resume, nil
 }
 
 func (s *memoryStore) LiveResumeByID(_ context.Context, id uuid.UUID) (viewcount.LiveResume, error) {
@@ -69,16 +63,36 @@ func (noOwnerQueries) ListResumeShareSignals(context.Context, store.ListResumeSh
 	return nil, nil
 }
 
-// GetPublicResumeBySlug returns a resume with sign-in-to-view off, so a test
-// service built without a real store still exercises the public start route
-// as an ordinary, ungated resume.
-func (noOwnerQueries) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return store.Resume{}, nil
+// liveQueries answers the start route's live read from rows keyed by slug;
+// a slug without a row is not live. It counts the reads. The owner reads are
+// unused.
+type liveQueries struct {
+	noOwnerQueries
+	rows  map[string]store.GetLiveViewResumeBySlugRow
+	reads int
+}
+
+func (q *liveQueries) GetLiveViewResumeBySlug(_ context.Context, slug string) (store.GetLiveViewResumeBySlugRow, error) {
+	q.reads++
+	row, ok := q.rows[slug]
+	if !ok {
+		return store.GetLiveViewResumeBySlugRow{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
+// liveRow returns queries whose only live slug is "ada-lovelace", naming
+// resume with the given sign-in switch and pass epoch.
+func liveRow(resume viewcount.LiveResume, signInToView bool, passEpoch int32) *liveQueries {
+	return &liveQueries{rows: map[string]store.GetLiveViewResumeBySlugRow{
+		"ada-lovelace": {ID: resume.ID, UserID: resume.Owner, SignInToView: signInToView, ViewPassEpoch: passEpoch},
+	}}
 }
 
 type routeFixture struct {
 	now     time.Time
 	store   *memoryStore
+	queries *liveQueries
 	counter *viewcount.Counter
 	mux     *http.ServeMux
 }
@@ -99,8 +113,9 @@ func newRouteFixture(t *testing.T) *routeFixture {
 		t.Fatalf("viewcount.New: %v", err)
 	}
 	f.counter = counter
+	f.queries = liveRow(f.store.resume, false, 0)
 	service, err := New(Dependencies{
-		Counter: counter, Queries: noOwnerQueries{}, Sessions: auth.NewSessionManager(nil), PublicOrigin: testOrigin,
+		Counter: counter, Queries: f.queries, Sessions: auth.NewSessionManager(nil), PublicOrigin: testOrigin,
 		TrustedProxies: api.LoopbackTrustedProxies(), Now: func() time.Time { return f.now }, Logger: logger,
 	})
 	if err != nil {

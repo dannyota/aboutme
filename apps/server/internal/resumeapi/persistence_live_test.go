@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -249,5 +250,41 @@ func TestLiveHTTPWriteReadSanitizesBeforePersistedBounds(t *testing.T) {
 	afterText := after.Content["profile"].ProfileEntries[0].Text
 	if afterText == nil || *afterText != "<p>safe</p>" {
 		t.Fatalf("rejected write changed stored rich text: %v", afterText)
+	}
+}
+
+// TestDocumentSaveRespondsWithTheStoredResume proves the customization and
+// personal-details saves answer with the stored resume: each body and entity
+// tag are those of a fresh read.
+func TestDocumentSaveRespondsWithTheStoredResume(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	resumePath := apiResumePath + "/" + created.ID.String()
+	revision := created.Revision
+	for _, save := range []struct{ path, body string }{
+		{resumePath + "/customization", `{"deltas":[{"op":"set","path":"font.baseSizePx","value":15}]}`},
+		{resumePath + "/personal-details", `{"fullName":"Stored Row","details":[]}`},
+	} {
+		saved := resumeRequest(t, h, http.MethodPatch, save.path, save.body, revision, uuid.New(), "")
+		if saved.status != http.StatusOK {
+			t.Fatalf("PATCH %s = %d %s, want 200", save.path, saved.status, saved.body)
+		}
+		read := resumeRequest(t, h, http.MethodGet, resumePath, "", 0, uuid.Nil, "")
+		if read.status != http.StatusOK {
+			t.Fatalf("read = %d %s, want 200", read.status, read.body)
+		}
+		// The PATCH body is replayable JSONB, so compare decoded values, not bytes.
+		var savedValue, readValue any
+		if err := json.Unmarshal(saved.body, &savedValue); err != nil {
+			t.Fatalf("decode PATCH %s body: %v", save.path, err)
+		}
+		if err := json.Unmarshal(read.body, &readValue); err != nil {
+			t.Fatalf("decode read body: %v", err)
+		}
+		if !reflect.DeepEqual(savedValue, readValue) || saved.header.Get("ETag") != read.header.Get("ETag") {
+			t.Fatalf("PATCH %s response %s (ETag %s)\nwant the stored resume %s (ETag %s)",
+				save.path, saved.body, saved.header.Get("ETag"), read.body, read.header.Get("ETag"))
+		}
+		revision++
 	}
 }

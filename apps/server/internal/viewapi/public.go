@@ -126,11 +126,12 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		writeNotFound(w)
 		return
 	}
-	// A sign-in-to-view resume needs a pass before it is counted; the check
+	// One live read serves both the pass check and the token. A
+	// sign-in-to-view resume needs a pass before it is counted; the check
 	// runs before Start so a missing pass is never counted
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
 	// AC-VIEW-003).
-	resume, err := s.queries.GetPublicResumeBySlug(r.Context(), slug)
+	resume, err := s.queries.GetLiveViewResumeBySlug(r.Context(), slug)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		writeNotFound(w)
@@ -144,12 +145,8 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		return
 	}
 
-	result, err := s.counter.Start(r.Context(), slug, s.viewer(r))
-	switch {
-	case errors.Is(err, viewcount.ErrNotFound):
-		writeNotFound(w)
-		return
-	case err != nil:
+	result, err := s.counter.Start(viewcount.LiveResume{ID: resume.ID, Owner: resume.UserID}, s.viewer(r))
+	if err != nil {
 		w.Header().Set("Retry-After", "60")
 		api.WriteError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "service temporarily unavailable")
 		return
