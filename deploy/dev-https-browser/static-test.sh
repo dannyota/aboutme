@@ -52,6 +52,46 @@ for file in Dockerfile base.Containerfile package.json package-lock.json run.sh 
   "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
+node --input-type=module - "$SOURCE" <<'NODE' || fail 'showcase console diagnostic drifted'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
+
+const source = process.argv[2];
+const spec = readFileSync(`${source}/publish.spec.ts`, 'utf8');
+const start = spec.indexOf('function classifyShowcaseConsoleFailure(');
+assert.notEqual(start, -1, 'missing showcase console classifier');
+const end = spec.indexOf('\n}\n', start);
+assert.notEqual(end, -1, 'missing classifier end');
+const { ALLOWED_ORIGIN, httpFailureStatus } = await import(pathToFileURL(`${source}/network-policy.ts`));
+const classify = runInNewContext(
+  `(${stripTypeScriptTypes(spec.slice(start, end + 2))})`,
+  { URL, ORIGIN: ALLOWED_ORIGIN, SHOWCASE_LISTING_PATH: '/api/v1/public/showcase', httpFailureStatus },
+);
+const message = (text, url) => ({ text: () => text, location: () => ({ url }) });
+const failed = 'Failed to load resource: the server responded with a status of 404 ()';
+const id = 'private-resume-id';
+const slug = 'private-slug';
+for (const [path, route] of [
+  [`/api/v1/resumes/${id}`, 'owner-read'],
+  [`/api/v1/resumes/${id}/publish`, 'owner-publish'],
+  ['/api/v1/events', 'owner-stream'],
+  ['/api/v1/public/showcase', 'showcase-listing'],
+  ['/showcase', 'showcase-page'],
+  ['/app/resumes', 'resumes-page'],
+  [`/api/v1/public/resumes/${slug}`, 'public-read'],
+  [`/api/v1/live/${slug}`, 'public-stream'],
+]) {
+  assert.equal(classify(message(failed, `${ALLOWED_ORIGIN}${path}?token=secret`), id, slug), `console-404-${route}`);
+}
+assert.equal(classify(message('secret content', 'https://other.invalid/api/v1/events'), id, slug), 'console-non-http-other');
+assert.equal(classify(message(failed, 'invalid secret'), id, slug), 'console-404-other');
+assert.match(spec, /onCountedConsoleError:\s*\(message(?:: ConsoleMessage)?\).*?showcaseConsoleFailure/s);
+assert.match(spec, /showcaseConsoleFailure.*?classifyShowcaseConsoleFailure\(message, resumeID, slug\)/s);
+assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?showcaseConsoleFailure/s);
+NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
   fail 'published base has the wrong Playwright base'
 grep -Eq 'apt-get install .*libnss3-tools=2:3\.98-1ubuntu0\.3([[:space:]]|$)' \
@@ -1165,7 +1205,7 @@ mcp-sdk-fail)
 publish-fail)
   printf '%s\n' 'browser-secret-must-not-escape'
   printf '%s\n' 'publish-stage:signed-out'
-  printf '%s\n' 'publish-stage:fail-showcase-initial-listing-status-wrong-status'
+  printf '%s\n' 'publish-stage:fail-showcase-final-console-errors-wrong-content-console-404-owner-read-at-showcase-cleanup-resume'
   printf '%s\n' 'publish-stage:showcase-cleanup'
   exit 1
   ;;
@@ -1670,7 +1710,7 @@ if output=$(FAKE_BROWSER_MODE=publish-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside publish 2>&1); then
   fail 'publish browser failure was accepted'
 fi
-grep -Fxq 'dev-https-browser: publish-stage:fail-showcase-initial-listing-status-wrong-status' <<<"$output" ||
+grep -Fxq 'dev-https-browser: publish-stage:fail-showcase-final-console-errors-wrong-content-console-404-owner-read-at-showcase-cleanup-resume' <<<"$output" ||
   fail 'publish failure did not expose its bounded failure marker'
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output" ||
   grep -Fq 'publish-stage:showcase-cleanup' <<<"$output"; then

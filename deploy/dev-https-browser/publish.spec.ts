@@ -93,6 +93,7 @@ function mutationHeaderPresence(request: Request) {
 
 let currentStage = "setup";
 let failedStage: string | undefined;
+let showcaseConsoleFailure: string | undefined;
 
 function stage(name: string): void {
   currentStage = name;
@@ -102,6 +103,7 @@ function stage(name: string): void {
 test.beforeEach(() => {
   currentStage = "setup";
   failedStage = undefined;
+  showcaseConsoleFailure = undefined;
 });
 
 test.afterEach(async ({}, info) => {
@@ -117,7 +119,7 @@ test.afterEach(async ({}, info) => {
           ? "wrong-status"
           : "wrong-content"
         : "error";
-  const marker = `fail-${failureStage}-${reason}`;
+  const marker = `fail-${failureStage}-${reason}${showcaseConsoleFailure === undefined ? "" : `-${showcaseConsoleFailure}`}`;
   stage(marker);
   const journey =
     info.title === "proves native HTTPS publish, discovery, and revocation"
@@ -938,6 +940,39 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
 // (docs/design/showcase.md "Opt-in", "Delivery, caching, and revocation").
 const SHOWCASE_LISTING_PATH = "/api/v1/public/showcase";
 
+function classifyShowcaseConsoleFailure(
+  message: ConsoleMessage,
+  resumeID: string | undefined,
+  slug: string,
+): string {
+  let path = "";
+  try {
+    const location = new URL(message.location().url);
+    if (location.origin === ORIGIN) path = location.pathname;
+  } catch {
+    /* Keep unknown locations in the other category. */
+  }
+  const route =
+    resumeID !== undefined && path === `/api/v1/resumes/${resumeID}`
+      ? "owner-read"
+      : resumeID !== undefined && path === `/api/v1/resumes/${resumeID}/publish`
+        ? "owner-publish"
+        : path === "/api/v1/events"
+          ? "owner-stream"
+          : path === SHOWCASE_LISTING_PATH
+            ? "showcase-listing"
+            : path === "/showcase"
+              ? "showcase-page"
+              : path === "/app/resumes"
+                ? "resumes-page"
+                : path === `/api/v1/public/resumes/${slug}`
+                  ? "public-read"
+                  : path === `/api/v1/live/${slug}`
+                    ? "public-stream"
+                    : "other";
+  return `console-${httpFailureStatus(message.text()) ?? "non-http"}-${route}`;
+}
+
 function isPublishResponse(resumeID: string): (response: Response) => boolean {
   return (response) =>
     response.request().method() === "POST" &&
@@ -1010,6 +1045,9 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
       !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+    onCountedConsoleError: (message: ConsoleMessage): void => {
+      showcaseConsoleFailure ??= `${classifyShowcaseConsoleFailure(message, resumeID, slug)}-at-${currentStage}`;
+    },
   };
   await installPublicGuards(context, counters);
   pageDiagnosticsAttacher(counters, hooks)(page);
