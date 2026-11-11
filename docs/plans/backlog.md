@@ -20,6 +20,17 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - Accepted, 2026-11-01; implementation and runtime acceptance pending: [local tooling](../design/local-tooling-simplification.md#owner-choices-and-combined-jobs) covers portable sessions, wrapper/lock changes, strict native Mac HTTPS, display execution, and `server-runtime-smoke`. No local run is authorized by the authority update; preserve exact-commit release CI.
 
+- Database audit of 2026-11-11 (owner approved all items; one change each, in this order). Evidence: the review of main 85741fac.
+  - No connection timeouts: `store/store.go:26` sets only the pool cap, so a blocked statement or idle transaction can hold a connection indefinitely. Set statement, lock, and idle-in-transaction defaults; give migrations a short DDL lock timeout.
+  - Publishing locks the user before slug and public locks (`resume/idempotency_execute.go:88`, `resumeapi/write_transition.go:134`); operator deletion takes slug locks first, then the user (`accountapi/delete_transaction.go:77,102`). Use one lock order.
+  - Discovery caches bytes keyed only by generation (`publicapi/discovery.go:79`), and operator deletion does not advance it (`accountapi/delete_transaction.go:162`), so a late `Cache.Put` can restore deleted slugs. Encode from the fetched slug snapshot.
+  - View-count and share-signal aggregates join `resumes` without locking it (`sql/view_counts.sql:29`), so a concurrent deletion can fail the insert and lose the whole buffered batch (`viewcount/buffer.go:122`). Lock surviving parents with `FOR KEY SHARE`.
+  - Full reads where a narrow one serves: `viewapi/public.go:133` reads `SELECT *` for a pass check; document writes return only the revision (`sql/queries.sql:259`) and then reload (`resumeapi/persist.go:159`, `showcase/service.go:102`).
+  - The hourly idempotency sweep starts from every account (`sql/privacy_retention.sql:16`); drive it from the global expiry index.
+  - Missing foreign-key and query-shaped indexes: revoked sessions (`migrations/00001_baseline.sql:80`), historical `oauth_grants`, `auth_email_jobs` scope references, OAuth transaction bindings, passkey pending authentications and ceremonies (`00004_passkey_second_factor.sql`), and the mail claim, cleanup, and lease-recovery queries (`sql/queries.sql:1183,1238,1271`). Check plans first.
+  - Session rows are never deleted, only scrubbed (`sql/privacy_retention.sql:92`). Add batch deletion after absolute expiry with a documented margin.
+  - Obsolete state: five unused showcase review columns and the approval index (`migrations/00011_showcase_without_review.sql:6`), and the authorization-code binding-fill trigger (`00004_passkey_second_factor.sql:170`). Remove them and record the rollback floor in ADR 0028.
+
 ## Production acceptance
 
 - Dispatch the first `action=renew` of `.github/workflows/vmonitor-renew.yml` after 2026-11-28T06:54:54Z (the 72-hour threshold for the term ending 2026-12-01T06:54:54Z) and confirm the later expiry by read-back; then add the schedule in a separate reviewed change. `action=check` passed on 2026-11-01 (run 41302010198) and the owner delegated closing hold issue #146, which is now closed. If the renewal fails or stays unconfirmed, reconcile with the provider before any retry. Evidence: [renewal design](../design/vmonitor-quota-renewal.md).
