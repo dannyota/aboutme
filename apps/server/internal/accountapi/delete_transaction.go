@@ -60,36 +60,12 @@ func (s *Service) executeDeletion(ctx context.Context, plan accountDeletionPlan)
 	}, nil
 }
 
+// mutateDeletion follows the lock order in docs/design/data.md: canonical
+// email, password registration, user, slug claims in sorted order, then public
+// state. Resume writes take the user before slug claims and public state, and
+// the operator command runs outside the server's in-process fences, so another
+// order deadlocks against a concurrent publish.
 func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan accountDeletionPlan) error {
-	slugs := make([]string, 0, len(plan.resumes))
-	for _, item := range plan.resumes {
-		if item.Slug != nil {
-			slugs = append(slugs, *item.Slug)
-		}
-	}
-	if plan.operatorSlug != "" && !slices.Contains(slugs, plan.operatorSlug) {
-		// The reported slug moved to another account after the plan was built.
-		// Lock it too so the owner check below reads a stable row.
-		slugs = append(slugs, plan.operatorSlug)
-	}
-	sort.Strings(slugs)
-	for _, slug := range slugs {
-		if err := qtx.LockSlugClaim(ctx, slug); err != nil {
-			return fmt.Errorf("accountapi: lock slug: %w", err)
-		}
-	}
-	if plan.operatorSlug != "" {
-		if err := requireSlugOwner(ctx, qtx, plan.operatorSlug, plan.user.ID); err != nil {
-			return err
-		}
-	}
-	public, err := qtx.LockPublicState(ctx)
-	if err != nil {
-		return fmt.Errorf("accountapi: lock public state: %w", err)
-	}
-	if public.DiscoveryGeneration != plan.discoveryGeneration {
-		return errAccountChanged
-	}
 	if lockErr := qtx.LockCanonicalAccountEmail(ctx, plan.user.Email); lockErr != nil {
 		return fmt.Errorf("accountapi: lock canonical email: %w", lockErr)
 	}
@@ -111,6 +87,35 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	}
 	if s.afterUserLock != nil {
 		s.afterUserLock()
+	}
+	slugs := make([]string, 0, len(plan.resumes))
+	for _, item := range plan.resumes {
+		if item.Slug != nil {
+			slugs = append(slugs, *item.Slug)
+		}
+	}
+	if plan.operatorSlug != "" && !slices.Contains(slugs, plan.operatorSlug) {
+		// The reported slug moved to another account after the plan was built.
+		// Lock it too so the owner check below reads a stable row.
+		slugs = append(slugs, plan.operatorSlug)
+	}
+	sort.Strings(slugs)
+	for _, slug := range slugs {
+		if lockErr := qtx.LockSlugClaim(ctx, slug); lockErr != nil {
+			return fmt.Errorf("accountapi: lock slug: %w", lockErr)
+		}
+	}
+	if plan.operatorSlug != "" {
+		if ownerErr := requireSlugOwner(ctx, qtx, plan.operatorSlug, plan.user.ID); ownerErr != nil {
+			return ownerErr
+		}
+	}
+	public, err := qtx.LockPublicState(ctx)
+	if err != nil {
+		return fmt.Errorf("accountapi: lock public state: %w", err)
+	}
+	if public.DiscoveryGeneration != plan.discoveryGeneration {
+		return errAccountChanged
 	}
 	if !sameDeletionUser(lockedUser, plan.user) {
 		return errAccountChanged

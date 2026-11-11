@@ -94,6 +94,14 @@ Aggregate discovery contains only a fixed heading and the slug-ordered eligible
 public URLs; it has no other mutable resume field, so other document edits
 cannot change its bytes.
 
+The database lock order is: the canonical-email advisory lock, the pending
+`password_registrations` row, the `users` row, the slug-claim advisory locks in
+sorted slug order, then the `public_state` row. Every path follows it and skips
+the locks it does not need: sign-up and verification, provider account creation,
+resume writes including publish and rename, and account deletion. The operator
+`account-delete` command runs outside the server's in-process fences, so this
+order alone keeps it from deadlocking with a concurrent publish.
+
 Database constraints enforce global slug uniqueness and format, valid publish
 flag combinations, and the three-resume cap. Resume creation also locks the
 owner row so concurrent callers cannot race past the cap. Reserved slug checks,
