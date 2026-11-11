@@ -24,13 +24,14 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Database audit of 2026-11-11 (owner approved all items; one change each, in this order). Evidence: the review of main 85741fac.
   - The showcase sync rereads the resume after a document save (`showcase/service.go:102`), and `SaveMetadataAndDocumentTx` saves then rereads. Pass the saved row through when `ShowcaseSync.SyncTx` next changes.
   - Each idempotency expiry page measures `octet_length(response_body::text)` (`sql/privacy_retention.sql:41`) while holding user row locks, so very large expired bodies can delay that user's writers up to the 15 s statement timeout. Store each record's byte size at insert instead.
-  - Drop the indexes migration 00015 superseded: `auth_email_jobs_claim_idx`, `auth_email_jobs_outcome_idx`, `sessions_user_id_active_idx`, and `oauth_grants_client_live_idx`. None is an `ON CONFLICT` target. Fold this into the obsolete-state migration.
-  - Obsolete state: five unused showcase review columns and the approval index (`migrations/00011_showcase_without_review.sql:6`), and the authorization-code binding-fill trigger (`00004_passkey_second_factor.sql:170`). Remove them and record the rollback floor in ADR 0028.
 
 - The editor's page chunk (`/_nuxt/pages/app/resumes/[id].vue`) sometimes fails to load in the HTTPS proofs ("Failed to fetch dynamically imported module", about 1 in 40 editor creates under load on the Ubuntu gate host, 2026-11-11). The publish and showcase journeys still create through the editor and can hit it. Find why the chunk load fails.
 - A Playwright test timeout skips the spec's `finally` cleanup, so a timed-out publish or showcase journey leaves its disposable resume behind (`deploy/dev-https-browser/publish.spec.ts`). Move cleanup to `afterEach`, as `public.spec.ts:195-217` does.
 - `verify-evidence.mjs` falls back to `-1` for an invalid `timings.joinInviteMs` in the `public` block (lines 140-142), so forged evidence with `-1` passes. Reject invalid timings as the publish block now does.
 - Resume request decoding accepts case-variant property names: `decodeJSONBody` relies on `DisallowUnknownFields` (`apps/server/internal/resumeapi/writesafety_json.go:34`), and Go matches field names case-insensitively, so `{"Title":"x"}` binds to `title` and a case-variant key passes the duplicate-key check. The project decoder checks exact names (`apps/server/internal/project/decode.go:67`); apply the same rule to resume request bodies and the other `DisallowUnknownFields` decoders. Evidence: the review of `f2e62ecd`, read from code, not run.
+
+- `deploy/vn/scripts/fence.sh` sets a rebuilt host's release floor to v0.4.7 (`floor_tag`, line 30), below the current production floor and below the release that drops the showcase review columns (migration 00017). A rebuilt host would then accept a tag that cannot run on its schema. Raise the rebuilt-host floor with each floor raise.
+- `CreateOAuthAuthorizationCode` takes `grant_id` and `auth_epoch` as `sqlc.narg` (`apps/server/sql/queries.sql`), so a caller that omits them fails only at the database since migration 00017 dropped the fill trigger. Make them `sqlc.arg` so the compiler catches it.
 
 ## Production acceptance
 

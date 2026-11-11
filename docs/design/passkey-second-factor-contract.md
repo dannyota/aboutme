@@ -375,6 +375,7 @@ assertion ceremonies require a pending row and no session.
 
 The migration deleted outstanding authorization codes (60-second lifetime)
 before making `grant_id` and `auth_epoch` required; nothing else was deleted. An
-insert trigger still fills an omitted code `grant_id` from the unique live
-`(user_id, client_id)` grant and copies the user's epoch. Current code supplies
+insert trigger filled an omitted code `grant_id` from the unique live
+`(user_id, client_id)` grant and copied the user's epoch, for the release before
+this migration. Migration 00017 dropped the trigger; every code insert supplies
 both fields.

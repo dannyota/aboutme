@@ -483,6 +483,7 @@ func seedAccountCascadeRows(
 		CodeDigest: digest, ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read",
 		CodeChallenge: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		RedirectURI:   "https://client.example/callback", CreatedAt: now,
+		GrantID: &grant.ID, AuthEpoch: &grant.AuthEpoch,
 	}); err != nil {
 		t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
 	}

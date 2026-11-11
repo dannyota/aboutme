@@ -122,6 +122,18 @@ the floor, then enable the flag in `/etc/aboutme/flags.env` and redeploy the
 same tag. The floors are v0.4.2 for passkeys, v0.4.7 for TOTP, and v0.6.26 for
 sign in to view. A raised floor stays raised if a later step fails.
 
+A schema floor has no flag. Migration 00017 drops showcase columns that every
+earlier release reads, so no earlier tag can serve after it runs. Once the first
+release with 00017 is deployed and healthy, activate that same tag at once:
+
+```sh
+DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh --activate <first-00017-tag>
+```
+
+This takes the lock and runs `fence.sh raise <operation-id> <first-00017-tag>`
+on the host. Until it succeeds, the fence still admits older tags; do not roll
+back to one.
+
 Before clearing a stale lock, prove that no laptop deploy, host deploy process,
 database command, or media writer from that operation can still run. Inspect
 release state, unit state, the fence, and any mutation marker. On the host:

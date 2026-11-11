@@ -14,10 +14,10 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// seedShowcaseRow inserts a resume and its showcase row through plain SQL at
-// schema version 10, with the review columns as given. Each row gets its own
-// user, because an account holds at most three resumes.
-func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, reviewedKey, outcome, firstListed string) uuid.UUID {
+// seedLiveResume inserts a user and one live resume through plain SQL, so it
+// works at any schema version from 10. Each resume gets its own user, because
+// an account holds at most three resumes.
+func seedLiveResume(ctx context.Context, t *testing.T, db *sql.DB, slug string) uuid.UUID {
 	t.Helper()
 	var userID, resumeID uuid.UUID
 	if err := db.QueryRowContext(ctx, `INSERT INTO users (email, name) VALUES ($1, 'Showcase') RETURNING id`, uuid.NewString()+"@example.com").Scan(&userID); err != nil {
@@ -28,6 +28,14 @@ func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, review
 		VALUES ($1, 'Seed', $2, true, 1, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb) RETURNING id`, userID, slug).Scan(&resumeID); err != nil {
 		t.Fatalf("insert resume %s: %v", slug, err)
 	}
+	return resumeID
+}
+
+// seedShowcaseRow inserts a resume and its showcase row through plain SQL at
+// schema version 10, with the review columns as given.
+func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, reviewedKey, outcome, firstListed string) uuid.UUID {
+	t.Helper()
+	resumeID := seedLiveResume(ctx, t, db, slug)
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO resume_showcase (
 			resume_id, requested_at, review_key, card_version,
@@ -108,27 +116,40 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005, AC-SHOW-015: an insert without review_key takes the default, and
-// the listing index serves the opt-in order.
+// AC-SHOW-005, AC-SHOW-015: at version 11 an insert without review_key takes
+// the default, and the listing index serves the opt-in order. Migration 00017
+// drops review_key; the index stays.
 func TestShowcaseWithoutReviewMigrationDefaultAndIndex(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
-	resumeID := insertLiveCardResume(ctx, t, tx, createTestUser(ctx, t, tx), uniqueCardSlug())
-	if _, err := tx.Exec(ctx, `
+	db := openTestDB(t, newTestDatabase(t))
+	ctx, cancel := context.WithTimeout(context.Background(), harnessTimeout)
+	defer cancel()
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		t.Fatalf("NewProvider() error: %v", err)
+	}
+	if _, err = provider.UpTo(ctx, 11); err != nil {
+		t.Fatalf("UpTo(11) error: %v", err)
+	}
+	resumeID := seedLiveResume(ctx, t, db, "nr-default")
+	if _, err = db.ExecContext(ctx, `
 		INSERT INTO resume_showcase (resume_id, requested_at, card_version) VALUES ($1, now(), $2)`,
 		resumeID, showcaseHexB); err != nil {
 		t.Fatalf("insert without review_key: %v", err)
 	}
 	var key string
-	if err := tx.QueryRow(ctx, `SELECT review_key FROM resume_showcase WHERE resume_id = $1`, resumeID).Scan(&key); err != nil {
+	if err = db.QueryRowContext(ctx, `SELECT review_key FROM resume_showcase WHERE resume_id = $1`, resumeID).Scan(&key); err != nil {
 		t.Fatalf("read review_key: %v", err)
 	}
 	if key != "0000000000000000" {
 		t.Errorf("default review_key = %q, want 0000000000000000", key)
 	}
 
+	if _, err = provider.Up(ctx); err != nil {
+		t.Fatalf("Up() error: %v", err)
+	}
 	var definition string
-	if err := tx.QueryRow(ctx, `
+	if err = db.QueryRowContext(ctx, `
 		SELECT indexdef FROM pg_indexes
 		WHERE schemaname = 'public' AND tablename = 'resume_showcase' AND indexname = 'resume_showcase_requested_asc_idx'`,
 	).Scan(&definition); err != nil {
