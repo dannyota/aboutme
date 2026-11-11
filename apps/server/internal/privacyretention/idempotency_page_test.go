@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -158,6 +159,71 @@ func TestExpireIdempotency_SweepsPastBusyUserHoldingFullPage(t *testing.T) {
 	assertUsage(ctx, t, pool, busy, 0, 0)
 }
 
+func TestExpireIdempotency_ContinuesAfterShortPage(t *testing.T) {
+	ctx, pool := newRetentionPool(t)
+	q := store.New(pool)
+	worker, err := New(Config{Pool: pool, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return retentionNow }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	held := createRetentionUser(ctx, t, q)
+	other := createRetentionUser(ctx, t, q)
+	t.Cleanup(func() { cleanupUsers(ctx, t, pool, held, other) })
+	insertExpiredBulk(ctx, t, pool, held, 600, retentionNow.Add(-2*time.Hour))
+	insertExpiredBulk(ctx, t, pool, other, 600, retentionNow.Add(-time.Hour))
+	seedUsage(ctx, t, pool, held)
+	seedUsage(ctx, t, pool, other)
+	pages := releaseReplayRowsAfterFirstPage(ctx, t, pool, worker, held)
+
+	result, err := worker.ExpireIdempotency(ctx)
+	if err != nil {
+		t.Fatalf("ExpireIdempotency: %v", err)
+	}
+	if want := []int64{400, 800}; !slices.Equal(*pages, want) {
+		t.Errorf("page deletions = %v, want %v", *pages, want)
+	}
+	if result.Pages != 2 || result.IdempotencyRecordsDeleted != 1200 || result.IdempotencyBytesReleased != 7200 || result.IdempotencyBacklog != 0 {
+		t.Errorf("run = %+v, want 2 pages, 1200 records, 7200 bytes, no backlog", result)
+	}
+	assertUsage(ctx, t, pool, held, 0, 0)
+	assertUsage(ctx, t, pool, other, 0, 0)
+}
+
+func TestExpireIdempotency_RunCapStaysExactAfterShortPage(t *testing.T) {
+	ctx, pool := newRetentionPool(t)
+	q := store.New(pool)
+	worker, err := New(Config{Pool: pool, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return retentionNow }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	held := createRetentionUser(ctx, t, q)
+	other := createRetentionUser(ctx, t, q)
+	t.Cleanup(func() { cleanupUsers(ctx, t, pool, held, other) })
+	insertExpiredBulk(ctx, t, pool, held, 600, retentionNow.Add(-2*time.Hour))
+	insertExpiredBulk(ctx, t, pool, other, int(maxRowsPerRun), retentionNow.Add(-time.Hour))
+	seedUsage(ctx, t, pool, held)
+	seedUsage(ctx, t, pool, other)
+	pages := releaseReplayRowsAfterFirstPage(ctx, t, pool, worker, held)
+
+	result, err := worker.ExpireIdempotency(ctx)
+	if err != nil {
+		t.Fatalf("ExpireIdempotency: %v", err)
+	}
+	want := []int64{400}
+	for range 9 {
+		want = append(want, int64(pageSize))
+	}
+	want = append(want, 600)
+	if !slices.Equal(*pages, want) {
+		t.Errorf("page deletions = %v, want %v", *pages, want)
+	}
+	if result.Pages != 11 || result.IdempotencyRecordsDeleted != maxRowsPerRun || result.IdempotencyBytesReleased != 6*maxRowsPerRun || result.IdempotencyBacklog != 600 {
+		t.Errorf("run = %+v, want 11 pages, %d records, %d bytes, backlog 600", result, maxRowsPerRun, 6*maxRowsPerRun)
+	}
+	assertUsage(ctx, t, pool, held, 0, 0)
+	assertUsage(ctx, t, pool, other, 600, 3600)
+}
+
 func TestExpireIdempotencyPage_CapsRowsAcrossUsers(t *testing.T) {
 	ctx, pool := newRetentionPool(t)
 	q := store.New(pool)
@@ -203,6 +269,32 @@ func insertExpiredBulk(ctx context.Context, t *testing.T, pool *store.Pool, user
 		FROM generate_series(1, $3::int)`, userID, expiresAt, count); err != nil {
 		t.Fatalf("insert bulk idempotency records: %v", err)
 	}
+}
+
+// releaseReplayRowsAfterFirstPage locks userID's replay rows, but not the
+// user, in another transaction. The first page locks the user and selects
+// those rows but cannot delete them, so it comes back short. The worker hook
+// records each page's deletions and releases the rows after the first page.
+func releaseReplayRowsAfterFirstPage(ctx context.Context, t *testing.T, pool *store.Pool, worker *Worker, userID uuid.UUID) *[]int64 {
+	t.Helper()
+	rowLocks, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin replay-row locks: %v", err)
+	}
+	t.Cleanup(func() { rollbackTestTx(ctx, t, rowLocks) })
+	if _, lockErr := rowLocks.Exec(ctx, `SELECT id FROM idempotency_records WHERE user_id = $1 FOR UPDATE`, userID); lockErr != nil {
+		t.Fatalf("lock replay rows: %v", lockErr)
+	}
+	pages := &[]int64{}
+	worker.hooks.afterIdempotencyPage = func(deleted int64) {
+		*pages = append(*pages, deleted)
+		if len(*pages) == 1 {
+			if commitErr := rowLocks.Commit(ctx); commitErr != nil {
+				t.Errorf("release replay-row locks: %v", commitErr)
+			}
+		}
+	}
+	return pages
 }
 
 // createIdleUsers creates accounts that each hold one unexpired 6-byte record

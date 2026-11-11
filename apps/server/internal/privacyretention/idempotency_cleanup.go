@@ -53,8 +53,16 @@ func (w *Worker) ExpireIdempotency(ctx context.Context) (result Result, returnEr
 	}
 
 	now := w.now()
+	// Only an empty page ends the run: a page can come back short while
+	// expired records remain, for example when a request deletes some of a
+	// locked user's records first. The last page asks only for what the run
+	// cap leaves, so the cap is exact.
 	for result.IdempotencyRecordsDeleted < maxRowsPerRun {
-		deleted, deletedBytes, pageErr := w.expireIdempotencyPage(runCtx, conn, now, pageSize)
+		limit := pageSize
+		if remaining := maxRowsPerRun - result.IdempotencyRecordsDeleted; remaining > 0 && remaining < int64(pageSize) {
+			limit = int32(remaining)
+		}
+		deleted, deletedBytes, pageErr := w.expireIdempotencyPage(runCtx, conn, now, limit)
 		if pageErr != nil {
 			result.Failures = 1
 			return result, ErrSweepFailed
@@ -65,8 +73,8 @@ func (w *Worker) ExpireIdempotency(ctx context.Context) (result Result, returnEr
 		result.Pages++
 		result.IdempotencyRecordsDeleted += deleted
 		result.IdempotencyBytesReleased += deletedBytes
-		if deleted < int64(pageSize) {
-			break
+		if w.hooks.afterIdempotencyPage != nil {
+			w.hooks.afterIdempotencyPage(deleted)
 		}
 	}
 	backlog, err := q.GetIdempotencyExpiryBacklog(runCtx, now)

@@ -145,6 +145,7 @@ type Worker struct {
 
 type workerHooks struct {
 	afterIdempotencyLock func()
+	afterIdempotencyPage func(deleted int64)
 	afterRetentionLock   func()
 	unlockIdempotency    func(context.Context, *pgxpool.Conn, *store.Queries) (bool, error)
 	unlockRetention      func(context.Context, *pgxpool.Conn, *store.Queries) (bool, error)
