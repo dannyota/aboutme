@@ -164,7 +164,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	hub, err := realtime.NewHub(realtime.Config{Observe: app.EvictDiscoveryOnDelete(cache, cards.Observe())})
+	hub, err := realtime.NewHub(realtime.Config{Observe: cards.Observe()})
 	if err != nil {
 		return fmt.Errorf("create realtime hub: %w", err)
 	}

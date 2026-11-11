@@ -86,8 +86,10 @@ excludes every second-factor table.
 `public_state` has one checked singleton row and a positive monotonic
 `discovery_generation`. A transaction that changes a resume slug, live state,
 discovery eligibility, or deletes a public resume increments it with the same
-commit. Go loads the committed generation before readiness and uses it for
-aggregate discovery cache keys, entity tags, and the in-process response fence.
+commit. Go loads the committed generation before readiness and uses it for the
+in-process response fence. Aggregate discovery bytes are not cached: each
+response encodes the slugs its own request read, because the operator
+`account-delete` command removes slugs without advancing the generation.
 Aggregate discovery contains only a fixed heading and the slug-ordered eligible
 public URLs; it has no other mutable resume field, so other document edits
 cannot change its bytes.

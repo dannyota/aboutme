@@ -64,11 +64,11 @@ session managers.
 Move `newPasswordAuth`, `newSecondFactorRoutes`, `newAgentAccessRoutes` and
 `newMediaBackend` into focused `app/password_auth.go`, `second_factor.go`,
 `agent.go` and `media.go`. Move public runtime parsing, readiness, logging,
-print construction, cards, view counts and cache observation into `runtime.go`,
-`readiness.go`, `logging.go`, `print.go`, `preview_cards.go`, `view_counts.go`
-and `discovery_evict.go`. Add focused reader/account/resume/router constructors
-in `public.go`, `account.go`, `resumes.go`, `router.go`. Move construction tests
-with their subjects; preserve operator helpers' callers and distinct exit codes.
+print construction, cards and view counts into `runtime.go`, `readiness.go`,
+`logging.go`, `print.go`, `preview_cards.go` and `view_counts.go`. Add focused
+reader/account/resume/router constructors in `public.go`, `account.go`,
+`resumes.go`, `router.go`. Move construction tests with their subjects; preserve
+operator helpers' callers and distinct exit codes.
 
 Main's ordered outline below abbreviates arguments only. Each call checks its
 error before the next step; each resource keeps its current defer/join owner.

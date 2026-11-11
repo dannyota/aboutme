@@ -78,8 +78,9 @@ func TestDiscoveryHandlerFailsClosedAfterSecondGenerationMismatch(t *testing.T) 
 	}
 }
 
-func TestDiscoveryHandlerClosedAdmissionDoesNotServeCache(t *testing.T) {
-	// This fails if global admission happens after cache selection.
+func TestDiscoveryHandlerClosedAdmissionServesNoDiscoveryBytes(t *testing.T) {
+	// This fails if a discovery response is served while the global fence is
+	// closed.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -95,12 +96,7 @@ func TestDiscoveryHandlerClosedAdmissionDoesNotServeCache(t *testing.T) {
 	if closeErr := transition.Close(context.Background(), time.Now().Add(time.Second)); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	cache, err := publiccache.New(4, time.Minute, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache.Put(publiccache.Key{RouteClass: "discovery", Representation: publicstate.RepresentationLLMS, Variant: "default", Generation: 1, FormatVersion: publicformat.LLMSFormatVersion, AppDigest: "sha256:app"}, publiccache.Value{Status: http.StatusOK, Header: http.Header{}, Body: []byte("stale")})
-	handler, err := NewLLMSHandler(DiscoveryDependencies{Store: &formatDiscoveryStore{snapshots: []formatDiscoverySnapshot{{generation: 1, slugs: []string{"ada"}}}}, Coordinator: coordinator, Cache: cache, PublicOrigin: origin, AppDigest: "sha256:app"})
+	handler, err := NewLLMSHandler(DiscoveryDependencies{Store: &formatDiscoveryStore{snapshots: []formatDiscoverySnapshot{{generation: 1, slugs: []string{"ada"}}}}, Coordinator: coordinator, PublicOrigin: origin})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,6 +108,74 @@ func TestDiscoveryHandlerClosedAdmissionDoesNotServeCache(t *testing.T) {
 	if err := transition.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestDiscoveryHandlerServesTheSnapshotItRead(t *testing.T) {
+	// Operator account deletion removes eligible slugs without a new discovery
+	// generation. This fails if a request that read the slugs before the
+	// deletion leaves its bytes for later requests.
+	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		handler func(DiscoveryDependencies) (http.Handler, error)
+		encode  discoveryEncoder
+		path    string
+	}{
+		{name: "sitemap", handler: NewSitemapHandler, encode: publicformat.Sitemap, path: "/sitemap.xml"},
+		{name: "llms", handler: NewLLMSHandler, encode: publicformat.LLMS, path: "/llms.txt"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cache, err := publiccache.New(4, time.Minute, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, after := []string{"ada", "deleted"}, []string{"ada"}
+			discovery := &changingDiscoveryStore{generation: 1, slugs: before}
+			// The deletion commits after the first request read its slugs but
+			// before it finished.
+			discovery.afterRead = func() { discovery.slugs = after }
+			handler, err := test.handler(DiscoveryDependencies{Store: discovery, Coordinator: coordinator, Cache: cache, PublicOrigin: origin, AppDigest: "sha256:app"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, slugs := range [][]string{before, after} {
+				want, err := test.encode(origin, slugs)
+				if err != nil {
+					t.Fatal(err)
+				}
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, test.path, nil))
+				if w.Code != http.StatusOK || w.Body.String() != string(want) {
+					t.Fatalf("request %d = %d %q, want the encoding of %q", i+1, w.Code, w.Body.String(), slugs)
+				}
+			}
+		})
+	}
+}
+
+// changingDiscoveryStore returns its current slugs and runs afterRead once,
+// after the first read is taken and before the handler sees it.
+type changingDiscoveryStore struct {
+	generation int64
+	slugs      []string
+	afterRead  func()
+}
+
+func (s *changingDiscoveryStore) GetPublicDiscoverySnapshot(context.Context) (store.GetPublicDiscoverySnapshotRow, error) {
+	row := store.GetPublicDiscoverySnapshotRow{DiscoveryGeneration: s.generation, Slugs: append([]string{}, s.slugs...)}
+	if afterRead := s.afterRead; afterRead != nil {
+		s.afterRead = nil
+		afterRead()
+	}
+	return row, nil
 }
 
 type formatDiscoveryStore struct {
