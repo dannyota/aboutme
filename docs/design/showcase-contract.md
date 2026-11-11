@@ -151,10 +151,9 @@ reload.
 | `reviewed_at`     | Unused; always null                                                  |
 | `first_listed_at` | Unused; always null                                                  |
 
-An index on `(requested_at DESC, resume_id DESC)` serves the listing.
-`aboutme_app` keeps select, insert, update, and delete. A row is about 100 bytes
-in use; three resumes per account bound the table. Nothing in the resume
-document changes.
+An index on `(requested_at, resume_id)` serves the listing. `aboutme_app` keeps
+select, insert, update, and delete. A row is about 100 bytes in use; three
+resumes per account bound the table. Nothing in the resume document changes.
 
 **Migration 00011** keeps the earlier release able to run against the new
 schema. It never edits 00010 and only adds a default and an index, besides the

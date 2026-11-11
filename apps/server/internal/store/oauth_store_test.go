@@ -148,18 +148,22 @@ func newOAuthStoreToken(
 	return token
 }
 
+// newOAuthStoreCode issues a code bound to grant and its epoch, the shape
+// consent creates.
 func newOAuthStoreCode(
-	ctx context.Context, t *testing.T, q *store.Queries, userID, clientID uuid.UUID, createdAt time.Time,
+	ctx context.Context, t *testing.T, q *store.Queries, grant store.OAuthGrant, createdAt time.Time,
 ) store.OAuthAuthorizationCode {
 	t.Helper()
 	code, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
 		CodeDigest:    uniqueTokenDigest(),
-		ClientID:      clientID,
-		UserID:        userID,
+		ClientID:      grant.ClientID,
+		UserID:        grant.UserID,
 		Scopes:        oauthStoreScopesBoth,
 		CodeChallenge: oauthStoreChallenge,
 		RedirectURI:   oauthStoreRedirect,
 		CreatedAt:     createdAt,
+		GrantID:       &grant.ID,
+		AuthEpoch:     &grant.AuthEpoch,
 	})
 	if err != nil {
 		t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
@@ -177,8 +181,8 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 
 	userID := newOAuthStoreUser(ctx, t, seed)
 	client := newOAuthStoreClient(ctx, t, seed, oauthStoreNow)
-	newOAuthStoreGrant(ctx, t, seed, userID, client.ID, oauthStoreScopesBoth)
-	code := newOAuthStoreCode(ctx, t, seed, userID, client.ID, oauthStoreNow)
+	grant := newOAuthStoreGrant(ctx, t, seed, userID, client.ID, oauthStoreScopesBoth)
+	code := newOAuthStoreCode(ctx, t, seed, grant, oauthStoreNow)
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		if _, err := seed.DeleteOAuthClient(cleanupCtx, client.ID); err != nil {
@@ -258,9 +262,9 @@ func TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
 	client := newOAuthStoreClient(ctx, t, q, oauthStoreNow)
-	newOAuthStoreGrant(ctx, t, q, userID, client.ID, oauthStoreScopesBoth)
+	grant := newOAuthStoreGrant(ctx, t, q, userID, client.ID, oauthStoreScopesBoth)
 
-	fresh := newOAuthStoreCode(ctx, t, q, userID, client.ID, oauthStoreNow)
+	fresh := newOAuthStoreCode(ctx, t, q, grant, oauthStoreNow)
 	if want := oauthStoreNow.Add(oauthStoreCodeTTL); !fresh.ExpiresAt.Equal(want) {
 		t.Fatalf("code expires_at = %s, want exactly created_at + 60s (%s)", fresh.ExpiresAt, want)
 	}
@@ -987,7 +991,7 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 	grant := newOAuthStoreGrant(ctx, t, q, userID, client.ID, oauthStoreScopesBoth)
 
 	for i := 0; i < 5; i++ {
-		newOAuthStoreCode(ctx, t, q, userID, client.ID, oauthGCEpoch)
+		newOAuthStoreCode(ctx, t, q, grant, oauthGCEpoch)
 	}
 	cutoff := oauthGCEpoch.Add(time.Hour)
 	deleted, err := q.DeleteExpiredOAuthAuthorizationCodes(ctx, store.DeleteExpiredOAuthAuthorizationCodesParams{
@@ -1012,7 +1016,7 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 	}
 
 	// A code that has not expired at the cutoff is never collected.
-	live := newOAuthStoreCode(ctx, t, q, userID, client.ID, cutoff)
+	live := newOAuthStoreCode(ctx, t, q, grant, cutoff)
 	deleted, err = q.DeleteExpiredOAuthAuthorizationCodes(ctx, store.DeleteExpiredOAuthAuthorizationCodesParams{
 		Cutoff:    cutoff,
 		LimitRows: 200,
@@ -1075,7 +1079,7 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 	// merely by callers: a future sweep must not turn a caller bug into an
 	// unbounded request-path delete by passing a value larger than 200.
 	for i := 0; i < 201; i++ {
-		newOAuthStoreCode(ctx, t, q, userID, client.ID, oauthGCEpoch)
+		newOAuthStoreCode(ctx, t, q, grant, oauthGCEpoch)
 	}
 	deleted, err = q.DeleteExpiredOAuthAuthorizationCodes(ctx, store.DeleteExpiredOAuthAuthorizationCodesParams{
 		Cutoff:    cutoff,

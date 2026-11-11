@@ -326,7 +326,7 @@ func TestOAuthAuthorizationCodeConstraints(t *testing.T) {
 	tx, ctx := newResumeSchemaTx(t)
 	userID := createTestUser(ctx, t, tx)
 	clientID := insertOAuthClient(ctx, t, tx)
-	insertOAuthGrant(ctx, t, tx, userID, clientID)
+	grantID := insertOAuthGrant(ctx, t, tx, userID, clientID)
 
 	type codeRow struct {
 		digest      []byte
@@ -350,10 +350,10 @@ func TestOAuthAuthorizationCodeConstraints(t *testing.T) {
 		_, err := sp.Exec(ctx, `
 			INSERT INTO oauth_authorization_codes (
 				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
-				created_at, expires_at, consumed_at, issued_family_id
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+				created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0)
 		`, row.digest, clientID, userID, row.scopes, row.challenge, row.redirectURI,
-			oauthNow, row.expiresAt, row.consumedAt, row.familyID)
+			oauthNow, row.expiresAt, row.consumedAt, row.familyID, grantID)
 		return err
 	}
 
@@ -851,10 +851,11 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 		insertOAuthTokenReturningID(ctx, t, tx, defaultOAuthTokenRow(clientID, userID, grantID))
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO oauth_authorization_codes (
-				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at,
+				grant_id, auth_epoch
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)
 		`, validOAuthDigest(), clientID, userID, oauthScopesBoth, oauthChallenge,
-			oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL)); err != nil {
+			oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL), grantID); err != nil {
 			t.Fatalf("insert code: %v", err)
 		}
 
@@ -886,10 +887,11 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 		insertOAuthTokenReturningID(ctx, t, tx, defaultOAuthTokenRow(clientID, userID, grantID))
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO oauth_authorization_codes (
-				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at,
+				grant_id, auth_epoch
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)
 		`, validOAuthDigest(), clientID, userID, oauthScopesBoth, oauthChallenge,
-			oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL)); err != nil {
+			oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL), grantID); err != nil {
 			t.Fatalf("insert code: %v", err)
 		}
 
@@ -996,10 +998,11 @@ func TestOAuthAgentAccessStoresNoRawMaterial(t *testing.T) {
 	insertOAuthTokenReturningID(ctx, t, tx, defaultOAuthTokenRow(clientID, userID, grantID))
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO oauth_authorization_codes (
-			code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at,
+			grant_id, auth_epoch
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)
 	`, validOAuthDigest(), clientID, userID, oauthScopesBoth, oauthChallenge,
-		oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL)); err != nil {
+		oauthRedirectURI, oauthNow, oauthNow.Add(oauthCodeTTL), grantID); err != nil {
 		t.Fatalf("insert code: %v", err)
 	}
 
