@@ -14,6 +14,10 @@ export type ProjectReauthCopy = {
   readonly wrongPassword: string;
   readonly reauthRateLimited: string;
   readonly reauthUnavailable: string;
+  readonly secondFactorIntro: string;
+  readonly secondFactorLink: string;
+  readonly secondFactorContinue: string;
+  readonly secondFactorIncomplete: string;
 };
 
 export type ProjectsCopy = {
@@ -233,6 +237,12 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
       wrongPassword: 'Mật khẩu không được chấp nhận. Hãy thử lại.',
       reauthRateLimited: 'Xác thực lại đang bị giới hạn. Hãy thử lại sau.',
       reauthUnavailable: 'Không thể xác thực lại. Hãy thử lại sau.',
+      secondFactorIntro:
+        'Tài khoản của bạn có bước xác minh thứ hai. Hoàn tất bước đó '
+        + 'trong tab mới, rồi quay lại đây.',
+      secondFactorLink: 'Mở bước xác minh',
+      secondFactorContinue: 'Tiếp tục',
+      secondFactorIncomplete: 'Bước xác minh thứ hai chưa hoàn tất.',
     },
     working: 'Đang xử lý…',
     addLanguageTitle: 'Thêm ngôn ngữ',
@@ -357,6 +367,13 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
       reauthRateLimited:
         'Reauthentication is rate limited. Try again later.',
       reauthUnavailable: 'Reauthentication is unavailable. Try again later.',
+      secondFactorIntro:
+        'Your account has a second verification step. Complete it in the '
+        + 'new tab, then come back here.',
+      secondFactorLink: 'Open verification step',
+      secondFactorContinue: 'Continue',
+      secondFactorIncomplete:
+        'The second verification step is not complete yet.',
     },
     working: 'Working…',
     addLanguageTitle: 'Add language',

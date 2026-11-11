@@ -472,6 +472,141 @@ test('the editor with a photo present sends the plain app CSP and shows '
   expect(external).toEqual([]);
 });
 
+// An account with a second factor answers the publish password with 202
+// (docs/design/passkey-second-factor-contract.md, "Primary authentication");
+// the address change needs that factor before the server accepts it.
+test('the publish dialog changes a published address after the second '
+  + 'factor, under the plain app CSP', async ({ page }) => {
+  test.setTimeout(40_000);
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  await mockSignedInSession(page);
+  const noStore = { 'Cache-Control': 'no-store, no-transform' };
+  const published = { ...sampleMetadata, live: true, slug: 'ada-lovelace' };
+  const publishes: { key: string | null; ifMatch: string | null;
+    body: unknown; }[] = [];
+  const reauths: string[] = [];
+  let factorComplete = false;
+  await page.route('**/api/v1/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: '',
+    });
+  });
+  await page.route('**/api/v1/resumes/resume-1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        ...noStore,
+        'Content-Type': 'application/json',
+        'ETag': '"r1"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: { data: { ...published, revision: '1', document: sampleDocument } },
+    });
+  });
+  await page.route('**/api/v1/auth/password/reauth', async (route) => {
+    reauths.push(route.request().method());
+    await route.fulfill({
+      status: 202,
+      headers: noStore,
+      json: { data: { secondFactorRequired: true } },
+    });
+  });
+  await page.route('**/api/v1/resumes/resume-1/publish', async (route) => {
+    const request = route.request();
+    publishes.push({
+      key: request.headers()['idempotency-key'] ?? null,
+      ifMatch: request.headers()['if-match'] ?? null,
+      body: request.postDataJSON(),
+    });
+    if (!factorComplete) {
+      await route.fulfill({
+        status: 403,
+        headers: noStore,
+        json: { error: { code: 'reauth_required', message: 'fixed' } },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        ...noStore,
+        'Content-Type': 'application/json',
+        'ETag': '"r2"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: {
+        data: {
+          ...published, slug: 'ada-v2', revision: '2', document: sampleDocument,
+        },
+      },
+    });
+  });
+
+  await page.goto('/app/resumes/resume-1');
+  await expect(page.getByTestId('save-status')).toBeVisible();
+  await page.locator('[data-action="publish"]').click();
+  const dialog = page.getByRole('dialog', { name: 'Publish resume' });
+  await dialog.locator('[data-action="publish-slug"]').fill('ada-v2');
+  await dialog.locator('[data-action="publish-submit"]').click();
+  const password = dialog.locator('[data-action="publish-password"]');
+  const reauthenticate = dialog.locator(
+    '[data-action="publish-password-reauth"]',
+  );
+  const link = dialog.getByRole('link', { name: 'Open verification step' });
+  const next = dialog.getByRole('button', { name: 'Continue', exact: true });
+  await password.fill('correct horse');
+  await reauthenticate.click();
+
+  await expect(dialog).toContainText('Your account has a second verification '
+    + 'step. Complete it in the new tab, then come back here.');
+  await expect(link).toHaveAttribute('href', '/login/second-factor');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener');
+  await expect(password).toHaveCount(0);
+  expect(publishes).toHaveLength(1);
+
+  await next.click();
+  await expect(dialog.getByText(
+    'The second verification step is not complete yet.',
+  )).toBeVisible();
+  await expect(next).toHaveCount(0);
+  expect(publishes).toHaveLength(2);
+  await password.fill('correct horse');
+  await reauthenticate.click();
+  await expect(link).toBeVisible();
+  expect(reauths).toHaveLength(2);
+  expect(publishes).toHaveLength(2);
+
+  factorComplete = true;
+  await next.click();
+
+  await expect(dialog.getByText('Published successfully.')).toBeVisible();
+  await expect(dialog.locator('[data-action="view-public-resume"]'))
+    .toHaveText('aboutme.vn/ada-v2');
+  expect(publishes).toHaveLength(3);
+  expect(new Set(publishes.map((entry) => entry.key)).size).toBe(1);
+  expect(publishes.map((entry) => entry.ifMatch))
+    .toEqual(['"r1"', '"r1"', '"r1"']);
+  expect(publishes[2]?.body).toEqual(publishes[0]?.body);
+  expect(publishes[0]?.body).toMatchObject({ slug: 'ada-v2', live: true });
+
+  // Each refused publish logs the browser's own 403 resource message.
+  await expectCspClean(probe, ['a status of 403']);
+  expect(external).toEqual([]);
+});
+
 test('settings sends the plain app CSP and hydrates cleanly', async ({
   page,
 }) => {

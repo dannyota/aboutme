@@ -1,6 +1,6 @@
 import { registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { setResponseStatus } from 'h3';
+import { setResponseHeader, setResponseStatus } from 'h3';
 
 import { registerCapabilities } from '../support/capabilities';
 
@@ -22,12 +22,24 @@ export function registerSignedIn(): void {
       identities: [],
     },
   }));
+  answerReauth(204, null, null);
+}
+
+/** Answers the password reauthentication with this exact response. */
+export function answerReauth(
+  status: number,
+  contentType: string | null,
+  body: string | null,
+): void {
   registerEndpoint('/api/v1/auth/password/reauth', {
     method: 'POST',
     handler: (event) => {
       reauthCalls.push(event.path);
-      setResponseStatus(event, 204);
-      return null;
+      setResponseStatus(event, status);
+      if (contentType !== null) {
+        setResponseHeader(event, 'Content-Type', contentType);
+      }
+      return body;
     },
   });
 }

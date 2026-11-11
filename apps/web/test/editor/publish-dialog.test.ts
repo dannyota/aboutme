@@ -512,6 +512,144 @@ describe('PublishDialog', () => {
       expect(context.actions.publish.submit).not.toHaveBeenCalled();
     });
 
+  it.each([
+    [
+      'en',
+      'Your account has a second verification step. Complete it in the new '
+      + 'tab, then come back here.',
+      'Open verification step',
+      'Continue',
+    ],
+    [
+      'vi',
+      'Tài khoản của bạn có bước xác minh thứ hai. Hoàn tất bước đó trong '
+      + 'tab mới, rồi quay lại đây.',
+      'Mở bước xác minh',
+      'Tiếp tục',
+    ],
+  ] as const)(
+    'links the %s second verification step and continues the same publish',
+    async (nextLocale, intro, linkText, continueText) => {
+      locale.value = nextLocale;
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const context = actionsFor(record, {
+        kind: 'reauth-second-factor', attempt: {} as never,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+
+      expect(wrapper.text()).toContain(intro);
+      const link = wrapper.get('[data-action="publish-second-factor-link"]');
+      expect(link.text()).toBe(linkText);
+      expect(link.attributes('href')).toBe('/login/second-factor');
+      expect(link.attributes('target')).toBe('_blank');
+      expect(link.attributes('rel')).toBe('noopener');
+      expect(wrapper.find('[data-action="publish-password"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-action="publish-submit"]').exists())
+        .toBe(false);
+      const next = wrapper.get(
+        '[data-action="publish-second-factor-continue"]',
+      );
+      expect(next.text()).toBe(continueText);
+
+      await next.trigger('click');
+
+      expect(context.actions.publish.continueAfterSecondFactor)
+        .toHaveBeenCalledOnce();
+      expect(context.actions.publish.reauthPassword).not.toHaveBeenCalled();
+      expect(context.actions.publish.submit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['en', 'The second verification step is not complete yet.'],
+    ['vi', 'Bước xác minh thứ hai chưa hoàn tất.'],
+  ] as const)(
+    'returns to the %s password form when the factor is still missing',
+    async (nextLocale, text) => {
+      locale.value = nextLocale;
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const context = actionsFor(record, {
+        kind: 'reauth-second-factor-incomplete',
+        method: 'password',
+        attempt: {} as never,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+
+      expect(wrapper.get('[role="alert"]').text()).toBe(text);
+      expect(wrapper.find('[data-action="publish-second-factor-continue"]')
+        .exists()).toBe(false);
+      expect(wrapper.find('[data-action="publish-submit"]').exists())
+        .toBe(false);
+      await wrapper.get('[data-action="publish-password"]')
+        .setValue('current-password');
+      await wrapper.get('[data-action="publish-password-reauth"]')
+        .trigger('click');
+      expect(context.actions.publish.reauthPassword)
+        .toHaveBeenCalledWith('current-password');
+    },
+  );
+
+  it('keeps the typed password after a wrong password', async () => {
+    const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+    const context = actionsFor(record, {
+      kind: 'reauth-required', method: 'password', attempt: {} as never,
+    });
+    const wrapper = await mountDialog(record, context.actions);
+    await wrapper.get('[data-action="publish-password"]')
+      .setValue('current-password');
+
+    context.state.value = {
+      kind: 'reauth-wrong-password', method: 'password', attempt: {} as never,
+    };
+    await nextTick();
+    await nextTick();
+
+    expect((wrapper.get('[data-action="publish-password"]')
+      .element as HTMLInputElement).value).toBe('current-password');
+  });
+
+  it('clears the typed password when the form returns from the second step',
+    async () => {
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const context = actionsFor(record, {
+        kind: 'reauth-required', method: 'password', attempt: {} as never,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+      await wrapper.get('[data-action="publish-password"]')
+        .setValue('current-password');
+
+      context.state.value = {
+        kind: 'reauth-second-factor', attempt: {} as never,
+      };
+      await nextTick();
+      context.state.value = {
+        kind: 'reauth-second-factor-incomplete',
+        method: 'password',
+        attempt: {} as never,
+      };
+      await nextTick();
+      await nextTick();
+
+      expect((wrapper.get('[data-action="publish-password"]')
+        .element as HTMLInputElement).value).toBe('');
+    });
+
+  it('drops the second verification step on cancel', async () => {
+    const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+    const context = actionsFor(record, {
+      kind: 'reauth-second-factor', attempt: {} as never,
+    });
+    const wrapper = await mountDialog(record, context.actions);
+
+    await wrapper.get('[data-action="publish-close"]').trigger('click');
+
+    expect(context.actions.publish.cancel).toHaveBeenCalledOnce();
+    expect(context.actions.publish.continueAfterSecondFactor)
+      .not.toHaveBeenCalled();
+    expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
   it('disables password and recovery controls during reauthentication',
     async () => {
       const record = editorRecord();
@@ -1521,6 +1659,7 @@ function actionsFor(
     reauthPassword: vi.fn().mockResolvedValue(state.value),
     startProviderReauth: vi.fn().mockResolvedValue(state.value),
     retryAfterProviderReauth: vi.fn().mockResolvedValue(state.value),
+    continueAfterSecondFactor: vi.fn().mockResolvedValue(state.value),
     cancel: vi.fn(),
   };
   return {

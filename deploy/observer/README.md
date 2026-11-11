@@ -4,7 +4,7 @@
 from the application, that asks the platform which image digests are running,
 checks each one against the signed GitHub build record, and publishes the result
 to `https://aboutme.vn/.well-known/deployment.json`. Its packages belong to the
-repository's root Go module (`danny.vn/aboutme`, go 1.27.3), under the package
+repository's root Go module (`danny.vn/aboutme`, go 1.27.4), under the package
 prefix `danny.vn/aboutme/deploy/observer`. It ships as a separate container
 image and imports no `apps/server` package, so the observer binary links only
 its own dependencies.

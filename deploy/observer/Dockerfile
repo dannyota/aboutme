@@ -4,9 +4,9 @@
 # deploy/observer/.
 
 # ---- build ----
-# Match the root go.mod (go 1.27.3). Digest pins the multi-arch index
+# Match the root go.mod (go 1.27.4). Digest pins the multi-arch index
 # so the same reference resolves on amd64 and arm64.
-FROM docker.io/library/golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS build
+FROM docker.io/library/golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
 
 WORKDIR /src
 

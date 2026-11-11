@@ -113,7 +113,9 @@ to view switches with explanations, then the
 [showcase block](landing-and-library.md#publish-dialog-block). PDF download and
 SEO and GEO are disabled until Public resume is enabled. The primary action is
 Publish, Unpublish, or Update publication according to the current state.
-Success shows the seal, public link, and Copy link.
+Success shows the seal, public link, and Copy link. When reauthentication finds
+a second factor, the dialog stays open, links that step in a new tab, and sends
+the same request once more when the owner chooses Continue.
 
 Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
 show the device description, relative last-seen time, This device, and Log out

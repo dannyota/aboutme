@@ -277,12 +277,22 @@ export type ReleaseState
         | 'reauth-unavailable';
       readonly method: 'password' | 'provider';
     }
-    | { readonly kind: 'reauth-wrong-password'; readonly method: 'password' }
+    | {
+      readonly kind:
+        | 'reauth-wrong-password'
+        | 'reauth-second-factor-incomplete';
+      readonly method: 'password';
+    }
+    | { readonly kind: 'reauth-second-factor' }
     | {
       readonly kind: 'provider-start-invalid' | 'provider-started-rate-limited';
       readonly method: 'provider';
     }
     | { readonly kind: 'provider-started'; readonly authorizeUrl: string };
+
+interface PasswordReauthEnvelope {
+  readonly data?: { readonly secondFactorRequired?: unknown };
+}
 
 interface ReleaseAttempt {
   readonly kind: ReleaseKind;
@@ -309,12 +319,13 @@ export interface ReleaseAction {
   reauthPassword(password: string): Promise<void>;
   startProviderReauth(): Promise<void>;
   retryAfterProviderReauth(): Promise<void>;
+  continueAfterSecondFactor(): Promise<void>;
   reset(): void;
 }
 
 const PASSWORD_STATES = new Set<ReleaseState['kind']>([
   'reauth-required', 'reauth-wrong-password', 'reauth-rate-limited',
-  'reauth-unavailable',
+  'reauth-unavailable', 'reauth-second-factor-incomplete',
 ]);
 const PROVIDER_START_STATES = new Set<ReleaseState['kind']>([
   'reauth-required', 'reauth-rate-limited', 'reauth-unavailable',
@@ -327,8 +338,9 @@ function methodOf(state: ReleaseState): 'password' | 'provider' | null {
 
 /**
  * Change of address and deletion release a slug, so each may need the
- * reauthentication step the publish dialog uses. After that step the same
- * request, with the same idempotency key, is sent once more.
+ * reauthentication step the publish dialog uses. After that step, and after
+ * a second factor the owner completes in another tab, the same request,
+ * with the same idempotency key, is sent once more.
  */
 export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
   const state = ref<ReleaseState>({ kind: 'idle' });
@@ -355,7 +367,10 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
           ));
   }
 
-  async function dispatch(current: ReleaseAttempt): Promise<void> {
+  async function dispatch(
+    current: ReleaseAttempt,
+    afterSecondFactor = false,
+  ): Promise<void> {
     if (!sameOwner(current)) {
       attempt = null;
       state.value = { kind: 'session-lost' };
@@ -381,6 +396,12 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
     const failure = result.failure;
     if (failure === 'reauth-required') {
       const hasPassword = deps.auth.user.value?.hasPassword !== false;
+      if (afterSecondFactor && hasPassword) {
+        state.value = {
+          kind: 'reauth-second-factor-incomplete', method: 'password',
+        };
+        return;
+      }
       state.value = hasPassword
         ? { kind: 'reauth-required', method: 'password' }
         : deps.providerLogin.value && provider() !== null
@@ -415,6 +436,27 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
     }
   }
 
+  /** Resends once after a step the owner finished in another tab. */
+  function resendAfterOtherTab(
+    from: 'provider-started' | 'reauth-second-factor',
+  ): Promise<void> {
+    return guarded(async () => {
+      const current = attempt;
+      if (current === null || state.value.kind !== from) return;
+      state.value = { kind: 'busy' };
+      try {
+        await deps.auth.refresh();
+      } catch {
+        attempt = null;
+        state.value = { kind: 'session-lost' };
+        return;
+      }
+      if (attempt === current) {
+        await dispatch(current, from === 'reauth-second-factor');
+      }
+    });
+  }
+
   return {
     state,
     start: (kind, project, slug = project.slug) => guarded(async () => {
@@ -445,11 +487,19 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
         || methodOf(state.value) !== 'password'
       ) return;
       state.value = { kind: 'busy' };
+      let response: PasswordReauthEnvelope | undefined;
+      let status: number | undefined;
       try {
-        await deps.auth.mutate('/api/v1/auth/password/reauth', {
-          method: 'POST',
-          body: { password },
-        });
+        response = await deps.auth.mutate<PasswordReauthEnvelope | undefined>(
+          '/api/v1/auth/password/reauth',
+          {
+            method: 'POST',
+            body: { password },
+            onStatus: (value) => {
+              status = value;
+            },
+          },
+        );
       } catch (error) {
         if (attempt !== current) return;
         const reason = mapReauthError(error).kind;
@@ -460,7 +510,24 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
             : { kind: 'reauth-unavailable', method: 'password' };
         return;
       }
-      if (attempt === current) await dispatch(current);
+      if (attempt !== current) return;
+      if (!sameOwner(current)) {
+        attempt = null;
+        state.value = { kind: 'session-lost' };
+        return;
+      }
+      // Only 204 completes reauthentication. An enrolled account's 202 opens
+      // a pending factor the server still requires, so the attempt waits for
+      // an explicit Continue; any other answer is not proof and sends nothing.
+      if (status === 202 && response?.data?.secondFactorRequired === true) {
+        state.value = { kind: 'reauth-second-factor' };
+        return;
+      }
+      if (status !== 204) {
+        state.value = { kind: 'reauth-unavailable', method: 'password' };
+        return;
+      }
+      await dispatch(current);
     }),
     startProviderReauth: () => guarded(async () => {
       const current = attempt;
@@ -493,19 +560,9 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
           : { kind: 'reauth-unavailable', method: 'provider' };
       }
     }),
-    retryAfterProviderReauth: () => guarded(async () => {
-      const current = attempt;
-      if (current === null || state.value.kind !== 'provider-started') return;
-      state.value = { kind: 'busy' };
-      try {
-        await deps.auth.refresh();
-      } catch {
-        attempt = null;
-        state.value = { kind: 'session-lost' };
-        return;
-      }
-      if (attempt === current) await dispatch(current);
-    }),
+    retryAfterProviderReauth: () => resendAfterOtherTab('provider-started'),
+    continueAfterSecondFactor: () =>
+      resendAfterOtherTab('reauth-second-factor'),
     reset: () => {
       if (running) return;
       attempt = null;
