@@ -52,6 +52,221 @@ for file in Dockerfile base.Containerfile package.json package-lock.json run.sh 
   "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
+node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish console diagnostic drifted'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
+
+const source = process.argv[2];
+const spec = readFileSync(`${source}/publish.spec.ts`, 'utf8');
+const start = spec.indexOf('function classifyConsoleFailure(');
+assert.notEqual(start, -1, 'missing console classifier');
+const end = spec.indexOf('\n}\n', start);
+assert.notEqual(end, -1, 'missing classifier end');
+const { ALLOWED_ORIGIN, httpFailureStatus } = await import(pathToFileURL(`${source}/network-policy.ts`));
+const classify = runInNewContext(
+  `(${stripTypeScriptTypes(spec.slice(start, end + 2))})`,
+  { URL, ORIGIN: ALLOWED_ORIGIN, SHOWCASE_LISTING_PATH: '/api/v1/public/showcase', httpFailureStatus },
+);
+const message = (text, url) => ({ text: () => text, location: () => ({ url }) });
+const failed = 'Failed to load resource: the server responded with a status of 404 ()';
+const id = 'private-resume-id';
+const slug = 'private-slug';
+for (const [path, route] of [
+  [`/api/v1/resumes/${id}`, 'owner-read'],
+  [`/api/v1/resumes/${id}/publish`, 'owner-publish'],
+  ['/api/v1/events', 'owner-stream'],
+  ['/api/v1/public/showcase', 'showcase-listing'],
+  ['/showcase', 'showcase-page'],
+  ['/app/resumes', 'resumes-page'],
+  [`/${slug}`, 'public-page'],
+  [`/api/v1/public/resumes/${slug}`, 'public-read'],
+  [`/api/v1/public/resumes/${slug}/og/0123456789abcdef.png`, 'public-card'],
+  [`/api/v1/live/${slug}`, 'public-stream'],
+]) {
+  assert.equal(classify(message(failed, `${ALLOWED_ORIGIN}${path}?token=secret`), id, slug), `console-404-${route}`);
+}
+assert.equal(classify(message('secret content', 'https://other.invalid/api/v1/events'), id, slug), 'console-non-http-other');
+assert.equal(classify(message(failed, 'invalid secret'), id, slug), 'console-404-other');
+assert.match(spec, /countedConsoleFailure \?\?= `\$\{classifyConsoleFailure\(message, resumeID, slug\)\}-at-\$\{currentStage\}`/);
+// Each of the three tests names its first counted console error.
+assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 3);
+assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?countedConsoleFailure/s);
+NODE
+# The publish proof's revocation rules: a revoked, deleted, or protected
+# public read is 401 or 404 and never 200; unpublish reaches an open page
+# within 30 s; console allowances cover only the test's own resume, the
+# listed statuses, and the test's own revocations; and the disposable resumes
+# are deleted where no counted page or counter can see it.
+node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish revocation rules drifted'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
+
+const source = process.argv[2];
+const spec = readFileSync(`${source}/publish.spec.ts`, 'utf8');
+const block = (head, close) => {
+  const start = spec.indexOf(head);
+  assert.notEqual(start, -1, `missing ${head}`);
+  const end = spec.indexOf(close, start);
+  assert.notEqual(end, -1, `missing end of ${head}`);
+  return spec.slice(start, end + close.length);
+};
+const fn = (name) => block(`function ${name}(`, '\n}\n');
+const testBody = (title) => block(`test(${title}`, '\n});\n');
+const constant = (name) => {
+  const match = new RegExp(`^const ${name}(?:: [^=]+)? = ([^;]+);$`, 'm').exec(spec);
+  assert.ok(match, `missing ${name}`);
+  return runInNewContext(match[1]);
+};
+const count = (text, pattern) => text.match(pattern)?.length ?? 0;
+
+const revokedStatuses = [...constant('REVOKED_PUBLIC_STATUSES')];
+const showcaseStatuses = [...constant('SHOWCASE_REVOKED_STATUSES')];
+assert.deepEqual(revokedStatuses, [401, 404]);
+assert.deepEqual(showcaseStatuses, [401, 403, 404, 410]);
+assert.equal(constant('REVOCATION_BOUND_MS'), 30_000);
+
+const { ALLOWED_ORIGIN, httpFailureStatus } = await import(pathToFileURL(`${source}/network-policy.ts`));
+const sandbox = {
+  URL,
+  ORIGIN: ALLOWED_ORIGIN,
+  REVOKED_PUBLIC_STATUSES: revokedStatuses,
+  SHOWCASE_LISTING_PATH: '/api/v1/public/showcase',
+  httpFailureStatus,
+};
+runInNewContext(
+  ['isPublicRouteOf', 'isExpectedRevokedPublicConsole', 'isExpectedDeletedConsole', 'isAbortedListingConsole']
+    .map((name) => stripTypeScriptTypes(fn(name)))
+    .join('\n'),
+  sandbox,
+);
+const { isExpectedRevokedPublicConsole: revoked, isExpectedDeletedConsole: deleted, isAbortedListingConsole: aborted } = sandbox;
+const message = (text, url) => ({ text: () => text, location: () => ({ url }) });
+const failed = (status) => `Failed to load resource: the server responded with a status of ${status} ()`;
+const id = 'resume-id';
+const slug = 'showcase-0a1b2c3d';
+const own = [
+  `/${slug}`,
+  `/api/v1/public/resumes/${slug}`,
+  `/api/v1/live/${slug}`,
+  `/api/v1/public/resumes/${slug}/og/0123456789abcdef.png`,
+];
+const other = [
+  '/other-slug',
+  '/api/v1/public/resumes/other-slug',
+  '/api/v1/live/other-slug',
+  '/api/v1/public/resumes/other-slug/og/0123456789abcdef.png',
+  `/api/v1/public/resumes/${slug}/pdf`,
+  `/api/v1/public/resumes/${slug}/og/0123456789ABCDEF.png`,
+  `/api/v1/public/resumes/${slug}/og/0123456789abcdef.png/x`,
+  `/api/v1/resumes/${id}`,
+  '/api/v1/public/showcase',
+  '/api/v1/me',
+];
+for (const path of own) {
+  const url = `${ALLOWED_ORIGIN}${path}`;
+  for (const status of [200, 400, 401, 403, 404, 410, 429, 500, 503]) {
+    assert.equal(revoked(message(failed(status), url), slug), revokedStatuses.includes(status));
+    assert.equal(revoked(message(failed(status), url), slug, showcaseStatuses), showcaseStatuses.includes(status));
+    assert.equal(deleted(message(failed(status), url), id, slug), revokedStatuses.includes(status));
+  }
+  assert.equal(revoked(message(failed(404), `${url}?x=1`), slug, showcaseStatuses), false);
+  assert.equal(revoked(message(failed(404), `https://other.invalid${path}`), slug, showcaseStatuses), false);
+  assert.equal(revoked(message('Failed to load resource: net::ERR_FAILED', url), slug, showcaseStatuses), false);
+}
+for (const path of other) {
+  for (const status of [401, 403, 404, 410]) {
+    assert.equal(revoked(message(failed(status), `${ALLOWED_ORIGIN}${path}`), slug, showcaseStatuses), false);
+  }
+}
+for (const status of [401, 403, 404, 410, 500]) {
+  assert.equal(deleted(message(failed(status), `${ALLOWED_ORIGIN}/api/v1/resumes/${id}`), id, slug), revokedStatuses.includes(status));
+}
+for (const path of [`/api/v1/resumes/${id}/publish`, '/api/v1/resumes/other', '/api/v1/resumes', '/api/v1/events', '/app/resumes']) {
+  assert.equal(deleted(message(failed(404), `${ALLOWED_ORIGIN}${path}`), id, slug), false);
+}
+const abortedText = 'Failed to load resource: net::ERR_ABORTED';
+assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), true);
+assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/api/v1/public/showcase?page=2`)), false);
+assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/showcase`)), false);
+assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/api/v1/public/resumes/${slug}`)), false);
+assert.equal(aborted(message(failed(404), `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
+assert.equal(aborted(message('Failed to load resource: net::ERR_FAILED', `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
+
+// Statuses: only the owner read of a deleted resume is an exact 404, and no
+// public status check accepts 200 after a revocation.
+assert.deepEqual(spec.match(/expect\([^\n]*\)\.toBe\(40\d\)/g), ['expect(await ownerReadStatus(page, id)).toBe(404)']);
+assert.doesNotMatch(spec, /=== 40\d\b/);
+assert.match(spec, /pathname === `\/\$\{slug\}` &&\s*REVOKED_PUBLIC_STATUSES\.includes\(response\.status\(\)\),\s*\{ timeout: REVOCATION_BOUND_MS \},/);
+assert.match(spec, /expect\(REVOKED_PUBLIC_STATUSES\)\.toContain\(statuses\.revoked\);\s*expect\(elapsed\)\.toBeLessThanOrEqual\(REVOCATION_BOUND_MS\);/);
+assert.doesNotMatch(spec, /toBeLessThanOrEqual\(5_?000\)/);
+
+// The showcase allowance holds only while the test revokes, and the aborted
+// listing allowance only while readListing navigates.
+const showcase = testBody('"proves the showcase opt-in, its revocations, and delivery rules"');
+assert.match(showcase, /revokingPublic &&\s*isExpectedRevokedPublicConsole\(message, slug, SHOWCASE_REVOKED_STATUSES\)/);
+assert.match(showcase, /listingNavigation && isAbortedListingConsole\(message\)/);
+assert.equal(count(showcase, /revokingPublic = true;\n\s*await submitPublishDialog\(page, dialog, id\);/g), 2);
+assert.equal(count(showcase, /\n\s+revokingPublic = true;/g), 2);
+assert.equal(count(showcase, /\n\s+revokingPublic = false;/g), 2);
+assert.equal(count(spec, /listingNavigation = true;/g), 1);
+// Each revocation the showcase test submits starts only after its listed card
+// has loaded, so the test never cancels its own card render.
+assert.equal(constant('CARD_RENDER_BOUND_MS'), 20_000);
+const cardWait = fn('waitForListedCard');
+assert.match(cardWait, /element\.complete\),\s*\{ timeout: CARD_RENDER_BOUND_MS \},/);
+assert.match(cardWait, /element\.naturalWidth\),\s*\)\.toBeGreaterThan\(0\);/);
+assert.deepEqual(
+  [...showcase.matchAll(/await waitForListedCard\(anonymous, slug\);|\n\s+revokingPublic = (?:true|false);/g)]
+    .map((match) => match[0].trim()),
+  [
+    'await waitForListedCard(anonymous, slug);',
+    'revokingPublic = true;',
+    'revokingPublic = false;',
+    'await waitForListedCard(anonymous, slug);',
+    'revokingPublic = true;',
+    'revokingPublic = false;',
+  ],
+);
+assert.match(fn('readListing'), /listingNavigation = true;\n\s*let document: Response \| null;\n\s*try \{\n\s*document = await page\.goto\("\/showcase"\);\n\s*\} finally \{\n\s*listingNavigation = false;/);
+const deletion = testBody('DELETION_TEST_TITLE');
+assert.match(deletion, /deleting &&\s*resumeID !== undefined &&\s*isExpectedDeletedConsole\(message, resumeID, slug\)/);
+assert.match(deletion, /deleting = true;\n\s*expect\(await ownerDelete\(page, id\)\)\.toEqual\(\{ read: 200, deleted: 204 \}\);/);
+assert.match(deletion, /expect\(REVOKED_PUBLIC_STATUSES\)\.toContain\(gone\?\.status\(\) \?\? 0\);/);
+// The deletion test sets its resume up through the owner API: the editor is
+// not what it proves.
+assert.doesNotMatch(deletion, /createBlankResume|completeResume|openPublishDialog|submitPublishDialog|\/app\/resumes\//);
+assert.match(deletion, /resumeID = created\.id;\n\s*expect\(created\.status\)\.toBe\(201\);/);
+assert.match(deletion, /expect\(await ownerPublish\(page, id, slug\)\)\.toBe\(200\);/);
+assert.match(fn('ownerPublish'), /slug,\n\s*live: true,/);
+
+// Cleanup: one deletion helper, in its own context with its own counters,
+// after each test closes its counted page.
+const cleanup = fn('deleteOutsideCounters');
+assert.match(cleanup, /const cleanupContext = await browser\.newContext\(\);/);
+assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);/);
+assert.doesNotMatch(cleanup, /\bcounters\b|hooks|pageDiagnosticsAttacher/);
+assert.equal(count(spec, /deleteRecordedResume\(/g), 1);
+// Each test cleans up whenever it recorded a resume, whatever its own steps
+// returned; the helper treats an already deleted resume as done.
+for (const title of [
+  '"proves native HTTPS publish, discovery, and revocation"',
+  '"proves the showcase opt-in, its revocations, and delivery rules"',
+  'DELETION_TEST_TITLE',
+]) {
+  assert.match(
+    testBody(title),
+    /\} finally \{\n(?:(?!\n {2}\}\n)[^])*\n {4}if \(resumeID !== undefined\) \{\n(?: {6}stage\("[a-z-]+"\);\n)? {6}await page\.close\(\);\n {6}await deleteOutsideCounters\(browser, resumeID\);/,
+    title,
+  );
+}
+assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 3);
+NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
   fail 'published base has the wrong Playwright base'
 grep -Eq 'apt-get install .*libnss3-tools=2:3\.98-1ubuntu0\.3([[:space:]]|$)' \
@@ -740,6 +955,62 @@ grep -Fq 'node /opt/aboutme-auth/verify-evidence.mjs' "$SOURCE/run.sh" ||
   fail 'verify-evidence.mjs is not a regular file'
 node --check "$SOURCE/verify-evidence.mjs" ||
   fail 'verify-evidence.mjs has a syntax error'
+# Publish evidence records a revoked page as 401 or 404 and an unpublish that
+# reached the open page within 30 s; anything else is rejected.
+node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish evidence revocation rules drifted'
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const verifier = join(process.argv[2], 'verify-evidence.mjs');
+const dir = mkdtempSync(join(tmpdir(), 'publish-evidence-'));
+const valid = JSON.stringify({
+  errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+  origin: 'https://localhost:20443',
+  scenario: 'native-https-publish',
+  schemaVersion: 1,
+  steps: Object.fromEntries([
+    'auth', 'complete', 'published', 'saveFirst', 'headers', 'noindex',
+    'discovery', 'unpublish', 'revocation', 'cleanup', 'signOut',
+    'accessibility', 'keyboard', 'longInvalidLayout', 'publicRealtime',
+    'ownerRealtime', 'scroll',
+  ].map((name) => [name, true])),
+  statuses: { publish: 200, publicPrivate: 200, publicDiscoverable: 200, unpublish: 200, revoked: 404 },
+  elapsedMs: { revocation: 1 },
+  headers: Object.fromEntries([
+    'publishContentType', 'publishCSRF', 'publishIfMatch', 'publishIdempotency',
+    'publishSchema', 'unpublishContentType', 'unpublishCSRF', 'unpublishIfMatch',
+    'unpublishIdempotency', 'unpublishSchema',
+  ].map((name) => [name, true])),
+});
+const accepted = (change) => {
+  const evidence = JSON.parse(valid);
+  change(evidence);
+  const path = join(dir, 'publish-proof.json');
+  writeFileSync(path, JSON.stringify(evidence));
+  return spawnSync(process.execPath, [verifier, 'publish', path]).status === 0;
+};
+try {
+  assert.equal(accepted(() => {}), true, 'valid publish evidence');
+  for (const [revoked, ok] of [
+    [401, true], [404, true], [200, false], [403, false], [410, false],
+    [503, false], [-1, false], [null, false], ['404', false],
+  ]) {
+    assert.equal(accepted((evidence) => { evidence.statuses.revoked = revoked; }), ok, `revoked ${revoked}`);
+  }
+  assert.equal(accepted((evidence) => { delete evidence.statuses.revoked; }), false, 'revoked missing');
+  for (const [elapsed, ok] of [
+    [0, true], [5001, true], [30000, true], [30001, false], [-1, false], [-5, false],
+    [1.5, false], ['1', false],
+  ]) {
+    assert.equal(accepted((evidence) => { evidence.elapsedMs.revocation = elapsed; }), ok, `revocation ${elapsed}`);
+  }
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+NODE
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
 for heavy_mode in editor public password-auth mcp publish second-factor second-factor-disabled; do
@@ -952,8 +1223,13 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
 fi
 readonly PUBLISH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=publish \
   "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
-grep -Fq 'proves native HTTPS publish, discovery, and revocation' \
-  <<<"$PUBLISH_LIST_OUTPUT" || fail 'Playwright could not compile and list the publish proof'
+for listed in \
+  'proves native HTTPS publish, discovery, and revocation' \
+  'proves the showcase opt-in, its revocations, and delivery rules' \
+  'proves deleting a published resume ends its owner and public reads'; do
+  grep -Fq "$listed" <<<"$PUBLISH_LIST_OUTPUT" ||
+    fail 'Playwright could not compile and list the publish proof'
+done
 for unrelated in \
   'proves trusted local Google authentication and CSRF boundaries' \
   'proves authenticated editor behavior over trusted HTTPS' \
@@ -1165,7 +1441,7 @@ mcp-sdk-fail)
 publish-fail)
   printf '%s\n' 'browser-secret-must-not-escape'
   printf '%s\n' 'publish-stage:signed-out'
-  printf '%s\n' 'publish-stage:fail-showcase-initial-listing-status-wrong-status'
+  printf '%s\n' 'publish-stage:fail-showcase-final-console-errors-wrong-content-console-404-owner-read-at-showcase-cleanup-resume'
   printf '%s\n' 'publish-stage:showcase-cleanup'
   exit 1
   ;;
@@ -1670,7 +1946,7 @@ if output=$(FAKE_BROWSER_MODE=publish-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside publish 2>&1); then
   fail 'publish browser failure was accepted'
 fi
-grep -Fxq 'dev-https-browser: publish-stage:fail-showcase-initial-listing-status-wrong-status' <<<"$output" ||
+grep -Fxq 'dev-https-browser: publish-stage:fail-showcase-final-console-errors-wrong-content-console-404-owner-read-at-showcase-cleanup-resume' <<<"$output" ||
   fail 'publish failure did not expose its bounded failure marker'
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output" ||
   grep -Fq 'publish-stage:showcase-cleanup' <<<"$output"; then
