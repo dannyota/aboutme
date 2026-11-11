@@ -287,8 +287,12 @@ type Querier interface {
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
 	EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error)
-	// Lock users before replay rows and usage counters, matching every resume
-	// writer. SKIP LOCKED lets inactive users progress past a busy account.
+	// Candidates come from expired records in (expires_at, id) order, not from
+	// every account. Each record's user is locked before any replay row or usage
+	// counter, matching every resume writer. LIMIT counts only rows whose user
+	// lock succeeded, so SKIP LOCKED passes over a busy user's records and later
+	// users still fill the page. ARRAY() reads every locked row before the first
+	// replay row is locked.
 	ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempotencyPageParams) (ExpireIdempotencyPageRow, error)
 	FailPrivacyNoticeRecipient(ctx context.Context, arg FailPrivacyNoticeRecipientParams) (int64, error)
 	// Finds the exact unrevoked successor through rotated_from. The partial unique
