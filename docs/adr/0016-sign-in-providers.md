@@ -1,8 +1,9 @@
 # 0016: Sign-in providers: start methods, per-provider enablement, and LinkedIn
 
 Status: Accepted (2026-08-12, 2026-09-02, 2026-09-18, 2026-09-26, 2026-09-27).
-The owner accepted the LinkedIn code-injection risk stated below; LinkedIn
-sign-in is on from v0.6.3.
+An `evidence` start purpose is proposed (2026-11-11) and awaits the owner's
+approval. The owner accepted the LinkedIn code-injection risk stated below;
+LinkedIn sign-in is on from v0.6.3.
 
 ## Context
 
@@ -181,6 +182,9 @@ take the resulting session cookie as well.
   check applies only when present, and the owner accepted the remaining risk.
 - 2026-09-27: `GET` also starts the unauthenticated `view` purpose, for sign in
   to view; an unrecognized `purpose` still starts login.
+- 2026-11-11: Proposed an authenticated `evidence` purpose for GitHub, which
+  connects an account for project evidence and never signs in or links an
+  identity ([ADR 0030](0030-github-evidence.md)).
 - 2026-11-01: Corrected the linking, credential custody, and request-recording
   descriptions. The provider decisions and accepted LinkedIn risk are unchanged.
 

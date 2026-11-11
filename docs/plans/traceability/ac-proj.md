@@ -1,9 +1,11 @@
 # AC-PROJ traceability rows
 
-Twelve acceptance-criterion rows use the `AC-PROJ-` prefix, for the account
+Eighteen acceptance-criterion rows use the `AC-PROJ-` prefix, for the account
 project library and project pages ([design](../../design/projects.md),
 [contract](../../design/projects-contract.md),
-[ADR 0029](../../adr/0029-account-project-library.md)). The owner approved
+[ADR 0029](../../adr/0029-account-project-library.md)), and for GitHub
+evidence ([design](../../design/github-evidence.md),
+[ADR 0030](../../adr/0030-github-evidence.md), proposed). The owner approved
 the design on 2026-11-11; nothing is implemented, so every row is `PLANNED` and
 names no test yet. See [README.md](./README.md) for matrix rules and the full prefix index.
 
@@ -21,3 +23,9 @@ names no test yet. See [README.md](./README.md) for matrix rules and the full pr
 | AC-PROJ-010 | Agents | Library tools need `projects:read` or `projects:write`; a grant made before those scopes answers `scope_denied`; no tool publishes, attaches evidence or connects an account | v0.9 | PLANNED | None yet |
 | AC-PROJ-011 | Print | In the public page and the PDF, a linked available entry's title links to its project page; layout and pagination of a resume without linked projects are unchanged | v0.9 | PLANNED | None yet |
 | AC-PROJ-012 | Export and deletion | The account export includes the library, and account deletion removes the library and its slug holds | v0.9 | PLANNED | None yet |
+| AC-PROJ-013 | GitHub evidence: connection | A GitHub connection is made only by the user who started it, asks for no scope, refuses a token that reports a scope, and never signs in or links an identity | v0.9 | PLANNED | None yet |
+| AC-PROJ-014 | GitHub evidence: session | No GitHub token is stored beyond one evidence session of at most 30 minutes, and none appears in any response, log or export | v0.9 | PLANNED | None yet |
+| AC-PROJ-015 | GitHub evidence: items | An item is attached only when its rule holds for the connected account id; a login match alone never confirms; commits are never evidence | v0.9 | PLANNED | None yet |
+| AC-PROJ-016 | GitHub evidence: outbound | Outbound requests go only to the fixed GitHub API host within the time, size and count bounds; a pasted link is rebuilt and never fetched as given | v0.9 | PLANNED | None yet |
+| AC-PROJ-017 | GitHub evidence: page | Evidence shows its label and checked date, follows the project page's gating and revocation, and no request reaches GitHub when a page is viewed | v0.9 | PLANNED | None yet |
+| AC-PROJ-018 | GitHub evidence: removal | Disconnect and account deletion leave no connection, session or token, and no agent tool can connect or attach evidence | v0.9 | PLANNED | None yet |
