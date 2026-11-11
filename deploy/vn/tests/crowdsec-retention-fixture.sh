@@ -60,7 +60,7 @@ retention_fixture_profile_binary() {
   cat >"$proof/go.mod" <<'MOD'
 module retention-profile-proof
 
-go 1.27.3
+go 1.27.4
 
 require github.com/crowdsecurity/crowdsec v1.8.2
 MOD

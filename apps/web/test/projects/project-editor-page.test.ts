@@ -12,6 +12,7 @@ import {
   stale,
 } from './fixtures';
 import {
+  answerReauth,
   click,
   dialogText,
   inDocument,
@@ -194,6 +195,51 @@ describe('project editor handling', () => {
       expect(wrapper.get('[data-testid="project-slug"]').text())
         .toBe('new-shop');
       expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+  async function reauthenticateAddress(
+    wrapper: Awaited<ReturnType<typeof mountEditor>>,
+  ): Promise<void> {
+    await wrapper.get('#project-change-address').trigger('click');
+    await flushPromises();
+    await typeInto('#project-new-address', 'new-shop');
+    api.replace.mockResolvedValueOnce(failed('reauth-required'));
+    await submitDialog();
+    await typeInto('[data-action="project-password"]', 'secret');
+    await click('[data-action="project-password-reauth"]');
+  }
+
+  it.each([
+    ['a 202 without the flag', 'application/json', '{"data":{}}'],
+    ['a 202 whose body is not JSON', 'text/plain', 'accepted'],
+  ] as const)('reauth_required on address: sends nothing after %s',
+    async (_name, contentType, body) => {
+      answerReauth(202, contentType, body);
+      const wrapper = await mountEditor();
+
+      await reauthenticateAddress(wrapper);
+
+      await vi.waitFor(() => expect(dialogText())
+        .toContain('Reauthentication is unavailable. Try again later.'));
+      expect(reauthCalls).toHaveLength(1);
+      expect(api.replace).toHaveBeenCalledOnce();
+      expect(document.body.querySelector('[data-action="project-password"]'))
+        .not.toBeNull();
+    });
+
+  it('reauth_required on address: a 202 with the flag opens the step',
+    async () => {
+      answerReauth(202, 'application/json',
+        '{"data":{"secondFactorRequired":true}}');
+      const wrapper = await mountEditor();
+
+      await reauthenticateAddress(wrapper);
+
+      await vi.waitFor(() => expect(document.body.querySelector(
+        '[data-action="project-second-factor-continue"]',
+      )).not.toBeNull());
+      expect(reauthCalls).toHaveLength(1);
+      expect(api.replace).toHaveBeenCalledOnce();
     });
 
   it('reauth_required on delete: reauthenticates, deletes, returns to list',

@@ -1,11 +1,17 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
-import { describe, expect, it } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
+import { ref } from 'vue';
+import { describe, expect, it, vi } from 'vitest';
 
 import ProjectLeaveDialog
   from '../../app/components/projects/ProjectLeaveDialog.vue';
+import ProjectReleaseDialog
+  from '../../app/components/projects/ProjectReleaseDialog.vue';
 import ProjectTechnologies
   from '../../app/components/projects/ProjectTechnologies.vue';
+import type { ReleaseState } from '../../app/composables/projectsApi';
 import { projectsCopy } from '../../app/i18n/projects';
+import { project } from './fixtures';
 import {
   requiresSession,
   signedOutRedirect,
@@ -145,6 +151,132 @@ describe('leave confirmation', () => {
       .toEqual(['Ở lại', 'Rời đi không lưu']);
     expect([projectsCopy.en.stay, projectsCopy.en.leave])
       .toEqual(['Stay', 'Leave without saving']);
+  });
+});
+
+function releaseAction(initial: ReleaseState) {
+  return {
+    state: ref<ReleaseState>(initial),
+    start: vi.fn(async () => {}),
+    reauthPassword: vi.fn(async () => {}),
+    startProviderReauth: vi.fn(async () => {}),
+    retryAfterProviderReauth: vi.fn(async () => {}),
+    continueAfterSecondFactor: vi.fn(async () => {}),
+    reset: vi.fn(),
+  };
+}
+
+async function mountRelease(
+  action: ReturnType<typeof releaseAction>,
+  locale: 'vi' | 'en' = 'en',
+) {
+  const wrapper = await mountSuspended(ProjectReleaseDialog, {
+    props: {
+      open: true,
+      kind: 'address',
+      project: project(),
+      action,
+      copy: projectsCopy[locale],
+    },
+    attachTo: document.body,
+  });
+  await flushPromises();
+  return wrapper;
+}
+
+describe('release second verification step', () => {
+  it.each([
+    [
+      'en',
+      'Your account has a second verification step. Complete it in the new '
+      + 'tab, then come back here.',
+      'Open verification step',
+      'Continue',
+    ],
+    [
+      'vi',
+      'Tài khoản của bạn có bước xác minh thứ hai. Hoàn tất bước đó trong '
+      + 'tab mới, rồi quay lại đây.',
+      'Mở bước xác minh',
+      'Tiếp tục',
+    ],
+  ] as const)('links the %s step and continues the same action',
+    async (locale, intro, linkText, continueText) => {
+      const action = releaseAction({ kind: 'idle' });
+      const wrapper = await mountRelease(action, locale);
+      action.state.value = { kind: 'reauth-second-factor' };
+      await flushPromises();
+
+      const dialog = document.body.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain(intro);
+      expect(dialog.textContent).toContain(projectsCopy[locale].reauthIntro);
+      const link = dialog.querySelector<HTMLAnchorElement>(
+        '[data-action="project-second-factor-link"]',
+      )!;
+      expect(link.textContent?.trim()).toBe(linkText);
+      expect(link.getAttribute('href')).toBe('/login/second-factor');
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener');
+      expect(dialog.querySelector('[data-action="project-password"]'))
+        .toBeNull();
+      expect(dialog.querySelector('[data-action="project-address-submit"]'))
+        .toBeNull();
+      expect(dialog.querySelector<HTMLInputElement>(
+        '[data-action="project-new-address"]',
+      )?.disabled).toBe(true);
+      const next = dialog.querySelector<HTMLElement>(
+        '[data-action="project-second-factor-continue"]',
+      )!;
+      expect(next.textContent?.trim()).toBe(continueText);
+
+      next.click();
+      await flushPromises();
+
+      expect(action.continueAfterSecondFactor).toHaveBeenCalledOnce();
+      expect(action.reauthPassword).not.toHaveBeenCalled();
+      expect(action.start).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+  it.each([
+    ['en', 'The second verification step is not complete yet.'],
+    ['vi', 'Bước xác minh thứ hai chưa hoàn tất.'],
+  ] as const)('returns to the %s password form when the factor is missing',
+    async (locale, text) => {
+      const action = releaseAction({ kind: 'idle' });
+      const wrapper = await mountRelease(action, locale);
+      action.state.value = {
+        kind: 'reauth-second-factor-incomplete', method: 'password',
+      };
+      await flushPromises();
+
+      const dialog = document.body.querySelector('[role="dialog"]')!;
+      expect(dialog.querySelector('[role="alert"]')?.textContent?.trim())
+        .toBe(text);
+      expect(dialog.querySelector('[data-action="project-password"]'))
+        .not.toBeNull();
+      expect(dialog.querySelector(
+        '[data-action="project-second-factor-continue"]',
+      )).toBeNull();
+      wrapper.unmount();
+    });
+
+  it('drops the action on cancel without continuing it', async () => {
+    const action = releaseAction({ kind: 'idle' });
+    const wrapper = await mountRelease(action);
+    action.state.value = { kind: 'reauth-second-factor' };
+    await flushPromises();
+    action.reset.mockClear();
+
+    document.body.querySelector<HTMLElement>(
+      '[data-action="project-release-cancel"]',
+    )!.click();
+    await flushPromises();
+
+    expect(action.reset).toHaveBeenCalledOnce();
+    expect(action.continueAfterSecondFactor).not.toHaveBeenCalled();
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    wrapper.unmount();
   });
 });
 

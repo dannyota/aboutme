@@ -102,6 +102,10 @@ export type PublishCopy = {
   readonly wrongPassword: string;
   readonly reauthRateLimited: string;
   readonly reauthUnavailable: string;
+  readonly secondFactorIntro: string;
+  readonly secondFactorLink: string;
+  readonly secondFactorContinue: string;
+  readonly secondFactorIncomplete: string;
   readonly blocked: Readonly<Record<PublishBlockedReason, string>>;
   readonly issue: Readonly<Record<PublishIssueCode, string>>;
   readonly invalid: string;
@@ -180,6 +184,12 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     wrongPassword: 'Mật khẩu không được chấp nhận. Hãy thử lại.',
     reauthRateLimited: 'Xác thực lại đang bị giới hạn. Hãy thử lại sau.',
     reauthUnavailable: 'Không thể xác thực lại. Hãy thử lại sau.',
+    secondFactorIntro:
+      'Tài khoản của bạn có bước xác minh thứ hai. Hoàn tất bước đó '
+      + 'trong tab mới, rồi quay lại đây.',
+    secondFactorLink: 'Mở bước xác minh',
+    secondFactorContinue: 'Tiếp tục',
+    secondFactorIncomplete: 'Bước xác minh thứ hai chưa hoàn tất.',
     blocked: {
       'not-loaded': 'CV vẫn đang tải. Chưa thể bắt đầu xuất bản.',
       'saving': 'Lưu các thay đổi CV mới nhất trước khi xuất bản.',
@@ -310,6 +320,13 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     reauthRateLimited:
       'Reauthentication is temporarily rate limited. Try again shortly.',
     reauthUnavailable: 'Reauthentication is unavailable. Try again later.',
+    secondFactorIntro:
+      'Your account has a second verification step. Complete it in the '
+      + 'new tab, then come back here.',
+    secondFactorLink: 'Open verification step',
+    secondFactorContinue: 'Continue',
+    secondFactorIncomplete:
+      'The second verification step is not complete yet.',
     blocked: {
       'not-loaded': 'The resume is still loading. Publishing cannot start yet.',
       'saving': 'Save the latest resume changes before publishing.',

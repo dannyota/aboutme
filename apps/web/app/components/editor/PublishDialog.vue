@@ -115,6 +115,7 @@ const submitDisabled = computed(
 const passwordReauth = computed(() =>
   (state.value.kind === 'reauth-required'
     || state.value.kind === 'reauth-wrong-password'
+    || state.value.kind === 'reauth-second-factor-incomplete'
     || state.value.kind === 'reauth-rate-limited'
     || state.value.kind === 'reauth-unavailable')
   && state.value.method === 'password',
@@ -163,7 +164,9 @@ watch(
 );
 
 watch(state, (next) => {
-  if (next.kind === 'accepted') {
+  if (next.kind === 'reauth-second-factor') {
+    password.value = '';
+  } else if (next.kind === 'accepted') {
     syncMetadata(next.resume.metadata);
   } else if (
     next.kind === 'stale'
@@ -240,6 +243,10 @@ function startProvider(): void {
 
 function retryProvider(): void {
   void run(() => props.actions.publish.retryAfterProviderReauth());
+}
+
+function continueSecondFactor(): void {
+  void run(() => props.actions.publish.continueAfterSecondFactor());
 }
 
 function focusIssue(path: string): void {
@@ -381,6 +388,7 @@ function focusIssue(path: string): void {
         @submit-password="submitPassword"
         @start-provider="startProvider"
         @retry-provider="retryProvider"
+        @continue-second-factor="continueSecondFactor"
       />
       <PublishFeedback
         :state="state"
@@ -449,6 +457,7 @@ function focusIssue(path: string): void {
           !passwordReauth
             && !providerReauth
             && state.kind !== 'provider-started'
+            && state.kind !== 'reauth-second-factor'
             && state.kind !== 'unknown'
         "
         type="submit"

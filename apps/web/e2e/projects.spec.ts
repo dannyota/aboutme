@@ -60,11 +60,21 @@ function seed(id: string, name: string, updatedAt: string): Project {
   };
 }
 
-async function fakeLibrary(page: Page, initial: readonly Project[]) {
+interface LibraryOptions {
+  /** The account has a second factor, so a password only opens it. */
+  readonly enrolled?: boolean;
+}
+
+async function fakeLibrary(
+  page: Page,
+  initial: readonly Project[],
+  options: LibraryOptions = {},
+) {
   const projects = new Map(
     initial.map((item) => [item.id, structuredClone(item)]),
   );
   const writes: Write[] = [];
+  const reauths: string[] = [];
   let reauthenticated = false;
   const problem = (status: number, code: string, details?: unknown) => ({
     status,
@@ -74,6 +84,14 @@ async function fakeLibrary(page: Page, initial: readonly Project[]) {
     },
   });
   await page.route('**/api/v1/auth/password/reauth', async (route) => {
+    reauths.push(route.request().method());
+    if (options.enrolled) {
+      await route.fulfill({
+        status: 202, headers: HEADERS,
+        json: { data: { secondFactorRequired: true } },
+      });
+      return;
+    }
     reauthenticated = true;
     await route.fulfill({ status: 204 });
   });
@@ -147,16 +165,29 @@ async function fakeLibrary(page: Page, initial: readonly Project[]) {
       headers: HEADERS, json: { data: { project: next, changedResumes: [] } },
     });
   });
-  return { projects, writes };
+  return {
+    projects,
+    writes,
+    reauths,
+    /** The owner finishes the factor in the other tab. */
+    completeFactor: () => {
+      reauthenticated = true;
+    },
+  };
 }
 
-async function open(page: Page, path: string, initial: readonly Project[]) {
+async function open(
+  page: Page,
+  path: string,
+  initial: readonly Project[],
+  options: LibraryOptions = {},
+) {
   await denyExternalRequests(page);
   await page.context().addCookies([{
     name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
   }]);
   await mockSignedInSession(page);
-  const library = await fakeLibrary(page, initial);
+  const library = await fakeLibrary(page, initial, options);
   await page.goto(path);
   await page.evaluate(() => document.fonts.ready);
   return library;
@@ -390,6 +421,92 @@ test('deleting reauthenticates and returns to the list', async ({ page }) => {
     .toHaveText(['Ops tool']);
   expect(writes.map((write) => [write.method, write.ifMatch]))
     .toEqual([['DELETE', '"r1"'], ['DELETE', '"r1"']]);
+});
+
+const SECOND_FACTOR_INTRO = 'Your account has a second verification step. '
+  + 'Complete it in the new tab, then come back here.';
+
+test('an enrolled account finishes its second factor, then the address '
+  + 'change continues once', async ({ page }) => {
+  const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+    enrolled: true,
+  });
+  await page.getByRole('button', { name: 'Change address' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Change address' });
+  await dialog.getByLabel('New address').fill('shop-v2');
+  await dialog.locator('[data-action="project-address-submit"]').click();
+  const password = dialog.getByLabel('Current password');
+  const reauthenticate = dialog.getByRole('button', {
+    name: 'Reauthenticate and continue',
+  });
+  const next = dialog.getByRole('button', { name: 'Continue', exact: true });
+  await password.fill('correct horse');
+  await reauthenticate.click();
+
+  await expect(dialog).toContainText(SECOND_FACTOR_INTRO);
+  const link = dialog.getByRole('link', { name: 'Open verification step' });
+  await expect(link).toHaveAttribute('href', '/login/second-factor');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener');
+  await expect(password).toHaveCount(0);
+  expect(fake.writes).toHaveLength(1);
+
+  await next.click();
+  await expect(dialog.getByText(
+    'The second verification step is not complete yet.',
+  )).toBeVisible();
+  await expect(next).toHaveCount(0);
+  expect(fake.writes).toHaveLength(2);
+  await password.fill('correct horse');
+  await reauthenticate.click();
+  await expect(link).toBeVisible();
+  expect(fake.reauths).toHaveLength(2);
+  expect(fake.writes).toHaveLength(2);
+
+  fake.completeFactor();
+  await next.click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('project-slug')).toHaveText('shop-v2');
+  expect(fake.writes.map((write) => write.method))
+    .toEqual(['PUT', 'PUT', 'PUT']);
+  expect(new Set(fake.writes.map((write) => write.key)).size).toBe(1);
+  expect(fake.writes[2]?.body).toEqual(fake.writes[0]?.body);
+});
+
+test('an enrolled account cancels the second factor step, then deletes '
+  + 'once after finishing it', async ({ page }) => {
+  const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+    enrolled: true,
+  });
+  const trigger = page.getByRole('button', { name: 'Delete project' });
+  const dialog = page.getByRole('dialog', { name: 'Delete project' });
+  const link = dialog.getByRole('link', { name: 'Open verification step' });
+  const reauthenticate = async () => {
+    await trigger.click();
+    await dialog.locator('[data-action="project-delete-submit"]').click();
+    await dialog.getByLabel('Current password').fill('correct horse');
+    await dialog.getByRole('button', { name: 'Reauthenticate and continue' })
+      .click();
+    await expect(link).toBeVisible();
+  };
+
+  await reauthenticate();
+  await dialog.locator('[data-action="project-release-cancel"]').click();
+  await expect(dialog).toBeHidden();
+  expect(fake.writes).toHaveLength(1);
+
+  await reauthenticate();
+  fake.completeFactor();
+  await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+
+  await expect(page).toHaveURL('/app/projects');
+  await expect(page.getByTestId('project-list').locator('[data-project-link]'))
+    .toHaveText(['Ops tool']);
+  expect(fake.writes.map((write) => [write.method, write.ifMatch]))
+    .toEqual([['DELETE', '"r1"'], ['DELETE', '"r1"'], ['DELETE', '"r1"']]);
+  expect(fake.writes[1]?.key).not.toBe(fake.writes[0]?.key);
+  expect(fake.writes[2]?.key).toBe(fake.writes[1]?.key);
 });
 
 function listContract(): ScreenContract {
