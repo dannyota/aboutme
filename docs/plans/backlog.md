@@ -33,6 +33,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The editor's page chunk (`/_nuxt/pages/app/resumes/[id].vue`) sometimes fails to load in the HTTPS proofs ("Failed to fetch dynamically imported module", about 1 in 40 editor creates under load on the Ubuntu gate host, 2026-11-11). The publish and showcase journeys still create through the editor and can hit it. Find why the chunk load fails.
 - A Playwright test timeout skips the spec's `finally` cleanup, so a timed-out publish or showcase journey leaves its disposable resume behind (`deploy/dev-https-browser/publish.spec.ts`). Move cleanup to `afterEach`, as `public.spec.ts:195-217` does.
 - `verify-evidence.mjs` falls back to `-1` for an invalid `timings.joinInviteMs` in the `public` block (lines 140-142), so forged evidence with `-1` passes. Reject invalid timings as the publish block now does.
+- Resume request decoding accepts case-variant property names: `decodeJSONBody` relies on `DisallowUnknownFields` (`apps/server/internal/resumeapi/writesafety_json.go:34`), and Go matches field names case-insensitively, so `{"Title":"x"}` binds to `title` and a case-variant key passes the duplicate-key check. The project decoder checks exact names (`apps/server/internal/project/decode.go:67`); apply the same rule to resume request bodies and the other `DisallowUnknownFields` decoders. Evidence: the review of `f2e62ecd`, read from code, not run.
 
 ## Production acceptance
 
