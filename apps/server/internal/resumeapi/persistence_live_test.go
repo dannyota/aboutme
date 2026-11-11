@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -272,7 +273,15 @@ func TestDocumentSaveRespondsWithTheStoredResume(t *testing.T) {
 		if read.status != http.StatusOK {
 			t.Fatalf("read = %d %s, want 200", read.status, read.body)
 		}
-		if !bytes.Equal(saved.body, read.body) || saved.header.Get("ETag") != read.header.Get("ETag") {
+		// The PATCH body is replayable JSONB, so compare decoded values, not bytes.
+		var savedValue, readValue any
+		if err := json.Unmarshal(saved.body, &savedValue); err != nil {
+			t.Fatalf("decode PATCH %s body: %v", save.path, err)
+		}
+		if err := json.Unmarshal(read.body, &readValue); err != nil {
+			t.Fatalf("decode read body: %v", err)
+		}
+		if !reflect.DeepEqual(savedValue, readValue) || saved.header.Get("ETag") != read.header.Get("ETag") {
 			t.Fatalf("PATCH %s response %s (ETag %s)\nwant the stored resume %s (ETag %s)",
 				save.path, saved.body, saved.header.Get("ETag"), read.body, read.header.Get("ETag"))
 		}
