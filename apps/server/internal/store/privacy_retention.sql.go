@@ -163,6 +163,11 @@ type DeleteExpiredSessionsPageParams struct {
 // successor or referencing row it could not lock stays for a later page. So it
 // takes no user lock, cannot deadlock with sign-in, rotation, revocation or
 // account deletion, and never removes a live row.
+//
+// This relies on no new row referencing a dead session: every path that
+// creates a pending authentication, ceremony or enrollment first locks its
+// session and requires it live (lockLiveSession). A reference committed after
+// this statement's snapshot would still be cascaded, and could make it wait.
 func (q *Queries) DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredSessionsPage, arg.Cutoff, arg.LimitRows, arg.Now)
 	if err != nil {
