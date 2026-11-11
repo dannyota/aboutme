@@ -1,10 +1,10 @@
 # 0030: GitHub evidence without a stored token
 
-Status: Proposed (2026-11-11). The owner chose a separate, no-scope GitHub
+Status: Accepted (2026-11-11). The owner chose a separate, no-scope GitHub
 connection for evidence on 2026-11-10
-([roadmap](../plans/roadmap.md#owner-decisions)); this record and the
-[GitHub evidence design](../design/github-evidence.md) await his approval before
-code.
+([roadmap](../plans/roadmap.md#owner-decisions)) and approved this record and
+the [GitHub evidence design](../design/github-evidence.md) on 2026-11-11.
+Nothing is implemented yet.
 
 ## Context
 
@@ -89,4 +89,5 @@ which anyone can set
 
 Proposed 2026-11-11 from the owner's roadmap decision of 2026-11-10. Revised the
 same day after design review: separate application and routes, no token on disk,
-server-owned evidence, GitHub ids for recheck, and no contributor rule.
+server-owned evidence, GitHub ids for recheck, and no contributor rule. Accepted
+by the owner on 2026-11-11.
