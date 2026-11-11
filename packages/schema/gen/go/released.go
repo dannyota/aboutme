@@ -12,16 +12,17 @@ import (
 	schemav3 "danny.vn/aboutme/packages/schema/gen/go/v3"
 	schemav4 "danny.vn/aboutme/packages/schema/gen/go/v4"
 	schemav5 "danny.vn/aboutme/packages/schema/gen/go/v5"
+	schemav6 "danny.vn/aboutme/packages/schema/gen/go/v6"
 )
 
 // CurrentVersion is the document-shape version resume.schema.json currently
 // describes, and the version every stored resume is projected to on read and
 // persisted at on write. It matches apps/server's docmigrate.CurrentVersion
 // because the production projector consumes this generated declaration.
-const CurrentVersion = 5
+const CurrentVersion = 6
 
-var acceptedVersions = []int{1, 2, 3, 4, 5}
-var emittedVersions = []int{1, 2, 3, 4, 5}
+var acceptedVersions = []int{1, 2, 3, 4, 5, 6}
+var emittedVersions = []int{1, 2, 3, 4, 5, 6}
 
 // AcceptedVersions returns the independently declared wire versions accepted
 // by production. The returned slice is a copy.
@@ -94,6 +95,13 @@ var releasedSchemas = []ReleasedSchema{
 		GoPackage: "gen/go/v5",
 		TSTypes:   "gen/ts/v5/resume.ts",
 		RawSchema: schemav5.RawSchema,
+	},
+	{
+		Version:   6,
+		Schema:    "resume.v6.schema.json",
+		GoPackage: "gen/go/v6",
+		TSTypes:   "gen/ts/v6/resume.ts",
+		RawSchema: schemav6.RawSchema,
 	},
 }
 

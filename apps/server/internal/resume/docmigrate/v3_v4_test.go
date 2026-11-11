@@ -156,12 +156,12 @@ func TestV3V4ConvertersRejectMalformedShapes(t *testing.T) {
 }
 
 func TestProductionEmitsV3WithDeclaredV4Loss(t *testing.T) {
-	doc := v5Document(t)
+	doc := v6Document(t)
 	emitted, err := NewIdentityProjector().EmitWire(mustJSON(t, doc), 3)
 	if err != nil {
 		t.Fatalf("emit v3: %v", err)
 	}
-	want := withoutV4Fields(t, withoutV5Fields(t, doc))
+	want := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	want["schemaVersion"] = float64(3)
 	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, want)) {
 		t.Fatalf("emitted v3 = %s", normalizeJSONForFontTest(t, emitted))
@@ -174,41 +174,41 @@ func TestProductionAcceptsV3AsCurrentWithoutNewFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept v3: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("accepted version = %d, want 5", version)
+	if version != 6 {
+		t.Fatalf("accepted version = %d, want 6", version)
 	}
 	want := decodeFontTestMap(t, v3)
-	want["schemaVersion"] = float64(5)
+	want["schemaVersion"] = float64(6)
 	if !bytes.Equal(normalizeJSONForFontTest(t, accepted), mustJSON(t, want)) {
 		t.Fatal("accepting v3 changed anything but schemaVersion")
 	}
 }
 
 func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV4Loss(t *testing.T) {
-	doc := v5Document(t)
+	doc := v6Document(t)
 	current := mustJSON(t, doc)
-	emittedMap := withoutV4Fields(t, withoutV5Fields(t, doc))
+	emittedMap := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	emittedMap["schemaVersion"] = float64(3)
-	restored := mustJSON(t, withoutV4Fields(t, withoutV5Fields(t, doc)))
+	restored := mustJSON(t, withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc))))
 
 	if err := productionEmissionLossPolicy(current, mustJSON(t, emittedMap), restored, 3); err != nil {
 		t.Fatalf("declared v4 loss rejected: %v", err)
 	}
 
 	// A v3 emission must keep the v3 fields; only photoPosition may go.
-	lostV3 := withoutV3Fields(t, withoutV4Fields(t, withoutV5Fields(t, doc)))
+	lostV3 := withoutV3Fields(t, withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc))))
 	lostV3["schemaVersion"] = float64(3)
 	if err := productionEmissionLossPolicy(current, mustJSON(t, lostV3), restored, 3); err == nil {
 		t.Fatal("a v3 emission passed without its v3 fields")
 	}
 
-	changed := withoutV4Fields(t, withoutV5Fields(t, doc))
+	changed := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	changed["schemaVersion"] = float64(3)
 	fontTestObject(t, fontTestObject(t, changed, "customization"), "header")["align"] = "center"
 	if err := productionEmissionLossPolicy(current, mustJSON(t, changed), restored, 3); err == nil {
 		t.Fatal("a v3 emission passed with a changed header align")
 	}
-	lostCustom := withoutV4Fields(t, withoutV5Fields(t, doc))
+	lostCustom := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	lostCustom["schemaVersion"] = float64(3)
 	customEntries := fontTestArray(t, fontTestObject(t, fontTestObject(t, lostCustom, "content"), "custom"), "entries")
 	delete(fontTestEntry(t, customEntries[0]), "subtitle")

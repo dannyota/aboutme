@@ -142,13 +142,20 @@ one section.
 | `skill`       | `name`, optional `level` from 0–5, `infoHtml`                                     |
 | `language`    | `name`, optional `level` from 0–5                                                 |
 | `certificate` | `title`, `titleLink`, `issuer`, `date`, `description`                             |
-| `project`     | `title`, `subtitle`, `link`, `dates`, `description`                               |
+| `project`     | `title`, `subtitle`, `link`, `dates`, `description`, `projectId`                  |
 | `custom`      | `title`, `titleLink`, `subtitle`, `city`, `dates`, `description`                  |
 | Every entry   | Client-generated UUID `id` and optional `isHidden`                                |
 
 A date range is `{start:{y,m?}, end:{y,m?}|null, present:boolean}`. Start may
 not follow end. `present=true` requires a null end; `present=false` requires an
 end. Certificate `date` is a single `{y,m?}`.
+
+A project entry's optional `projectId` names a library project
+([projects](projects.md#selection)). Every document write checks, under the
+owner lock, that each `projectId` names a project of the same account and that
+no two entries of the resume name the same project; a bearer write may keep or
+remove a link but not add or change one. The public projection, the print
+snapshot and every public representation omit it.
 
 ## Draft and publish validation
 
@@ -199,10 +206,12 @@ persists the projected current shape with revision compare-and-swap (CAS).
 Background backfill compares the observed schema version and revision. It does
 not bump the revision, and it loses cleanly to any concurrent resume write.
 Adjacent up and down converters are explicit, validated at every step, and
-tested in both directions. The current release is document v5, and the server
-accepts and emits v1 to v5. It declares four lossy emissions, and every other
+tested in both directions. The current release is document v6, and the server
+accepts and emits v1 to v6. It declares five lossy emissions, and every other
 value must remain equal:
 
+- Emitting v1 to v5 drops v6's project entry `projectId`
+  ([projects](projects.md#selection)).
 - Emitting v1, v2, v3, or v4 drops v5's `customization.colorScheme`
   ([public page theme](public-page-theme.md#versions-and-compatibility)).
 - Emitting v1, v2, or v3 drops v4's `customization.header.photoPosition` and
@@ -219,9 +228,11 @@ targets that field. They always keep the stored `textAlign`, and each surviving
 detail's `display`, matched by its unique id. A v1 to v3 client write keeps the
 stored `photoPosition` while both documents have a header, and each surviving
 project entry's `subtitle`, matched by entry id. A v1 to v4 client write always
-keeps the stored `colorScheme`, since every version has `customization`.
-Retained types support compatibility testing; HTTP delta application may remain
-generic so handlers do not need one compiled code path per old version.
+keeps the stored `colorScheme`, since every version has `customization`. A v1 to
+v5 client write keeps the stored `projectId` of each surviving project entry,
+matched by entry id; an added entry gets none. Retained types support
+compatibility testing; HTTP delta application may remain generic so handlers do
+not need one compiled code path per old version.
 [ADR 0004](../adr/0004-resume-document-contract.md) records this boundary. A
 release that raises the document version cannot be rolled back once it has
 stored the new version; see the

@@ -616,7 +616,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an owned library project
-         * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted: a non-empty body is request_invalid, and one over 262,144 bytes is body_too_large. Every response uses Cache-Control no-store, no-transform.
+         * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Every resume of the caller that links the project, published or not, loses the link in that transaction: the entry and its text stay, and the resume revision advances by one. The linking resumes are planned first and must be unchanged under the owner lock; after three changed plans the request answers public_state_busy and changes nothing. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted: a non-empty body is request_invalid, and one over 262,144 bytes is body_too_large. Every response uses Cache-Control no-store, no-transform.
          */
         delete: operations["deleteProject"];
         options?: never;
@@ -747,6 +747,46 @@ export interface paths {
          *     The request has no body. Its idempotency fingerprint hashes a zero-length payload.
          */
         delete: operations["deleteResumeEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}/project-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link one library project as a prefilled project entry
+         * @description Appends one project entry that names the project to the resume's first project section in layout order. When the resume has none, a section keyed `projects` is created at the end of the main column through the structure command. The entry is prefilled from the project text whose key equals the resume language's primary subtag, or else the default language: `title` from `name`, `subtitle` from `role`, `link` from `repositoryUrl` or else `demoUrl`, `dates`, and `description` from `summary` as one paragraph. The entry text is the resume's own afterwards; nothing but a refresh overwrites it. The write uses the entry-write chain and returns its response; an older declared schema version is emitted without the link.
+         */
+        post: operations["linkResumeProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}/entries/{entryId}/project-refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repeat the library prefill for one linked project entry
+         * @description Overwrites only the five prefilled fields of the linked entry from its library project, chosen by the same language rule as a link; a field the project leaves empty is removed. The entry id, its hidden flag and its link stay. An entry without a link answers `project_not_found`. The request has no body and uses the entry-write chain.
+         */
+        post: operations["refreshResumeProjectEntry"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2213,6 +2253,7 @@ export interface components {
             updatedAt: string;
         };
         Project: components["schemas"]["ProjectRecord"] & {
+            /** @description The caller's resumes whose project entries link this project, in resume list order. */
             linkedResumeIds: string[];
         };
         ProjectResponse: {
@@ -2234,6 +2275,7 @@ export interface components {
                 changedResumes: components["schemas"]["ProjectChangedResumes"];
             };
         };
+        /** @description Each resume the mutation changed, with its new revision. A replacement changes none yet. */
         ProjectChangedResumes: {
             /** Format: uuid */
             id: string;
@@ -2309,7 +2351,7 @@ export interface components {
          *         "state": "listed",
          *         "role": "backend"
          *       },
-         *       "schemaVersion": 5,
+         *       "schemaVersion": 6,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
          *     }
@@ -2413,10 +2455,20 @@ export interface components {
         /**
          * @description The resume document. Its shape is **not** restated here: it is governed by `packages/schema/resume.schema.json` at the version named by the `X-Resume-Schema-Version` header, and the generated client types come from `packages/schema/gen/ts`. Restating a 24-section, byte-bounded schema in this file would create a second source of truth for one contract and drift silently. This document owns the envelope, headers, statuses, and error shapes.
          * @example {
-         *       "schemaVersion": 5
+         *       "schemaVersion": 6
          *     }
          */
         ResumeDocument: Record<string, never>;
+        /**
+         * @description The owned library project to link. The new entry is prefilled from the project text in the resume language, or else the project's default language.
+         * @example {
+         *       "projectId": "018f5b6a-9a3e-7c21-8b1e-0000000000c1"
+         *     }
+         */
+        ProjectLinkRequest: {
+            /** Format: uuid */
+            projectId: string;
+        };
         /**
          * @description One entry to create or replace. Identity is `entry.id`: an existing id replaces that entry in place and keeps its position, a new id appends. The entry's own shape is governed by `packages/schema/resume.schema.json` at the declared version.
          * @example {
@@ -3102,11 +3154,11 @@ export interface components {
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
                  *         "showcase": null,
-                 *         "schemaVersion": 5,
+                 *         "schemaVersion": 6,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
                  *         "document": {
-                 *           "schemaVersion": 5
+                 *           "schemaVersion": 6
                  *         }
                  *       }
                  *     }
@@ -3139,11 +3191,11 @@ export interface components {
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
                  *         "showcase": null,
-                 *         "schemaVersion": 5,
+                 *         "schemaVersion": 6,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
                  *         "document": {
-                 *           "schemaVersion": 5
+                 *           "schemaVersion": 6
                  *         }
                  *       }
                  *     }
@@ -3170,7 +3222,8 @@ export interface components {
                  *             2,
                  *             3,
                  *             4,
-                 *             5
+                 *             5,
+                 *             6
                  *           ]
                  *         }
                  *       }
@@ -3324,7 +3377,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description A domain conflict, never staleness: `resume_cap_exceeded` for a create beyond the per-account cap, or `idempotency_key_reuse` when the same key arrives with a different request fingerprint. */
+        /** @description A domain conflict, never staleness: `resume_cap_exceeded` for a create beyond the per-account cap, `project_already_linked` when two entries of the document name the same project, or `idempotency_key_reuse` when the same key arrives with a different request fingerprint. */
         ResumeCreateConflict: {
             headers: {
                 [name: string]: unknown;
@@ -3358,6 +3411,84 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `project_already_linked` when the written document would hold two entries that name the same project, or `idempotency_key_reuse` when the same key arrives with a different request fingerprint. Nothing is written. */
+        ResumeProjectLinkConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "project_already_linked",
+                 *         "message": "the resume already links this project"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `resume_not_found` when the resume or the addressed entry is missing or owned by another account, or `project_not_found` when a linked project is missing or owned by another account. Both answers are identical for a missing and a foreign id. */
+        ResumeOrProjectNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "project_not_found",
+                 *         "message": "project not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `public_state_busy`: a linking resume's public-generation drain did not finish within five seconds, or the linking resumes changed on three planning attempts. Nothing is committed. */
+        ProjectPublicStateBusy: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 1
+                 */
+                "Retry-After"?: 1;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "public_state_busy",
+                 *         "message": "public state is busy"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on a post-only resume child. */
+        MethodNotAllowedPostOnly: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example POST
+                 */
+                Allow?: "POST";
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description `revision_mismatch`: the `If-Match` revision is stale. `details` carries the winning `revision` and `document` so a client can rebase without a second round trip. Staleness is always `412`, never `409`. */
         ResumeRevisionMismatch: {
             headers: {
@@ -3372,7 +3503,7 @@ export interface components {
                  *         "details": {
                  *           "revision": "44",
                  *           "document": {
-                 *             "schemaVersion": 5
+                 *             "schemaVersion": 6
                  *           }
                  *         }
                  *       }
@@ -5002,7 +5133,7 @@ export interface components {
         ObjectETag: string;
         /**
          * @description The resume document version this response was emitted at. Absent from whole-resume deletion and from binary photo reads.
-         * @example 5
+         * @example 6
          */
         EmittedSchemaVersion: number;
         /**
@@ -6174,7 +6305,7 @@ export interface operations {
                     "Content-Disposition"?: "attachment; filename=\"aboutme-export.json\"";
                     /**
                      * @description Current emitted resume schema version.
-                     * @example 5
+                     * @example 6
                      */
                     "X-Resume-Schema-Version"?: string;
                     [name: string]: unknown;
@@ -6936,7 +7067,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The private library, with empty linkedResumeIds arrays. */
+            /** @description The private library; each project lists the caller's linking resume ids. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7108,7 +7239,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description An empty changedResumes array. */
+            /** @description Each changed resume with its new revision. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7128,6 +7259,7 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["ProjectPublicStateBusy"];
         };
     };
     listResumes: {
@@ -7172,7 +7304,7 @@ export interface operations {
                      *           "faviconEmoji": "🚀",
                      *           "signInToView": false,
                      *           "showcase": null,
-                     *           "schemaVersion": 5,
+                     *           "schemaVersion": 6,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
                      *         }
@@ -7266,11 +7398,11 @@ export interface operations {
                      *         "faviconEmoji": null,
                      *         "signInToView": false,
                      *         "showcase": null,
-                     *         "schemaVersion": 5,
+                     *         "schemaVersion": 6,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
                      *         "document": {
-                     *           "schemaVersion": 5
+                     *           "schemaVersion": 6
                      *         }
                      *       }
                      *     }
@@ -7283,6 +7415,7 @@ export interface operations {
             400: components["responses"]["ResumeCreateBadRequest"];
             401: components["responses"]["ResumeUnauthorized"];
             403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ProjectNotFound"];
             405: components["responses"]["MethodNotAllowedResumes"];
             409: components["responses"]["ResumeCreateConflict"];
             413: components["responses"]["ResumeBodyTooLarge"];
@@ -7577,9 +7710,9 @@ export interface operations {
             400: components["responses"]["ResumeWriteBadRequest"];
             401: components["responses"]["ResumeUnauthorized"];
             403: components["responses"]["ResumeCsrfRejected"];
-            404: components["responses"]["ResumeNotFound"];
+            404: components["responses"]["ResumeOrProjectNotFound"];
             405: components["responses"]["MethodNotAllowedPatchOnly"];
-            409: components["responses"]["ResumeIdempotencyConflict"];
+            409: components["responses"]["ResumeProjectLinkConflict"];
             412: components["responses"]["ResumeRevisionMismatch"];
             413: components["responses"]["ResumeBodyTooLarge"];
             422: components["responses"]["ResumeDocumentInvalid"];
@@ -7654,6 +7787,123 @@ export interface operations {
             409: components["responses"]["ResumeIdempotencyConflict"];
             412: components["responses"]["ResumeRevisionMismatch"];
             413: components["responses"]["ResumeBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    linkResumeProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectLinkRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeOrProjectNotFound"];
+            405: components["responses"]["MethodNotAllowedPostOnly"];
+            409: components["responses"]["ResumeProjectLinkConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    refreshResumeProjectEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description An entry's id inside the addressed section.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-0000000000a1
+                 */
+                entryId: components["parameters"]["EntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeOrProjectNotFound"];
+            405: components["responses"]["MethodNotAllowedPostOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];

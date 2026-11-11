@@ -74,6 +74,9 @@ func (op resumeMetadataMutation) Run(ctx context.Context, qtx *store.Queries, mu
 	if err != nil {
 		return mutationRunResult{}, err
 	}
+	if err = requireLinkAuthority(mutation, &current.Doc, doc); err != nil {
+		return mutationRunResult{}, err
+	}
 	if _, saveErr := op.service.resumes.SaveMetadataAndDocumentTx(
 		ctx, qtx, mutation.UserID, input.ResumeID, title, lng, doc, *mutation.ExpectedRevision,
 	); saveErr != nil {

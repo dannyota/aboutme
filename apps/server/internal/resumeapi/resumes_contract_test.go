@@ -67,7 +67,7 @@ func TestResumeCRUD_OpenAPIContract(t *testing.T) {
 		bodyless   bool
 	}{
 		{name: "list", operation: document.Paths["/resumes"].Get, wantID: "listResumes", wantStatus: []string{"200", "400", "401", "405", "429", "500"}, success: "200"},
-		{name: "create", operation: document.Paths["/resumes"].Post, wantID: "createResume", wantStatus: []string{"201", "400", "401", "403", "405", "409", "413", "422", "429", "500"}, success: "201"},
+		{name: "create", operation: document.Paths["/resumes"].Post, wantID: "createResume", wantStatus: []string{"201", "400", "401", "403", "404", "405", "409", "413", "422", "429", "500"}, success: "201"},
 		{name: "read", operation: document.Paths["/resumes/{id}"].Get, wantID: "getResume", wantStatus: []string{"200", "400", "401", "404", "405", "429", "500"}, success: "200"},
 		{name: "metadata", operation: document.Paths["/resumes/{id}"].Patch, wantID: "updateResumeMetadata", wantStatus: []string{"200", "400", "401", "403", "404", "405", "409", "412", "413", "422", "428", "429", "500"}, success: "200"},
 		{name: "delete", operation: document.Paths["/resumes/{id}"].Delete, wantID: "deleteResume", wantStatus: []string{"204", "400", "401", "403", "404", "405", "409", "412", "413", "428", "429", "500"}, success: "204", bodyless: true},

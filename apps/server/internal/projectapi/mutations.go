@@ -15,6 +15,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
@@ -85,7 +86,15 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call := boundApply{service: s, ctx: r.Context(), sess: sess, method: r.Method, id: id, revision: headers.revision, input: input}
-	result, err := s.idempotency.Execute(r.Context(), sess.UserID, operation, headers.key, fingerprint, call.run)
+	var result resume.ExecuteResult
+	if r.Method == http.MethodDelete {
+		result, err = s.links.RemoveProject(r.Context(), resumeapi.ProjectRemoval{
+			UserID: sess.UserID, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
+			Authorize: call.authorizeDelete, Remove: call.remove,
+		})
+	} else {
+		result, err = s.idempotency.Execute(r.Context(), sess.UserID, operation, headers.key, fingerprint, call.run)
+	}
 	if err != nil {
 		writeError(w, mapError(err))
 		return
@@ -109,6 +118,46 @@ func (b boundApply) run(q *store.Queries) (resume.StoredResponse, error) {
 		return resume.StoredResponse{}, err
 	}
 	return b.service.apply(b.ctx, q, b.sess, b.method, b.id, b.revision, b.input)
+}
+
+// authorizeDelete rechecks the session, the project precondition and recent
+// reauthentication before any linking resume is rewritten.
+func (b boundApply) authorizeDelete(ctx context.Context, q *store.Queries) error {
+	if err := b.service.reauthenticate(ctx, q, b.sess); err != nil {
+		return err
+	}
+	if _, err := b.service.match(ctx, q, b.sess.UserID, b.id, b.revision); err != nil {
+		return err
+	}
+	return b.service.requireRecent(ctx, q, b.sess, b.service.now())
+}
+
+// remove deletes the project after its links are gone and stores the
+// changed resumes as the response.
+func (b boundApply) remove(ctx context.Context, q *store.Queries, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
+	if err := b.service.projects.DeleteTx(ctx, q, b.sess.UserID, b.id, b.revision, b.service.now()); err != nil {
+		return resume.StoredResponse{}, err
+	}
+	out := make([]changedResume, len(changed))
+	for i, item := range changed {
+		out[i] = changedResume{ID: item.ID, Revision: item.Revision}
+	}
+	return stored(200, deleteResult{ChangedResumes: out}, nil)
+}
+
+// match evaluates the project precondition; a failed one carries the
+// current project with its linked resume ids.
+func (s *Service) match(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64) (project.Project, error) {
+	current, err := s.projects.MatchTx(ctx, q, owner, id, revision)
+	var mismatch *project.RevisionMismatch
+	if errors.As(err, &mismatch) {
+		links, linkErr := s.links.LinkedResumeIDs(ctx, q, owner)
+		if linkErr != nil {
+			return project.Project{}, linkErr
+		}
+		return project.Project{}, &linkedMismatch{current: resourceOf(mismatch.Current, links)}
+	}
+	return current, err
 }
 
 func decodeInput(r *http.Request) ([]byte, projectInput, *clientError) {
@@ -153,28 +202,26 @@ func (s *Service) apply(ctx context.Context, q *store.Queries, sess store.Sessio
 		if err != nil {
 			return resume.StoredResponse{}, err
 		}
-		return stored(201, resourceOf(p), map[string]string{"Location": projectsPath + "/" + p.ID.String(), "ETag": revisionTag(p.Revision)})
+		return stored(201, resourceOf(p, nil), map[string]string{"Location": projectsPath + "/" + p.ID.String(), "ETag": revisionTag(p.Revision)})
 	}
-	current, err := s.projects.MatchTx(ctx, q, sess.UserID, id, revision)
+	current, err := s.match(ctx, q, sess.UserID, id, revision)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	if method == http.MethodDelete || current.Slug != slug {
+	if current.Slug != slug {
 		if err = s.requireRecent(ctx, q, sess, now); err != nil {
 			return resume.StoredResponse{}, err
 		}
-	}
-	if method == http.MethodDelete {
-		if err = s.projects.DeleteTx(ctx, q, sess.UserID, id, revision, now); err != nil {
-			return resume.StoredResponse{}, err
-		}
-		return stored(200, deleteResult{ChangedResumes: []changedResume{}}, nil)
 	}
 	p, err := s.projects.ReplaceTx(ctx, q, sess.UserID, id, revision, slug, input.Document, now, admit)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	return stored(200, replaceResult{Project: resourceOf(p), ChangedResumes: []changedResume{}}, map[string]string{"ETag": revisionTag(p.Revision)})
+	links, err := s.links.LinkedResumeIDs(ctx, q, sess.UserID)
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	return stored(200, replaceResult{Project: resourceOf(p, links), ChangedResumes: []changedResume{}}, map[string]string{"ETag": revisionTag(p.Revision)})
 }
 
 func (s *Service) reauthenticate(ctx context.Context, q *store.Queries, sess store.Session) error {

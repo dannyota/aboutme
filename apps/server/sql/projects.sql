@@ -9,6 +9,10 @@ SELECT * FROM projects WHERE id = $1 AND user_id = $2;
 -- name: CountProjectsForUser :one
 SELECT count(*) FROM projects WHERE user_id = $1;
 
+-- name: CountOwnedProjects :one
+SELECT count(*) FROM projects
+WHERE user_id = sqlc.arg(user_id) AND id = ANY(sqlc.arg(ids)::uuid[]);
+
 -- name: ProjectDocumentBytes :one
 SELECT octet_length(sqlc.arg(document)::jsonb::text)::int AS bytes;
 

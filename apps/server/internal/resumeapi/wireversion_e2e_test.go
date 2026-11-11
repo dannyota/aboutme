@@ -141,7 +141,7 @@ func TestWireVersion_PersonalDetailsFailsClosedAndCurrentIdentity(t *testing.T) 
 		version string
 	}{
 		{name: "absent"},
-		{name: "explicit current", version: "5"},
+		{name: "explicit current", version: "6"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newResumeAPITestHarness(t)
@@ -149,7 +149,7 @@ func TestWireVersion_PersonalDetailsFailsClosedAndCurrentIdentity(t *testing.T) 
 			path := apiResumePath + "/" + created.ID.String() + "/personal-details"
 			response := resumeRequest(t, h, http.MethodPatch, path,
 				`{"fullName":"Identity","details":[]}`, created.Revision, uuid.New(), test.version)
-			if response.status != http.StatusOK || response.header.Get(wireVersionHeader) != "5" {
+			if response.status != http.StatusOK || response.header.Get(wireVersionHeader) != "6" {
 				t.Fatalf("current identity write = %d schema=%q body=%s",
 					response.status, response.header.Get(wireVersionHeader), response.body)
 			}

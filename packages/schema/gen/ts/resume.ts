@@ -1,9 +1,9 @@
 // Code generated from resume.schema.json. DO NOT EDIT.
 
 /**
- * Document-shape version. This schema validates version 5 only; see docs/design/data.md#document-versions.
+ * Document-shape version. This schema validates version 6 only; see docs/design/data.md#document-versions.
  */
-export type SchemaVersion = 5;
+export type SchemaVersion = 6;
 export type Uuid = string;
 /**
  * Draft section selected by sectionType. Only sectionType and entries are required. See docs/design/data.md#resume-aggregate.
@@ -161,6 +161,7 @@ export type ProjectEntry = EntryBase & {
   link?: Link;
   dates?: DateRange;
   description?: RichText;
+  projectId?: Uuid;
 };
 /**
  * Draft-permissive custom entry. See docs/design/data.md#resume-aggregate.

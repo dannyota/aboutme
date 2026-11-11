@@ -448,6 +448,8 @@ func routeSecurityBody(route routeSpec) io.Reader {
 		return strings.NewReader("--test--\r\n")
 	case "updateResumePhotoCrop":
 		return strings.NewReader(`{"crop":null}`)
+	case "linkResumeProject":
+		return strings.NewReader(`{"projectId":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e70"}`)
 	default:
 		return nil
 	}

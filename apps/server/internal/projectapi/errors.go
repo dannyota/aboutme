@@ -8,7 +8,9 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
 type clientError struct {
@@ -40,7 +42,11 @@ func mapError(err error) *clientError {
 	if errors.As(err, &client) {
 		return client
 	}
-	var mismatch *project.RevisionMismatch
+	var bare *project.RevisionMismatch
+	if errors.As(err, &bare) {
+		err = &linkedMismatch{current: resourceOf(bare.Current, nil)}
+	}
+	var mismatch *linkedMismatch
 	if errors.As(err, &mismatch) {
 		e := failure(412, "revision_mismatch", "project revision has changed")
 		e.details = struct {
@@ -48,15 +54,19 @@ func mapError(err error) *clientError {
 			Revision string `json:"revision"`
 			// Project is the canonical current owner project.
 			Project resource `json:"project"`
-		}{Revision: strconv.FormatInt(mismatch.Current.Revision, 10), Project: resourceOf(mismatch.Current)}
+		}{Revision: strconv.FormatInt(mismatch.current.Revision, 10), Project: mismatch.current}
 		return e
+	}
+	var drain *publicstate.DrainTimeoutError
+	if errors.Is(err, resumeapi.ErrPublicStateBusy) || errors.As(err, &drain) {
+		return &clientError{status: 503, code: "public_state_busy", message: "public state is busy", retryAfter: 1}
 	}
 	var capacity *resume.IdempotencyCapacityError
 	if errors.As(err, &capacity) {
 		return &clientError{status: 429, code: "rate_limited", message: "idempotency capacity exceeded", retryAfter: capacity.RetryAfterSeconds}
 	}
 	switch {
-	case errors.Is(err, project.ErrNotFound):
+	case errors.Is(err, project.ErrNotFound), errors.Is(err, resume.ErrProjectNotFound):
 		return failure(404, "project_not_found", "project not found")
 	case errors.Is(err, project.ErrLimit):
 		return failure(409, "project_limit", "account project limit reached")
@@ -78,6 +88,15 @@ func mapError(err error) *clientError {
 		return internalError()
 	}
 }
+
+// linkedMismatch is a failed project precondition with the current project
+// and its linked resume ids.
+type linkedMismatch struct {
+	current resource
+}
+
+// Error returns a closed mismatch description.
+func (e *linkedMismatch) Error() string { return "project revision mismatch" }
 
 type errorBody struct {
 	// Code is the closed machine-readable failure code.

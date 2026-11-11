@@ -22,6 +22,10 @@ const SURFACE: Record<string, Record<string, string>> = {
   "/resumes/{id}/entries/{sectionKey}/{entryId}": {
     delete: "deleteResumeEntry",
   },
+  "/resumes/{id}/project-links": { post: "linkResumeProject" },
+  "/resumes/{id}/entries/{entryId}/project-refresh": {
+    post: "refreshResumeProjectEntry",
+  },
   "/resumes/{id}/sections/{sectionKey}": { patch: "updateResumeSection" },
   "/resumes/{id}/structure": { patch: "updateResumeStructure" },
   "/resumes/{id}/personal-details": { patch: "updateResumePersonalDetails" },
@@ -100,6 +104,20 @@ const SUCCESS: Record<string, Success[]> = {
     {
       status: "204",
       mediaTypes: [],
+      headers: ["ETag", "X-Resume-Schema-Version"],
+    },
+  ],
+  linkResumeProject: [
+    {
+      status: "200",
+      mediaTypes: ["application/json"],
+      headers: ["ETag", "X-Resume-Schema-Version"],
+    },
+  ],
+  refreshResumeProjectEntry: [
+    {
+      status: "200",
+      mediaTypes: ["application/json"],
       headers: ["ETag", "X-Resume-Schema-Version"],
     },
   ],
@@ -227,8 +245,13 @@ const ERRORS: Record<string, Record<string, string[]>> = {
     "400": CREATE_400,
     "401": ["session_required"],
     "403": ["csrf_rejected"],
+    "404": ["project_not_found"],
     "405": ["method_not_allowed"],
-    "409": ["resume_cap_exceeded", "idempotency_key_reuse"],
+    "409": [
+      "resume_cap_exceeded",
+      "project_already_linked",
+      "idempotency_key_reuse",
+    ],
     "413": ["body_too_large"],
     "422": ["document_invalid"],
     "429": ["rate_limited"],
@@ -259,7 +282,17 @@ const ERRORS: Record<string, Record<string, string[]>> = {
     "500": ["internal_error"],
     "503": ["public_state_busy"],
   },
-  upsertResumeEntry: itemWrite(),
+  upsertResumeEntry: itemWrite({
+    "404": ["resume_not_found", "project_not_found"],
+    "409": ["project_already_linked", "idempotency_key_reuse"],
+  }),
+  linkResumeProject: itemWrite({
+    "404": ["resume_not_found", "project_not_found"],
+    "409": ["project_already_linked", "idempotency_key_reuse"],
+  }),
+  refreshResumeProjectEntry: itemWrite({
+    "404": ["resume_not_found", "project_not_found"],
+  }),
   deleteResumeEntry: itemDelete(),
   updateResumeSection: itemWrite(),
   updateResumeStructure: itemWrite(),

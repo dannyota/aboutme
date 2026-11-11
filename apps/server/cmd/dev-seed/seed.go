@@ -185,7 +185,7 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
-		VALUES ($1, $2, $3, NULL, false, true, false, 5, 1, $4, $5, $6)`,
+		VALUES ($1, $2, $3, NULL, false, true, false, 6, 1, $4, $5, $6)`,
 		seedResumeID, seedUser.ID, seedResumeTitle, personalDetails, content, customization)
 	if err != nil {
 		return fmt.Errorf("insert resume: %w", err)

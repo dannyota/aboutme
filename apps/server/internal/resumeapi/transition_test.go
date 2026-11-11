@@ -231,13 +231,13 @@ func TestRunMutationRechecksBeforeCloseAndCommitsExactGeneration(t *testing.T) {
 }
 
 func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
-	// The Task02 catalog predates publish. Its twelve mutations include create;
-	// create has no existing public revision to fence, leaving these eleven
+	// The catalog excludes publish. Its fourteen mutations include create;
+	// create has no existing public revision to fence, leaving these thirteen
 	// revision mutation handlers to exercise at the real Close/Execute seam.
 	h := newResumeAPITestHarness(t)
 	fixture := newRemainingFixture(t, h)
 	mutations := remainingOpenAPIMutations(t, fixture.resume.ID)
-	exercised := make([]string, 0, 11)
+	exercised := make([]string, 0, 13)
 	for _, mutation := range mutations {
 		if mutation.operationID == "createResume" {
 			continue
@@ -285,8 +285,8 @@ func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
 		})
 		exercised = append(exercised, mutation.operationID)
 	}
-	if len(exercised) != 11 {
-		t.Fatalf("exercised %d revision routes, want 11: %v", len(exercised), exercised)
+	if len(exercised) != 13 {
+		t.Fatalf("exercised %d revision routes, want 13: %v", len(exercised), exercised)
 	}
 }
 

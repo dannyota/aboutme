@@ -25,8 +25,8 @@ func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte,
 	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
 		return nil, nil, nil, fmt.Errorf("decode full.json: %w", unmarshalErr)
 	}
-	if doc.SchemaVersion != 5 {
-		return nil, nil, nil, fmt.Errorf("full.json schemaVersion = %d, want 5", doc.SchemaVersion)
+	if doc.SchemaVersion != 6 {
+		return nil, nil, nil, fmt.Errorf("full.json schemaVersion = %d, want 6", doc.SchemaVersion)
 	}
 	personalDetails, err = withoutPhoto(doc.PersonalDetails)
 	if err != nil {
