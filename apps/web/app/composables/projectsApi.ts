@@ -488,10 +488,17 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
       ) return;
       state.value = { kind: 'busy' };
       let response: PasswordReauthEnvelope | undefined;
+      let status: number | undefined;
       try {
         response = await deps.auth.mutate<PasswordReauthEnvelope | undefined>(
           '/api/v1/auth/password/reauth',
-          { method: 'POST', body: { password } },
+          {
+            method: 'POST',
+            body: { password },
+            onStatus: (value) => {
+              status = value;
+            },
+          },
         );
       } catch (error) {
         if (attempt !== current) return;
@@ -509,11 +516,15 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
         state.value = { kind: 'session-lost' };
         return;
       }
-      // An enrolled account's password only opens a pending factor; the
-      // server still refuses the action until that factor completes, so the
-      // attempt waits for an explicit Continue instead of resending now.
-      if (response?.data?.secondFactorRequired === true) {
+      // Only 204 completes reauthentication. An enrolled account's 202 opens
+      // a pending factor the server still requires, so the attempt waits for
+      // an explicit Continue; any other answer is not proof and sends nothing.
+      if (status === 202 && response?.data?.secondFactorRequired === true) {
         state.value = { kind: 'reauth-second-factor' };
+        return;
+      }
+      if (status !== 204) {
+        state.value = { kind: 'reauth-unavailable', method: 'password' };
         return;
       }
       await dispatch(current);

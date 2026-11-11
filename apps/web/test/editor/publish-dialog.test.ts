@@ -590,6 +590,51 @@ describe('PublishDialog', () => {
     },
   );
 
+  it('keeps the typed password after a wrong password', async () => {
+    const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+    const context = actionsFor(record, {
+      kind: 'reauth-required', method: 'password', attempt: {} as never,
+    });
+    const wrapper = await mountDialog(record, context.actions);
+    await wrapper.get('[data-action="publish-password"]')
+      .setValue('current-password');
+
+    context.state.value = {
+      kind: 'reauth-wrong-password', method: 'password', attempt: {} as never,
+    };
+    await nextTick();
+    await nextTick();
+
+    expect((wrapper.get('[data-action="publish-password"]')
+      .element as HTMLInputElement).value).toBe('current-password');
+  });
+
+  it('clears the typed password when the form returns from the second step',
+    async () => {
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const context = actionsFor(record, {
+        kind: 'reauth-required', method: 'password', attempt: {} as never,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+      await wrapper.get('[data-action="publish-password"]')
+        .setValue('current-password');
+
+      context.state.value = {
+        kind: 'reauth-second-factor', attempt: {} as never,
+      };
+      await nextTick();
+      context.state.value = {
+        kind: 'reauth-second-factor-incomplete',
+        method: 'password',
+        attempt: {} as never,
+      };
+      await nextTick();
+      await nextTick();
+
+      expect((wrapper.get('[data-action="publish-password"]')
+        .element as HTMLInputElement).value).toBe('');
+    });
+
   it('drops the second verification step on cancel', async () => {
     const record = editorRecord({ live: true, slug: 'ada-lovelace' });
     const context = actionsFor(record, {

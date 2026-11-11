@@ -70,9 +70,20 @@ export function fakeAuth(options: { hasPassword?: boolean } = {}) {
     authState: computed(() => authState.value),
     identities: computed(() => identities.value),
     refresh: vi.fn(async () => {}),
-    mutate: vi.fn(async () => undefined as never),
+    mutate: vi.fn(answered(204)),
   } satisfies ProjectAuth;
   return { auth, user, csrfToken, authState, identities };
+}
+
+/** A fake `mutate` answer: the status it reports, then its body. */
+export function answered(status: number, body?: unknown) {
+  return async (
+    _url: string,
+    options: { onStatus?: (value: number) => void },
+  ): Promise<never> => {
+    options.onStatus?.(status);
+    return body as never;
+  };
 }
 
 /** Keys k1, k2, … so a test can tell a fresh key from a reused one. */

@@ -894,6 +894,7 @@ function actionsFor(
       reauthPassword: vi.fn(),
       startProviderReauth: vi.fn(),
       retryAfterProviderReauth: vi.fn(),
+      continueAfterSecondFactor: vi.fn(),
       cancel: vi.fn(),
     },
   };

@@ -1,14 +1,33 @@
+import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
+import { setResponseHeader, setResponseStatus } from 'h3';
 import { createPinia, setActivePinia } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, defineComponent, h, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPublishController } from '../../app/editor/publishController';
+import { useAuth } from '../../app/composables/useAuth';
+import {
+  createPublishController,
+  type PublishControllerDeps,
+} from '../../app/editor/publishController';
 import type { PublishCommand } from '../../app/editor/publishApi';
 import { useResumeStore } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 import { parseRevision } from '../../app/editor/revision';
 
-function setup() {
+const FACTOR_PENDING = { data: { secondFactorRequired: true } };
+
+/** A fake reauthentication answer: the status `mutate` reports, then body. */
+function answered(status: number, body?: unknown) {
+  return async (
+    _url: string,
+    options: { onStatus?: (value: number) => void },
+  ) => {
+    options.onStatus?.(status);
+    return body;
+  };
+}
+
+function setup(liveAuth?: PublishControllerDeps['auth']) {
   setActivePinia(createPinia());
   const accepted = acceptedFixture();
   const store = useResumeStore();
@@ -21,14 +40,14 @@ function setup() {
   const csrfToken = ref<string | null>('csrf-1');
   const authState = ref<'authenticated' | 'anonymous'>('authenticated');
   const identities = ref([{ provider: 'google' as const }]);
-  const auth = {
+  const auth = (liveAuth ?? {
     user: computed(() => user.value),
     csrfToken: computed(() => csrfToken.value),
     authState: computed(() => authState.value),
     refresh: vi.fn().mockResolvedValue(undefined),
     mutate: vi.fn(),
     identities,
-  } as never;
+  }) as never;
   const completeRead = vi.fn().mockResolvedValue(true);
   const coordinator = {
     flush: vi.fn().mockResolvedValue(undefined),
@@ -206,7 +225,7 @@ describe('publish controller', () => {
           revision: parseRevision('2'),
         },
       });
-    vi.mocked(context.auth.mutate).mockResolvedValue(undefined);
+    vi.mocked(context.auth.mutate).mockImplementation(answered(204));
     await expect(context.controller.submit(command)).resolves.toMatchObject({
       kind: 'reauth-required',
       method: 'password',
@@ -216,7 +235,11 @@ describe('publish controller', () => {
     ).resolves.toMatchObject({ kind: 'accepted' });
     expect(context.auth.mutate).toHaveBeenCalledWith(
       '/api/v1/auth/password/reauth',
-      { method: 'POST', body: { password: 'password' } },
+      {
+        method: 'POST',
+        body: { password: 'password' },
+        onStatus: expect.any(Function),
+      },
     );
     expect(context.api.dispatch).toHaveBeenCalledTimes(2);
   });
@@ -618,9 +641,8 @@ describe('publish controller second factor', () => {
       kind: 'reauth-required',
     });
     await context.controller.submit(command);
-    vi.mocked(context.auth.mutate).mockResolvedValueOnce({
-      data: { secondFactorRequired: true },
-    });
+    vi.mocked(context.auth.mutate)
+      .mockImplementationOnce(answered(202, FACTOR_PENDING));
     const state = await context.controller.reauthPassword('password');
     return { ...context, state };
   }
@@ -670,9 +692,8 @@ describe('publish controller second factor', () => {
       await context.controller.continueAfterSecondFactor();
       expect(context.api.dispatch).toHaveBeenCalledTimes(2);
 
-      vi.mocked(context.auth.mutate).mockResolvedValueOnce({
-        data: { secondFactorRequired: true },
-      });
+      vi.mocked(context.auth.mutate)
+        .mockImplementationOnce(answered(202, FACTOR_PENDING));
       await expect(context.controller.reauthPassword('password'))
         .resolves.toMatchObject({ kind: 'reauth-second-factor' });
       expect(context.auth.mutate).toHaveBeenCalledTimes(2);
@@ -703,10 +724,12 @@ describe('publish controller second factor', () => {
         kind: 'reauth-required',
       });
       await context.controller.submit(command);
-      vi.mocked(context.auth.mutate).mockImplementationOnce(async () => {
-        context.user.value = { id: 'other-owner', hasPassword: true };
-        return { data: { secondFactorRequired: true } };
-      });
+      vi.mocked(context.auth.mutate).mockImplementationOnce(
+        async (url, options) => {
+          context.user.value = { id: 'other-owner', hasPassword: true };
+          return answered(202, FACTOR_PENDING)(url, options);
+        },
+      );
 
       await expect(context.controller.reauthPassword('password'))
         .resolves.toEqual({ kind: 'session-lost' });
@@ -722,5 +745,104 @@ describe('publish controller second factor', () => {
 
     expect(context.api.dispatch).toHaveBeenCalledOnce();
     expect(context.auth.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('publish controller reauthentication answers over HTTP', () => {
+  registerEndpoint('/api/v1/me', () => ({
+    data: {
+      user: {
+        id: 'owner-1',
+        email: 'owner@example.invalid',
+        name: null,
+        avatarKey: null,
+        hasPassword: true,
+      },
+      csrfToken: 'csrf-1',
+      identities: [],
+    },
+  }));
+
+  function answerReauth(
+    status: number,
+    contentType: string | null,
+    body: string | null,
+  ): void {
+    registerEndpoint('/api/v1/auth/password/reauth', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, status);
+        if (contentType !== null) {
+          setResponseHeader(event, 'Content-Type', contentType);
+        }
+        return body;
+      },
+    });
+  }
+
+  /** The session the app reads, with its real `mutate`. */
+  async function liveAuth(): Promise<PublishControllerDeps['auth']> {
+    let auth: ReturnType<typeof useAuth> | undefined;
+    await mountSuspended(defineComponent({
+      setup() {
+        auth = useAuth();
+        return () => h('div');
+      },
+    }));
+    await vi.waitFor(() =>
+      expect(auth?.authState.value).toBe('authenticated'));
+    return auth!;
+  }
+
+  async function reauthenticated(
+    status: number,
+    contentType: string | null,
+    body: string | null,
+  ) {
+    answerReauth(status, contentType, body);
+    const context = setup(await liveAuth());
+    vi.mocked(context.api.dispatch).mockResolvedValueOnce({
+      kind: 'reauth-required',
+    });
+    await context.controller.submit(command);
+    return context;
+  }
+
+  it.each([
+    ['a 202 without the flag', 'application/json', '{"data":{}}'],
+    ['a 202 whose body is not JSON', 'text/plain', 'accepted'],
+  ] as const)('sends nothing after %s', async (_name, contentType, body) => {
+    const context = await reauthenticated(202, contentType, body);
+
+    await expect(context.controller.reauthPassword('password'))
+      .resolves.toMatchObject({
+        kind: 'reauth-unavailable',
+        method: 'password',
+      });
+    expect(context.api.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('opens the step after a 202 with the flag', async () => {
+    const context = await reauthenticated(
+      202, 'application/json', JSON.stringify(FACTOR_PENDING),
+    );
+
+    await expect(context.controller.reauthPassword('password'))
+      .resolves.toMatchObject({ kind: 'reauth-second-factor' });
+    expect(context.api.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('resends the same attempt once after a 204', async () => {
+    const context = await reauthenticated(204, null, null);
+    vi.mocked(context.api.dispatch).mockResolvedValueOnce({
+      kind: 'accepted',
+      resume: { ...context.accepted, revision: parseRevision('2') },
+    });
+
+    await expect(context.controller.reauthPassword('password'))
+      .resolves.toMatchObject({ kind: 'accepted' });
+    const calls = vi.mocked(context.api.dispatch).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]![0]).toBe(calls[0]![0]);
   });
 });

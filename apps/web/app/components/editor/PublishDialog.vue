@@ -164,7 +164,9 @@ watch(
 );
 
 watch(state, (next) => {
-  if (next.kind === 'accepted') {
+  if (next.kind === 'reauth-second-factor') {
+    password.value = '';
+  } else if (next.kind === 'accepted') {
     syncMetadata(next.resume.metadata);
   } else if (
     next.kind === 'stale'

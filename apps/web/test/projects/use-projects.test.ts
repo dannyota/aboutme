@@ -8,6 +8,7 @@ import {
   useProjectList,
 } from '../../app/composables/useProjects';
 import {
+  answered,
   failed,
   fakeApi,
   fakeAuth,
@@ -356,7 +357,11 @@ describe('address change and deletion', () => {
       await action.reauthPassword('secret');
       expect(auth.mutate).toHaveBeenCalledWith(
         '/api/v1/auth/password/reauth',
-        { method: 'POST', body: { password: 'secret' } },
+        {
+          method: 'POST',
+          body: { password: 'secret' },
+          onStatus: expect.any(Function),
+        },
       );
       expect(api.replace).toHaveBeenCalledTimes(2);
       expect(action.state.value)
@@ -422,7 +427,9 @@ describe('address change and deletion', () => {
 });
 
 describe('address change and deletion with a second factor', () => {
-  const FACTOR_PENDING = { data: { secondFactorRequired: true } } as never;
+  const FACTOR_PENDING = answered(202, {
+    data: { secondFactorRequired: true },
+  });
 
   /** An enrolled account answers the password with a pending factor. */
   async function factorPending(kind: 'address' | 'delete' = 'address') {
@@ -430,7 +437,7 @@ describe('address change and deletion with a second factor', () => {
     const send = kind === 'delete' ? context.api.remove : context.api.replace;
     send.mockResolvedValueOnce(failed('reauth-required'));
     await context.action.start(kind, project(), 'new-shop');
-    context.auth.mutate.mockResolvedValueOnce(FACTOR_PENDING);
+    context.auth.mutate.mockImplementationOnce(FACTOR_PENDING);
     await context.action.reauthPassword('secret');
     return { ...context, send };
   }
@@ -475,7 +482,7 @@ describe('address change and deletion with a second factor', () => {
       await action.continueAfterSecondFactor();
       expect(send).toHaveBeenCalledTimes(2);
 
-      auth.mutate.mockResolvedValueOnce(FACTOR_PENDING);
+      auth.mutate.mockImplementationOnce(FACTOR_PENDING);
       await action.reauthPassword('secret');
       expect(auth.mutate).toHaveBeenCalledTimes(2);
       expect(action.state.value).toEqual({ kind: 'reauth-second-factor' });
@@ -502,9 +509,9 @@ describe('address change and deletion with a second factor', () => {
       const { api, auth, user, action } = releaseSetup();
       api.replace.mockResolvedValueOnce(failed('reauth-required'));
       await action.start('address', project(), 'new-shop');
-      auth.mutate.mockImplementationOnce(async () => {
+      auth.mutate.mockImplementationOnce(async (url, options) => {
         user.value = { ...user.value, id: 'owner-2' };
-        return FACTOR_PENDING;
+        return FACTOR_PENDING(url, options);
       });
 
       await action.reauthPassword('secret');

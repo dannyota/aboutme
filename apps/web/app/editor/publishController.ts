@@ -333,6 +333,7 @@ export function createPublishController(
     const runGeneration = generation;
     const frozen = attempt;
     let response: PasswordReauthEnvelope | undefined;
+    let status: number | undefined;
     passwordBusy = true;
     try {
       if (!sameOwner(frozen, deps.auth)) {
@@ -340,7 +341,13 @@ export function createPublishController(
       }
       response = await deps.auth.mutate<PasswordReauthEnvelope | undefined>(
         '/api/v1/auth/password/reauth',
-        { method: 'POST', body: { password } },
+        {
+          method: 'POST',
+          body: { password },
+          onStatus: (value) => {
+            status = value;
+          },
+        },
       );
     } catch (error) {
       if (
@@ -381,11 +388,18 @@ export function createPublishController(
       return state.value;
     }
     if (!sameOwner(frozen, deps.auth)) return loseSession();
-    // An enrolled account's password only opens a pending factor; the
-    // server still refuses the action until that factor completes, so the
-    // attempt waits for an explicit Continue instead of resending now.
-    if (response?.data?.secondFactorRequired === true) {
+    // Only 204 completes reauthentication. An enrolled account's 202 opens a
+    // pending factor the server still requires, so the attempt waits for an
+    // explicit Continue; any other answer is not proof and sends nothing.
+    if (status === 202 && response?.data?.secondFactorRequired === true) {
       return setState({ kind: 'reauth-second-factor', attempt: frozen });
+    }
+    if (status !== 204) {
+      return setState({
+        kind: 'reauth-unavailable',
+        method: 'password',
+        attempt: frozen,
+      });
     }
     csrfRetried = false;
     return dispatchCurrent(runGeneration);
