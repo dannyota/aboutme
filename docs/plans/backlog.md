@@ -30,6 +30,10 @@ Open items that outlived their shipped plans. One line each, with the evidence t
   - Session rows are never deleted, only scrubbed (`sql/privacy_retention.sql:92`). Add batch deletion after absolute expiry with a documented margin.
   - Obsolete state: five unused showcase review columns and the approval index (`migrations/00011_showcase_without_review.sql:6`), and the authorization-code binding-fill trigger (`00004_passkey_second_factor.sql:170`). Remove them and record the rollback floor in ADR 0028.
 
+- The editor's page chunk (`/_nuxt/pages/app/resumes/[id].vue`) sometimes fails to load in the HTTPS proofs ("Failed to fetch dynamically imported module", about 1 in 40 editor creates under load on the Ubuntu gate host, 2026-11-11). The publish and showcase journeys still create through the editor and can hit it. Find why the chunk load fails.
+- A Playwright test timeout skips the spec's `finally` cleanup, so a timed-out publish or showcase journey leaves its disposable resume behind (`deploy/dev-https-browser/publish.spec.ts`). Move cleanup to `afterEach`, as `public.spec.ts:195-217` does.
+- `verify-evidence.mjs` falls back to `-1` for an invalid `timings.joinInviteMs` in the `public` block (lines 140-142), so forged evidence with `-1` passes. Reject invalid timings as the publish block now does.
+
 ## Production acceptance
 
 - Dispatch the first `action=renew` of `.github/workflows/vmonitor-renew.yml` after 2026-11-28T06:54:54Z (the 72-hour threshold for the term ending 2026-12-01T06:54:54Z) and confirm the later expiry by read-back; then add the schedule in a separate reviewed change. `action=check` passed on 2026-11-01 (run 41302010198) and the owner delegated closing hold issue #146, which is now closed. If the renewal fails or stays unconfirmed, reconcile with the provider before any retry. Evidence: [renewal design](../design/vmonitor-quota-renewal.md).
