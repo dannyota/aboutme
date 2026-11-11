@@ -97,13 +97,17 @@ normalize() {
       | sort_by(.Sid))'
 }
 
-# policy_for <principal-arn> <bucket> prints the wiki template.
+# policy_for <principal-arn> <bucket> prints the wiki template. vStorage checks
+# a batch delete (POST ?delete) against the bucket, not its objects, so the
+# backups bucket, whose pgBackRest expire deletes in batches, also gets
+# s3:DeleteObject on the bucket; without it every expire fails with 403.
 policy_for() {
   jq -n -c --arg p "$1" --arg b "$2" '
     {Version: "2012-10-17", Statement: [
       {Sid: "Bucket", Effect: "Allow", Principal: {AWS: [$p]},
-       Action: ["s3:ListBucket", "s3:GetBucketLocation",
-                "s3:ListBucketMultipartUploads"],
+       Action: (["s3:ListBucket", "s3:GetBucketLocation",
+                 "s3:ListBucketMultipartUploads"]
+                + (if $b == "aboutme-backups" then ["s3:DeleteObject"] else [] end)),
        Resource: ["arn:aws:s3:::" + $b]},
       {Sid: "Objects", Effect: "Allow", Principal: {AWS: [$p]},
        Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject",
