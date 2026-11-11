@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,6 +106,7 @@ type Querier interface {
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountLivePrivacyNoticeJobs(ctx context.Context) (int64, error)
 	CountPrivacyNoticeRecovery(ctx context.Context, arg CountPrivacyNoticeRecoveryParams) (int64, error)
+	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountShowcase(ctx context.Context, arg CountShowcaseParams) (int64, error)
@@ -162,6 +164,7 @@ type Querier interface {
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePendingAuthentication(ctx context.Context, arg CreatePendingAuthenticationParams) (PendingAuthentication, error)
 	CreatePrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (PrivacyNoticeCampaign, error)
+	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
 	CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error)
 	CreateSecondFactorRecoveryCode(ctx context.Context, arg CreateSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
@@ -186,6 +189,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error)
+	DeleteAccountProjectSlugHolds(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error)
 	DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCompletedMediaJobsPageParams) (int64, error)
@@ -225,6 +229,7 @@ type Querier interface {
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
+	DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg DeleteExpiredProjectSlugHoldsPageParams) (int64, error)
 	// A released slug stays reserved and unlinked from any account for 180 days
 	// (docs/design/product.md), then the privacy sweep deletes the reservation.
 	DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error)
@@ -246,6 +251,7 @@ type Querier interface {
 	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePrivacyNoticeRecipientUser(ctx context.Context, arg DeletePrivacyNoticeRecipientUserParams) (int64, error)
+	DeleteProjectCAS(ctx context.Context, arg DeleteProjectCASParams) (int64, error)
 	DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	// Revision-CAS delete returning the deleted row, so the caller can
@@ -374,6 +380,9 @@ type Querier interface {
 	GetPrivacyNoticeJobForUpdate(ctx context.Context, id uuid.UUID) (AuthEmailJob, error)
 	GetPrivacyNoticeRecipient(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
 	GetPrivacyNoticeRecipientForUpdate(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
+	GetProjectForUser(ctx context.Context, arg GetProjectForUserParams) (Project, error)
+	GetProjectSlugClaim(ctx context.Context, arg GetProjectSlugClaimParams) (uuid.UUID, error)
+	GetProjectSlugHold(ctx context.Context, arg GetProjectSlugHoldParams) (time.Time, error)
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
@@ -460,6 +469,7 @@ type Querier interface {
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
 	GetWebAuthnCeremonyByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (WebauthnCeremony, error)
 	GetWebAuthnCredentialForUpdate(ctx context.Context, arg GetWebAuthnCredentialForUpdateParams) (WebauthnCredential, error)
+	HoldProjectSlug(ctx context.Context, arg HoldProjectSlugParams) error
 	InsertAccountDeletedAuditEvent(ctx context.Context, arg InsertAccountDeletedAuditEventParams) (LifecycleAuditEvent, error)
 	// Records the unlink's kind and time only: no user, provider, or identity.
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
@@ -484,6 +494,7 @@ type Querier interface {
 	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
 	LatchPrivacyNoticeAbort(ctx context.Context, contentSha256 []byte) (int64, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
+	ListAccountExportProjects(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
 	// Carries sign_in_to_view with the other publish settings; the pass epoch
 	// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
@@ -542,6 +553,8 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListPrivacyNoticeAbortCandidates(ctx context.Context) ([]PrivacyNoticeRecipient, error)
 	ListPrivacyNoticeCaptureUsers(ctx context.Context, captureCursor *uuid.UUID) ([]uuid.UUID, error)
+	// Callers hold LockUserForResumeWrite throughout mutations and replay storage.
+	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
@@ -609,6 +622,8 @@ type Querier interface {
 	PrivacyNoticeCaptureProof(ctx context.Context) (PrivacyNoticeCaptureProofRow, error)
 	PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error)
 	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
+	ProjectDocumentBytes(ctx context.Context, document json.RawMessage) (int32, error)
+	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)
 	// sign_in_to_view is the caller's already-merged final value (an omitted
 	// publish field keeps the stored value before this query ever runs; see
 	// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
@@ -651,6 +666,7 @@ type Querier interface {
 	// non-negative checks.
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
 	ReopenPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
+	ReplaceProjectCAS(ctx context.Context, arg ReplaceProjectCASParams) (Project, error)
 	// Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
 	// existing id and created_at, reseals under a fresh nonce, and resets the
 	// failure budget, including last_failed_at, because a fresh secret cannot

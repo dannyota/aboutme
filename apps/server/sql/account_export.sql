@@ -27,3 +27,6 @@ LEFT JOIN resume_showcase s ON s.resume_id = r.id
 WHERE r.user_id = $1
 ORDER BY r.created_at, r.id
 LIMIT 4;
+
+-- name: ListAccountExportProjects :many
+SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at, id;

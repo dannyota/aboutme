@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 )
@@ -48,6 +50,27 @@ func (s *Service) newRouteChains() routeChains {
 		csrfJSON:      auth.RequireCSRF(s.publicOrigin),
 		csrfMultipart: auth.RequireCSRFMultipart(s.publicOrigin),
 	}
+}
+
+// sharedRouteChains builds the route chains once, so every resume route and
+// every caller of the admission accessors below spends the same budgets.
+func (s *Service) sharedRouteChains() routeChains {
+	s.chainsOnce.Do(func() { s.chains = s.newRouteChains() })
+	return s.chains
+}
+
+// ReadAdmission returns the per-account and per-IP resume read budget. The
+// project library applies the same instance, so its reads count against it.
+func (s *Service) ReadAdmission() api.Middleware { return s.sharedRouteChains().read }
+
+// WriteAdmission returns the per-account and per-IP resume write budget. The
+// project library applies the same instance, so its writes count against it.
+func (s *Service) WriteAdmission() api.Middleware { return s.sharedRouteChains().write }
+
+// AllowSlugClaim records one changed-slug attempt for the account in the
+// rolling budget resume publish uses and reports whether it is admitted.
+func (s *Service) AllowSlugClaim(accountID uuid.UUID, now time.Time) bool {
+	return s.slugAttempts.AllowChangedSlug(accountID, now)
 }
 
 func (c routeChains) wrap(route routeSpec, handler http.Handler) http.Handler {

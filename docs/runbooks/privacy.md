@@ -63,11 +63,13 @@ absolute expiry, so no later than 90 days after sign-in (`session_metadata_*`
 log keys); `session_oldest_age_seconds` reports age since the original sign-in,
 not since the redaction cutoff. Released slug tombstones are deleted 180 days
 after release (`slug_tombstones_*` log keys); `slug_tombstones_oldest_seconds`
-reports age since release. Lifecycle audit records and completed media jobs are
-retained for 180 days from occurrence or completion. Pending and overdue media
-jobs never expire. Existing OAuth transaction, authorization-code, token, and
-idle-client cleanup is limited to 200 rows per category/pass. The result reports
-category totals, backlogs, and oldest ages.
+reports age since release. Released project slug holds are deleted 180 days
+after release (`project_slug_holds_deleted` log key). Lifecycle audit records
+and completed media jobs are retained for 180 days from occurrence or
+completion. Pending and overdue media jobs never expire. Existing OAuth
+transaction, authorization-code, token, and idle-client cleanup is limited to
+200 rows per category/pass. The result reports category totals, backlogs, and
+oldest ages.
 
 ## Triage and rollback
 

@@ -16,6 +16,7 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
@@ -125,7 +126,7 @@ type exportEnvelope struct {
 
 // exportData is one account's portable export bundle.
 type exportData struct {
-	// ExportVersion is the bundle format version, always 1.
+	// ExportVersion is the bundle format version, always 2.
 	ExportVersion int `json:"exportVersion"`
 	// ExportedAt is when the bundle was built, in UTC.
 	ExportedAt time.Time `json:"exportedAt"`
@@ -133,6 +134,8 @@ type exportData struct {
 	Account exportProfile `json:"account"`
 	// Resumes lists the account's resumes, at most three.
 	Resumes []exportResume `json:"resumes"`
+	// Projects lists the private library in creation order.
+	Projects []project.Project `json:"projects"`
 }
 
 // exportProfile is the account profile in an export bundle.
@@ -297,19 +300,24 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 			Photo:           photo,
 		}
 	}
+	projects, projectErr := s.exportProjects(ctx, q, userID)
+	if projectErr != nil {
+		return nil, projectErr
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit snapshot: %w", err)
 	}
 
 	return marshalExportPayload(exportData{
-		ExportVersion: 1,
+		ExportVersion: 2,
 		ExportedAt:    s.now().UTC(),
 		Account: exportProfile{
 			ID: profile.ID, Email: profile.Email, Name: profile.Name,
 			CreatedAt: profile.CreatedAt, UpdatedAt: profile.UpdatedAt,
 			LinkedProviders: providers,
 		},
-		Resumes: resumes,
+		Resumes:  resumes,
+		Projects: projects,
 	})
 }
 

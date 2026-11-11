@@ -102,6 +102,8 @@ type Result struct {
 	// AuthenticationSecurityEventsOldestSeconds is the age of the oldest such
 	// event, in seconds.
 	AuthenticationSecurityEventsOldestSeconds int64 `json:"authenticationSecurityEventsOldestSeconds"`
+	// ProjectSlugHoldsDeleted counts account-local reservations deleted after 180 days.
+	ProjectSlugHoldsDeleted int64 `json:"projectSlugHoldsDeleted"`
 	// SlugTombstonesDeleted counts slug tombstones deleted after their
 	// reservation period.
 	SlugTombstonesDeleted int64 `json:"slugTombstonesDeleted"`
@@ -183,6 +185,7 @@ func (w *Worker) logResult(ctx context.Context, command string, result Result) {
 		"authentication_security_events_deleted", result.AuthenticationSecurityEventsDeleted,
 		"authentication_security_events_backlog", result.AuthenticationSecurityEventsBacklog,
 		"authentication_security_events_oldest_seconds", result.AuthenticationSecurityEventsOldestSeconds,
+		"project_slug_holds_deleted", result.ProjectSlugHoldsDeleted,
 		"slug_tombstones_deleted", result.SlugTombstonesDeleted,
 		"slug_tombstones_backlog", result.SlugTombstonesBacklog,
 		"slug_tombstones_oldest_seconds", result.SlugTombstonesOldestSeconds,

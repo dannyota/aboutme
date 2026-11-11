@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -101,6 +102,8 @@ type Service struct {
 	printQueue                 PrintQueue
 	pdfAdmission               api.Middleware
 	slugAttempts               slugAttemptLimiter
+	chainsOnce                 sync.Once
+	chains                     routeChains
 	transactionOrderHook       func(string)
 	publishPreflightOrderHook  func(string)
 	signInToViewEnabled        bool
@@ -225,7 +228,7 @@ func registeredRoutes() []routeSpec {
 
 // RegisterRoutes attaches the whole resume route inventory in one step.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
-	chains := s.newRouteChains()
+	chains := s.sharedRouteChains()
 	byPattern := make(map[string][]routeSpec)
 	for _, route := range registeredRoutes() {
 		byPattern[route.Pattern] = append(byPattern[route.Pattern], route)

@@ -174,6 +174,9 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	}); err != nil {
 		return fmt.Errorf("accountapi: insert deletion audit: %w", err)
 	}
+	if _, err := qtx.DeleteAccountProjectSlugHolds(ctx, plan.user.ID); err != nil {
+		return fmt.Errorf("accountapi: delete project slug holds: %w", err)
+	}
 	if deleted, err := qtx.DeleteAccountUser(ctx, plan.user.ID); err != nil {
 		return fmt.Errorf("accountapi: delete user: %w", err)
 	} else if deleted != 1 {

@@ -6,8 +6,8 @@ project library and project pages ([design](../../design/projects.md),
 [ADR 0029](../../adr/0029-account-project-library.md)), and for GitHub
 evidence ([design](../../design/github-evidence.md),
 [ADR 0030](../../adr/0030-github-evidence.md)). The owner approved
-the design on 2026-11-11; nothing is implemented, so every row is `PLANNED` and
-names no test yet. See [README.md](./README.md) for matrix rules and the full prefix index.
+the design on 2026-11-11. The private library store, owner API, export and
+deletion have landed; every other row is `PLANNED` and names no test yet. See [README.md](./README.md) for matrix rules and the full prefix index.
 
 | ID | Design clause | Statement | Phase/task | State | Test/UAT reference |
 | - | - | - | - | - | - |
@@ -18,11 +18,11 @@ names no test yet. See [README.md](./README.md) for matrix rules and the full pr
 | AC-PROJ-005 | Project pages | `/{slug}/projects` and `/{slug}/projects/{project-slug}` are served only for a live resume and a visible linked entry; every other state answers as an unknown resume | v0.9 | PLANNED | None yet |
 | AC-PROJ-006 | Generations and revocation | Unpublish, sign in to view, hide, unlink, project deletion and slug rename take effect on the next request, and a cached page is never reused across them | v0.9 | PLANNED | None yet |
 | AC-PROJ-007 | Library mutations | Deleting a project unlinks it from every resume of the account in one transaction, leaves each document valid, advances each revision, and is replayed by its idempotency key | v0.9 | PLANNED | None yet |
-| AC-PROJ-008 | Library mutations | A released project slug cannot be claimed again within the account for 180 days | v0.9 | PLANNED | None yet |
+| AC-PROJ-008 | Library mutations | A released project slug cannot be claimed again within the account for 180 days | v0.9 | LANDED | `internal/project/store_test.go` `TestStore_SlugsAndHolds` (rename and delete holds, held at 180 days less 1 µs, free at 180 days, free in another account), `TestStore_ProposalWhenSuffixedCandidateEqualsBase`; `internal/projectapi/adversarial_test.go` `TestProjects_ConcurrentSlugClaimsCommitOnce`, `TestProjects_ConcurrentProposalsAreDistinct`; `internal/privacyretention/projects_test.go` `TestRetain_ExpiredProjectSlugHolds` |
 | AC-PROJ-009 | Representations | Public JSON gains only `projectLinks` and no project id; Markdown, JSON-LD, sitemap, `llms.txt`, showcase and the live stream protocol are unchanged by projects; project pages are `noindex` unless SEO and GEO is on | v0.9 | PLANNED | None yet |
 | AC-PROJ-010 | Agents | Library tools need `projects:read` or `projects:write`; a grant made before those scopes answers `scope_denied`; no tool publishes, attaches evidence or connects an account | v0.9 | PLANNED | None yet |
 | AC-PROJ-011 | Print | In the public page and the PDF, a linked available entry's title links to its project page; layout and pagination of a resume without linked projects are unchanged | v0.9 | PLANNED | None yet |
-| AC-PROJ-012 | Export and deletion | The account export includes the library, and account deletion removes the library and its slug holds | v0.9 | PLANNED | None yet |
+| AC-PROJ-012 | Export and deletion | The account export includes the library, and account deletion removes the library and its slug holds | v0.9 | LANDED | `internal/accountapi/export_projects_test.go` `TestExport_ProjectsVersionAndCreationOrder`, `TestExport_EmptyProjectsArray`, `TestAccountDeletion_RemovesProjectsAndSlugHolds`; `docs/api/test/privacy.test.ts` "closes the portable envelope and excludes credential fields" |
 | AC-PROJ-013 | GitHub evidence: enablement and connection | With evidence credentials unset every evidence route answers 404 and sign-in is unchanged; a connection is made only by the user who started it, with an unchanged connection generation, and never signs in or links an identity | v0.9 | PLANNED | None yet |
 | AC-PROJ-014 | GitHub evidence: session | A token response with a non-empty or missing scope is refused; the token exists only in server memory for one session of at most 30 minutes and appears in no response, log, export or database row | v0.9 | PLANNED | None yet |
 | AC-PROJ-015 | GitHub evidence: items | An item is attached only when its rule holds for the connected account id; a login match, contributor listing or commit never confirms; a disconnect that commits during an attach leaves nothing attached | v0.9 | PLANNED | None yet |

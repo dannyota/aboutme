@@ -381,6 +381,11 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		// matcher in deploy/caddy/Caddyfile.
 		{name: "api", method: http.MethodGet, path: "/api", want: wantGo},
 		{name: "api_v1_wildcard", method: http.MethodGet, path: "/api/v1/nope", want: wantGo},
+		{name: "projects_list", method: http.MethodGet, path: "/api/v1/projects", want: wantGo},
+		{name: "projects_create", method: http.MethodPost, path: "/api/v1/projects", want: wantGo},
+		{name: "projects_read", method: http.MethodGet, path: "/api/v1/projects/018f5b6a-9a3e-7c21-8b1e-000000000001", want: wantGo},
+		{name: "projects_replace", method: http.MethodPut, path: "/api/v1/projects/018f5b6a-9a3e-7c21-8b1e-000000000001", want: wantGo},
+		{name: "projects_delete", method: http.MethodDelete, path: "/api/v1/projects/018f5b6a-9a3e-7c21-8b1e-000000000001", want: wantGo},
 		{name: "sitemap_xml", method: http.MethodGet, path: "/sitemap.xml", want: wantGo},
 		{name: "robots_txt", method: http.MethodGet, path: "/robots.txt", want: wantGo},
 		{name: "llms_txt", method: http.MethodGet, path: "/llms.txt", want: wantGo},

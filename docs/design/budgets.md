@@ -22,6 +22,24 @@ every per-account and per-IP limit, revocation deadline, and admission bound;
 the [scaling contract](scaling/README.md) and
 [policy catalog](scaling/policy-catalog.md) fix its shared pools and policies.
 
+## Account project library
+
+| Budget                                | Limit                                                               | Where enforced                                       |
+| ------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------- |
+| Projects per account                  | 30                                                                  | Owner-locked project store                           |
+| Languages per project                 | 1 to 4 lowercase primary subtags                                    | Project validation                                   |
+| Technologies per project              | 20, each at most 40 characters                                      | Project validation                                   |
+| Project name and role                 | 120 characters each                                                 | Project validation                                   |
+| Project summary and outcome           | 300 and 600 characters                                              | Project validation                                   |
+| Project description                   | 16 KiB UTF-8, before and after sanitizing                           | Project validation and resume sanitizer              |
+| Stored project document               | 96 KiB PostgreSQL JSON text                                         | Project store and database constraint                |
+| Project slug                          | 2 to 40 ASCII lowercase letters, digits and single internal hyphens | Project validation and database constraint           |
+| Released project slug                 | Held within the account for 180 days                                | Project store; expired rows removed by privacy sweep |
+| Project date years and months         | 1900 to 2100; 1 to 12                                               | Resume date range rules in project validation        |
+| Project request body and JSON nesting | 256 KiB; 100 levels                                                 | Project transport and decoder                        |
+| Project reads and writes              | Count against resume reads and writes per account and IP            | Resume route limiters, same instances                |
+| Project slug claims                   | Count against slug claim attempts per account                       | Slug route limiter, same instance                    |
+
 ## Runtime bounds
 
 | Budget                                                   | Target                                                                                                                                                            | Where enforced                                           |

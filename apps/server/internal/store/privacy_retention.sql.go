@@ -64,6 +64,31 @@ func (q *Queries) DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCo
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredProjectSlugHoldsPage = `-- name: DeleteExpiredProjectSlugHoldsPage :execrows
+WITH doomed AS (
+    SELECT user_id, slug FROM project_slug_holds
+    WHERE released_at <= $1::timestamptz
+    ORDER BY released_at, user_id, slug
+    LIMIT LEAST($2::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM project_slug_holds AS hold
+USING doomed WHERE hold.user_id = doomed.user_id AND hold.slug = doomed.slug
+`
+
+type DeleteExpiredProjectSlugHoldsPageParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg DeleteExpiredProjectSlugHoldsPageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredProjectSlugHoldsPage, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredSlugTombstonesPage = `-- name: DeleteExpiredSlugTombstonesPage :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id

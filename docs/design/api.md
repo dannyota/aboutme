@@ -65,6 +65,7 @@ behavior that contract changes must keep.
 | `POST/GET/PATCH/DELETE /resumes/{id}/photo`                           | Owner-only photo upload, read, crop, replace, and delete         |
 | `POST /resumes/{id}/publish`                                          | Slug, publish controls, showcase opt-in, title, and favicon      |
 | `GET /resumes/{id}/pdf`                                               | Owner PDF                                                        |
+| `GET/POST /projects`, `GET/PUT/DELETE /projects/{id}`                 | Private project library list, create, read, replace, and delete  |
 | `GET /events`, `GET /live/{slug}`                                     | Authenticated and public SSE invalidation streams                |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`      | Live-gated public document and photo                             |
 | `GET /public/resumes/{slug}/pdf`                                      | Live and download-gated public PDF                               |

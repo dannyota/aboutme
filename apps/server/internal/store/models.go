@@ -249,6 +249,22 @@ type PrivacySweepState struct {
 	UpdatedAt time.Time
 }
 
+type Project struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Slug      string
+	Revision  int64
+	Document  json.RawMessage
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type ProjectSlugHold struct {
+	UserID     uuid.UUID
+	Slug       string
+	ReleasedAt time.Time
+}
+
 type PublicState struct {
 	Singleton           bool
 	DiscoveryGeneration int64
