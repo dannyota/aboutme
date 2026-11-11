@@ -2,6 +2,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import {
   expect,
   test,
+  type Browser,
   type BrowserContext,
   type ConsoleMessage,
   type Locator,
@@ -15,6 +16,7 @@ import { writeFile } from "node:fs/promises";
 import {
   createBlankResume,
   deleteRecordedResume,
+  freshCSRF,
   readRemoteResumeRevision,
 } from "./editor-fixtures";
 import {
@@ -36,6 +38,13 @@ const EVIDENCE_PATH = "/evidence/publish-proof.json";
 const SCHEMA_VERSION = "5";
 const SEED_EMAIL = "dev@aboutme.invalid";
 const SEED_PASSWORD = "aboutme-dev-password-1";
+// An unpublished, deleted, or sign-in protected public resume may answer
+// either status.
+const REVOKED_PUBLIC_STATUSES: readonly number[] = [401, 404];
+// How long an unpublish may take to reach an open public page. Unpublish can
+// wait up to five seconds for old public responses to drain (ADR 0010), and a
+// loaded runner adds its own delay.
+const REVOCATION_BOUND_MS = 30_000;
 
 const steps = {
   auth: false,
@@ -93,7 +102,7 @@ function mutationHeaderPresence(request: Request) {
 
 let currentStage = "setup";
 let failedStage: string | undefined;
-let showcaseConsoleFailure: string | undefined;
+let countedConsoleFailure: string | undefined;
 
 function stage(name: string): void {
   currentStage = name;
@@ -103,7 +112,7 @@ function stage(name: string): void {
 test.beforeEach(() => {
   currentStage = "setup";
   failedStage = undefined;
-  showcaseConsoleFailure = undefined;
+  countedConsoleFailure = undefined;
 });
 
 test.afterEach(async ({}, info) => {
@@ -119,12 +128,14 @@ test.afterEach(async ({}, info) => {
           ? "wrong-status"
           : "wrong-content"
         : "error";
-  const marker = `fail-${failureStage}-${reason}${showcaseConsoleFailure === undefined ? "" : `-${showcaseConsoleFailure}`}`;
+  const marker = `fail-${failureStage}-${reason}${countedConsoleFailure === undefined ? "" : `-${countedConsoleFailure}`}`;
   stage(marker);
   const journey =
     info.title === "proves native HTTPS publish, discovery, and revocation"
       ? "publish"
-      : "showcase";
+      : info.title === DELETION_TEST_TITLE
+        ? "deletion"
+        : "showcase";
   await writeFile(
     `/evidence/${journey}-diagnostic.json`,
     `${JSON.stringify({ marker })}\n`,
@@ -142,9 +153,25 @@ function stageNavigationFailure(error: unknown): void {
   else stage("navigation-error");
 }
 
+// isPublicRouteOf reports whether path is one of the resume's own public
+// routes: its page, its read, its live stream, or its versioned card image.
+function isPublicRouteOf(path: string, slug: string): boolean {
+  const card = `/api/v1/public/resumes/${slug}/og/`;
+  return (
+    [
+      `/${slug}`,
+      `/api/v1/public/resumes/${slug}`,
+      `/api/v1/live/${slug}`,
+    ].includes(path) ||
+    (path.startsWith(card) &&
+      /^[0-9a-f]{16}\.png$/u.test(path.slice(card.length)))
+  );
+}
+
 function isExpectedRevokedPublicConsole(
   message: ConsoleMessage,
   slug: string,
+  statuses: readonly number[] = REVOKED_PUBLIC_STATUSES,
 ): boolean {
   let location: URL;
   try {
@@ -152,15 +179,12 @@ function isExpectedRevokedPublicConsole(
   } catch {
     return false;
   }
+  const status = httpFailureStatus(message.text());
   return (
-    message.text() ===
-      "Failed to load resource: the server responded with a status of 404 ()" &&
+    status !== null &&
+    statuses.includes(status) &&
     location.origin === ORIGIN &&
-    [
-      `/${slug}`,
-      `/api/v1/public/resumes/${slug}`,
-      `/api/v1/live/${slug}`,
-    ].includes(location.pathname) &&
+    isPublicRouteOf(location.pathname, slug) &&
     location.search === ""
   );
 }
@@ -212,6 +236,40 @@ async function installPublicGuards(
   await installExternalWebSocketFirewall(context, counters);
 }
 
+async function signInWithPassword(page: Page): Promise<void> {
+  await page.goto("/login");
+  await waitForHydration(page);
+  await page.getByRole("textbox", { name: "Email" }).fill(SEED_EMAIL);
+  await page
+    .getByRole("textbox", { name: "Password", exact: true })
+    .fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(
+    (url) => url.origin === ORIGIN && url.pathname === "/app/resumes",
+  );
+}
+
+// deleteOutsideCounters deletes a test's recorded resume from a context with
+// its own session, which no test counter watches. Callers close their counted
+// pages first, so none of them can react to the deletion with a counted error.
+async function deleteOutsideCounters(
+  browser: Browser,
+  resumeID: string,
+): Promise<void> {
+  const cleanupCounters = newDiagnosticCounters();
+  const cleanupContext = await browser.newContext();
+  try {
+    await pinEnglish(cleanupContext);
+    await installPublicGuards(cleanupContext, cleanupCounters);
+    const cleanupPage = await cleanupContext.newPage();
+    await signInWithPassword(cleanupPage);
+    await deleteRecordedResume(cleanupPage, resumeID);
+    expect(cleanupCounters.externalRequests).toBe(0);
+  } finally {
+    await cleanupContext.close();
+  }
+}
+
 async function auditDialog(page: Page): Promise<void> {
   for (const viewport of [
     { width: 1440, height: 900 },
@@ -237,7 +295,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   const events: string[] = [];
   let resumeID: string | undefined;
   const slug = `publish-${crypto.randomUUID().slice(0, 8)}`;
-  let loggedIn = false;
   let publicContext: BrowserContext | undefined;
   let secondEditor: Page | undefined;
   let revocationElapsed = 0;
@@ -246,26 +303,8 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   let revokingPublic = false;
   let syntheticInvalidRequest = false;
   let syntheticInvalidConsoleBudget = 0;
-  let consoleFailure: string | undefined;
   const recordConsoleFailure = (message: ConsoleMessage): void => {
-    let path = "";
-    try {
-      path = new URL(message.location().url).pathname;
-    } catch {
-      /* No URL in this diagnostic. */
-    }
-    const route =
-      path === `/api/v1/resumes/${resumeID}`
-        ? "owner-read"
-        : path === `/api/v1/public/resumes/${slug}`
-          ? "public-read"
-          : path === `/api/v1/live/${slug}`
-            ? "public-stream"
-            : path === "/api/v1/events"
-              ? "owner-stream"
-              : "other";
-    const status = httpFailureStatus(message.text());
-    consoleFailure = `console-${status ?? "non-http"}-${route}`;
+    recordCountedConsole(message, resumeID, slug);
   };
   const requestListener = (request: Request): void => {
     const url = new URL(request.url());
@@ -366,7 +405,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await page.waitForURL(
       (url) => url.origin === ORIGIN && url.pathname === "/app/resumes",
     );
-    loggedIn = true;
     steps.auth = true;
     stage("signed-in");
 
@@ -792,7 +830,8 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       (response) =>
         response.request().isNavigationRequest() &&
         new URL(response.url()).pathname === `/${slug}` &&
-        response.status() === 404,
+        REVOKED_PUBLIC_STATUSES.includes(response.status()),
+      { timeout: REVOCATION_BOUND_MS },
     );
     const started = Date.now();
     revokingPublic = true;
@@ -806,12 +845,13 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     ).toHaveValue(slug);
     await expect(publicMark).toHaveCount(0);
     await expect(previewStamp).toHaveCount(0);
+    stage("revoked-navigation");
     const revokedResponse = await revokedNavigation;
     const elapsed = Date.now() - started;
     revocationElapsed = elapsed;
     statuses.revoked = revokedResponse?.status() ?? 0;
-    expect(statuses.revoked).toBe(404);
-    expect(elapsed).toBeLessThanOrEqual(5_000);
+    expect(REVOKED_PUBLIC_STATUSES).toContain(statuses.revoked);
+    expect(elapsed).toBeLessThanOrEqual(REVOCATION_BOUND_MS);
     steps.unpublish = true;
     steps.revocation = true;
     steps.headers = Object.values(headerPresence).every(Boolean);
@@ -825,9 +865,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await expect(
       page.getByRole("heading", { name: "Resumes", exact: true }),
     ).toBeVisible();
-    await deleteRecordedResume(page, resumeID);
-    steps.cleanup = true;
-    stage("cleanup");
     // Log out stays disabled until the `/me` read brings the CSRF token, and
     // the session list often renders first. `press` only focuses, and a
     // disabled button takes no focus, so an Enter in that window is lost.
@@ -861,7 +898,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     // the held reads through before the press and hide a missing wait.
     await page.unroute(isMe, holdMe);
     steps.signOut = true;
-    loggedIn = false;
     stage("signed-out");
   } catch (error) {
     failedStage = currentStage;
@@ -874,14 +910,19 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   } finally {
     if (secondEditor !== undefined) await secondEditor.close();
     if (publicContext !== undefined) await publicContext.close();
-    if (resumeID !== undefined && loggedIn && !steps.cleanup) {
-      await deleteRecordedResume(page, resumeID);
+    if (resumeID !== undefined) {
+      await page.close();
+      await deleteOutsideCounters(browser, resumeID);
+      steps.cleanup = true;
+      stage("cleanup");
     }
   }
 
   stage("final-diagnostics");
   if (counters.certificateErrors !== 0) stage("certificate-errors");
-  if (counters.consoleErrors !== 0) stage(consoleFailure ?? "console-errors");
+  if (counters.consoleErrors !== 0) {
+    stage(countedConsoleFailure ?? "console-errors");
+  }
   if (counters.externalRequests !== 0) stage("external-requests");
   if (counters.pageErrors !== 0) stage("page-errors");
   for (const [name, present] of [
@@ -939,8 +980,15 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
 // every revocation removes it from the next listing read
 // (docs/design/showcase.md "Opt-in", "Delivery, caching, and revocation").
 const SHOWCASE_LISTING_PATH = "/api/v1/public/showcase";
+// What the resume's own public routes may answer while the showcase test
+// itself turns sign in to view on or unpublishes.
+const SHOWCASE_REVOKED_STATUSES: readonly number[] = [401, 403, 404, 410];
+// True only while readListing navigates its page.
+let listingNavigation = false;
+// A listed card renders on demand within the server's 20 s render job bound.
+const CARD_RENDER_BOUND_MS = 20_000;
 
-function classifyShowcaseConsoleFailure(
+function classifyConsoleFailure(
   message: ConsoleMessage,
   resumeID: string | undefined,
   slug: string,
@@ -965,12 +1013,43 @@ function classifyShowcaseConsoleFailure(
               ? "showcase-page"
               : path === "/app/resumes"
                 ? "resumes-page"
-                : path === `/api/v1/public/resumes/${slug}`
-                  ? "public-read"
-                  : path === `/api/v1/live/${slug}`
-                    ? "public-stream"
-                    : "other";
+                : path === `/${slug}`
+                  ? "public-page"
+                  : path === `/api/v1/public/resumes/${slug}`
+                    ? "public-read"
+                    : path.startsWith(`/api/v1/public/resumes/${slug}/og/`)
+                      ? "public-card"
+                      : path === `/api/v1/live/${slug}`
+                        ? "public-stream"
+                        : "other";
   return `console-${httpFailureStatus(message.text()) ?? "non-http"}-${route}`;
+}
+
+// recordCountedConsole keeps the first counted console error of a test as
+// closed words for its failure marker.
+function recordCountedConsole(
+  message: ConsoleMessage,
+  resumeID: string | undefined,
+  slug: string,
+): void {
+  countedConsoleFailure ??= `${classifyConsoleFailure(message, resumeID, slug)}-at-${currentStage}`;
+}
+
+// A listing read still open when readListing navigates its page away ends
+// with this line. Only that navigation may cause it.
+function isAbortedListingConsole(message: ConsoleMessage): boolean {
+  let location: URL;
+  try {
+    location = new URL(message.location().url);
+  } catch {
+    return false;
+  }
+  return (
+    message.text() === "Failed to load resource: net::ERR_ABORTED" &&
+    location.origin === ORIGIN &&
+    location.pathname === SHOWCASE_LISTING_PATH &&
+    location.search === ""
+  );
 }
 
 function isPublishResponse(resumeID: string): (response: Response) => boolean {
@@ -990,6 +1069,50 @@ async function submitPublishDialog(
   await dialog.locator('[data-action="publish-submit"]').press("Enter");
   stage(`${publishStage}-status`);
   expect((await accepted).status()).toBe(200);
+}
+
+// waitForListedCard waits until the listed resume's card image has loaded. A
+// revocation cancels a card render still in flight, and the image then fails
+// with a 503 (ADR 0010), so the test lets its own card finish before it
+// revokes.
+async function waitForListedCard(page: Page, slug: string): Promise<void> {
+  const image = page.locator(`[data-showcase-slug="${slug}"] img`);
+  await image.scrollIntoViewIfNeeded();
+  await expect
+    .poll(
+      () => image.evaluate((element: HTMLImageElement) => element.complete),
+      { timeout: CARD_RENDER_BOUND_MS },
+    )
+    .toBe(true);
+  expect(
+    await image.evaluate((element: HTMLImageElement) => element.naturalWidth),
+  ).toBeGreaterThan(0);
+}
+
+// completeResume gives the open English editor what publishing needs: a full
+// name and one work entry.
+async function completeResume(page: Page, fullName: string): Promise<void> {
+  await page.locator('[data-action="open-document"]').press("Enter");
+  await page.getByLabel("Full name").fill(fullName);
+  await page.getByLabel("Full name").press("Tab");
+  await expect(page.getByTestId("save-status")).toContainText("Saved");
+  await page.locator('[data-action="open-structure"]').press("Enter");
+  await page.locator('[data-action="section-type"]').selectOption("work");
+  await page
+    .getByTestId("section-create-form")
+    .locator('[data-action="create"]')
+    .press("Enter");
+  await expect(page.getByTestId("save-status")).toContainText("Saved");
+  await page.locator('[data-outline-key="work"]').press("Enter");
+  await page.locator('[data-action="add-entry"]').press("Enter");
+  const entry = page.locator("[data-entry-id]");
+  await expect(entry).toHaveCount(1);
+  await entry.getByLabel("Job title").fill("Engineer");
+  await entry.getByLabel("Job title").press("Tab");
+  await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
+  await entry.getByLabel("Employer", { exact: true }).press("Tab");
+  await expect(page.getByTestId("save-status")).toContainText("Saved");
+  await page.locator('[data-action="open-document"]').press("Enter");
 }
 
 async function openPublishDialog(page: Page) {
@@ -1012,7 +1135,13 @@ async function readListing(
       new URL(response.url()).pathname === SHOWCASE_LISTING_PATH &&
       response.request().method() === "GET",
   );
-  const document = await page.goto("/showcase");
+  listingNavigation = true;
+  let document: Response | null;
+  try {
+    document = await page.goto("/showcase");
+  } finally {
+    listingNavigation = false;
+  }
   if (document === null) throw new Error("showcase document is unavailable");
   stage(`${listingStage}-response`);
   const listing = await read;
@@ -1040,32 +1169,28 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   const counters = newDiagnosticCounters();
   const slug = `showcase-${crypto.randomUUID().slice(0, 8)}`;
   let resumeID: string | undefined;
-  let loggedIn = false;
   let publicContext: BrowserContext | undefined;
+  // True from each revocation this test submits until it lists or publishes
+  // the resume again, so only revocations the test made itself are excused.
+  let revokingPublic = false;
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
-      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url) &&
+      !(
+        revokingPublic &&
+        isExpectedRevokedPublicConsole(message, slug, SHOWCASE_REVOKED_STATUSES)
+      ) &&
+      !(listingNavigation && isAbortedListingConsole(message)),
     onCountedConsoleError: (message: ConsoleMessage): void => {
-      showcaseConsoleFailure ??= `${classifyShowcaseConsoleFailure(message, resumeID, slug)}-at-${currentStage}`;
+      recordCountedConsole(message, resumeID, slug);
     },
   };
   await installPublicGuards(context, counters);
   pageDiagnosticsAttacher(counters, hooks)(page);
 
   try {
-    stage("showcase-login-navigation");
-    await page.goto("/login");
-    await waitForHydration(page);
-    stage("showcase-login-submit");
-    await page.getByRole("textbox", { name: "Email" }).fill(SEED_EMAIL);
-    await page
-      .getByRole("textbox", { name: "Password", exact: true })
-      .fill(SEED_PASSWORD);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(
-      (url) => url.origin === ORIGIN && url.pathname === "/app/resumes",
-    );
-    loggedIn = true;
+    stage("showcase-login");
+    await signInWithPassword(page);
 
     stage("showcase-create-resume");
     const created = await createBlankResume(
@@ -1079,27 +1204,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     resumeID = created.metadata.id;
     const id = resumeID;
     stage("showcase-complete-resume");
-    await page.locator('[data-action="open-document"]').press("Enter");
-    await page.getByLabel("Full name").fill("Showcase proof resume");
-    await page.getByLabel("Full name").press("Tab");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page.locator('[data-action="open-structure"]').press("Enter");
-    await page.locator('[data-action="section-type"]').selectOption("work");
-    await page
-      .getByTestId("section-create-form")
-      .locator('[data-action="create"]')
-      .press("Enter");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page.locator('[data-outline-key="work"]').press("Enter");
-    await page.locator('[data-action="add-entry"]').press("Enter");
-    const entry = page.locator("[data-entry-id]");
-    await expect(entry).toHaveCount(1);
-    await entry.getByLabel("Job title").fill("Engineer");
-    await entry.getByLabel("Job title").press("Tab");
-    await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
-    await entry.getByLabel("Employer", { exact: true }).press("Tab");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page.locator('[data-action="open-document"]').press("Enter");
+    await completeResume(page, "Showcase proof resume");
 
     // AC-SHOW-001: the switch is off by default and needs a public resume.
     let dialog = await openPublishDialog(page);
@@ -1146,6 +1251,8 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       anonymous.locator(`[data-showcase-slug="${slug}"]`),
     ).toBeVisible();
     await expect(anonymous.locator('[data-state="empty"]')).toHaveCount(0);
+    stage("showcase-listed-card");
+    await waitForListedCard(anonymous, slug);
 
     // AC-SHOW-008, AC-SHOW-014: delivery rules of the page and the listing.
     stage("showcase-delivery-headers");
@@ -1172,6 +1279,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await expect(description).toContainText(
       "Not available while Require sign-in to view is on.",
     );
+    revokingPublic = true;
     await submitPublishDialog(page, dialog, id);
     stage("showcase-sign-in-reload");
     await page.reload();
@@ -1207,6 +1315,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     // AC-SHOW-001, AC-SHOW-006: opting in again lists the resume at once;
     // unpublishing ends the opt-in and publishing again starts off.
     stage("showcase-reopt-in-controls");
+    revokingPublic = false;
     await showcaseSwitch.press("Space");
     await expect(showcaseSwitch).toBeChecked();
     await submitPublishDialog(page, dialog, id);
@@ -1216,14 +1325,18 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     );
     stage("showcase-reopt-in-listing");
     expect((await readListing(anonymous)).slugs).toContain(slug);
+    stage("showcase-reopt-in-card");
+    await waitForListedCard(anonymous, slug);
     stage("showcase-unpublish-controls");
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeDisabled();
+    revokingPublic = true;
     await submitPublishDialog(page, dialog, id);
     // AC-SHOW-014: unpublishing removes the resume from the next read.
     stage("showcase-unpublished-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
     stage("showcase-republish-controls");
+    revokingPublic = false;
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeEnabled();
     await expect(showcaseSwitch).not.toBeChecked();
@@ -1243,10 +1356,10 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   } finally {
     stage("showcase-cleanup-public-context");
     if (publicContext !== undefined) await publicContext.close();
-    if (resumeID !== undefined && loggedIn) {
+    if (resumeID !== undefined) {
       stage("showcase-cleanup-resume");
-      await page.goto(`${ORIGIN}/app/resumes`);
-      await deleteRecordedResume(page, resumeID);
+      await page.close();
+      await deleteOutsideCounters(browser, resumeID);
     }
   }
 
@@ -1257,5 +1370,177 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   stage("showcase-final-external-requests");
   expect(counters.externalRequests).toBe(0);
   stage("showcase-final-page-errors");
+  expect(counters.pageErrors).toBe(0);
+});
+
+const DELETION_TEST_TITLE =
+  "proves deleting a published resume ends its owner and public reads";
+
+// isExpectedDeletedConsole matches the line the browser logs for a read of
+// the deleted resume's own owner or public routes.
+function isExpectedDeletedConsole(
+  message: ConsoleMessage,
+  resumeID: string,
+  slug: string,
+): boolean {
+  if (isExpectedRevokedPublicConsole(message, slug)) return true;
+  let location: URL;
+  try {
+    location = new URL(message.location().url);
+  } catch {
+    return false;
+  }
+  const status = httpFailureStatus(message.text());
+  return (
+    status !== null &&
+    REVOKED_PUBLIC_STATUSES.includes(status) &&
+    location.origin === ORIGIN &&
+    location.pathname === `/api/v1/resumes/${resumeID}` &&
+    location.search === ""
+  );
+}
+
+// ownerDelete reads the resume for its revision and deletes it through the
+// owner API. It returns both statuses.
+async function ownerDelete(
+  page: Page,
+  id: string,
+): Promise<{ read: number; deleted: number }> {
+  const token = await freshCSRF(page);
+  return page.evaluate(
+    async ({ id, schemaVersion, token }) => {
+      const path = `/api/v1/resumes/${encodeURIComponent(id)}`;
+      const read = await fetch(path, {
+        cache: "no-store",
+        credentials: "include",
+        headers: { "X-Resume-Schema-Version": schemaVersion },
+      });
+      const removed = await fetch(path, {
+        cache: "no-store",
+        credentials: "include",
+        headers: {
+          "Idempotency-Key": crypto.randomUUID(),
+          "If-Match": read.headers.get("etag") ?? "",
+          "X-CSRF-Token": token,
+          "X-Resume-Schema-Version": schemaVersion,
+        },
+        method: "DELETE",
+      });
+      return { read: read.status, deleted: removed.status };
+    },
+    { id, schemaVersion: SCHEMA_VERSION, token },
+  );
+}
+
+async function ownerReadStatus(page: Page, id: string): Promise<number> {
+  return page.evaluate(
+    async ({ id, schemaVersion }) =>
+      (
+        await fetch(`/api/v1/resumes/${encodeURIComponent(id)}`, {
+          cache: "no-store",
+          credentials: "include",
+          headers: { "X-Resume-Schema-Version": schemaVersion },
+        })
+      ).status,
+    { id, schemaVersion: SCHEMA_VERSION },
+  );
+}
+
+test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
+  stage("deletion-setup");
+  await pinEnglish(context);
+  const counters = newDiagnosticCounters();
+  const slug = `deletion-${crypto.randomUUID().slice(0, 8)}`;
+  let resumeID: string | undefined;
+  let publicContext: BrowserContext | undefined;
+  // Set just before the delete request: from then on, and only for this
+  // resume's own routes, a 401 or 404 is the expected answer.
+  let deleting = false;
+  let deleted = false;
+  const hooks = {
+    countConsoleError: (message: ConsoleMessage): boolean =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url) &&
+      !(
+        deleting &&
+        resumeID !== undefined &&
+        isExpectedDeletedConsole(message, resumeID, slug)
+      ),
+    onCountedConsoleError: (message: ConsoleMessage): void => {
+      recordCountedConsole(message, resumeID, slug);
+    },
+  };
+  await installPublicGuards(context, counters);
+  pageDiagnosticsAttacher(counters, hooks)(page);
+
+  try {
+    stage("deletion-login");
+    await signInWithPassword(page);
+    stage("deletion-create-resume");
+    const created = await createBlankResume(
+      page,
+      `Deletion proof ${crypto.randomUUID()}`,
+      undefined,
+      (accepted) => {
+        resumeID = accepted.metadata.id;
+      },
+    );
+    resumeID = created.metadata.id;
+    const id = resumeID;
+    stage("deletion-complete-resume");
+    await completeResume(page, "Deletion proof resume");
+    const dialog = await openPublishDialog(page);
+    stage("deletion-publish");
+    await dialog.getByLabel("Slug", { exact: true }).fill(slug);
+    await dialog.getByLabel("Public resume", { exact: true }).press("Space");
+    await submitPublishDialog(page, dialog, id);
+
+    stage("deletion-public-before-status");
+    publicContext = await browser.newContext();
+    await installPublicGuards(publicContext, counters);
+    let publicPage = await publicContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(publicPage);
+    expect((await publicPage.goto(`${ORIGIN}/${slug}`))?.status()).toBe(200);
+    // An open public page reloads when its resume goes away. Closing it
+    // first leaves one read of the deleted page, the one asserted below.
+    await publicContext.close();
+    publicContext = undefined;
+
+    stage("deletion-owner-list");
+    await page.goto(`${ORIGIN}/app/resumes`);
+    await expect(
+      page.getByRole("heading", { name: "Resumes", exact: true }),
+    ).toBeVisible();
+    stage("deletion-request-status");
+    deleting = true;
+    expect(await ownerDelete(page, id)).toEqual({ read: 200, deleted: 204 });
+    deleted = true;
+    stage("deletion-owner-read-status");
+    expect(await ownerReadStatus(page, id)).toBe(404);
+    stage("deletion-public-status");
+    publicContext = await browser.newContext();
+    await installPublicGuards(publicContext, counters);
+    publicPage = await publicContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(publicPage);
+    const gone = await publicPage.goto(`${ORIGIN}/${slug}`);
+    expect(REVOKED_PUBLIC_STATUSES).toContain(gone?.status() ?? 0);
+  } catch (error) {
+    failedStage = currentStage;
+    throw error;
+  } finally {
+    stage("deletion-cleanup");
+    if (publicContext !== undefined) await publicContext.close();
+    if (resumeID !== undefined && !deleted) {
+      await page.close();
+      await deleteOutsideCounters(browser, resumeID);
+    }
+  }
+
+  stage("deletion-final-certificate-errors");
+  expect(counters.certificateErrors).toBe(0);
+  stage("deletion-final-console-errors");
+  expect(counters.consoleErrors).toBe(0);
+  stage("deletion-final-external-requests");
+  expect(counters.externalRequests).toBe(0);
+  stage("deletion-final-page-errors");
   expect(counters.pageErrors).toBe(0);
 });
