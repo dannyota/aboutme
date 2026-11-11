@@ -6,7 +6,9 @@ import type { PublishCopy } from '../../i18n/publish';
 type ReauthenticationCopyKey
   = | 'currentPassword' | 'passwordAction' | 'providerContinue'
     | 'providerStart' | 'providerLink' | 'providerReturn' | 'providerRetry'
-    | 'wrongPassword' | 'reauthRateLimited' | 'reauthUnavailable';
+    | 'wrongPassword' | 'reauthRateLimited' | 'reauthUnavailable'
+    | 'secondFactorIntro' | 'secondFactorLink' | 'secondFactorContinue'
+    | 'secondFactorIncomplete';
 
 // Projects reuse this step for address changes and deletion, so it reads
 // only the state fields and copy it shows.
@@ -29,6 +31,7 @@ const emit = defineEmits<{
   'submit-password': [];
   'start-provider': [];
   'retry-provider': [];
+  'continue-second-factor': [];
 }>();
 </script>
 
@@ -103,11 +106,43 @@ const emit = defineEmits<{
     </Button>
   </div>
 
+  <!-- The factor page always returns to settings, never here, so it opens
+       in a new tab while this page keeps unsaved text and the action. -->
+  <div
+    v-else-if="state.kind === 'reauth-second-factor'"
+    class="grid gap-3"
+  >
+    <p>{{ copy.secondFactorIntro }}</p>
+    <a
+      href="/login/second-factor"
+      class="text-link underline underline-offset-4"
+      :data-action="`${actionPrefix}-second-factor-link`"
+      target="_blank"
+      rel="noopener"
+    >
+      {{ copy.secondFactorLink }}
+    </a>
+    <Button
+      type="button"
+      :data-action="`${actionPrefix}-second-factor-continue`"
+      :disabled="busy"
+      @click="emit('continue-second-factor')"
+    >
+      {{ copy.secondFactorContinue }}
+    </Button>
+  </div>
+
   <p
     v-if="state.kind === 'reauth-wrong-password'"
     role="alert"
   >
     {{ copy.wrongPassword }}
+  </p>
+  <p
+    v-if="state.kind === 'reauth-second-factor-incomplete'"
+    role="alert"
+  >
+    {{ copy.secondFactorIncomplete }}
   </p>
   <p
     v-if="

@@ -609,3 +609,118 @@ describe('publish controller', () => {
     },
   );
 });
+
+describe('publish controller second factor', () => {
+  /** An enrolled account answers the password with a pending factor. */
+  async function factorPending() {
+    const context = setup();
+    vi.mocked(context.api.dispatch).mockResolvedValueOnce({
+      kind: 'reauth-required',
+    });
+    await context.controller.submit(command);
+    vi.mocked(context.auth.mutate).mockResolvedValueOnce({
+      data: { secondFactorRequired: true },
+    });
+    const state = await context.controller.reauthPassword('password');
+    return { ...context, state };
+  }
+
+  const accepted = (context: ReturnType<typeof setup>) => ({
+    kind: 'accepted' as const,
+    resume: { ...context.accepted, revision: parseRevision('2') },
+  });
+
+  it('waits for the factor instead of resending', async () => {
+    const context = await factorPending();
+
+    expect(context.state).toMatchObject({ kind: 'reauth-second-factor' });
+    expect(context.controller.state.value.kind).toBe('reauth-second-factor');
+    expect(context.api.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('continues with the same attempt and key after the account check',
+    async () => {
+      const context = await factorPending();
+      vi.mocked(context.api.dispatch).mockResolvedValueOnce(accepted(context));
+
+      await expect(context.controller.continueAfterSecondFactor())
+        .resolves.toMatchObject({ kind: 'accepted' });
+
+      const calls = vi.mocked(context.api.dispatch).mock;
+      expect(calls.calls).toHaveLength(2);
+      expect(calls.calls[1]![0]).toBe(calls.calls[0]![0]);
+      expect(calls.calls[1]![0].idempotencyKey).toBe('publish-key');
+      expect(context.auth.refresh).toHaveBeenCalledOnce();
+      expect(vi.mocked(context.auth.refresh).mock.invocationCallOrder[0])
+        .toBeLessThan(calls.invocationCallOrder[1]!);
+    });
+
+  it('returns to the password form when the factor is still missing',
+    async () => {
+      const context = await factorPending();
+      vi.mocked(context.api.dispatch).mockResolvedValueOnce({
+        kind: 'reauth-required',
+      });
+
+      await expect(context.controller.continueAfterSecondFactor())
+        .resolves.toMatchObject({
+          kind: 'reauth-second-factor-incomplete',
+          method: 'password',
+        });
+      await context.controller.continueAfterSecondFactor();
+      expect(context.api.dispatch).toHaveBeenCalledTimes(2);
+
+      vi.mocked(context.auth.mutate).mockResolvedValueOnce({
+        data: { secondFactorRequired: true },
+      });
+      await expect(context.controller.reauthPassword('password'))
+        .resolves.toMatchObject({ kind: 'reauth-second-factor' });
+      expect(context.auth.mutate).toHaveBeenCalledTimes(2);
+      expect(context.api.dispatch).toHaveBeenCalledTimes(2);
+    });
+
+  it('stops when the account changes during the step', async () => {
+    const before = await factorPending();
+    before.user.value = { id: 'other-owner', hasPassword: true };
+    await expect(before.controller.continueAfterSecondFactor())
+      .resolves.toEqual({ kind: 'session-lost' });
+    expect(before.api.dispatch).toHaveBeenCalledOnce();
+    expect(before.store.recordFor('resume-1')?.sessionLost).toBe(true);
+
+    const during = await factorPending();
+    vi.mocked(during.auth.refresh).mockImplementation(async () => {
+      during.user.value = { id: 'other-owner', hasPassword: true };
+    });
+    await expect(during.controller.continueAfterSecondFactor())
+      .resolves.toEqual({ kind: 'session-lost' });
+    expect(during.api.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('does not open the step for an account that changed meanwhile',
+    async () => {
+      const context = setup();
+      vi.mocked(context.api.dispatch).mockResolvedValueOnce({
+        kind: 'reauth-required',
+      });
+      await context.controller.submit(command);
+      vi.mocked(context.auth.mutate).mockImplementationOnce(async () => {
+        context.user.value = { id: 'other-owner', hasPassword: true };
+        return { data: { secondFactorRequired: true } };
+      });
+
+      await expect(context.controller.reauthPassword('password'))
+        .resolves.toEqual({ kind: 'session-lost' });
+      expect(context.api.dispatch).toHaveBeenCalledOnce();
+    });
+
+  it('drops the intent on cancel and sends nothing', async () => {
+    const context = await factorPending();
+
+    context.controller.cancel();
+    expect(context.controller.state.value).toEqual({ kind: 'idle' });
+    await context.controller.continueAfterSecondFactor();
+
+    expect(context.api.dispatch).toHaveBeenCalledOnce();
+    expect(context.auth.refresh).not.toHaveBeenCalled();
+  });
+});

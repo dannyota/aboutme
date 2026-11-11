@@ -66,8 +66,14 @@ export type PublishControllerState
       readonly attempt: FrozenPublishAttempt;
     }
     | {
-      readonly kind: 'reauth-wrong-password';
+      readonly kind:
+        | 'reauth-wrong-password'
+        | 'reauth-second-factor-incomplete';
       readonly method: 'password';
+      readonly attempt: FrozenPublishAttempt;
+    }
+    | {
+      readonly kind: 'reauth-second-factor';
       readonly attempt: FrozenPublishAttempt;
     }
     | {
@@ -103,7 +109,12 @@ export interface PublishController {
   reauthPassword(password: string): Promise<PublishControllerState>;
   startProviderReauth(): Promise<PublishControllerState>;
   retryAfterProviderReauth(): Promise<PublishControllerState>;
+  continueAfterSecondFactor(): Promise<PublishControllerState>;
   cancel(): void;
+}
+
+interface PasswordReauthEnvelope {
+  readonly data?: { readonly secondFactorRequired?: unknown };
 }
 
 export interface PublishControllerDeps {
@@ -142,6 +153,7 @@ export function createPublishController(
 
   async function dispatchCurrent(
     runGeneration = generation,
+    afterSecondFactor = false,
   ): Promise<PublishControllerState> {
     if (runGeneration !== generation) return state.value;
     if (attempt === null) {
@@ -170,7 +182,7 @@ export function createPublishController(
         }
         return setState({ kind: 'failed', code: 'csrf_rejected' });
       }
-      return dispatchCurrent(runGeneration);
+      return dispatchCurrent(runGeneration, afterSecondFactor);
     }
     if (result.kind === 'csrf-rejected') {
       return setState({ kind: 'failed', code: 'csrf_rejected' });
@@ -214,6 +226,13 @@ export function createPublishController(
     }
     if (result.kind === 'reauth-required') {
       const hasPassword = deps.auth.user.value?.hasPassword !== false;
+      if (afterSecondFactor && hasPassword) {
+        return setState({
+          kind: 'reauth-second-factor-incomplete',
+          method: 'password',
+          attempt,
+        });
+      }
       if (!hasPassword && !providerEnabled()) {
         return setState({ kind: 'failed', code: 'provider_disabled' });
       }
@@ -304,6 +323,7 @@ export function createPublishController(
       || !(
         state.value.kind === 'reauth-required'
         || state.value.kind === 'reauth-wrong-password'
+        || state.value.kind === 'reauth-second-factor-incomplete'
         || (state.value.kind === 'reauth-rate-limited'
           && state.value.method === 'password')
         || (state.value.kind === 'reauth-unavailable'
@@ -312,15 +332,16 @@ export function createPublishController(
     ) { return state.value; }
     const runGeneration = generation;
     const frozen = attempt;
+    let response: PasswordReauthEnvelope | undefined;
     passwordBusy = true;
     try {
       if (!sameOwner(frozen, deps.auth)) {
         return loseSession();
       }
-      await deps.auth.mutate('/api/v1/auth/password/reauth', {
-        method: 'POST',
-        body: { password },
-      });
+      response = await deps.auth.mutate<PasswordReauthEnvelope | undefined>(
+        '/api/v1/auth/password/reauth',
+        { method: 'POST', body: { password } },
+      );
     } catch (error) {
       if (
         runGeneration !== generation
@@ -360,6 +381,12 @@ export function createPublishController(
       return state.value;
     }
     if (!sameOwner(frozen, deps.auth)) return loseSession();
+    // An enrolled account's password only opens a pending factor; the
+    // server still refuses the action until that factor completes, so the
+    // attempt waits for an explicit Continue instead of resending now.
+    if (response?.data?.secondFactorRequired === true) {
+      return setState({ kind: 'reauth-second-factor', attempt: frozen });
+    }
     csrfRetried = false;
     return dispatchCurrent(runGeneration);
   }
@@ -440,12 +467,11 @@ export function createPublishController(
     }
   }
 
-  async function retryAfterProviderReauth(): Promise<PublishControllerState> {
-    if (
-      retryBusy
-      || attempt === null
-      || state.value.kind !== 'provider-started'
-    ) {
+  /** Resends once after a step the owner finished in another tab. */
+  async function resendAfterOtherTab(
+    from: 'provider-started' | 'reauth-second-factor',
+  ): Promise<PublishControllerState> {
+    if (retryBusy || attempt === null || state.value.kind !== from) {
       return state.value;
     }
     retryBusy = true;
@@ -467,7 +493,10 @@ export function createPublishController(
         return loseSession();
       }
       csrfRetried = false;
-      return await dispatchCurrent(runGeneration);
+      return await dispatchCurrent(
+        runGeneration,
+        from === 'reauth-second-factor',
+      );
     } catch {
       return runGeneration === generation && attempt === frozen
         ? loseSession()
@@ -511,7 +540,9 @@ export function createPublishController(
     retryUncertain,
     reauthPassword,
     startProviderReauth,
-    retryAfterProviderReauth,
+    retryAfterProviderReauth: () => resendAfterOtherTab('provider-started'),
+    continueAfterSecondFactor: () =>
+      resendAfterOtherTab('reauth-second-factor'),
     cancel,
   };
 }

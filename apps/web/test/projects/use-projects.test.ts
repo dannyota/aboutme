@@ -420,3 +420,107 @@ describe('address change and deletion', () => {
     expect(onStale).toHaveBeenCalledWith(winner);
   });
 });
+
+describe('address change and deletion with a second factor', () => {
+  const FACTOR_PENDING = { data: { secondFactorRequired: true } } as never;
+
+  /** An enrolled account answers the password with a pending factor. */
+  async function factorPending(kind: 'address' | 'delete' = 'address') {
+    const context = releaseSetup();
+    const send = kind === 'delete' ? context.api.remove : context.api.replace;
+    send.mockResolvedValueOnce(failed('reauth-required'));
+    await context.action.start(kind, project(), 'new-shop');
+    context.auth.mutate.mockResolvedValueOnce(FACTOR_PENDING);
+    await context.action.reauthPassword('secret');
+    return { ...context, send };
+  }
+
+  it('waits for the factor instead of resending', async () => {
+    const { action, send } = await factorPending();
+
+    expect(action.state.value).toEqual({ kind: 'reauth-second-factor' });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it.each(['address', 'delete'] as const)(
+    'continues the %s once with the same key after the account check',
+    async (kind) => {
+      const { action, auth, send, onDone } = await factorPending(kind);
+      send.mockResolvedValueOnce(ok(kind === 'delete'
+        ? null
+        : project({ slug: 'new-shop', revision: '4' })) as never);
+
+      await action.continueAfterSecondFactor();
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+      expect(send.mock.calls.map((call) => call.at(-2)))
+        .toEqual(['k1', 'k1']);
+      expect(auth.refresh).toHaveBeenCalledOnce();
+      expect(auth.refresh.mock.invocationCallOrder[0])
+        .toBeLessThan(send.mock.invocationCallOrder[1]!);
+      expect(onDone).toHaveBeenCalledOnce();
+      expect(action.state.value).toEqual({ kind: 'done' });
+    });
+
+  it('returns to the password form when the factor is still missing',
+    async () => {
+      const { action, auth, send } = await factorPending();
+      send.mockResolvedValueOnce(failed('reauth-required'));
+
+      await action.continueAfterSecondFactor();
+      expect(action.state.value).toEqual({
+        kind: 'reauth-second-factor-incomplete', method: 'password',
+      });
+      await action.continueAfterSecondFactor();
+      expect(send).toHaveBeenCalledTimes(2);
+
+      auth.mutate.mockResolvedValueOnce(FACTOR_PENDING);
+      await action.reauthPassword('secret');
+      expect(auth.mutate).toHaveBeenCalledTimes(2);
+      expect(action.state.value).toEqual({ kind: 'reauth-second-factor' });
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+  it('stops when the account changes during the step', async () => {
+    const before = await factorPending();
+    before.user.value = { ...before.user.value, id: 'owner-2' };
+    await before.action.continueAfterSecondFactor();
+    expect(before.action.state.value).toEqual({ kind: 'session-lost' });
+    expect(before.send).toHaveBeenCalledOnce();
+
+    const during = await factorPending();
+    switchAccountOnRefresh(during.auth, during.user);
+    await during.action.continueAfterSecondFactor();
+    expect(during.action.state.value).toEqual({ kind: 'session-lost' });
+    expect(during.send).toHaveBeenCalledOnce();
+    expect(during.onDone).not.toHaveBeenCalled();
+  });
+
+  it('does not open the step for an account that changed meanwhile',
+    async () => {
+      const { api, auth, user, action } = releaseSetup();
+      api.replace.mockResolvedValueOnce(failed('reauth-required'));
+      await action.start('address', project(), 'new-shop');
+      auth.mutate.mockImplementationOnce(async () => {
+        user.value = { ...user.value, id: 'owner-2' };
+        return FACTOR_PENDING;
+      });
+
+      await action.reauthPassword('secret');
+
+      expect(action.state.value).toEqual({ kind: 'session-lost' });
+      expect(api.replace).toHaveBeenCalledOnce();
+    });
+
+  it('drops the intent on reset and sends nothing', async () => {
+    const { action, auth, send } = await factorPending();
+
+    action.reset();
+    await action.continueAfterSecondFactor();
+
+    expect(action.state.value).toEqual({ kind: 'idle' });
+    expect(send).toHaveBeenCalledOnce();
+    expect(auth.refresh).not.toHaveBeenCalled();
+  });
+});

@@ -81,6 +81,16 @@ reauthentication. When pending status later returns `401`, the web clears its
 flow and redirects to settings with `error=authentication_required` if `/me`
 still succeeds, otherwise to the login page with that error.
 
+The publish dialog and the project address and delete dialogs never leave their
+page, because the editor can hold unsaved text. When their password
+reauthentication returns `202`, the dialog keeps the frozen action, links
+`/login/second-factor` in a new tab, and offers Continue. Continue refreshes
+`/me`, stops unless the session still belongs to the action's account, and sends
+the action once more with the same `Idempotency-Key`. A further
+`reauth_required` returns the dialog to the password form with a message that
+the second step is not complete; the web never retries or polls on its own.
+Cancel or closing the dialog drops the action without sending it.
+
 After valid primary authentication, a new pending cookie consumes the row named
 by the same browser's previous valid pending cookie, not rows held by other
 browsers. A successful unenrolled login clears a present pending cookie. A
