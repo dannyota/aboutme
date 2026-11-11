@@ -81,6 +81,16 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 			},
 		},
 		{
+			name:    "options backslash-escaped name wins",
+			query:   "&options=-c%20statement%5C_timeout%3D60000",
+			options: `-c statement\_timeout=60000`,
+			want: map[string]string{
+				"statement_timeout":                   "",
+				"idle_in_transaction_session_timeout": "30s",
+				"lock_timeout":                        "",
+			},
+		},
+		{
 			name:    "options long form with dashes and case wins",
 			query:   "&options=--Idle-In-Transaction-Session-Timeout%3D1min",
 			options: "--Idle-In-Transaction-Session-Timeout=1min",

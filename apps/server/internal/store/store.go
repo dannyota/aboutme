@@ -77,7 +77,8 @@ func HasRuntimeSetting(params map[string]string, name string) bool {
 	want := settingName(name)
 	for key, value := range params {
 		if key == "options" {
-			if strings.Contains(settingName(value), want) {
+			// PostgreSQL drops a backslash that escapes the next character.
+			if strings.Contains(settingName(strings.ReplaceAll(value, `\`, "")), want) {
 				return true
 			}
 			continue
