@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -273,10 +274,11 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 	updated.PersonalDetails.FullName = strp("Seam Updated")
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	newRev, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision)
+	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision)
 	if err != nil {
 		t.Fatalf("SaveDocumentTx() error: %v", err)
 	}
+	newRev := saved.Revision
 	if newRev != created.Revision+1 {
 		t.Errorf("SaveDocumentTx() revision = %d, want %d", newRev, created.Revision+1)
 	}
@@ -308,6 +310,42 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 		t.Errorf("mismatch.CurrentRevision = %d, want winning %d", mismatch.CurrentRevision, newRev)
 	}
 	assertResumeRowEqual(t, mismatch.Current, got)
+}
+
+// TestSaveDocumentTx_ReturnsTheStoredRow proves the saved resume is exactly
+// what a reread in the same transaction gives: the stored row with its
+// database-set revision and updated_at, and the document decoded from the
+// stored parts at the current version, not the caller's value.
+func TestSaveDocumentTx_ReturnsTheStoredRow(t *testing.T) {
+	t.Parallel()
+	s, q, pool, ctx := newIntegrationStore(t)
+	userID := createTestUser(t, q)
+	created, err := s.Create(ctx, userID, "Seam Stored Row", validDocForTest(t))
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	updated := validDocForTest(t)
+	updated.PersonalDetails.FullName = strp("Stored Row")
+	updated.SchemaVersion = 0
+
+	tx, qtx := beginSeamTx(ctx, t, pool)
+	defer rollbackSeamTx(ctx, t, tx)
+	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision)
+	if err != nil {
+		t.Fatalf("SaveDocumentTx() error: %v", err)
+	}
+	reread, err := s.GetTx(ctx, qtx, userID, created.ID)
+	if err != nil {
+		t.Fatalf("GetTx() error: %v", err)
+	}
+	if !reflect.DeepEqual(saved, reread) {
+		t.Errorf("SaveDocumentTx() = %+v\nwant the reread %+v", saved, reread)
+	}
+	if saved.Revision != created.Revision+1 || saved.Doc.SchemaVersion == 0 {
+		t.Errorf("saved revision %d, schema version %d; want %d and the current version",
+			saved.Revision, saved.Doc.SchemaVersion, created.Revision+1)
+	}
 }
 
 func TestSaveDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
@@ -911,10 +949,11 @@ func TestEnqueueMediaDeletionTx_PhotoReferenceRemovalCommitsWithJob(t *testing.T
 	withoutPhoto := withPhoto
 	withoutPhoto.PersonalDetails.Photo = nil
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	removedRevision, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, withoutPhoto, photoRevision)
+	removed, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, withoutPhoto, photoRevision)
 	if err != nil {
 		t.Fatalf("SaveDocumentTx(remove photo) error: %v", err)
 	}
+	removedRevision := removed.Revision
 	if enqueueErr := s.EnqueueMediaDeletionTx(ctx, qtx, created.ID, key); enqueueErr != nil {
 		t.Fatalf("EnqueueMediaDeletionTx() error: %v", enqueueErr)
 	}

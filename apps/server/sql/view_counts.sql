@@ -2,8 +2,10 @@
 -- daily numbers only; days are Asia/Ho_Chi_Minh dates.
 
 -- name: GetLiveViewResumeBySlug :one
--- The same live gate as GetPublicResumeBySlug.
-SELECT id, user_id FROM resumes
+-- The same live gate as GetPublicResumeBySlug, with only what the view-count
+-- start and the sign-in "view" start need: the owner, the sign-in switch, and
+-- the pass epoch.
+SELECT id, user_id, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = sqlc.arg(slug)::text AND live = true;
 
 -- name: GetLiveViewResumeByID :one

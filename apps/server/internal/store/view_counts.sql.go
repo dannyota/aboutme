@@ -185,22 +185,31 @@ func (q *Queries) GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (GetL
 
 const getLiveViewResumeBySlug = `-- name: GetLiveViewResumeBySlug :one
 
-SELECT id, user_id FROM resumes
+SELECT id, user_id, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = $1::text AND live = true
 `
 
 type GetLiveViewResumeBySlugRow struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	SignInToView  bool
+	ViewPassEpoch int32
 }
 
 // View count queries (docs/design/viewer-analytics/counting.md). Tables hold
 // daily numbers only; days are Asia/Ho_Chi_Minh dates.
-// The same live gate as GetPublicResumeBySlug.
+// The same live gate as GetPublicResumeBySlug, with only what the view-count
+// start and the sign-in "view" start need: the owner, the sign-in switch, and
+// the pass epoch.
 func (q *Queries) GetLiveViewResumeBySlug(ctx context.Context, slug string) (GetLiveViewResumeBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getLiveViewResumeBySlug, slug)
 	var i GetLiveViewResumeBySlugRow
-	err := row.Scan(&i.ID, &i.UserID)
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
+	)
 	return i, err
 }
 

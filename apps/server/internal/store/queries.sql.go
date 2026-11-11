@@ -5265,7 +5265,7 @@ UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
     schema_version = $7, revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING revision
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
 `
 
 type UpdateResumeDocumentCASParams struct {
@@ -5278,11 +5278,11 @@ type UpdateResumeDocumentCASParams struct {
 	SchemaVersion   int32
 }
 
-// The returned revision is the NEW revision (revision + 1), never the
-// caller's expected one. A stale or non-matching $3 updates zero rows and
-// surfaces as pgx.ErrNoRows, which internal/resume turns into
-// *RevisionMismatchError or ErrNotFound.
-func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error) {
+// Returns the stored row, so the caller needs no reread; its revision is the
+// NEW revision (revision + 1), never the caller's expected one. A stale or
+// non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
+// internal/resume turns into *RevisionMismatchError or ErrNotFound.
+func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, updateResumeDocumentCAS,
 		arg.ID,
 		arg.UserID,
@@ -5292,9 +5292,29 @@ func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeD
 		arg.Customization,
 		arg.SchemaVersion,
 	)
-	var revision int64
-	err := row.Scan(&revision)
-	return revision, err
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
+	)
+	return i, err
 }
 
 const updateResumeMetadataAndDocumentCAS = `-- name: UpdateResumeMetadataAndDocumentCAS :one

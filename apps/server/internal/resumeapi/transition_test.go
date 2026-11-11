@@ -52,8 +52,8 @@ func (s *scriptedTransitionResumes) GetTx(context.Context, *store.Queries, uuid.
 	}
 	return s.second, nil
 }
-func (*scriptedTransitionResumes) SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64) (int64, error) {
-	return 0, errors.New("unexpected SaveDocumentTx")
+func (*scriptedTransitionResumes) SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64) (resume.Resume, error) {
+	return resume.Resume{}, errors.New("unexpected SaveDocumentTx")
 }
 func (*scriptedTransitionResumes) SaveMetadataAndDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, string, *string, schema.Resume, int64) (int64, error) {
 	return 0, errors.New("unexpected SaveMetadataAndDocumentTx")

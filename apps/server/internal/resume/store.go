@@ -126,11 +126,11 @@ func (s *Store) Delete(ctx context.Context, userID, id uuid.UUID) error {
 // ErrNotFound (no such resume for this user).
 func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (newRevision int64, err error) {
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		rev, txErr := s.SaveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision)
+		saved, txErr := s.SaveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision)
 		if txErr != nil {
 			return txErr
 		}
-		newRevision = rev
+		newRevision = saved.Revision
 		return nil
 	})
 	if err != nil {

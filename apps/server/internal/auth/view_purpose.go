@@ -51,7 +51,7 @@ func (s *Service) handleViewStart(w http.ResponseWriter, r *http.Request, provid
 	ctx := withProviderHTTPClient(r.Context())
 	s.reapExpiredOAuthTransactions(ctx, r, provider)
 
-	resume, err := s.q.GetPublicResumeBySlug(ctx, slug)
+	resume, err := s.q.GetLiveViewResumeBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			s.redirectToSlugNoTransaction(w, r, slug)

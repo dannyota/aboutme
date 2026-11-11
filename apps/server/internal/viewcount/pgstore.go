@@ -14,7 +14,6 @@ import (
 
 // Queries is the generated query subset PGStore uses.
 type Queries interface {
-	GetLiveViewResumeBySlug(ctx context.Context, slug string) (store.GetLiveViewResumeBySlugRow, error)
 	GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (store.GetLiveViewResumeByIDRow, error)
 	AddResumeViewDays(ctx context.Context, arg store.AddResumeViewDaysParams) error
 	AddResumeShareSignalDays(ctx context.Context, arg store.AddResumeShareSignalDaysParams) error
@@ -25,18 +24,6 @@ var _ Queries = (*store.Queries)(nil)
 // PGStore implements Store over the generated queries.
 type PGStore struct {
 	Queries Queries
-}
-
-// LiveResumeBySlug implements Store.
-func (s PGStore) LiveResumeBySlug(ctx context.Context, slug string) (LiveResume, error) {
-	row, err := s.Queries.GetLiveViewResumeBySlug(ctx, slug)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return LiveResume{}, ErrNotFound
-	}
-	if err != nil {
-		return LiveResume{}, err
-	}
-	return LiveResume{ID: row.ID, Owner: row.UserID}, nil
 }
 
 // LiveResumeByID implements Store.

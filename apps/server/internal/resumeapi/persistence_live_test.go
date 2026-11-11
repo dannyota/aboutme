@@ -251,3 +251,31 @@ func TestLiveHTTPWriteReadSanitizesBeforePersistedBounds(t *testing.T) {
 		t.Fatalf("rejected write changed stored rich text: %v", afterText)
 	}
 }
+
+// TestDocumentSaveRespondsWithTheStoredResume proves the customization and
+// personal-details saves answer with the stored resume: each body and entity
+// tag are those of a fresh read.
+func TestDocumentSaveRespondsWithTheStoredResume(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	resumePath := apiResumePath + "/" + created.ID.String()
+	revision := created.Revision
+	for _, save := range []struct{ path, body string }{
+		{resumePath + "/customization", `{"deltas":[{"op":"set","path":"font.baseSizePx","value":15}]}`},
+		{resumePath + "/personal-details", `{"fullName":"Stored Row","details":[]}`},
+	} {
+		saved := resumeRequest(t, h, http.MethodPatch, save.path, save.body, revision, uuid.New(), "")
+		if saved.status != http.StatusOK {
+			t.Fatalf("PATCH %s = %d %s, want 200", save.path, saved.status, saved.body)
+		}
+		read := resumeRequest(t, h, http.MethodGet, resumePath, "", 0, uuid.Nil, "")
+		if read.status != http.StatusOK {
+			t.Fatalf("read = %d %s, want 200", read.status, read.body)
+		}
+		if !bytes.Equal(saved.body, read.body) || saved.header.Get("ETag") != read.header.Get("ETag") {
+			t.Fatalf("PATCH %s response %s (ETag %s)\nwant the stored resume %s (ETag %s)",
+				save.path, saved.body, saved.header.Get("ETag"), read.body, read.header.Get("ETag"))
+		}
+		revision++
+	}
+}

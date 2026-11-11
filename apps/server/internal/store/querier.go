@@ -324,7 +324,9 @@ type Querier interface {
 	GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (GetLiveViewResumeByIDRow, error)
 	// View count queries (docs/design/viewer-analytics/counting.md). Tables hold
 	// daily numbers only; days are Asia/Ho_Chi_Minh dates.
-	// The same live gate as GetPublicResumeBySlug.
+	// The same live gate as GetPublicResumeBySlug, with only what the view-count
+	// start and the sign-in "view" start need: the owner, the sign-in switch, and
+	// the pass epoch.
 	GetLiveViewResumeBySlug(ctx context.Context, slug string) (GetLiveViewResumeBySlugRow, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
@@ -753,11 +755,11 @@ type Querier interface {
 	UnlockIdempotencyExpirySweep(ctx context.Context) (bool, error)
 	UnlockPrivacyRetentionSweep(ctx context.Context) (bool, error)
 	UpdateCurrentSessionProofs(ctx context.Context, arg UpdateCurrentSessionProofsParams) (Session, error)
-	// The returned revision is the NEW revision (revision + 1), never the
-	// caller's expected one. A stale or non-matching $3 updates zero rows and
-	// surfaces as pgx.ErrNoRows, which internal/resume turns into
-	// *RevisionMismatchError or ErrNotFound.
-	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error)
+	// Returns the stored row, so the caller needs no reread; its revision is the
+	// NEW revision (revision + 1), never the caller's expected one. A stale or
+	// non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
+	// internal/resume turns into *RevisionMismatchError or ErrNotFound.
+	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (Resume, error)
 	// The full-aggregate metadata write: title, lng, and the
 	// caller's complete already-projected document under ONE revision CAS. The
 	// returned revision is the NEW revision. A stale or non-matching $3

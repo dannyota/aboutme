@@ -110,7 +110,7 @@ type Service struct {
 type resumeBoundary interface {
 	CreateTx(context.Context, *store.Queries, uuid.UUID, string, *string, schema.Resume) (resume.Resume, error)
 	GetTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID) (resume.Resume, error)
-	SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64) (int64, error)
+	SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64) (resume.Resume, error)
 	SaveMetadataAndDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, string, *string, schema.Resume, int64) (int64, error)
 	DeleteTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, int64) (resume.Resume, error)
 }

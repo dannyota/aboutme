@@ -144,22 +144,24 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 
 // SaveDocumentTx is SaveDocument's transaction-scoped core: ValidateForStore,
 // then UpdateResumeDocumentCAS at schema_version = docmigrate.CurrentVersion.
-// A 0-row CAS (pgx.ErrNoRows, since it is a RETURNING :one query) means
-// either id doesn't exist for userID, or expectedRevision is stale --
-// afterCASMiss re-reads inside the SAME transaction to tell the two apart
-// and, for the stale case, to return the actual winning row.
-func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (int64, error) {
+// It returns the stored resume as GetTx would read it after the write, from
+// the row the update returned. A 0-row CAS (pgx.ErrNoRows, since it is a
+// RETURNING :one query) means either id doesn't exist for userID, or
+// expectedRevision is stale -- afterCASMiss re-reads inside the SAME
+// transaction to tell the two apart and, for the stale case, to return the
+// actual winning row.
+func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (Resume, error) {
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
-		return 0, err
+		return Resume{}, err
 	}
 
 	personalDetails, content, customization, err := encodeParts(doc)
 	if err != nil {
-		return 0, fmt.Errorf("resume: save document: encode document: %w", err)
+		return Resume{}, fmt.Errorf("resume: save document: encode document: %w", err)
 	}
 
-	newRevision, err := qtx.UpdateResumeDocumentCAS(ctx, store.UpdateResumeDocumentCASParams{
+	row, err := qtx.UpdateResumeDocumentCAS(ctx, store.UpdateResumeDocumentCASParams{
 		ID:              id,
 		UserID:          userID,
 		Revision:        expectedRevision,
@@ -170,14 +172,21 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 	})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return 0, fmt.Errorf("resume: save document: %w", err)
+			return Resume{}, fmt.Errorf("resume: save document: %w", err)
 		}
-		return 0, s.afterCASMiss(ctx, qtx, userID, id)
+		return Resume{}, s.afterCASMiss(ctx, qtx, userID, id)
 	}
 	if err = s.syncShowcaseTx(ctx, qtx, id); err != nil {
-		return 0, fmt.Errorf("resume: save document: %w", err)
+		return Resume{}, fmt.Errorf("resume: save document: %w", err)
 	}
-	return newRevision, nil
+	saved, err := s.projectRow(row)
+	if err != nil {
+		return Resume{}, err
+	}
+	if err = attachShowcase(ctx, qtx, &saved); err != nil {
+		return Resume{}, err
+	}
+	return saved, nil
 }
 
 // SaveMetadataAndDocumentTx writes title, lng, and the caller-supplied

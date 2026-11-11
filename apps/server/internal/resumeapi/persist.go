@@ -152,19 +152,24 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 			return mutationRunResult{}, beforeSaveErr
 		}
 	}
-	revision, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision)
+	updated, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	updated, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
-	if err != nil {
+	if err = requireNextRevision(updated, *mutation.ExpectedRevision); err != nil {
 		return mutationRunResult{}, err
-	}
-	if updated.Revision != revision {
-		return mutationRunResult{}, errors.New("resumeapi: saved resume revision changed inside transaction")
 	}
 	response, err := input.Response(updated, updated.Doc, mutation.WireVersion)
 	return mutationRunResult{Response: response}, err
+}
+
+// requireNextRevision checks that a document save advanced exactly one
+// revision past the one the request expected.
+func requireNextRevision(saved resume.Resume, expected int64) error {
+	if saved.Revision != expected+1 {
+		return errors.New("resumeapi: saved resume revision is not the expected revision plus one")
+	}
+	return nil
 }
 
 type deleteOperation struct{ service *Service }
