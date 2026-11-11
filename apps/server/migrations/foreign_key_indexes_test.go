@@ -14,13 +14,13 @@ var unindexedForeignKeys = map[string]string{
 	"oauth_authorization_codes_grant_id_user_client_fkey": "grants are deleted only by the user or client cascade, " +
 		"which also removes these codes through their indexed user_id and client_id keys; " +
 		"the grant cascade can use the user_id index too, and codes expire 60 seconds after creation",
-	"pending_authentications_session_id_fkey": "sessions are deleted only by the account cascade; " +
+	"pending_authentications_session_id_fkey": "sessions are deleted by the account cascade and the daily expiry sweep, and this table holds minutes of rows, so each cascade scans a tiny table; " +
 		"rows expire 5 minutes after creation and are swept before each new pending sign-in or ceremony",
-	"totp_enrollments_session_id_fkey": "sessions are deleted only by the account cascade; " +
+	"totp_enrollments_session_id_fkey": "sessions are deleted by the account cascade and the daily expiry sweep, and this table holds minutes of rows, so each cascade scans a tiny table; " +
 		"at most one row per user, expiring 10 minutes after creation and swept before each enrollment start",
 	"webauthn_ceremonies_pending_authentication_id_fkey": "the table holds minutes of rows: " +
 		"they expire 5 minutes after creation and are swept before each new pending sign-in or ceremony",
-	"webauthn_ceremonies_session_id_fkey": "sessions are deleted only by the account cascade; " +
+	"webauthn_ceremonies_session_id_fkey": "sessions are deleted by the account cascade and the daily expiry sweep, and this table holds minutes of rows, so each cascade scans a tiny table; " +
 		"rows expire 5 minutes after creation and are swept before each new pending sign-in or ceremony",
 }
 
