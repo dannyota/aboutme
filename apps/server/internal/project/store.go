@@ -22,6 +22,8 @@ var (
 	ErrSlugTaken = errors.New("project slug taken")
 	// ErrSlugHeld reports a released slug still held by this account.
 	ErrSlugHeld = errors.New("project slug held")
+	// ErrSlugRateLimited reports a slug claim refused by the shared budget.
+	ErrSlugRateLimited = errors.New("project slug claims rate limited")
 )
 
 // Project is an owner project with its stored content and revision.
@@ -84,8 +86,20 @@ func (s *Store) ListTx(ctx context.Context, q *store.Queries, owner uuid.UUID) (
 	return out, nil
 }
 
-// CreateTx sanitizes and validates content, enforces the cap and claims a slug.
-func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID, slug string, d Document, now time.Time) (Project, error) {
+// SlugAdmission spends one slug claim from a shared budget and reports
+// whether the claim may proceed. Nil admits every claim.
+type SlugAdmission func() bool
+
+func (a SlugAdmission) admit() error {
+	if a != nil && !a() {
+		return ErrSlugRateLimited
+	}
+	return nil
+}
+
+// CreateTx sanitizes and validates content, enforces the cap and claims a
+// slug. The claim is admitted only after the complete document is valid.
+func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID, slug string, d Document, now time.Time, admit SlugAdmission) (Project, error) {
 	raw, prepared, err := prepareStored(ctx, q, d)
 	if err != nil {
 		return Project{}, err
@@ -96,6 +110,9 @@ func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID,
 	}
 	if count >= MaxProjects {
 		return Project{}, ErrLimit
+	}
+	if err = admit.admit(); err != nil {
+		return Project{}, err
 	}
 	if slug == "" {
 		slug, err = s.proposeAvailable(ctx, q, owner, prepared.Text[prepared.DefaultLanguage].Name, now)
@@ -113,7 +130,8 @@ func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID,
 }
 
 // ReplaceTx replaces every content field and advances the matched revision.
-func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, slug string, d Document, now time.Time) (Project, error) {
+// A slug change is admitted only after the complete document is valid.
+func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, slug string, d Document, now time.Time, admit SlugAdmission) (Project, error) {
 	current, err := s.MatchTx(ctx, q, owner, id, revision)
 	if err != nil {
 		return Project{}, err
@@ -121,6 +139,11 @@ func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.
 	raw, _, err := prepareStored(ctx, q, d)
 	if err != nil {
 		return Project{}, err
+	}
+	if current.Slug != slug {
+		if err = admit.admit(); err != nil {
+			return Project{}, err
+		}
 	}
 	if err = s.checkSlug(ctx, q, owner, id, slug, now); err != nil {
 		return Project{}, err

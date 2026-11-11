@@ -273,10 +273,19 @@ func TestExportRouteFailsBeforeHeadersWhenReferencedPhotoIsMissing(t *testing.T)
 	}
 }
 
-func TestMarshalExportPayloadRejectsTheTwelveMiBCap(t *testing.T) {
-	_, err := marshalExportPayload(exportData{Account: exportProfile{Name: strings.Repeat("x", exportMaxBytes)}})
-	if err == nil {
-		t.Fatal("marshalExportPayload() error = nil, want size-limit failure")
+func TestMarshalExportPayloadEnforcesTheSixteenMiBCap(t *testing.T) {
+	empty, err := marshalExportPayload(exportData{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const limit = 16 * 1024 * 1024
+	name := strings.Repeat("x", limit-len(empty))
+	payload, err := marshalExportPayload(exportData{Account: exportProfile{Name: name}})
+	if err != nil || len(payload) != limit {
+		t.Fatalf("payload at the cap: %d bytes, error = %v; want %d bytes accepted", len(payload), err, limit)
+	}
+	if _, err = marshalExportPayload(exportData{Account: exportProfile{Name: name + "x"}}); err == nil {
+		t.Fatal("marshalExportPayload() error = nil one byte over the cap, want size-limit failure")
 	}
 }
 

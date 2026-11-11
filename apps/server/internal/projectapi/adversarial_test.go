@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -139,6 +140,7 @@ func TestProjects_HostileRequestsWriteNothing(t *testing.T) {
 		{"javascript link", "POST", "/api/v1/projects", `{"demoUrl":"javascript:alert(1)","defaultLanguage":"en","text":{"en":{"name":"X"}}}`, "", 422, "document_invalid"},
 		{"replace without slug", "PUT", path, unnamedSlugBody, `"r1"`, 422, "document_invalid"},
 		{"delete with body", "DELETE", path, `{}`, `"r1"`, 400, "request_invalid"},
+		{"oversized delete", "DELETE", path, big, `"r1"`, 413, "body_too_large"},
 		{"malformed id", "PUT", "/api/v1/projects/not-a-uuid", projectBody, `"r1"`, 400, "request_invalid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -172,5 +174,56 @@ func TestProjects_SlugReleaseNeedsRecentReauthentication(t *testing.T) {
 	var holds int
 	if err := h.pool.QueryRow(t.Context(), "SELECT count(*) FROM project_slug_holds WHERE user_id=$1", h.user.ID).Scan(&holds); err != nil || holds != 0 || h.projectCount(t) != 1 {
 		t.Fatalf("holds=%d stored=%d error=%v", holds, h.projectCount(t), err)
+	}
+}
+
+func TestProjects_InvalidDocumentsSpendNoSlugClaim(t *testing.T) {
+	h := newHarness(t)
+	calls := 0
+	h.svc.allowSlug = func(uuid.UUID, time.Time) bool { calls++; return true }
+	path := "/api/v1/projects/" + idOf(t, h.create(t))
+	oversized := `{"repositoryUrl":"https://example.test/` + strings.Repeat("a", 98304) + `","defaultLanguage":"en","text":{"en":{"name":"X"}}}`
+	invalid := []string{
+		`{"demoUrl":"javascript:alert(1)","defaultLanguage":"en","text":{"en":{"name":"X"}}}`,
+		`{"defaultLanguage":"en","text":{"en":{"name":" "}}}`,
+		`{"defaultLanguage":"en","text":{"EN":{"name":"X"}}}`,
+		`{"slug":"fresh-slug","dates":{"start":{"y":2022},"end":{"y":2021},"present":false},"defaultLanguage":"en","text":{"en":{"name":"X"}}}`,
+		oversized,
+	}
+	for i := 0; i < 30; i++ {
+		assertCode(t, h.request(t, "POST", "/api/v1/projects", invalid[i%len(invalid)], uuid.NewString(), ""), 422, "document_invalid")
+	}
+	renamed := strings.Replace(oversized, `"defaultLanguage"`, `"slug":"renamed","defaultLanguage"`, 1)
+	assertCode(t, h.request(t, "PUT", path, renamed, uuid.NewString(), `"r1"`), 422, "document_invalid")
+	if calls != 1 || h.projectCount(t) != 1 {
+		t.Fatalf("invalid requests spent slug claims: calls=%d stored=%d", calls, h.projectCount(t))
+	}
+	assertCode(t, h.request(t, "POST", "/api/v1/projects", projectBody, uuid.NewString(), ""), 409, "project_slug_taken")
+	if calls != 2 {
+		t.Fatalf("valid taken-slug attempt calls=%d, want 2", calls)
+	}
+}
+
+func TestProjects_CaseVariantNamesWriteNothing(t *testing.T) {
+	h := newHarness(t)
+	path := "/api/v1/projects/" + idOf(t, h.create(t))
+	for name, body := range map[string]string{
+		"Dates":           `{"defaultLanguage":"en","text":{"en":{"name":"X"}},"Dates":{"start":{"y":2020},"present":true}}`,
+		"Dates.Start":     `{"defaultLanguage":"en","text":{"en":{"name":"X"}},"dates":{"Start":{"y":2020},"end":null,"present":true}}`,
+		"Text":            `{"defaultLanguage":"en","Text":{"en":{"name":"X"}}}`,
+		"DefaultLanguage": `{"DefaultLanguage":"en","text":{"en":{"name":"X"}}}`,
+		"Name":            `{"defaultLanguage":"en","text":{"en":{"Name":"X"}}}`,
+		"name and Name":   `{"defaultLanguage":"en","text":{"en":{"name":"X","Name":"Y"}}}`,
+		"Slug":            `{"Slug":"cased","defaultLanguage":"en","text":{"en":{"name":"X"}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertCode(t, h.request(t, "POST", "/api/v1/projects", body, uuid.NewString(), ""), 400, "request_invalid")
+			replace := strings.Replace(body, `"defaultLanguage"`, `"slug":"example","defaultLanguage"`, 1)
+			assertCode(t, h.request(t, "PUT", path, replace, uuid.NewString(), `"r1"`), 400, "request_invalid")
+		})
+	}
+	read := h.request(t, "GET", path, "", "", "")
+	if h.projectCount(t) != 1 || read.Header().Get("ETag") != `"r1"` {
+		t.Fatalf("case variants wrote: stored=%d etag=%s", h.projectCount(t), read.Header().Get("ETag"))
 	}
 }

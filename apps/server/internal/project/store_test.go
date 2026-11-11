@@ -39,44 +39,44 @@ func TestStore_SlugsAndHolds(t *testing.T) {
 	ctx, _, q, owner := projectDB(t)
 	s := NewStore()
 	now := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
-	a, err := s.CreateTx(ctx, q, owner, "", draft(), now)
+	a, err := s.CreateTx(ctx, q, owner, "", draft(), now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a.Slug != "du-an" || a.ID.Version() != 7 || a.Revision != 1 {
 		t.Fatalf("created=%+v", a)
 	}
-	b, err := s.CreateTx(ctx, q, owner, "", draft(), now)
+	b, err := s.CreateTx(ctx, q, owner, "", draft(), now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if b.Slug == a.Slug {
 		t.Fatal("proposal was not deduplicated")
 	}
-	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now); !errors.Is(err, ErrSlugTaken) {
+	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now, nil); !errors.Is(err, ErrSlugTaken) {
 		t.Fatalf("duplicate error=%v", err)
 	}
-	renamed, err := s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, "new-slug", draft(), now)
+	renamed, err := s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, "new-slug", draft(), now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if renamed.Revision != 2 {
 		t.Fatalf("revision=%d", renamed.Revision)
 	}
-	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now.Add(180*24*time.Hour-time.Microsecond)); !errors.Is(err, ErrSlugHeld) {
+	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now.Add(180*24*time.Hour-time.Microsecond), nil); !errors.Is(err, ErrSlugHeld) {
 		t.Fatalf("held rename error=%v", err)
 	}
 	if err = s.DeleteTx(ctx, q, owner, b.ID, b.Revision, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CreateTx(ctx, q, owner, b.Slug, draft(), now); !errors.Is(err, ErrSlugHeld) {
+	if _, err = s.CreateTx(ctx, q, owner, b.Slug, draft(), now, nil); !errors.Is(err, ErrSlugHeld) {
 		t.Fatalf("held delete error=%v", err)
 	}
-	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now.Add(180*24*time.Hour)); err != nil {
+	if _, err = s.CreateTx(ctx, q, owner, a.Slug, draft(), now.Add(180*24*time.Hour), nil); err != nil {
 		t.Fatalf("hold expiry error=%v", err)
 	}
 	_, _, q2, owner2 := projectDB(t)
-	if _, err = s.CreateTx(ctx, q2, owner2, "new-slug", draft(), now); err != nil {
+	if _, err = s.CreateTx(ctx, q2, owner2, "new-slug", draft(), now, nil); err != nil {
 		t.Fatalf("same slug in another account: %v", err)
 	}
 }
@@ -90,7 +90,7 @@ func TestStore_ProposalWhenSuffixedCandidateEqualsBase(t *testing.T) {
 	base := strings.Repeat("a", 38) + "-2"
 	want := []string{base, strings.Repeat("a", 38) + "-3", strings.Repeat("a", 38) + "-4"}
 	for i, slug := range want {
-		p, err := s.CreateTx(ctx, q, owner, "", d, now)
+		p, err := s.CreateTx(ctx, q, owner, "", d, now, nil)
 		if err != nil {
 			t.Fatalf("project %d: %v", i+1, err)
 		}
@@ -105,11 +105,11 @@ func TestStore_AccountProjectBound(t *testing.T) {
 	s := NewStore()
 	now := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 30; i++ {
-		if _, err := s.CreateTx(ctx, q, owner, "", draft(), now); err != nil {
+		if _, err := s.CreateTx(ctx, q, owner, "", draft(), now, nil); err != nil {
 			t.Fatalf("project %d: %v", i+1, err)
 		}
 	}
-	if _, err := s.CreateTx(ctx, q, owner, "", draft(), now); !errors.Is(err, ErrLimit) {
+	if _, err := s.CreateTx(ctx, q, owner, "", draft(), now, nil); !errors.Is(err, ErrLimit) {
 		t.Fatalf("31st error=%v", err)
 	}
 }
@@ -129,12 +129,12 @@ func TestStore_StoredByteBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.RepositoryURL += strings.Repeat("a", 98304-base)
-	a, err := s.CreateTx(ctx, q, owner, "at-bound", d, now)
+	a, err := s.CreateTx(ctx, q, owner, "at-bound", d, now, nil)
 	if err != nil {
 		t.Fatalf("at stored byte bound: %v", err)
 	}
 	d.RepositoryURL += "a"
-	if _, err = s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, a.Slug, d, now); !errors.Is(err, ErrInvalid) {
+	if _, err = s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, a.Slug, d, now, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("over stored byte bound error=%v", err)
 	}
 }

@@ -5,25 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 	"unicode/utf8"
 )
 
-// Decode parses a closed document without duplicate keys or trailing JSON.
-// Null is accepted only for optional date ranges and date-range ends.
+// Decode parses a closed owner request: a project document plus an optional
+// slug. encoding/json matches field names case-insensitively, so every
+// property name is first checked exactly against the request shape, with no
+// duplicate keys and no trailing JSON. Null is accepted only for optional date
+// ranges and date-range ends.
 func Decode(raw []byte, target any) error {
 	if !utf8.Valid(raw) {
 		return ErrInvalid
 	}
 	tokens := json.NewDecoder(bytes.NewReader(raw))
 	tokens.UseNumber()
-	if err := consume(tokens, 0, ""); err != nil {
+	if err := consume(tokens, 0, requestShape()); err != nil {
 		return ErrInvalid
 	}
 	if _, err := tokens.Token(); !errors.Is(err, io.EOF) {
-		return ErrInvalid
-	}
-	if len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '{' {
 		return ErrInvalid
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -31,25 +30,41 @@ func Decode(raw []byte, target any) error {
 	if err := dec.Decode(target); err != nil {
 		return ErrInvalid
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return ErrInvalid
-	}
-	if dates, ok := fields["dates"]; ok && !bytes.Equal(bytes.TrimSpace(dates), []byte("null")) {
-		var values map[string]json.RawMessage
-		if err := json.Unmarshal(dates, &values); err != nil {
-			return ErrInvalid
-		}
-		for _, required := range []string{"start", "end", "present"} {
-			if _, ok := values[required]; !ok {
-				return ErrInvalid
-			}
-		}
-	}
 	return nil
 }
 
-func consume(d *json.Decoder, depth int, key string) error {
+// shape is the closed JSON form of one value in a project request.
+type shape struct {
+	// fields holds the exact property names of a closed object.
+	fields map[string]*shape
+	// required lists the properties a closed object must carry.
+	required []string
+	// values is the value form of an object with free keys.
+	values *shape
+	// items is the element form of an array.
+	items *shape
+	// nullable admits JSON null.
+	nullable bool
+}
+
+func requestShape() *shape {
+	scalar := &shape{}
+	yearMonth := func(nullable bool) *shape {
+		return &shape{fields: map[string]*shape{"y": scalar, "m": scalar}, nullable: nullable}
+	}
+	text := &shape{fields: map[string]*shape{"name": scalar, "role": scalar, "summary": scalar, "outcome": scalar, "description": scalar}}
+	return &shape{fields: map[string]*shape{
+		"slug": scalar, "repositoryUrl": scalar, "demoUrl": scalar, "defaultLanguage": scalar,
+		"dates": {
+			fields:   map[string]*shape{"start": yearMonth(false), "end": yearMonth(true), "present": scalar},
+			required: []string{"start", "end", "present"}, nullable: true,
+		},
+		"technologies": {items: scalar},
+		"text":         {values: text},
+	}}
+}
+
+func consume(d *json.Decoder, depth int, s *shape) error {
 	if depth > 100 {
 		return ErrInvalid
 	}
@@ -57,15 +72,21 @@ func consume(d *json.Decoder, depth int, key string) error {
 	if err != nil {
 		return err
 	}
-	if token == nil && key != "dates" && key != "dates.end" {
+	if token == nil {
+		if s.nullable {
+			return nil
+		}
 		return ErrInvalid
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {
+		if s.fields != nil || s.values != nil || s.items != nil {
+			return ErrInvalid
+		}
 		return nil
 	}
-	switch delim {
-	case '{':
+	switch {
+	case delim == '{' && (s.fields != nil || s.values != nil):
 		seen := make(map[string]bool)
 		for d.More() {
 			token, err = d.Token()
@@ -77,13 +98,25 @@ func consume(d *json.Decoder, depth int, key string) error {
 				return ErrInvalid
 			}
 			seen[name] = true
-			if err = consume(d, depth+1, strings.TrimPrefix(key+"."+name, ".")); err != nil {
+			child := s.values
+			if s.fields != nil {
+				child = s.fields[name]
+			}
+			if child == nil {
+				return ErrInvalid
+			}
+			if err = consume(d, depth+1, child); err != nil {
 				return err
 			}
 		}
-	case '[':
+		for _, name := range s.required {
+			if !seen[name] {
+				return ErrInvalid
+			}
+		}
+	case delim == '[' && s.items != nil:
 		for d.More() {
-			if err = consume(d, depth+1, ""); err != nil {
+			if err = consume(d, depth+1, s.items); err != nil {
 				return err
 			}
 		}

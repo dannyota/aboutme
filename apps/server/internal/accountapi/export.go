@@ -1,6 +1,7 @@
 package accountapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,7 +27,7 @@ const (
 	exportCacheControl      = "no-store, no-transform"
 	exportAttachment        = `attachment; filename="aboutme-export.json"`
 	exportSchemaHeader      = "X-Resume-Schema-Version"
-	exportMaxBytes          = 12 * 1024 * 1024
+	exportMaxBytes          = 16 * 1024 * 1024
 	exportTimeout           = 20 * time.Second
 	exportPhotoTimeout      = 5 * time.Second
 	exportJPEGMaxEdge       = 2048
@@ -336,11 +337,16 @@ func (s *Service) rollbackExportSnapshot(ctx context.Context, tx pgx.Tx) {
 	}
 }
 
+// marshalExportPayload encodes without HTML escaping: the bundle is a
+// downloaded attachment, never HTML, and escaping can grow text sixfold.
 func marshalExportPayload(data exportData) ([]byte, error) {
-	payload, err := json.Marshal(exportEnvelope{Data: data})
-	if err != nil {
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(exportEnvelope{Data: data}); err != nil {
 		return nil, fmt.Errorf("marshal export: %w", err)
 	}
+	payload := bytes.TrimSuffix(out.Bytes(), []byte("\n"))
 	if len(payload) > exportMaxBytes {
 		return nil, errors.New("complete export exceeds size limit")
 	}

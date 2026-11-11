@@ -392,7 +392,7 @@ export interface paths {
         };
         /**
          * Download the caller’s portable account data
-         * @description Downloads one complete version-1 JSON bundle of the account profile and up to three current-version resume documents, including hidden/private content and incomplete drafts. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 12,582,912 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
+         * @description Downloads one complete version-2 JSON bundle of the account profile, up to three current-version resume documents and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 16,777,216 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
          */
         get: operations["getAccountExport"];
         put?: never;
@@ -616,7 +616,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an owned library project
-         * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted. Every response uses Cache-Control no-store, no-transform.
+         * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted: a non-empty body is request_invalid, and one over 262,144 bytes is body_too_large. Every response uses Cache-Control no-store, no-transform.
          */
         delete: operations["deleteProject"];
         options?: never;
@@ -6167,7 +6167,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Complete portable JSON attachment, at most 12 MiB. */
+            /** @description Complete portable JSON attachment, at most 16 MiB. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store, no-transform";
@@ -7124,6 +7124,7 @@ export interface operations {
             405: components["responses"]["ProjectMethodNotAllowed"];
             409: components["responses"]["ProjectConflict"];
             412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];

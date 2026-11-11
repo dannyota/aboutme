@@ -1,10 +1,14 @@
 package accountapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"danny.vn/aboutme/apps/server/internal/project"
 )
 
 func TestExport_ProjectsVersionAndCreationOrder(t *testing.T) {
@@ -91,5 +95,79 @@ func TestAccountDeletion_RemovesProjectsAndSlugHolds(t *testing.T) {
 		if err = h.pool.QueryRow(h.ctx, "SELECT count(*) FROM "+table+" WHERE user_id=$1", h.user.ID).Scan(&n); err != nil || n != 0 {
 			t.Fatalf("%s count=%d error=%v", table, n, err)
 		}
+	}
+}
+
+// maximumProjectDocument returns a valid document whose stored JSON text is
+// exactly the project bound, filled with characters HTML escaping would grow.
+func maximumProjectDocument(t *testing.T, h *exportTestHarness) []byte {
+	t.Helper()
+	d := project.Document{
+		DefaultLanguage: "en",
+		DemoURL:         "https://example.test/?a=1&b=2",
+		Technologies:    []string{"C&<>"},
+		Text: map[string]project.Text{"en": {
+			Name: "<&> Tools & <Tests>", Role: "R&D <lead>", Summary: "a < b & c > d",
+			Outcome: "&&&", Description: "<p>&lt;&amp;&gt;</p>",
+		}},
+	}
+	measure := func(d project.Document) int {
+		prepared, err := project.Prepare(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(prepared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		if err = h.pool.QueryRow(h.ctx, "SELECT octet_length($1::jsonb::text)", raw).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	d.RepositoryURL = "https://example.test/?"
+	d.RepositoryURL += strings.Repeat("&", project.MaxStoredBytes-measure(d))
+	prepared, err := project.Prepare(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func TestExport_MaximumLibraryKeepsLiteralCharacters(t *testing.T) {
+	h := newExportTestHarness(t)
+	raw := maximumProjectDocument(t, h)
+	for i := 1; i <= project.MaxProjects; i++ {
+		if _, err := h.pool.Exec(h.ctx, "INSERT INTO projects(user_id,slug,document) VALUES($1,$2,$3)", h.user.ID, fmt.Sprintf("max-%d", i), raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stored, count int
+	if err := h.pool.QueryRow(h.ctx, "SELECT min(octet_length(document::text)), count(*) FROM projects WHERE user_id=$1", h.user.ID).Scan(&stored, &count); err != nil || stored != project.MaxStoredBytes || count != project.MaxProjects {
+		t.Fatalf("stored=%d count=%d error=%v", stored, count, err)
+	}
+	response := h.request(t, "GET", ExportPath, nil)
+	if response.Code != 200 {
+		t.Fatalf("status=%d, want 200 for a maximum library", response.Code)
+	}
+	body := response.Body.Bytes()
+	if !bytes.Contains(body, []byte(`"name":"<&> Tools & <Tests>"`)) || bytes.Contains(body, []byte(`\u0026`)) || bytes.Contains(body, []byte(`\u003c`)) {
+		t.Fatal("export escaped HTML characters")
+	}
+	if !bytes.HasSuffix(body, []byte("}")) || response.Header().Get("Content-Length") != fmt.Sprint(len(body)) {
+		t.Fatalf("export tail=%q length header=%s", body[len(body)-1:], response.Header().Get("Content-Length"))
+	}
+	var bundle struct {
+		Data struct {
+			Projects []json.RawMessage `json:"projects"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &bundle); err != nil || len(bundle.Data.Projects) != project.MaxProjects {
+		t.Fatalf("projects=%d error=%v", len(bundle.Data.Projects), err)
 	}
 }

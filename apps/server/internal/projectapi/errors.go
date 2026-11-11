@@ -64,6 +64,8 @@ func mapError(err error) *clientError {
 		return failure(409, "project_slug_taken", "project slug is unavailable")
 	case errors.Is(err, project.ErrSlugHeld):
 		return failure(409, "project_slug_held", "project slug is held from reuse")
+	case errors.Is(err, project.ErrSlugRateLimited):
+		return rateError()
 	case errors.Is(err, project.ErrInvalid):
 		return failure(422, "document_invalid", "project document is invalid")
 	case errors.Is(err, resume.ErrIdempotencyKeyReuse):

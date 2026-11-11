@@ -124,10 +124,14 @@ omitted optional field is cleared, and a language absent from `text` is removed.
 Every write carries `If-Match` with the project or resume revision and an
 `Idempotency-Key`.
 
+A slug rename and a deletion release a slug, so each needs recent
+reauthentication, and for an account with a second factor also a recent
+second-factor proof; otherwise it answers `403 reauth_required`.
+
 Errors reuse the existing problem format: `project_limit`, `project_slug_taken`,
 `project_slug_held`, `project_not_found` (also for another account's id),
-`project_already_linked`, `public_state_busy`, and the existing precondition and
-validation errors.
+`project_already_linked`, `public_state_busy`, `reauth_required`, and the
+existing precondition and validation errors.
 
 ## Agents
 

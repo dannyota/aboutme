@@ -72,7 +72,7 @@ async function readDownload(download: Download): Promise<Buffer> {
   for await (const chunk of stream!) {
     const bytes = Buffer.from(chunk);
     size += bytes.byteLength;
-    expect(size).toBeLessThanOrEqual(12_582_912);
+    expect(size).toBeLessThanOrEqual(16_777_216);
     chunks.push(bytes);
   }
   return Buffer.concat(chunks);

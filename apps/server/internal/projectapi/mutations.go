@@ -147,11 +147,9 @@ func (s *Service) apply(ctx context.Context, q *store.Queries, sess store.Sessio
 	if input.Slug != nil {
 		slug = *input.Slug
 	}
+	admit := project.SlugAdmission(func() bool { return s.allowSlug(sess.UserID, now) })
 	if method == http.MethodPost {
-		if !s.allowSlug(sess.UserID, now) {
-			return resume.StoredResponse{}, rateError()
-		}
-		p, err := s.projects.CreateTx(ctx, q, sess.UserID, slug, input.Document, now)
+		p, err := s.projects.CreateTx(ctx, q, sess.UserID, slug, input.Document, now, admit)
 		if err != nil {
 			return resume.StoredResponse{}, err
 		}
@@ -172,10 +170,7 @@ func (s *Service) apply(ctx context.Context, q *store.Queries, sess store.Sessio
 		}
 		return stored(200, deleteResult{ChangedResumes: []changedResume{}}, nil)
 	}
-	if current.Slug != slug && !s.allowSlug(sess.UserID, now) {
-		return resume.StoredResponse{}, rateError()
-	}
-	p, err := s.projects.ReplaceTx(ctx, q, sess.UserID, id, revision, slug, input.Document, now)
+	p, err := s.projects.ReplaceTx(ctx, q, sess.UserID, id, revision, slug, input.Document, now, admit)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
