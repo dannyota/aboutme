@@ -30,13 +30,16 @@ whether evidence is available. Sign-in start methods, purposes and scopes
 
 ## Connection
 
-| Field          | Rule                                              |
-| -------------- | ------------------------------------------------- |
-| `githubUserId` | Numeric id from GitHub; the only matching key     |
-| `login`        | As last seen; display only; never used to match   |
-| `generation`   | Advanced by every connect, replace and disconnect |
-| `connectedAt`  | Set when the connection is made                   |
+| Field          | Rule                                                             |
+| -------------- | ---------------------------------------------------------------- |
+| `githubUserId` | Numeric id from GitHub; the only matching key                    |
+| `login`        | As last seen; display only; never used to match                  |
+| `generation`   | Advanced by every connect, replace and disconnect; never repeats |
+| `connectedAt`  | Set when the connection is made                                  |
 
+- One connection row per aboutme account. Disconnecting clears its GitHub fields
+  and keeps the row and its generation, so a generation is never reused; the row
+  is deleted only with the account.
 - One connection per aboutme account. A GitHub account may be connected to
   several aboutme accounts; nothing is unique across accounts.
 - `POST /api/v1/github-evidence/start` is session-authenticated and
@@ -45,8 +48,11 @@ whether evidence is available. Sign-in start methods, purposes and scopes
   purpose `evidence`, state, PKCE and the exact callback URL, bound to the user
   and the connection generation at that moment.
 - `GET /api/v1/github-evidence/callback` consumes the transaction once and
-  requires a live session of the same user and an unchanged connection
-  generation; otherwise it fails through the existing no-oracle path. It never
+  requires a live session of the same user. After the token exchange and the
+  profile fetch, one transaction under the owner lock compares the generation
+  recorded on the OAuth transaction with the stored one and, only if they are
+  equal, installs the connection and advances the generation. Any mismatch
+  discards the token and fails through the existing no-oracle path. It never
   resolves or links an identity, never updates reauthentication proof, and never
   starts a session of the account.
 - The token response must contain a `scope` field that is present and empty. Any
@@ -64,8 +70,9 @@ The token exists only in server memory.
   authentication epoch and the connection generation. One session per account; a
   new one replaces the old.
 - It ends on "Done", expiry, sign-out, an epoch change, disconnect, replacement
-  and process exit. Ending revokes the token at GitHub with the application's
-  credentials, best effort; a failed revocation is logged without the token.
+  and process exit. Ending discards the token and asks GitHub to revoke it. The
+  request needs the token itself, so a crash or a failed request leaves it valid
+  at GitHub and held by no one; a failed revocation is logged without the token.
 - The token is never written to the database, a file, a log, a response or the
   export. A database backup contains none.
 - When no session is live, the picker asks the owner to continue with GitHub;
@@ -88,7 +95,12 @@ A stored item holds: its own evidence id, type, GitHub repository id, GitHub
 item id (pull request or release), canonical URL, repository full name, title or
 name, the item's date, the label, the GitHub account id it was checked against,
 the check time and, for a repository, the star count at that time. It holds no
-body text, diff or email address.
+body text, diff or email address. Title and repository name are cut to 200
+characters and a URL is rejected over 300, so one item stays under 1 KiB.
+
+Evidence counts toward the stored project bound: the project document plus its
+evidence stays within 96 KiB. Attach, recheck and every project write enforce
+it, and the account export cap is unchanged.
 
 ## Owner API
 
@@ -118,6 +130,16 @@ MCP tool reaches them.
   owner-locked transaction they require the same connection generation and a
   live session of the same epoch, so a disconnect or replacement that commits
   during the fetch wins.
+- A candidate is `{candidateId, kind, title, repository, date}`. `candidateId`
+  is an opaque string the server derives from the kind and GitHub's repository
+  and item ids; it is valid only in the session that listed it. The candidates
+  response is `{items, nextPage}`.
+- Attach, recheck, reorder and remove answer with the project's evidence list,
+  the new project revision and each advanced resume revision. Each evidence
+  entry carries the stored item fields and `confirmed`.
+- Export version 2 gains `evidence` on each project, with the stored item
+  fields, and `githubConnection` with the GitHub user id, login and connected
+  time when a connection exists. It never contains a token.
 - Errors: `evidence_unavailable` (feature off), `evidence_session_required`,
   `evidence_not_confirmed`, `evidence_limit`, `evidence_unsupported_link`,
   `evidence_upstream` (GitHub error, limit or timeout), plus the existing
@@ -183,18 +205,18 @@ page's own data.
 
 ## Disconnecting
 
-`DELETE /api/v1/github-evidence` advances the generation, deletes the
-connection, ends the session and revokes its token. With `keepLinks` the items
+`DELETE /api/v1/github-evidence` advances the generation, clears the connection,
+ends the session and asks GitHub to revoke its token. With `keepLinks` the items
 stay as plain links; without it they are removed. Either way each affected
 project changes through one library mutation.
 
 ## Data
 
-- `github_connections`: owner (unique), GitHub user id, login, generation,
-  connected time.
+- `github_connections`: owner (unique), nullable GitHub user id, login and
+  connected time, and a generation that only grows.
 - `project_evidence`: project (cascade), position, the item fields above.
-- The OAuth transaction purpose set gains `evidence`, with the connection
-  generation recorded on the transaction.
+- The OAuth transaction purpose and user-binding constraints gain `evidence`,
+  with the connection generation recorded on the transaction.
 - Configuration: evidence client id, client secret and callback URL.
 
 ## Checks

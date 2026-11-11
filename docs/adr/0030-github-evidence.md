@@ -37,8 +37,10 @@ which anyone can set
    response reports any scope, or none at all, is refused. Private repositories
    are never read.
 4. **The token is never written to disk.** It lives only in server memory for
-   one bounded evidence session and is revoked at GitHub when the session ends.
-   A restart ends every session. Nothing reads GitHub in the background.
+   one bounded evidence session. When the session ends the server discards it
+   and asks GitHub to revoke it; a crash or a failed request can leave the token
+   valid at GitHub, held by no one. A restart ends every session. Nothing reads
+   GitHub in the background.
 5. **Evidence is a checked snapshot, owned by the server.** The owner picks an
    item during a session. The server fetches it, compares its account id with
    the connection, and stores a snapshot with GitHub's own ids and the check
