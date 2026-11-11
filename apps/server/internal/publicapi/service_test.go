@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/directrender"
 	"danny.vn/aboutme/apps/server/internal/publiccache"
-	"danny.vn/aboutme/apps/server/internal/publicformat"
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
@@ -105,30 +103,6 @@ func TestPublicJSONCacheSitsAfterLiveAdmission(t *testing.T) {
 	}
 	if backing.calls != 2 {
 		t.Fatalf("public cache bypassed live admission: reads = %d, want 2", backing.calls)
-	}
-}
-
-func TestRestartGenerationAndInvalidationFailureCannotRestoreAccess(t *testing.T) {
-	// A retained pre-restart artifact stands in for a failed edge invalidation.
-	// Startup's committed generation must make it unselectable.
-	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 41})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache, err := publiccache.New(4, time.Minute, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	origin := mustPublicOrigin(t)
-	cache.Put(publiccache.Key{RouteClass: "discovery", Representation: publicstate.RepresentationLLMS, Variant: "default", Generation: 40, FormatVersion: publicformat.LLMSFormatVersion, AppDigest: "sha256:app"}, publiccache.Value{Status: http.StatusOK, Header: http.Header{}, Body: []byte("stale")})
-	handler, err := NewLLMSHandler(DiscoveryDependencies{Store: &formatDiscoveryStore{snapshots: []formatDiscoverySnapshot{{generation: 41, slugs: []string{"current"}}}}, Coordinator: coordinator, Cache: cache, PublicOrigin: origin, AppDigest: "sha256:app"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/llms.txt", nil))
-	if response.Code != http.StatusOK || response.Body.String() == "stale" || !strings.Contains(response.Body.String(), "/current") {
-		t.Fatalf("restart response = %d %q, want committed generation body", response.Code, response.Body.String())
 	}
 }
 

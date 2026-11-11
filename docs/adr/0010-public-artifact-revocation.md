@@ -90,8 +90,8 @@ order. This same order covers account deletion of up to three resumes. It closes
 old admission and cancels and drains every lease set under one five-second
 bound. It then increments the durable discovery generation in the same
 PostgreSQL transaction as the membership change. After commit, both fences open
-at the committed generations. Cache keys and entity tags include the applicable
-generation. Startup loads the durable value before Go becomes ready, so a crash
+at the committed generations. Neither route caches bytes; each encodes the slugs
+it has read. Startup loads the durable value before Go becomes ready, so a crash
 or restart cannot reuse an old generation or validate stale aggregate bytes. Any
 drain failure or definite pre-commit or rollback database failure reopens the
 global fence and each affected resume fence at the unchanged committed
@@ -120,8 +120,8 @@ its commit:
   public read starts from the database;
 - a response admitted before the commit finishes sending;
 - an open live-update stream ends through the deleted-resume notification; and
-- the server drops its cached `/sitemap.xml` and `/llms.txt` when it sees that
-  notification.
+- the next `/sitemap.xml` and `/llms.txt` responses omit the deleted slugs,
+  because both routes encode the snapshot their own request read.
 
 ## Alternatives rejected
 
@@ -166,3 +166,7 @@ without the in-process fences; new requests still return `404` at once.
 
 2026-11-01: Corrected production delivery to reflect the direct Vietnam host
 under ADR 0027, while retaining the live-state gate and revocation rules.
+
+2026-11-11: Aggregate discovery stopped caching its bytes. Operator deletion
+keeps the discovery generation, so a generation-keyed entry stored after the
+deletion's cache eviction could keep listing deleted slugs.

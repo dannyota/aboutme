@@ -8,14 +8,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-const (
-	// SitemapFormatVersion identifies the sitemap byte format.
-	SitemapFormatVersion = 3
-	// RobotsFormatVersion identifies the robots.txt byte format.
-	RobotsFormatVersion = 2
-	// LLMSFormatVersion identifies the llms.txt byte format.
-	LLMSFormatVersion = 3
-)
+// RobotsFormatVersion identifies the robots.txt byte format.
+const RobotsFormatVersion = 2
 
 // sitePages are the static site pages every sitemap and llms.txt lists.
 var sitePages = []struct{ path, title string }{
