@@ -61,7 +61,7 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 			},
 		},
 		{
-			name:    "options -c with a separate value wins",
+			name:    "options plain switch wins",
 			query:   "&options=-c%20idle_in_transaction_session_timeout%3D1min",
 			options: "-c idle_in_transaction_session_timeout=1min",
 			want: map[string]string{
@@ -71,9 +71,9 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 			},
 		},
 		{
-			name:    "options -c with a joined value wins",
-			query:   "&options=-cstatement_timeout%3D0",
-			options: "-cstatement_timeout=0",
+			name:    "options grouped switch wins",
+			query:   "&options=-ecstatement_timeout%3D60000",
+			options: "-ecstatement_timeout=60000",
 			want: map[string]string{
 				"statement_timeout":                   "",
 				"idle_in_transaction_session_timeout": "30s",
@@ -81,9 +81,9 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 			},
 		},
 		{
-			name:    "options long form with dashes wins",
-			query:   "&options=--idle-in-transaction-session-timeout%3D1min",
-			options: "--idle-in-transaction-session-timeout=1min",
+			name:    "options long form with dashes and case wins",
+			query:   "&options=--Idle-In-Transaction-Session-Timeout%3D1min",
+			options: "--Idle-In-Transaction-Session-Timeout=1min",
 			want: map[string]string{
 				"statement_timeout":                   "15s",
 				"idle_in_transaction_session_timeout": "",
@@ -91,9 +91,9 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 			},
 		},
 		{
-			name:    "escaped space inside another value is not a switch",
-			query:   "&options=-c%20application_name%3Da%5C%20-c%5C%20statement_timeout%3D1s",
-			options: `-c application_name=a\ -c\ statement_timeout=1s`,
+			name:    "unrelated options value keeps both defaults",
+			query:   "&options=-c%20search_path%3Dpublic",
+			options: "-c search_path=public",
 			want: map[string]string{
 				"statement_timeout":                   "15s",
 				"idle_in_transaction_session_timeout": "30s",
@@ -133,7 +133,7 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 }
 
 // TestPool_Integration_TimeoutDefaults checks the settings a pooled
-// connection reports and that a transaction's SET LOCAL still wins.
+// connection reports.
 func TestPool_Integration_TimeoutDefaults(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -155,25 +155,96 @@ func TestPool_Integration_TimeoutDefaults(t *testing.T) {
 			t.Errorf("SHOW %s = %q, want %q", name, got, want)
 		}
 	}
+}
+
+// TestPool_Integration_SetLocalResetsAfterCommit checks that a transaction's
+// SET LOCAL wins inside it and that the same connection is back at the
+// default after commit.
+func TestPool_Integration_SetLocalResetsAfterCommit(t *testing.T) {
+	dsn := testutil.RequireTestDatabaseURL(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := store.NewPool(ctx, dsn)
+	if err != nil {
+		t.Fatalf("NewPool() error: %v", err)
+	}
+	defer pool.Close(ctx)
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire() error: %v", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatalf("Begin() error: %v", err)
+	}
+	if _, execErr := tx.Exec(ctx, `SET LOCAL statement_timeout = '30s'`); execErr != nil {
+		t.Fatalf("SET LOCAL error: %v", execErr)
+	}
+	var got string
+	if scanErr := tx.QueryRow(ctx, `SHOW statement_timeout`).Scan(&got); scanErr != nil {
+		t.Fatalf("SHOW in transaction error: %v", scanErr)
+	}
+	if got != "30s" {
+		t.Errorf("SHOW statement_timeout after SET LOCAL = %q, want 30s", got)
+	}
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("Commit() error: %v", commitErr)
+	}
+	if scanErr := conn.QueryRow(ctx, `SHOW statement_timeout`).Scan(&got); scanErr != nil {
+		t.Fatalf("SHOW after commit error: %v", scanErr)
+	}
+	if got != "15s" {
+		t.Errorf("SHOW statement_timeout after commit = %q, want the 15s default", got)
+	}
+}
+
+// TestPool_Integration_IdleTransactionEndsAndPoolRecovers leaves a
+// transaction idle past a short idle timeout from the URL and checks that
+// PostgreSQL ends the session and the one-connection pool serves the next
+// query on a new connection.
+func TestPool_Integration_IdleTransactionEndsAndPoolRecovers(t *testing.T) {
+	dsn := testutil.RequireTestDatabaseURL(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := store.NewPool(ctx, dsn+urlParamSeparator(dsn)+"pool_max_conns=1&idle_in_transaction_session_timeout=200ms")
+	if err != nil {
+		t.Fatalf("NewPool() error: %v", err)
+	}
+	defer pool.Close(ctx)
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Begin() error: %v", err)
 	}
-	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil {
-			t.Logf("rollback: %v", rollbackErr)
-		}
-	}()
-	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = '30s'`); err != nil {
-		t.Fatalf("SET LOCAL error: %v", err)
+	var first int32
+	if scanErr := tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&first); scanErr != nil {
+		t.Fatalf("first query error: %v", scanErr)
 	}
-	var got string
-	if err := tx.QueryRow(ctx, `SHOW statement_timeout`).Scan(&got); err != nil {
-		t.Fatalf("SHOW in transaction error: %v", err)
+	time.Sleep(time.Second)
+	_, err = tx.Exec(ctx, `SELECT 1`)
+	if err == nil || !tx.Conn().IsClosed() {
+		t.Fatalf("query after idle timeout: err=%v closed=%v, want an error on a closed connection", err, tx.Conn().IsClosed())
 	}
-	if got != "30s" {
-		t.Errorf("SHOW statement_timeout after SET LOCAL = %q, want 30s", got)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code != "25P03" {
+		t.Errorf("idle timeout SQLSTATE = %s, want 25P03", pgErr.Code)
+	}
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Logf("rollback on the ended session: %v", rollbackErr)
+	}
+
+	var next int32
+	if scanErr := pool.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&next); scanErr != nil {
+		t.Fatalf("query after recovery error: %v", scanErr)
+	}
+	if next == first {
+		t.Errorf("next query ran on backend %d again, want a new connection", next)
 	}
 }
 

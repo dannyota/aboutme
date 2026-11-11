@@ -66,32 +66,23 @@ func NewPool(ctx context.Context, databaseURL string) (*Pool, error) {
 }
 
 // HasRuntimeSetting reports whether params, the startup parameters of a
-// parsed pgx connection configuration, already set the server setting name,
-// either as their own key or through a -c name=value, -cname=value, or
-// --name=value switch in options. PostgreSQL applies the other startup
-// parameters after options, so a default added beside an options switch
-// would override it. Names match as PostgreSQL matches them: without case,
-// and with dashes read as underscores.
+// parsed pgx connection configuration, may already set the server setting
+// name: params has it as a key, or the options parameter mentions it
+// anywhere. PostgreSQL applies the other startup parameters after options,
+// so a default added beside an options switch would override it. Names
+// match without case, with dashes and underscores alike. A mention that is
+// not a switch, or a longer name that contains this one, also counts; that
+// only skips a default.
 func HasRuntimeSetting(params map[string]string, name string) bool {
 	want := settingName(name)
-	for key := range params {
-		if key != "options" && settingName(key) == want {
-			return true
+	for key, value := range params {
+		if key == "options" {
+			if strings.Contains(settingName(value), want) {
+				return true
+			}
+			continue
 		}
-	}
-	args := splitOptions(params["options"])
-	for i := 0; i < len(args); i++ {
-		var setting string
-		switch arg := args[i]; {
-		case arg == "-c" && i+1 < len(args):
-			i++
-			setting = args[i]
-		case strings.HasPrefix(arg, "--"):
-			setting = arg[2:]
-		case strings.HasPrefix(arg, "-c"):
-			setting = arg[2:]
-		}
-		if key, _, found := strings.Cut(setting, "="); found && settingName(key) == want {
+		if settingName(key) == want {
 			return true
 		}
 	}
@@ -100,37 +91,6 @@ func HasRuntimeSetting(params map[string]string, name string) bool {
 
 func settingName(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, "-", "_"))
-}
-
-// splitOptions splits an options startup parameter into arguments the way
-// PostgreSQL does: on unescaped whitespace, with a backslash escaping the
-// next character.
-func splitOptions(options string) []string {
-	var args []string
-	var arg strings.Builder
-	started, escaped := false, false
-	for _, r := range options {
-		switch {
-		case escaped:
-			arg.WriteRune(r)
-			escaped = false
-		case r == '\\':
-			started, escaped = true, true
-		case strings.ContainsRune(" \t\n\v\f\r", r):
-			if started {
-				args = append(args, arg.String())
-				arg.Reset()
-				started = false
-			}
-		default:
-			arg.WriteRune(r)
-			started = true
-		}
-	}
-	if started {
-		args = append(args, arg.String())
-	}
-	return args
 }
 
 // Close closes the pool, returning as soon as the close completes or ctx is
