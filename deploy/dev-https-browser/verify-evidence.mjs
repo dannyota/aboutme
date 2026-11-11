@@ -259,9 +259,10 @@ async function verify(mode, path) {
       unpublish: 200,
       revoked: [401, 404].includes(actual.statuses?.revoked) ? actual.statuses.revoked : 404,
     },
+    // An invalid time is compared with 0, a valid time it can never equal.
     elapsedMs: { revocation: Number.isInteger(actual.elapsedMs?.revocation)
       && actual.elapsedMs.revocation >= 0
-      && actual.elapsedMs.revocation <= 30000 ? actual.elapsedMs.revocation : -1 },
+      && actual.elapsedMs.revocation <= 30000 ? actual.elapsedMs.revocation : 0 },
     headers: {
       publishContentType: true,
       publishCSRF: true,

@@ -984,7 +984,8 @@ try {
   }
   assert.equal(accepted((evidence) => { delete evidence.statuses.revoked; }), false, 'revoked missing');
   for (const [elapsed, ok] of [
-    [0, true], [5001, true], [30000, true], [30001, false], [1.5, false], ['1', false],
+    [0, true], [5001, true], [30000, true], [30001, false], [-1, false], [-5, false],
+    [1.5, false], ['1', false],
   ]) {
     assert.equal(accepted((evidence) => { evidence.elapsedMs.revocation = elapsed; }), ok, `revocation ${elapsed}`);
   }
