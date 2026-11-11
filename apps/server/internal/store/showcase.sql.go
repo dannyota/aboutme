@@ -60,7 +60,7 @@ func (q *Queries) DeleteResumeShowcase(ctx context.Context, resumeID uuid.UUID) 
 
 const getResumeShowcase = `-- name: GetResumeShowcase :one
 
-SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
+SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
 WHERE resume_id = $1
 `
 
@@ -73,14 +73,19 @@ func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (Re
 		&i.ResumeID,
 		&i.RequestedAt,
 		&i.Role,
+		&i.ReviewKey,
 		&i.CardVersion,
 		&i.TemplateID,
+		&i.ReviewedKey,
+		&i.ReviewOutcome,
+		&i.ReviewedAt,
+		&i.FirstListedAt,
 	)
 	return i, err
 }
 
 const getResumeShowcaseForUpdate = `-- name: GetResumeShowcaseForUpdate :one
-SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
+SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
 WHERE resume_id = $1
 FOR UPDATE
 `
@@ -93,8 +98,13 @@ func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.
 		&i.ResumeID,
 		&i.RequestedAt,
 		&i.Role,
+		&i.ReviewKey,
 		&i.CardVersion,
 		&i.TemplateID,
+		&i.ReviewedKey,
+		&i.ReviewOutcome,
+		&i.ReviewedAt,
+		&i.FirstListedAt,
 	)
 	return i, err
 }
@@ -115,6 +125,8 @@ type InsertResumeShowcaseParams struct {
 	TemplateID  *string
 }
 
+// review_key and the other review columns are unused; the insert leaves them
+// to their defaults (docs/design/showcase.md "Data and contract").
 func (q *Queries) InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error {
 	_, err := q.db.Exec(ctx, insertResumeShowcase,
 		arg.ResumeID,
@@ -152,7 +164,7 @@ func (q *Queries) ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error
 }
 
 const listResumeShowcasesForUser = `-- name: ListResumeShowcasesForUser :many
-SELECT s.resume_id, s.requested_at, s.role, s.card_version, s.template_id
+SELECT s.resume_id, s.requested_at, s.role, s.review_key, s.card_version, s.template_id, s.reviewed_key, s.review_outcome, s.reviewed_at, s.first_listed_at
 FROM resume_showcase s
 JOIN resumes r ON r.id = s.resume_id
 WHERE r.user_id = $1
@@ -171,8 +183,13 @@ func (q *Queries) ListResumeShowcasesForUser(ctx context.Context, userID uuid.UU
 			&i.ResumeID,
 			&i.RequestedAt,
 			&i.Role,
+			&i.ReviewKey,
 			&i.CardVersion,
 			&i.TemplateID,
+			&i.ReviewedKey,
+			&i.ReviewOutcome,
+			&i.ReviewedAt,
+			&i.FirstListedAt,
 		); err != nil {
 			return nil, err
 		}

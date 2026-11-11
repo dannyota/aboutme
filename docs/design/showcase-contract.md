@@ -138,13 +138,18 @@ reload.
 
 **Table `resume_showcase`**, one row per opted-in resume:
 
-| Column         | Rule                                                                 |
-| -------------- | -------------------------------------------------------------------- |
-| `resume_id`    | Primary key; references `resumes` with `ON DELETE CASCADE`           |
-| `requested_at` | Not null; the opt-in time, which orders the listing                  |
-| `role`         | Null or one of the ten roles                                         |
-| `card_version` | 16 lowercase hex, not null; maintained by Go                         |
-| `template_id`  | Null or a preset ID matching the slug grammar, at most 64 characters |
+| Column            | Rule                                                                 |
+| ----------------- | -------------------------------------------------------------------- |
+| `resume_id`       | Primary key; references `resumes` with `ON DELETE CASCADE`           |
+| `requested_at`    | Not null; the opt-in time, which orders the listing                  |
+| `role`            | Null or one of the ten roles                                         |
+| `card_version`    | 16 lowercase hex, not null; maintained by Go                         |
+| `template_id`     | Null or a preset ID matching the slug grammar, at most 64 characters |
+| `review_key`      | Unused; not null, default `0000000000000000`; Go never writes it     |
+| `reviewed_key`    | Unused; always null                                                  |
+| `review_outcome`  | Unused; always null                                                  |
+| `reviewed_at`     | Unused; always null                                                  |
+| `first_listed_at` | Unused; always null                                                  |
 
 An index on `(requested_at, resume_id)` serves the listing. `aboutme_app` keeps
 select, insert, update, and delete. A row is about 100 bytes in use; three
@@ -164,21 +169,14 @@ row changes (**Owner approval** N1):
    migration drops the unused columns with it.
 
 `Down` drops the index and the default; it cannot restore deleted rows or
-cleared results.
+cleared results. The unused columns and the old index go in a later contract
+migration, once no supported rollback reads them.
 
-**Migration 00017** drops the unused `review_key`, `reviewed_key`,
-`review_outcome`, `reviewed_at`, and `first_listed_at` columns, their checks,
-and the old partial index. Every earlier release reads those columns, so the
-first release with 00017 is the rollback floor
-([ADR 0028](../adr/0028-community-showcase.md)). Its `Down` restores them as
-00011 left every row: the fixed key and no review result.
-
-**Older release on the new schema.** Until 00017, the earlier release lists only
-rows with a matching approved result; after 00011 none has one, so it lists
-nothing and shows every owner `pending`. Its review command could list resumes
-again, but never one the new rules would not. Rows it writes are valid opt-ins
-under the new rules, and the new release ignores the `review_key` it rewrites at
-start.
+**Older release on the new schema.** The earlier release lists only rows with a
+matching approved result; after 00011 none has one, so it lists nothing and
+shows every owner `pending`. Its review command could list resumes again, but
+never one the new rules would not. Rows it writes are valid opt-ins under the
+new rules, and the new release ignores the `review_key` it rewrites at start.
 
 **Publish request.** `PublishResumeRequest` gains two optional fields. Omitted
 keeps the stored value, so an older web tab that does not know them leaves the

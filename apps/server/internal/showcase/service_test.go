@@ -134,7 +134,7 @@ func TestSyncTxDeletesARowThatCannotBeListed(t *testing.T) {
 
 // AC-SHOW-001, AC-SHOW-005: turning the switch on inserts a row, a row that
 // stays on keeps its opt-in time and takes the new role, and turning it off and
-// on again starts a new opt-in.
+// on again starts a new opt-in. The review columns stay unused.
 func TestPublishTxLifecycle(t *testing.T) {
 	e := newEnv(t)
 	f := e.addResume(t, defaultSpec())
@@ -144,6 +144,7 @@ func TestPublishTxLifecycle(t *testing.T) {
 	if !found || row.Role == nil || *row.Role != "backend" {
 		t.Fatalf("new opt-in = %+v found %t, want a backend row", row, found)
 	}
+	requireReviewColumnsUnused(t, row)
 	if !row.RequestedAt.Equal(e.now) {
 		t.Fatalf("requested_at = %v, want %v", row.RequestedAt, e.now)
 	}
@@ -170,8 +171,18 @@ func TestPublishTxLifecycle(t *testing.T) {
 
 	e.optIn(t, f.id, nil)
 	row, _ = e.showcaseRow(t, f.id)
+	requireReviewColumnsUnused(t, row)
 	if !row.RequestedAt.Equal(later) {
 		t.Fatalf("requested_at after a new opt-in = %v, want %v", row.RequestedAt, later)
+	}
+}
+
+// requireReviewColumnsUnused checks the columns kept only for the previous
+// release (docs/design/showcase.md "Data and contract").
+func requireReviewColumnsUnused(t *testing.T, row store.ResumeShowcase) {
+	t.Helper()
+	if row.ReviewKey != "0000000000000000" || row.ReviewedKey != nil || row.ReviewOutcome != nil || row.ReviewedAt != nil || row.FirstListedAt != nil {
+		t.Fatalf("review columns = %+v, want the default key and nothing else", row)
 	}
 }
 

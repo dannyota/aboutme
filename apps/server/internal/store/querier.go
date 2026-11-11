@@ -501,6 +501,8 @@ type Querier interface {
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
+	// review_key and the other review columns are unused; the insert leaves them
+	// to their defaults (docs/design/showcase.md "Data and contract").
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	// Refresh rotation. Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted

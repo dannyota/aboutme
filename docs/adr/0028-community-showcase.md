@@ -76,10 +76,8 @@ document stores no template identity.
   and resume fetch follow the current state.
 - Operators must not add an in-app review or takedown page later without
   superseding ADR 0003.
-- Migration 00017 drops the approval index and the unused review columns, which
-  every earlier release reads. The first release with 00017 is the rollback
-  floor; the [deploy runbook](../runbooks/deploy.md#passkey-release-fence)
-  raises the fence to it.
+- Removing review keeps the schema expand-only: the release before it still
+  runs, lists nothing, and never lists a resume the new rules would not.
 - The privacy notice and terms carry the text in the design, with no review
   claim. Assessment decisions follow
   [ADR 0026](0026-vietnam-hosted-production.md).
@@ -96,6 +94,3 @@ document stores no template identity.
 - 2026-10-02: The owner approved the operator-deletion privacy text.
 - 2026-11-01: Corrected the approval and assessment wording; release evidence
   gaps remain in the traceability record.
-- 2026-11-11: Migration 00017 dropped the five unused review columns and the
-  approval index that 00011 kept for the release before it. The release floor
-  rises to the first release with 00017 when it deploys.

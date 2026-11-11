@@ -1,13 +1,12 @@
-// Migration 00017 (ADR 0028 "History"): the unused showcase review columns and
-// approval index, the authorization-code binding-fill trigger, and the four
-// indexes 00015 superseded are gone; Down restores them.
+// Migration 00017: the authorization-code binding-fill trigger and the four
+// indexes 00015 superseded are gone, Down restores them, and the showcase
+// review columns that earlier releases read stay.
 package migrations_test
 
 import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,18 +16,9 @@ import (
 )
 
 var (
-	// obsoleteShowcaseColumns are the review columns 00011 left unused.
-	obsoleteShowcaseColumns = []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
-	// obsoleteShowcaseChecks are the checks on those columns.
-	obsoleteShowcaseChecks = []string{
-		"resume_showcase_review_key_check", "resume_showcase_reviewed_key_check",
-		"resume_showcase_review_outcome_check", "resume_showcase_review_columns_check",
-		"resume_showcase_first_listed_check",
-	}
-	// obsoleteIndexes are the approval index and the four indexes 00015
-	// superseded.
+	// obsoleteIndexes are the four indexes 00015 superseded.
 	obsoleteIndexes = []string{
-		"resume_showcase_listing_idx", "auth_email_jobs_claim_idx", "auth_email_jobs_outcome_idx",
+		"auth_email_jobs_claim_idx", "auth_email_jobs_outcome_idx",
 		"sessions_user_id_active_idx", "oauth_grants_client_live_idx",
 	}
 	// supersedingIndexes serve the queries the four superseded indexes served.
@@ -36,19 +26,22 @@ var (
 		"auth_email_jobs_claim_order_idx", "auth_email_jobs_finished_idx",
 		"sessions_user_revoked_idx", "oauth_grants_client_revoked_idx",
 	}
+	// keptShowcaseColumns are the unused review columns earlier releases read.
+	keptShowcaseColumns = []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
 )
 
 const (
-	showcaseColumnsQuery = `SELECT count(*) FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'resume_showcase' AND column_name = ANY($1::text[])`
-	showcaseChecksQuery = `SELECT count(*) FROM pg_constraint
-		WHERE conrelid = 'public.resume_showcase'::regclass AND conname = ANY($1::text[])`
 	indexesQuery = `SELECT count(*) FROM pg_indexes
 		WHERE schemaname = 'public' AND indexname = ANY($1::text[])`
+	showcaseColumnsQuery = `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'resume_showcase' AND column_name = ANY($1::text[])`
 	bindingTriggerQuery = `SELECT count(*) FROM pg_trigger
 		WHERE tgname = 'oauth_authorization_codes_fill_second_factor_bindings'`
 	bindingFunctionQuery = `SELECT count(*) FROM pg_proc
 		WHERE proname = 'fill_oauth_authorization_code_second_factor_bindings'`
+	// releasedShowcaseRead is GetResumeShowcase as v0.8.28 generated it.
+	releasedShowcaseRead = `SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
+WHERE resume_id = $1`
 )
 
 // queryCountNamed runs a count query whose only argument is a list of names.
@@ -75,14 +68,8 @@ func queryCount(ctx context.Context, t *testing.T, db sqlExecer, query string) i
 // the superseding indexes remain.
 func requireObsoleteStateGone(ctx context.Context, t *testing.T, db sqlExecer) {
 	t.Helper()
-	if n := queryCountNamed(ctx, t, db, showcaseColumnsQuery, obsoleteShowcaseColumns); n != 0 {
-		t.Errorf("showcase review columns = %d, want 0", n)
-	}
-	if n := queryCountNamed(ctx, t, db, showcaseChecksQuery, obsoleteShowcaseChecks); n != 0 {
-		t.Errorf("showcase review checks = %d, want 0", n)
-	}
 	if n := queryCountNamed(ctx, t, db, indexesQuery, obsoleteIndexes); n != 0 {
-		t.Errorf("obsolete indexes = %d, want 0", n)
+		t.Errorf("superseded indexes = %d, want 0", n)
 	}
 	if n := queryCount(ctx, t, db, bindingTriggerQuery); n != 0 {
 		t.Errorf("binding-fill triggers = %d, want 0", n)
@@ -107,28 +94,39 @@ func requireNotNullViolation(t *testing.T, err error, column string) {
 	}
 }
 
-// At head nothing 00017 drops remains, and with no trigger to fill them an
-// authorization code needs its grant and epoch from the caller.
+// At head nothing 00017 drops remains, the previous release's showcase read
+// still runs, and with no trigger to fill them an authorization code needs its
+// grant and epoch from the caller.
 func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 	requireObsoleteStateGone(ctx, t, tx)
 
+	if n := queryCountNamed(ctx, t, tx, showcaseColumnsQuery, keptShowcaseColumns); n != len(keptShowcaseColumns) {
+		t.Errorf("showcase review columns = %d, want %d", n, len(keptShowcaseColumns))
+	}
+	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
+		return sp.QueryRow(ctx, releasedShowcaseRead, uuid.New()).Scan()
+	})
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("v0.8.28 showcase read = %v, want no rows", err)
+	}
+
 	userID := createTestUser(ctx, t, tx)
 	clientID := insertOAuthClient(ctx, t, tx)
 	grantID := insertOAuthGrant(ctx, t, tx, userID, clientID)
 	insert := func(sp pgx.Tx, grant *uuid.UUID, epoch *int64) error {
-		_, err := sp.Exec(ctx, `
+		_, execErr := sp.Exec(ctx, `
 			INSERT INTO oauth_authorization_codes (
 				code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
 				created_at, expires_at, grant_id, auth_epoch
 			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		`, validOAuthDigest(), clientID, userID, oauthScopesBoth, oauthChallenge, oauthRedirectURI,
 			oauthNow, oauthNow.Add(oauthCodeTTL), grant, epoch)
-		return err
+		return execErr
 	}
 	epoch := int64(0)
-	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, nil, &epoch) })
+	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, nil, &epoch) })
 	requireNotNullViolation(t, err, "grant_id")
 	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, &grantID, nil) })
 	requireNotNullViolation(t, err, "auth_epoch")
@@ -137,10 +135,8 @@ func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	}
 }
 
-// An opt-in keeps its row through 00017. Down restores every dropped object,
-// with the review columns as 00011 left them: the previous release's showcase
-// read works again, the trigger fills an omitted code binding again, and
-// 00011's own Down still runs.
+// Down restores the four indexes and the trigger, which fills an omitted code
+// binding again, and Up drops them once more.
 func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)
@@ -161,63 +157,20 @@ func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 		}
 	})
 
-	if _, err = provider.UpTo(ctx, 16); err != nil {
-		t.Fatalf("UpTo(16) error: %v", err)
-	}
-	resumeID := seedLiveResume(ctx, t, db, "obsolete-state")
-	if _, err = db.ExecContext(ctx, `
-		INSERT INTO resume_showcase (resume_id, requested_at, role, card_version) VALUES ($1, now(), 'backend', $2)`,
-		resumeID, showcaseHexB); err != nil {
-		t.Fatalf("insert showcase row: %v", err)
-	}
-
 	if _, err = provider.UpTo(ctx, 17); err != nil {
 		t.Fatalf("UpTo(17) error: %v", err)
 	}
 	requireObsoleteStateGone(ctx, t, conn)
-	var role, cardVersion string
-	if err = conn.QueryRow(ctx, `SELECT role, card_version FROM resume_showcase WHERE resume_id = $1`, resumeID).
-		Scan(&role, &cardVersion); err != nil {
-		t.Fatalf("read the opt-in after up: %v", err)
-	}
-	if role != "backend" || cardVersion != showcaseHexB {
-		t.Errorf("opt-in after up = %q %q, want backend %s", role, cardVersion, showcaseHexB)
-	}
 
 	if _, err = provider.DownTo(ctx, 16); err != nil {
 		t.Fatalf("DownTo(16) error: %v", err)
 	}
-	if n := queryCountNamed(ctx, t, conn, showcaseColumnsQuery, obsoleteShowcaseColumns); n != len(obsoleteShowcaseColumns) {
-		t.Errorf("showcase review columns after down = %d, want %d", n, len(obsoleteShowcaseColumns))
-	}
-	if n := queryCountNamed(ctx, t, conn, showcaseChecksQuery, obsoleteShowcaseChecks); n != len(obsoleteShowcaseChecks) {
-		t.Errorf("showcase review checks after down = %d, want %d", n, len(obsoleteShowcaseChecks))
-	}
 	if n := queryCountNamed(ctx, t, conn, indexesQuery, obsoleteIndexes); n != len(obsoleteIndexes) {
-		t.Errorf("obsolete indexes after down = %d, want %d", n, len(obsoleteIndexes))
+		t.Errorf("superseded indexes after down = %d, want %d", n, len(obsoleteIndexes))
 	}
 	if n := queryCount(ctx, t, conn, bindingTriggerQuery); n != 1 {
 		t.Errorf("binding-fill triggers after down = %d, want 1", n)
 	}
-
-	// The previous release's generated read of an opt-in.
-	var (
-		reviewKey                 string
-		reviewedKey, outcome      *string
-		reviewedAt, firstListedAt *time.Time
-	)
-	if err = conn.QueryRow(ctx, `
-		SELECT review_key, reviewed_key, review_outcome, reviewed_at, first_listed_at
-		FROM resume_showcase WHERE resume_id = $1`, resumeID).
-		Scan(&reviewKey, &reviewedKey, &outcome, &reviewedAt, &firstListedAt); err != nil {
-		t.Fatalf("read the review columns after down: %v", err)
-	}
-	if reviewKey != "0000000000000000" || reviewedKey != nil || outcome != nil || reviewedAt != nil || firstListedAt != nil {
-		t.Errorf("review columns after down = %q %v %v %v %v, want the default key and nothing else",
-			reviewKey, reviewedKey, outcome, reviewedAt, firstListedAt)
-	}
-
-	// The restored trigger fills an omitted binding again.
 	userID := createTestUser(ctx, t, conn)
 	clientID := insertOAuthClient(ctx, t, conn)
 	grantID := insertOAuthGrant(ctx, t, conn, userID, clientID)
@@ -234,9 +187,6 @@ func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 		t.Errorf("filled grant_id = %s, want %s", filled, grantID)
 	}
 
-	if _, err = provider.DownTo(ctx, 10); err != nil {
-		t.Fatalf("DownTo(10) error: %v", err)
-	}
 	if _, err = provider.Up(ctx); err != nil {
 		t.Fatalf("Up() after down error: %v", err)
 	}

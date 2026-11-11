@@ -1,12 +1,13 @@
 // Community showcase table (docs/design/showcase.md "Data and contract", ADR
 // 0028; AC-SHOW-001, AC-SHOW-009, AC-SHOW-015): its column checks, cascades,
-// and the slug refusal.
+// listing index, and the slug refusal.
 package migrations_test
 
 import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,20 +22,28 @@ const (
 
 // showcaseRow is every column of a resume_showcase insert the tests vary.
 type showcaseRow struct {
-	role        *string
-	cardVersion string
-	templateID  *string
+	role          *string
+	reviewHex     string
+	cardVersion   string
+	templateID    *string
+	reviewedHex   *string
+	outcome       *string
+	reviewedAt    *time.Time
+	firstListedAt *time.Time
 }
 
 func validShowcaseRow() showcaseRow {
-	return showcaseRow{cardVersion: showcaseHexB}
+	return showcaseRow{reviewHex: showcaseHexA, cardVersion: showcaseHexB}
 }
 
 func insertShowcase(ctx context.Context, db sqlExecer, resumeID uuid.UUID, row showcaseRow) error {
 	_, err := db.Exec(ctx, `
-		INSERT INTO resume_showcase (resume_id, requested_at, role, card_version, template_id)
-		VALUES ($1, now(), $2, $3, $4)`,
-		resumeID, row.role, row.cardVersion, row.templateID)
+		INSERT INTO resume_showcase (
+			resume_id, requested_at, role, review_key, card_version, template_id,
+			reviewed_key, review_outcome, reviewed_at, first_listed_at
+		) VALUES ($1, now(), $2, $3, $4, $5, $6, $7, $8, $9)`,
+		resumeID, row.role, row.reviewHex, row.cardVersion, row.templateID,
+		row.reviewedHex, row.outcome, row.reviewedAt, row.firstListedAt)
 	return err
 }
 
@@ -52,6 +61,8 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 	resumeID := insertLiveCardResume(ctx, t, tx, createTestUser(ctx, t, tx), uniqueCardSlug())
+	now := time.Now().UTC()
+	approved, declined, other := "approved", "declined", "maybe"
 
 	tests := []struct {
 		name           string
@@ -60,6 +71,9 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 	}{
 		{"role outside the ten", func(r *showcaseRow) { r.role = strPtr("designer") }, "resume_showcase_role_check"},
 		{"empty role", func(r *showcaseRow) { r.role = strPtr("") }, "resume_showcase_role_check"},
+		{"uppercase review key", func(r *showcaseRow) { r.reviewHex = "0123456789ABCDEF" }, "resume_showcase_review_key_check"},
+		{"short review key", func(r *showcaseRow) { r.reviewHex = "0123456789abcde" }, "resume_showcase_review_key_check"},
+		{"long review key", func(r *showcaseRow) { r.reviewHex = "0123456789abcdef0" }, "resume_showcase_review_key_check"},
 		{"non hex card version", func(r *showcaseRow) { r.cardVersion = "0123456789abcdeg" }, "resume_showcase_card_version_check"},
 		{"short card version", func(r *showcaseRow) { r.cardVersion = "0123" }, "resume_showcase_card_version_check"},
 		{"template with uppercase", func(r *showcaseRow) { r.templateID = strPtr("Ats-Plain") }, "resume_showcase_template_id_check"},
@@ -67,6 +81,26 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 		{"template with trailing hyphen", func(r *showcaseRow) { r.templateID = strPtr("ats-") }, "resume_showcase_template_id_check"},
 		{"empty template", func(r *showcaseRow) { r.templateID = strPtr("") }, "resume_showcase_template_id_check"},
 		{"template over 64 characters", func(r *showcaseRow) { r.templateID = strPtr(strings.Repeat("a", 65)) }, "resume_showcase_template_id_check"},
+		{"uppercase reviewed key", func(r *showcaseRow) {
+			r.reviewedHex, r.outcome, r.reviewedAt = strPtr("0123456789ABCDEF"), &declined, &now
+		}, "resume_showcase_reviewed_key_check"},
+		{"unknown outcome", func(r *showcaseRow) {
+			r.reviewedHex, r.outcome, r.reviewedAt = strPtr(showcaseHexA), &other, &now
+		}, "resume_showcase_review_outcome_check"},
+		{"reviewed key without outcome", func(r *showcaseRow) {
+			r.reviewedHex, r.reviewedAt = strPtr(showcaseHexA), &now
+		}, "resume_showcase_review_columns_check"},
+		{"outcome without reviewed key", func(r *showcaseRow) {
+			r.outcome, r.reviewedAt = &declined, &now
+		}, "resume_showcase_review_columns_check"},
+		{"outcome without review time", func(r *showcaseRow) {
+			r.reviewedHex, r.outcome = strPtr(showcaseHexA), &declined
+		}, "resume_showcase_review_columns_check"},
+		{"review time alone", func(r *showcaseRow) { r.reviewedAt = &now }, "resume_showcase_review_columns_check"},
+		{"first listed without a review", func(r *showcaseRow) { r.firstListedAt = &now }, "resume_showcase_first_listed_check"},
+		{"approved without first listed", func(r *showcaseRow) {
+			r.reviewedHex, r.outcome, r.reviewedAt = strPtr(showcaseHexA), &approved, &now
+		}, "resume_showcase_first_listed_check"},
 	}
 	for _, test := range tests {
 		row := validShowcaseRow()
@@ -94,10 +128,35 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 	good := validShowcaseRow()
 	good.templateID = strPtr(strings.Repeat("a", 64))
 	if insertErr := insertShowcase(ctx, tx, resumeID, good); insertErr != nil {
-		t.Fatalf("insert row with a 64 character template: %v", insertErr)
+		t.Fatalf("insert pending row with a 64 character template: %v", insertErr)
 	}
 	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insertShowcase(ctx, sp, resumeID, validShowcaseRow()) })
 	requireConstraintViolation(t, err, "resume_showcase_pkey")
+}
+
+// A reviewed row is valid when all three review columns are set, and an
+// approved one needs its first-listed time.
+func TestResumeShowcaseAcceptsReviewedRows(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userID := createTestUser(ctx, t, tx)
+	now := time.Now().UTC()
+	approved, declined := "approved", "declined"
+
+	approvedRow := validShowcaseRow()
+	approvedRow.reviewedHex, approvedRow.outcome, approvedRow.reviewedAt, approvedRow.firstListedAt = strPtr(showcaseHexB), &approved, &now, &now
+	declinedRow := validShowcaseRow()
+	declinedRow.reviewedHex, declinedRow.outcome, declinedRow.reviewedAt = strPtr(showcaseHexA), &declined, &now
+	declinedAfterListing := declinedRow
+	declinedAfterListing.firstListedAt = &now
+	for name, row := range map[string]showcaseRow{
+		"approved": approvedRow, "declined": declinedRow, "declined after listing": declinedAfterListing,
+	} {
+		resumeID := insertLiveCardResume(ctx, t, tx, userID, uniqueCardSlug())
+		if err := insertShowcase(ctx, tx, resumeID, row); err != nil {
+			t.Errorf("%s row rejected: %v", name, err)
+		}
+	}
 }
 
 // AC-SHOW-001, AC-SHOW-015: the row goes with its resume, and with its account
@@ -126,6 +185,25 @@ func TestResumeShowcaseCascades(t *testing.T) {
 	}
 	if got := showcaseCount(ctx, t, tx, accountResume); got != 0 {
 		t.Fatalf("showcase rows after account delete = %d, want 0", got)
+	}
+}
+
+// The partial index on the first approval stays for the previous release; the
+// listing index of the current release is checked with migration 00011.
+func TestResumeShowcaseListingIndex(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	var definition string
+	if err := tx.QueryRow(ctx, `
+		SELECT indexdef FROM pg_indexes
+		WHERE schemaname = 'public' AND tablename = 'resume_showcase' AND indexname = 'resume_showcase_listing_idx'`,
+	).Scan(&definition); err != nil {
+		t.Fatalf("read listing index: %v", err)
+	}
+	for _, want := range []string{"first_listed_at DESC", "resume_id DESC", "review_outcome = 'approved'"} {
+		if !strings.Contains(definition, want) {
+			t.Errorf("index definition %q lacks %q", definition, want)
+		}
 	}
 }
 

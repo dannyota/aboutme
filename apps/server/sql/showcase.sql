@@ -18,6 +18,8 @@ JOIN resumes r ON r.id = s.resume_id
 WHERE r.user_id = sqlc.arg(user_id);
 
 -- name: InsertResumeShowcase :exec
+-- review_key and the other review columns are unused; the insert leaves them
+-- to their defaults (docs/design/showcase.md "Data and contract").
 INSERT INTO resume_showcase (resume_id, requested_at, role, card_version, template_id)
 VALUES (
     sqlc.arg(resume_id), sqlc.arg(requested_at), sqlc.narg(role),
