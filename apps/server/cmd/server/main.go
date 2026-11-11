@@ -197,6 +197,9 @@ func run() error {
 		Config: cfg, Pool: pool, Projector: projector, Media: blobs, Logger: logger,
 		Sessions: sessionManager, Coordinator: coordinator, PrintQueue: printQueue, Showcase: showcaseService,
 	})
+	projectService := app.NewProjects(app.ProjectDependencies{
+		Config: cfg, Pool: pool, Sessions: sessionManager, Resumes: resumeService,
+	})
 	agentRoutes, err := app.NewAgents(ctx, cfg, pool, queries, resumeService, sessionManager)
 	if err != nil {
 		return fmt.Errorf("create agent access: %w", err)
@@ -208,7 +211,7 @@ func run() error {
 
 	handler := app.NewRouter(app.RouterDependencies{
 		Config: cfg, Logger: logger, Readiness: readiness, Public: publicService,
-		Providers: authService, Account: accountService, Resumes: resumeService, Passwords: passwordAuth.Service,
+		Providers: authService, Account: accountService, Resumes: resumeService, Projects: projectService, Passwords: passwordAuth.Service,
 		Agents: agentRoutes, SecondFactor: secondFactor.RegisterRoutes, Streams: streams, Views: views.Service,
 	})
 

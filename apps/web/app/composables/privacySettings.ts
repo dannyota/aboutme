@@ -2,7 +2,7 @@ import { ref, type InjectionKey, type Ref } from 'vue';
 
 import type { AuthProvider } from './useAuth';
 
-export const MAX_ACCOUNT_EXPORT_BYTES = 12_582_912;
+export const MAX_ACCOUNT_EXPORT_BYTES = 16_777_216;
 
 type AccountExportState
   = | { readonly kind: 'idle' }

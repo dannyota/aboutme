@@ -13,6 +13,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/projectapi"
 	"danny.vn/aboutme/apps/server/internal/publicapi"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/realtimeapi"
@@ -36,6 +37,8 @@ type RouterDependencies struct {
 	Account *accountapi.Service
 	// Resumes serves authenticated resume routes.
 	Resumes *resumeapi.Service
+	// Projects serves the private account project library.
+	Projects *projectapi.Service
 	// Passwords serves the password routes.
 	Passwords *auth.PasswordService
 	// Agents attaches the agent-access routes, or nothing when disabled.
@@ -58,7 +61,7 @@ func NewRouter(deps RouterDependencies) http.Handler {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, deps.Public, deps.Providers.RegisterRoutes, deps.Account.RegisterRoutes, deps.Resumes.RegisterRoutes, deps.Passwords.RegisterRoutes, deps.Agents, deps.SecondFactor, capabilitiesRegistrar(cfg), deps.Streams.RegisterRoutes, deps.Views.RegisterRoutes)
+	}, deps.Public, deps.Providers.RegisterRoutes, deps.Account.RegisterRoutes, deps.Resumes.RegisterRoutes, deps.Projects.RegisterRoutes, deps.Passwords.RegisterRoutes, deps.Agents, deps.SecondFactor, capabilitiesRegistrar(cfg), deps.Streams.RegisterRoutes, deps.Views.RegisterRoutes)
 }
 
 // capabilitiesRegistrar exposes the optional-surface flags and the enabled

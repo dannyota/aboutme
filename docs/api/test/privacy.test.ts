@@ -33,9 +33,14 @@ describe("account privacy contract", () => {
       "exportedAt",
       "account",
       "resumes",
+      "projects",
     ]);
-    expect(bundle?.properties.exportVersion.const).toBe(1);
+    expect(bundle?.properties.exportVersion.const).toBe(2);
     expect(bundle?.properties.resumes.maxItems).toBe(3);
+    expect(bundle?.properties.projects.maxItems).toBe(30);
+    expect(bundle?.properties.projects.items.$ref).toBe(
+      "#/components/schemas/ProjectRecord",
+    );
     expect(schemas.AccountExportProfile?.required).toEqual([
       "id",
       "email",

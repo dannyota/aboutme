@@ -44,6 +44,38 @@ func (q *Queries) GetAccountExportProfile(ctx context.Context, id uuid.UUID) (Ge
 	return i, err
 }
 
+const listAccountExportProjects = `-- name: ListAccountExportProjects :many
+SELECT id, user_id, slug, revision, document, created_at, updated_at FROM projects WHERE user_id = $1 ORDER BY created_at, id
+`
+
+func (q *Queries) ListAccountExportProjects(ctx context.Context, userID uuid.UUID) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listAccountExportProjects, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Slug,
+			&i.Revision,
+			&i.Document,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccountExportProviders = `-- name: ListAccountExportProviders :many
 SELECT provider
 FROM identities

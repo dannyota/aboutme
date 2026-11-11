@@ -194,3 +194,14 @@ SELECT count(*)::bigint AS backlog,
            AS oldest_age_seconds
 FROM slug_tombstones
 WHERE released_at <= sqlc.arg(cutoff)::timestamptz;
+
+-- name: DeleteExpiredProjectSlugHoldsPage :execrows
+WITH doomed AS (
+    SELECT user_id, slug FROM project_slug_holds
+    WHERE released_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY released_at, user_id, slug
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM project_slug_holds AS hold
+USING doomed WHERE hold.user_id = doomed.user_id AND hold.slug = doomed.slug;

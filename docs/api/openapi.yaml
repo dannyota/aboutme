@@ -109,6 +109,13 @@ tags:
       `Cache-Control: no-store, no-transform` and
       `X-Request-ID`; those request-scoped headers are never stored for
       idempotent replay and are not repeated on each operation below.
+  - name: projects
+    description: >-
+      The owner's private project library, using cookie sessions only. A
+      library project has no public URL and is never listed across accounts.
+      Mutations follow the resume write-safety rules: `If-Match` on the
+      project revision for an existing project, and `Idempotency-Key` on
+      every write.
   - name: media
     description: >-
       Resume photos. Objects are private and served only through Go after an
@@ -1316,21 +1323,22 @@ paths:
       summary: Download the caller’s portable account data
       security:
         - sessionCookie: []
-      description: "Downloads one complete version-1 JSON bundle of the account
-        profile and up to three current-version resume documents, including
-        hidden/private content and incomplete drafts. Each normalized photo is
+      description: "Downloads one complete version-2 JSON bundle of the account
+        profile, up to three current-version resume documents and the private
+        project library, including hidden/private content and incomplete
+        drafts. Strings are not HTML-escaped. Each normalized photo is
         separate standard-base64 data with its crop;
         document.personalDetails.photo is removed. No backend object keys,
         provider subjects, password/session/CSRF/OAuth credentials or cleanup
         data appear. Reads account and documents in one database snapshot and
         buffers the complete attachment before success. A referenced photo that
         is missing, invalid or over 2 MiB fails the export. Complete response
-        cap: 12,582,912 bytes. No body, query, schema, conditional or
+        cap: 16,777,216 bytes. No body, query, schema, conditional or
         idempotency input is accepted. Separate 5/minute account-and-client-IP
         limit."
       responses:
         "200":
-          description: Complete portable JSON attachment, at most 12 MiB.
+          description: Complete portable JSON attachment, at most 16 MiB.
           headers:
             Cache-Control:
               schema:
@@ -1352,7 +1360,7 @@ paths:
                 $ref: "#/components/schemas/AccountExport"
               example:
                 data:
-                  exportVersion: 1
+                  exportVersion: 2
                   exportedAt: 2026-09-06T00:00:00Z
                   account:
                     id: 018f5b6a-9a3e-7c21-8b1e-000000000001
@@ -1362,6 +1370,7 @@ paths:
                     updatedAt: 2026-08-01T00:00:00Z
                     linkedProviders: []
                   resumes: []
+                  projects: []
         "400":
           description: Bodiless account operation rejects query, body, schema,
             conditional and idempotency inputs.
@@ -2022,6 +2031,227 @@ paths:
                 error:
                   code: not_found
                   message: no such agent grant
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List the caller's private project library
+      description: >-
+        Lists only the caller's projects in creation order. Reads share the
+        resume read limiter. Query parameters and bodies are rejected.
+        Every response uses Cache-Control no-store, no-transform.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The private library, with empty linkedResumeIds arrays.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+        "400":
+          $ref: "#/components/responses/ProjectBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "405":
+          $ref: "#/components/responses/ProjectMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a private library project
+      description: >-
+        Creates at most 30 projects per account. An omitted slug is proposed by
+        ASCII folding the default-language name and deduplicating within the
+        account. Released slugs are held within that account for 180 days.
+        If-Match is rejected. Writes share the resume write limiter and a slug
+        claim consumes the shared slug claim budget. The bounded request,
+        normalized precondition and concrete operation identify one replay.
+        Every response uses Cache-Control no-store, no-transform.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: The sanitized stored project, starting at revision 1.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ProjectETag"
+            Location:
+              schema:
+                type: string
+              description: The owner project resource path.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/ProjectBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "405":
+          $ref: "#/components/responses/ProjectMethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/ProjectConflict"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "422":
+          $ref: "#/components/responses/ProjectDocumentInvalid"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /projects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Read one owned library project
+      description: >-
+        Missing and foreign IDs return the same project_not_found response.
+        Reads share the resume read limiter. Every response uses
+        Cache-Control no-store, no-transform.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The private project with its revision validator.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ProjectETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/ProjectBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "405":
+          $ref: "#/components/responses/ProjectMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+    put:
+      operationId: replaceProject
+      tags: [projects]
+      summary: Replace a complete owned library project
+      description: >-
+        Omitted optional fields are cleared and absent translations removed.
+        Every successful write advances the project revision. A slug rename
+        holds the old slug for 180 days and consumes the shared slug limiter.
+        Slug release requires recent primary proof and, for an enrolled account,
+        recent second-factor proof. Writes share the resume write limiter.
+        Every response uses Cache-Control no-store, no-transform.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceProjectRequest"
+      responses:
+        "200":
+          description: The sanitized project and an empty changedResumes array.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ProjectETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReplaceResponse"
+        "400":
+          $ref: "#/components/responses/ProjectBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ProjectForbidden"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "405":
+          $ref: "#/components/responses/ProjectMethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/ProjectConflict"
+        "412":
+          $ref: "#/components/responses/ProjectRevisionMismatch"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "422":
+          $ref: "#/components/responses/ProjectDocumentInvalid"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete an owned library project
+      description: >-
+        Deletes the project and holds its slug for 180 days in the same
+        transaction as its replay response. Requires recent primary proof and,
+        for an enrolled account, recent second-factor proof. Writes share the
+        resume write limiter. No request body is accepted: a non-empty body is
+        request_invalid, and one over 262,144 bytes is body_too_large. Every
+        response uses Cache-Control no-store, no-transform.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: An empty changedResumes array.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDeleteResponse"
+        "400":
+          $ref: "#/components/responses/ProjectBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ProjectForbidden"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "405":
+          $ref: "#/components/responses/ProjectMethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/ProjectConflict"
+        "412":
+          $ref: "#/components/responses/ProjectRevisionMismatch"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
   /resumes:
     get:
       operationId: listResumes
@@ -4816,6 +5046,73 @@ components:
             error:
               code: rate_limited
               message: too many requests; retry later
+    ProjectBadRequest:
+      description: >-
+        `request_invalid`, `idempotency_key_required`,
+        `idempotency_key_invalid`, `precondition_malformed`, or
+        `precondition_not_supported`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProjectNotFound:
+      description: >-
+        `project_not_found`, identical for a missing project and another
+        account's project.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProjectConflict:
+      description: >-
+        `project_limit` at 30 projects per account, `project_slug_taken` when
+        another project of the account holds the slug, `project_slug_held`
+        while a released slug of the account is held from reuse, or
+        `idempotency_key_reuse`. No mutation is committed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProjectDocumentInvalid:
+      description: >-
+        `document_invalid`: a field breaks its rule, the slug breaks the slug
+        grammar, or the stored JSON exceeds 96 KiB.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProjectRevisionMismatch:
+      description: >-
+        `revision_mismatch`, carrying the current revision and project. No
+        mutation is committed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectRevisionError"
+    ProjectForbidden:
+      description: >-
+        `csrf_rejected` when the CSRF or exact-origin chain fails, or
+        `reauth_required` when the change releases the project slug and the
+        session has no recent primary proof or, for an account with a second
+        factor, no recent second-factor proof. Nothing is committed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_required
+              message: recent reauthentication is required
+    ProjectMethodNotAllowed:
+      description: Unsupported method for this project route.
+      headers:
+        Allow:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     ResumeRead:
       description: One owned resume, projected to the requested wire version.
       headers:
@@ -6340,6 +6637,13 @@ components:
       schema:
         $ref: "#/components/schemas/PDFAttachment"
       example: attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf
+    ProjectETag:
+      description: The library project's revision as a strong entity tag,
+        `"r<revision>"`. Send it back as `If-Match` on the next mutation.
+      schema:
+        type: string
+        pattern: '^"r[0-9]+"$'
+      example: '"r1"'
     ParentETag:
       description: The owning resume's revision as a strong entity tag,
         `"r<revision>"`. Send it back as `If-Match` on the next mutation.
@@ -6909,12 +7213,12 @@ components:
       type: string
       pattern: "^[0-9]+$"
       description: >-
-        A resume's revision number. Server-assigned, monotonically
-        increasing, and stored as a Postgres bigint — serialized here as a
-        **string** (not a JSON number) so TypeScript and Dart clients don't
-        lose precision on 64-bit values. Appears in resource bodies (e.g.
-        `"revision": "42"`) and is echoed in the `ETag` response header as
-        `"r<revision>"` for use in a subsequent `If-Match`.
+        A resume's or library project's revision number. Server-assigned,
+        monotonically increasing, and stored as a Postgres bigint —
+        serialized here as a **string** (not a JSON number) so TypeScript and
+        Dart clients don't lose precision on 64-bit values. Appears in
+        resource bodies (e.g. `"revision": "42"`) and is echoed in the `ETag`
+        response header as `"r<revision>"` for use in a subsequent `If-Match`.
       example: "42"
     User:
       type: object
@@ -7982,6 +8286,201 @@ components:
           description: >-
             Public page color scheme: light, dark, or follow the viewer's
             device. Absent means `light`.
+    ProjectContent:
+      type: object
+      required: [defaultLanguage, text]
+      description: >-
+        Complete private content. PostgreSQL JSON text is at most 98,304 UTF-8
+        bytes after sanitizing. Unknown fields and duplicate keys are rejected.
+      properties:
+        dates:
+          anyOf:
+            - $ref: "#/components/schemas/PublicDateRange"
+            - type: "null"
+        repositoryUrl:
+          $ref: "#/components/schemas/ProjectLink"
+        demoUrl:
+          $ref: "#/components/schemas/ProjectLink"
+        technologies:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 40
+        defaultLanguage:
+          type: string
+          pattern: "^[a-z]{2,8}$"
+          description: A key present in text, whose name must be non-blank.
+        text:
+          type: object
+          minProperties: 1
+          maxProperties: 4
+          propertyNames:
+            pattern: "^[a-z]{2,8}$"
+          additionalProperties:
+            $ref: "#/components/schemas/ProjectText"
+    ProjectText:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        role:
+          type: string
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 300
+        outcome:
+          type: string
+          maxLength: 600
+        description:
+          type: string
+          maxLength: 16384
+          description: >-
+            Rich text through the resume sanitizer, bounded to 16,384 UTF-8
+            bytes both before and after sanitizing.
+    ProjectLink:
+      type: string
+      description: Empty or an absolute HTTPS URL.
+      anyOf:
+        - const: ""
+        - format: uri
+          pattern: "^https://"
+    ProjectSlug:
+      type: string
+      minLength: 2
+      maxLength: 40
+      pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+    CreateProjectRequest:
+      allOf:
+        - $ref: "#/components/schemas/ProjectContent"
+        - type: object
+          properties:
+            slug:
+              $ref: "#/components/schemas/ProjectSlug"
+      unevaluatedProperties: false
+    ReplaceProjectRequest:
+      allOf:
+        - $ref: "#/components/schemas/CreateProjectRequest"
+      required: [slug]
+    ProjectRecord:
+      allOf:
+        - $ref: "#/components/schemas/ProjectContent"
+        - type: object
+          required: [id, slug, revision, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+            slug:
+              $ref: "#/components/schemas/ProjectSlug"
+            revision:
+              $ref: "#/components/schemas/Revision"
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    Project:
+      allOf:
+        - $ref: "#/components/schemas/ProjectRecord"
+        - type: object
+          required: [linkedResumeIds]
+          properties:
+            linkedResumeIds:
+              type: array
+              maxItems: 0
+              items:
+                type: string
+                format: uuid
+      unevaluatedProperties: false
+    ProjectResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Project"
+    ProjectListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [projects]
+          properties:
+            projects:
+              type: array
+              maxItems: 30
+              items:
+                $ref: "#/components/schemas/Project"
+    ProjectReplaceResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [project, changedResumes]
+          properties:
+            project:
+              $ref: "#/components/schemas/Project"
+            changedResumes:
+              $ref: "#/components/schemas/ProjectChangedResumes"
+    ProjectDeleteResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [changedResumes]
+          properties:
+            changedResumes:
+              $ref: "#/components/schemas/ProjectChangedResumes"
+    ProjectChangedResumes:
+      type: array
+      maxItems: 0
+      items:
+        type: object
+        additionalProperties: false
+        required: [id, revision]
+        properties:
+          id:
+            type: string
+            format: uuid
+          revision:
+            $ref: "#/components/schemas/Revision"
+    ProjectRevisionError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details]
+          properties:
+            code:
+              const: revision_mismatch
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: false
+              required: [revision, project]
+              properties:
+                revision:
+                  $ref: "#/components/schemas/Revision"
+                project:
+                  $ref: "#/components/schemas/Project"
     AccountExport:
       type: object
       additionalProperties: false
@@ -7996,10 +8495,11 @@ components:
             - exportedAt
             - account
             - resumes
+            - projects
           properties:
             exportVersion:
               type: integer
-              const: 1
+              const: 2
             exportedAt:
               type: string
               format: date-time
@@ -8010,6 +8510,11 @@ components:
               maxItems: 3
               items:
                 $ref: "#/components/schemas/AccountExportResume"
+            projects:
+              type: array
+              maxItems: 30
+              items:
+                $ref: "#/components/schemas/ProjectRecord"
     AccountExportProfile:
       type: object
       additionalProperties: false
@@ -9490,10 +9995,10 @@ components:
       description: >-
         Optimistic-concurrency precondition, ETag form: `"r<revision>"`
         (quotes included, per RFC 9110). Required on every mutation of an
-        existing resume. Resume creation has no prior revision and rejects an
-        `If-Match` header. A mismatch returns `412 Precondition Failed` with
-        the current revision/document — never `409` (see the write-safety
-        section above).
+        existing resume or library project. Resume and project creation have
+        no prior revision and reject an `If-Match` header. A mismatch returns
+        `412 Precondition Failed` with the current revision/document — never
+        `409` (see the write-safety section above).
 
 
         Singleton header: exactly one field line with one value. A repeated
@@ -9551,6 +10056,14 @@ components:
         type: string
         format: uuid
       example: 018f5b6a-9a3e-7c21-8b1e-000000000030
+    ProjectID:
+      name: id
+      in: path
+      required: true
+      description: The owned library project's server-generated UUIDv7.
+      schema:
+        type: string
+        format: uuid
     ResumeID:
       name: id
       in: path

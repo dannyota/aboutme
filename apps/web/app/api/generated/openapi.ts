@@ -392,7 +392,7 @@ export interface paths {
         };
         /**
          * Download the caller’s portable account data
-         * @description Downloads one complete version-1 JSON bundle of the account profile and up to three current-version resume documents, including hidden/private content and incomplete drafts. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 12,582,912 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
+         * @description Downloads one complete version-2 JSON bundle of the account profile, up to three current-version resume documents and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 16,777,216 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
          */
         get: operations["getAccountExport"];
         put?: never;
@@ -564,6 +564,61 @@ export interface paths {
          * @description Revokes the live grant and its token family. Unknown, already revoked, or foreign grant IDs all return the same 404 response and are not distinguishable.
          */
         delete: operations["revokeAgentGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's private project library
+         * @description Lists only the caller's projects in creation order. Reads share the resume read limiter. Query parameters and bodies are rejected. Every response uses Cache-Control no-store, no-transform.
+         */
+        get: operations["listProjects"];
+        put?: never;
+        /**
+         * Create a private library project
+         * @description Creates at most 30 projects per account. An omitted slug is proposed by ASCII folding the default-language name and deduplicating within the account. Released slugs are held within that account for 180 days. If-Match is rejected. Writes share the resume write limiter and a slug claim consumes the shared slug claim budget. The bounded request, normalized precondition and concrete operation identify one replay. Every response uses Cache-Control no-store, no-transform.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one owned library project
+         * @description Missing and foreign IDs return the same project_not_found response. Reads share the resume read limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        get: operations["getProject"];
+        /**
+         * Replace a complete owned library project
+         * @description Omitted optional fields are cleared and absent translations removed. Every successful write advances the project revision. A slug rename holds the old slug for 180 days and consumes the shared slug limiter. Slug release requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        put: operations["replaceProject"];
+        post?: never;
+        /**
+         * Delete an owned library project
+         * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted: a non-empty body is request_invalid, and one over 262,144 bytes is body_too_large. Every response uses Cache-Control no-store, no-transform.
+         */
+        delete: operations["deleteProject"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1689,7 +1744,7 @@ export interface components {
             };
         };
         /**
-         * @description A resume's revision number. Server-assigned, monotonically increasing, and stored as a Postgres bigint — serialized here as a **string** (not a JSON number) so TypeScript and Dart clients don't lose precision on 64-bit values. Appears in resource bodies (e.g. `"revision": "42"`) and is echoed in the `ETag` response header as `"r<revision>"` for use in a subsequent `If-Match`.
+         * @description A resume's or library project's revision number. Server-assigned, monotonically increasing, and stored as a Postgres bigint — serialized here as a **string** (not a JSON number) so TypeScript and Dart clients don't lose precision on 64-bit values. Appears in resource bodies (e.g. `"revision": "42"`) and is echoed in the `ETag` response header as `"r<revision>"` for use in a subsequent `If-Match`.
          * @example 42
          */
         Revision: string;
@@ -2120,14 +2175,90 @@ export interface components {
              */
             colorScheme?: "light" | "dark" | "system";
         };
+        /** @description Complete private content. PostgreSQL JSON text is at most 98,304 UTF-8 bytes after sanitizing. Unknown fields and duplicate keys are rejected. */
+        ProjectContent: {
+            dates?: components["schemas"]["PublicDateRange"] | null;
+            repositoryUrl?: components["schemas"]["ProjectLink"];
+            demoUrl?: components["schemas"]["ProjectLink"];
+            technologies?: string[];
+            /** @description A key present in text, whose name must be non-blank. */
+            defaultLanguage: string;
+            text: {
+                [key: string]: components["schemas"]["ProjectText"];
+            };
+        };
+        ProjectText: {
+            name?: string;
+            role?: string;
+            summary?: string;
+            outcome?: string;
+            /** @description Rich text through the resume sanitizer, bounded to 16,384 UTF-8 bytes both before and after sanitizing. */
+            description?: string;
+        };
+        /** @description Empty or an absolute HTTPS URL. */
+        ProjectLink: string | "" | unknown;
+        ProjectSlug: string;
+        CreateProjectRequest: components["schemas"]["ProjectContent"] & {
+            slug?: components["schemas"]["ProjectSlug"];
+        };
+        ReplaceProjectRequest: components["schemas"]["CreateProjectRequest"];
+        ProjectRecord: components["schemas"]["ProjectContent"] & {
+            /** Format: uuid */
+            id: string;
+            slug: components["schemas"]["ProjectSlug"];
+            revision: components["schemas"]["Revision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Project: components["schemas"]["ProjectRecord"] & {
+            linkedResumeIds: string[];
+        };
+        ProjectResponse: {
+            data: components["schemas"]["Project"];
+        };
+        ProjectListResponse: {
+            data: {
+                projects: components["schemas"]["Project"][];
+            };
+        };
+        ProjectReplaceResponse: {
+            data: {
+                project: components["schemas"]["Project"];
+                changedResumes: components["schemas"]["ProjectChangedResumes"];
+            };
+        };
+        ProjectDeleteResponse: {
+            data: {
+                changedResumes: components["schemas"]["ProjectChangedResumes"];
+            };
+        };
+        ProjectChangedResumes: {
+            /** Format: uuid */
+            id: string;
+            revision: components["schemas"]["Revision"];
+        }[];
+        ProjectRevisionError: {
+            error: {
+                /** @constant */
+                code: "revision_mismatch";
+                message: string;
+                details: {
+                    revision: components["schemas"]["Revision"];
+                    project: components["schemas"]["Project"];
+                };
+            };
+        };
         AccountExport: {
             data: {
                 /** @constant */
-                exportVersion: 1;
+                exportVersion: 2;
                 /** Format: date-time */
                 exportedAt: string;
                 account: components["schemas"]["AccountExportProfile"];
                 resumes: components["schemas"]["AccountExportResume"][];
+                projects: components["schemas"]["ProjectRecord"][];
             };
         };
         AccountExportProfile: {
@@ -2873,6 +3004,78 @@ export interface components {
                  *       }
                  *     }
                  */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `request_invalid`, `idempotency_key_required`, `idempotency_key_invalid`, `precondition_malformed`, or `precondition_not_supported`. */
+        ProjectBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `project_not_found`, identical for a missing project and another account's project. */
+        ProjectNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `project_limit` at 30 projects per account, `project_slug_taken` when another project of the account holds the slug, `project_slug_held` while a released slug of the account is held from reuse, or `idempotency_key_reuse`. No mutation is committed. */
+        ProjectConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `document_invalid`: a field breaks its rule, the slug breaks the slug grammar, or the stored JSON exceeds 96 KiB. */
+        ProjectDocumentInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `revision_mismatch`, carrying the current revision and project. No mutation is committed. */
+        ProjectRevisionMismatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ProjectRevisionError"];
+            };
+        };
+        /** @description `csrf_rejected` when the CSRF or exact-origin chain fails, or `reauth_required` when the change releases the project slug and the session has no recent primary proof or, for an account with a second factor, no recent second-factor proof. Nothing is committed. */
+        ProjectForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_required",
+                 *         "message": "recent reauthentication is required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Unsupported method for this project route. */
+        ProjectMethodNotAllowed: {
+            headers: {
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
                 "application/json": components["schemas"]["Error"];
             };
         };
@@ -4687,7 +4890,7 @@ export interface components {
          */
         AuthLinkPurpose: "link" | "reauth";
         /**
-         * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+         * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
          *
          *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
          * @example "r42"
@@ -4715,6 +4918,8 @@ export interface components {
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000030
          */
         GrantID: string;
+        /** @description The owned library project's server-generated UUIDv7. */
+        ProjectID: string;
         /**
          * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
@@ -4780,6 +4985,11 @@ export interface components {
          * @example attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf
          */
         ResumePDFAttachment: components["schemas"]["PDFAttachment"];
+        /**
+         * @description The library project's revision as a strong entity tag, `"r<revision>"`. Send it back as `If-Match` on the next mutation.
+         * @example "r1"
+         */
+        ProjectETag: string;
         /**
          * @description The owning resume's revision as a strong entity tag, `"r<revision>"`. Send it back as `If-Match` on the next mutation.
          * @example "r43"
@@ -5957,7 +6167,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Complete portable JSON attachment, at most 12 MiB. */
+            /** @description Complete portable JSON attachment, at most 16 MiB. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store, no-transform";
@@ -5973,7 +6183,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "data": {
-                     *         "exportVersion": 1,
+                     *         "exportVersion": 2,
                      *         "exportedAt": "2026-09-06T00:00:00Z",
                      *         "account": {
                      *           "id": "018f5b6a-9a3e-7c21-8b1e-000000000001",
@@ -5983,7 +6193,8 @@ export interface operations {
                      *           "updatedAt": "2026-08-01T00:00:00Z",
                      *           "linkedProviders": []
                      *         },
-                     *         "resumes": []
+                     *         "resumes": [],
+                     *         "projects": []
                      *       }
                      *     }
                      */
@@ -6716,6 +6927,209 @@ export interface operations {
             };
         };
     };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The private library, with empty linkedResumeIds arrays. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            400: components["responses"]["ProjectBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description The sanitized stored project, starting at revision 1. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ProjectETag"];
+                    /** @description The owner project resource path. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            400: components["responses"]["ProjectBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectConflict"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ProjectDocumentInvalid"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The private project with its revision validator. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ProjectETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            400: components["responses"]["ProjectBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ProjectNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    replaceProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description The sanitized project and an empty changedResumes array. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ProjectETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectReplaceResponse"];
+                };
+            };
+            400: components["responses"]["ProjectBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ProjectForbidden"];
+            404: components["responses"]["ProjectNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ProjectDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An empty changedResumes array. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDeleteResponse"];
+                };
+            };
+            400: components["responses"]["ProjectBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ProjectForbidden"];
+            404: components["responses"]["ProjectNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
     listResumes: {
         parameters: {
             query?: never;
@@ -6916,7 +7330,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -6975,7 +7389,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7041,7 +7455,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7108,7 +7522,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7179,7 +7593,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7250,7 +7664,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7319,7 +7733,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7399,7 +7813,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7463,7 +7877,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7661,7 +8075,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7727,7 +8141,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"
@@ -7788,7 +8202,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
                  *
                  *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
                  * @example "r42"

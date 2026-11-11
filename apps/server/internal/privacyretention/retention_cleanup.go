@@ -85,6 +85,13 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 		return w.failed(result)
 	}
 
+	result.ProjectSlugHoldsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteExpiredProjectSlugHoldsPage(ctx, store.DeleteExpiredProjectSlugHoldsPageParams{Cutoff: now.Add(-slugReservation), LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
+
 	viewCutoff := viewcount.Date(viewcount.Day(now).AddDate(0, 0, -viewCountDays))
 	result.ViewCountDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
 		return q.DeleteOldResumeViewDaysPage(ctx, store.DeleteOldResumeViewDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
