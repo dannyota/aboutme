@@ -1,6 +1,6 @@
 module danny.vn/aboutme
 
-go 1.27.3
+go 1.27.4
 
 // npm packages can ship Go files (flatted does); keep them out of ./... and all.
 ignore node_modules
