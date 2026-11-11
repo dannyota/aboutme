@@ -15,11 +15,13 @@ has checked that the item belongs to the person, and if the page says when.
 GitHub sign-in is built but off in production
 ([ADR 0016](0016-sign-in-providers.md)). Provider tokens are discarded after the
 profile fetch and no refresh token is stored
-([security: sign-in](../design/security-sign-in.md)). Keeping a GitHub token
-would add a credential to the database and its backups for a feature that reads
-only public data. GitHub grants read access to public information with no scope,
-links pull requests and releases to a numeric account id, and links commits only
-by email address ([sources](../plans/roadmap.md#facts-that-shape-the-order)).
+([security: sign-in](../design/security-sign-in.md)). A GitHub token written to
+the database would also sit in every backup for 30 days, and GitHub OAuth
+application tokens do not expire on their own. GitHub grants read access to
+public information with no scope, links pull requests and releases to a durable
+numeric account id, and links commits and contributor lists by email address,
+which anyone can set
+([sources](../plans/roadmap.md#facts-that-shape-the-order)).
 
 ## Decision
 
@@ -27,52 +29,62 @@ by email address ([sources](../plans/roadmap.md#facts-that-shape-the-order)).
    their aboutme account for evidence. The connection stores the GitHub numeric
    id, the login as last seen and the time. It is not an identity: it never
    signs anyone in, and GitHub sign-in stays governed by ADR 0016.
-2. **No scope.** The authorization request asks for no scope. Private
-   repositories are never read.
-3. **No stored token.** The access token lives only for one bounded evidence
-   session, encrypted, and is deleted when the session ends or expires. Nothing
-   reads GitHub in the background.
-4. **Evidence is a checked snapshot.** The owner picks an item during a session.
-   The server fetches it from GitHub, compares the item's account id with the
-   connection, and stores a snapshot with the check time. The page shows the
-   snapshot and its checked date. It is never refreshed without the owner.
-5. **What "confirmed" means is stated per item.** A merged pull request is
-   confirmed when its author id matches. A release is confirmed when its author
-   id matches. A repository is confirmed as owned when its owner id matches, or
-   as contributed to when GitHub lists the account as a contributor. Commits are
-   not evidence.
-6. **Evidence belongs to the library project** and is shown on every project
-   page of that project. It is attached and removed only in the web UI, never by
-   an agent tool.
-7. **Disconnecting** deletes the connection. The owner chooses whether attached
-   items stay as plain links without the confirmed mark or are removed.
+2. **Its own OAuth application and routes.** Evidence uses a separate GitHub
+   OAuth application and its own start and callback routes. Sign-in routes,
+   their enablement and their scopes do not change, and the feature is off until
+   its own credentials are configured.
+3. **No scope.** The authorization request asks for none, and a token whose
+   response reports any scope, or none at all, is refused. Private repositories
+   are never read.
+4. **The token is never written to disk.** It lives only in server memory for
+   one bounded evidence session and is revoked at GitHub when the session ends.
+   A restart ends every session. Nothing reads GitHub in the background.
+5. **Evidence is a checked snapshot, owned by the server.** The owner picks an
+   item during a session. The server fetches it, compares its account id with
+   the connection, and stores a snapshot with GitHub's own ids and the check
+   time. No client or agent can write an evidence field.
+6. **What "confirmed" means is stated per item.** A merged pull request and a
+   release are confirmed when their author id matches. A repository is confirmed
+   when its owner id matches. Contributor lists and commits are not evidence.
+7. **Evidence belongs to the library project** and is shown on every project
+   page of that project.
+8. **Disconnecting** deletes the connection and ends any session. The owner
+   chooses whether attached items stay as plain links or are removed.
 
 ## Alternatives rejected
 
 - **Turn on GitHub sign-in and reuse the identity.** Couples sign-in policy to a
   portfolio feature and makes a GitHub account a way into the aboutme account.
+- **A purpose on the sign-in routes.** An unrecognized purpose starts login
+  there, and omitting scope inherits the sign-in application's earlier grant.
+- **Seal the token in the database for the session.** The ciphertext reaches
+  backups and outlives the session; a later key compromise recovers a token
+  GitHub still honors.
 - **Store the token and refresh evidence in the background.** A standing
-  credential in the database and backups, for data the owner can recheck in one
-  step.
-- **A GitHub App installed on repositories.** Asks for installation on
-  repositories to read data that is already public.
+  credential for data the owner can recheck in one step.
+- **A GitHub App installed on repositories.** Asks for installation to read data
+  that is already public.
 - **Let the owner paste links without checking.** A link proves nothing about
   who did the work.
-- **Verify commits by email.** GitHub links commits by email address, which
-  anyone can set.
+- **Count contributor-list membership or commits.** Both follow commit email
+  addresses, so a repository's controller can attribute work to anyone.
 
 ## Consequences
 
-- Production needs GitHub OAuth application credentials before this ships, as an
-  owner action; without them the feature is off and nothing else changes.
-- A snapshot can go stale: the item may be deleted, made private or renamed. The
-  page says when it was checked, and the owner can check again.
-- The project page may reveal the owner's GitHub login through the items
-  themselves. The owner sees this before attaching the first item.
-- The server makes outbound requests to one fixed host, bounded in time, size
-  and count.
-- ADR 0016 gains an `evidence` start purpose.
+- Production needs a second GitHub OAuth application before this ships, as an
+  owner action; without it the feature is off and nothing else changes.
+- A session does not survive a server restart or reach another server process;
+  the owner continues with GitHub again. A fleet needs a new decision.
+- A snapshot can go stale. The page says when it was checked, and the owner can
+  check again; a renamed or transferred repository is followed by its id.
+- The project page may reveal the owner's GitHub login through the items. A
+  GitHub id shared by several aboutme accounts links them for anyone holding the
+  database, and confirmation does not mean exclusive authorship.
+- The server makes outbound requests to one fixed host through a dedicated
+  client, bounded in time, size and count.
 
 ## History
 
-Proposed 2026-11-11 from the owner's roadmap decision of 2026-11-10.
+Proposed 2026-11-11 from the owner's roadmap decision of 2026-11-10. Revised the
+same day after design review: separate application and routes, no token on disk,
+server-owned evidence, GitHub ids for recheck, and no contributor rule.
