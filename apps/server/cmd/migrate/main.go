@@ -127,6 +127,10 @@ func run(check bool, stdout io.Writer) error {
 	if databaseURL == "" {
 		return fmt.Errorf("load config: DATABASE_URL is required")
 	}
+	databaseURL, err := withSessionDefaults(databaseURL)
+	if err != nil {
+		return fmt.Errorf("open database: invalid configuration")
+	}
 
 	// migrations.Open always runs as aboutme_migrator (see its doc
 	// comment): every migration, and goose_db_version itself, is created
