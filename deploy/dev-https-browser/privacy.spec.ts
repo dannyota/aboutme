@@ -86,9 +86,11 @@ function assertPortableExport(value: unknown, resumeID: string): void {
     "account",
     "exportVersion",
     "exportedAt",
+    "projects",
     "resumes",
   ]);
-  expect(data.exportVersion).toBe(1);
+  expect(data.exportVersion).toBe(2);
+  expect(data.projects).toEqual([]);
   expect(Number.isNaN(Date.parse(data.exportedAt as string))).toBe(false);
   const account = object(data.account);
   expect(Object.keys(account).sort()).toEqual([
