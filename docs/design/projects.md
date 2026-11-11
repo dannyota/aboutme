@@ -1,6 +1,6 @@
 # Projects
 
-Status: Proposed (2026-11-10, revised 2026-11-11), awaiting owner approval.
+Status: Accepted by the owner (2026-11-11); not yet implemented.
 [ADR 0029](../adr/0029-account-project-library.md) records the decision and the
 [roadmap](../plans/roadmap.md#v09-show-the-work) the order. This document covers
 the product, the library and selection. The
@@ -41,9 +41,10 @@ A language key is the lowercase primary subtag of a BCP 47 tag (`vi`, `en`,
 needs a non-blank `name` in its default language to be saved and is otherwise
 draft-permissive, like a resume entry.
 
-### Proposed limits
+### Limits
 
-These move to [budgets](budgets.md) when the owner approves them.
+Approved by the owner on 2026-11-11. Each row moves to [budgets](budgets.md)
+with the code that enforces it.
 
 | Limit                                 | Value                                   |
 | ------------------------------------- | --------------------------------------- |
@@ -108,8 +109,8 @@ by the upgrade.
   available, and a linked, available entry's title links to its project page.
   The entry's own `link` then appears only on the project page.
 - In the PDF and print, the same title is a link to the project page. No line is
-  added, so layout and pagination do not change. A printed address line is the
-  owner's open point 2.
+  added, so layout and pagination do not change. The owner chose this for v0.9
+  on 2026-11-11; a printed address line for paper readers is not planned.
 
 The page uses the public page bar and theme of its resume. Layout, the workspace
 Projects screen, the resume picker and bilingual copy are specified with the UI
@@ -125,12 +126,3 @@ work in [shell and editor](ui/shell-and-editor.md) and
 - A project page gates, indexes and revokes exactly as its resume
   ([contract](projects-contract.md#representations)).
 - Project text is user content: it never enters logs or telemetry.
-
-## Open points for the owner
-
-1. The proposed limits above.
-2. Print. The roadmap says the PDF and print carry a short link so a reader of
-   any copy can reach the projects. This design proposes the title as a link
-   only, which serves a PDF reader and not a paper reader. Choose: title link
-   only in v0.9 (no layout change), or an added printed address line (changes
-   the renderer contract, pagination and the product images).

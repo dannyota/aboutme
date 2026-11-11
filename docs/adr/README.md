@@ -46,7 +46,7 @@ record may change until accepted.
 | [0026](0026-vietnam-hosted-production.md)                | Accepted | Move production to Vietnam-hosted providers                                      |
 | [0027](0027-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                      |
 | [0028](0028-community-showcase.md)                       | Accepted | Opt-in, uncached, never-indexed showcase of published resumes                    |
-| [0029](0029-account-project-library.md)                  | Proposed | Private account project library, selection in the resume, pages under the resume |
+| [0029](0029-account-project-library.md)                  | Accepted | Private account project library, selection in the resume, pages under the resume |
 
 The [historical AWS production decision](history/aws-production.md) is an
 unnumbered appendix.

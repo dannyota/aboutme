@@ -3,9 +3,9 @@
 Twelve acceptance-criterion rows use the `AC-PROJ-` prefix, for the account
 project library and project pages ([design](../../design/projects.md),
 [contract](../../design/projects-contract.md),
-[ADR 0029](../../adr/0029-account-project-library.md)). The design is proposed
-and awaits the owner's approval, so every row is `PLANNED` and names no test
-yet. See [README.md](./README.md) for matrix rules and the full prefix index.
+[ADR 0029](../../adr/0029-account-project-library.md)). The owner approved
+the design on 2026-11-11; nothing is implemented, so every row is `PLANNED` and
+names no test yet. See [README.md](./README.md) for matrix rules and the full prefix index.
 
 | ID | Design clause | Statement | Phase/task | State | Test/UAT reference |
 | - | - | - | - | - | - |

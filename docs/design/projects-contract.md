@@ -1,7 +1,7 @@
 # Projects contract
 
-Status: Proposed (2026-11-11), awaiting owner approval. Product scope is in
-[projects](projects.md); the decision is
+Status: Accepted by the owner (2026-11-11); not yet implemented. Product scope
+is in [projects](projects.md); the decision is
 [ADR 0029](../adr/0029-account-project-library.md). Nothing here is implemented.
 
 ## Routes and dispatch
