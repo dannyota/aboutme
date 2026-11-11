@@ -89,6 +89,88 @@ func (q *Queries) DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg Del
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredSessionsPage = `-- name: DeleteExpiredSessionsPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id
+    FROM sessions
+    WHERE absolute_expires_at <= $1::timestamptz
+    ORDER BY absolute_expires_at, id
+    LIMIT LEAST($2::int, 1000)
+    FOR UPDATE SKIP LOCKED
+), pending AS MATERIALIZED (
+    SELECT id
+    FROM pending_authentications
+    WHERE session_id = ANY (ARRAY(SELECT candidates.id FROM candidates))
+      AND expires_at <= $3::timestamptz
+    FOR UPDATE SKIP LOCKED
+), ceremonies AS MATERIALIZED (
+    SELECT id
+    FROM webauthn_ceremonies
+    WHERE (session_id = ANY (ARRAY(SELECT candidates.id FROM candidates))
+           OR pending_authentication_id = ANY (ARRAY(SELECT pending.id FROM pending)))
+      AND expires_at <= $3::timestamptz
+    FOR UPDATE SKIP LOCKED
+), enrollments AS MATERIALIZED (
+    SELECT id
+    FROM totp_enrollments
+    WHERE session_id = ANY (ARRAY(SELECT candidates.id FROM candidates))
+      AND expires_at <= $3::timestamptz
+    FOR UPDATE SKIP LOCKED
+), doomed AS MATERIALIZED (
+    SELECT candidate.id
+    FROM candidates AS candidate
+    WHERE NOT EXISTS (
+            SELECT 1 FROM sessions AS successor
+            WHERE successor.rotated_from = candidate.id
+              AND successor.id NOT IN (SELECT candidates.id FROM candidates))
+      AND NOT EXISTS (
+            SELECT 1 FROM pending_authentications AS bound
+            WHERE bound.session_id = candidate.id
+              AND bound.id NOT IN (SELECT pending.id FROM pending))
+      AND NOT EXISTS (
+            SELECT 1
+            FROM webauthn_ceremonies AS ceremony
+            LEFT JOIN pending_authentications AS bound
+                ON bound.id = ceremony.pending_authentication_id
+            WHERE (ceremony.session_id = candidate.id OR bound.session_id = candidate.id)
+              AND ceremony.id NOT IN (SELECT ceremonies.id FROM ceremonies))
+      AND NOT EXISTS (
+            SELECT 1 FROM totp_enrollments AS enrollment
+            WHERE enrollment.session_id = candidate.id
+              AND enrollment.id NOT IN (SELECT enrollments.id FROM enrollments))
+)
+DELETE FROM sessions AS session
+USING doomed
+WHERE session.id = doomed.id
+`
+
+type DeleteExpiredSessionsPageParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+	Now       time.Time
+}
+
+// Deletes session rows, revoked or not, whose absolute expiry is at or before
+// the cutoff, which the caller sets seven days before now. Rotation and reissue
+// copy absolute_expires_at unchanged, so every token in a rotation chain is
+// already dead by then.
+//
+// The statement never waits for a row lock. It first locks, with SKIP LOCKED,
+// every row its delete reaches: the sessions, their expired pending
+// authentications, WebAuthn ceremonies (also those bound to such a pending
+// authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
+// the successors whose rotated_from ON DELETE SET NULL clears. A session whose
+// successor or referencing row it could not lock stays for a later page. So it
+// takes no user lock, cannot deadlock with sign-in, rotation, revocation or
+// account deletion, and never removes a live row.
+func (q *Queries) DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessionsPage, arg.Cutoff, arg.LimitRows, arg.Now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredSlugTombstonesPage = `-- name: DeleteExpiredSlugTombstonesPage :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id
@@ -268,6 +350,34 @@ type GetCompletedMediaJobsBacklogRow struct {
 func (q *Queries) GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error) {
 	row := q.db.QueryRow(ctx, getCompletedMediaJobsBacklog, arg.Now, arg.Cutoff)
 	var i GetCompletedMediaJobsBacklogRow
+	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
+	return i, err
+}
+
+const getExpiredSessionsBacklog = `-- name: GetExpiredSessionsBacklog :one
+SELECT count(*)::bigint AS backlog,
+       (COALESCE(floor(extract(epoch FROM
+           greatest($1::timestamptz - (min(absolute_expires_at) - interval '90 days'), interval '0 seconds'))), 0))::bigint
+           AS oldest_age_seconds
+FROM sessions
+WHERE absolute_expires_at <= $2::timestamptz
+`
+
+type GetExpiredSessionsBacklogParams struct {
+	Now    time.Time
+	Cutoff time.Time
+}
+
+type GetExpiredSessionsBacklogRow struct {
+	Backlog          int64
+	OldestAgeSeconds int64
+}
+
+// oldest_age_seconds is age since the original sign-in, like the session
+// metadata backlog.
+func (q *Queries) GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error) {
+	row := q.db.QueryRow(ctx, getExpiredSessionsBacklog, arg.Now, arg.Cutoff)
+	var i GetExpiredSessionsBacklogRow
 	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
 	return i, err
 }

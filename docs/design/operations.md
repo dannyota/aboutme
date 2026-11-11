@@ -11,7 +11,7 @@ exercised at the environment that owns the risk.
 | Account deletion | Recent reauthentication, except the operator's out-of-band `account-delete` command ([showcase](showcase-contract.md#derived-values-and-reports), ADR 0003); transactionally revoke sessions, identities, resumes, public generations, and media references; retain slug tombstones |
 | Media deletion   | Enqueue exact keys with reference revocation; deny access immediately; target physical removal within 24 hours; audit, alert, and retry overdue work                                                                                                                                |
 | Export           | A JSON bundle of the account's resume documents and related portable data                                                                                                                                                                                                           |
-| Session metadata | IP and user agent are redacted two days before the session's absolute expiry, so no later than 90 days after sign-in; rotation never extends it                                                                                                                                     |
+| Session metadata | IP and user agent are redacted two days before the session's absolute expiry, so no later than 90 days after sign-in; rotation never extends it. The session row is deleted 7 days after absolute expiry                                                                            |
 | Slug tombstones  | Hold no account link; deleted by the privacy sweep 180 days after release                                                                                                                                                                                                           |
 | Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                                                                                                                                                       |
 | Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                                                                                                                                                 |
@@ -77,6 +77,8 @@ Session IP and user agent are redacted two days before the session's absolute
 expiry, so no later than 90 days after the original sign-in; rotation and
 reissue never extend that expiry, so a redaction cannot be outrun by staying
 signed in. The two-day lead covers the daily sweep schedule plus one missed run.
+The privacy sweep deletes the session row, revoked or not, 7 days after its
+absolute expiry, when every token in its rotation chain is already dead.
 Lifecycle events contain only a generated event ID, fixed kind, occurrence time
 and an optional media-job ID. Account deletion and media overdue/completion
 events are durable; audit insertion and the state they describe commit together.

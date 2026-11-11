@@ -230,6 +230,20 @@ type Querier interface {
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
 	DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg DeleteExpiredProjectSlugHoldsPageParams) (int64, error)
+	// Deletes session rows, revoked or not, whose absolute expiry is at or before
+	// the cutoff, which the caller sets seven days before now. Rotation and reissue
+	// copy absolute_expires_at unchanged, so every token in a rotation chain is
+	// already dead by then.
+	//
+	// The statement never waits for a row lock. It first locks, with SKIP LOCKED,
+	// every row its delete reaches: the sessions, their expired pending
+	// authentications, WebAuthn ceremonies (also those bound to such a pending
+	// authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
+	// the successors whose rotated_from ON DELETE SET NULL clears. A session whose
+	// successor or referencing row it could not lock stays for a later page. So it
+	// takes no user lock, cannot deadlock with sign-in, rotation, revocation or
+	// account deletion, and never removes a live row.
+	DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error)
 	// A released slug stays reserved and unlinked from any account for 180 days
 	// (docs/design/product.md), then the privacy sweep deletes the reservation.
 	DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error)
@@ -310,6 +324,9 @@ type Querier interface {
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
 	// Public UUID resolution excludes the internal UUID of a URL client.
 	GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
+	// oldest_age_seconds is age since the original sign-in, like the session
+	// metadata backlog.
+	GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error)
 	GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error)
 	// Inputs for the capacity Retry-After decision: while an expired retained
 	// row remains the caller retries in one second (the next mutation's

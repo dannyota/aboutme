@@ -30,6 +30,10 @@ const (
 	// absolute expiry (90 days after sign-in, docs/design/security.md) even
 	// when a run is skipped.
 	sessionRedactionLead = 48 * time.Hour
+	// sessionRetention is how long a session row stays after its absolute
+	// expiry. Rotation copies the absolute expiry, so every token in the
+	// row's rotation chain is dead by then.
+	sessionRetention = 7 * 24 * time.Hour
 )
 
 var (
@@ -78,6 +82,14 @@ type Result struct {
 	// SessionOldestAgeSeconds is the time since sign-in of the oldest
 	// session still due for redaction, in seconds.
 	SessionOldestAgeSeconds int64 `json:"sessionOldestAgeSeconds"`
+	// ExpiredSessionsDeleted counts session rows deleted seven days after
+	// their absolute expiry.
+	ExpiredSessionsDeleted int64 `json:"expiredSessionsDeleted"`
+	// ExpiredSessionsBacklog counts session rows still due for deletion.
+	ExpiredSessionsBacklog int64 `json:"expiredSessionsBacklog"`
+	// ExpiredSessionsOldestAgeSeconds is the time since sign-in of the oldest
+	// session row still due for deletion, in seconds.
+	ExpiredSessionsOldestAgeSeconds int64 `json:"expiredSessionsOldestAgeSeconds"`
 	// LifecycleAuditDeleted counts lifecycle audit events deleted past retention.
 	LifecycleAuditDeleted int64 `json:"lifecycleAuditDeleted"`
 	// LifecycleAuditBacklog counts lifecycle audit events left past retention.
@@ -177,6 +189,9 @@ func (w *Worker) logResult(ctx context.Context, command string, result Result) {
 		"session_metadata_redacted", result.SessionMetadataRedacted,
 		"session_metadata_backlog", result.SessionMetadataBacklog,
 		"session_oldest_age_seconds", result.SessionOldestAgeSeconds,
+		"expired_sessions_deleted", result.ExpiredSessionsDeleted,
+		"expired_sessions_backlog", result.ExpiredSessionsBacklog,
+		"expired_sessions_oldest_age_seconds", result.ExpiredSessionsOldestAgeSeconds,
 		"lifecycle_audit_deleted", result.LifecycleAuditDeleted,
 		"lifecycle_audit_backlog", result.LifecycleAuditBacklog,
 		"lifecycle_audit_oldest_seconds", result.LifecycleAuditOldestSeconds,

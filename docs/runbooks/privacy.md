@@ -18,7 +18,7 @@ place secret values in command lines, logs, tickets, or evidence.
 | `idempotency-expiry-sweep` | Remove expired replay records                                             | Hourly             |
 | `media-deletion-sweep`     | Drain due exact-key deletion jobs                                         | Hourly             |
 | `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection             | Weekly             |
-| `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup        | Daily              |
+| `privacy-retention-sweep`  | Redact and delete sessions; clean audit, media-job, and OAuth rows        | Daily              |
 | `release-snapshot-sweep`   | Delete deploy.sh snapshots more than 27 days old, or beyond the newest 30 | Not scheduled      |
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
@@ -61,15 +61,17 @@ The daily retention sweep processes up to 10,000 rows per category in 1,000-row
 pages. Session IP and user agent are redacted two days before the session's
 absolute expiry, so no later than 90 days after sign-in (`session_metadata_*`
 log keys); `session_oldest_age_seconds` reports age since the original sign-in,
-not since the redaction cutoff. Released slug tombstones are deleted 180 days
-after release (`slug_tombstones_*` log keys); `slug_tombstones_oldest_seconds`
-reports age since release. Released project slug holds are deleted 180 days
-after release (`project_slug_holds_deleted` log key). Lifecycle audit records
-and completed media jobs are retained for 180 days from occurrence or
-completion. Pending and overdue media jobs never expire. Existing OAuth
-transaction, authorization-code, token, and idle-client cleanup is limited to
-200 rows per category/pass. The result reports category totals, backlogs, and
-oldest ages.
+not since the redaction cutoff. Session rows, revoked or not, are deleted 7 days
+after absolute expiry (`expired_sessions_*` log keys);
+`expired_sessions_oldest_age_seconds` also reports age since sign-in. Released
+slug tombstones are deleted 180 days after release (`slug_tombstones_*` log
+keys); `slug_tombstones_oldest_seconds` reports age since release. Released
+project slug holds are deleted 180 days after release
+(`project_slug_holds_deleted` log key). Lifecycle audit records and completed
+media jobs are retained for 180 days from occurrence or completion. Pending and
+overdue media jobs never expire. Existing OAuth transaction, authorization-code,
+token, and idle-client cleanup is limited to 200 rows per category/pass. The
+result reports category totals, backlogs, and oldest ages.
 
 ## Triage and rollback
 

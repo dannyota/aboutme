@@ -60,6 +60,12 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	if err != nil {
 		return w.failed(result)
 	}
+	result.ExpiredSessionsDeleted, result.Pages, err = runPagesUntilEmpty(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteExpiredSessionsPage(ctx, store.DeleteExpiredSessionsPageParams{Cutoff: now.Add(-sessionRetention), Now: now, LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
 	result.LifecycleAuditDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
 		return q.DeleteLifecycleAuditPage(ctx, store.DeleteLifecycleAuditPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
 	})
@@ -135,6 +141,30 @@ func runPages(ctx context.Context, pages int64, run func(context.Context, int32)
 	return total, updatedPages, nil
 }
 
+// runPagesUntilEmpty ends only on an empty page. A session page comes back
+// short while due rows remain when it keeps a session whose successor or
+// referencing row another transaction holds. The last page asks only for what
+// the run cap leaves, so the cap is exact.
+func runPagesUntilEmpty(ctx context.Context, pages int64, run func(context.Context, int32) (int64, error)) (total, updatedPages int64, err error) {
+	updatedPages = pages
+	for total < maxRowsPerRun {
+		limit := pageSize
+		if remaining := maxRowsPerRun - total; remaining < int64(pageSize) {
+			limit = int32(remaining)
+		}
+		count, runErr := run(ctx, limit)
+		if runErr != nil {
+			return total, updatedPages, runErr
+		}
+		if count == 0 {
+			return total, updatedPages, nil
+		}
+		total += count
+		updatedPages++
+	}
+	return total, updatedPages, nil
+}
+
 func (w *Worker) cleanupOAuth(ctx context.Context, conn *pgxpool.Conn, q *store.Queries, now time.Time, result *Result) (returnErr error) {
 	var err error
 	result.OAuthTransactionsDeleted, err = q.DeleteExpiredOAuthTransactions(ctx, store.DeleteExpiredOAuthTransactionsParams{
@@ -195,6 +225,12 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	if err != nil {
 		return err
 	}
+	expired, err := q.GetExpiredSessionsBacklog(ctx, store.GetExpiredSessionsBacklogParams{
+		Now: now, Cutoff: now.Add(-sessionRetention),
+	})
+	if err != nil {
+		return err
+	}
 	audits, err := q.GetLifecycleAuditBacklog(ctx, store.GetLifecycleAuditBacklogParams{
 		Now: now, Cutoff: now.Add(-auditRetention),
 	})
@@ -221,6 +257,8 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	}
 	result.SessionMetadataBacklog = sessions.Backlog
 	result.SessionOldestAgeSeconds = sessions.OldestAgeSeconds
+	result.ExpiredSessionsBacklog = expired.Backlog
+	result.ExpiredSessionsOldestAgeSeconds = expired.OldestAgeSeconds
 	result.LifecycleAuditBacklog = audits.Backlog
 	result.LifecycleAuditOldestSeconds = audits.OldestAgeSeconds
 	result.CompletedMediaJobsBacklog = media.Backlog
