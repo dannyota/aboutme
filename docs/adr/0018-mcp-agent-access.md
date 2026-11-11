@@ -1,10 +1,10 @@
 # 0018: MCP agent access
 
-Status: Accepted (2026-09-01; extended 2026-10-13 and 2026-10-14). An amendment
-for project scopes is proposed (2026-11-11) and awaits the owner's approval.
-CIMD is implemented and enabled in production. The owner proof passed with
-Claude Code on 2026-10-14; hosted Claude's CIMD connection remains unverified.
-CI, independent review, and hosted HTTPS proof execution remain outstanding.
+Status: Accepted (2026-09-01; extended 2026-10-13 and 2026-10-14; amended
+2026-11-11 for project scopes, not yet implemented). CIMD is implemented and
+enabled in production. The owner proof passed with Claude Code on 2026-10-14;
+hosted Claude's CIMD connection remains unverified. CI, independent review, and
+hosted HTTPS proof execution remain outstanding.
 
 ## Context
 
@@ -56,7 +56,7 @@ stays a human decision in the web UI.
 the account. Photo tools ride on `resumes:write`. Per-resume grants are not
 offered.
 
-**Project scopes (proposed).** The account project library
+**Project scopes.** The account project library
 ([ADR 0029](0029-account-project-library.md)) is read with `projects:read` and
 changed with `projects:write`. A grant made before these scopes exist does not
 hold them; a client that requests them is shown the consent page.
@@ -111,5 +111,5 @@ Former ADR 0026, unchanged in substance.
   implementation and production activation.
 - 2026-11-01: Corrected CIMD implementation and production status against the
   recorded Claude Code proof; retained the outstanding verification gaps.
-- 2026-11-11: Proposed project scopes, so a resume grant does not silently reach
-  the project library.
+- 2026-11-11: The owner approved project scopes, so a resume grant does not
+  silently reach the project library.

@@ -1,10 +1,10 @@
 # 0029: Account project library and project pages
 
-Status: Proposed (2026-11-10). The owner chose the direction on 2026-11-10
-([roadmap](../plans/roadmap.md#owner-decisions)); this record, the
+Status: Accepted (2026-11-11). The owner chose the direction on 2026-11-10
+([roadmap](../plans/roadmap.md#owner-decisions)) and approved this record, the
 [projects design](../design/projects.md) and the
-[projects contract](../design/projects-contract.md) await his approval before
-code.
+[projects contract](../design/projects-contract.md) on 2026-11-11. Nothing is
+implemented yet.
 
 ## Context
 
@@ -82,4 +82,6 @@ reuse passes the live-state gate and unpublish takes effect at once (ADR 0010).
 
 Proposed 2026-11-10 from the owner's roadmap decisions. Revised 2026-11-11 after
 design review: same-account reference checks, language fallback, project scopes,
-slug holds, and deletion as one multi-resume transaction.
+slug holds, and deletion as one multi-resume transaction. Accepted by the owner
+on 2026-11-11 with the proposed limits and the project title as the print entry
+point.
