@@ -20,6 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
+
+	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 // FS embeds every migration in this directory. The pattern is deliberately
@@ -54,10 +56,23 @@ const migratorRole = "aboutme_migrator"
 // ends up owned by aboutme_migrator, and a login that cannot SET ROLE
 // aboutme_migrator (e.g. aboutme_app) fails closed here instead of
 // silently running, or silently owning objects, as the wrong role.
+//
+// Every connection also starts with statement_timeout 0, because DDL may run
+// long, and lock_timeout 5s, so a migration blocked behind live traffic fails
+// instead of queueing every later query behind its lock request. A value dsn
+// already sets is kept, and a migration's own SET LOCAL wins over both.
 func Open(dsn string) (*sql.DB, error) {
 	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("migrations: parse database configuration: %w", err)
+	}
+	for _, setting := range []struct{ name, value string }{
+		{name: "statement_timeout", value: "0"},
+		{name: "lock_timeout", value: "5s"},
+	} {
+		if !store.HasRuntimeSetting(config.RuntimeParams, setting.name) {
+			config.RuntimeParams[setting.name] = setting.value
+		}
 	}
 	afterConnect := stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
 		if _, err := conn.Exec(ctx, `SET ROLE `+migratorRole); err != nil {
