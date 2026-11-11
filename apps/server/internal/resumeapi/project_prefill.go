@@ -7,6 +7,7 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
 	"danny.vn/aboutme/apps/server/internal/project"
+	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
 // projectTextFor picks the project text for a resume language: the text
@@ -36,13 +37,24 @@ func prefillProjectEntry(entry *schema.ProjectEntry, library project.Project, ln
 	if link == "" {
 		link = library.DemoURL
 	}
-	entry.Link = prefillValue(link)
+	entry.Link = prefillLink(link)
 	entry.Dates = library.Dates
 	entry.Description = nil
 	if text.Summary != "" {
 		paragraph := "<p>" + html.EscapeString(text.Summary) + "</p>"
 		entry.Description = &paragraph
 	}
+}
+
+// prefillLink lowercases the scheme and host of a library link and leaves the
+// entry link out when the result still fails the entry link contract, which
+// a project saved before the library applied that contract can hold.
+func prefillLink(raw string) *string {
+	link, ok := project.NormalizeLink(raw)
+	if !ok || link == "" || !resume.ValidEntryLink(link) {
+		return nil
+	}
+	return &link
 }
 
 func prefillValue(value string) *string {

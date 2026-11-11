@@ -8529,7 +8529,10 @@ components:
             bytes both before and after sanitizing.
     ProjectLink:
       type: string
-      description: Empty or an absolute HTTPS URL.
+      description: >-
+        Empty or an absolute HTTPS URL of at most 2048 characters. The scheme
+        and host are stored lowercase.
+      maxLength: 2048
       anyOf:
         - const: ""
         - format: uri

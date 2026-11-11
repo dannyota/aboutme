@@ -151,11 +151,13 @@ not follow end. `present=true` requires a null end; `present=false` requires an
 end. Certificate `date` is a single `{y,m?}`.
 
 A project entry's optional `projectId` names a library project
-([projects](projects.md#selection)). Every document write checks, under the
-owner lock, that each `projectId` names a project of the same account and that
-no two entries of the resume name the same project; a bearer write may keep or
-remove a link but not add or change one. The public projection, the print
-snapshot and every public representation omit it.
+([projects](projects.md#selection)). Every REST and agent document write checks,
+under the owner lock, that each `projectId` names a project of the same account
+and that no two entries of the resume name the same project; a bearer write may
+keep or remove a link but not add or change one. The background backfill skips
+the check: it rewrites only documents stored below v6, which cannot hold a link,
+and skips current ones. The public projection, the print snapshot and every
+public representation omit it.
 
 ## Draft and publish validation
 

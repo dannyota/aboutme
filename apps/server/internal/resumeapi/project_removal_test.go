@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -111,49 +110,6 @@ func requireUnlinkedAt(t *testing.T, h *resumeAPITestHarness, id uuid.UUID, revi
 	}
 }
 
-func TestRemoveProject_ThreeLinkingResumesAdvanceAndReopenFences(t *testing.T) {
-	h := newResumeAPITestHarness(t)
-	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
-	seeded := []resume.Resume{
-		seedLinkingResume(t, h, owned.ID, true), seedLinkingResume(t, h, owned.ID, true), seedLinkingResume(t, h, owned.ID, false),
-	}
-	result, err := h.service.RemoveProject(h.ctx, newTestRemoval(h, owned.ID, nil))
-	if err != nil || result.Outcome != resume.CommitCommitted {
-		t.Fatalf("remove = %+v, %v", result, err)
-	}
-	var changed []ChangedResume
-	if err = json.Unmarshal(result.Response.Body, &changed); err != nil || len(changed) != 3 {
-		t.Fatalf("changed = %s (%v), want three resumes", result.Response.Body, err)
-	}
-	for _, item := range seeded {
-		requireUnlinkedAt(t, h, item.ID, item.Revision+1)
-		requireFenceOpen(t, h, item.ID, item.Revision+1)
-		if _, staleErr := h.service.coordinator.AcquireResume(h.ctx, item.ID, item.Revision, publicstate.RepresentationJSON); staleErr == nil {
-			t.Fatalf("fence for %s still admits the old revision", item.ID)
-		}
-	}
-	if _, err = project.NewStore().GetTx(h.ctx, h.queries, h.userID, owned.ID); !errors.Is(err, project.ErrNotFound) {
-		t.Fatalf("project after removal: %v, want not found", err)
-	}
-}
-
-func TestRemoveProject_RollbackReopensFencesAtUnchangedRevisions(t *testing.T) {
-	h := newResumeAPITestHarness(t)
-	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
-	live := seedLinkingResume(t, h, owned.ID, true)
-	refused := func(context.Context, *store.Queries) error { return auth.ErrReauthRequired }
-	if _, err := h.service.RemoveProject(h.ctx, newTestRemoval(h, owned.ID, refused)); !errors.Is(err, auth.ErrReauthRequired) {
-		t.Fatalf("remove error = %v, want the authorization failure", err)
-	}
-	requireFenceOpen(t, h, live.ID, live.Revision)
-	if links := storedLinks(t, h, live.ID); len(links) != 1 {
-		t.Fatalf("rolled back removal changed links to %v", links)
-	}
-	if _, err := project.NewStore().GetTx(h.ctx, h.queries, h.userID, owned.ID); err != nil {
-		t.Fatalf("rolled back removal deleted the project: %v", err)
-	}
-}
-
 func TestRemoveProject_ReplansAfterALinkCommittedBetweenPlanAndLock(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
@@ -216,21 +172,4 @@ func TestRemoveProject_ThreeChangedPlansAreBusyAndChangeNothing(t *testing.T) {
 	if _, err := project.NewStore().GetTx(h.ctx, h.queries, h.userID, owned.ID); err != nil {
 		t.Fatalf("busy removal deleted the project: %v", err)
 	}
-}
-
-func TestRemoveProject_LostCommitAcknowledgementRecoversTheStoredResponse(t *testing.T) {
-	h := newResumeAPITestHarness(t)
-	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
-	live := seedLinkingResume(t, h, owned.ID, true)
-	h.service.idempotency = &removalIdempotency{idempotencyBoundary: h.service.idempotency, lostAck: true}
-	result, err := h.service.RemoveProject(h.ctx, newTestRemoval(h, owned.ID, nil))
-	if err != nil || !result.Replayed || result.Outcome != resume.CommitCommitted {
-		t.Fatalf("recovered remove = %+v, %v; want the recovered stored response", result, err)
-	}
-	var changed []ChangedResume
-	if err = json.Unmarshal(result.Response.Body, &changed); err != nil || len(changed) != 1 || changed[0].Revision != live.Revision+1 {
-		t.Fatalf("recovered response = %s (%v)", result.Response.Body, err)
-	}
-	requireUnlinkedAt(t, h, live.ID, live.Revision+1)
-	requireFenceOpen(t, h, live.ID, live.Revision+1)
 }

@@ -2235,7 +2235,7 @@ export interface components {
             /** @description Rich text through the resume sanitizer, bounded to 16,384 UTF-8 bytes both before and after sanitizing. */
             description?: string;
         };
-        /** @description Empty or an absolute HTTPS URL. */
+        /** @description Empty or an absolute HTTPS URL of at most 2048 characters. The scheme and host are stored lowercase. */
         ProjectLink: string | "" | unknown;
         ProjectSlug: string;
         CreateProjectRequest: components["schemas"]["ProjectContent"] & {

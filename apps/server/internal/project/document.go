@@ -20,6 +20,9 @@ const (
 	MaxStoredBytes = 96 * 1024
 	// SlugHoldDays is the account-local reservation after release, in days.
 	SlugHoldDays = 180
+	// MaxLinkCharacters bounds a repository or demo link in Unicode code
+	// points, matching the resume entry link it prefills.
+	MaxLinkCharacters = 2048
 )
 
 var (
@@ -67,7 +70,9 @@ func Prepare(d Document) (Document, error) {
 	if !ok || strings.TrimSpace(text.Name) == "" {
 		return Document{}, ErrInvalid
 	}
-	if !validLink(d.RepositoryURL) || !validLink(d.DemoURL) || !validDates(d.Dates) {
+	repository, repositoryOK := NormalizeLink(d.RepositoryURL)
+	demo, demoOK := NormalizeLink(d.DemoURL)
+	if !repositoryOK || !demoOK || !validDates(d.Dates) {
 		return Document{}, ErrInvalid
 	}
 	for _, v := range d.Technologies {
@@ -76,6 +81,7 @@ func Prepare(d Document) (Document, error) {
 		}
 	}
 	out := d
+	out.RepositoryURL, out.DemoURL = repository, demo
 	out.Technologies = append([]string(nil), d.Technologies...)
 	out.Text = make(map[string]Text, len(d.Text))
 	for key, value := range d.Text {
@@ -94,15 +100,36 @@ func Prepare(d Document) (Document, error) {
 func validString(s string, limit int) bool {
 	return utf8.ValidString(s) && !strings.ContainsRune(s, 0) && utf8.RuneCountInString(s) <= limit
 }
-func validLink(s string) bool {
+
+// NormalizeLink returns s with its scheme and host lowercase, as a resume
+// entry link requires, and reports whether the result is an absolute HTTPS
+// link of at most MaxLinkCharacters. An empty link is valid. The user
+// information, path, query and fragment keep their case.
+func NormalizeLink(s string) (string, bool) {
 	if s == "" {
-		return true
+		return "", true
 	}
 	if !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
-		return false
+		return "", false
 	}
-	u, err := url.Parse(s)
-	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.Opaque == ""
+	scheme, rest, found := strings.Cut(s, "://")
+	if !found || !strings.EqualFold(scheme, "https") {
+		return "", false
+	}
+	end := strings.IndexAny(rest, "/?#")
+	if end < 0 {
+		end = len(rest)
+	}
+	hostStart := strings.LastIndex(rest[:end], "@") + 1
+	normalized := "https://" + rest[:hostStart] + strings.ToLower(rest[hostStart:end]) + rest[end:]
+	if utf8.RuneCountInString(normalized) > MaxLinkCharacters {
+		return "", false
+	}
+	u, err := url.Parse(normalized)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.Opaque != "" {
+		return "", false
+	}
+	return normalized, true
 }
 func validDates(d *schema.DateRange) bool {
 	if d == nil {

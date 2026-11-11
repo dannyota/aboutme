@@ -130,8 +130,26 @@ func maximumProjectDocument(t *testing.T, h *exportTestHarness) []byte {
 		}
 		return n
 	}
+	// A link is at most 2048 characters, so the rest of the bound is filled
+	// with description text: a backslash is one byte of the 16 KiB
+	// description bound and two bytes of stored JSON text.
 	d.RepositoryURL = "https://example.test/?"
-	d.RepositoryURL += strings.Repeat("&", project.MaxStoredBytes-measure(d))
+	d.RepositoryURL += strings.Repeat("&", project.MaxLinkCharacters-len(d.RepositoryURL))
+	padding := []string{"vi", "ja", "fr"}
+	for _, key := range padding {
+		d.Text[key] = project.Text{Name: key, Description: "a"}
+	}
+	remaining := project.MaxStoredBytes - measure(d)
+	for _, key := range padding {
+		share := min(remaining, 32766)
+		text := d.Text[key]
+		text.Description = strings.Repeat(`\`, share/2) + strings.Repeat("a", share%2+1)
+		d.Text[key] = text
+		remaining -= share
+	}
+	if remaining != 0 {
+		t.Fatalf("project bound needs %d more bytes than the padding holds", remaining)
+	}
 	prepared, err := project.Prepare(d)
 	if err != nil {
 		t.Fatal(err)

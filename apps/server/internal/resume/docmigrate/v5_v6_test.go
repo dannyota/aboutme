@@ -26,14 +26,48 @@ func v6Document(t *testing.T) map[string]any {
 	return doc
 }
 
-// withoutV6Fields strips exactly what v5 cannot represent.
+// withoutV6Fields removes the one link v6Document adds, by its literal path,
+// independently of the production converter.
 func withoutV6Fields(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
 	out := decodeFontTestMap(t, mustJSON(t, doc))
-	if err := removeV6Fields(out); err != nil {
-		t.Fatalf("remove v6 fields: %v", err)
+	projects := fontTestObject(t, fontTestObject(t, out, "content"), "projects")
+	entry, ok := projects["entries"].([]any)[0].(map[string]any)
+	if !ok {
+		t.Fatal("project test entry is not an object")
 	}
+	delete(entry, "projectId")
 	return out
+}
+
+// TestV6ToV5KeepsEveryFieldButLinksOfTheFullFixture links the retained v5
+// full fixture's project entry and expects exactly that fixture back.
+func TestV6ToV5KeepsEveryFieldButLinksOfTheFullFixture(t *testing.T) {
+	v5 := readFontV2Fixture(t, "packages", "schema", "fixtures", "v5", "full.json")
+	linked := decodeFontTestMap(t, v5)
+	linked["schemaVersion"] = float64(6)
+	section := fontTestObject(t, fontTestObject(t, linked, "content"), "project")
+	entries, ok := section["entries"].([]any)
+	if !ok || len(entries) == 0 {
+		t.Fatal("v5 full fixture has no project entries")
+	}
+	for index, raw := range entries {
+		entry, isEntry := raw.(map[string]any)
+		if !isEntry {
+			t.Fatalf("project entry %d is not an object", index)
+		}
+		entry["projectId"] = v6TestProjectID
+	}
+	if err := releasedValidators[6](mustJSON(t, linked)); err != nil {
+		t.Fatalf("linked full document invalid at v6: %v", err)
+	}
+	lowered, err := convertV6ToV5(mustJSON(t, linked))
+	if err != nil {
+		t.Fatalf("convert v6 to v5: %v", err)
+	}
+	if !bytes.Equal(normalizeJSONForFontTest(t, lowered), normalizeJSONForFontTest(t, v5)) {
+		t.Fatalf("v6 -> v5 = %s, want the v5 full fixture", normalizeJSONForFontTest(t, lowered))
+	}
 }
 
 func TestV6DocumentIsValidAtV6Only(t *testing.T) {
@@ -111,8 +145,7 @@ func TestV6ToV5DropsOnlyProjectLinks(t *testing.T) {
 	if err := releasedValidators[5](v5); err != nil {
 		t.Fatalf("down-converted document invalid at v5: %v", err)
 	}
-	want := withoutV6Fields(t, doc)
-	want["schemaVersion"] = float64(5)
+	want := v5Document(t)
 	if !bytes.Equal(normalizeJSONForFontTest(t, v5), mustJSON(t, want)) {
 		t.Fatalf("v6 -> v5 = %s, want %s", normalizeJSONForFontTest(t, v5), mustJSON(t, want))
 	}

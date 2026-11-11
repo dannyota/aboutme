@@ -244,6 +244,7 @@ describe("project library schemas", () => {
 
   it("accepts only https links and closes every request and resource", () => {
     expect(schemas.ProjectLink.anyOf[1].pattern).toBe("^https://");
+    expect(schemas.ProjectLink.maxLength).toBe(2048);
     for (const name of ["CreateProjectRequest", "Project"]) {
       expect(schemas[name].unevaluatedProperties, name).toBe(false);
     }
