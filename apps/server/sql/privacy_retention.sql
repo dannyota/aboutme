@@ -9,29 +9,26 @@ SELECT pg_try_advisory_lock(hashtextextended('aboutme.idempotency-expiry-sweep.v
 SELECT pg_advisory_unlock(hashtextextended('aboutme.idempotency-expiry-sweep.v1', 0));
 
 -- name: ExpireIdempotencyPage :one
--- Lock users before replay rows and usage counters, matching every resume
--- writer. SKIP LOCKED lets inactive users progress past a busy account.
-WITH candidate_users AS MATERIALIZED (
-    SELECT owner.id
-    FROM users AS owner
-    JOIN LATERAL (
-        SELECT record.expires_at, record.id
-        FROM idempotency_records AS record
-        WHERE record.user_id = owner.id
-          AND record.expires_at <= sqlc.arg(cutoff)::timestamptz
-        ORDER BY record.expires_at, record.id
-        LIMIT 1
-    ) AS oldest ON true
-    ORDER BY oldest.expires_at, oldest.id, owner.id
+-- Candidates come from expired records in (expires_at, id) order, not from
+-- every account. Each record's user is locked before any replay row or usage
+-- counter, matching every resume writer. LIMIT counts only rows whose user
+-- lock succeeded, so SKIP LOCKED passes over a busy user's records and later
+-- users still fill the page. ARRAY() reads every locked row before the first
+-- replay row is locked.
+WITH locked AS MATERIALIZED (
+    SELECT record.id
+    FROM idempotency_records AS record
+    JOIN users AS owner ON owner.id = record.user_id
+    WHERE record.expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY record.expires_at, record.id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
     FOR UPDATE OF owner SKIP LOCKED
 ), doomed AS MATERIALIZED (
     SELECT record.id, record.user_id
     FROM idempotency_records AS record
-    JOIN candidate_users AS owner ON owner.id = record.user_id
-    WHERE record.expires_at <= sqlc.arg(cutoff)::timestamptz
+    WHERE record.id = ANY (ARRAY(SELECT locked.id FROM locked))
+      AND record.expires_at <= sqlc.arg(cutoff)::timestamptz
     ORDER BY record.expires_at, record.id
-    LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
     FOR UPDATE OF record SKIP LOCKED
 ), deleted AS (
     DELETE FROM idempotency_records AS record
