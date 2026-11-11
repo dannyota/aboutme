@@ -590,9 +590,9 @@ type Querier interface {
 	// 7, 30, and 90 days.
 	ListViewSummaries(ctx context.Context, arg ListViewSummariesParams) ([]ListViewSummariesRow, error)
 	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
-	// Account deletion owns the global lock order documented in
-	// docs/design/operations.md. The caller takes slug advisory locks and
-	// public_state before these account-scoped locks.
+	// Account deletion follows the lock order in docs/design/data.md: these
+	// account-scoped locks come first, then slug advisory locks in sorted
+	// order, then public_state.
 	LockCanonicalAccountEmail(ctx context.Context, email string) error
 	LockPrivacyNoticeCommand(ctx context.Context) error
 	LockPrivacyNoticeJob(ctx context.Context, id uuid.UUID) error
