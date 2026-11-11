@@ -54,6 +54,9 @@ const onTemplatesPath = computed(() =>
 const onGuidePath = computed(() => route.path === '/guide/mcp');
 const onShowcasePath = computed(() => route.path === '/showcase');
 const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
+const onProjectsPath = computed(
+  () => route.path.startsWith('/app/projects'),
+);
 const onViewsPath = computed(() => route.path.startsWith('/app/views'));
 const onSettingsPath = computed(
   () => route.path.startsWith('/app/settings/sessions'),
@@ -106,10 +109,11 @@ const guideLinkClass = computed(() => cn(
   linkClass,
   signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden max-lg:px-2',
 ));
-// Settings and Views are also one tap away from the account menu, so they
-// are the other links to drop on phones when signed in.
+// Projects, Settings and Views are also one tap away from the account menu,
+// so they are the other links to drop on phones when signed in.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
 const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
+const projectsLinkClass = cn(linkClass, 'max-sm:hidden');
 </script>
 
 <template>
@@ -156,8 +160,13 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
           :class="linkClass"
           to="/app/resumes"
         >{{ copy.resumes }}</NuxtLink>
-        <!-- The account menu also opens Views and Settings, so they stay
-             reachable on phones with these links hidden. -->
+        <!-- The account menu also opens Projects, Views and Settings, so they
+             stay reachable on phones with these links hidden. -->
+        <NuxtLink
+          :aria-current="onProjectsPath ? 'page' : undefined"
+          :class="projectsLinkClass"
+          to="/app/projects"
+        >{{ copy.projects }}</NuxtLink>
         <NuxtLink
           :aria-current="onViewsPath ? 'page' : undefined"
           :class="viewsLinkClass"

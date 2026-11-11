@@ -41,7 +41,11 @@ export function useUnsavedNavigationGuard(
   record: Readonly<Ref<ResumeRecord | undefined>>,
   drafts?: FieldDrafts,
 ): void {
-  const unsafe = (): boolean => flushAndCheckUnsaved(record.value, drafts);
+  useLeaveGuard(() => flushAndCheckUnsaved(record.value, drafts));
+}
+
+/** Holds route changes and asks before unload while `unsafe` is true. */
+export function useLeaveGuard(unsafe: () => boolean): void {
   const beforeUnload = (event: BeforeUnloadEvent): void => {
     if (!unsafe()) return;
     event.preventDefault();

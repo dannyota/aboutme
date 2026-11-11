@@ -17,7 +17,7 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # surfaces it tests. rest-1 and rest-3 take whatever the other shards of
 # their surface leave.
 WEB_E2E_HARNESS_SPECS := screenshot.spec.ts guide-screenshot.spec.ts resume-screen.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
-WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts
+WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts projects.spec.ts
 WEB_E2E_PREVIEW_GAP_SPECS := preview-gap.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts
 WEB_E2E_REST_2_SPECS := chrome.spec.ts gallery.spec.ts verify.spec.ts normal-csp.spec.ts
 WEB_E2E_REST_4_SPECS := resume-screen.spec.ts
