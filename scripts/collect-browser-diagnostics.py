@@ -116,6 +116,7 @@ FIXTURES = {
     "corpus.spec.ts": "corpus",
     "normal-csp.spec.ts": "normal-csp",
     "preview-gap.spec.ts": "preview-gap",
+    "projects.spec.ts": "projects",
 }
 REVIEWS = {
     "public-modern-sidebar-vi-dark-390": "resume-screen.spec.ts",

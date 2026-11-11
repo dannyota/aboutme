@@ -110,10 +110,11 @@ const guideLinkClass = computed(() => cn(
   signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden max-lg:px-2',
 ));
 // Projects, Settings and Views are also one tap away from the account menu,
-// so they are the other links to drop on phones when signed in.
+// so they are the other links to drop on phones when signed in. The English
+// bar fits Projects only from 768 px.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
 const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
-const projectsLinkClass = cn(linkClass, 'max-sm:hidden');
+const projectsLinkClass = cn(linkClass, 'max-md:hidden');
 </script>
 
 <template>

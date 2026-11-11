@@ -215,19 +215,33 @@ export function createProjectsApi(
   };
 }
 
+/** The CSRF token while the session still belongs to `ownerId`. */
+function tokenFor(auth: ProjectAuth, ownerId: string): string | null {
+  const token = auth.csrfToken.value;
+  return token !== null
+    && auth.authState.value === 'authenticated'
+    && auth.user.value?.id === ownerId
+    ? token
+    : null;
+}
+
+const SESSION_LOST = { kind: 'failed', failure: 'session-lost' } as const;
+
 /**
- * Sends one write with the session's CSRF token. A rotated token is
- * refreshed and the same request, with the same key, is sent once more.
+ * Sends one write of `ownerId`'s intent. A rotated token is refreshed and
+ * the same request, with the same key, is sent once more. Another tab can
+ * switch the session to a different account meanwhile: then nothing more
+ * is sent and no result is handed back for the new account to adopt.
  */
 export async function sendWithCsrf<T>(
   auth: ProjectAuth,
+  ownerId: string,
   send: (csrfToken: string) => Promise<ProjectResult<T>>,
 ): Promise<ProjectResult<T>> {
-  const first = auth.csrfToken.value;
-  if (first === null || auth.authState.value !== 'authenticated') {
-    return { kind: 'failed', failure: 'session-lost' };
-  }
+  const first = tokenFor(auth, ownerId);
+  if (first === null) return SESSION_LOST;
   const result = await send(first);
+  if (tokenFor(auth, ownerId) === null) return SESSION_LOST;
   if (result.kind !== 'failed' || result.failure !== 'csrf-rejected') {
     return result;
   }
@@ -236,10 +250,10 @@ export async function sendWithCsrf<T>(
   } catch {
     return result;
   }
-  const second = auth.csrfToken.value;
-  return second === null
-    ? { kind: 'failed', failure: 'session-lost' }
-    : send(second);
+  const second = tokenFor(auth, ownerId);
+  if (second === null) return SESSION_LOST;
+  const retried = await send(second);
+  return tokenFor(auth, ownerId) === null ? SESSION_LOST : retried;
 }
 
 export type ReleaseKind = 'address' | 'delete';
@@ -329,7 +343,7 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
 
   function send(current: ReleaseAttempt): Promise<ProjectResult<unknown>> {
     const { project } = current;
-    return sendWithCsrf<unknown>(deps.auth, (csrfToken) =>
+    return sendWithCsrf<unknown>(deps.auth, current.ownerId, (csrfToken) =>
       current.kind === 'delete'
         ? deps.api.remove(project.id, project.revision, current.key, csrfToken)
         : deps.api.replace(

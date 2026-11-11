@@ -243,6 +243,50 @@ test('the editor saves the whole document with the loaded revision', async ({
   expect(writes[1]?.key).not.toBe(writes[0]?.key);
 });
 
+test('a project with dates loads, edits and saves', async ({ page }) => {
+  const dated = {
+    ...seed(FIRST, 'Shop site', '2026-11-01T00:00:00Z'),
+    dates: { start: { y: 2024, m: 3 }, end: { y: 2025, m: 6 }, present: false },
+  };
+  const { writes } = await open(page, `/app/projects/${FIRST}`, [dated]);
+  await expect(page.locator('[data-part="start-year"]')).toHaveValue('2024');
+  await page.getByLabel('Role').fill('Staff engineer');
+  await page.locator('[data-action="project-save"]').click();
+  await expect(page.locator('[data-state-mark="saved"]')).toBeVisible();
+
+  await page.locator('[data-part="end-year"]').fill('2026');
+  await page.locator('[data-part="end-year"]').blur();
+  await page.locator('[data-action="project-save"]').click();
+  await expect(page.locator('[data-state-mark="saved"]')).toBeVisible();
+  expect(writes.map((write) => (write.body as Project & {
+    dates: unknown;
+  }).dates)).toEqual([
+    { start: { y: 2024, m: 3 }, end: { y: 2025, m: 6 }, present: false },
+    { start: { y: 2024, m: 3 }, end: { y: 2026, m: 6 }, present: false },
+  ]);
+});
+
+test('leaving with unsaved changes asks first', async ({ page }) => {
+  await open(page, `/app/projects/${FIRST}`, library());
+  await page.getByLabel('Role').fill('Typed');
+  const back = page.getByTestId('project-breadcrumb');
+
+  await back.click();
+  const confirm = page.getByRole('alertdialog', {
+    name: 'You have unsaved changes.',
+  });
+  await expect(confirm.getByRole('button', { name: 'Stay' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Stay' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(page).toHaveURL(`/app/projects/${FIRST}`);
+  await expect(page.getByLabel('Role')).toHaveValue('Typed');
+
+  await back.click();
+  await confirm.getByRole('button', { name: 'Leave without saving' }).click();
+  await expect(page).toHaveURL('/app/projects');
+  await expect(page.getByTestId('project-list')).toBeVisible();
+});
+
 test('languages are added, made default and removed', async ({ page }) => {
   const { writes } = await open(page, `/app/projects/${FIRST}`, library());
   await page.getByRole('button', { name: 'Add language' }).click();
@@ -388,18 +432,23 @@ test('both screens fit 320 px without horizontal overflow', async ({
   await page.locator('[data-project-link]').last().click();
   await expect(page.getByTestId('project-title')).toHaveText('Shop site');
   await expectScreen(page, editorContract());
-  // The signed-in English shell is wider than 640 px on its own, so the
-  // page column is checked there and the whole document from 1024 px.
-  for (const width of [640, 1024]) {
+  // The signed-in English bar overflows 640 px without the Projects link
+  // too, so only the page column is checked there.
+  await page.setViewportSize({ width: 640, height: 900 });
+  await expect.poll(() => page.getByTestId('project-editor').evaluate(
+    (main) => main.scrollWidth <= main.clientWidth
+      && main.getBoundingClientRect().right <= innerWidth + 1),
+  'Fit at 640px.').toBe(true);
+  const link = page.getByTestId('app-shell')
+    .getByRole('link', { name: 'Projects', exact: true });
+  for (const width of [700, 768, 1024]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect.poll(() => page.getByTestId('project-editor').evaluate(
-      (main) => main.scrollWidth <= main.clientWidth
-        && main.getBoundingClientRect().right <= innerWidth + 1),
-    `Fit at ${width}px.`).toBe(true);
+    await expect(link).toBeVisible({ visible: width >= 768 });
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement.scrollWidth
+      <= document.documentElement.clientWidth), `Fit at ${width}px.`)
+      .toBe(true);
   }
-  await expect.poll(() => page.evaluate(() =>
-    document.documentElement.scrollWidth
-    <= document.documentElement.clientWidth), 'Fit at 1024px.').toBe(true);
 });
 
 screenMutationTests('projects list', openListAt320, listContract());

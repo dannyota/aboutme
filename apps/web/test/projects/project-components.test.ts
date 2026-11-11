@@ -1,6 +1,8 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { describe, expect, it } from 'vitest';
 
+import ProjectLeaveDialog
+  from '../../app/components/projects/ProjectLeaveDialog.vue';
 import ProjectTechnologies
   from '../../app/components/projects/ProjectTechnologies.vue';
 import { projectsCopy } from '../../app/i18n/projects';
@@ -87,6 +89,7 @@ const sources = [
   'components/projects/ProjectLanguageDialog.vue',
   'components/projects/ProjectTechnologies.vue',
   'components/projects/ProjectTextFields.vue',
+  'components/projects/ProjectLeaveDialog.vue',
   'components/projects/projectIssues.ts',
   'components/projects/projectDocument.ts',
   'composables/useProjects.ts',
@@ -112,6 +115,38 @@ const fixtures: Readonly<Record<string, readonly unknown[]>> = {
   'projects.deleteDescription': ['Shop'],
   'projects.languageName': ['ja'],
 };
+
+describe('leave confirmation', () => {
+  it('focuses Stay and reports either choice', async () => {
+    const wrapper = await mountSuspended(ProjectLeaveDialog, {
+      props: { open: true, copy: projectsCopy.en },
+      attachTo: document.body,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain('You have unsaved changes.');
+    expect(document.activeElement?.textContent?.trim()).toBe('Stay');
+    document.body.querySelector<HTMLElement>(
+      '[data-action="project-leave-confirm"]',
+    )?.click();
+    document.body.querySelector<HTMLElement>(
+      '[data-action="project-leave-stay"]',
+    )?.click();
+    expect(wrapper.emitted('leave')).toHaveLength(1);
+    expect(wrapper.emitted('stay')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('uses the decided wording in both languages', () => {
+    expect([projectsCopy.vi.leaveTitle, projectsCopy.en.leaveTitle])
+      .toEqual(['Bạn có thay đổi chưa lưu.', 'You have unsaved changes.']);
+    expect([projectsCopy.vi.stay, projectsCopy.vi.leave])
+      .toEqual(['Ở lại', 'Rời đi không lưu']);
+    expect([projectsCopy.en.stay, projectsCopy.en.leave])
+      .toEqual(['Stay', 'Leave without saving']);
+  });
+});
 
 describe('projects navigation', () => {
   it('sends a signed-out visit to sign in and back', () => {

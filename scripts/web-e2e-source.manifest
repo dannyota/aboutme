@@ -148,6 +148,7 @@ apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
 apps/web/app/components/projects/ProjectCreateDialog.vue
 apps/web/app/components/projects/ProjectLanguageDialog.vue
+apps/web/app/components/projects/ProjectLeaveDialog.vue
 apps/web/app/components/projects/ProjectList.vue
 apps/web/app/components/projects/ProjectReleaseDialog.vue
 apps/web/app/components/projects/ProjectTechnologies.vue

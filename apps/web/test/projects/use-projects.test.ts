@@ -23,37 +23,53 @@ function inScope<T>(run: () => T): T {
 
 function listSetup(locale: 'vi' | 'en' = 'vi') {
   const api = fakeApi();
-  const { auth } = fakeAuth();
+  const { auth, user } = fakeAuth();
   const navigate = vi.fn();
   api.list.mockResolvedValue(ok([]));
   const list = inScope(() => useProjectList(ref(locale), {
     api, auth, uuid: sequence(), navigate,
   }));
-  return { api, auth, navigate, list };
+  return { api, auth, user, navigate, list };
 }
 
 async function editorSetup(loaded = project()) {
   const api = fakeApi();
-  const { auth } = fakeAuth();
+  const { auth, user } = fakeAuth();
   const navigate = vi.fn();
   api.read.mockResolvedValue(ok(loaded));
   const editor = inScope(() => useProjectEditor(loaded.id, {
     api, auth, uuid: sequence(), navigate,
   }));
   await flushPromises();
-  return { api, auth, navigate, editor };
+  return { api, auth, user, navigate, editor };
 }
+
+/** Another tab signs in as a different account while a write is out. */
+function switchAccountOnRefresh(
+  auth: ReturnType<typeof fakeAuth>['auth'],
+  user: ReturnType<typeof fakeAuth>['user'],
+): void {
+  auth.refresh.mockImplementation(async () => {
+    user.value = { ...user.value, id: 'owner-2' };
+  });
+}
+
+const dated = () => project({
+  dates: { start: { y: 2024, m: 3 }, end: null, present: true },
+});
 
 function releaseSetup(options: { hasPassword?: boolean } = {}) {
   const api = fakeApi();
-  const { auth, identities } = fakeAuth(options);
+  const { auth, user, identities } = fakeAuth(options);
   const onDone = vi.fn();
   const onStale = vi.fn();
   const providerLogin = ref(false);
   const action = createReleaseAction({
     api, auth, uuid: sequence(), providerLogin, onDone, onStale,
   });
-  return { api, auth, identities, onDone, onStale, providerLogin, action };
+  return {
+    api, auth, user, identities, onDone, onStale, providerLogin, action,
+  };
 }
 
 describe('project list', () => {
@@ -97,6 +113,37 @@ describe('project list', () => {
     expect(api.create.mock.calls.map((call) => call[1]))
       .toEqual(['k1', 'k1', 'k2']);
   });
+
+  it('does not resend a create for another account after a CSRF refresh',
+    async () => {
+      const { api, auth, user, list, navigate } = listSetup('en');
+      await flushPromises();
+      switchAccountOnRefresh(auth, user);
+      api.create.mockResolvedValue(failed('csrf-rejected'));
+
+      await list.create('Shop');
+
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(list.createState.value).toBe('session-lost');
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+  it('does not adopt a create that lands after the account changed',
+    async () => {
+      const { api, user, list, navigate } = listSetup('en');
+      api.list.mockResolvedValue(ok([]));
+      await flushPromises();
+      api.create.mockImplementation(async () => {
+        user.value = { ...user.value, id: 'owner-2' };
+        return ok(project({ id: 'created' }));
+      });
+
+      await list.create('Shop');
+
+      expect(list.createState.value).toBe('session-lost');
+      expect(list.items.value).toEqual([]);
+      expect(navigate).not.toHaveBeenCalled();
+    });
 
   it('reports the project limit on create', async () => {
     const { api, list } = listSetup();
@@ -176,6 +223,43 @@ describe('project editor', () => {
       expect(editor.draft.value?.text.en?.name).toBe('Elsewhere');
       expect(editor.notice.value).toBeNull();
     });
+
+  it('loads, edits and saves a project that already has dates', async () => {
+    const { editor, api } = await editorSetup(dated());
+    expect(editor.dirty.value).toBe(false);
+    editor.draft.value!.text.en!.name = 'Shop';
+    expect(editor.dirty.value).toBe(true);
+    const saved = project({
+      revision: '4',
+      dates: { start: { y: 2024, m: 3 }, end: { y: 2025 }, present: false },
+      text: { en: { name: 'Shop', role: 'Lead engineer' } },
+    });
+    api.replace.mockResolvedValue(ok(saved));
+
+    await editor.save();
+
+    expect(api.replace.mock.calls[0]?.[2]).toMatchObject({
+      dates: { start: { y: 2024, m: 3 }, end: null, present: true },
+    });
+    expect(editor.dirty.value).toBe(false);
+    expect(editor.draft.value?.dates)
+      .toEqual({ start: { y: 2024, m: 3 }, end: { y: 2025 }, present: false });
+    editor.adopt(project({ ...saved, slug: 'renamed', revision: '5' }));
+    expect(editor.dirty.value).toBe(false);
+  });
+
+  it('keeps a save for the loading account only', async () => {
+    const { editor, api, auth, user } = await editorSetup();
+    editor.draft.value!.text.en!.name = 'Typed';
+    switchAccountOnRefresh(auth, user);
+    api.replace.mockResolvedValue(failed('csrf-rejected'));
+
+    await editor.save();
+
+    expect(api.replace).toHaveBeenCalledTimes(1);
+    expect(editor.notice.value).toBe('session-lost');
+    expect(editor.draft.value?.text.en?.name).toBe('Typed');
+  });
 
   it('marks invalid fields without sending', async () => {
     const { editor, api } = await editorSetup();
@@ -302,6 +386,18 @@ describe('address change and deletion', () => {
       expect(action.state.value)
         .toEqual({ kind: 'reauth-required', method: 'provider' });
     });
+
+  it('stops when the account changes during a CSRF refresh', async () => {
+    const { api, auth, user, action, onDone } = releaseSetup();
+    switchAccountOnRefresh(auth, user);
+    api.remove.mockResolvedValue(failed('csrf-rejected'));
+
+    await action.start('delete', project());
+
+    expect(api.remove).toHaveBeenCalledTimes(1);
+    expect(action.state.value).toEqual({ kind: 'session-lost' });
+    expect(onDone).not.toHaveBeenCalled();
+  });
 
   it('deletes with the loaded revision', async () => {
     const { api, action, onDone } = releaseSetup();

@@ -9,10 +9,9 @@ a project arrives with resume linking and is not part of these screens yet.
 ## Navigation
 
 The signed-in shell adds a Projects link (“Dự án”) after Resumes, to
-`/app/projects`. It hides below 640 px with the other direct links, and the
-account menu gains a Projects item above Views, so the page is always one tap
-away. No signed-out page links to it; opening it signed out goes to sign in and
-returns.
+`/app/projects`. It hides below 768 px, and the account menu gains a Projects
+item above Views, so the page is always one tap away. No signed-out page links
+to it; opening it signed out goes to sign in and returns.
 
 ## Project list
 

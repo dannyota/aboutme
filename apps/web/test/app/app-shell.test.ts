@@ -221,7 +221,9 @@ describe('AppShell', () => {
     const projects = wrapper.findAll('a')
       .find((a) => a.attributes('href') === '/app/projects');
     expect(projects?.attributes('aria-current')).toBe('page');
-    expect(projects?.classes()).toContain('max-sm:hidden');
+    // The signed-in English bar fits Projects only from 768 px.
+    expect(projects?.classes()).toContain('max-md:hidden');
+    expect(projects?.classes()).not.toContain('max-sm:hidden');
     wrapper.unmount();
   });
   it(

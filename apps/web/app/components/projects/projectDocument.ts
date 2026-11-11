@@ -86,18 +86,29 @@ export function draftFromProject(project: Project): ProjectDraft {
   }
   return {
     slug: project.slug,
-    dates: project.dates === undefined || project.dates === null
-      ? null
-      : structuredClone({
-          start: project.dates.start,
-          end: project.dates.end,
-          present: project.dates.present,
-        }),
+    dates: datesOf(project.dates),
     repositoryUrl: linkOf(project.repositoryUrl),
     demoUrl: linkOf(project.demoUrl),
     technologies: [...(project.technologies ?? [])],
     defaultLanguage: project.defaultLanguage,
     text,
+  };
+}
+
+type YearMonth = ProjectDates['start'];
+
+// A loaded project is a reactive proxy, which structuredClone rejects, so
+// the dates are copied field by field.
+function yearMonthOf(value: YearMonth): YearMonth {
+  return value.m === undefined ? { y: value.y } : { y: value.y, m: value.m };
+}
+
+function datesOf(dates: ProjectDates | null | undefined): ProjectDates | null {
+  if (dates === undefined || dates === null) return null;
+  return {
+    start: yearMonthOf(dates.start),
+    end: dates.end === null ? null : yearMonthOf(dates.end),
+    present: dates.present,
   };
 }
 

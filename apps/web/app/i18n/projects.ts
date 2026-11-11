@@ -113,6 +113,9 @@ export type ProjectsCopy = {
   readonly languageCodeError: string;
   readonly add: string;
   readonly languageName: (key: string) => string;
+  readonly leaveTitle: string;
+  readonly stay: string;
+  readonly leave: string;
 };
 
 const NAMES: Readonly<Record<string, string>> = {
@@ -240,6 +243,9 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
     languageCodeError: 'Hãy nhập mã ngôn ngữ chưa có trong dự án.',
     add: 'Thêm',
     languageName: (key) => NAMES[key] ?? key,
+    leaveTitle: 'Bạn có thay đổi chưa lưu.',
+    stay: 'Ở lại',
+    leave: 'Rời đi không lưu',
   },
   en: {
     title: 'Projects',
@@ -361,5 +367,8 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
     languageCodeError: 'Enter a language code the project does not have yet.',
     add: 'Add',
     languageName: (key) => NAMES[key] ?? key,
+    leaveTitle: 'You have unsaved changes.',
+    stay: 'Stay',
+    leave: 'Leave without saving',
   },
 };

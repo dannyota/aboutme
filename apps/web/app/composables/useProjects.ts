@@ -184,14 +184,19 @@ export function useProjectList(
       createState.value = 'limit';
       return;
     }
+    const ownerId = auth.user.value?.id;
+    if (ownerId === undefined) {
+      createState.value = 'session-lost';
+      return;
+    }
     const language = locale.value;
     const body = {
       defaultLanguage: language,
       text: { [language]: { name: trimmed } },
     };
-    const key = keys.keyFor(body);
+    const key = keys.keyFor({ ownerId, body });
     createState.value = 'busy';
-    const result = await sendWithCsrf(auth, (csrfToken) =>
+    const result = await sendWithCsrf(auth, ownerId, (csrfToken) =>
       api.create(body, key, csrfToken));
     if (disposed.value) return;
     if (result.kind === 'ok') {
@@ -273,6 +278,8 @@ export function useProjectEditor(
   const keys = intentKeys(uuid);
   const disposed = useDisposed();
   let winner: Project | null = null;
+  // Saves belong to the account that loaded the project.
+  let ownerId: string | null = null;
 
   const dirty = computed(() =>
     loaded.value !== null
@@ -295,6 +302,7 @@ export function useProjectEditor(
 
   async function load(): Promise<void> {
     view.value = 'loading';
+    ownerId = auth.user.value?.id ?? null;
     const result = await api.read(id);
     if (disposed.value) return;
     if (result.kind === 'ok') {
@@ -340,12 +348,16 @@ export function useProjectEditor(
     const found = [...extraIssues, ...validateDraft(current)];
     issues.value = found;
     if (found.length > 0) return;
+    if (ownerId === null) {
+      notice.value = 'session-lost';
+      return;
+    }
     const body = requestFromDraft(current);
     const revision = base.revision;
-    const key = keys.keyFor({ revision, body });
+    const key = keys.keyFor({ ownerId, revision, body });
     saving.value = true;
     notice.value = null;
-    const result = await sendWithCsrf(auth, (csrfToken) =>
+    const result = await sendWithCsrf(auth, ownerId, (csrfToken) =>
       api.replace(id, revision, body, key, csrfToken));
     saving.value = false;
     if (disposed.value) return;

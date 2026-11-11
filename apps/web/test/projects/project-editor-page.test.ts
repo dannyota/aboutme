@@ -263,6 +263,29 @@ describe('project editor text and details', () => {
       .toBe('100 / 120 characters');
   });
 
+  it('counts a held date range as unsaved and enables Save', async () => {
+    const wrapper = await mountEditor();
+
+    await typeInto('[data-part="start-year"]', '2024');
+
+    expect(wrapper.get('[data-state-mark]').text()).toBe('Unsaved');
+    expect(wrapper.get('[data-action="project-save"]').attributes('disabled'))
+      .toBeUndefined();
+  });
+
+  it('focuses the unfinished date range from the error summary', async () => {
+    const wrapper = await mountEditor();
+    await typeInto('[data-part="start-year"]', '2024');
+
+    await save(wrapper);
+    expect(api.replace).not.toHaveBeenCalled();
+    await wrapper.get('[data-action="focus-editor-issue"]').trigger('click');
+    await flushPromises();
+
+    expect(document.activeElement)
+      .toBe(inDocument('[data-part="start-year"]'));
+  });
+
   it('keeps Save disabled until something changes', async () => {
     const wrapper = await mountEditor();
     const button = () => wrapper.get('[data-action="project-save"]');

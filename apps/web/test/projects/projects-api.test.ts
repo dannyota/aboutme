@@ -141,7 +141,28 @@ describe('projects API', () => {
         .mockResolvedValueOnce(failed('csrf-rejected'))
         .mockResolvedValueOnce(ok(null));
 
-      expect(await sendWithCsrf(auth, send)).toEqual(ok(null));
+      expect(await sendWithCsrf(auth, 'owner-1', send)).toEqual(ok(null));
       expect(send.mock.calls).toEqual([['csrf-1'], ['csrf-2']]);
     });
+
+  it('does not resend after a refresh that changed the account', async () => {
+    const { auth, user } = fakeAuth();
+    auth.refresh.mockImplementation(async () => {
+      user.value = { ...user.value, id: 'owner-2' };
+    });
+    const send = vi.fn().mockResolvedValue(failed('csrf-rejected'));
+
+    expect(await sendWithCsrf(auth, 'owner-1', send))
+      .toEqual(failed('session-lost'));
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing for an account other than the intent\'s', async () => {
+    const { auth } = fakeAuth();
+    const send = vi.fn();
+
+    expect(await sendWithCsrf(auth, 'owner-2', send))
+      .toEqual(failed('session-lost'));
+    expect(send).not.toHaveBeenCalled();
+  });
 });

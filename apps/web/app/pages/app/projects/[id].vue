@@ -13,6 +13,7 @@ import DateRangeField from '@/components/editor/forms/DateRangeField.vue';
 import type { FieldIntent } from '@/components/editor/forms/fieldIntent';
 import ProjectLanguageDialog
   from '@/components/projects/ProjectLanguageDialog.vue';
+import ProjectLeaveDialog from '@/components/projects/ProjectLeaveDialog.vue';
 import ProjectReleaseDialog
   from '@/components/projects/ProjectReleaseDialog.vue';
 import ProjectTechnologies
@@ -60,9 +61,21 @@ const drafts = createFieldDrafts();
 provide(FieldDraftsKey, drafts);
 
 let leaving = false;
+const leaveChoice = ref<((leave: boolean) => void) | null>(null);
+
+function confirmLeave(): Promise<boolean> {
+  leaveChoice.value?.(false);
+  return new Promise((resolve) => {
+    leaveChoice.value = (leave) => {
+      leaveChoice.value = null;
+      resolve(leave);
+    };
+  });
+}
+
 // Held rich text and an unfinished date range count as unsaved work.
 useLeaveGuard(() => !leaving && (drafts.flushAll()
-  || editor.dirty.value || editor.saving.value));
+  || editor.dirty.value || editor.saving.value), confirmLeave);
 
 const active = ref('');
 const languageOpen = ref(false);
@@ -79,9 +92,12 @@ const languages = computed(() => Object.keys(draft.value?.text ?? {}));
 const errors = computed<Record<string, string>>(() => Object.fromEntries(
   editor.issues.value.map((issue) =>
     [issue.path, issueMessage(issue, copy.value)])));
+// A held draft, such as a start year without an end, is unsaved work too.
+const changed = computed(() =>
+  editor.dirty.value || drafts.count.value > 0);
 const saveMark = computed(() => {
   if (editor.saving.value) return 'saving';
-  if (!editor.dirty.value) return 'saved';
+  if (!changed.value) return 'saved';
   return editor.saveFailed.value ? 'failed' : 'unsaved';
 });
 const noticeText = computed(() => {
@@ -374,6 +390,7 @@ function closeRelease(): void {
           {{ copy.detailsSection }}
         </h2>
         <DateRangeField
+          id="project-dates"
           field-id="project-dates"
           :model-value="draft.dates ?? undefined"
           class="grid gap-3"
@@ -476,7 +493,7 @@ function closeRelease(): void {
       >
         <StateMark :state="saveMark" />
         <Button
-          :disabled="!editor.dirty.value || editor.saving.value"
+          :disabled="!changed || editor.saving.value"
           data-action="project-save"
           type="submit"
         >
@@ -491,6 +508,12 @@ function closeRelease(): void {
       :copy="copy"
       @close="languageOpen = false; focusById('project-add-language')"
       @submit="addLanguage"
+    />
+    <ProjectLeaveDialog
+      :open="leaveChoice !== null"
+      :copy="copy"
+      @stay="leaveChoice?.(false)"
+      @leave="leaveChoice?.(true)"
     />
     <ProjectReleaseDialog
       :open="releaseKind !== null"
