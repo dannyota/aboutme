@@ -50,7 +50,7 @@ func TestProjectLinks_LegacyLibraryLinksPrefillWithinTheEntryContract(t *testing
 	if response := linkProject(t, h, first.ID, upper, first.Revision); response.status != http.StatusOK {
 		t.Fatalf("link uppercase scheme = %d %s, want 200", response.status, response.body)
 	}
-	requireEntryLink(t, h, first.ID, stringPointer("https://example.com/atlas"))
+	requireEntryLink(t, h, first.ID, stringPointer("https://Example.COM/atlas"))
 
 	second := createResumeWithLanguage(t, h, nil, loadMinimalDocument(t))
 	if response := linkProject(t, h, second.ID, long, second.Revision); response.status != http.StatusOK {
@@ -82,5 +82,30 @@ func TestProjectLinks_LegacyLibraryLinksRefreshWithinTheEntryContract(t *testing
 	requireEntryLink(t, h, created.ID, nil)
 	setLegacyRepository(t, h, legacy, "HTTPS://Example.COM/renamed")
 	refresh(3)
-	requireEntryLink(t, h, created.ID, stringPointer("https://example.com/renamed"))
+	requireEntryLink(t, h, created.ID, stringPointer("https://Example.COM/renamed"))
+}
+
+// A saved library link keeps its host bytes, and the entry link contract
+// accepts an uppercase or internationalised host, so linking copies both.
+func TestProjectLinks_SavedHostKeepsItsBytesAndLinks(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	for _, tc := range []struct {
+		slug, given string
+		want        *string
+	}{
+		{"idn-host", "https://İ.example/Atlas", stringPointer("https://İ.example/Atlas")},
+		{"upper-host", "HTTPS://Example.COM/Path?Q=A", stringPointer("https://Example.COM/Path?Q=A")},
+	} {
+		document := linkProjectDocument(tc.slug)
+		document.RepositoryURL = tc.given
+		saved := createLinkProject(t, h, h.userID, tc.slug, document)
+		created := createResumeWithLanguage(t, h, nil, loadMinimalDocument(t))
+		if response := linkProject(t, h, created.ID, saved.ID, created.Revision); response.status != http.StatusOK {
+			t.Fatalf("link %s = %d %s, want 200", tc.given, response.status, response.body)
+		}
+		got := onlyProjectEntry(t, h, created.ID, "projects").Link
+		if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+			t.Fatalf("link %s prefilled entry link %v, want %v", tc.given, got, tc.want)
+		}
+	}
 }

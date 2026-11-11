@@ -46,7 +46,7 @@ func prefillProjectEntry(entry *schema.ProjectEntry, library project.Project, ln
 	}
 }
 
-// prefillLink lowercases the scheme and host of a library link and leaves the
+// prefillLink lowercases the scheme of a library link and leaves the
 // entry link out when the result still fails the entry link contract, which
 // a project saved before the library applied that contract can hold.
 func prefillLink(raw string) *string {

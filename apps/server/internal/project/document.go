@@ -101,10 +101,10 @@ func validString(s string, limit int) bool {
 	return utf8.ValidString(s) && !strings.ContainsRune(s, 0) && utf8.RuneCountInString(s) <= limit
 }
 
-// NormalizeLink returns s with its scheme and host lowercase, as a resume
-// entry link requires, and reports whether the result is an absolute HTTPS
-// link of at most MaxLinkCharacters. An empty link is valid. The user
-// information, path, query and fragment keep their case.
+// NormalizeLink returns s with its scheme lowercase, as a resume entry link
+// requires, and reports whether the result is an absolute HTTPS link of at
+// most MaxLinkCharacters. An empty link is valid. Every byte after the scheme
+// is kept: lowercasing an internationalised host can change where it points.
 func NormalizeLink(s string) (string, bool) {
 	if s == "" {
 		return "", true
@@ -116,12 +116,7 @@ func NormalizeLink(s string) (string, bool) {
 	if !found || !strings.EqualFold(scheme, "https") {
 		return "", false
 	}
-	end := strings.IndexAny(rest, "/?#")
-	if end < 0 {
-		end = len(rest)
-	}
-	hostStart := strings.LastIndex(rest[:end], "@") + 1
-	normalized := "https://" + rest[:hostStart] + strings.ToLower(rest[hostStart:end]) + rest[end:]
+	normalized := "https://" + rest
 	if utf8.RuneCountInString(normalized) > MaxLinkCharacters {
 		return "", false
 	}

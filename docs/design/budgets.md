@@ -32,7 +32,7 @@ the [scaling contract](scaling/README.md) and
 | Project name and role                 | 120 characters each                                                 | Project validation                                   |
 | Project summary and outcome           | 300 and 600 characters                                              | Project validation                                   |
 | Project description                   | 16 KiB UTF-8, before and after sanitizing                           | Project validation and resume sanitizer              |
-| Project repository and demo links     | HTTPS, at most 2048 characters; scheme and host stored lowercase    | Project validation                                   |
+| Project repository and demo links     | HTTPS, at most 2048 characters; scheme stored lowercase             | Project validation                                   |
 | Stored project document               | 96 KiB PostgreSQL JSON text                                         | Project store and database constraint                |
 | Project slug                          | 2 to 40 ASCII lowercase letters, digits and single internal hyphens | Project validation and database constraint           |
 | Released project slug                 | Held within the account for 180 days                                | Project store; expired rows removed by privacy sweep |

@@ -6,8 +6,9 @@ import (
 )
 
 // A library link is copied into a resume entry link, which requires a
-// lowercase scheme and at most 2048 characters, so a save stores the scheme
-// and host lowercase and refuses a longer link.
+// lowercase scheme and at most 2048 characters, so a save lowercases the
+// scheme, keeps every other byte, and refuses a longer link. Lowercasing a
+// host could change where an internationalised link points.
 func TestPrepare_NormalizesAndBoundsLinks(t *testing.T) {
 	d := draft()
 	d.RepositoryURL = "HTTPS://Example.COM/Atlas/Path?Query=Kept#Frag"
@@ -16,11 +17,22 @@ func TestPrepare_NormalizesAndBoundsLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
-	if prepared.RepositoryURL != "https://example.com/Atlas/Path?Query=Kept#Frag" {
+	if prepared.RepositoryURL != "https://Example.COM/Atlas/Path?Query=Kept#Frag" {
 		t.Fatalf("repositoryUrl = %q", prepared.RepositoryURL)
 	}
-	if prepared.DemoURL != "https://user:Pass@demo.example:8443/Run" {
+	if prepared.DemoURL != "https://user:Pass@Demo.Example:8443/Run" {
 		t.Fatalf("demoUrl = %q", prepared.DemoURL)
+	}
+	for given, want := range map[string]string{
+		"https://İ.example/Atlas":      "https://İ.example/Atlas",
+		"HTTPS://Example.COM/Path?Q=A": "https://Example.COM/Path?Q=A",
+	} {
+		d := draft()
+		d.RepositoryURL = given
+		prepared, err := Prepare(d)
+		if err != nil || prepared.RepositoryURL != want {
+			t.Fatalf("repositoryUrl %q stored as %q (%v), want %q", given, prepared.RepositoryURL, err, want)
+		}
 	}
 	base := "https://example.com/"
 	for _, n := range []int{2048, 2049} {

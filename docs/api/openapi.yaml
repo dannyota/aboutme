@@ -8531,7 +8531,7 @@ components:
       type: string
       description: >-
         Empty or an absolute HTTPS URL of at most 2048 characters. The scheme
-        and host are stored lowercase.
+        is stored lowercase; every other character is kept as given.
       maxLength: 2048
       anyOf:
         - const: ""
