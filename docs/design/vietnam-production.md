@@ -257,17 +257,17 @@ reviewed deployment helpers when selecting older images.
 ## Release fence
 
 `fence.sh` owns root-only `/var/lib/aboutme/fence.json` under `flock`. Images
-check the minimum before Podman; new hosts start at floor 4007. Cutover locks
-the installed tag, checkpoints before mutation, and holds through quiescence;
-`verify` locks. Its marker records ID, kind, state, and start time. Retained
-cutover ownership or a marker blocks server, web, serving Caddy, migrate, and
-jobs across reboot; maintenance can start. Only a valid active `reset-db` marker
-matching the lock permits db-setup. Missing, symlinked, malformed, wrong-kind,
-or mismatched state refuses it. The owner removes the marker after quiescence.
-Uncertainty retains ownership. Manual clear refuses markers; privileged recovery
-records its reason. Cleanup releases only its exact ID without a marker; retries
-cannot replace an owner. Other operation kinds retain minimum-only checks unless
-their contract adds gates.
+check the minimum before Podman; new hosts start at the tracked floor. Cutover
+locks the installed tag, checkpoints before mutation, and holds through
+quiescence; `verify` locks. Its marker records ID, kind, state, and start time.
+Retained cutover ownership or a marker blocks server, web, serving Caddy,
+migrate, and jobs across reboot; maintenance can start. Only a valid active
+`reset-db` marker matching the lock permits db-setup. Missing, symlinked,
+malformed, wrong-kind, or mismatched state refuses it. The owner removes the
+marker after quiescence. Uncertainty retains ownership. Manual clear refuses
+markers; privileged recovery records its reason. Cleanup releases only its exact
+ID without a marker; retries cannot replace an owner. Other operation kinds
+retain minimum-only checks unless their contract adds gates.
 
 The
 [notice host contract](crowdsec-privacy-notification.md#send-authority-and-restore-fence)
@@ -276,6 +276,9 @@ owns mount checks, adoption, restore sequencing, and proof limits. Its
 and initializing adoption block app/ingestion starts, including db-setup, across
 reboot. PostgreSQL recovery and maintenance retain their existing gates. Restore
 releases only its own ownership, never reconciliation or send/activation gates.
+
+[Release floors](release-floors.md) owns the tracked rebuilt-host floor and the
+schema floor that a breaking migration raises before it runs.
 
 ## Scheduled jobs
 

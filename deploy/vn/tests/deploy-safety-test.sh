@@ -6,6 +6,26 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
 
+# fence.sh's floor_tag and floor_release name one release, and a tree's schema
+# floor never sits above it (docs/design/release-floors.md).
+tracked_floor_check() { # root
+  local fence=$1/deploy/vn/scripts/fence.sh schema=$1/apps/server/migrations/schema-floor
+  local strict='^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$' tag number raw floor
+  tag=$(sed -n 's/^floor_tag=//p' "$fence")
+  [[ $tag =~ $strict ]] || fail 'fence.sh must set floor_tag once to a strict tag'
+  number=$((BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3]))
+  [[ $(sed -n 's/^floor_release=//p' "$fence") == "$number" ]] ||
+    fail "fence.sh must set floor_release once to $number for $tag"
+  [[ -e $schema || -L $schema ]] || return 0
+  raw=$(cat "$schema" && printf x) || fail 'cannot read apps/server/migrations/schema-floor'
+  floor=${raw%$'\n'x}
+  [[ $raw == "$floor"$'\n'x && $floor =~ $strict ]] ||
+    fail 'apps/server/migrations/schema-floor must hold one strict tag and a newline'
+  ((BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] <= number)) ||
+    fail "the tracked floor $tag in fence.sh is below the schema floor $floor"
+}
+tracked_floor_check "$root"
+
 # macOS limits Unix socket paths to 104 bytes, even with a long TMPDIR.
 control_path='ControlPath=\$ssh_dir/(ssh-%C|prod\.sock|drill\.sock)("| )'
 for script in deploy.sh restore-drill.sh; do

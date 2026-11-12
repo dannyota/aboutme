@@ -506,14 +506,16 @@ SH
   export PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   retention_fixture_case=fixture-fence-initialization
   /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
+  # A freshly initialized fence admits its tracked floor as the lowest tag.
+  retention_fixture_tag=$(sed -n 's/^floor_tag=//p' /usr/local/lib/aboutme/fence.sh)
   if [[ ${retention_fixture_migration:-no} != yes ]]; then
     retention_fixture_case=fixture-fence-ownership
-    retention_fixture_owner=$(/usr/local/lib/aboutme/fence.sh lock cutover v0.8.9 2>/dev/null)
+    retention_fixture_owner=$(/usr/local/lib/aboutme/fence.sh lock cutover "$retention_fixture_tag" 2>/dev/null)
     retention_fixture_case=fixture-fence-mutation
-    /usr/local/lib/aboutme/fence.sh mutation-start "$retention_fixture_owner" v0.8.9 reset-db >/dev/null 2>&1
+    /usr/local/lib/aboutme/fence.sh mutation-start "$retention_fixture_owner" "$retention_fixture_tag" reset-db >/dev/null 2>&1
   fi
   retention_fixture_case=fixture-postgresql-provision
-  printf '{"operation_id":"%s","release_tag":"v0.8.9"}\n' "${retention_fixture_owner:-}" |
+  printf '{"operation_id":"%s","release_tag":"%s"}\n' "${retention_fixture_owner:-}" "$retention_fixture_tag" |
     /usr/local/lib/aboutme/crowdsec-provision.sh fresh >/dev/null 2>&1
   # shellcheck disable=SC2034 # The caller's ERR trap reads this fixed case name.
   retention_fixture_case=fixture-postgresql-ready

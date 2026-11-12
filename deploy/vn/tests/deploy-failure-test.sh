@@ -36,6 +36,21 @@ case $1 in
     ;;
   fetch) [[ ${RELEASE_CASE:-} != fetch-error ]] ;;
   merge-base) [[ ${RELEASE_CASE:-} != off-main ]] ;;
+  # The tagged commit's tree: SCHEMA_FLOOR holds the schema-floor file's exact
+  # bytes and SCHEMA_ENTRY its mode and type. As in git, a path given from a
+  # subdirectory resolves there unless --full-tree is passed.
+  ls-tree)
+    printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/git.log"
+    [[ ${SCHEMA_TREE:-} != fail ]] || { echo 'fatal: not a tree object' >&2; exit 128; }
+    if [[ -n ${SCHEMA_FLOOR+set} && " $* " == *' --full-tree '* ]]; then
+      printf '%s %040d\t%s\n' "${SCHEMA_ENTRY:-100644 blob}" 0 apps/server/migrations/schema-floor
+    fi
+    ;;
+  show)
+    printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/git.log"
+    [[ ${SCHEMA_SHOW:-} != fail ]] || exit 128
+    printf '%s' "$SCHEMA_FLOOR"
+    ;;
   *) echo "unexpected git command: $*" >&2; exit 2 ;;
 esac
 STUB
@@ -101,6 +116,12 @@ if [[ $args == *' /usr/local/lib/aboutme/fence.sh lock '* ]]; then
   exit 0
 fi
 printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/ssh.log"
+if [[ $args == *' /usr/local/lib/aboutme/fence.sh read '* ]]; then
+  [[ ${FAIL_FENCE_READ:-0} != 1 ]] || exit 1
+  printf '{"minimum_release":%s,"minimum_tag":"v0.1.0","operation_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}\n' "${FENCE_MINIMUM:-1000}"
+  exit 0
+fi
+if [[ $args == *' /usr/local/lib/aboutme/fence.sh raise '* && ${FAIL_RAISE:-0} == 1 ]]; then exit 1; fi
 if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
   printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/host.log"
   if [[ $args == *' release-json '* ]]; then printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
@@ -546,5 +567,130 @@ fi
 rm -f "$work/probe.pid"
 unset EGRESS_CASE
 
-((edge_failures == 0 && egress_failures == 0)) || exit 1
+# Release floors (docs/design/release-floors.md). Tags derive from the tracked
+# floor in fence.sh, so raising it changes no case.
+floor_failures=0
+floor_fail() { echo "$*" >&2; floor_failures=1; }
+floor_reset() {
+  rm -f "$work/probe.pid" "$work/git.log"
+  : >"$work/external.log"
+  : >"$work/order.log"
+  : >"$work/host.log"
+  : >"$work/ssh.log"
+}
+deploy() { "$repo_root/deploy/vn/scripts/deploy.sh" "$@"; }
+# Prints the first order.log line number that holds a fixed string.
+at() { grep -nF -- "$1" "$work/order.log" | head -n1 | cut -d: -f1 || true; }
+op_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+file_read="ls-tree --full-tree $(printf '%040d' 0 | tr 0 a) -- apps/server/migrations/schema-floor"
+[[ $(grep '^floor_tag=' "$repo_root/deploy/vn/scripts/fence.sh") =~ ^floor_tag=v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]
+above_floor=v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))
+past_floor=v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] + 1)).0
+
+floor_reset
+if deploy --activate "$above_floor" >"$work/floor-activate.out" 2>&1 ||
+   [[ -s $work/external.log ]] || ! grep -q 'above the tracked floor' "$work/floor-activate.out"; then
+  floor_fail 'an activation above the tracked floor was not refused before SSH'
+fi
+
+# A candidate below its own schema floor, a schema floor above the tracked
+# floor, a file that is not one strict tag and a newline, an entry that is not
+# a regular file, and a tree or file that cannot be read all stop before SSH.
+for schema_case in above-candidate above-tracked no-newline blank-line padded crlf empty two-tags \
+  tree-unreadable executable symlink directory submodule file-unreadable; do
+  tag=v0.1.1 message='must hold one strict tag and a newline'
+  SCHEMA_TREE='' SCHEMA_ENTRY='100644 blob' SCHEMA_SHOW='' SCHEMA_FLOOR=$'v0.1.1\n'
+  case $schema_case in
+    above-candidate) SCHEMA_FLOOR=$'v0.1.2\n' message='is below its schema floor' ;;
+    above-tracked) tag=$past_floor SCHEMA_FLOOR=$above_floor$'\n' message='above the tracked floor' ;;
+    no-newline) SCHEMA_FLOOR=v0.1.1 ;;
+    blank-line) SCHEMA_FLOOR=$'v0.1.1\n\n' ;;
+    padded) SCHEMA_FLOOR=$'v0.01.1\n' ;;
+    crlf) SCHEMA_FLOOR=$'v0.1.1\r\n' ;;
+    empty) SCHEMA_FLOOR='' ;;
+    two-tags) SCHEMA_FLOOR=$'v0.1.1\nv0.1.0\n' ;;
+    tree-unreadable) SCHEMA_TREE=fail message='could not inspect' ;;
+    executable) SCHEMA_ENTRY='100755 blob' message='not a regular file' ;;
+    symlink) SCHEMA_ENTRY='120000 blob' message='not a regular file' ;;
+    directory) SCHEMA_ENTRY='040000 tree' message='not a regular file' ;;
+    submodule) SCHEMA_ENTRY='160000 commit' message='not a regular file' ;;
+    file-unreadable) SCHEMA_SHOW=fail message='could not read' ;;
+  esac
+  export SCHEMA_FLOOR SCHEMA_TREE SCHEMA_ENTRY SCHEMA_SHOW
+  floor_reset
+  if deploy "$tag" >"$work/floor-$schema_case.out" 2>&1 || [[ -s $work/external.log ]] ||
+     ! grep -q "$message" "$work/floor-$schema_case.out" || ! grep -qsxF -- "$file_read" "$work/git.log"; then
+    floor_fail "a schema floor case ($schema_case) was not refused before SSH"
+  fi
+done
+unset SCHEMA_TREE SCHEMA_ENTRY SCHEMA_SHOW
+
+# Above the fence: the deploy reads the minimum and raises with the operation
+# ID after app-down and render, before db-setup and migrate. It never prints
+# the fence document, which holds that ID.
+export SCHEMA_FLOOR=$'v0.1.1\n' FENCE_MINIMUM=1000
+for mode in deploy first-deploy; do
+  args=(v0.1.1)
+  [[ $mode == deploy ]] || args+=(--first-deploy)
+  floor_reset
+  deploy "${args[@]}" >"$work/floor-raise.out" 2>&1 || true
+  down=$(at ' app-down ') render=$(at ' render ') fence_read=$(at '/fence.sh read ')
+  raise=$(at "/fence.sh raise $op_id v0.1.1 ") migrate=$(at ' migrate ') setup=$migrate
+  [[ $mode == deploy ]] || setup=$(at ' db-setup ')
+  if [[ -z $down || -z $render || -z $fence_read || -z $raise || -z $setup || -z $migrate ]] ||
+     ((down > render || render > fence_read || fence_read > raise || raise > setup || setup > migrate)) ||
+     grep -qF "$op_id" "$work/floor-raise.out"; then
+    floor_fail "$mode did not raise a schema floor above the fence after app-down and before migrate"
+  fi
+done
+
+# A failed raise may still have landed, so recovery fails closed and starts
+# nothing.
+floor_reset
+if FAIL_RAISE=1 deploy v0.1.1 >"$work/floor-raise-failed.out" 2>&1 ||
+   ! grep -qF "/fence.sh raise $op_id v0.1.1 " "$work/order.log" || ! grep -q ' fail-closed ' "$work/host.log" ||
+   grep -q -e ' restore-previous ' -e ' app-up ' -e ' migrate ' "$work/host.log"; then
+  floor_fail 'a failed schema-floor raise did not fail closed'
+fi
+
+# A failed fence read sends no raise, so recovery restores the previous release.
+floor_reset
+if FAIL_FENCE_READ=1 deploy v0.1.1 >"$work/floor-read-failed.out" 2>&1 ||
+   ! grep -qF '/fence.sh read ' "$work/order.log" || grep -qF '/fence.sh raise ' "$work/order.log" ||
+   grep -q -e ' fail-closed ' -e ' migrate ' "$work/host.log" || ! grep -q ' restore-previous ' "$work/host.log" ||
+   [[ $(tail -n 3 "$work/host.log" | awk '{ print $NF }' | paste -sd ' ' -) != 'app-up maintenance-down timers-start' ]] ||
+   ! grep -q 'restored the previous release' "$work/floor-read-failed.out"; then
+  floor_fail 'a failed fence read did not restore the previous release'
+fi
+
+for FENCE_MINIMUM in 1001 2000; do
+  floor_reset
+  deploy v0.1.1 >"$work/floor-at-fence.out" 2>&1 || true
+  if ! grep -qF '/fence.sh read ' "$work/order.log" || grep -qF '/fence.sh raise ' "$work/order.log" ||
+     ! grep -q ' migrate ' "$work/host.log"; then
+    floor_fail "a schema floor at or below a fence of $FENCE_MINIMUM did not continue without a raise"
+  fi
+done
+unset SCHEMA_FLOOR FENCE_MINIMUM
+
+floor_reset
+deploy v0.1.1 >"$work/floor-absent.out" 2>&1 || true
+if ! grep -qsxF -- "$file_read" "$work/git.log" || grep -qF -e '/fence.sh read ' -e '/fence.sh raise ' "$work/order.log" ||
+   ! grep -q ' migrate ' "$work/host.log"; then
+  floor_fail 'a tree without a schema floor did not deploy without reading the fence'
+fi
+
+# A rollback and an activation never read the file.
+export SCHEMA_FLOOR=$'v0.1.2\n'
+for mode in rollback activate; do
+  floor_reset
+  deploy "--$mode" v0.1.1 >"$work/floor-$mode.out" 2>&1 || true
+  if [[ -e $work/git.log ]] || grep -qF -e '/fence.sh read ' -e "/fence.sh raise $op_id v0.1.2 " "$work/order.log" ||
+     ! grep -qF "/fence.sh lock $mode v0.1.1 " "$work/order.log"; then
+    floor_fail "a $mode read the schema floor"
+  fi
+done
+unset SCHEMA_FLOOR
+
+((edge_failures == 0 && egress_failures == 0 && floor_failures == 0)) || exit 1
 echo "deployment failure test passed"

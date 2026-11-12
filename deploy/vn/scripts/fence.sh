@@ -6,13 +6,13 @@
 # written to a temporary file, synced, then renamed, so a crash leaves either
 # the old or the new document and never a torn one.
 #
-#   fence.sh init                      create the file at the rebuilt-host floor
+#   fence.sh init                      create the file at the tracked floor
 #   fence.sh read                      print the document
 #   fence.sh lock <kind> <tag>         take the operation lock; prints its id
 #   fence.sh checkpoint <id> <tag>     reprove the lock and floor before a start
 #   fence.sh mutation-start <id> <tag> <kind>  mark a cutover write active
 #   fence.sh mutation-clear <id> <kind>        clear its completed marker
-#   fence.sh raise <id> <tag>          raise the minimum to <tag>
+#   fence.sh raise <id> <tag>          raise the minimum to <tag>, up to the tracked floor
 #   fence.sh release <id>              release the lock this id owns
 #   fence.sh check <release> <unit>    ExecStartPre: refuse an unsafe start
 #   fence.sh clear <reason>            privileged manual clear of a stale lock
@@ -25,10 +25,10 @@ dir=${FENCE_DIR:-/var/lib/aboutme}
 file=$dir/fence.json
 lockfile=$dir/fence.lock
 mutation_file=$dir/cutover-mutation.json
-# The highest floor in docs/design/passkey-release-fence.md that a rebuilt
-# host starts at (docs/design/vietnam-production.md, "Release fence").
-floor_tag=v0.4.7
-floor_release=4007
+# The tracked floor (docs/design/release-floors.md): a rebuilt host starts
+# here, and raise never goes above it. Never below production's floor.
+floor_tag=v0.8.10
+floor_release=8010
 
 say() { printf 'fence: %s\n' "$*" >&2; }
 die() {
@@ -192,6 +192,8 @@ cmd_checkpoint() { # id tag
 cmd_raise() { # id tag
   local candidate
   candidate=$(candidate_of "$2")
+  ((candidate <= floor_release)) ||
+    die "$2 ($candidate) is above the tracked floor $floor_tag ($floor_release); install a fence.sh that tracks it first"
   owned_or_die "$1"
   ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
   jq --argjson r "$candidate" --arg t "$2" --arg s "$(now)" \

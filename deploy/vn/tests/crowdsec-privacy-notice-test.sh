@@ -61,6 +61,10 @@ exit 1
 STUB
 done
 mount --bind "$work/lib" /usr/local/lib/aboutme; mkdir -p /run/aboutme; export NOTICE_FIXTURE=$work NOTICE_DEVICE=$device
+# A fresh fence admits its installed tracked floor, and raise refuses any tag above it.
+floor_tag=$(sed -n 's/^floor_tag=//p' /usr/local/lib/aboutme/fence.sh); floor_release=$(sed -n 's/^floor_release=//p' /usr/local/lib/aboutme/fence.sh)
+[[ $floor_release =~ ^[0-9]+$ && $floor_tag =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || fail 'installed tracked floor'
+above_floor=v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1)); above_release=$((floor_release + 1))
 for command in sync mv rm; do
   stub "$work/bin/$command" <<'STUB'
 set -euo pipefail; name=${0##*/}
@@ -314,10 +318,12 @@ retained() {
   jq -e '.operation_kind=="notice_restore" and (.operation_id|type=="string")' /var/lib/aboutme/fence.json >/dev/null || fail 'operation not retained'
   denied
 }
+# The fence minimum admits the tracked floor, so only the notice protection
+# refuses these starts.
 denied() {
   local unit
   for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
-    if "$fence" check 4007 "$unit" >"$work/out" 2>"$work/err"; then
+    if "$fence" check "$floor_release" "$unit" >"$work/out" 2>"$work/err"; then
       fail 'guarded start admitted'
     fi
   done
@@ -727,10 +733,15 @@ for field in "${legacy_fields[@]}"; do unset "$field"; done
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" "$work/lib/"; mkdir -p "$work/units" "$work/etc" /etc/containers/systemd /etc/aboutme
 mount --bind "$work/units" /etc/containers/systemd; mount --bind "$work/etc" /etc/aboutme; : >"$work/etc/server.env"
 : >"$work/etc/flags.env"
-jq '.release_tag="v0.999.999" | .release_number=999999' "$work/legacy/release.json" > /var/lib/aboutme/release.json
-sed -e 's/@RELEASE_TAG@/v0.999.999/g' -e 's/@RELEASE_NUMBER@/999999/g' \
-  -e "s|@SERVER_IMAGE@|$legacy_server|g" -e "s|@WEB_IMAGE@|$legacy_web|g" \
-  -e '/@SERVER_SECRETS@/d' "$root/deploy/vn/host/quadlet/aboutme-server.container.in" >"$work/units/aboutme-server.container"
+# The deployed release and its server unit change together. Activation raises
+# the fence to this tag, so it sits at the tracked floor.
+release_fixture() { # tag number
+  jq --arg tag "$1" --argjson number "$2" '.release_tag=$tag | .release_number=$number' "$work/legacy/release.json" > /var/lib/aboutme/release.json
+  sed -e "s/@RELEASE_TAG@/$1/g" -e "s/@RELEASE_NUMBER@/$2/g" \
+    -e "s|@SERVER_IMAGE@|$legacy_server|g" -e "s|@WEB_IMAGE@|$legacy_web|g" \
+    -e '/@SERVER_SECRETS@/d' "$root/deploy/vn/host/quadlet/aboutme-server.container.in" >"$work/units/aboutme-server.container"
+}
+release_fixture "$floor_tag" "$floor_release"
 printf '[Container]\nImage=%s\n' "$legacy_web" >"$work/units/aboutme-web.container"; : >"$work/db-stages"
 refuse "$controller" host-pass latest; [[ ! -s $work/db-stages ]] || fail 'drill controller restored a full application host'
 stub "$work/bin/podman" <<'STUB'
@@ -811,7 +822,7 @@ app() {
 # Reset only known synthetic fixture state, never production recovery or automatic release.
 invalid_aggregate() { refuse bash "$wrapper" "${1:-authorize-send}"; jq -e '.operation_kind=="deploy" and (.operation_id|type=="string")' /var/lib/aboutme/fence.json >/dev/null || fail 'invalid post-call output released owner'; cp "$work/owner-baseline" /var/lib/aboutme/fence.json; }
 # Reconciliation permits ordinary mail startup; notice SMTP claim/send gates remain backend full-CI proofs.
-"$fence" check 999999 aboutme-server >"$work/out" 2>"$work/err" || fail 'notice marker blocked compatible ordinary mail'
+"$fence" check "$floor_release" aboutme-server >"$work/out" 2>"$work/err" || fail 'notice marker blocked compatible ordinary mail'
 refuse bash "$wrapper" enqueue; refuse bash "$wrapper" authorize-send
 # Initial proof has its own closed output and never creates mail authority.
 jq -nc --arg digest "$digest" '{schema_version:1,result:"initial_reconciled",campaign_id:"crowdsec-postgres-paths-v1",
@@ -982,6 +993,15 @@ printf '{}\n' >"$authority/send.json"; refuse bash "$wrapper" enqueue; cp "$work
 jq '.result="activated" | .state="activated" | .counts={unqueued:0,queued:0,accepted:1,deleted:0,failed:0,cancelled:0}
   | .activation_count=1 | .first_activated_at="2026-10-19T01:02:05.000000Z"
   | .activated_at=.first_activated_at | .last_accepted_at=.first_activated_at' "$work/sealed" >"$work/aggregate"
+# A deployed release above the tracked floor activates nothing: the app call
+# runs, then the fence refuses the raise, keeps its minimum, and keeps the owner.
+cp /var/lib/aboutme/fence.json "$work/ceiling-fence"; /usr/bin/rm -f "$work/container-args"
+release_fixture "$above_floor" "$above_release"; printf '0\n' >"$work/app-exit"; refuse bash "$wrapper" activate
+grep -qxF activate "$work/container-args" && [[ ! -e $authority/activation.json ]] &&
+  jq -e --slurpfile before "$work/ceiling-fence" '.operation_kind=="deploy" and .minimum_release==$before[0].minimum_release
+    and .minimum_tag==$before[0].minimum_tag' /var/lib/aboutme/fence.json >/dev/null || fail 'activation above the tracked floor'
+release_fixture "$floor_tag" "$floor_release"; cp "$work/ceiling-fence" /var/lib/aboutme/fence.json
+cp "$work/current-send" "$authority/send.json"; chmod 0444 "$authority/send.json"
 printf '0\n' >"$work/app-exit"; rm -f "$work/joined" "$work/stopped"; : >"$work/order"
 NOTICE_CLAIMED=1 app 0 activate; [[ -f $authority/activation.json && ! -e $authority/send.json ]] || fail 'activation authority transition'
 awk '$0=="stop" {stopped=NR} $0=="join" {joined=NR} $0=="rm send.json" {revoked=NR} END {exit !(stopped && joined>stopped && revoked>joined)}' \
