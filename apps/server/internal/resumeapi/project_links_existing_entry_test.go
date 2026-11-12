@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -206,6 +208,71 @@ func TestProjectLinks_ExistingEntryRefusalsWriteNothing(t *testing.T) {
 	requireUnchanged(t, h, "a link naming its entry", otherBefore)
 	if foreignBody, missingBody := bodies["another account's project"], bodies["missing project"]; !bytes.Equal(foreignBody, missingBody) {
 		t.Fatalf("foreign project = %s, missing project = %s; want identical answers", foreignBody, missingBody)
+	}
+}
+
+// An omitted entryId inserts an entry, so an explicit null is refused before
+// any write rather than read as an insert.
+func TestProjectLinks_NullEntryIDWritesNothing(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	fixture := newExistingLinkFixture(t, h)
+	before := storedResume(t, h, fixture.resumeID)
+	for _, version := range []string{"", "5"} {
+		response := linkRouteRequest(t, h, http.MethodPost, apiResumePath+"/"+fixture.resumeID.String()+"/project-links",
+			`{"projectId":"`+fixture.atlas.String()+`","entryId":null}`, before.Revision, version)
+		var envelope struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(response.body, &envelope); err != nil || response.status != http.StatusBadRequest ||
+			envelope.Error.Code != "request_invalid" || !strings.Contains(envelope.Error.Message, `"entryId"`) {
+			t.Fatalf("null entryId at version %q = %d %s, want 400 request_invalid naming entryId", version, response.status, response.body)
+		}
+		requireUnchanged(t, h, "a null entryId", before)
+	}
+}
+
+// Two links of one project to two entries at one revision: the save's
+// revision check lets one commit, and the loser's retry meets the link the
+// winner made.
+func TestProjectLinks_ExistingEntryConcurrentLinksOfOneProject(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	fixture := newExistingLinkFixture(t, h)
+	entries := []string{fixture.target.ID, fullFixtureProjectEntryID}
+	responses := make([]testHTTPResponse, len(entries))
+	var wg sync.WaitGroup
+	for index, entryID := range entries {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			responses[index] = linkExistingRequest(t, h, fixture.resumeID, fixture.atlas, entryID, fixture.revision, "")
+		}()
+	}
+	wg.Wait()
+	statuses := []int{responses[0].status, responses[1].status}
+	sort.Ints(statuses)
+	if !reflect.DeepEqual(statuses, []int{http.StatusOK, http.StatusPreconditionFailed}) {
+		t.Fatalf("concurrent links = %v: %s / %s", statuses, responses[0].body, responses[1].body)
+	}
+	winner, loser := 0, 1
+	if responses[0].status != http.StatusOK {
+		winner, loser = 1, 0
+	}
+	if code := errorCodeOf(t, responses[loser].body); code != "revision_mismatch" {
+		t.Fatalf("loser code = %q, want revision_mismatch", code)
+	}
+	retry := linkExistingRequest(t, h, fixture.resumeID, fixture.atlas, entries[loser], fixture.revision+1, "")
+	if retry.status != http.StatusConflict || errorCodeOf(t, retry.body) != "project_already_linked" {
+		t.Fatalf("loser retry = %d %s, want 409 project_already_linked", retry.status, retry.body)
+	}
+	want := map[string]string{fixture.linkedEntryID: fixture.linked.String(), entries[winner]: fixture.atlas.String()}
+	if links := storedLinks(t, h, fixture.resumeID); !reflect.DeepEqual(links, want) {
+		t.Fatalf("stored links = %v, want %v", links, want)
+	}
+	if stored := storedResume(t, h, fixture.resumeID); stored.Revision != fixture.revision+1 {
+		t.Fatalf("revision = %d, want %d after one committed link", stored.Revision, fixture.revision+1)
 	}
 }
 

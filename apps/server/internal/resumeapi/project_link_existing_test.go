@@ -185,6 +185,15 @@ func TestDecodeProjectLink_OptionalEntryID(t *testing.T) {
 			t.Errorf("%s = %+v %+v, want 400 request_invalid", name, prepared, failure)
 		}
 	}
+	// An omitted entryId inserts an entry, so an explicit null must not read
+	// as one.
+	if prepared, failure := decodeProjectLinkBody(t, resumeID, `{"projectId":"`+projectID+`","entryId":null}`); failure == nil ||
+		failure.Status != http.StatusBadRequest || failure.Code != "request_invalid" || !strings.Contains(failure.Message, `"entryId"`) {
+		t.Errorf("null entryId = %+v %+v, want 400 request_invalid naming entryId", prepared, failure)
+	}
+	if _, failure := decodeProjectLinkBody(t, resumeID, `{"projectId":null}`); failure == nil || failure.Message != "projectId is required" {
+		t.Errorf("null projectId = %+v, want the required-project answer", failure)
+	}
 }
 
 // A link that names an existing entry shares the insert's operation

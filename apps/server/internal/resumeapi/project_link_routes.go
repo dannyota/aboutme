@@ -10,11 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/google/uuid"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
+	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/store"
@@ -58,7 +60,11 @@ func decodeProjectLink(r *http.Request) (boundedInput, error) {
 		// to link instead of inserting one.
 		EntryID *string `json:"entryId"`
 	}
-	input, err := decodeJSONBody(r, &body)
+	// An omitted entryId inserts an entry, so an explicit null is refused
+	// rather than read as an omission.
+	shape := api.JSONShapeOf(reflect.TypeOf(&body))
+	shape.Fields["entryId"] = &api.JSONShape{Kind: api.JSONString}
+	input, err := decodeJSONBodyAs(r, &body, shape)
 	if err != nil {
 		return boundedInput{}, err
 	}

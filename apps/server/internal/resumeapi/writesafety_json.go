@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"danny.vn/aboutme/apps/server/internal/api"
@@ -23,6 +24,12 @@ const (
 )
 
 func decodeJSONBody(r *http.Request, target any) (boundedInput, error) {
+	return decodeJSONBodyAs(r, target, api.JSONShapeOf(reflect.TypeOf(target)))
+}
+
+// decodeJSONBodyAs is decodeJSONBody against shape instead of the shape
+// derived from target, for a body that refuses a value target would accept.
+func decodeJSONBodyAs(r *http.Request, target any, shape *api.JSONShape) (boundedInput, error) {
 	if err := requireJSONContentType(r.Header); err != nil {
 		return boundedInput{}, err
 	}
@@ -30,7 +37,7 @@ func decodeJSONBody(r *http.Request, target any) (boundedInput, error) {
 	if err != nil {
 		return boundedInput{}, err
 	}
-	shapeErr := api.CheckJSONBinding(raw, target)
+	shapeErr := api.CheckJSONShape(raw, shape)
 	var pathErr *api.JSONPathError
 	if errors.As(shapeErr, &pathErr) {
 		return boundedInput{}, requestInvalid(pathErr.Error())

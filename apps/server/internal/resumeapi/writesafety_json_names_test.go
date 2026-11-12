@@ -103,6 +103,7 @@ func TestMutationRoutes_RejectInexactPropertyNames(t *testing.T) {
 			rejected: map[string]string{
 				`{"projectId":"` + projectID + `","EntryId":"` + entryID + `"}`:                             "EntryId",
 				`{"projectId":"` + projectID + `","entryId":"` + entryID + `","entryID":"` + entryID + `"}`: "entryID",
+				`{"projectId":"` + projectID + `","entryId":null}`:                                          "entryId",
 			},
 		},
 	}
