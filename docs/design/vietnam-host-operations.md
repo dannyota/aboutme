@@ -176,8 +176,10 @@ metadata IDs. Do not emit full inspect output or inspect secret payloads.
 Require live tag and fence >=4007 for TOTP, >=6026 for view-pass, plus every
 enabled flag's floor. Operations never raise/lower floors or change enrollment
 flags. An operator command is available only in a release that includes its
-contract; record the first supporting tag in the shipping runbook and wrapper
-allowlist.
+contract; record the first supporting tag in the shipping runbook and the
+wrapper's release check. Account deletion accepts that tag and every later one:
+the installed operation code must equal the reviewed checkout, and the closed
+reply validator refuses protocol drift.
 
 Only one attempt may run. Each DB connection uses
 `application_name=hostop:<id>:<attempt>` within PostgreSQL's length limit. On

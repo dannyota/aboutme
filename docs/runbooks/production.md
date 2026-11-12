@@ -62,8 +62,8 @@ first adoption, initial reconciliation, notification, and activation. The
 existing production campaign is complete; do not resend it or recapture its
 cohort for the storage transition.
 
-Account deletion first ships in v0.7.9. Publish the reviewed image, install its
-reviewed bundle, then deploy it before use. Follow the
+Account deletion works on any eligible release from v0.7.9 on, once the current
+reviewed host bundle is installed. Follow the
 [account-deletion runbook](account-delete.md) for confirmation, closed output,
 unknown-outcome recovery, public proof, and physical cleanup. Operations use
 pinned SSH as `aboutme-admin`; their target and confirmation arrive only through

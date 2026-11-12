@@ -14,8 +14,6 @@ source "$here/ssh-lib.sh"
 source "$here/../../aws/scripts/provenance.sh"
 say() { printf '%s\n' refused >&2; }
 fail() { printf '%s\n' "$1" >&2; exit "${2:-1}"; }
-# Only releases whose operation protocol was reviewed belong here.
-supported() { [[ $1 == v0.7.9 ]]; }
 valid_id() { [[ $1 =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]]; }
 case "$#:${1:-}:${2:-}" in
   3:account-delete:show)
@@ -35,8 +33,8 @@ esac
 envelope=$(operation_envelope "$envelope" 2>/dev/null) || fail invalid_request 2
 [[ -n ${DEPLOY_HOST:-} && $DEPLOY_HOST =~ ^[A-Za-z0-9][A-Za-z0-9.:-]*$ ]] || fail invalid_request 2
 [[ -z ${DEPLOY_SITE:-} || $DEPLOY_SITE == https://aboutme.vn ]] || fail invalid_request 2
-# The first supporting release also proves clean current main before SSH.
-bash "$root/scripts/release-eligibility.sh" --deploy-checkout v0.7.9 >/dev/null 2>&1 || fail refused
+# Prove a clean checkout of current main before SSH.
+bash "$root/scripts/release-eligibility.sh" --deploy-checkout >/dev/null 2>&1 || fail refused
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=10)
@@ -62,7 +60,7 @@ for source in "${files[@]}"; do
 done
 release=$(remote "sudo $lib/deploy-host.sh - - release-json" 2>/dev/null) || fail transport_failed
 tag=$(jq -er .release_tag <<<"$release") || fail protocol_failed
-supported "$tag" || fail refused
+operation_release_supported "$tag" || fail refused
 commit=$(bash "$root/scripts/release-eligibility.sh" --deploy-checkout "$tag" 2>/dev/null) || fail refused
 for component in server web caddy; do
   pin=$(jq -er --arg component "$component" '.[$component+"_image"]' <<<"$release") || fail protocol_failed
