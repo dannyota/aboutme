@@ -1,7 +1,8 @@
 package resumeapi
 
-// Bounded, strict JSON request-body decoding: size and depth limits, no
-// unknown fields, no duplicate object keys, and no trailing data.
+// Bounded, strict JSON request-body decoding: size and depth limits, exact
+// property names, no unknown fields, no duplicate object keys, and no
+// trailing data.
 
 import (
 	"bytes"
@@ -12,6 +13,8 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+
+	"danny.vn/aboutme/apps/server/internal/api"
 )
 
 const (
@@ -27,8 +30,16 @@ func decodeJSONBody(r *http.Request, target any) (boundedInput, error) {
 	if err != nil {
 		return boundedInput{}, err
 	}
+	shapeErr := api.CheckJSONBinding(raw, target)
+	var pathErr *api.JSONPathError
+	if errors.As(shapeErr, &pathErr) {
+		return boundedInput{}, requestInvalid(pathErr.Error())
+	}
 	if err := validateJSONTokens(raw, maxJSONDepth); err != nil {
 		return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "request body is not valid JSON"}
+	}
+	if shapeErr != nil {
+		return boundedInput{}, requestInvalid("request body does not match the operation")
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()

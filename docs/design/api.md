@@ -30,6 +30,14 @@ behavior that contract changes must keep.
   names its emitted version in the same header.
 - Unknown JSON fields, unsupported document versions, malformed preconditions,
   and malformed idempotency keys fail closed.
+- Request property names match the declared JSON names exactly at every object
+  level a route binds. A case variant such as `Title` for `title` is an unknown
+  field, and a repeated name is rejected. The `400 request_invalid` message
+  names the first failing field path, such as `deltas[0].Path`;
+  `request_invalid` carries no `details`. Resume document keys fail the closed
+  document schema as `422 document_invalid`. The public view
+  [start and collect](viewer-analytics/delivery.md) routes follow the same rule,
+  so a repeated key there is also `400 request_invalid`.
 - Every response carries a request ID. Client-safe errors expose a stable code
   and message; internal details stay in structured server logs keyed by that ID.
   A `5xx` response never includes a dependency, query, decoder, or stack error.
@@ -172,7 +180,10 @@ redirects to. The OAuth error vocabulary is closed and carries one fixed generic
 sentence, never dependency or input detail. The MCP tool error vocabulary is
 separately closed: `validation_failed`, `revision_conflict`, `not_found`,
 `payload_too_large`, `scope_denied`, `rate_limited`, and
-`agent_access_unavailable`.
+`agent_access_unavailable`. Tool arguments passed through to REST, including
+each `update_structure` `commands` item and each `update_customization` `deltas`
+item, use the exact REST names; a case variant returns `validation_failed`
+without the field path.
 
 **These routes are not in the OpenAPI contract.** The named RFCs and the MCP
 specification define them. OpenAPI holds only the session-authenticated consent

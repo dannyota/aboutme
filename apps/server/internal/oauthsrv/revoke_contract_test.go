@@ -135,7 +135,7 @@ func newRevokeFixture(t *testing.T, mode string) revokeFixture {
 	}
 	var epoch int64 // the fixture's new user is at epoch 0
 	if _, err = f.q.CreateOAuthAuthorizationCode(t.Context(), store.CreateOAuthAuthorizationCodeParams{
-		CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, GrantID: &f.grantID, AuthEpoch: &epoch,
+		CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, GrantID: f.grantID, AuthEpoch: epoch,
 		Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]),
 		RedirectURI: "http://127.0.0.1/callback", CreatedAt: now,
 	}); err != nil {

@@ -162,8 +162,8 @@ func newOAuthStoreCode(
 		CodeChallenge: oauthStoreChallenge,
 		RedirectURI:   oauthStoreRedirect,
 		CreatedAt:     createdAt,
-		GrantID:       &grant.ID,
-		AuthEpoch:     &grant.AuthEpoch,
+		GrantID:       grant.ID,
+		AuthEpoch:     grant.AuthEpoch,
 	})
 	if err != nil {
 		t.Fatalf("CreateOAuthAuthorizationCode: %v", err)

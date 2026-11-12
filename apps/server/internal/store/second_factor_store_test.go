@@ -153,7 +153,7 @@ func TestSecondFactorStore_IssuersPersistFactorAuthority(t *testing.T) {
 	authEpoch := int64(7)
 	code, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
 		CodeDigest: uniqueTokenDigest(), ClientID: client.ID, UserID: userID,
-		GrantID: &grantID, AuthEpoch: &authEpoch, Scopes: oauthStoreScopesRead,
+		GrantID: grantID, AuthEpoch: authEpoch, Scopes: oauthStoreScopesRead,
 		CodeChallenge: oauthStoreChallenge, RedirectURI: oauthStoreRedirect, CreatedAt: now,
 	})
 	if err != nil {

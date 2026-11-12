@@ -2,6 +2,7 @@ package project
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -142,8 +143,8 @@ func TestSlug_GrammarAndProposal(t *testing.T) {
 func TestDecode_RejectsUnknownDuplicateAndNullFields(t *testing.T) {
 	for _, body := range []string{`null`, `{"defaultLanguage":"en","text":{"en":{"name":"X"}},"unknown":1}`, `{"defaultLanguage":"en","defaultLanguage":"vi","text":{"en":{"name":"X"}}}`, `{"defaultLanguage":"en","text":{"en":{"name":"X","name":"Y"}}}`, `{"defaultLanguage":"en","text":{"en":null}}`, `{"defaultLanguage":"en","text":{"en":{"name":"X"}},"technologies":[null]}`, `{"defaultLanguage":"en","text":{"en":{"name":"X"}},"dates":{"start":{"y":2020},"present":true}}`} {
 		var d Document
-		if err := Decode([]byte(body), &d); err == nil {
-			t.Errorf("accepted %s", body)
+		if err := Decode([]byte(body), &d); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Decode(%s) = %v, want ErrInvalid", body, err)
 		}
 	}
 	raw, err := json.Marshal(draft())
