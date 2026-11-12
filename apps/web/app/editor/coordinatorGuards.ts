@@ -1,14 +1,64 @@
+import { toRaw } from 'vue';
+
 import type { useAuth } from '../composables/useAuth';
 import type { ResumeRecord, useResumeStore } from '../stores/resumes';
 import type { AtomicEditorCommand } from './commands';
 import type { AttemptFailureCode, FrozenAttempt } from './attempt';
 import type { EditorQueueItem } from './templateGroup';
-import type { CoordinatorContext } from './coordinatorTypes';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
 export const DEBOUNCE_MS = 1_000;
 export const UNKNOWN_REPLAY_DELAY_MS = 250;
 export const READ_RETRY_FIRST_MS = 1_000;
 export const READ_RETRY_MAX_MS = 30_000;
+
+/**
+ * Starts an operation on the record the editor holds for `resumeId` now.
+ * Closing the editor stops the coordinator for the resume, and opening the
+ * resume again replaces the record; either makes the operation stale.
+ */
+export function begin(
+  ctx: CoordinatorContext,
+  resumeId: string,
+): OperationContext {
+  return { ...ctx, epoch: { record: rawRecord(ctx, resumeId) } };
+}
+
+/**
+ * Whether an operation may still act after an await. A stale one returns
+ * without sending, scheduling or changing the store; a request it already
+ * sent may complete on the server, and its answer is ignored.
+ */
+export function current(ctx: OperationContext, resumeId: string): boolean {
+  return (
+    !ctx.stopped.has(resumeId)
+    && rawRecord(ctx, resumeId) === ctx.epoch.record
+  );
+}
+
+/** The operation is current and `queueItem` is still the write in flight. */
+export function owns(
+  ctx: OperationContext,
+  resumeId: string,
+  queueItem: EditorQueueItem,
+): boolean {
+  return (
+    current(ctx, resumeId)
+    && ctx.deps.store.recordFor(resumeId)?.attempt?.queueItem.id
+    === queueItem.id
+  );
+}
+
+function rawRecord(
+  ctx: CoordinatorContext,
+  resumeId: string,
+): object | undefined {
+  const record = ctx.deps.store.recordFor(resumeId);
+  return record === undefined ? undefined : toRaw(record);
+}
 
 export function dispatchToken(
   ctx: CoordinatorContext,

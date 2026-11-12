@@ -5,7 +5,7 @@ import {
   refreshOpaqueCreate,
   retryCreate,
 } from './coordinatorCreate';
-import { discard } from './coordinatorGuards';
+import { begin, discard } from './coordinatorGuards';
 import { resolveOpaquePhoto } from './coordinatorPhoto';
 import {
   completeReadBarrier,
@@ -62,16 +62,20 @@ export function createMutationCoordinator(
     abandonOpaqueCreate: (intentId) => abandonOpaqueCreate(ctx, intentId),
     schedule: (resumeId) => schedule(ctx, resumeId),
     flush: (resumeId) => flush(ctx, resumeId),
-    completeRead: (resumeId) => completeReadBarrier(ctx, resumeId),
-    retry: (resumeId, commandId) => retry(ctx, resumeId, commandId),
-    refreshAndReconcile: (resumeId) => refreshAndReconcile(ctx, resumeId),
+    completeRead: (resumeId) =>
+      completeReadBarrier(begin(ctx, resumeId), resumeId),
+    retry: (resumeId, commandId) =>
+      retry(begin(ctx, resumeId), resumeId, commandId),
+    refreshAndReconcile: (resumeId) =>
+      refreshAndReconcile(begin(ctx, resumeId), resumeId),
     refreshConditionalAndReconcile: (resumeId, etag) =>
-      refreshConditionalAndReconcile(ctx, resumeId, etag),
+      refreshConditionalAndReconcile(begin(ctx, resumeId), resumeId, etag),
     acceptLatest: (resumeId, conflictId) =>
       acceptLatest(ctx, resumeId, conflictId),
     applyMine: (resumeId, conflictId, confirmation) =>
-      applyMine(ctx, resumeId, conflictId, confirmation),
-    resumeAfterAuth: (resumeId) => resumeAfterAuth(ctx, resumeId),
+      applyMine(begin(ctx, resumeId), resumeId, conflictId, confirmation),
+    resumeAfterAuth: (resumeId) =>
+      resumeAfterAuth(begin(ctx, resumeId), resumeId),
     stop: (resumeId) => stop(ctx, resumeId),
     resolveOpaquePhoto: (resumeId, commandId, decision) =>
       resolveOpaquePhoto(ctx, resumeId, commandId, decision),

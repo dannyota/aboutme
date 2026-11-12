@@ -2,9 +2,12 @@ import {
   createReplacementCommand,
   type ConflictConfirmation,
 } from './reconcile';
-import { stopForSessionLoss } from './coordinatorGuards';
+import { current, stopForSessionLoss } from './coordinatorGuards';
 import { flush, schedule } from './coordinatorQueue';
-import type { CoordinatorContext } from './coordinatorTypes';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
 export async function acceptLatest(
   ctx: CoordinatorContext,
@@ -21,7 +24,7 @@ export async function acceptLatest(
 }
 
 export async function applyMine(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   conflictId: string,
   confirmation: ConflictConfirmation,
@@ -31,6 +34,7 @@ export async function applyMine(
     ?.conflicts.find((candidate) => candidate.id === conflictId);
   if (conflict?.subject !== 'atomic') return;
   const latest = await ctx.deps.api.read(resumeId);
+  if (!current(ctx, resumeId)) return;
   if (latest.kind === 'session-lost') stopForSessionLoss(ctx, resumeId);
   if (latest.kind !== 'complete') return;
   const replacement = createReplacementCommand(

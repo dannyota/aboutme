@@ -101,3 +101,12 @@ export interface CoordinatorContext {
   /** Resumes whose editor closed; nothing more is scheduled for them. */
   stopped: Set<string>;
 }
+
+/**
+ * The context of one operation: a drain, a retry, a read, or a conflict
+ * resolution. It carries the editor record the operation started on, so a
+ * continuation can tell whether that record is still the one being edited.
+ */
+export interface OperationContext extends CoordinatorContext {
+  readonly epoch: { readonly record: object | undefined };
+}

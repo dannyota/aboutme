@@ -9,8 +9,11 @@ import {
 } from './templateGroup';
 import type { AcceptedResume, ParentETag } from './types';
 import type { ResumeReadResult } from './attempt';
-import { stopForSessionLoss } from './coordinatorGuards';
-import type { CoordinatorContext } from './coordinatorTypes';
+import { current, stopForSessionLoss } from './coordinatorGuards';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
 export function settleTemplateComplete(
   ctx: CoordinatorContext,
@@ -69,10 +72,11 @@ export function settleTemplateComplete(
 }
 
 export async function refreshAndReconcile(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
 ): Promise<ResumeReadResult> {
   const result = await ctx.deps.api.read(resumeId);
+  if (!current(ctx, resumeId)) return result;
   if (result.kind === 'session-lost') {
     stopForSessionLoss(ctx, resumeId);
     return result;
@@ -142,11 +146,12 @@ function adoptAndReconcile(
 }
 
 export async function refreshConditionalAndReconcile(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   etag?: ParentETag,
 ): Promise<ResumeConditionalReadResult> {
   const result = await ctx.deps.api.readConditional(resumeId, etag);
+  if (!current(ctx, resumeId)) return result;
   if (result.kind === 'session-lost') {
     stopForSessionLoss(ctx, resumeId);
     return result;

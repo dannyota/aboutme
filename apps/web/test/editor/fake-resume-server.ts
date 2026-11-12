@@ -63,6 +63,7 @@ export function startingResume(): AcceptedResume {
 export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
   const failedReads: ReadFailure[] = [];
+  const heldResponses: Promise<void>[] = [];
   const sent: { attempt: FrozenAttempt; result: AttemptResult['kind'] }[]
     = [];
   const readTimes: number[] = [];
@@ -135,6 +136,8 @@ export function fakeServer(initial: AcceptedResume) {
             },
           };
       sent.push({ attempt, result: result.kind });
+      const held = heldResponses.shift();
+      if (held !== undefined) await held;
       return result;
     }),
     read: vi.fn(async (): Promise<ResumeReadResult> => {
@@ -158,6 +161,17 @@ export function fakeServer(initial: AcceptedResume) {
     },
     failNextRead(failure: ReadFailure): void {
       failedReads.push(failure);
+    },
+    /**
+     * Applies the next write at once but holds its response until the
+     * returned function is called.
+     */
+    holdNextResponse(): () => void {
+      let release = (): void => {};
+      heldResponses.push(new Promise<void>((resolve) => {
+        release = resolve;
+      }));
+      return release;
     },
     /** Another tab or agent changes the resume. */
     otherWriter(change: (document: Resume) => Resume): void {
