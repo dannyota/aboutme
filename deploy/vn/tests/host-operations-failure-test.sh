@@ -564,3 +564,82 @@ echo 'host operation pre-intent resume passed'
   if request_unit_stopped; then fail 'failed unit read proved quiescence'; fi
 )
 echo 'host operation queued unit checks passed'
+
+# The real live-release check admits every verb that rechecks it on any release
+# from v0.7.9 on, and refuses an older or malformed tag before any effect. Only
+# installed paths, the flags file and host commands are synthetic.
+# account_live has a local named live, so the fixture uses another name.
+live_dir=$work/live
+mkdir -p "$live_dir"
+: >"$live_dir/flags.env"
+printf '#!/usr/bin/env bash\ncat %q\n' "$live_dir/release.json" >"$live_dir/deploy-host.sh"
+printf '#!/usr/bin/env bash\n[[ $1 == read ]] && echo %q\n' '{"minimum_release":4007}' >"$live_dir/fence.sh"
+chmod +x "$live_dir/deploy-host.sh" "$live_dir/fence.sh"
+live_verbs() { # tag number; prints the verbs that passed the live check
+  (
+    eval "$(sed -n '/^account_secret_id() {/,/^}/p; /^account_live() {/,/^}/p' "$here/host/operation-account.sh" |
+      sed "s|/etc/aboutme/flags.env|$live_dir/flags.env|g")"
+    lib=$live_dir id=$(request_id 93)
+    jq -n --arg tag "$1" --argjson number "$2" '{release_tag:$tag,release_number:$number,maintenance_tag:"v0.7.9",maintenance_number:7009,
+      server_image:("ghcr.io/dannyota/aboutme-server@sha256:"+("a"*64)),web_image:("ghcr.io/dannyota/aboutme-web@sha256:"+("b"*64)),
+      caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("c"*64)),maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("d"*64))}' >"$live_dir/release.json"
+    systemctl() { [[ $1 == is-active || $1 == start ]]; }
+    podman() {
+      case "$1 $2 $4" in
+        'secret inspect {{.ID}}') echo synthetic ;;
+        'container inspect {{.State.Running}} {{.ImageName}} {{.Image}}')
+          printf 'true %s %064d\n' "$(jq -r --arg c "${5#aboutme-}" '.[$c+"_image"]' "$live_dir/release.json")" 0 ;;
+        'container inspect '*DEPLOY_RELEASE_TAG=*)
+          jq -r '"DEPLOY_RELEASE_TAG=\(.release_tag)\nDEPLOY_RELEASE_NUMBER=\(.release_number)"' "$live_dir/release.json" ;;
+        'image inspect {{range .RepoDigests}}{{println .}}{{end}}') jq -r '.server_image, .web_image, .caddy_image' "$live_dir/release.json" ;;
+        'image inspect {{.Os}}/{{.Architecture}}') echo linux/amd64 ;;
+        *) return 1 ;;
+      esac
+    }
+    bound() { # jq filter; the saved request bound to the live release
+      state=$(new_state "$id" | jq --slurpfile live "$live_dir/release.json" --arg flags "$(sha256sum "$live_dir/flags.env" | cut -d' ' -f1)" \
+        '.release=$live[0] | .flagsHash=$flags | .dbSecretId="synthetic" | '"$1")
+      operation_save
+    }
+    passed() { # verb; the check passed only if the verb dispatched
+      [[ -e $work/dispatches && $(wc -l <"$work/dispatches") == 1 ]] && echo "$1"
+      rm -f "$work/dispatches"
+    }
+    rm -f "$work/dispatches"
+    state=''
+    if account_live; then echo live; fi
+    (
+      state=''
+      operation_state() { cat <&3; }
+      request_lock() { exec {request_fd}>>"$live_dir/request.lock"; }
+      operation_load() { state=$(jq '.phase="planned"' <<<"$state"); }
+      request_new valid-slug
+    ) >/dev/null 2>&1 || true
+    passed show
+    bound '.'
+    (request_existing apply "$(jq -r .confirmation <<<"$state")") >/dev/null 2>&1 || true
+    passed apply
+    for verb in resume abort; do
+      bound '.phase="accepted" | .confirmation=null | .expiresAt=null | .pendingVerb="apply" | .intent="delete" | .action.writeOutcome="unknown" | .outcome="unknown"'
+      (request_existing "$verb") >/dev/null 2>&1 || true
+      passed "$verb"
+    done
+    bound '.phase="serving" | .confirmation=null | .expiresAt=null | .action.writeOutcome="committed"'
+    (request_existing verify) >/dev/null 2>&1 || true
+    passed verify
+    nonce=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    bound '.phase="serving" | .confirmation=null | .expiresAt=null | .reserved=false | .action.writeOutcome="committed" |
+      .challenge={requestId:.requestId,digest:(.release.server_image|split("@")[1]),phase:"serving",nonce:"'"$nonce"'",expiresAt:"2099-01-01T00:00:00Z"}'
+    envelope=$(jq -cn --arg nonce "$nonce" '{phase:"serving",nonce:$nonce,result:"pass"}')
+    (request_proof) >/dev/null 2>&1 || true
+    [[ $(jq -r '.proofReceipt.result // empty' "$work/saved") != pass ]] || echo proof
+  ) | tr '\n' ' '
+}
+for release in v0.7.9:7009 v0.7.10:7010 v0.8.29:8029 v1.0.0:1000000; do
+  [[ $(live_verbs "${release%:*}" "${release#*:}") == 'live show apply resume abort verify proof ' ]] ||
+    fail "supported live release refused: ${release%:*} ($(live_verbs "${release%:*}" "${release#*:}"))"
+done
+for tag in v0.7.8 v0.6.999 v0.0.0 '' v0.8 v0.8.29.1 v0.8.29-rc1 'v0.8.29 ' v08.29.0 V0.8.29 v1000.0.0; do
+  [[ -z $(live_verbs "$tag" 7008) ]] || fail "unsupported live release accepted: $tag"
+done
+echo 'host operation live release gate passed'

@@ -86,8 +86,10 @@ case $1 in
     ;;
   fetch)
     [[ " $* " == *' https://github.com/dannyota/aboutme.git '* &&
-       " $* " == *' +refs/heads/main:refs/remotes/origin/main '* &&
-       " $* " == *" refs/tags/$TAG:refs/tags/$TAG "* ]] || exit 2
+       " $* " == *' +refs/heads/main:refs/remotes/origin/main '* ]] || exit 2
+    # The tagless checkout proof fetches main alone.
+    if [[ -n ${TAG:-} ]]; then [[ " $* " == *" refs/tags/$TAG:refs/tags/$TAG "* ]] || exit 2
+    else [[ $* != *refs/tags/* ]] || exit 2; fi
     [[ ${TEST_CASE:-} != fetch-error ]]
     ;;
   rev-parse)
@@ -165,6 +167,36 @@ bash scripts/release-eligibility.sh --deploy-checkout "$TAG" >"$work/out" 2>&1 |
   cat "$work/out" >&2; fail 'clean current main checkout refused'
 }
 [[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'checkout gate did not return the resolved commit'
+
+# Without a tag, --deploy-checkout proves only a clean checkout equal to the
+# release repository's main. It reads no tag or CI evidence and prints nothing.
+for CHECKOUT_CASE in dirty staged untracked stale branch detached status-error; do
+  export CHECKOUT_CASE
+  if TAG='' bash scripts/release-eligibility.sh --deploy-checkout >"$work/out" 2>&1; then
+    fail "tagless $CHECKOUT_CASE checkout was accepted"
+  fi
+  grep -Eq 'release-eligibility: (cannot inspect )?deployment checkout' "$work/out" || {
+    cat "$work/out" >&2; fail "tagless $CHECKOUT_CASE failed outside checkout validation"
+  }
+  echo "rejected tagless $CHECKOUT_CASE checkout"
+done
+unset CHECKOUT_CASE
+if TAG='' TEST_CASE=fetch-error bash scripts/release-eligibility.sh --deploy-checkout >"$work/out" 2>&1; then
+  fail 'tagless checkout passed without fetching main'
+fi
+grep -q 'release-eligibility: cannot fetch main' "$work/out" || { cat "$work/out" >&2; fail 'tagless fetch error'; }
+if TAG='' bash scripts/release-eligibility.sh >"$work/out" 2>&1; then fail 'tagless publication gate accepted'; fi
+grep -q 'release-eligibility: usage' "$work/out" || { cat "$work/out" >&2; fail 'tagless publication usage'; }
+runs push main failure
+: >"$work/git.log"
+TAG='' TEST_CASE=api-error bash scripts/release-eligibility.sh --deploy-checkout >"$work/out" 2>&1 || {
+  cat "$work/out" >&2; fail 'clean current main tagless checkout refused'
+}
+[[ ! -s $work/out ]] || fail 'tagless checkout printed output'
+grep -q '^-C .* fetch ' "$work/git.log" || fail 'tagless checkout did not fetch main'
+! grep -qE 'refs/tags/|merge-base' "$work/git.log" || fail 'tagless checkout read a tag'
+echo 'accepted tagless clean current main checkout'
+runs
 
 for TEST_CASE in off-main fetch-error missing-tag api-error wrong-sha branch-only dispatch-only cancelled pending red no-run malformed-evidence newer-red newer-pending; do
   export TEST_CASE

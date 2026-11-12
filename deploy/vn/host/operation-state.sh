@@ -6,6 +6,15 @@ set -euo pipefail
 declare id
 
 operation_id_valid() { [[ $1 =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]]; }
+# The laptop wrapper and the host share this release check. v0.7.9 (7009,
+# numbered as fence.sh does) first shipped this protocol. A lower bound is
+# enough: the wrapper requires the installed operation code to equal its
+# reviewed checkout, the host parses server replies strictly, and the closed
+# reply validator refuses protocol drift.
+operation_release_supported() {
+  [[ $1 =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] &&
+    ((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} >= 7009))
+}
 operation_initialize() {
   operations_dir=/srv/data/host-operations
   mountpoint -q /srv/data || return 1

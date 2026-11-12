@@ -105,6 +105,11 @@ At each runtime pass, after the existing gates and feed trim:
    check every row against `H` using a fresh verification time, repeat
    preflight, and renew the existing lease only after full success.
 
+A forced batch stops the consumers, and with them the edge, in whichever pass
+first finds an age-due decision. The edge can therefore stop outside the nightly
+opportunity, as it did at 19:00:04 UTC on 2026-11-04. That is intended: the age
+bound outranks the schedule.
+
 This starts forced cleanup at the 23-hour target, rather than consuming the
 failure margin to approach 23 h 30 min. A record crossing `T` just after a pass
 is normally deleted within `300 + 1 + 60 = 361 seconds`, at most 23 h 6 min 1 s

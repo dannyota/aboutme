@@ -38,12 +38,12 @@ point to the floating IP with TTL 300. The separate OpenTofu root
 record inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at
 the `.vn` registrar.
 
-Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80.
-DNS must point at the host before the edge starts so validation can reach it.
-Production uses `EDGES=direct`: Caddy takes the socket address, strips
-forwarding headers, and emits one `X-Real-IP` to Go on loopback. Coraza and
-CrowdSec run on the host. The [CloudFront runbook](cloudfront.md) is an AWS
-reference.
+Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80 or
+TLS-ALPN-01 on 443, Caddy's default challenges. DNS must point at the host
+before the edge starts so validation can reach it. Production uses
+`EDGES=direct`: Caddy takes the socket address, strips forwarding headers, and
+emits one `X-Real-IP` to Go on loopback. Coraza and CrowdSec run on the host.
+The [CloudFront runbook](cloudfront.md) is an AWS reference.
 
 ## Secrets
 
@@ -62,8 +62,8 @@ first adoption, initial reconciliation, notification, and activation. The
 existing production campaign is complete; do not resend it or recapture its
 cohort for the storage transition.
 
-Account deletion first ships in v0.7.9. Publish the reviewed image, install its
-reviewed bundle, then deploy it before use. Follow the
+Account deletion works on any eligible release from v0.7.9 on, once the current
+reviewed host bundle is installed. Follow the
 [account-deletion runbook](account-delete.md) for confirmation, closed output,
 unknown-outcome recovery, public proof, and physical cleanup. Operations use
 pinned SSH as `aboutme-admin`; their target and confirmation arrive only through

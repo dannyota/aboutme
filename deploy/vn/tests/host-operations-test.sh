@@ -36,7 +36,13 @@ for text in '--no-healthcheck' '--network none' '--memory-swap 256m' '--log-driv
   grep -qF -- "$text" "$here/host/operation-account.sh" || fail "missing isolation: $text"
 done
 ! grep -qE 'secret (media-|smtp-|google-|linkedin-)' "$here/host/operation-account.sh" || fail 'credential overreach'
-grep -qF 'v0.7.9' "$here/scripts/operations.sh" || fail 'supporting release missing'
+! grep -qE -- '--deploy-checkout v[0-9]' "$here/scripts/operations.sh" || fail 'checkout proof pinned to a fixed release'
+# The wrapper and the host share one release check; neither pins its own.
+[[ $(grep -c '^operation_release_supported() {' "$here/host/operation-state.sh") == 1 ]] || fail 'shared release check missing'
+grep -qxF 'operation_release_supported "$tag" || fail refused' "$here/scripts/operations.sh" || fail 'wrapper skips the shared release check'
+grep -qxF '  operation_release_supported "$tag" || return 1' "$here/host/operation-account.sh" || fail 'host skips the shared release check'
+! grep -qE 'v0\.7\.[0-9]|7009|_supported\(\)' "$here/scripts/operations.sh" "$here/host/operation-account.sh" "$here/host/operation-run.sh" ||
+  fail 'release pinned outside the shared check'
 grep -qF 'StrictHostKeyChecking=yes' "$here/scripts/operations.sh" || fail 'unpinned SSH'
 grep -qF 'ForwardAgent=no' "$here/scripts/operations.sh" || fail 'SSH forwarding enabled'
 grep -qF 'KillMode=control-group' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit kill boundary'
@@ -77,7 +83,9 @@ mkdir -p "$work/client/deploy/vn" "$work/client/deploy/aws/scripts" "$work/clien
 cp -R "$here/host" "$here/scripts" "$work/client/deploy/vn/"
 cat >"$work/client/scripts/release-eligibility.sh" <<'STUB'
 #!/usr/bin/env bash
+printf 'eligibility %s\n' "$*" >>"$CLIENT_FIXTURE/calls"
 [[ ${REJECT_ELIGIBILITY:-0} == 0 ]] || exit 1
+[[ $# == 1 || ${REJECT_TAG_ELIGIBILITY:-0} == 0 ]] || exit 1
 printf '%040d\n' 0
 STUB
 cat >"$work/client/deploy/aws/scripts/provenance.sh" <<'STUB'
@@ -117,18 +125,21 @@ cat >"$work/bin/curl" <<'STUB'
 set -euo pipefail
 case ${!#} in
   *'/token?'*) echo '{"token":"synthetic-public-pull"}' ;;
-  *) printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"sha256:%064d"}]}\n' 0 ;;
+  *) printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"sha256:%064d"}]}\n' "${REGISTRY_DIGEST:-0}" ;;
 esac
 STUB
 chmod +x "$work/bin/"* "$work/client/scripts/release-eligibility.sh"
 export CLIENT_FIXTURE=$work
 export PATH=$work/bin:$PATH DEPLOY_HOST=fixture.example SSH_PORT=22922
-jq -cn '{release_tag:"v0.7.9",release_number:7009,maintenance_tag:"v0.7.9",maintenance_number:7009,
- server_image:("ghcr.io/dannyota/aboutme-server@sha256:"+("0"*64)),web_image:("ghcr.io/dannyota/aboutme-web@sha256:"+("0"*64)),
- caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64)),maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64))}' >"$work/release"
+release_fixture() { # tag number
+  jq -cn --arg tag "$1" --argjson number "$2" '{release_tag:$tag,release_number:$number,maintenance_tag:$tag,maintenance_number:$number,
+   server_image:("ghcr.io/dannyota/aboutme-server@sha256:"+("0"*64)),web_image:("ghcr.io/dannyota/aboutme-web@sha256:"+("0"*64)),
+   caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64)),maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64))}' >"$work/release"
+}
+release_fixture v0.8.29 8029
 wrapper=$work/client/deploy/vn/scripts/operations.sh
 if REJECT_ELIGIBILITY=1 bash "$wrapper" status "$valid_id" >/dev/null 2>&1; then fail 'ineligible checkout accepted'; fi
-[[ ! -e $work/calls ]] || fail 'SSH preceded eligibility'
+[[ $(<"$work/calls") == 'eligibility --deploy-checkout' ]] || fail 'SSH preceded the tagless checkout proof'
 if REJECT_HASH=1 bash "$wrapper" status "$valid_id" >/dev/null 2>&1; then fail 'wrong bundle hash accepted'; fi
 [[ ! -e $work/envelope ]] || fail 'wrong bundle reached dispatch'
 if REJECT_PROVENANCE=1 bash "$wrapper" status "$valid_id" >/dev/null 2>&1; then fail 'wrong provenance accepted'; fi
@@ -197,6 +208,112 @@ jq -cn --arg id "$valid_id" --arg user "$valid_uuid" --slurpfile release "$work/
 bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail 'known status reply refused'
 [[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/reply")" ]] || fail 'known status reply changed'
 echo 'host operation remote errors and known status passed'
+
+# The checkout proof names no tag and precedes SSH; eligibility then binds the
+# release the host reports. Every release from v0.7.9 on passes the gate.
+call_order() { uniq "$work/calls" | tr '\n' ' '; }
+known_reply() { [[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/known-reply")" ]]; }
+cp "$work/reply" "$work/known-reply"
+for release in v0.7.9:7009 v0.7.10:7010 v0.8.29:8029 v1.0.0:1000000 v999.999.999:999999999; do
+  tag=${release%:*}
+  release_fixture "$tag" "${release#*:}"
+  rm -f "$work/calls"
+  bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail "supported release refused: $tag"
+  known_reply || fail "supported release reply changed: $tag"
+  [[ $(call_order) == "eligibility --deploy-checkout ssh eligibility --deploy-checkout $tag ssh " ]] ||
+    fail "checkout proof, hashes, deployed tag eligibility or dispatch out of order: $tag"
+done
+for tag in v0.7.8 v0.6.999 v0.0.0 '' v0.8 v0.8.29.1 v0.8.29-rc1 v0.8.29+build 'v0.8.29 ' v08.29.0 v0.08.29 V0.8.29 0.8.29 v1000.0.0 'v0.8.29;true'; do
+  release_fixture "$tag" 0
+  rm -f "$work/calls" "$work/envelope"
+  rc=0
+  bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == refused && ! -e $work/envelope ]] || fail "unsupported release accepted: $tag"
+  [[ $(call_order) == 'eligibility --deploy-checkout ssh ' ]] || fail "unsupported release reached eligibility: $tag"
+done
+release_fixture v0.8.29 8029
+
+# Every check after the host reports its release still refuses before dispatch.
+post_ssh_refused() { # case expected-error
+  local rc=0
+  rm -f "$work/calls" "$work/envelope"
+  bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == "$2" && ! -e $work/envelope ]] || fail "$1 reached dispatch"
+  grep -qx ssh "$work/calls" || fail "$1 refused before SSH"
+}
+REJECT_HASH=1 post_ssh_refused 'wrong bundle hash' refused
+REJECT_TAG_ELIGIBILITY=1 post_ssh_refused 'ineligible deployed tag' refused
+[[ $(call_order) == 'eligibility --deploy-checkout ssh eligibility --deploy-checkout v0.8.29 ' ]] || fail 'deployed tag eligibility not checked'
+REGISTRY_DIGEST=1 post_ssh_refused 'registry digest mismatch' refused
+REJECT_PROVENANCE=1 post_ssh_refused 'wrong provenance' refused
+jq -c '.web_image="ghcr.io/dannyota/aboutme-web:latest"' "$work/release" >"$work/pin" && mv "$work/pin" "$work/release"
+post_ssh_refused 'unpinned image' protocol_failed
+release_fixture v0.8.29 8029
+jq -c '. + {extra:true}' "$work/known-reply" >"$work/reply"
+rc=0
+bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+[[ $rc == 1 && ! -s $work/output && $(<"$work/error") == protocol_failed ]] || fail 'open reply accepted'
+cp "$work/known-reply" "$work/reply"
+echo 'host operation release gate and post-SSH checks passed'
+
+# The real eligibility gate checks a private copy of the release repository.
+# It must refuse an unclean, off-main or stale checkout before any SSH.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0="url.$work/release.git.insteadOf" GIT_CONFIG_VALUE_0=https://github.com/dannyota/aboutme.git \
+  GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
+cp "$here/../../scripts/release-eligibility.sh" "$work/client/scripts/"
+cat >"$work/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+while (($# > 1)); do [[ $1 != --commit ]] || commit=$2; shift; done
+jq -n --arg sha "$commit" --arg conclusion "${CI_CONCLUSION:-success}" \
+  '[{databaseId:1,headSha:$sha,event:"push",headBranch:"main",status:"completed",conclusion:$conclusion}]'
+STUB
+chmod +x "$work/bin/gh"
+client() { git -C "$work/client" "$@"; }
+release_repo() { git -C "$work/release.git" "$@"; }
+client init -q -b main
+client add -A
+client commit -q -m fixture
+client tag v0.8.29
+git init -q --bare "$work/release.git"
+client push -q "$work/release.git" main v0.8.29
+reviewed=$(client rev-parse HEAD)
+checkout_refused() { # case
+  local rc=0
+  rm -f "$work/calls" "$work/envelope"
+  bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == refused ]] || fail "$1 checkout accepted"
+  [[ ! -e $work/calls ]] || fail "$1 checkout reached SSH"
+}
+: >"$work/client/untracked"
+checkout_refused untracked
+rm "$work/client/untracked"
+printf '# local edit\n' >>"$work/client/deploy/aws/scripts/provenance.sh"
+checkout_refused modified
+client checkout -q -- deploy/aws/scripts/provenance.sh
+client checkout -q -b feature
+checkout_refused 'non-main branch'
+client checkout -q main
+client checkout -q --detach
+checkout_refused detached
+client checkout -q main
+# A stale local origin/main equal to HEAD must not pass once main moves on.
+client update-ref refs/remotes/origin/main HEAD
+release_repo update-ref refs/heads/main "$(release_repo commit-tree -p "$reviewed" -m next "$reviewed^{tree}")"
+checkout_refused 'behind origin/main'
+release_repo update-ref refs/heads/main "$reviewed"
+rm -f "$work/calls"
+bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail 'clean current main checkout refused'
+known_reply || fail 'clean current main reply changed'
+# The real gate still checks the deployed tag after SSH.
+release_repo update-ref refs/tags/v0.8.30 "$(release_repo commit-tree -m off-main "$reviewed^{tree}")"
+release_fixture v0.8.30 8030
+post_ssh_refused 'off-main deployed tag' refused
+release_fixture v0.8.29 8029
+CI_CONCLUSION=failure post_ssh_refused 'red deployed tag CI' refused
+echo 'host operation checkout proof passed'
 
 # Exercise the installer's unit inventory guard without touching host paths.
 install_guard=$(sed -n '/^operation_units=/,/^# Validate the saved protocol/p' "$here/host/install.sh" | sed '$d')

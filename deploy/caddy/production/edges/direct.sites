@@ -9,8 +9,9 @@
 # CloudFront listener restores (a header one edge sets is never trusted on
 # another's), and sends Go the socket address as X-Real-IP.
 
-# Let's Encrypt by ACME HTTP-01 on port 80, or Caddy's internal CA when
-# DIRECT_TLS=internal (tests only); entrypoint.sh writes the file.
+# Let's Encrypt by ACME HTTP-01 on port 80 or TLS-ALPN-01 on 443, or Caddy's
+# internal CA when DIRECT_TLS=internal (tests only); entrypoint.sh writes the
+# file.
 (direct_tls) {
 	import /run/caddy/direct-tls.caddy
 }
