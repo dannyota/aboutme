@@ -49,7 +49,9 @@ they differ, install the reviewed host bundle before retrying.
 
 The deployer then:
 
-1. Takes the host operation lock and rejects a tag below the release floor.
+1. Refuses unless the host sees one held HTTPS request from the SSH client
+   address, which the CrowdSec smoke bans; a first deploy checks after step 5.
+   Takes the host operation lock and rejects a tag below the release floor.
 2. Pulls images while the old release serves and checks every referenced secret
    by name.
 3. Takes a pgBackRest incremental backup annotated with the tag.
@@ -61,14 +63,15 @@ The deployer then:
 7. Restarts Nuxt, starts Go, and waits for `/readyz` at `127.0.0.1:8080` on the
    host. Starts Caddy, then stops maintenance and proves it stopped.
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
-   `nosniff`, and a CrowdSec 403 for the operator's test ban (12 tries 5 s
-   apart, up to 10 s a request). Deletes the ban, polls `/` until HTTP 200
-   (sleeps of two ticks plus 5 s, rounded up to 5 s steps, and up to 10 s a
-   request: about 85 s), then releases the lock.
+   `nosniff`, and a CrowdSec 403 for the operator's test ban (polls 5 s apart
+   for up to 150 s after adding it, up to 10 s a request). Deletes the ban,
+   polls `/` until HTTP 200 (sleeps of two ticks plus 5 s, rounded up to 5 s
+   steps, and up to 10 s a request: about 85 s), then releases the lock.
 
-The 403 wait assumes the new Caddy's first decision pull succeeded. If the local
-API fails that pull, the bouncer retries after a random wait whose bound doubles
-from 10 s to two minutes, so the smoke can fail before bans are enforced
+The 403 wait gives the new Caddy's first decision pull 150 s, inside the
+3-minute test ban. If the local API fails that pull, the bouncer retries after a
+random wait whose bound doubles from 10 s to two minutes, and the first snapshot
+request may take 60 s, so the smoke can still fail before bans are enforced
 ([pinned bouncer behavior](../design/crowdsec-retention-reload.md#pinned-bouncer-behavior)).
 
 vMonitor and the uptime backstop keep running during maintenance. Host alarms

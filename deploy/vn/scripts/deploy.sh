@@ -10,7 +10,8 @@
 #   deploy.sh --activate <tag>       raises the release fence; changes nothing else
 #
 # Environment: DEPLOY_HOST (address of the host, required), DEPLOY_SITE
-# (default https://aboutme.vn; a rehearsal sets its own origin), and
+# (default https://aboutme.vn; a rehearsal sets its own origin), and SSH_PORT
+# (ssh-lib.sh).
 #
 # Recovery follows docs/design/single-host-production.md, "Release and
 # deploy": a failure before any migration request restores the previous
@@ -67,7 +68,7 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
 # code comes from clean, current main, even when rolling back to an older tag.
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
 
-work='' ssh_dir=''
+work='' ssh_dir='' probe=''
 ssh_opts=()
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
@@ -139,6 +140,7 @@ on_exit() {
     on_host fence.sh release "$op" >/dev/null ||
       { say "could not release the operation lock; fence.sh clear owns it"; status=1; }
   fi
+  if [[ -n $probe ]]; then kill "$probe" 2>/dev/null || true; fi
   if [[ -n ${ssh_opts[*]:-} ]]; then ssh_close; fi
   if [[ -n $work ]]; then rm -rf "$work"; fi
   if [[ -n $ssh_dir ]]; then rm -rf "$ssh_dir"; fi
@@ -259,6 +261,44 @@ if ((activate)); then
   exit 0
 fi
 
+# The CrowdSec smoke bans the address the host sees for SSH and expects this
+# laptop's HTTPS requests to get 403, so both must leave through one address.
+me=$(ssh "${ssh_opts[@]}" "$admin@$host" 'printf %s "${SSH_CLIENT%% *}"')
+[[ $me =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
+  say "the host did not report an IPv4 SSH client address"
+  exit 1
+}
+# Holds one HTTPS request open while the host counts its established port-443
+# sockets from that address. ss filters on the host, so no other client's
+# address crosses SSH. Caddy's dual-stack socket shows an IPv4 client as an
+# IPv4-mapped IPv6 peer, so the filter names both forms.
+egress_check() {
+  local i count=''
+  curl -s -o /dev/null -m 20 --limit-rate 1 "$site/" &
+  probe=$!
+  for ((i = 1; i <= 5; i++)); do
+    sleep 1
+    # shellcheck disable=SC2029 # me is a checked IPv4 address
+    count=$(ssh "${ssh_opts[@]}" "$admin@$host" \
+      "set -o pipefail; ss -Htn state established '( sport = :443 ) and ( dst $me or dst [::ffff:$me] )' | wc -l") ||
+      count=''
+    [[ $count =~ ^[0-9]+$ ]] || break
+    ((10#$count == 0)) || break
+  done
+  kill "$probe" 2>/dev/null || true
+  wait "$probe" 2>/dev/null || true
+  probe=''
+  [[ $count =~ ^[0-9]+$ ]] || {
+    say "could not count the host's HTTPS connections from this laptop"
+    return 1
+  }
+  ((10#$count > 0)) || {
+    say "the host does not see this laptop's HTTPS from its SSH address; turn off VPNs such as Cloudflare WARP and retry"
+    return 1
+  }
+}
+if ((!first)); then egress_check || exit 1; fi
+
 # 2. The lock. A lower tag or a held lock stops here, before any change.
 op=$(on_host fence.sh lock "$kind" "$tag") || exit 1
 lock_held=1
@@ -302,6 +342,8 @@ retry 5 3 maintenance_ok || {
   exit 1
 }
 say "maintenance confirmed from outside"
+# A first deploy has nothing listening on 443 before maintenance starts.
+if ((first)); then egress_check || exit 1; fi
 
 # 7. Database work under the new units.
 if ((!first)); then previous=$(step release-json) || exit 1; fi
@@ -357,14 +399,26 @@ ticker=$(ssh "${ssh_opts[@]}" "$admin@$host" \
   exit 1
 }
 ticker_seconds=${BASH_REMATCH[1]}
-me=$(ssh "${ssh_opts[@]}" "$admin@$host" 'printf %s "${SSH_CLIENT%% *}"')
 banned() { [[ $(curl -s -o /dev/null -m 10 -w '%{http_code}' "$site/") == 403 ]]; }
+# The new Caddy's first decision pull can fail and retry after a growing wait,
+# so poll until 150 s after the ban: a last request of up to 10 s still ends
+# inside the 3-minute test ban. 31 polls 5 s apart cannot end before that
+# deadline; the bound also ends the loop when sleep returns at once.
+ban_seen() { # deadline
+  local i
+  for ((i = 1; i <= 31; i++)); do
+    banned && return 0
+    ((i < 31 && SECONDS + 5 <= $1)) || return 1
+    sleep 5
+  done
+  return 1
+}
 step ban-test add "$me"
-if retry 12 5 banned; then
+if ban_seen $((SECONDS + 150)); then
   step ban-test del "$me"
 else
   step ban-test del "$me" || true
-  say "smoke: CrowdSec did not answer 403 for a banned address"
+  say "smoke: CrowdSec did not answer 403 for a banned address within 150 s"
   exit 1
 fi
 # Wait at least two stream ticks plus five seconds after deleting the ban.

@@ -83,6 +83,15 @@ case $args in
   *' -O exit '*) exit 0 ;;
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
   *'SSH_CLIENT'*) printf '198.51.100.10'; exit 0 ;;
+  *' ss -Htn '*)
+    # Answer once the held probe runs, as the host sees it only then.
+    for ((i = 0; i < 500; i++)); do
+      [[ ! -f $DEPLOY_TEST_DIR/probe.pid ]] || break
+      /bin/sleep 0.01
+    done
+    printf '%s\n' "${EGRESS_COUNT:-1}"
+    exit 0
+    ;;
   *' podman exec aboutme-caddy '*) printf '10s\n'; exit 0 ;;
 esac
 printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/order.log"
@@ -114,6 +123,10 @@ cat >"$work/bin/curl" <<'STUB'
 set -euo pipefail
 printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/external.log"
 args=" $* "
+if [[ $args == *' --limit-rate '* ]]; then
+  printf '%s\n' "$$" >"$DEPLOY_TEST_DIR/probe.pid"
+  exec /bin/sleep 30
+fi
 digest=$(printf '%064d' 0 | tr 0 b)
 if [[ $args == *'aboutme-observer/manifests/'* ]]; then
   [[ ${OBSERVER_CASE:-absent} != transport-error ]] || exit 7
@@ -163,9 +176,17 @@ elif [[ -n ${EDGE_CASE:-} ]] && grep -q ' ban-test del ' "$DEPLOY_TEST_DIR/host.
   [[ ! -f $DEPLOY_TEST_DIR/edge-count ]] || read -r count <"$DEPLOY_TEST_DIR/edge-count"
   count=$((count + 1))
   printf '%s\n' "$count" >"$DEPLOY_TEST_DIR/edge-count"
-  if [[ $EDGE_CASE == delayed && $count -gt 3 ]]; then printf '200'; else printf '403'; fi
+  if [[ $EDGE_CASE == stuck || ( $EDGE_CASE == delayed && $count -le 3 ) ]]; then printf '403'; else printf '200'; fi
 elif [[ -n ${EDGE_CASE:-} ]] && grep -q ' ban-test add ' "$DEPLOY_TEST_DIR/host.log"; then
-  printf '403'
+  bans=0
+  [[ ! -f $DEPLOY_TEST_DIR/ban-count ]] || read -r bans <"$DEPLOY_TEST_DIR/ban-count"
+  bans=$((bans + 1))
+  printf '%s\n' "$bans" >"$DEPLOY_TEST_DIR/ban-count"
+  case $EDGE_CASE in
+    late-ban) if ((bans >= 20)); then printf '403'; else printf '200'; fi ;;
+    no-ban) printf '200' ;;
+    *) printf '403' ;;
+  esac
 elif grep -q ' maintenance-up ' "$DEPLOY_TEST_DIR/host.log"; then
   printf '<!-- aboutme:maintenance -->\n503'
 else
@@ -271,10 +292,15 @@ for mode in uncertain rollback; do
   [[ $maintenance -lt $stop && $stop -lt $restore && $restore -lt $start ]]
 done
 : >"$work/order.log"
+: >"$work/external.log"
 "$repo_root/deploy/vn/scripts/deploy.sh" --activate v0.1.1 >"$work/activate.out" 2>&1
 lock=$(grep -n 'fence.sh lock activate' "$work/order.log" | cut -d: -f1)
 read_line=$(grep -n ' running-release ' "$work/order.log" | cut -d: -f1)
 [[ $lock -lt $read_line ]]
+if grep -q -e ' ss -Htn ' -e '--limit-rate' "$work/external.log"; then
+  echo 'activation ran the egress check' >&2
+  exit 1
+fi
 
 for OBSERVER_CASE in good arm64 index bad-provenance transport-error; do
   export OBSERVER_CASE
@@ -313,21 +339,36 @@ done
 unset FAIL_CIMD
 
 edge_failures=0
-for EDGE_CASE in delayed stuck; do
+for EDGE_CASE in delayed stuck late-ban no-ban; do
   export EDGE_CASE
   : >"$work/host.log"
   : >"$work/sleep.log"
-  rm -f "$work/edge-count"
+  rm -f "$work/edge-count" "$work/ban-count"
   if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/edge-$EDGE_CASE.out" 2>&1; then
     result=success
   else
     result=failure
   fi
-  count=0
+  count=0 bans=0
   [[ ! -f $work/edge-count ]] || read -r count <"$work/edge-count"
+  [[ ! -f $work/ban-count ]] || read -r bans <"$work/ban-count"
   if [[ $EDGE_CASE == delayed ]]; then
     if [[ $result != success || $count -lt 4 ]]; then
       echo 'delayed edge recovery did not wait for a 200 before success' >&2
+      edge_failures=1
+    fi
+  elif [[ $EDGE_CASE == late-ban ]]; then
+    if [[ $result != success || $bans != 20 ]]; then
+      echo 'a 403 on the twentieth poll did not pass the ban check' >&2
+      edge_failures=1
+    fi
+  elif [[ $EDGE_CASE == no-ban ]]; then
+    polls=$(grep -cx 5 "$work/sleep.log" || true)
+    if [[ $result != failure || $bans != 31 || $polls != 30 ]] ||
+       ! grep -q 'smoke: CrowdSec did not answer 403 for a banned address within 150 s' "$work/edge-$EDGE_CASE.out" ||
+       ! grep -q ' ban-test del ' "$work/host.log" ||
+       ! grep -q ' fail-closed ' "$work/host.log"; then
+      echo 'a missing 403 did not end at the attempt bound with the ban deleted' >&2
       edge_failures=1
     fi
   else
@@ -341,5 +382,79 @@ for EDGE_CASE in delayed stuck; do
   fi
 done
 unset EDGE_CASE
-((edge_failures == 0)) || exit 1
+
+# The host counts its port-443 sockets from the SSH client address while the
+# deploy holds one HTTPS request open; ss filters, so no peer list crosses SSH.
+egress_failures=0
+filter="ss -Htn state established '( sport = :443 ) and ( dst 198.51.100.10 or dst [::ffff:198.51.100.10] )' | wc -l"
+probe_stopped() {
+  local pid
+  [[ -f $work/probe.pid ]] || return 1
+  pid=$(cat "$work/probe.pid")
+  rm -f "$work/probe.pid"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid"
+    return 1
+  fi
+}
+egress_reset() {
+  rm -f "$work/probe.pid"
+  : >"$work/external.log"
+  : >"$work/order.log"
+  : >"$work/host.log"
+  : >"$work/sleep.log"
+}
+
+egress_reset
+"$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/egress-pass.out" 2>&1 || true
+check_line=$(grep -nF -- "$filter" "$work/external.log" | head -n1 | cut -d: -f1) || true
+lock_line=$(grep -n 'fence.sh lock deploy' "$work/external.log" | head -n1 | cut -d: -f1) || true
+if ! probe_stopped || [[ -z $check_line || -z $lock_line || $check_line -gt $lock_line ]] ||
+   ! grep -q ' maintenance-up ' "$work/host.log"; then
+  echo 'deploy did not count its held HTTPS probe on the host before the lock' >&2
+  egress_failures=1
+fi
+
+for EGRESS_COUNT in 0 x; do
+  export EGRESS_COUNT
+  polls=1 message='could not count'
+  [[ $EGRESS_COUNT != 0 ]] || polls=5 message='turn off VPNs such as Cloudflare WARP'
+  for mode in deploy rollback; do
+    egress_reset
+    args=(v0.1.1)
+    [[ $mode == deploy ]] || args=(--rollback v0.1.1)
+    result=failure
+    if "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/egress-$mode.out" 2>&1; then result=success; fi
+    stopped=1
+    probe_stopped || stopped=0
+    if [[ $result != failure || $stopped != 1 || -s $work/order.log || -s $work/host.log ]] ||
+       [[ $(grep -cF -- "$filter" "$work/external.log") != "$polls" ]] ||
+       ! grep -q "$message" "$work/egress-$mode.out"; then
+      echo "$mode with an egress count of $EGRESS_COUNT did not refuse before the lock" >&2
+      egress_failures=1
+    fi
+  done
+done
+
+# A first deploy has nothing on 443 until maintenance starts.
+export EGRESS_COUNT=0
+egress_reset
+result=failure
+if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 --first-deploy >"$work/egress-first.out" 2>&1; then result=success; fi
+stopped=1
+probe_stopped || stopped=0
+confirmed=$(grep -n 'maintenance confirmed from outside' "$work/egress-first.out" | cut -d: -f1) || true
+refused=$(grep -n 'turn off VPNs such as Cloudflare WARP' "$work/egress-first.out" | cut -d: -f1) || true
+check_line=$(grep -nF -- "$filter" "$work/external.log" | head -n1 | cut -d: -f1) || true
+lock_line=$(grep -n 'fence.sh lock deploy' "$work/external.log" | head -n1 | cut -d: -f1) || true
+if [[ $result != failure || $stopped != 1 || -z $confirmed || -z $refused || $confirmed -gt $refused ]] ||
+   [[ -z $check_line || -z $lock_line || $check_line -lt $lock_line ]] ||
+   ! grep -q ' maintenance-up ' "$work/host.log" ||
+   grep -q -e ' render ' -e ' db-setup ' -e ' migrate ' "$work/host.log"; then
+  echo 'first deploy did not run the egress check after maintenance confirmation' >&2
+  egress_failures=1
+fi
+unset EGRESS_COUNT
+
+((edge_failures == 0 && egress_failures == 0)) || exit 1
 echo "deployment failure test passed"

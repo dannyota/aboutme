@@ -38,12 +38,12 @@ point to the floating IP with TTL 300. The separate OpenTofu root
 record inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at
 the `.vn` registrar.
 
-Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80.
-DNS must point at the host before the edge starts so validation can reach it.
-Production uses `EDGES=direct`: Caddy takes the socket address, strips
-forwarding headers, and emits one `X-Real-IP` to Go on loopback. Coraza and
-CrowdSec run on the host. The [CloudFront runbook](cloudfront.md) is an AWS
-reference.
+Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80 or
+TLS-ALPN-01 on 443, Caddy's default challenges. DNS must point at the host
+before the edge starts so validation can reach it. Production uses
+`EDGES=direct`: Caddy takes the socket address, strips forwarding headers, and
+emits one `X-Real-IP` to Go on loopback. Coraza and CrowdSec run on the host.
+The [CloudFront runbook](cloudfront.md) is an AWS reference.
 
 ## Secrets
 
