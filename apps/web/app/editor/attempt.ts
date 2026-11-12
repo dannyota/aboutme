@@ -42,7 +42,8 @@ export interface FrozenAttempt {
   readonly firstDispatchAt: number;
   readonly retryCutoff: number;
   readonly automaticReplays: 0 | 1;
-  readonly staleRebases: 0 | 1;
+  /** Rebases onto a newer revision this command has had so far. */
+  readonly staleRebases: number;
 }
 
 export interface ValidatedStaleWinner {

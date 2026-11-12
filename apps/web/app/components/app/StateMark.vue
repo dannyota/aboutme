@@ -5,7 +5,14 @@ import AppSeal from './AppSeal.vue';
 import { workspaceCopy } from '@/i18n/workspace';
 
 const props = defineProps<{
-  state: 'saved' | 'unsaved' | 'saving' | 'failed' | 'draft' | 'public';
+  state:
+    | 'saved'
+    | 'unsaved'
+    | 'retrying'
+    | 'saving'
+    | 'failed'
+    | 'draft'
+    | 'public';
   link?: string;
 }>();
 
@@ -57,6 +64,7 @@ const copy = computed(() => workspaceCopy[locale.value]);
       <span>{{ copy.saved }}</span>
     </template>
     <template v-else-if="state === 'unsaved'"> {{ copy.unsaved }} </template>
+    <template v-else-if="state === 'retrying'"> {{ copy.retrying }} </template>
     <template v-else-if="state === 'saving'"> {{ copy.saving }} </template>
     <template v-else-if="state === 'failed'"> {{ copy.failed }} </template>
     <template v-else-if="state === 'draft'"> {{ copy.draft }} </template>

@@ -54,6 +54,7 @@ const vueSources = [
   'components/editor/LanguageTwinReview.vue',
   'components/editor/EntryCard.vue',
   'components/editor/ErrorSummary.vue',
+  'components/editor/HeldWriteAlert.vue',
   'components/editor/PDFDownloadButton.vue',
   'components/editor/PublishDialog.vue',
   'components/editor/PublishPageFields.vue',

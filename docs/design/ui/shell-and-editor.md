@@ -85,6 +85,21 @@ alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
 title and the public link truncate with an ellipsis before any control moves;
 the link's `title` attribute holds the whole address.
 
+The save state reads “Đã lưu”, “Chưa lưu”, “Đang lưu…”, “Chưa lưu, đang thử lại”
+or “Lưu không thành công” (Saved, Unsaved, Saving…, Not saved, retrying, or Save
+failed). A write the editor still holds after its automatic retries shows an
+error banner at the top of the inspector, below any conflicts. The banner never
+offers to discard the change, and leaving the page warns while the write is
+held. Once a write's outcome has stayed unknown for a minute, the banner reads
+“Thay đổi gần nhất chưa được lưu” and “Không kết nối được với máy chủ. Hệ thống
+vẫn thử lại mỗi 30 giây.” (“Your latest change isn't saved yet” and “We couldn't
+reach the server. We keep trying every 30 seconds.”), with Retry now (“Thử lại
+ngay”), which sends it again at once. Once a write has used every rebase, it
+reads “Thay đổi của bạn liên tục gặp chỉnh sửa mới hơn” and “CV này đang được
+thay đổi ở nơi khác. Thay đổi của bạn vẫn được giữ ở đây.” (“Your change keeps
+meeting newer edits” and “This resume is being changed elsewhere. Your change is
+kept here.”), with Try again (“Thử lại”), which starts the rebases again.
+
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF
 mode shows each page as its own sheet, then an estimated page count beside a

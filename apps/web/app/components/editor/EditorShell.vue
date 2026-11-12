@@ -52,6 +52,7 @@ import StructurePanel from './structure/StructurePanel.vue';
 import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
+import HeldWriteAlert from './HeldWriteAlert.vue';
 import LanguageTwinReview from './LanguageTwinReview.vue';
 import EditorPreview from './EditorPreview.vue';
 import EditorRegionTabs from './EditorRegionTabs.vue';
@@ -588,6 +589,10 @@ async function discardAndSignIn(): Promise<void> {
         :actions="actions"
         :conflicts="record.conflicts"
         @open-inspector="openInspector"
+      />
+      <HeldWriteAlert
+        :actions="actions"
+        :record="record"
       />
       <PersonalDetailsPanel
         v-if="inspector.kind === 'personal'"

@@ -6,18 +6,20 @@ import { nextTemplateChild, type EditorQueueItem } from './templateGroup';
 import {
   begin,
   canDrain,
+  clearWriteRetry,
   current,
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
+  heldWriteDue,
   owns,
-  READ_RETRY_FIRST_MS,
-  READ_RETRY_MAX_MS,
   readBarrierDue,
+  retryDelay,
   stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
 import { adoptRead } from './coordinatorReconcile';
+import { retryHeldWrite } from './coordinatorRetry';
 import { resolveUnknown, send } from './coordinatorSettle';
 import type {
   CoordinatorContext,
@@ -94,6 +96,16 @@ async function drainResume(
       continue;
     }
     ctx.readRetries.delete(resumeId);
+    if (record?.attempt?.kind === 'unknown') {
+      if (
+        !heldWriteDue(record, authState, ownerId)
+        || !(await retryHeldWrite(ctx, resumeId))
+      ) {
+        return;
+      }
+      continue;
+    }
+    clearWriteRetry(ctx, resumeId);
     if (!canDrain(record, authState, ownerId)) return;
     const queueItem = toRaw(record.pending[0]!);
     if (!dependenciesAcknowledged(record, queueItem)) return;
@@ -189,7 +201,10 @@ export async function retry(
   }
   const queueItem = toRaw(active.queueItem);
   const command = toRaw(active.command);
-  const attempt = toRaw(active.attempt);
+  // Try again after the rebase limit starts a fresh cycle of rebases.
+  const attempt = active.kind === 'failed' && active.reason === 'stale-limit'
+    ? { ...toRaw(active.attempt), staleRebases: 0 }
+    : toRaw(active.attempt);
   if (ctx.deps.runtime.nowEpochMs() >= attempt.retryCutoff) {
     await resolveUnknown(
       ctx,
@@ -280,10 +295,7 @@ export async function completeReadBarrier(
     return false;
   }
   const failures = ctx.readRetries.get(resumeId)?.failures ?? 0;
-  const backoff = Math.min(
-    READ_RETRY_FIRST_MS * 2 ** failures,
-    READ_RETRY_MAX_MS,
-  );
+  const backoff = retryDelay(failures);
   const delay = result.kind === 'rate-limited'
     ? Math.max(result.retryAfterMs ?? 0, backoff)
     : backoff;
@@ -304,6 +316,7 @@ export async function completeReadBarrier(
 export function stop(ctx: CoordinatorContext, resumeId: string): void {
   ctx.stopped.add(resumeId);
   ctx.readRetries.delete(resumeId);
+  clearWriteRetry(ctx, resumeId);
   const timer = ctx.timers.get(resumeId);
   if (timer !== undefined) clearTimeout(timer);
   ctx.timers.delete(resumeId);

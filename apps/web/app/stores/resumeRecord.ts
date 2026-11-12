@@ -56,6 +56,8 @@ export type AttemptState
     readonly command: AtomicEditorCommand;
     readonly attempt: FrozenAttempt;
     readonly reason: 'transport' | 'server' | 'cutoff';
+    /** The write has been failing long enough to tell the person. */
+    readonly alert?: true;
   }
   | {
     readonly kind: 'retry-later';
@@ -74,7 +76,7 @@ export type AttemptState
       | AttemptFailureCode
       | 'csrf-rejected'
       | 'idempotency-reuse'
-      | 'second-stale';
+      | 'stale-limit';
   };
 
 export type OpaquePhotoOutcome = {
@@ -168,6 +170,11 @@ export function saveState(record: ResumeRecord): SaveState {
   if (record.sessionLost) return 'session-lost';
   if (record.conflicts.length > 0) return 'conflict';
   if (record.attempt?.kind === 'unknown') {
+    // A held write is retried on its own; it is only reported as failed
+    // once the alert is up or the retry window has closed.
+    if (record.attempt.reason !== 'cutoff' && !record.attempt.alert) {
+      return 'retrying';
+    }
     return record.attempt.reason === 'transport' ? 'offline' : 'error';
   }
   if (

@@ -43,6 +43,7 @@ interface ResumeStoreActions {
     resumeId: string,
     state: Exclude<AttemptState, { kind: 'dispatching' }>,
   ): void;
+  markHeldAlert(resumeId: string, itemId: string): void;
   adoptComplete(resumeId: string, accepted: AcceptedResume): CompletionAdoption;
   adoptCompleteRead(
     resumeId: string,
@@ -140,6 +141,11 @@ const resumeStore = defineStore('resumes', {
     ) {
       const record = recordIn(this, resumeId);
       if (record !== undefined) queue.holdAttempt(record, state);
+    },
+
+    markHeldAlert(resumeId: string, itemId: string) {
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.markHeldAlert(record, itemId);
     },
 
     adoptComplete(

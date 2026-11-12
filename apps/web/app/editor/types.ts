@@ -19,6 +19,7 @@ export type SaveState
     | 'dirty'
     | 'saving'
     | 'saved'
+    | 'retrying'
     | 'offline'
     | 'error'
     | 'conflict'

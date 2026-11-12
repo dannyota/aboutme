@@ -55,9 +55,21 @@ export function holdAttempt(
   record: ResumeRecord,
   state: Exclude<AttemptState, { kind: 'dispatching' }>,
 ): void {
-  if (record.attempt?.queueItem.id !== state.queueItem.id) return;
-  record.attempt = copy(state);
+  const held = record.attempt;
+  if (held?.queueItem.id !== state.queueItem.id) return;
+  // Once raised, the alert stays while the same write is still unknown.
+  const alert = held.kind === 'unknown' && held.alert === true
+    && state.kind === 'unknown' && state.reason !== 'cutoff';
+  record.attempt = copy(alert ? { ...state, alert: true as const } : state);
   replay(record);
+}
+
+/** Raises the alert for a write that is still held as unknown. */
+export function markHeldAlert(record: ResumeRecord, itemId: string): void {
+  const held = record.attempt;
+  if (held?.kind !== 'unknown' || held.queueItem.id !== itemId) return;
+  if (held.reason === 'cutoff' || held.alert === true) return;
+  record.attempt = { ...copy(held), alert: true };
 }
 
 export function replaceHead(record: ResumeRecord, item: EditorQueueItem): void {

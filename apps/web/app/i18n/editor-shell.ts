@@ -51,6 +51,11 @@ export type EditorShellCopy = {
   readonly issueGeneric: string;
   readonly conflictTitle: string;
   readonly conflictDescription: string;
+  readonly unknownWriteTitle: string;
+  readonly unknownWriteDescription: string;
+  readonly retryNow: string;
+  readonly staleWriteTitle: string;
+  readonly staleWriteDescription: string;
   readonly acceptLatest: string;
   readonly conflictControl: (control: ConflictControlKind) => string;
   readonly previewLabel: string;
@@ -112,6 +117,14 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     conflictTitle: 'Xem lại thay đổi',
     conflictDescription:
       'Phần này đã thay đổi ở nơi khác. Hãy xem bản mới nhất trước khi lưu.',
+    unknownWriteTitle: 'Thay đổi gần nhất chưa được lưu',
+    unknownWriteDescription:
+      'Không kết nối được với máy chủ. Hệ thống vẫn thử lại mỗi 30 giây.',
+    retryNow: 'Thử lại ngay',
+    staleWriteTitle: 'Thay đổi của bạn liên tục gặp chỉnh sửa mới hơn',
+    staleWriteDescription:
+      'CV này đang được thay đổi ở nơi khác. Thay đổi của bạn vẫn được giữ '
+      + 'ở đây.',
     acceptLatest: 'Chấp nhận bản mới nhất',
     conflictControl: (control) => ({
       'apply-field': 'Áp dụng giá trị của tôi',
@@ -198,6 +211,13 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     conflictTitle: 'Review changes',
     conflictDescription:
       'This part changed elsewhere. Review the latest version before saving.',
+    unknownWriteTitle: 'Your latest change isn\'t saved yet',
+    unknownWriteDescription:
+      'We couldn\'t reach the server. We keep trying every 30 seconds.',
+    retryNow: 'Retry now',
+    staleWriteTitle: 'Your change keeps meeting newer edits',
+    staleWriteDescription:
+      'This resume is being changed elsewhere. Your change is kept here.',
     acceptLatest: 'Accept latest',
     conflictControl: (control) => ({
       'apply-field': 'Apply my value',

@@ -12,8 +12,20 @@ import type {
 
 export const DEBOUNCE_MS = 1_000;
 export const UNKNOWN_REPLAY_DELAY_MS = 250;
-export const READ_RETRY_FIRST_MS = 1_000;
-export const READ_RETRY_MAX_MS = 30_000;
+export const RETRY_FIRST_MS = 1_000;
+export const RETRY_MAX_MS = 30_000;
+/** Rebases one write may have onto newer revisions before it is held. */
+export const STALE_REBASE_LIMIT = 3;
+/** How long a write may stay unknown before the person is told. */
+export const HELD_WRITE_ALERT_MS = 60_000;
+
+/**
+ * The wait before retry number `failures + 1` of a failed read or of a write
+ * whose outcome is unknown: 1 s, doubling to 30 s (docs/design/budgets.md).
+ */
+export function retryDelay(failures: number): number {
+  return Math.min(RETRY_FIRST_MS * 2 ** failures, RETRY_MAX_MS);
+}
 
 /**
  * Starts an operation on the record the editor holds for `resumeId` now.
@@ -98,7 +110,39 @@ export function discard(ctx: CoordinatorContext, resumeId: string): void {
   const timer = ctx.timers.get(resumeId);
   if (timer !== undefined) clearTimeout(timer);
   ctx.timers.delete(resumeId);
+  clearWriteRetry(ctx, resumeId);
   ctx.deps.store.discardLocal(resumeId);
+}
+
+/** Forgets the retry schedule and alert timer of a held write. */
+export function clearWriteRetry(
+  ctx: CoordinatorContext,
+  resumeId: string,
+): void {
+  const retry = ctx.writeRetries.get(resumeId);
+  if (retry === undefined) return;
+  clearTimeout(retry.alert);
+  ctx.writeRetries.delete(resumeId);
+}
+
+/**
+ * A write held with an unknown outcome is sent again, unchanged, while the
+ * session is the owner's and its retry window is open.
+ */
+export function heldWriteDue(
+  record: ResumeRecord | undefined,
+  authState: ReturnType<typeof useAuth>['authState']['value'],
+  ownerId: string | undefined,
+): boolean {
+  const held = record?.attempt;
+  return (
+    held?.kind === 'unknown'
+    && held.reason !== 'cutoff'
+    && !record!.sessionLost
+    && record!.opaquePhotoOutcome === null
+    && authState === 'authenticated'
+    && held.queueItem.ownerId === ownerId
+  );
 }
 
 export function canDrain(
@@ -156,7 +200,7 @@ export function holdFailed(
   command: AtomicEditorCommand,
   attempt: FrozenAttempt,
   reason:
-    AttemptFailureCode | 'csrf-rejected' | 'idempotency-reuse' | 'second-stale',
+    AttemptFailureCode | 'csrf-rejected' | 'idempotency-reuse' | 'stale-limit',
 ): void {
   // `request_invalid` is the stable holder for a validation issue; individual
   // field issue codes remain on the record for the UI.

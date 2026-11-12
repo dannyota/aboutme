@@ -55,18 +55,32 @@ export function startingResume(): AcceptedResume {
   };
 }
 
+/** How a write's response is lost on the way back to the editor. */
+export interface LostResponse {
+  /** Whether the server had already applied the write. */
+  readonly applied: boolean;
+}
+
 /**
  * The owner API over one stored resume. It checks If-Match as the server
  * does, answers a stale write with the stored document and revision, and
- * applies the writes these scenarios send.
+ * applies the writes these scenarios send. A key it already applied replays
+ * that result without running the write again (ADR 0006).
  */
 export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
   const failedReads: ReadFailure[] = [];
   const heldResponses: Promise<void>[] = [];
   let readsHeld: Promise<void> | undefined;
-  const sent: { attempt: FrozenAttempt; result: AttemptResult['kind'] }[]
-    = [];
+  const lostResponses: LostResponse[] = [];
+  let everyResponseLost: LostResponse | undefined;
+  const beforeWrites: (() => void)[] = [];
+  const replays = new Map<string, AttemptResult>();
+  const sent: {
+    attempt: FrozenAttempt;
+    result: AttemptResult['kind'];
+    at: number;
+  }[] = [];
   const readTimes: number[] = [];
 
   const advance = (document: Resume): void => {
@@ -105,6 +119,15 @@ export function fakeServer(initial: AcceptedResume) {
       }
       case 'linkResumeProject':
         return { kind: 'rejected', code: 'project_not_found' };
+      case 'updateResumeMetadata': {
+        if (attempt.payload.kind !== 'json') throw new Error('no body');
+        advance(document);
+        stored = {
+          ...stored,
+          metadata: { ...stored.metadata, ...JSON.parse(attempt.payload.utf8) },
+        };
+        return { kind: 'complete', status: 200, accepted: copy() };
+      }
       case 'deleteResumePhoto': {
         const { photo: _photo, ...personalDetails } = document.personalDetails;
         advance({ ...document, personalDetails });
@@ -124,7 +147,14 @@ export function fakeServer(initial: AcceptedResume) {
 
   const api = {
     dispatch: vi.fn(async (attempt: FrozenAttempt): Promise<AttemptResult> => {
-      const result: AttemptResult = attempt.ifMatch === parentETag(
+      beforeWrites.shift()?.();
+      const lost = lostResponses.shift() ?? everyResponseLost;
+      if (lost?.applied === false) {
+        sent.push({ attempt, result: 'unknown', at: Date.now() });
+        return { kind: 'unknown', reason: 'transport' };
+      }
+      const replay = replays.get(attempt.idempotencyKey);
+      const result: AttemptResult = replay ?? (attempt.ifMatch === parentETag(
         stored.revision,
       )
         ? apply(attempt)
@@ -135,12 +165,23 @@ export function fakeServer(initial: AcceptedResume) {
               document: structuredClone(stored.document),
               revision: stored.revision,
             },
-          };
-      sent.push({ attempt, result: result.kind });
+          });
+      if (result.kind === 'complete' || result.kind === 'child-ack') {
+        replays.set(attempt.idempotencyKey, result);
+      }
+      if (lost !== undefined) {
+        sent.push({ attempt, result: 'unknown', at: Date.now() });
+        return { kind: 'unknown', reason: 'transport' };
+      }
+      sent.push({ attempt, result: result.kind, at: Date.now() });
       const held = heldResponses.shift();
       if (held !== undefined) await held;
       return result;
     }),
+    list: vi.fn(async () => ({
+      kind: 'ready' as const,
+      items: [{ ...stored.metadata, revision: stored.revision }],
+    })),
     read: vi.fn(async (): Promise<ResumeReadResult> => {
       readTimes.push(Date.now());
       if (readsHeld !== undefined) await readsHeld;
@@ -164,10 +205,6 @@ export function fakeServer(initial: AcceptedResume) {
     failNextRead(failure: ReadFailure): void {
       failedReads.push(failure);
     },
-    /**
-     * Applies the next write at once but holds its response until the
-     * returned function is called.
-     */
     /** Holds every read until the returned function is called. */
     holdReads(): () => void {
       let release = (): void => {};
@@ -179,12 +216,35 @@ export function fakeServer(initial: AcceptedResume) {
       });
       return () => release();
     },
+    /**
+     * Applies the next write at once but holds its response until the
+     * returned function is called.
+     */
     holdNextResponse(): () => void {
       let release = (): void => {};
       heldResponses.push(new Promise<void>((resolve) => {
         release = resolve;
       }));
       return release;
+    },
+    /** The next write's response never reaches the editor. */
+    loseNextResponse(lost: LostResponse): void {
+      lostResponses.push(lost);
+    },
+    /** Every write's response is lost until this is called again. */
+    loseEveryResponse(lost: LostResponse | undefined): void {
+      everyResponseLost = lost;
+    },
+    /** Milliseconds between the attempts sent for one command. */
+    sendGapsFor(commandId: string): number[] {
+      const times = sent
+        .filter(({ attempt }) => attempt.id === commandId)
+        .map(({ at }) => at);
+      return times.slice(1).map((time, index) => time - times[index]!);
+    },
+    /** Runs `change` as the next write arrives, before it is checked. */
+    beforeNextWrite(change: () => void): void {
+      beforeWrites.push(change);
     },
     /** Another tab or agent changes the resume. */
     otherWriter(change: (document: Resume) => Resume): void {

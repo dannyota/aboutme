@@ -10,9 +10,12 @@ import {
   dispatchToken,
   holdFailed,
   owns,
+  retryDelay,
+  STALE_REBASE_LIMIT,
   stopForSessionLoss,
   UNKNOWN_REPLAY_DELAY_MS,
 } from './coordinatorGuards';
+import { scheduleWriteRetry, startWriteRetry } from './coordinatorRetry';
 import {
   adoptRead,
   refreshAndReconcile,
@@ -264,6 +267,7 @@ export async function resolveUnknown(
       attempt: replay,
       reason,
     });
+    startWriteRetry(ctx, resumeId, queueItem);
     await ctx.deps.runtime.delay(UNKNOWN_REPLAY_DELAY_MS);
     if (!owns(ctx, resumeId, queueItem)) return;
     const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
@@ -283,7 +287,10 @@ export async function resolveUnknown(
     reason:
       ctx.deps.runtime.nowEpochMs() >= attempt.retryCutoff ? 'cutoff' : reason,
   });
-  if (ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff) return;
+  if (ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff) {
+    scheduleWriteRetry(ctx, resumeId, queueItem);
+    return;
+  }
   if (command.kind === 'photoUpload') {
     await setOpaquePhoto(ctx, resumeId, queueItem, command, attempt);
     return;
@@ -303,20 +310,20 @@ async function settleStale(
   },
 ): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
-  // A link or refresh is reconciled against every winner first, so a second
-  // mismatch can still drop one that landed or whose text changed; the
-  // one-retry limit then applies below.
+  // A link or refresh is reconciled against every winner first, so a
+  // mismatch after the last rebase can still drop one that landed or whose
+  // text changed; the rebase limit then applies below.
   const project = command.kind === 'projectLink'
     || command.kind === 'projectRefresh';
-  const secondStale = attempt.staleRebases === 1;
-  if (record === undefined || (secondStale && !project)) {
+  const exhausted = attempt.staleRebases >= STALE_REBASE_LIMIT;
+  if (record === undefined || (exhausted && !project)) {
     holdFailed(
       ctx.deps.store,
       resumeId,
       queueItem,
       command,
       attempt,
-      'second-stale',
+      'stale-limit',
     );
     return;
   }
@@ -328,18 +335,9 @@ async function settleStale(
       stopForSessionLoss(ctx, resumeId);
       return;
     }
-    if (complete.kind === 'rate-limited') {
-      ctx.deps.store.holdAttempt(resumeId, {
-        kind: 'retry-later',
-        queueItem,
-        command,
-        attempt,
-        reason: 'rate-limited',
-        retryAfterMs: complete.retryAfterMs,
-      });
-      return;
-    }
     if (complete.kind !== 'complete') {
+      // The write is held as unknown and sent again on the retry schedule;
+      // its next 412 reads the resume again.
       ctx.deps.store.holdAttempt(resumeId, {
         kind: 'unknown',
         queueItem,
@@ -347,6 +345,12 @@ async function settleStale(
         attempt,
         reason: 'server',
       });
+      scheduleWriteRetry(
+        ctx,
+        resumeId,
+        queueItem,
+        complete.kind === 'rate-limited' ? complete.retryAfterMs ?? 0 : 0,
+      );
       return;
     }
     const adoption = adoptRead(ctx, resumeId, complete.accepted);
@@ -373,14 +377,14 @@ async function settleStale(
   if (settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
     return;
   }
-  if (secondStale) {
+  if (exhausted) {
     holdFailed(
       ctx.deps.store,
       resumeId,
       queueItem,
       command,
       attempt,
-      'second-stale',
+      'stale-limit',
     );
     return;
   }
@@ -398,7 +402,7 @@ async function settleStale(
   }
   const rebased = {
     ...freezeAttempt(command, snapshot, ctx.deps.runtime),
-    staleRebases: 1 as const,
+    staleRebases: attempt.staleRebases + 1,
   };
   ctx.deps.store.holdAttempt(resumeId, {
     kind: 'unknown',
@@ -407,6 +411,17 @@ async function settleStale(
     attempt: rebased,
     reason: 'server',
   });
+  // Rebases wait 1, 2 and 4 s, so revisions bumped in quick succession
+  // settle before the write is sent over them again.
+  await ctx.deps.runtime.delay(retryDelay(attempt.staleRebases));
+  if (
+    !owns(ctx, resumeId, queueItem)
+    || ctx.deps.store.recordFor(resumeId)?.conflicts.some(
+      (conflict) => conflict.id === queueItem.id,
+    )
+  ) {
+    return;
+  }
   const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   if (csrfToken === null) return;
   await send(ctx, resumeId, queueItem, command, rebased, csrfToken);

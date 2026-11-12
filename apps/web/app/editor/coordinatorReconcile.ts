@@ -10,6 +10,7 @@ import {
 import type { AcceptedResume, ParentETag } from './types';
 import type { ResumeReadResult } from './attempt';
 import { current, stopForSessionLoss } from './coordinatorGuards';
+import { flush } from './coordinatorQueue';
 import type {
   CoordinatorContext,
   OperationContext,
@@ -139,6 +140,8 @@ function adoptAndReconcile(
   const decision = reconcileCommand(toRaw(active.command), latest);
   if (decision.kind === 'satisfied') {
     ctx.deps.store.dropHead(resumeId, active.queueItem.id);
+    // A held write the read shows landed no longer blocks the queue.
+    if (active.kind !== 'dispatching') void flush(ctx, resumeId);
   } else if (decision.kind === 'conflict') {
     ctx.deps.store.markConflict(resumeId, decision.conflict);
   }

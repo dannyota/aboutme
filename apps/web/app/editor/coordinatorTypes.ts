@@ -100,6 +100,17 @@ export interface CoordinatorContext {
   readRetries: Map<string, { failures: number; at: number }>;
   /** Resumes whose editor closed; nothing more is scheduled for them. */
   stopped: Set<string>;
+  /**
+   * A write held with an unknown outcome: retries so far, the epoch time
+   * before which the next may not run, and the timer that raises its alert.
+   */
+  writeRetries: Map<string, WriteRetry>;
+}
+
+export interface WriteRetry {
+  failures: number;
+  at: number;
+  readonly alert: ReturnType<typeof setTimeout>;
 }
 
 /**

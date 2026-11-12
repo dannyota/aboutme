@@ -88,6 +88,8 @@ interface LibraryOptions {
   readonly headlinesElsewhere?: Readonly<Record<string, string>>;
   /** A second tab of the same session, served by the same fake. */
   readonly otherTab?: Page;
+  /** Resume writes whose connection drops before they reach the server. */
+  readonly lostWrites?: number;
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -202,6 +204,7 @@ async function fakeLibrary(
   const headlinesElsewhere = new Map(
     Object.entries(options.headlinesElsewhere ?? {}),
   );
+  let lostWrites = options.lostWrites ?? 0;
   let nextEntry = 0;
   const reauths: string[] = [];
   let reauthenticated = false;
@@ -358,6 +361,11 @@ async function fakeLibrary(
         key: request.headers()['idempotency-key'] ?? null,
         body: request.postData() ? request.postDataJSON() : null,
       });
+      if (lostWrites > 0) {
+        lostWrites -= 1;
+        await route.abort('failed');
+        return;
+      }
       if (savedElsewhere.delete(row.id)) row.revision += 1;
       const headline = headlinesElsewhere.get(row.id);
       if (headlinesElsewhere.delete(row.id)) {
@@ -1001,6 +1009,31 @@ test('the resume editor sends an edit typed after another tab saved the '
     .toEqual([[personal, '"r1"'], [personal, '"r2"']]);
   expect(fake.resumes.get(BACKEND)!.personalDetails).toMatchObject({
     fullName: 'Ada Byron', headline: 'Staff engineer',
+  });
+});
+
+test('the resume editor sends a write again with the same key after its '
+  + 'connection drops, and saves it', async ({ page }) => {
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: resumeRows(), lostWrites: 2,
+  });
+  const headline = page.locator(
+    '[data-region="inspector"] [data-field="headline"] [data-field-input]',
+  );
+  const status = page.getByTestId('save-status');
+
+  await headline.fill('Staff engineer');
+  await headline.press('Tab');
+  await expect.poll(() => fake.resumeWrites.length).toBe(2);
+  await expect(status).toHaveAttribute('data-state', 'retrying');
+
+  await expect.poll(() => fake.resumeWrites.length).toBe(3);
+  await expect(status).toHaveAttribute('data-state', 'saved');
+  const sent = fake.resumeWrites.map((write) => [write.key, write.ifMatch]);
+  expect(sent).toEqual([sent[0], sent[0], sent[0]]);
+  expect(sent[0]).toEqual([expect.any(String), '"r1"']);
+  expect(fake.resumes.get(BACKEND)!.personalDetails).toMatchObject({
+    headline: 'Staff engineer',
   });
 });
 

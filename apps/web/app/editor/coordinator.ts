@@ -53,6 +53,7 @@ export function createMutationCoordinator(
     csrfRetries: new Set(),
     readRetries: new Map(),
     stopped: new Set(),
+    writeRetries: new Map(),
   };
 
   return {
