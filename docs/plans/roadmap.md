@@ -40,6 +40,8 @@ Projects and evidence first, then reviewed changes, then assistant-led review. T
 
 Vision: a project stops being three lines on a resume and becomes a page that proves the work.
 
+Release numbers (owner, 2026-11-12): the first release in which a person can write a project and show it on a resume is v0.9.0; each later feature of this list is v0.9.1 and up. An urgent fix released before v0.9.0 stays in v0.8.x.
+
 Features, in shipping order:
 
 1. Project library: projects live once per account, private, with no public URL of their own. A project has role, technologies, outcome, repository link and demo link, with its text held per resume language.
