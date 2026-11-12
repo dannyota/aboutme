@@ -257,17 +257,17 @@ reviewed deployment helpers when selecting older images.
 ## Release fence
 
 `fence.sh` owns root-only `/var/lib/aboutme/fence.json` under `flock`. Images
-check the minimum before Podman; new hosts start at floor 4007. Cutover locks
-the installed tag, checkpoints before mutation, and holds through quiescence;
-`verify` locks. Its marker records ID, kind, state, and start time. Retained
-cutover ownership or a marker blocks server, web, serving Caddy, migrate, and
-jobs across reboot; maintenance can start. Only a valid active `reset-db` marker
-matching the lock permits db-setup. Missing, symlinked, malformed, wrong-kind,
-or mismatched state refuses it. The owner removes the marker after quiescence.
-Uncertainty retains ownership. Manual clear refuses markers; privileged recovery
-records its reason. Cleanup releases only its exact ID without a marker; retries
-cannot replace an owner. Other operation kinds retain minimum-only checks unless
-their contract adds gates.
+check the minimum before Podman; new hosts start at the tracked floor below.
+Cutover locks the installed tag, checkpoints before mutation, and holds through
+quiescence; `verify` locks. Its marker records ID, kind, state, and start time.
+Retained cutover ownership or a marker blocks server, web, serving Caddy,
+migrate, and jobs across reboot; maintenance can start. Only a valid active
+`reset-db` marker matching the lock permits db-setup. Missing, symlinked,
+malformed, wrong-kind, or mismatched state refuses it. The owner removes the
+marker after quiescence. Uncertainty retains ownership. Manual clear refuses
+markers; privileged recovery records its reason. Cleanup releases only its exact
+ID without a marker; retries cannot replace an owner. Other operation kinds
+retain minimum-only checks unless their contract adds gates.
 
 The
 [notice host contract](crowdsec-privacy-notification.md#send-authority-and-restore-fence)
@@ -276,6 +276,29 @@ owns mount checks, adoption, restore sequencing, and proof limits. Its
 and initializing adoption block app/ingestion starts, including db-setup, across
 reboot. PostgreSQL recovery and maintenance retain their existing gates. Restore
 releases only its own ownership, never reconciliation or send/activation gates.
+
+### Floors for rebuilt hosts and schema changes
+
+`fence.sh` names the tracked floor (`floor_tag`): the floor a rebuilt host
+starts at, which is never below the production floor. A restored backup can
+carry any state production had, so the rebuilt host must refuse every release
+production refuses. `deploy.sh --activate <tag>` refuses a tag above the
+checkout's tracked floor. Raising production's floor therefore first lands a
+reviewed change that raises the tracked floor, then installs the host bundle.
+The deploy's helper-hash check holds the host to that checkout.
+
+A migration can make older releases unsafe, for example by dropping a column
+they read. `apps/server/migrations/schema-floor` holds one strict tag: the
+lowest release that runs against the schema after that tree's migrations. A
+change with such a migration raises this file and the tracked floor together,
+and a static test keeps the tracked floor at or above it. Before `migrate`, the
+deploy reads the file from the candidate's commit. If it names a release above
+the fence, the deploy raises the fence to it while holding the lock. A failed
+start then leaves the floor raised, so neither restoration nor a later rollback
+can start a release that reads the old schema. The deploy refuses a candidate
+below its own schema floor. A tree without the file, as in releases before this
+rule, has no schema floor. Rollbacks run no migration and read no file; the
+fence alone limits them.
 
 ## Scheduled jobs
 
