@@ -373,15 +373,14 @@ with.
 
 ## Host account deletion
 
-Account deletion first ships in v0.7.9. Publish the reviewed images, copy the
-reviewed `deploy/vn` bundle from clean, current `main` to the host, and install
-it before deploying v0.7.9 through the ordinary deployer:
+Account deletion works on any eligible release from v0.7.9 on. Copy the reviewed
+`deploy/vn` bundle from clean, current `main` to the host and install it; the
+deployed release stays as it is:
 
 ```sh
 # On the host, with the reviewed bundle already copied:
 sudo bash <bundle>/host/install.sh <bundle>
 # On the operator computer, from clean, current reviewed main:
-DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh v0.7.9
 DEPLOY_HOST=<host> bash deploy/vn/scripts/operations.sh account-delete show reported-slug
 ```
 

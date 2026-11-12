@@ -1,13 +1,14 @@
 # Account delete
 
-The host account-deletion procedure first ships in **v0.7.9**. Publish the
-reviewed image, install its reviewed host bundle, and deploy that release before
-using it. The [host guide](../../deploy/vn/README.md#host-account-deletion) owns
-installation. The [operations design](../design/vietnam-host-operations.md) owns
-execution and recovery; [ADR 0028](../adr/0028-community-showcase.md) owns the
-deletion decision. There is no operator screen or HTTP route. Host helpers
-installed with v0.7.9 accept only that release, so on a later release install
-the current reviewed host bundle before first use.
+The host account-deletion procedure works on any eligible release from
+**v0.7.9** on. Install the current reviewed host bundle before using it; no
+redeploy is needed. The
+[host guide](../../deploy/vn/README.md#host-account-deletion) owns installation.
+The [operations design](../design/vietnam-host-operations.md) owns execution and
+recovery; [ADR 0028](../adr/0028-community-showcase.md) owns the deletion
+decision. There is no operator screen or HTTP route. Host helpers installed with
+v0.7.9 accept only that release, so on a later release install the current
+reviewed host bundle before first use.
 
 ## When to use it
 
