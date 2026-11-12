@@ -23,8 +23,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 	t.Parallel()
 
 	routes := registeredRoutes()
-	if len(routes) != 18 {
-		t.Fatalf("registered route count = %d, want 18", len(routes))
+	if len(routes) != 20 {
+		t.Fatalf("registered route count = %d, want 20", len(routes))
 	}
 	mutations := 0
 	var got []string
@@ -34,8 +34,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 			mutations++
 		}
 	}
-	if mutations != 13 {
-		t.Fatalf("mutation route count = %d, want 13", mutations)
+	if mutations != 15 {
+		t.Fatalf("mutation route count = %d, want 15", mutations)
 	}
 	sort.Strings(got)
 	want := []string{
@@ -47,6 +47,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 		http.MethodPatch + " /api/v1/resumes/{id}",
 		http.MethodDelete + " /api/v1/resumes/{id}/entries/{sectionKey}/{entryId}",
 		http.MethodPatch + " /api/v1/resumes/{id}/entries/{sectionKey}",
+		http.MethodPost + " /api/v1/resumes/{id}/project-links",
+		http.MethodPost + " /api/v1/resumes/{id}/entries/{entryId}/project-refresh",
 		http.MethodPatch + " /api/v1/resumes/{id}/sections/{sectionKey}",
 		http.MethodPatch + " /api/v1/resumes/{id}/structure",
 		http.MethodPatch + " /api/v1/resumes/{id}/personal-details",
@@ -92,6 +94,8 @@ func TestEveryMutationRegistersExactlyOneConcreteOperation(t *testing.T) {
 		"publishResume":               operationPublish,
 		"upsertResumeEntry":           operationAggregate,
 		"deleteResumeEntry":           operationAggregate,
+		"linkResumeProject":           operationAggregate,
+		"refreshResumeProjectEntry":   operationAggregate,
 		"updateResumeSection":         operationAggregate,
 		"updateResumeStructure":       operationAggregate,
 		"updateResumePersonalDetails": operationAggregate,

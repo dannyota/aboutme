@@ -12,6 +12,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
@@ -31,6 +32,19 @@ type Options struct {
 	AllowSlug func(uuid.UUID, time.Time) bool
 	// Clock returns the current time; nil uses time.Now.
 	Clock func() time.Time
+	// Links reads and removes the owner's resume links to library projects.
+	Links LinkedResumes
+}
+
+// LinkedResumes is the resume side of the library: which resumes link a
+// project, and the deletion that unlinks a project from all of them.
+type LinkedResumes interface {
+	// LinkedResumeIDs maps each linked project to the owner's linking
+	// resume ids; q may be a pool or a transaction.
+	LinkedResumeIDs(context.Context, *store.Queries, uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
+	// RemoveProject runs a project deletion under the linking resumes'
+	// public-state fences.
+	RemoveProject(context.Context, resumeapi.ProjectRemoval) (resume.ExecuteResult, error)
 }
 
 type idempotencyStore interface {
@@ -49,6 +63,7 @@ type Service struct {
 	writeLimit  api.Middleware
 	allowSlug   func(uuid.UUID, time.Time) bool
 	now         func() time.Time
+	links       LinkedResumes
 }
 
 // New builds a library service using the shared resume limiter instances.
@@ -56,7 +71,7 @@ func New(pool *store.Pool, idem *resume.IdempotencyStore, opts Options) *Service
 	if opts.Clock == nil {
 		opts.Clock = time.Now
 	}
-	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock}
+	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links}
 }
 
 // RegisterRoutes attaches only session-authenticated owner library routes.
@@ -68,7 +83,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 
 func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", api.CacheControlNoStore)
-	if s.readLimit == nil || s.writeLimit == nil || s.allowSlug == nil {
+	if s.readLimit == nil || s.writeLimit == nil || s.allowSlug == nil || s.links == nil {
 		writeError(w, internalError())
 		return
 	}
@@ -102,12 +117,13 @@ func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
 type resource struct {
 	// Project is the canonical private project.
 	project.Project
-	// LinkedResumeIDs is empty while the resume contract has no project links.
+	// LinkedResumeIDs lists the owner's resumes that link the project.
 	LinkedResumeIDs []uuid.UUID `json:"linkedResumeIds"`
 }
 
-func resourceOf(p project.Project) resource {
-	return resource{Project: p, LinkedResumeIDs: []uuid.UUID{}}
+func resourceOf(p project.Project, links map[uuid.UUID][]uuid.UUID) resource {
+	linked := append([]uuid.UUID{}, links[p.ID]...)
+	return resource{Project: p, LinkedResumeIDs: linked}
 }
 
 func (s *Service) read(w http.ResponseWriter, r *http.Request) {
@@ -120,15 +136,20 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 		writeError(w, sessionError())
 		return
 	}
+	links, err := s.links.LinkedResumeIDs(r.Context(), s.q, sess.UserID)
+	if err != nil {
+		writeError(w, mapError(err))
+		return
+	}
 	if r.PathValue("id") == "" {
-		projects, err := s.projects.ListTx(r.Context(), s.q, sess.UserID)
-		if err != nil {
-			writeError(w, mapError(err))
+		projects, listErr := s.projects.ListTx(r.Context(), s.q, sess.UserID)
+		if listErr != nil {
+			writeError(w, mapError(listErr))
 			return
 		}
 		out := make([]resource, len(projects))
 		for i, p := range projects {
-			out[i] = resourceOf(p)
+			out[i] = resourceOf(p, links)
 		}
 		api.WriteData(w, 200, struct {
 			// Projects lists only this account's library.
@@ -147,5 +168,5 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", revisionTag(p.Revision))
-	api.WriteData(w, 200, resourceOf(p))
+	api.WriteData(w, 200, resourceOf(p, links))
 }

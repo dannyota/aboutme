@@ -27,6 +27,7 @@ import (
 const (
 	remainingExistingEntryID = "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60"
 	remainingNewEntryID      = "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61"
+	remainingLinkedEntryID   = "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e62"
 )
 
 type remainingOpenAPIMutation struct {
@@ -39,6 +40,8 @@ type remainingOpenAPIMutation struct {
 type remainingFixture struct {
 	resume   resume.Resume
 	photoKey string
+	// unlinkedProject is an owned project the fixture resume does not link.
+	unlinkedProject uuid.UUID
 }
 
 type remainingMutationRequest struct {
@@ -98,8 +101,8 @@ func TestIfMatch_ExistingWritesAndCreate(t *testing.T) {
 		}
 		existing = append(existing, mutation)
 	}
-	if create.operationID == "" || len(existing) != 11 {
-		t.Fatalf("OpenAPI mutation split = create %q and %d existing writes, want createResume and 11",
+	if create.operationID == "" || len(existing) != 13 {
+		t.Fatalf("OpenAPI mutation split = create %q and %d existing writes, want createResume and 13",
 			create.operationID, len(existing))
 	}
 
@@ -328,7 +331,7 @@ func TestWireVersion_FailsClosed(t *testing.T) {
 		name  string
 		value string
 	}{
-		{name: "undeclared", value: "6"},
+		{name: "undeclared", value: "7"},
 		{name: "non-numeric", value: "future"},
 		{name: "negative", value: "-1"},
 		{name: "zero", value: "0"},
@@ -367,8 +370,8 @@ func TestStrictDecode(t *testing.T) {
 			jsonMutations = append(jsonMutations, mutation)
 		}
 	}
-	if len(jsonMutations) != 8 {
-		t.Fatalf("OpenAPI JSON mutation count = %d, want 8", len(jsonMutations))
+	if len(jsonMutations) != 10 {
+		t.Fatalf("OpenAPI JSON mutation count = %d, want 10", len(jsonMutations))
 	}
 
 	deep := strings.Repeat("[", maxJSONDepth+2) + "0" + strings.Repeat("]", maxJSONDepth+2)
@@ -493,11 +496,17 @@ func remainingSingletonHeaderCases() []remainingHeaderCase {
 
 func newRemainingFixture(t *testing.T, h *resumeAPITestHarness) remainingFixture {
 	t.Helper()
+	linked := createLinkProject(t, h, h.userID, "remaining-linked", linkProjectDocument("Linked"))
+	unlinked := createLinkProject(t, h, h.userID, "remaining-unlinked", linkProjectDocument("Unlinked"))
+	linkedID := linked.ID.String()
 	document := loadMinimalDocument(t)
 	document.Content = map[string]schema.Section{
 		"work": schema.NewWorkSection(nil, nil, []schema.WorkEntry{{ID: remainingExistingEntryID}}),
+		"projects": {SectionType: schema.Project, ProjectEntries: []schema.ProjectEntry{
+			{ID: remainingLinkedEntryID, ProjectID: &linkedID},
+		}},
 	}
-	document.Customization.Layout.Sections.Main = []string{"work"}
+	document.Customization.Layout.Sections.Main = []string{"work", "projects"}
 	document.Customization.Layout.Sections.Sidebar = []string{}
 	created, err := h.resumes.Create(h.ctx, h.userID, "Adversarial exit", document)
 	if err != nil {
@@ -517,7 +526,7 @@ func newRemainingFixture(t *testing.T, h *resumeAPITestHarness) remainingFixture
 	if err != nil {
 		t.Fatalf("reload adversarial resume: %v", err)
 	}
-	return remainingFixture{resume: stored, photoKey: photoKey}
+	return remainingFixture{resume: stored, photoKey: photoKey, unlinkedProject: unlinked.ID}
 }
 
 func remainingOpenAPIMutations(t *testing.T, resumeID uuid.UUID) []remainingOpenAPIMutation {
@@ -541,9 +550,8 @@ func remainingOpenAPIMutations(t *testing.T, resumeID uuid.UUID) []remainingOpen
 			if candidate.operation == nil {
 				continue
 			}
-			// This Task02 catalog intentionally covers the twelve mutations that
-			// existed before Task07 added publish. Publish has its own transition
-			// policy and tests.
+			// This catalog covers every resume mutation except publish, which
+			// has its own transition policy and tests.
 			if candidate.operation.OperationID == "publishResume" {
 				continue
 			}
@@ -558,10 +566,14 @@ func remainingOpenAPIMutations(t *testing.T, resumeID uuid.UUID) []remainingOpen
 				t.Fatalf("OpenAPI mutation %s %s (%s) has no matching registered mutation",
 					candidate.method, path, candidate.operation.OperationID)
 			}
+			entryID := remainingExistingEntryID
+			if strings.HasSuffix(path, "/project-refresh") {
+				entryID = remainingLinkedEntryID
+			}
 			concrete := strings.NewReplacer(
 				"{id}", resumeID.String(),
 				"{sectionKey}", "work",
-				"{entryId}", remainingExistingEntryID,
+				"{entryId}", entryID,
 			).Replace("/api/v1" + path)
 			mutations = append(mutations, remainingOpenAPIMutation{
 				operationID: candidate.operation.OperationID,
@@ -621,6 +633,9 @@ func remainingRequestForOperation(t *testing.T, mutation remainingOpenAPIMutatio
 		})
 	case "updateResumePhotoCrop":
 		request.body = []byte(`{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`)
+	case "linkResumeProject":
+		request.body = []byte(`{"projectId":"` + fixture.unlinkedProject.String() + `"}`)
+	case "refreshResumeProjectEntry":
 	default:
 		t.Fatalf("no valid request fixture for %s", mutation.operationID)
 	}

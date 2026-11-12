@@ -72,6 +72,12 @@ func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, 
 // around the two statements: the CAS predicate IS the atomicity, so holding a
 // transaction open across the projection would only make a system job block
 // user writes.
+//
+// BackfillResumeDocumentCAS is the one document write that skips the project
+// link check of CreateTx, SaveDocumentTx and SaveMetadataAndDocumentTx. That
+// is safe because it rewrites only a row stored below the current version,
+// whose released schema cannot hold a projectId and whose up-conversion adds
+// none, and skips every current-version row.
 func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (BackfillResult, error) {
 	row, err := s.q.GetResumeByID(ctx, id)
 	if err != nil {

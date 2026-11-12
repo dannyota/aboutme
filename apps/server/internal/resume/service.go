@@ -39,7 +39,7 @@ const MaxLngCharacters = 35
 var ErrLngTooLong = errors.New("resume: language tag exceeds 35 characters")
 
 // CreateTx is Create's transaction-scoped core: validate, lock the owner's
-// users row, check the resume cap, insert. lng is the already-canonicalized
+// users row, check the resume cap and the document's project links, insert. lng is the already-canonicalized
 // BCP 47 tag, or nil for unset — the HTTP boundary owns parsing and
 // canonicalization; this store enforces only the stored-length bound,
 // before any statement runs.
@@ -73,6 +73,9 @@ func (s *Store) CreateTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 	}
 	if count >= resumeCap {
 		return Resume{}, ErrCapExceeded
+	}
+	if err = checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
+		return Resume{}, err
 	}
 
 	personalDetails, content, customization, err := encodeParts(doc)
@@ -142,8 +145,9 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 	return out, nil
 }
 
-// SaveDocumentTx is SaveDocument's transaction-scoped core: ValidateForStore,
-// then UpdateResumeDocumentCAS at schema_version = docmigrate.CurrentVersion.
+// SaveDocumentTx is SaveDocument's transaction-scoped core: ValidateForStore
+// and the project link check, then UpdateResumeDocumentCAS at schema_version
+// = docmigrate.CurrentVersion.
 // It returns the stored resume as GetTx would read it after the write, from
 // the row the update returned. A 0-row CAS (pgx.ErrNoRows, since it is a
 // RETURNING :one query) means either id doesn't exist for userID, or
@@ -153,6 +157,9 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (Resume, error) {
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
+		return Resume{}, err
+	}
+	if err := checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
 		return Resume{}, err
 	}
 
@@ -209,6 +216,9 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
 	}
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
+		return 0, err
+	}
+	if err := checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
 		return 0, err
 	}
 

@@ -118,23 +118,47 @@ func TestStore_StoredByteBoundary(t *testing.T) {
 	ctx, pool, q, owner := projectDB(t)
 	s := NewStore()
 	now := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+	// Links are bounded at 2048 characters, so the padding is description
+	// text: a backslash is one byte of the 16 KiB description bound and two
+	// bytes of stored JSON text.
 	d := draft()
-	d.RepositoryURL = "https://example.test/"
-	raw, err := json.Marshal(d)
-	if err != nil {
-		t.Fatal(err)
+	d.Text["en"] = Text{Name: "en", Description: strings.Repeat(`\`, 16384)}
+	d.Text["ja"] = Text{Name: "ja", Description: strings.Repeat(`\`, 16384)}
+	d.Text["fr"] = Text{Name: "fr", Description: "a"}
+	stored := func(d Document) int {
+		t.Helper()
+		prepared, err := Prepare(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(prepared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		if err = pool.QueryRow(ctx, "SELECT octet_length($1::jsonb::text)", raw).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
 	}
-	var base int
-	if err = pool.QueryRow(ctx, "SELECT octet_length($1::jsonb::text)", raw).Scan(&base); err != nil {
-		t.Fatal(err)
+	remaining := 98304 - stored(d)
+	fill := func(extra int) Document {
+		padded := d
+		padded.Text = map[string]Text{}
+		for key, value := range d.Text {
+			padded.Text[key] = value
+		}
+		padded.Text["fr"] = Text{Name: "fr", Description: strings.Repeat(`\`, remaining/2) + strings.Repeat("a", remaining%2+1+extra)}
+		return padded
 	}
-	d.RepositoryURL += strings.Repeat("a", 98304-base)
-	a, err := s.CreateTx(ctx, q, owner, "at-bound", d, now, nil)
+	if got := stored(fill(0)); got != 98304 {
+		t.Fatalf("padded document stores %d bytes, want 98304", got)
+	}
+	a, err := s.CreateTx(ctx, q, owner, "at-bound", fill(0), now, nil)
 	if err != nil {
 		t.Fatalf("at stored byte bound: %v", err)
 	}
-	d.RepositoryURL += "a"
-	if _, err = s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, a.Slug, d, now, nil); !errors.Is(err, ErrInvalid) {
+	if _, err = s.ReplaceTx(ctx, q, owner, a.ID, a.Revision, a.Slug, fill(1), now, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("over stored byte bound error=%v", err)
 	}
 }

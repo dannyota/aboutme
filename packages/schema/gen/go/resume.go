@@ -275,8 +275,10 @@ type ProjectEntry struct {
 	ID          string     `json:"id"`
 	IsHidden    *bool      `json:"isHidden,omitempty"`
 	Link        *string    `json:"link,omitempty"`
-	Subtitle    *string    `json:"subtitle,omitempty"`
-	Title       *string    `json:"title,omitempty"`
+	// Optional private library project this entry links. See docs/design/projects.md#selection.
+	ProjectID *string `json:"projectId,omitempty"`
+	Subtitle  *string `json:"subtitle,omitempty"`
+	Title     *string `json:"title,omitempty"`
 }
 
 // Draft-permissive custom entry. See docs/design/data.md#resume-aggregate.

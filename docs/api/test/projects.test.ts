@@ -57,6 +57,7 @@ const STATUSES: Record<string, string[]> = {
     "428",
     "429",
     "500",
+    "503",
   ],
 };
 
@@ -107,12 +108,25 @@ describe("project library surface", () => {
     ]);
   });
 
-  it("adds no resume route for project links", () => {
-    for (const path of Object.keys(doc.paths)) {
-      if (path.startsWith("/resumes")) {
-        expect(path).not.toMatch(/project/);
-      }
+  it("adds exactly the link and refresh resume routes", () => {
+    const linkPaths = Object.keys(doc.paths).filter(
+      (path) => path.startsWith("/resumes") && /project/.test(path),
+    );
+    expect(linkPaths.sort()).toEqual([
+      "/resumes/{id}/entries/{entryId}/project-refresh",
+      "/resumes/{id}/project-links",
+    ]);
+    for (const path of linkPaths) {
+      const methods = Object.keys(doc.paths[path]).filter((k) =>
+        HTTP_METHODS.includes(k),
+      );
+      expect(methods, path).toEqual(["post"]);
+      expect(doc.paths[path].post.security, path).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+      ]);
     }
+    expect(schemas.ProjectLinkRequest.required).toEqual(["projectId"]);
+    expect(schemas.ProjectLinkRequest.additionalProperties).toBe(false);
   });
 
   it("uses the cookie session only, with CSRF on every write", () => {
@@ -171,6 +185,8 @@ describe("project library surface", () => {
     ]);
     expect(responseCodes(put, "422")).toEqual(["document_invalid"]);
     expect(responseCodes(put, "412")).toEqual(["revision_mismatch"]);
+    const remove = doc.paths["/projects/{id}"].delete;
+    expect(responseCodes(remove, "503")).toEqual(["public_state_busy"]);
     const mismatch = schemas.ProjectRevisionError.properties.error;
     expect(mismatch.required).toEqual(["code", "message", "details"]);
     expect(mismatch.properties.details.required).toEqual([
@@ -228,6 +244,7 @@ describe("project library schemas", () => {
 
   it("accepts only https links and closes every request and resource", () => {
     expect(schemas.ProjectLink.anyOf[1].pattern).toBe("^https://");
+    expect(schemas.ProjectLink.maxLength).toBe(2048);
     for (const name of ["CreateProjectRequest", "Project"]) {
       expect(schemas[name].unevaluatedProperties, name).toBe(false);
     }
@@ -243,11 +260,11 @@ describe("project library schemas", () => {
     }
   });
 
-  it("keeps resume references empty until resumes can link projects", () => {
+  it("bounds resume references by the three-resume account cap", () => {
     expect(schemas.Project.allOf[1].properties.linkedResumeIds.maxItems).toBe(
-      0,
+      3,
     );
-    expect(schemas.ProjectChangedResumes.maxItems).toBe(0);
+    expect(schemas.ProjectChangedResumes.maxItems).toBe(3);
     expect(schemas.ProjectRecord.allOf[1].properties).not.toHaveProperty(
       "linkedResumeIds",
     );

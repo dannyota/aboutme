@@ -15,7 +15,10 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/store"
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
@@ -31,6 +34,8 @@ type harness struct {
 	user    store.User
 	session store.Session
 	token   string
+	// coordinator is the public-state coordinator the linked resumes use.
+	coordinator *publicstate.Coordinator
 }
 
 func newHarness(t *testing.T) *harness {
@@ -56,10 +61,23 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	pass := func(h http.Handler) http.Handler { return h }
-	svc := New(pool, resume.NewIdempotencyStore(pool), Options{Sessions: sessions, PublicOrigin: origin, ReadLimit: pass, WriteLimit: pass, AllowSlug: func(uuid.UUID, time.Time) bool { return true }})
+	public, err := q.GetPublicState(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: public.DiscoveryGeneration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projector := docmigrate.NewIdentityProjector()
+	idempotency := resume.NewIdempotencyStore(pool)
+	resumes := resumeapi.New(resume.NewStore(pool, projector), idempotency, projector, nil, resumeapi.Options{
+		SessionManager: sessions, PublicOrigin: origin, Coordinator: coordinator, RecoveryPool: pool,
+	})
+	svc := New(pool, idempotency, Options{Sessions: sessions, PublicOrigin: origin, ReadLimit: pass, WriteLimit: pass, AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Links: resumes})
 	mux := http.NewServeMux()
 	svc.RegisterRoutes(mux)
-	return &harness{pool: pool, q: q, svc: svc, mux: mux, user: user, session: session, token: token}
+	return &harness{pool: pool, q: q, svc: svc, mux: mux, user: user, session: session, token: token, coordinator: coordinator}
 }
 func (h *harness) request(t *testing.T, method, path, body, key, match string) *httptest.ResponseRecorder {
 	t.Helper()

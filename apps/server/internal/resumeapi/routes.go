@@ -217,6 +217,7 @@ func registeredRoutes() []routeSpec {
 	var routes []routeSpec
 	routes = append(routes, resumeRoutes()...)
 	routes = append(routes, entryRoutes()...)
+	routes = append(routes, projectLinkRoutes()...)
 	routes = append(routes, sectionRoutes()...)
 	routes = append(routes, structureRoutes()...)
 	routes = append(routes, personalDetailsRoutes()...)

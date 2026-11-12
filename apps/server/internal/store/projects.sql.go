@@ -13,6 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const countOwnedProjects = `-- name: CountOwnedProjects :one
+SELECT count(*) FROM projects
+WHERE user_id = $1 AND id = ANY($2::uuid[])
+`
+
+type CountOwnedProjectsParams struct {
+	UserID uuid.UUID
+	Ids    []uuid.UUID
+}
+
+func (q *Queries) CountOwnedProjects(ctx context.Context, arg CountOwnedProjectsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOwnedProjects, arg.UserID, arg.Ids)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countProjectsForUser = `-- name: CountProjectsForUser :one
 SELECT count(*) FROM projects WHERE user_id = $1
 `

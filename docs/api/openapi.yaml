@@ -115,7 +115,8 @@ tags:
       library project has no public URL and is never listed across accounts.
       Mutations follow the resume write-safety rules: `If-Match` on the
       project revision for an existing project, and `Idempotency-Key` on
-      every write.
+      every write. A resume links a project through `projectId` on a project
+      entry; each project lists the ids of the caller's resumes that link it.
   - name: media
     description: >-
       Resume photos. Objects are private and served only through Go after an
@@ -1353,7 +1354,7 @@ paths:
                 type: string
                 pattern: ^[0-9]+$
               description: Current emitted resume schema version.
-              example: "5"
+              example: "6"
           content:
             application/json:
               schema:
@@ -2044,7 +2045,9 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          description: The private library, with empty linkedResumeIds arrays.
+          description: >-
+            The private library; each project lists the caller's linking
+            resume ids.
           content:
             application/json:
               schema:
@@ -2212,11 +2215,17 @@ paths:
       summary: Delete an owned library project
       description: >-
         Deletes the project and holds its slug for 180 days in the same
-        transaction as its replay response. Requires recent primary proof and,
-        for an enrolled account, recent second-factor proof. Writes share the
-        resume write limiter. No request body is accepted: a non-empty body is
-        request_invalid, and one over 262,144 bytes is body_too_large. Every
-        response uses Cache-Control no-store, no-transform.
+        transaction as its replay response. Every resume of the caller that
+        links the project, published or not, loses the link in that
+        transaction: the entry and its text stay, and the resume revision
+        advances by one. The linking resumes are planned first and must be
+        unchanged under the owner lock; after three changed plans the request
+        answers public_state_busy and changes nothing. Requires recent
+        primary proof and, for an enrolled account, recent second-factor
+        proof. Writes share the resume write limiter. No request body is
+        accepted: a non-empty body is request_invalid, and one over 262,144
+        bytes is body_too_large. Every response uses Cache-Control no-store,
+        no-transform.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -2225,7 +2234,7 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
-          description: An empty changedResumes array.
+          description: Each changed resume with its new revision.
           content:
             application/json:
               schema:
@@ -2252,6 +2261,8 @@ paths:
           $ref: "#/components/responses/ResumeRateLimited"
         "500":
           $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          $ref: "#/components/responses/ProjectPublicStateBusy"
   /resumes:
     get:
       operationId: listResumes
@@ -2303,7 +2314,7 @@ paths:
                     faviconEmoji: "\U0001F680"
                     signInToView: false
                     showcase: null
-                    schemaVersion: 5
+                    schemaVersion: 6
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
         "400":
@@ -2413,17 +2424,19 @@ paths:
                   faviconEmoji: null
                   signInToView: false
                   showcase: null
-                  schemaVersion: 5
+                  schemaVersion: 6
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
                   document:
-                    schemaVersion: 5
+                    schemaVersion: 6
         "400":
           $ref: "#/components/responses/ResumeCreateBadRequest"
         "401":
           $ref: "#/components/responses/ResumeUnauthorized"
         "403":
           $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
         "405":
           $ref: "#/components/responses/MethodNotAllowedResumes"
         "409":
@@ -2691,11 +2704,11 @@ paths:
         "403":
           $ref: "#/components/responses/ResumeCsrfRejected"
         "404":
-          $ref: "#/components/responses/ResumeNotFound"
+          $ref: "#/components/responses/ResumeOrProjectNotFound"
         "405":
           $ref: "#/components/responses/MethodNotAllowedPatchOnly"
         "409":
-          $ref: "#/components/responses/ResumeIdempotencyConflict"
+          $ref: "#/components/responses/ResumeProjectLinkConflict"
         "412":
           $ref: "#/components/responses/ResumeRevisionMismatch"
         "413":
@@ -2756,6 +2769,112 @@ paths:
           $ref: "#/components/responses/ResumeRevisionMismatch"
         "413":
           $ref: "#/components/responses/ResumeBodyTooLarge"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/project-links:
+    post:
+      operationId: linkResumeProject
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Link one library project as a prefilled project entry
+      description: >-
+        Appends one project entry that names the project to the resume's
+        first project section in layout order. When the resume has none, a
+        section keyed `projects` is created at the end of the main column
+        through the structure command. The entry is prefilled from the
+        project text whose key equals the resume language's primary subtag,
+        or else the default language: `title` from `name`, `subtitle` from
+        `role`, `link` from `repositoryUrl` or else `demoUrl`, `dates`, and
+        `description` from `summary` as one paragraph. The entry text is the
+        resume's own afterwards; nothing but a refresh overwrites it. The
+        write uses the entry-write chain and returns its response; an older
+        declared schema version is emitted without the link.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SchemaVersionHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectLinkRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ResumeWritten"
+        "400":
+          $ref: "#/components/responses/ResumeWriteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ResumeOrProjectNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedPostOnly"
+        "409":
+          $ref: "#/components/responses/ResumeProjectLinkConflict"
+        "412":
+          $ref: "#/components/responses/ResumeRevisionMismatch"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "422":
+          $ref: "#/components/responses/ResumeDocumentInvalid"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/entries/{entryId}/project-refresh:
+    post:
+      operationId: refreshResumeProjectEntry
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Repeat the library prefill for one linked project entry
+      description: >-
+        Overwrites only the five prefilled fields of the linked entry from
+        its library project, chosen by the same language rule as a link; a
+        field the project leaves empty is removed. The entry id, its hidden
+        flag and its link stay. An entry without a link answers
+        `project_not_found`. The request has no body and uses the entry-write
+        chain.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/EntryID"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SchemaVersionHeader"
+      responses:
+        "200":
+          $ref: "#/components/responses/ResumeWritten"
+        "400":
+          $ref: "#/components/responses/ResumeWriteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ResumeOrProjectNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedPostOnly"
+        "409":
+          $ref: "#/components/responses/ResumeIdempotencyConflict"
+        "412":
+          $ref: "#/components/responses/ResumeRevisionMismatch"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "422":
+          $ref: "#/components/responses/ResumeDocumentInvalid"
         "428":
           $ref: "#/components/responses/ResumePreconditionRequired"
         "429":
@@ -5143,11 +5262,11 @@ components:
               faviconEmoji: "\U0001F680"
               signInToView: false
               showcase: null
-              schemaVersion: 5
+              schemaVersion: 6
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
               document:
-                schemaVersion: 5
+                schemaVersion: 6
     ResumeWritten:
       description: The whole resume after the write, at its new revision.
       headers:
@@ -5178,11 +5297,11 @@ components:
               faviconEmoji: "\U0001F680"
               signInToView: false
               showcase: null
-              schemaVersion: 5
+              schemaVersion: 6
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
               document:
-                schemaVersion: 5
+                schemaVersion: 6
     ResumeListBadRequest:
       description: >-
         `invalid_client_ip` when the trusted-proxy boundary cannot derive one
@@ -5198,7 +5317,7 @@ components:
               code: unsupported_schema_version
               message: requested resume schema version is not accepted
               details:
-                acceptedVersions: [1, 2, 3, 4, 5]
+                acceptedVersions: [1, 2, 3, 4, 5, 6]
     ResumeReadBadRequest:
       description: >-
         `invalid_client_ip`, `request_invalid` for a malformed path
@@ -5317,8 +5436,10 @@ components:
     ResumeCreateConflict:
       description: >-
         A domain conflict, never staleness: `resume_cap_exceeded` for a
-        create beyond the per-account cap, or `idempotency_key_reuse` when
-        the same key arrives with a different request fingerprint.
+        create beyond the per-account cap, `project_already_linked` when two
+        entries of the document name the same project, or
+        `idempotency_key_reuse` when the same key arrives with a different
+        request fingerprint.
       content:
         application/json:
           schema:
@@ -5340,6 +5461,71 @@ components:
             error:
               code: idempotency_key_reuse
               message: this idempotency key was used with a different request
+    ResumeProjectLinkConflict:
+      description: >-
+        `project_already_linked` when the written document would hold two
+        entries that name the same project, or `idempotency_key_reuse` when
+        the same key arrives with a different request fingerprint. Nothing is
+        written.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: project_already_linked
+              message: the resume already links this project
+    ResumeOrProjectNotFound:
+      description: >-
+        `resume_not_found` when the resume or the addressed entry is missing
+        or owned by another account, or `project_not_found` when a linked
+        project is missing or owned by another account. Both answers are
+        identical for a missing and a foreign id.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: project_not_found
+              message: project not found
+    ProjectPublicStateBusy:
+      description: >-
+        `public_state_busy`: a linking resume's public-generation drain did
+        not finish within five seconds, or the linking resumes changed on
+        three planning attempts. Nothing is committed.
+      headers:
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            const: 1
+          example: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: public_state_busy
+              message: public state is busy
+    MethodNotAllowedPostOnly:
+      description: "`method_not_allowed` on a post-only resume child."
+      headers:
+        Allow:
+          description: Methods this path serves.
+          schema:
+            type: string
+            const: POST
+          example: POST
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method not allowed
     ResumeRevisionMismatch:
       description: >-
         `revision_mismatch`: the `If-Match` revision is stale. `details`
@@ -5356,7 +5542,7 @@ components:
               details:
                 revision: "44"
                 document:
-                  schemaVersion: 5
+                  schemaVersion: 6
     ResumePreconditionRequired:
       description: >-
         `precondition_required`: this mutation needs an `If-Match` header and
@@ -6663,7 +6849,7 @@ components:
       schema:
         type: integer
         minimum: 1
-      example: 5
+      example: 6
     PublicCacheControl:
       description: >-
         Public representations must revalidate at the origin before reuse.
@@ -8343,7 +8529,10 @@ components:
             bytes both before and after sanitizing.
     ProjectLink:
       type: string
-      description: Empty or an absolute HTTPS URL.
+      description: >-
+        Empty or an absolute HTTPS URL of at most 2048 characters. The scheme
+        is stored lowercase; every other character is kept as given.
+      maxLength: 2048
       anyOf:
         - const: ""
         - format: uri
@@ -8392,7 +8581,10 @@ components:
           properties:
             linkedResumeIds:
               type: array
-              maxItems: 0
+              description: >-
+                The caller's resumes whose project entries link this project,
+                in resume list order.
+              maxItems: 3
               items:
                 type: string
                 format: uuid
@@ -8447,7 +8639,10 @@ components:
               $ref: "#/components/schemas/ProjectChangedResumes"
     ProjectChangedResumes:
       type: array
-      maxItems: 0
+      description: >-
+        Each resume the mutation changed, with its new revision. A
+        replacement changes none yet.
+      maxItems: 3
       items:
         type: object
         additionalProperties: false
@@ -8710,7 +8905,7 @@ components:
         showcase:
           state: listed
           role: backend
-        schemaVersion: 5
+        schemaVersion: 6
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z
     ShowcaseRole:
@@ -8848,7 +9043,21 @@ components:
         truth for one contract and drift silently. This document owns the
         envelope, headers, statuses, and error shapes.
       example:
-        schemaVersion: 5
+        schemaVersion: 6
+    ProjectLinkRequest:
+      type: object
+      description: >-
+        The owned library project to link. The new entry is prefilled from
+        the project text in the resume language, or else the project's
+        default language.
+      additionalProperties: false
+      required: [projectId]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+      example:
+        projectId: 018f5b6a-9a3e-7c21-8b1e-0000000000c1
     EntryUpsert:
       type: object
       description: >-

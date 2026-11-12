@@ -8,7 +8,11 @@ import (
 	"testing"
 	"time"
 
+	schema "danny.vn/aboutme/packages/schema/gen/go"
+
 	"danny.vn/aboutme/apps/server/internal/project"
+	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
 func TestExport_ProjectsVersionAndCreationOrder(t *testing.T) {
@@ -126,8 +130,26 @@ func maximumProjectDocument(t *testing.T, h *exportTestHarness) []byte {
 		}
 		return n
 	}
+	// A link is at most 2048 characters, so the rest of the bound is filled
+	// with description text: a backslash is one byte of the 16 KiB
+	// description bound and two bytes of stored JSON text.
 	d.RepositoryURL = "https://example.test/?"
-	d.RepositoryURL += strings.Repeat("&", project.MaxStoredBytes-measure(d))
+	d.RepositoryURL += strings.Repeat("&", project.MaxLinkCharacters-len(d.RepositoryURL))
+	padding := []string{"vi", "ja", "fr"}
+	for _, key := range padding {
+		d.Text[key] = project.Text{Name: key, Description: "a"}
+	}
+	remaining := project.MaxStoredBytes - measure(d)
+	for _, key := range padding {
+		share := min(remaining, 32766)
+		text := d.Text[key]
+		text.Description = strings.Repeat(`\`, share/2) + strings.Repeat("a", share%2+1)
+		d.Text[key] = text
+		remaining -= share
+	}
+	if remaining != 0 {
+		t.Fatalf("project bound needs %d more bytes than the padding holds", remaining)
+	}
 	prepared, err := project.Prepare(d)
 	if err != nil {
 		t.Fatal(err)
@@ -169,5 +191,46 @@ func TestExport_MaximumLibraryKeepsLiteralCharacters(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &bundle); err != nil || len(bundle.Data.Projects) != project.MaxProjects {
 		t.Fatalf("projects=%d error=%v", len(bundle.Data.Projects), err)
+	}
+}
+
+func TestExport_ResumeDocumentsKeepProjectLinks(t *testing.T) {
+	h := newExportTestHarness(t)
+	var projectID string
+	if err := h.pool.QueryRow(h.ctx, `INSERT INTO projects(user_id,slug,document) VALUES($1,'linked','{"defaultLanguage":"en","text":{"en":{"name":"Linked"}}}') RETURNING id`, h.user.ID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	var doc schema.Resume
+	if err := json.Unmarshal([]byte(`{"schemaVersion":6,"personalDetails":{"fullName":"Ada","details":[]},`+
+		`"content":{"projects":{"sectionType":"project","entries":[{"id":"6f0d8f5e-6d0b-4b8e-9b55-2f7c2a0c9e11","title":"Linked","projectId":"`+projectID+`"}]}},`+
+		`"customization":{"font":{"family":"inter","baseSizePx":14},"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},`+
+		`"spacing":{"sectionGap":16,"entryGap":8,"lineHeight":1.4},"heading":{"style":"normal","showRule":false},`+
+		`"layout":{"columns":1,"sections":{"main":["projects"],"sidebar":[]}},"sectionDisplay":{"skill":{"style":"text"},"language":{"style":"text"}},`+
+		`"pageFormat":"a4","dateFormat":"MM/YYYY"}}`), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resume.NewStore(h.pool, docmigrate.NewIdentityProjector()).Create(h.ctx, h.user.ID, "linked", doc); err != nil {
+		t.Fatalf("seed linked resume: %v", err)
+	}
+	response := h.request(t, "GET", ExportPath, nil)
+	if response.Code != 200 {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var bundle struct {
+		Data struct {
+			Resumes []struct {
+				Document schema.Resume `json:"document"`
+			} `json:"resumes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &bundle); err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Data.Resumes) != 1 {
+		t.Fatalf("export=%s", response.Body.String())
+	}
+	entries := bundle.Data.Resumes[0].Document.Content["projects"].ProjectEntries
+	if len(entries) != 1 || entries[0].ProjectID == nil || *entries[0].ProjectID != projectID {
+		t.Fatalf("exported entries = %+v, want the project link kept", entries)
 	}
 }

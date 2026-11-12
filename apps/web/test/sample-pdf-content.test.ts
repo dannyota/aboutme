@@ -7,7 +7,7 @@ import { samplePdfChunks, samplePdfContentMatches }
 import type { PdfTextPage } from '../e2e/pdf-display';
 
 const sample: Resume = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   personalDetails: { fullName: 'Lê An', headline: 'Kỹ sư', details: [
     { id: 'location', type: 'location', value: 'Huế', isHidden: false },
     { id: 'hidden-contact', type: 'phone', value: '123', isHidden: true },

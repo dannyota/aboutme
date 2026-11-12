@@ -192,6 +192,8 @@ func resumeIDFromPrepared(prepared preparedInput) uuid.UUID {
 		return input.ResumeID
 	case photoDeleteInput:
 		return input.ResumeID
+	case projectLinkPrepared:
+		return input.ResumeID
 	default:
 		return uuid.Nil
 	}

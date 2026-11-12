@@ -24,6 +24,7 @@ var productionErrorVocabulary = map[string]struct{}{
 	"media_type_unsupported": {}, "media_too_large": {}, "media_invalid": {},
 	"media_busy": {}, "media_not_found": {},
 	"publish_invalid": {}, "slug_taken": {}, "reauth_required": {}, "public_state_busy": {},
+	"project_not_found": {}, "project_already_linked": {}, "scope_denied": {},
 }
 
 var genericErrorVocabulary = map[string]struct{}{
@@ -153,6 +154,12 @@ func mapMutationError(err error) *clientError {
 	}
 	if errors.Is(err, resume.ErrNotFound) {
 		return &clientError{Status: http.StatusNotFound, Code: "resume_not_found", Message: "resume not found"}
+	}
+	if errors.Is(err, resume.ErrProjectNotFound) {
+		return &clientError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
+	}
+	if errors.Is(err, resume.ErrProjectAlreadyLinked) {
+		return &clientError{Status: http.StatusConflict, Code: "project_already_linked", Message: "the resume already links this project"}
 	}
 	if errors.Is(err, resume.ErrCapExceeded) {
 		return &clientError{Status: http.StatusConflict, Code: "resume_cap_exceeded", Message: "resume limit reached"}

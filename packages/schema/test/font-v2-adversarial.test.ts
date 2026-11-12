@@ -53,14 +53,14 @@ describe("document v2 font catalog release", () => {
 
   it("declares current, accepted, and emitted versions independently", () => {
     expect(released.versions.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5,
+      1, 2, 3, 4, 5, 6,
     ]);
-    expect(released.currentVersion).toBe(5);
-    expect(released.acceptedVersions).toEqual([1, 2, 3, 4, 5]);
-    expect(released.emittedVersions).toEqual([1, 2, 3, 4, 5]);
-    expect(CURRENT_VERSION).toBe(5);
-    expect(ACCEPTED_VERSIONS).toEqual([1, 2, 3, 4, 5]);
-    expect(EMITTED_VERSIONS).toEqual([1, 2, 3, 4, 5]);
+    expect(released.currentVersion).toBe(6);
+    expect(released.acceptedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(released.emittedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(CURRENT_VERSION).toBe(6);
+    expect(ACCEPTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(EMITTED_VERSIONS).toEqual([1, 2, 3, 4, 5, 6]);
     expect(Object.isFrozen(ACCEPTED_VERSIONS)).toBe(true);
     expect(Object.isFrozen(EMITTED_VERSIONS)).toBe(true);
   });

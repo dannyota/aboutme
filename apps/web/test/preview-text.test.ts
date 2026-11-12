@@ -140,7 +140,7 @@ function makeResume(params: {
   sidebar?: string[];
 }): Resume {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     personalDetails: params.personalDetails ?? {},
     content: params.content ?? {},
     customization: baseCustomization(params.main ?? [], params.sidebar ?? []),

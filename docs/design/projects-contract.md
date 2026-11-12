@@ -61,6 +61,10 @@ holds unchanged.
 | Deletion, for each linking draft resume    | Non-draining over that resume            |
 | Any edit of a project no live resume links | None; an ordinary row write              |
 
+Until project pages ship, a project edit or rename advances no resume, because
+no public response reads library data; the change that adds the first public
+reader adds the advancement with it.
+
 Link, unlink, hide, unpublish and sign in to view are existing resume writes and
 transitions.
 

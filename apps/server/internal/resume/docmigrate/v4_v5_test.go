@@ -130,26 +130,31 @@ func TestV4V5ConvertersRejectMalformedShapes(t *testing.T) {
 }
 
 func TestProductionEmitsV4WithDeclaredV5Loss(t *testing.T) {
-	doc := v5Document(t)
+	doc := v6Document(t)
 	emitted, err := NewIdentityProjector().EmitWire(mustJSON(t, doc), 4)
 	if err != nil {
 		t.Fatalf("emit v4: %v", err)
 	}
-	want := withoutV5Fields(t, doc)
+	want := withoutV5Fields(t, withoutV6Fields(t, doc))
 	want["schemaVersion"] = float64(4)
 	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, want)) {
 		t.Fatalf("emitted v4 = %s", normalizeJSONForFontTest(t, emitted))
 	}
 }
 
-func TestProductionEmitsCurrentKeepingColorScheme(t *testing.T) {
-	doc := v5Document(t)
+func TestProductionEmitsV5KeepingColorScheme(t *testing.T) {
+	doc := v6Document(t)
 	emitted, err := NewIdentityProjector().EmitWire(mustJSON(t, doc), 5)
 	if err != nil {
 		t.Fatalf("emit v5: %v", err)
 	}
-	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, doc)) {
+	want := withoutV6Fields(t, doc)
+	want["schemaVersion"] = float64(5)
+	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, want)) {
 		t.Fatalf("emitted v5 = %s", normalizeJSONForFontTest(t, emitted))
+	}
+	if fontTestObject(t, decodeFontTestMap(t, emitted), "customization")["colorScheme"] != "dark" {
+		t.Fatal("emitting v5 dropped the color scheme")
 	}
 }
 
@@ -159,35 +164,35 @@ func TestProductionAcceptsV4AsCurrentWithoutColorScheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept v4: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("accepted version = %d, want 5", version)
+	if version != 6 {
+		t.Fatalf("accepted version = %d, want 6", version)
 	}
 	want := decodeFontTestMap(t, v4)
-	want["schemaVersion"] = float64(5)
+	want["schemaVersion"] = float64(6)
 	if !bytes.Equal(normalizeJSONForFontTest(t, accepted), mustJSON(t, want)) {
 		t.Fatal("accepting v4 changed anything but schemaVersion")
 	}
 }
 
 func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV5Loss(t *testing.T) {
-	doc := v5Document(t)
+	doc := v6Document(t)
 	current := mustJSON(t, doc)
-	emittedMap := withoutV5Fields(t, doc)
+	emittedMap := withoutV5Fields(t, withoutV6Fields(t, doc))
 	emittedMap["schemaVersion"] = float64(4)
-	restored := mustJSON(t, withoutV5Fields(t, doc))
+	restored := mustJSON(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 
 	if err := productionEmissionLossPolicy(current, mustJSON(t, emittedMap), restored, 4); err != nil {
 		t.Fatalf("declared v5 loss rejected: %v", err)
 	}
 
 	// A v4 emission must keep the v4 fields; only colorScheme may go.
-	lostV4 := withoutV4Fields(t, withoutV5Fields(t, doc))
+	lostV4 := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	lostV4["schemaVersion"] = float64(4)
 	if err := productionEmissionLossPolicy(current, mustJSON(t, lostV4), restored, 4); err == nil {
 		t.Fatal("a v4 emission passed without its v4 fields")
 	}
 
-	changed := withoutV5Fields(t, doc)
+	changed := withoutV5Fields(t, withoutV6Fields(t, doc))
 	changed["schemaVersion"] = float64(4)
 	fontTestObject(t, fontTestObject(t, changed, "customization"), "header")["align"] = "center"
 	if err := productionEmissionLossPolicy(current, mustJSON(t, changed), restored, 4); err == nil {

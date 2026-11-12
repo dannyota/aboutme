@@ -33,11 +33,11 @@ const manifest: Manifest = JSON.parse(
 );
 
 describe("released-version manifest", () => {
-  it("declares versions 1 to 5 as released, and 5 as current", () => {
-    expect(manifest.versions.map((v) => v.version)).toEqual([1, 2, 3, 4, 5]);
-    expect(manifest.currentVersion).toBe(5);
-    expect(manifest.acceptedVersions).toEqual([1, 2, 3, 4, 5]);
-    expect(manifest.emittedVersions).toEqual([1, 2, 3, 4, 5]);
+  it("declares versions 1 to 6 as released, and 6 as current", () => {
+    expect(manifest.versions.map((v) => v.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(manifest.currentVersion).toBe(6);
+    expect(manifest.acceptedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(manifest.emittedVersions).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("declares an explicit schema path per released version, never a discovered one", () => {
@@ -73,10 +73,10 @@ describe("released-version manifest", () => {
 
 describe("released schema and generated output", () => {
   // A version bump adds a new snapshot and changes CURRENT_VERSION together.
-  it("keeps resume.v5.schema.json byte-identical to resume.schema.json while CURRENT_VERSION is 5", () => {
-    expect(CURRENT_VERSION).toBe(5);
+  it("keeps resume.v6.schema.json byte-identical to resume.schema.json while CURRENT_VERSION is 6", () => {
+    expect(CURRENT_VERSION).toBe(6);
     const current = readFileSync("resume.schema.json");
-    const released = readFileSync("resume.v5.schema.json");
+    const released = readFileSync("resume.v6.schema.json");
     expect(released.equals(current)).toBe(true);
   });
 
@@ -96,14 +96,14 @@ describe("released schema and generated output", () => {
 
   // Byte-identical inputs must produce identical bodies after the source
   // header. This also detects a hand edit to either generated file.
-  it("derives the current TS output from the v5 schema while CURRENT_VERSION is 5", () => {
+  it("derives the current TS output from the v6 schema while CURRENT_VERSION is 6", () => {
     const dropHeader = (path: string) =>
       readFileSync(path, "utf8").split("\n").slice(1).join("\n");
-    expect(dropHeader("gen/ts/v5/resume.ts")).toBe(
+    expect(dropHeader("gen/ts/v6/resume.ts")).toBe(
       dropHeader("gen/ts/resume.ts"),
     );
-    expect(readFileSync("gen/ts/v5/resume.ts", "utf8").split("\n")[0]).toBe(
-      "// Code generated from resume.v5.schema.json. DO NOT EDIT.",
+    expect(readFileSync("gen/ts/v6/resume.ts", "utf8").split("\n")[0]).toBe(
+      "// Code generated from resume.v6.schema.json. DO NOT EDIT.",
     );
   });
 
@@ -156,12 +156,17 @@ describe("released-schema registry (TypeScript)", () => {
     expect(v5.goPackage).toBe("gen/go/v5");
     expect(v5.tsTypes).toBe("gen/ts/v5/resume.ts");
     expect(isReleasedVersion(5)).toBe(true);
+    const v6 = releasedSchema(6);
+    expect(v6.schema).toBe("resume.v6.schema.json");
+    expect(v6.goPackage).toBe("gen/go/v6");
+    expect(v6.tsTypes).toBe("gen/ts/v6/resume.ts");
+    expect(isReleasedVersion(6)).toBe(true);
   });
 
   it("fails closed on an unreleased, malformed, or out-of-range version", () => {
     for (const version of [
       0,
-      6,
+      7,
       -1,
       1.5,
       Number.NaN,

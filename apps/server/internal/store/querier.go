@@ -105,6 +105,7 @@ type Querier interface {
 	// pre-cap count.
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountLivePrivacyNoticeJobs(ctx context.Context) (int64, error)
+	CountOwnedProjects(ctx context.Context, arg CountOwnedProjectsParams) (int64, error)
 	CountPrivacyNoticeRecovery(ctx context.Context, arg CountPrivacyNoticeRecoveryParams) (int64, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)

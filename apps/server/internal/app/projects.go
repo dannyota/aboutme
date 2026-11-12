@@ -17,7 +17,8 @@ type ProjectDependencies struct {
 	Pool *store.Pool
 	// Sessions authenticates owner requests.
 	Sessions *auth.SessionManager
-	// Resumes owns the read, write and slug claim budgets the library shares.
+	// Resumes owns the read, write and slug claim budgets the library shares,
+	// and the resume links a project deletion removes.
 	Resumes *resumeapi.Service
 }
 
@@ -27,6 +28,6 @@ func NewProjects(deps ProjectDependencies) *projectapi.Service {
 	return projectapi.New(deps.Pool, resume.NewIdempotencyStore(deps.Pool), projectapi.Options{
 		Sessions: deps.Sessions, PublicOrigin: deps.Config.PublicOrigin,
 		ReadLimit: deps.Resumes.ReadAdmission(), WriteLimit: deps.Resumes.WriteAdmission(),
-		AllowSlug: deps.Resumes.AllowSlugClaim,
+		AllowSlug: deps.Resumes.AllowSlugClaim, Links: deps.Resumes,
 	})
 }

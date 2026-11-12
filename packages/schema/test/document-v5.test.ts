@@ -11,18 +11,18 @@ const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
-const validate = ajv.compile(read("resume.schema.json"));
+const validate = ajv.compile(read("resume.v5.schema.json"));
 const validateV4 = ajv.compile(read("resume.v4.schema.json"));
 
 const withScheme = (colorScheme: unknown) => {
-  const document = read("fixtures/minimal.json");
+  const document = read("fixtures/v5/minimal.json");
   document.customization.colorScheme = colorScheme;
   return document;
 };
 
 describe("document v5 color scheme", () => {
   it("is version 5", () => {
-    expect(read("fixtures/minimal.json").schemaVersion).toBe(5);
+    expect(read("fixtures/v5/minimal.json").schemaVersion).toBe(5);
   });
 
   it("accepts light, dark, and system", () => {
@@ -35,7 +35,7 @@ describe("document v5 color scheme", () => {
   });
 
   it("leaves colorScheme optional", () => {
-    const document = read("fixtures/minimal.json");
+    const document = read("fixtures/v5/minimal.json");
     expect(document.customization.colorScheme).toBeUndefined();
     expect(validate(document), ajv.errorsText(validate.errors)).toBe(true);
   });

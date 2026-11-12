@@ -49,6 +49,9 @@ func (op personalDetailsMutation) Run(ctx context.Context, qtx *store.Queries, m
 	if err != nil {
 		return mutationRunResult{}, err
 	}
+	if err = requireLinkAuthority(mutation, &current.Doc, doc); err != nil {
+		return mutationRunResult{}, err
+	}
 	updated, err := op.service.resumes.SaveDocumentTx(
 		ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision,
 	)

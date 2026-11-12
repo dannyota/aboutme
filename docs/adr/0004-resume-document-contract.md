@@ -1,7 +1,7 @@
 # 0004: Resume document validation, code generation, order, and versions
 
 Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19, 2026-09-27,
-2026-10-13).
+2026-10-13, 2026-11-11).
 
 ## Context
 
@@ -91,12 +91,13 @@ shape for input and output while storage stays current. A new schema version
 updates the manifest, schemas, converters, generated types, tests, OpenAPI
 examples, and consumers in one reviewed change.
 
-The server accepts and emits v1 to v5; v5 is current. v5 adds the optional
-`customization.colorScheme`, an enum of `light`, `dark`, and `system`; absent
-means `light`, and ADR 0020 owns what it renders. Up-conversion from v4 adds
-nothing: a v4 document is a v5 document without the leaf. Down-emission is
-lossless except for these declared losses, and each emission also takes the
-losses of every newer row:
+The server accepts and emits v1 to v6; v6 is current. v6 adds an optional
+`projectId` on project entries that names a library project of the same account;
+ADR 0029 owns what it links. v5 added the optional `customization.colorScheme`,
+an enum of `light`, `dark`, and `system`; absent means `light`, and ADR 0020
+owns what it renders. Up-conversion from v5 adds nothing: a v5 document is a v6
+document without links. Down-emission is lossless except for these declared
+losses, and each emission also takes the losses of every newer row:
 
 | Emitted | Loss                                                                                 |
 | ------- | ------------------------------------------------------------------------------------ |
@@ -104,6 +105,7 @@ losses of every newer row:
 | v2      | Detail `display` and `customization.font.textAlign` are dropped                      |
 | v3      | `customization.header.photoPosition` and every project `subtitle` are dropped        |
 | v4      | `customization.colorScheme` is dropped                                               |
+| v5      | Every project entry `projectId` is dropped                                           |
 
 An older client write never erases a field it cannot express:
 
@@ -118,6 +120,8 @@ An older client write never erases a field it cannot express:
   an added entry gets none.
 - A v1 to v4 write keeps the stored `colorScheme` unconditionally, because
   `customization` exists in every version.
+- A v1 to v5 write keeps the stored `projectId` of each project entry that
+  survives, matched by entry id; an added entry gets none.
 
 ## Alternatives rejected
 
@@ -150,8 +154,8 @@ An older client write never erases a field it cannot express:
   which fails closed on that version. Fix forward; the
   [production runbook](../runbooks/production.md#rollback) records this.
 - The [data design](../design/data.md#document-versions) states the version
-  rules; ADR 0013 owns the v3 and v4 fields' rendering, and ADR 0020 owns the v5
-  field's.
+  rules; ADR 0013 owns the v3 and v4 fields' rendering, ADR 0020 owns the v5
+  field's, and ADR 0029 owns the v6 field's.
 
 ## History
 
@@ -170,3 +174,5 @@ An older client write never erases a field it cannot express:
   older-client support changes before application v1; establish root
   `.v1-baseline` in its first release candidate. Document schema numbering
   remains independent.
+- Accepted (2026-11-11, with ADR 0029): document v6 with the optional project
+  entry `projectId`, its v5 loss, and its older-client write rule.
