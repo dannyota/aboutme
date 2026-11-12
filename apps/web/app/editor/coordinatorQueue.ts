@@ -20,7 +20,7 @@ import {
   stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
-import { adoptRead, reconcileHeld } from './coordinatorReconcile';
+import { reconcileHeld } from './coordinatorReconcile';
 import {
   heldNext,
   rebaseHeld,
@@ -346,35 +346,49 @@ export function retry(
   return flush(ctx, resumeId);
 }
 
+/** Checks the session again, then goes on as `wake` does after recovery. */
 export async function resumeAfterAuth(
   ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
   await ctx.deps.auth.refresh();
   if (!current(ctx, resumeId)) return;
+  await wake(ctx, resumeId, true);
+}
+
+/**
+ * Goes on with the queue once the session is known to be its owner's: every
+ * drain that stopped for authentication runs again. After the session was in
+ * doubt or lost (`recovered`), the queue first reads the resume in full,
+ * through the read barrier, so the read is retried on the schedule and the
+ * queue goes on when it completes; a held write is then sent at once. Work
+ * owned by someone else than the signed-in person is left alone.
+ */
+export function wake(
+  ctx: OperationContext,
+  resumeId: string,
+  recovered: boolean,
+): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
   const ownerId = ctx.deps.auth.user.value?.id;
   const retainedOwner
     = record?.attempt?.queueItem.ownerId ?? record?.pending[0]?.ownerId;
   if (
-    record === undefined
+    !current(ctx, resumeId)
+    || record === undefined
     || ownerId === undefined
     || ctx.deps.auth.authState.value !== 'authenticated'
     || (retainedOwner !== undefined && retainedOwner !== ownerId)
   ) {
-    return;
+    return Promise.resolve();
   }
-  const result = await ctx.deps.api.read(resumeId);
-  if (!current(ctx, resumeId) || result.kind !== 'complete') return;
-  adoptRead(ctx, resumeId, result.accepted);
-  ctx.deps.store.clearSessionLost(resumeId);
-  const held = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (held !== null && held !== undefined) {
-    requestRetry(ctx, resumeId, toRaw(held));
-    await flush(ctx, resumeId);
-  } else {
-    schedule(ctx, resumeId);
+  if (recovered) {
+    ctx.deps.store.clearSessionLost(resumeId);
+    ctx.deps.store.requireCompleteRead(resumeId);
+    const held = record.attempt;
+    if (held !== null) requestRetry(ctx, resumeId, toRaw(held));
   }
+  return flush(ctx, resumeId);
 }
 
 /**

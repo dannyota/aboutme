@@ -31,7 +31,12 @@ interface ResumeStoreState {
 }
 
 interface ResumeStoreActions {
-  initialize(accepted: AcceptedResume): void;
+  /**
+   * Starts a record from a complete read, unless the one held for the
+   * resume has unsent or in-flight work, which nothing replaces. Returns
+   * whether it started the record.
+   */
+  initialize(accepted: AcceptedResume): boolean;
   enqueue(resumeId: string, item: EditorQueueItem): void;
   startAttempt(
     resumeId: string,
@@ -115,8 +120,13 @@ const resumeStore = defineStore('resumes', {
 
   actions: {
     initialize(accepted: AcceptedResume) {
+      const held = recordIn(this, accepted.metadata.id);
+      const working = held !== undefined
+        && (held.pending.length > 0 || held.attempt !== null);
+      if (working) return false;
       const record = createRecord(accepted);
       this.records.set(record.accepted.metadata.id, record);
+      return true;
     },
 
     enqueue(resumeId: string, item: EditorQueueItem) {

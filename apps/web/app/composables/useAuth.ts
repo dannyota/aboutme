@@ -62,6 +62,8 @@ export interface UseAuthReturn {
   csrfToken: ComputedRef<string | null>;
   identities: ComputedRef<AuthIdentity[]>;
   authState: ComputedRef<AuthState>;
+  /** The wait the last failed `/me` asked for in `Retry-After`, if any. */
+  retryAfterMs: ComputedRef<number | null>;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
   mutate: <T = void>(url: string, options: MutateOptions) => Promise<T>;
@@ -102,6 +104,15 @@ function isRecoveredMeEnvelope(
   return (recovered.user as { id?: unknown }).id === userId
     && typeof recovered.csrfToken === 'string'
     && recovered.csrfToken !== '';
+}
+
+/** A failed response's `Retry-After`, in whole seconds as the API sends it. */
+function retryAfterMsOf(error: unknown): number | null {
+  const value = (error as { response?: { headers?: Headers } } | null)
+    ?.response?.headers?.get?.('Retry-After') ?? null;
+  if (value === null || !/^[0-9]+$/.test(value)) return null;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) ? seconds * 1_000 : null;
 }
 
 /** The browser's current interface language choice, if it holds one. */
@@ -168,6 +179,7 @@ export function useAuth(): UseAuthReturn {
     if (data.value === null || data.value === undefined) return 'anonymous';
     return data.value?.data?.user === undefined ? 'error' : 'authenticated';
   });
+  const retryAfterMs = computed(() => retryAfterMsOf(error.value));
 
   let refreshing: Promise<void> | null = null;
 
@@ -236,5 +248,14 @@ export function useAuth(): UseAuthReturn {
     await navigateTo('/login');
   }
 
-  return { user, csrfToken, identities, authState, refresh, logout, mutate };
+  return {
+    user,
+    csrfToken,
+    identities,
+    authState,
+    retryAfterMs,
+    refresh,
+    logout,
+    mutate,
+  };
 }

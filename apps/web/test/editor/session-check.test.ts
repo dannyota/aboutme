@@ -38,18 +38,53 @@ describe('the session check', () => {
       expect(sessionCheck.failing.value).toBe(true);
     });
 
-  it('runs at once on Try again and keeps the schedule after it',
-    async () => {
-      const { authState, checkedAt, check } = failingCheck();
-      const sessionCheck = createSessionCheck({ check, authState });
-      sessionCheck.start();
-      await vi.advanceTimersByTimeAsync(500);
+  it('runs at once on Try again a second after a failed check, and keeps '
+    + 'the schedule after it', async () => {
+    const { authState, checkedAt, check } = failingCheck();
+    const sessionCheck = createSessionCheck({ check, authState });
+    sessionCheck.start();
+    await vi.advanceTimersByTimeAsync(2_500);
 
+    await sessionCheck.retry();
+    await vi.advanceTimersByTimeAsync(4_500);
+
+    expect(checkedAt).toEqual([1_000, 2_500, 6_500]);
+  });
+
+  it('sends no check sooner than a second after a failed one, however often '
+    + 'Try again is clicked', async () => {
+    const { authState, checkedAt, check } = failingCheck();
+    const sessionCheck = createSessionCheck({ check, authState });
+    sessionCheck.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    for (const at of [1_100, 1_200, 1_300, 1_400]) {
+      vi.setSystemTime(at);
       await sessionCheck.retry();
-      await vi.advanceTimersByTimeAsync(2_000);
+    }
+    await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(checkedAt).toEqual([500, 2_500]);
+    expect(checkedAt).toEqual([1_000, 2_000]);
+    expect(sessionCheck.busy.value).toBe(false);
+  });
+
+  it('waits for the server\'s Retry-After, Try again included', async () => {
+    const { authState, checkedAt, check } = failingCheck();
+    const sessionCheck = createSessionCheck({
+      check,
+      authState,
+      retryAfterMs: () => 5_000,
     });
+    sessionCheck.start();
+    await vi.advanceTimersByTimeAsync(500);
+
+    await sessionCheck.retry();
+    await vi.advanceTimersByTimeAsync(5_500);
+    await sessionCheck.retry();
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    expect(checkedAt).toEqual([5_000, 10_000]);
+  });
 
   it('runs no more once the check succeeds or is stopped', async () => {
     const { authState, checkedAt, check } = failingCheck();

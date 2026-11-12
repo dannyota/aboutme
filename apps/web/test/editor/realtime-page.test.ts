@@ -60,6 +60,7 @@ describe('resume editor realtime session expiry', () => {
     mocks.auth = {
       authState: ref('authenticated'),
       user: computed(() => ({ id: 'owner-1' })),
+      retryAfterMs: computed(() => null),
     };
     mocks.api = {
       read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
@@ -67,6 +68,7 @@ describe('resume editor realtime session expiry', () => {
     mocks.actions = {
       record: computed(() => record),
       stop: mocks.stopEditor,
+      wake: vi.fn(async () => {}),
       refresh: vi.fn(async () => {
         record.sessionLost = true;
         return { kind: 'session-lost' };

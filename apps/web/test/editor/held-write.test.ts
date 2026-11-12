@@ -154,7 +154,7 @@ describe('the retry of a write whose outcome is unknown', () => {
       expect(context.store.saveStateFor(context.id)).toBe('saved');
     });
 
-  it('stops when the editor closes', async () => {
+  it('stops, and drops the held write, when the editor closes', async () => {
     const context = editor();
     context.server.loseEveryResponse({ applied: false });
     const mine = context.edit(headline('Staff engineer'));
@@ -165,22 +165,38 @@ describe('the retry of a write whose outcome is unknown', () => {
     await vi.advanceTimersByTimeAsync(120_000);
 
     expect(context.server.sentFor(mine)).toHaveLength(sends);
-    expect(context.record().attempt).not.toHaveProperty('alert');
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
   });
 
-  it('stops when the resume is opened again', async () => {
+  it('is not replaced by another read while it is held', async () => {
     const context = editor();
     context.server.loseEveryResponse({ applied: false });
     const mine = context.edit(headline('Staff engineer'));
     await vi.advanceTimersByTimeAsync(5_000);
-    const sends = context.server.sentFor(mine).length;
 
-    context.store.initialize(context.server.stored);
-    await vi.advanceTimersByTimeAsync(120_000);
+    expect(context.store.initialize(context.server.stored)).toBe(false);
+    expect(context.record().attempt).toMatchObject({ kind: 'unknown' });
+    context.server.loseEveryResponse(undefined);
+    await vi.advanceTimersByTimeAsync(30_000);
 
-    expect(context.server.sentFor(mine)).toHaveLength(sends);
-    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+    expect(context.server.sentFor(mine).at(-1)).toBe('complete');
   });
+
+  it('stops when the resume is opened again after the editor closed',
+    async () => {
+      const context = editor();
+      context.server.loseEveryResponse({ applied: false });
+      const mine = context.edit(headline('Staff engineer'));
+      await vi.advanceTimersByTimeAsync(5_000);
+      const sends = context.server.sentFor(mine).length;
+
+      context.actions.stop();
+      expect(context.store.initialize(context.server.stored)).toBe(true);
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      expect(context.server.sentFor(mine)).toHaveLength(sends);
+      expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+    });
 
   it('hands over to a read and reconcile at the retry cutoff', async () => {
     const context = editor();

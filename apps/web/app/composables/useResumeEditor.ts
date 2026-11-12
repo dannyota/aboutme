@@ -80,12 +80,17 @@ export interface ResumeEditorActions {
     confirmation: ConflictConfirmation,
   ): Promise<void>;
   resumeAfterAuth(): Promise<void>;
+  /** Goes on with the queue once the session is the owner's again. */
+  wake(recovered: boolean): Promise<void>;
   refresh(): Promise<ResumeReadResult>;
   refreshConditional?: (
     etag?: ParentETag,
   ) => Promise<ResumeConditionalReadResult>;
   discard(): void;
-  /** Ends background reads and writes when the editor closes. */
+  /**
+   * Ends background reads and writes when the editor closes, and drops the
+   * work it has not saved: the resume opens afresh next time.
+   */
   stop(): void;
   readonly downloadPdf: PdfDownloadController;
   readonly publish: PublishController;
@@ -98,6 +103,13 @@ export interface ResumeEditorActionDeps {
   auth: ReturnType<typeof useAuth>;
   runtime: EditorRuntime;
   providerLogin?: ComputedRef<boolean>;
+  /**
+   * The verified owner of the editor's work, captured when it opened. Left
+   * out, the first signed-in user the actions see is kept.
+   */
+  ownerId?: string;
+  /** Checks the session again for Resume after sign-in, if the page does. */
+  recheckSession?: () => Promise<void>;
 }
 
 export function createResumeEditorActions(
@@ -125,9 +137,15 @@ export function createResumeEditorActions(
     kind: 'blocked',
     reason,
   });
+  // Local edits are captured for the editor's own owner for its whole life,
+  // so typing while the session cannot be checked is queued, not refused.
+  // Sending still waits for that owner to be the one signed in.
+  let retainedOwner = deps.ownerId;
+  const owner = (): string | undefined =>
+    (retainedOwner ??= deps.auth.user.value?.id);
   const editable = () => {
     const state = record.value;
-    const ownerId = deps.auth.user.value?.id;
+    const ownerId = owner();
     if (state === undefined || ownerId === undefined) return null;
     if (state.sessionLost) return null;
     const pendingOwner
@@ -137,7 +155,7 @@ export function createResumeEditorActions(
   };
   const edit = (intent: AtomicCommandIntent): EditorActionResult => {
     const state = record.value;
-    const ownerId = deps.auth.user.value?.id;
+    const ownerId = owner();
     if (state === undefined || ownerId === undefined) {
       return blocked('not-loaded');
     }
@@ -168,7 +186,7 @@ export function createResumeEditorActions(
     const current = editable();
     if (current === null) {
       const state = record.value;
-      if (state === undefined || deps.auth.user.value === null) {
+      if (state === undefined || owner() === undefined) {
         return blocked('not-loaded');
       }
       return state.sessionLost
@@ -233,7 +251,7 @@ export function createResumeEditorActions(
     const result = captureTemplateUndo({
       undo: state.templateState.undo,
       current: toRaw(state.accepted),
-      ownerId: deps.auth.user.value?.id ?? '',
+      ownerId: owner() ?? '',
       sequence: nextSequence(state),
       dependencyIds: dependencyIdsForNewCommand(state),
       runtime: deps.runtime,
@@ -258,7 +276,9 @@ export function createResumeEditorActions(
       deps.coordinator.acceptLatest(deps.resumeId, conflictId),
     applyMine: (conflictId, confirmation) =>
       deps.coordinator.applyMine(deps.resumeId, conflictId, confirmation),
-    resumeAfterAuth: () => deps.coordinator.resumeAfterAuth(deps.resumeId),
+    resumeAfterAuth: deps.recheckSession
+      ?? (() => deps.coordinator.resumeAfterAuth(deps.resumeId)),
+    wake: (recovered) => deps.coordinator.wake(deps.resumeId, recovered),
     refresh: () => deps.coordinator.refreshAndReconcile(deps.resumeId),
     refreshConditional:
       deps.coordinator.refreshConditionalAndReconcile === undefined
@@ -269,7 +289,10 @@ export function createResumeEditorActions(
               etag,
             ),
     discard: () => deps.coordinator.discard(deps.resumeId),
-    stop: () => deps.coordinator.stop(deps.resumeId),
+    stop: () => {
+      deps.coordinator.stop(deps.resumeId);
+      deps.coordinator.discard(deps.resumeId);
+    },
     downloadPdf,
     publish,
   };
@@ -287,6 +310,7 @@ function activeTemplateGroup(
 export function useResumeEditor(
   resumeId: string,
   runtime: EditorRuntime = browserEditorRuntime,
+  session: Pick<ResumeEditorActionDeps, 'ownerId' | 'recheckSession'> = {},
 ): ResumeEditorActions {
   const store = useResumeStore();
   const auth = useAuth();
@@ -304,5 +328,6 @@ export function useResumeEditor(
     auth,
     runtime,
     providerLogin,
+    ...session,
   });
 }

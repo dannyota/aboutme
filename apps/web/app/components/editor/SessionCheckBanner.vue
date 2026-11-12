@@ -30,6 +30,7 @@ function retry(): void {
     <p>{{ copy.sessionCheckDescription }}</p>
     <Button
       data-action="retry-session-check"
+      :disabled="sessionCheck.busy.value"
       size="sm"
       type="button"
       @click="retry"

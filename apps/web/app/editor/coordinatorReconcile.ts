@@ -96,15 +96,18 @@ function adoptAndReconcile(
   resumeId: string,
   accepted: AcceptedResume,
 ): AcceptedResume | undefined {
-  if (ctx.deps.store.recordFor(resumeId) === undefined) return undefined;
+  const before = ctx.deps.store.recordFor(resumeId);
+  if (before === undefined) return undefined;
+  const barrier = before.completeReadRequired;
   const adoption = adoptRead(ctx, resumeId, accepted);
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  // A held write the read shows landed no longer blocks the queue.
-  if (reconcileHeld(ctx, resumeId, latest) && active?.kind !== 'dispatching') {
-    void flush(ctx, resumeId);
-  }
+  // A held write the read shows landed, or a read barrier the read
+  // completed, no longer holds the queue back.
+  const released = reconcileHeld(ctx, resumeId, latest)
+    || (barrier && !ctx.deps.store.recordFor(resumeId)?.completeReadRequired);
+  if (released && active?.kind !== 'dispatching') void flush(ctx, resumeId);
   return latest;
 }
 

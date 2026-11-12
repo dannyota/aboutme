@@ -58,6 +58,8 @@ export interface ResumeMutationCoordinator {
     confirmation: ConflictConfirmation,
   ): Promise<void>;
   resumeAfterAuth(resumeId: string): Promise<void>;
+  /** Goes on with the queue once the session is the owner's again. */
+  wake(resumeId: string, recovered: boolean): Promise<void>;
   /** Ends all work on a resume whose editor closed. */
   stop(resumeId: string): void;
   resolveOpaquePhoto(

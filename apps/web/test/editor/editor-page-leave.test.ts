@@ -44,8 +44,8 @@ vi.mock('../../app/composables/useResumeEditor', async (importOriginal) => {
   >();
   return {
     ...real,
-    useResumeEditor: (id: string) => {
-      const actions = real.useResumeEditor(id);
+    useResumeEditor: (...args: Parameters<typeof real.useResumeEditor>) => {
+      const actions = real.useResumeEditor(...args);
       mocks.editors.push(actions);
       return actions;
     },
@@ -94,6 +94,7 @@ function start(): FakeResumeServer {
     csrfToken: computed(() => 'csrf-1'),
     identities: computed(() => []),
     refresh: vi.fn(async () => {}),
+    retryAfterMs: computed(() => null),
     mutate: vi.fn(),
   };
   return server;
