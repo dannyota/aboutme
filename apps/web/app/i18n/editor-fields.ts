@@ -129,7 +129,6 @@ export type EditorFieldsCopy = {
     | 'notAdded'
     | 'refresh'
     | 'refreshQuestion'
-    | 'refreshChanged'
     | 'replace'
     | 'openProject'
     | 'sharedPublic'
@@ -236,8 +235,6 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       notAdded: 'Chưa thêm được dự án. Hãy thử lại.',
       refresh: 'Làm mới từ thư viện',
       refreshQuestion: 'Thay nội dung mục bằng nội dung hiện tại của dự án?',
-      refreshChanged: 'Mục đã thay đổi ở nơi khác. '
-        + 'Hãy làm mới lại nếu bạn vẫn muốn.',
       replace: 'Thay nội dung',
       openProject: 'Mở dự án',
       sharedPublic: 'Dự án này đã hiển thị trên một CV công khai khác.',
@@ -404,8 +401,6 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       refresh: 'Refresh from library',
       refreshQuestion:
         'Replace this entry\'s text with the project\'s current text?',
-      refreshChanged: 'This entry changed elsewhere. '
-        + 'Refresh again if you still want to.',
       replace: 'Replace text',
       openProject: 'Open project',
       sharedPublic: 'This project is already shown on another public resume.',

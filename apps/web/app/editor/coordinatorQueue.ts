@@ -4,14 +4,12 @@ import { reconcileCommand, reconcileTemplateGroup } from './reconcile';
 import { freezeAttempt } from './resumeApi';
 import { nextTemplateChild, type EditorQueueItem } from './templateGroup';
 import {
-  allowProjectLink,
   canDrain,
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
 } from './coordinatorGuards';
 import { resolveUnknown, settle } from './coordinatorSettle';
-import { completeReadBarrier } from './coordinatorReconcile';
 import type { CoordinatorContext } from './coordinatorTypes';
 
 export function schedule(ctx: CoordinatorContext, resumeId: string): void {
@@ -106,13 +104,6 @@ async function drainResume(
     }
     if (decision.kind === 'conflict') {
       ctx.deps.store.markConflict(resumeId, decision.conflict);
-      if (queueItem.kind === 'projectRefresh') {
-        ctx.deps.store.dropHead(resumeId, queueItem.id);
-        if (record.completeReadRequired) {
-          await completeReadBarrier(ctx, resumeId);
-        }
-        continue;
-      }
       return;
     }
     if (!(await dispatchCommand(ctx, resumeId, queueItem, queueItem))) return;
@@ -138,11 +129,6 @@ async function dispatchCommand(
   if (record === undefined || csrfToken === null) return false;
   const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
   ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  if (command.kind === 'projectLink') {
-    if (!(await allowProjectLink(ctx, resumeId, command))) return false;
-    csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-    if (csrfToken === null) return false;
-  }
   await settle(
     ctx,
     resumeId,
@@ -181,8 +167,6 @@ export async function retry(
     );
     return;
   }
-  if (command.kind === 'projectLink'
-    && !(await allowProjectLink(ctx, resumeId, command))) return;
   const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   if (csrfToken === null) return;
   await settle(

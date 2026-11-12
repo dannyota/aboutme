@@ -1,4 +1,3 @@
-import type { ProjectsApi } from '../composables/projectsApi';
 import type { useAuth } from '../composables/useAuth';
 import type { useResumeStore } from '../stores/resumes';
 import type { CreateResumeIntent } from './commands';
@@ -79,7 +78,6 @@ export interface RetainedCreate {
  * auth state, and the runtime clock/uuid/delay hooks. */
 export interface CoordinatorDeps {
   api: ResumeApi;
-  projects?: Pick<ProjectsApi, 'read'>;
   store: ReturnType<typeof useResumeStore>;
   auth: ReturnType<typeof useAuth>;
   runtime: EditorRuntime;

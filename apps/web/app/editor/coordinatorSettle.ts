@@ -1,6 +1,4 @@
-import {
-  projectCommand, replayCommand, type AtomicEditorCommand,
-} from './commands';
+import type { AtomicEditorCommand } from './commands';
 import type {
   AttemptFailureCode,
   AttemptResult,
@@ -10,9 +8,8 @@ import { createSupersededConflict, reconcileCommand } from './reconcile';
 import { compareRevision } from './revision';
 import { freezeAttempt } from './resumeApi';
 import { reconcileTemplateChild, type EditorQueueItem } from './templateGroup';
-import type { AcceptedResume, ResumeSnapshot } from './types';
+import type { AcceptedResume } from './types';
 import {
-  allowProjectLink,
   assertNever,
   dispatchToken,
   holdFailed,
@@ -40,12 +37,6 @@ export async function settle(
         settleTemplateComplete(ctx, resumeId, queueItem, result.accepted);
       } else {
         settleAtomicComplete(ctx, resumeId, command, result.accepted);
-        if (
-          (command.kind === 'projectLink' || command.kind === 'projectRefresh')
-          && ctx.deps.store.recordFor(resumeId)?.completeReadRequired
-        ) {
-          await completeReadBarrier(ctx, resumeId);
-        }
       }
       return;
     case 'child-ack':
@@ -174,9 +165,7 @@ async function dropRefusedProjectCommand(
     return false;
   }
   ctx.deps.store.dropHead(resumeId, queueItem.id);
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (record !== undefined) record.completeReadRequired = true;
-  await completeReadBarrier(ctx, resumeId);
+  await refreshAndReconcile(ctx, resumeId);
   return true;
 }
 
@@ -188,16 +177,10 @@ function settleAtomicComplete(
 ): void {
   const adoption = ctx.deps.store.adoptComplete(resumeId, accepted);
   if (adoption.kind === 'adopted') {
-    if (command.kind === 'projectRefresh') {
-      rebaseRefreshEdits(ctx, resumeId, command, adoption.accepted);
-    }
     ctx.deps.store.dropHead(resumeId, command.id);
     return;
   }
   if (compareRevision(accepted.revision, adoption.winner.revision) === 0) {
-    if (command.kind === 'projectRefresh') {
-      rebaseRefreshEdits(ctx, resumeId, command, adoption.winner);
-    }
     ctx.deps.store.resolveConflict(resumeId, command.id);
     ctx.deps.store.dropHead(resumeId, command.id);
     return;
@@ -212,43 +195,6 @@ function settleAtomicComplete(
     createSupersededConflict(command, accepted, adoption.winner),
   );
   ctx.deps.store.dropHead(resumeId, command.id);
-}
-
-/** Typing after a confirmed refresh applies to the refreshed entry. */
-function rebaseRefreshEdits(
-  ctx: CoordinatorContext,
-  resumeId: string,
-  refresh: Extract<AtomicEditorCommand, { kind: 'projectRefresh' }>,
-  accepted: AcceptedResume,
-): void {
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined) return;
-  let snapshot: ResumeSnapshot = accepted;
-  let canRebase = true;
-  record.pending = record.pending.map((item) => {
-    if (item.kind === 'templateGroup') {
-      canRebase = false;
-      return item;
-    }
-    if (item.kind === 'structure'
-      || (('entryId' in item && item.entryId === refresh.entryId)
-        && (item.kind === 'projectRefresh' || item.kind === 'entryDelete'))
-      || (item.kind === 'entryUpsert' && item.entry.id === refresh.entryId)) {
-      canRebase = false;
-    }
-    const next = replayCommand(snapshot, item);
-    const rebased = canRebase && item.kind === 'entryField'
-      && item.entryId === refresh.entryId
-      && item.sectionKey === refresh.sectionKey
-      && item.dependencyIds.includes(refresh.id)
-      ? {
-          ...item, base: projectCommand(snapshot, item),
-          intended: projectCommand(next, item),
-        }
-      : item;
-    snapshot = next;
-    return rebased;
-  });
 }
 
 function markTemplateChildFailed(
@@ -376,8 +322,7 @@ async function settleStale(
   },
 ): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined
-    || (attempt.staleRebases === 1 && command.kind !== 'projectRefresh')) {
+  if (record === undefined || attempt.staleRebases === 1) {
     holdFailed(
       ctx.deps.store,
       resumeId,
@@ -443,23 +388,10 @@ async function settleStale(
       return;
     }
     ctx.deps.store.dropHead(resumeId, queueItem.id);
-    if (command.kind === 'projectLink' || command.kind === 'projectRefresh') {
-      await completeReadBarrier(ctx, resumeId);
-    }
     return;
   }
   if (decision.kind === 'conflict') {
     ctx.deps.store.markConflict(resumeId, decision.conflict);
-    if (command.kind === 'projectRefresh') {
-      ctx.deps.store.dropHead(resumeId, queueItem.id);
-      await completeReadBarrier(ctx, resumeId);
-    }
-    return;
-  }
-  if (attempt.staleRebases === 1) {
-    holdFailed(
-      ctx.deps.store, resumeId, queueItem, command, attempt, 'second-stale',
-    );
     return;
   }
   const rebased = {
@@ -473,8 +405,6 @@ async function settleStale(
     attempt: rebased,
     reason: 'server',
   });
-  if (command.kind === 'projectLink'
-    && !(await allowProjectLink(ctx, resumeId, command))) return;
   const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   if (csrfToken === null) return;
   await settle(

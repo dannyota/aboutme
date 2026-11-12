@@ -55,16 +55,6 @@ export function projectPageLanguage(
   return { key: project.defaultLanguage, fallback: determined };
 }
 
-/** Unreadable privacy inputs require consent. */
-export function projectPrivacyRequired(
-  targetId: string,
-  linkedResumeIds: readonly string[] | null,
-  resumes: readonly PublishedState[] | null,
-): boolean {
-  return linkedResumeIds === null || resumes === null
-    || revealsAcrossResumes(targetId, linkedResumeIds, resumes);
-}
-
 export interface PublishedState {
   readonly id: string;
   readonly live: boolean;

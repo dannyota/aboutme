@@ -30,6 +30,7 @@ import {
   linkedEntry,
   linkedProjectIds,
   projectPageLanguage,
+  revealsAcrossResumes,
   type EntryLocation,
 } from '../../../editor/projectLinks';
 import { projectName } from '../../projects/projectDocument';
@@ -121,13 +122,23 @@ watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
   if (project) void library.load();
 }, { immediate: true });
 
-/** Fresh publication and link state decide whether linking needs consent. */
+/**
+ * Asks first when this published resume would be the second published one
+ * to show the project (docs/design/projects.md "Privacy"). The account's
+ * other resumes are read only then.
+ */
 async function choose(projectId: string): Promise<void> {
   const record = props.actions.record.value;
-  if (record === undefined) return;
-  if (await library.privacyRequired(projectId, record.accepted.metadata.id)) {
-    asking.value = projectId;
-    return;
+  const others = (library.find(projectId)?.linkedResumeIds ?? [])
+    .filter((id) => id !== record?.accepted.metadata.id);
+  if (record?.accepted.metadata.live === true && others.length > 0) {
+    const published = await library.published();
+    if (revealsAcrossResumes(
+      record.accepted.metadata.id, others, published, true,
+    )) {
+      asking.value = projectId;
+      return;
+    }
   }
   link(projectId);
 }
@@ -135,15 +146,12 @@ async function choose(projectId: string): Promise<void> {
 function addAnyway(): void {
   const projectId = asking.value;
   asking.value = null;
-  if (projectId !== null) link(projectId, true);
+  if (projectId !== null) link(projectId);
 }
 
-function link(projectId: string, privacyConfirmed = false): void {
+function link(projectId: string): void {
   linkFailed.value = false;
-  const result = props.actions.edit({
-    kind: 'projectLink', projectId,
-    ...(privacyConfirmed ? { privacyConfirmed: true } : {}),
-  });
+  const result = props.actions.edit({ kind: 'projectLink', projectId });
   if (result.kind === 'enqueued') {
     linking.value = { commandId: result.command.id, projectId };
   }
@@ -170,15 +178,7 @@ watch(linkOutcome, (outcome) => {
   else emit('selectEntry', outcome);
 });
 
-async function refresh(entryId: string): Promise<void> {
-  const conflicts = props.actions.record.value?.conflicts ?? [];
-  for (const conflict of conflicts) {
-    if (conflict.subject === 'atomic'
-      && conflict.command.kind === 'projectRefresh'
-      && conflict.command.entryId === entryId) {
-      await props.actions.acceptLatest(conflict.id);
-    }
-  }
+function refresh(entryId: string): void {
   props.actions.edit({
     kind: 'projectRefresh',
     sectionKey: props.sectionKey,

@@ -8,10 +8,7 @@ import {
   type LinkResult,
 } from '../../app/components/projects/projectLinks';
 import type { ResumeListResult } from '../../app/editor/resumeApi';
-import {
-  fakeApi, fakeAuth, ok as projectOk, project,
-  resumeSummary as summary, sequence,
-} from './fixtures';
+import { fakeAuth, resumeSummary as summary, sequence } from './fixtures';
 
 const BASE = 'http://localhost/api/v1';
 const PROJECT = '0190f000-0000-7000-8000-0000000000c1';
@@ -64,12 +61,10 @@ function linkerSetup() {
   const { auth, user, csrfToken } = fakeAuth();
   const links = { link: vi.fn() };
   const resumes = { list: vi.fn() };
-  const projects = fakeApi();
-  projects.read.mockResolvedValue(projectOk(project()));
   const linker = createProjectLinker({
-    links, resumes, projects, auth, uuid: sequence(),
+    links, resumes, auth, uuid: sequence(),
   });
-  return { auth, user, csrfToken, links, resumes, projects, linker };
+  return { auth, user, csrfToken, links, resumes, linker };
 }
 
 describe('project link client', () => {
@@ -152,60 +147,6 @@ describe('project linker', () => {
         .toEqual([['7', 'k1'], ['8', 'k2']]);
     });
 
-  it('checks fresh publication and project links again after a mismatch',
-    async () => {
-      const { links, resumes, projects, linker } = linkerSetup();
-      const publicResume = (id: string, revision: string, live: boolean) =>
-        summary(id, revision, id, { live });
-      resumes.list.mockResolvedValueOnce(ready(
-        publicResume('resume-1', '7', false),
-        publicResume('resume-2', '1', true),
-      )).mockResolvedValueOnce(ready(
-        publicResume('resume-1', '8', true),
-        publicResume('resume-2', '1', true),
-      ));
-      projects.read.mockResolvedValue(projectOk(project({
-        linkedResumeIds: ['resume-2'],
-      })));
-      links.link.mockResolvedValue(failed('stale'));
-
-      expect(await linker.link('owner-1', 'resume-1', PROJECT))
-        .toEqual(failed('privacy-required'));
-      expect(links.link).toHaveBeenCalledOnce();
-      expect(projects.read).toHaveBeenCalledTimes(2);
-    });
-
-  it('asks when a different resume linked elsewhere before the retry',
-    async () => {
-      const { links, resumes, projects, linker } = linkerSetup();
-      resumes.list.mockResolvedValue(ready(
-        summary('resume-1', '7', 'One', { live: true }),
-        summary('resume-2', '1', 'Two', { live: true }),
-      ));
-      projects.read.mockResolvedValueOnce(projectOk(project()))
-        .mockResolvedValueOnce(projectOk(project({
-          linkedResumeIds: ['resume-2'],
-        })));
-      links.link.mockResolvedValue(failed('stale'));
-
-      expect(await linker.link('owner-1', 'resume-1', PROJECT))
-        .toEqual(failed('privacy-required'));
-      expect(links.link).toHaveBeenCalledOnce();
-    });
-
-  it('asks on a failed reread and sends nothing without confirmation',
-    async () => {
-      const { links, resumes, projects, linker } = linkerSetup();
-      resumes.list.mockResolvedValue(ready(summary('resume-1', '7')));
-      projects.read.mockResolvedValue({
-        kind: 'failed', failure: 'unavailable',
-      });
-
-      expect(await linker.link('owner-1', 'resume-1', PROJECT))
-        .toEqual(failed('privacy-required'));
-      expect(links.link).not.toHaveBeenCalled();
-    });
-
   it('reuses the key only to retry the same request', async () => {
     const { links, resumes, linker } = linkerSetup();
     resumes.list.mockResolvedValue(ready(summary('resume-1', '7')));
@@ -260,10 +201,10 @@ describe('project linker', () => {
         .mockResolvedValueOnce({ kind: 'session-lost' });
 
       const results = [
-        await linker.link('owner-1', 'resume-1', PROJECT, true),
-        await linker.link('owner-1', 'resume-1', PROJECT, true),
-        await linker.link('owner-1', 'resume-1', PROJECT, true),
-        await linker.link('owner-1', 'resume-1', PROJECT, true),
+        await linker.link('owner-1', 'resume-1', PROJECT),
+        await linker.link('owner-1', 'resume-1', PROJECT),
+        await linker.link('owner-1', 'resume-1', PROJECT),
+        await linker.link('owner-1', 'resume-1', PROJECT),
       ];
 
       expect(results).toEqual([

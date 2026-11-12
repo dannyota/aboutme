@@ -3,7 +3,6 @@ import { Plus } from '@lucide/vue';
 import { nextTick } from 'vue';
 
 import StatusBanner from '@/components/app/StatusBanner.vue';
-import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 import ProjectCreateDialog
   from '@/components/projects/ProjectCreateDialog.vue';
 import ProjectList from '@/components/projects/ProjectList.vue';
@@ -218,19 +217,6 @@ function closeRelease(): void {
       :resumes="list.resumes.value"
       @close="closeCreate"
       @submit="list.create"
-    />
-    <ConfirmDialog
-      v-if="list.askingPrivacy.value"
-      :open="true"
-      :title="copy.sharedPublic"
-      :description="copy.sharedReader"
-      :confirm-label="copy.addAnyway"
-      :cancel-label="copy.cancel"
-      destructive
-      confirm-action="confirm-project-privacy"
-      cancel-action="cancel-project-privacy"
-      @confirm="list.confirmPrivacy"
-      @cancel="list.cancelPrivacy"
     />
     <ProjectReleaseDialog
       :open="release !== null"

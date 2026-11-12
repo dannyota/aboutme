@@ -128,9 +128,6 @@ export interface ProjectListController {
   readonly createState: Ref<CreateState>;
   /** The account's resumes a new project can be shown on. */
   readonly resumes: Ref<readonly ResumeSummary[]>;
-  readonly askingPrivacy: Ref<boolean>;
-  confirmPrivacy(): void;
-  cancelPrivacy(): void;
   retry(): Promise<void>;
   loadResumes(): Promise<void>;
   /** Creates the project, links each chosen resume, then opens it. */
@@ -145,31 +142,12 @@ export function useProjectList(
   deps: ProjectsDeps = {},
 ): ProjectListController {
   const { api, auth, uuid, navigate } = resolve(deps);
-  const linker = deps.linker ?? createProjectLinker({ auth, projects: api });
+  const linker = deps.linker ?? createProjectLinker({ auth });
   const view = ref<ProjectListView>({ kind: 'waiting-auth' });
   const createState = ref<CreateState>('idle');
   const resumes = ref<readonly ResumeSummary[]>([]);
   const keys = intentKeys(uuid);
   const disposed = useDisposed();
-  const askingPrivacy = ref(false);
-  let privacyAnswer: ((confirmed: boolean) => void) | null = null;
-  if (getCurrentScope() !== undefined) {
-    onScopeDispose(() => answerPrivacy(false));
-  }
-
-  function answerPrivacy(confirmed: boolean): void {
-    askingPrivacy.value = false;
-    privacyAnswer?.(confirmed);
-    privacyAnswer = null;
-  }
-
-  function askPrivacy(): Promise<boolean> {
-    if (disposed.value) return Promise.resolve(false);
-    askingPrivacy.value = true;
-    return new Promise((resolve) => {
-      privacyAnswer = resolve;
-    });
-  }
 
   const items = computed<readonly Project[]>(() =>
     view.value.kind === 'ready'
@@ -220,21 +198,10 @@ export function useProjectList(
     ownerId: string,
     projectId: string,
     resumeIds: readonly string[],
-    privacyConfirmed: boolean,
   ): Promise<void> {
     const missed: string[] = [];
-    let confirmed = privacyConfirmed;
     for (const resumeId of resumeIds) {
-      if (disposed.value) break;
-      let result = confirmed
-        ? await linker.link(ownerId, resumeId, projectId, true)
-        : await linker.link(ownerId, resumeId, projectId);
-      if (result.kind === 'failed' && result.failure === 'privacy-required') {
-        confirmed = await askPrivacy();
-        if (confirmed && !disposed.value) {
-          result = await linker.link(ownerId, resumeId, projectId, true);
-        }
-      }
+      const result = await linker.link(ownerId, resumeId, projectId);
       if (result.kind === 'failed' && result.failure !== 'already-linked') {
         missed.push(resumes.value.find((item) => item.id === resumeId)?.title
           ?? '');
@@ -262,9 +229,6 @@ export function useProjectList(
       createState.value = 'session-lost';
       return;
     }
-    // Consent comes from the note visible when Create was pressed.
-    const privacyConfirmed = resumes.value.filter((item) =>
-      item.live && resumeIds.includes(item.id)).length >= 2;
     const language = locale.value;
     const body = {
       defaultLanguage: language,
@@ -278,7 +242,7 @@ export function useProjectList(
     if (result.kind === 'ok') {
       keys.settle();
       setItems([...items.value, result.value]);
-      await linkChosen(ownerId, result.value.id, resumeIds, privacyConfirmed);
+      await linkChosen(ownerId, result.value.id, resumeIds);
       createState.value = 'idle';
       if (disposed.value) return;
       await navigate(`/app/projects/${encodeURIComponent(result.value.id)}`);
@@ -302,9 +266,6 @@ export function useProjectList(
     atLimit,
     createState,
     resumes,
-    askingPrivacy,
-    confirmPrivacy: () => answerPrivacy(true),
-    cancelPrivacy: () => answerPrivacy(false),
     retry: load,
     loadResumes,
     create,

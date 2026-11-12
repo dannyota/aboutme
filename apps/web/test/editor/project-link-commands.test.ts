@@ -23,11 +23,8 @@ import {
 } from '../../app/editor/templateGroup';
 import { TEMPLATES } from '@aboutme/schema/templates';
 import type { AcceptedResume, EditorRuntime } from '../../app/editor/types';
-import {
-  dependencyIdsForNewCommand, nextSequence, useResumeStore,
-} from '../../app/stores/resumes';
+import { useResumeStore } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
-import { fakeApi, ok, project, resumeSummary } from '../projects/fixtures';
 
 const PROJECT = '0190f000-0000-7000-8000-0000000000c1';
 const ENTRY = '0190f000-0000-7000-8000-0000000000e1';
@@ -96,39 +93,16 @@ function queued(accepted: AcceptedResume, intent: AtomicCommandIntent) {
   const api = {
     dispatch: vi.fn(),
     read: vi.fn(),
-    list: vi.fn().mockResolvedValue({
-      kind: 'ready', items: [resumeSummary(accepted.metadata.id)],
-    }),
   };
-  const projects = fakeApi();
-  projects.read.mockResolvedValue(ok(project()));
   const coordinator = createMutationCoordinator({
     api: api as never,
     store,
     auth,
-    projects,
     runtime: runtime(['attempt-1', 'attempt-2', 'attempt-3']),
   });
   const id = accepted.metadata.id;
-  return { store, api, projects, coordinator, id };
+  return { store, api, coordinator, id };
 }
-
-function enqueue(
-  store: ReturnType<typeof useResumeStore>,
-  id: string,
-  intent: AtomicCommandIntent,
-): void {
-  const record = store.recordFor(id)!;
-  store.enqueue(id, captureCommand(record.current, {
-    resumeId: id, ownerId: 'owner-1', sequence: nextSequence(record),
-    dependencyIds: dependencyIdsForNewCommand(record), intent,
-  }, runtime([`command-${nextSequence(record)}`])));
-}
-
-const editTitle = (title: string): AtomicCommandIntent => ({
-  kind: 'entryField', sectionKey: 'projects', entryId: ENTRY,
-  path: 'title', value: { present: true, value: title },
-});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -258,237 +232,6 @@ describe('project link command', () => {
     expect(store.saveStateFor(id)).toBe('saved');
   });
 
-  it('asks again before retrying a link that became public elsewhere',
-    async () => {
-      const { api, projects, coordinator, store, id } = queued(
-        withEntries([]), { kind: 'projectLink', projectId: PROJECT },
-      );
-      api.list.mockResolvedValueOnce({
-        kind: 'ready', items: [resumeSummary(id)],
-      }).mockResolvedValue({
-        kind: 'ready', items: [
-          resumeSummary(id, '2', 'Current', { live: true }),
-          resumeSummary('other', '1', 'Other', { live: true }),
-        ],
-      });
-      projects.read.mockResolvedValue(ok(project({
-        linkedResumeIds: ['other'],
-      })));
-      const winner = withEntries([], '2');
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'stale', status: 412,
-        winner: { document: winner.document, revision: winner.revision },
-      });
-      api.read.mockResolvedValue({ kind: 'complete', accepted: winner });
-
-      await coordinator.flush(id);
-
-      expect(api.dispatch).toHaveBeenCalledOnce();
-      expect(store.recordFor(id)?.conflicts[0]).toMatchObject({
-        kind: 'project-privacy', command: { kind: 'projectLink' },
-      });
-      await coordinator.acceptLatest(id, store.recordFor(id)!.conflicts[0]!.id);
-      expect(api.dispatch).toHaveBeenCalledOnce();
-      expect(store.recordFor(id)?.pending).toEqual([]);
-    });
-
-  it('checks privacy before manually retrying a refused link attempt',
-    async () => {
-      const { api, projects, coordinator, store, id } = queued(
-        withEntries([]), { kind: 'projectLink', projectId: PROJECT },
-      );
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'rate-limited', retryAfterMs: null,
-      });
-      await coordinator.flush(id);
-      api.list.mockResolvedValue({ kind: 'ready', items: [
-        resumeSummary(id, '2', 'Current', { live: true }),
-        resumeSummary('other', '1', 'Other', { live: true }),
-      ] });
-      projects.read.mockResolvedValue(ok(project({
-        linkedResumeIds: ['other'],
-      })));
-
-      await coordinator.retry(id, store.recordFor(id)!.attempt!.command.id);
-
-      expect(api.dispatch).toHaveBeenCalledOnce();
-      expect(store.recordFor(id)?.conflicts[0]?.kind).toBe('project-privacy');
-    });
-
-  it('sends a privacy-confirmed replacement once with a fresh revision',
-    async () => {
-      const { api, projects, coordinator, store, id } = queued(
-        withEntries([]), { kind: 'projectLink', projectId: PROJECT },
-      );
-      api.list.mockResolvedValue({
-        kind: 'ready', items: [
-          resumeSummary(id, '2', 'Current', { live: true }),
-          resumeSummary('other', '1', 'Other', { live: true }),
-        ],
-      });
-      projects.read.mockResolvedValue(ok(project({
-        linkedResumeIds: ['other'],
-      })));
-      const latest = withEntries([], '2');
-      api.read.mockResolvedValue({ kind: 'complete', accepted: latest });
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'complete', status: 200, accepted: withEntries([linked()], '3'),
-      });
-      await coordinator.flush(id);
-      expect(api.dispatch).not.toHaveBeenCalled();
-
-      await coordinator.applyMine(id, store.recordFor(id)!.conflicts[0]!.id,
-        { kind: 'field' });
-      await coordinator.flush(id);
-
-      expect(api.dispatch).toHaveBeenCalledOnce();
-      expect(api.dispatch.mock.calls[0]![0].ifMatch).toBe('"r2"');
-      expect(store.recordFor(id)?.conflicts).toEqual([]);
-      expect(store.recordFor(id)?.pending).toEqual([]);
-    });
-
-  it('asks before sending a queued link when the fresh privacy read fails',
-    async () => {
-      const { api, projects, coordinator, store, id } = queued(
-        withEntries([]), { kind: 'projectLink', projectId: PROJECT },
-      );
-      projects.read.mockResolvedValue({
-        kind: 'failed', failure: 'unavailable',
-      });
-
-      await coordinator.flush(id);
-
-      expect(api.dispatch).not.toHaveBeenCalled();
-      expect(store.recordFor(id)?.conflicts[0]?.kind).toBe('project-privacy');
-      await coordinator.acceptLatest(id, store.recordFor(id)!.conflicts[0]!.id);
-      expect(api.dispatch).not.toHaveBeenCalled();
-    });
-
-  it('sends edits behind a link satisfied by the 412 winner', async () => {
-    const { store, api, coordinator, id } = queued(withEntries([]), {
-      kind: 'projectLink', projectId: PROJECT,
-    });
-    enqueue(store, id, {
-      kind: 'personalField', path: 'headline',
-      value: { present: true, value: 'Typed after linking' },
-    });
-    const winner = withEntries([linked()], '2');
-    api.dispatch.mockResolvedValueOnce({
-      kind: 'stale', status: 412,
-      winner: { document: winner.document, revision: winner.revision },
-    }).mockResolvedValueOnce({
-      kind: 'complete', status: 200, accepted: {
-        ...winner, revision: parseRevision('3'), document: {
-          ...winner.document, personalDetails: {
-            ...winner.document.personalDetails, headline: 'Typed after linking',
-          },
-        },
-      },
-    });
-    api.read.mockResolvedValue({ kind: 'complete', accepted: winner });
-
-    await coordinator.flush(id);
-
-    expect(api.dispatch.mock.calls.map(([attempt]) => attempt.ifMatch))
-      .toEqual(['"r1"', '"r2"']);
-    expect(store.recordFor(id)?.completeReadRequired).toBe(false);
-    expect(store.recordFor(id)?.pending).toEqual([]);
-  });
-
-  it.each([
-    { kind: 'rejected', code: 'project_not_found' },
-    { kind: 'rejected', code: 'project_already_linked' },
-    { kind: 'validation-rejected', issues: [] },
-  ])('sends edits after a stale link is refused: $kind $code',
-    async (refusal) => {
-      const { store, api, coordinator, id } = queued(withEntries([]), {
-        kind: 'projectLink', projectId: PROJECT,
-      });
-      enqueue(store, id, {
-        kind: 'personalField', path: 'headline',
-        value: { present: true, value: 'Queued' },
-      });
-      const winner = withEntries([], '2');
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'stale', status: 412,
-        winner: { document: winner.document, revision: winner.revision },
-      }).mockResolvedValueOnce(refusal).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: { ...winner, revision: parseRevision('3') },
-      });
-      api.read.mockResolvedValue({ kind: 'complete', accepted: winner });
-
-      await coordinator.flush(id);
-
-      expect(api.dispatch.mock.calls.map(([attempt]) => attempt.ifMatch))
-        .toEqual(['"r1"', '"r2"', '"r2"']);
-      expect(store.recordFor(id)?.completeReadRequired).toBe(false);
-      expect(store.recordFor(id)?.pending).toEqual([]);
-    });
-
-  it('keeps trailing edits behind the barrier when a refusal reread fails',
-    async () => {
-      const { store, api, coordinator, id } = queued(withEntries([]), {
-        kind: 'projectLink', projectId: PROJECT,
-      });
-      enqueue(store, id, {
-        kind: 'personalField', path: 'headline',
-        value: { present: true, value: 'Queued' },
-      });
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'rejected', code: 'project_not_found',
-      });
-      api.read.mockResolvedValueOnce({ kind: 'unavailable' });
-
-      await coordinator.flush(id);
-
-      expect(api.dispatch).toHaveBeenCalledOnce();
-      expect(store.recordFor(id)?.completeReadRequired).toBe(true);
-      expect(store.recordFor(id)?.pending).toHaveLength(1);
-      api.read.mockResolvedValueOnce({
-        kind: 'complete', accepted: withEntries([], '1'),
-      });
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'complete', status: 200, accepted: withEntries([], '2'),
-      });
-      await coordinator.completeRead(id);
-      await coordinator.flush(id);
-      expect(api.dispatch).toHaveBeenCalledTimes(2);
-      expect(store.recordFor(id)?.pending).toEqual([]);
-    });
-
-  it('preserves typing on the same entry before and after a queued link',
-    async () => {
-      const initial = withEntries([{ id: ENTRY, title: 'Old' }]);
-      const { store, api, coordinator, id } = queued(
-        initial, editTitle('Before'),
-      );
-      enqueue(store, id, { kind: 'projectLink', projectId: PROJECT });
-      enqueue(store, id, editTitle('After'));
-      const added = linked({ id: 'new-entry' });
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([{ id: ENTRY, title: 'Before' }], '2'),
-      }).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([{ id: ENTRY, title: 'Before' }, added], '3'),
-      }).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([{ id: ENTRY, title: 'After' }, added], '4'),
-      });
-
-      await coordinator.flush(id);
-
-      const attempts = api.dispatch.mock.calls.map(([attempt]) => attempt);
-      expect(attempts.map((attempt) => attempt.ifMatch))
-        .toEqual(['"r1"', '"r2"', '"r3"']);
-      expect(JSON.parse(attempts[0].payload.utf8).entry.title).toBe('Before');
-      expect(JSON.parse(attempts[1].payload.utf8))
-        .toEqual({ projectId: PROJECT });
-      expect(JSON.parse(attempts[2].payload.utf8).entry.title).toBe('After');
-      expect(store.recordFor(id)?.pending).toEqual([]);
-    });
-
   it('is sent without the typing debounce', async () => {
     vi.useFakeTimers();
     const { api, coordinator, id } = queued(withEntries([]), {
@@ -506,20 +249,14 @@ describe('project link command', () => {
 });
 
 describe('project refresh command', () => {
-  it('captures the link and prefill fields without changing text', () => {
+  it('captures the link as its base, has no predicted result and changes '
+    + 'nothing locally', () => {
     const accepted = withEntries([linked()]);
     const command = capture(accepted, {
       kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
     });
 
-    expect(command.base.target).toEqual({
-      present: true, value: {
-        projectId: { present: true, value: PROJECT },
-        title: { present: true, value: 'Shop site' },
-        subtitle: { present: false }, link: { present: false },
-        dates: { present: false }, description: { present: false },
-      },
-    });
+    expect(command.base.target).toEqual({ present: true, value: PROJECT });
     expect(command.intended).toBeNull();
     expect(replayCommand(accepted, command).document)
       .toEqual(accepted.document);
@@ -544,126 +281,18 @@ describe('project refresh command', () => {
     expect(await request.text()).toBe('');
   });
 
-  it.each([
-    { title: 'Edited elsewhere' },
-    { subtitle: 'New role' },
-    { link: 'https://example.com' },
-    { dates: { start: { y: 2025, m: 1 }, end: null, present: true } },
-    { description: '<p><strong>New text</strong></p>' },
-  ])('keeps changed prefill text on a 412 without resending: %j',
-    async (changed) => {
-      const { store, api, coordinator, id } = queued(withEntries([linked()]), {
-        kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
-      });
-      enqueue(store, id, {
-        kind: 'personalField', path: 'headline',
-        value: { present: true, value: 'Queued' },
-      });
-      const winner = withEntries([linked(changed as Partial<Entry>)], '2');
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'stale', status: 412,
-        winner: { document: winner.document, revision: winner.revision },
-      }).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: { ...winner, revision: parseRevision('3') },
-      });
-      api.read.mockResolvedValue({ kind: 'complete', accepted: winner });
-
-      await coordinator.flush(id);
-
-      expect(api.dispatch.mock.calls.map(([attempt]) => attempt.operation))
-        .toEqual(['refreshResumeProjectEntry', 'updateResumePersonalDetails']);
-      expect(store.recordFor(id)?.current.document.content.projects?.entries)
-        .toEqual(winner.document.content.projects?.entries);
-      expect(store.recordFor(id)?.completeReadRequired).toBe(false);
-      expect(store.recordFor(id)?.pending).toEqual([]);
-      expect(store.recordFor(id)?.conflicts[0]).toMatchObject({
-        subject: 'atomic', command: { kind: 'projectRefresh' },
-      });
-    });
-
-  it('compares dates by value and rich text exactly, including formatting',
+  it('is sent while the entry stays linked, even after its text changed',
     () => {
-      const before = withEntries([linked({
-        dates: { start: { y: 2025, m: 1 }, end: null, present: true },
-        description: '<p>Text</p>',
-      } as Partial<Entry>)]);
-      const command = capture(before, {
+      const command = capture(withEntries([linked()]), {
         kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
       });
-      const same = structuredClone(before);
-      expect(reconcileCommand(command, same).kind).toBe('safe-base');
-      const formatting = withEntries([linked({
-        dates: { start: { y: 2025, m: 1 }, end: null, present: true },
-        description: '<p><strong>Text</strong></p>',
-      } as Partial<Entry>)], '2');
-      expect(reconcileCommand(command, formatting).kind).toBe('conflict');
-      const changedDates = withEntries([linked({
-        dates: { start: { y: 2025 }, end: null, present: true },
-        description: '<p>Text</p>',
-      } as Partial<Entry>)], '2');
-      expect(reconcileCommand(command, changedDates).kind).toBe('conflict');
-      expect(reconcileCommand(command, withEntries([linked()], '2')).kind)
-        .toBe('conflict');
-    });
 
-  it('rebases once when only fields outside the prefill changed', async () => {
-    const { api, coordinator, id } = queued(withEntries([linked()]), {
-      kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
-    });
-    const winner = withEntries([linked({ isHidden: true })], '2');
-    api.dispatch.mockResolvedValueOnce({
-      kind: 'stale', status: 412,
-      winner: { document: winner.document, revision: winner.revision },
-    }).mockResolvedValueOnce({
-      kind: 'complete', status: 200,
-      accepted: withEntries([
-        linked({ title: 'Refreshed', isHidden: true }),
-      ], '3'),
-    });
-
-    await coordinator.flush(id);
-
-    expect(api.dispatch.mock.calls.map(([attempt]) => attempt.ifMatch))
-      .toEqual(['"r1"', '"r2"']);
-  });
-
-  it('preserves typing on the same entry before and after a queued refresh',
-    async () => {
-      const { store, api, coordinator, id } = queued(
-        withEntries([linked()]), editTitle('Before'),
-      );
-      enqueue(store, id, {
-        kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
-      });
-      enqueue(store, id, editTitle('After'));
-      api.dispatch.mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([linked({ title: 'Before' })], '2'),
-      }).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([
-          linked({ title: 'Library', subtitle: 'Fresh' }),
-        ], '3'),
-      }).mockResolvedValueOnce({
-        kind: 'complete', status: 200,
-        accepted: withEntries([
-          linked({ title: 'After', subtitle: 'Fresh' }),
-        ], '4'),
-      });
-
-      await coordinator.flush(id);
-
-      const attempts = api.dispatch.mock.calls.map(([attempt]) => attempt);
-      expect(attempts.map((attempt) => attempt.operation))
-        .toEqual([
-          'upsertResumeEntry', 'refreshResumeProjectEntry', 'upsertResumeEntry',
-        ]);
-      expect(JSON.parse(attempts[2].payload.utf8).entry).toMatchObject({
-        title: 'After', subtitle: 'Fresh', projectId: PROJECT,
-      });
-      expect(store.recordFor(id)?.pending).toEqual([]);
-      expect(store.recordFor(id)?.conflicts).toEqual([]);
+      expect(reconcileCommand(
+        command, withEntries([linked({ title: 'Edited' })], '2'),
+      ).kind).toBe('safe-base');
+      expect(reconcileCommand(
+        command, withEntries([{ id: ENTRY, title: 'Shop site' }], '2'),
+      ).kind).toBe('conflict');
     });
 
   it('replaces the entry with the server text and keeps saving', async () => {

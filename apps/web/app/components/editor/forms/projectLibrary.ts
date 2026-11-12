@@ -5,7 +5,7 @@ import {
   createProjectsApi,
   type ProjectsApi,
 } from '../../../composables/projectsApi';
-import { projectPrivacyRequired } from '../../../editor/projectLinks';
+import type { PublishedState } from '../../../editor/projectLinks';
 import { createResumeApi, type ResumeApi } from '../../../editor/resumeApi';
 
 export type ProjectLibraryView
@@ -18,8 +18,8 @@ export interface ProjectLibrary {
   readonly view: Ref<ProjectLibraryView>;
   load(): Promise<void>;
   find(id: string): Project | undefined;
-  /** Rereads both privacy inputs before the owner chooses to link. */
-  privacyRequired(projectId: string, resumeId: string): Promise<boolean>;
+  /** Which resumes of the account are published; null when unreadable. */
+  published(): Promise<readonly PublishedState[] | null>;
 }
 
 /**
@@ -51,18 +51,9 @@ export function createProjectLibrary(
     find: (id) => view.value.kind === 'ready'
       ? view.value.items.find((item) => item.id === id)
       : undefined,
-    async privacyRequired(projectId, resumeId) {
-      const [projects, published] = await Promise.all([
-        api.list(), resumes.list(),
-      ]);
-      const project = projects.kind === 'ok'
-        ? projects.value.find((item) => item.id === projectId)
-        : undefined;
-      return projectPrivacyRequired(
-        resumeId,
-        project === undefined ? null : project.linkedResumeIds ?? [],
-        published.kind === 'ready' ? published.items : null,
-      );
+    async published() {
+      const result = await resumes.list();
+      return result.kind === 'ready' ? result.items : null;
     },
   };
 }
