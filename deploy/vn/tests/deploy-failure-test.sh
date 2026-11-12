@@ -89,6 +89,7 @@ case $args in
       [[ ! -f $DEPLOY_TEST_DIR/probe.pid ]] || break
       /bin/sleep 0.01
     done
+    [[ ${EGRESS_CASE:-} != interrupt ]] || kill -TERM "$PPID"
     printf '%s\n' "${EGRESS_COUNT:-1}"
     exit 0
     ;;
@@ -124,8 +125,16 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/external.log"
 args=" $* "
 if [[ $args == *' --limit-rate '* ]]; then
+  if [[ ${EGRESS_CASE:-} != interrupt ]]; then
+    printf '%s\n' "$$" >"$DEPLOY_TEST_DIR/probe.pid"
+    exec /bin/sleep 30
+  fi
+  trap 'kill "$nap" 2>/dev/null; /bin/sleep 1; exit 0' TERM
+  /bin/sleep 30 &
+  nap=$!
   printf '%s\n' "$$" >"$DEPLOY_TEST_DIR/probe.pid"
-  exec /bin/sleep 30
+  wait "$nap"
+  exit 0
 fi
 digest=$(printf '%064d' 0 | tr 0 b)
 if [[ $args == *'aboutme-observer/manifests/'* ]]; then
@@ -189,6 +198,9 @@ elif [[ -n ${EDGE_CASE:-} ]] && grep -q ' ban-test add ' "$DEPLOY_TEST_DIR/host.
   esac
 elif grep -q ' maintenance-up ' "$DEPLOY_TEST_DIR/host.log"; then
   printf '<!-- aboutme:maintenance -->\n503'
+elif [[ ${SITE_CASE:-} == down ]]; then
+  printf '000'
+  exit 7
 else
   printf '200'
 fi
@@ -383,10 +395,31 @@ for EDGE_CASE in delayed stuck late-ban no-ban; do
 done
 unset EDGE_CASE
 
+# The ban poll ends at its deadline: with 10 s requests and 5 s sleeps, the
+# eleventh poll starts at 150 s and the loop ends at 160 s. Unsetting SECONDS
+# makes it a plain variable that the fakes advance.
+sed -n '/^ban_seen() {/,/^}/p' "$repo_root/deploy/vn/scripts/deploy.sh" >"$work/ban-seen.sh"
+deadline=$(
+  # shellcheck source=/dev/null
+  source "$work/ban-seen.sh"
+  unset SECONDS
+  SECONDS=0 polls=0
+  banned() { polls=$((polls + 1)); SECONDS=$((SECONDS + 10)); return 1; }
+  sleep() { SECONDS=$((SECONDS + $1)); }
+  if ban_seen 150; then echo accepted; fi
+  echo "$polls $SECONDS"
+)
+read -r polls clock <<<"$deadline"
+if [[ $polls != 11 || ! $clock =~ ^[0-9]+$ ]] || ((clock > 160)); then
+  echo "the ban poll did not stop at its deadline: $deadline" >&2
+  edge_failures=1
+fi
+
 # The host counts its port-443 sockets from the SSH client address while the
 # deploy holds one HTTPS request open; ss filters, so no peer list crosses SSH.
 egress_failures=0
 filter="ss -Htn state established '( sport = :443 ) and ( dst 198.51.100.10 or dst [::ffff:198.51.100.10] )' | wc -l"
+site_probe='-s -o /dev/null -m 10 -w %{http_code} https://vn.example.test/'
 probe_stopped() {
   local pid
   [[ -f $work/probe.pid ]] || return 1
@@ -427,8 +460,11 @@ for EGRESS_COUNT in 0 x; do
     if "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/egress-$mode.out" 2>&1; then result=success; fi
     stopped=1
     probe_stopped || stopped=0
+    site_line=$(grep -nxF -- "$site_probe" "$work/external.log" | head -n1 | cut -d: -f1) || true
+    check_line=$(grep -nF -- "$filter" "$work/external.log" | head -n1 | cut -d: -f1) || true
     if [[ $result != failure || $stopped != 1 || -s $work/order.log || -s $work/host.log ]] ||
        [[ $(grep -cF -- "$filter" "$work/external.log") != "$polls" ]] ||
+       [[ $(grep -cxF -- "$site_probe" "$work/external.log") != 1 || -z $check_line || $site_line -gt $check_line ]] ||
        ! grep -q "$message" "$work/egress-$mode.out"; then
       echo "$mode with an egress count of $EGRESS_COUNT did not refuse before the lock" >&2
       egress_failures=1
@@ -449,12 +485,66 @@ check_line=$(grep -nF -- "$filter" "$work/external.log" | head -n1 | cut -d: -f1
 lock_line=$(grep -n 'fence.sh lock deploy' "$work/external.log" | head -n1 | cut -d: -f1) || true
 if [[ $result != failure || $stopped != 1 || -z $confirmed || -z $refused || $confirmed -gt $refused ]] ||
    [[ -z $check_line || -z $lock_line || $check_line -lt $lock_line ]] ||
-   ! grep -q ' maintenance-up ' "$work/host.log" ||
+   ! grep -q ' maintenance-up ' "$work/host.log" || grep -qxF -- "$site_probe" "$work/external.log" ||
    grep -q -e ' render ' -e ' db-setup ' -e ' migrate ' "$work/host.log"; then
   echo 'first deploy did not run the egress check after maintenance confirmation' >&2
   egress_failures=1
 fi
 unset EGRESS_COUNT
+
+# When nothing answers on 443, a rollback or forward fix still reaches
+# maintenance, and the check waits until maintenance serves.
+export SITE_CASE=down
+for mode in deploy rollback; do
+  args=(v0.1.1)
+  [[ $mode == deploy ]] || args=(--rollback v0.1.1)
+  for EGRESS_COUNT in 1 0; do
+    export EGRESS_COUNT
+    egress_reset
+    "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/egress-down.out" 2>&1 || true
+    stopped=1
+    probe_stopped || stopped=0
+    lock_line=$(grep -n 'fence.sh lock ' "$work/external.log" | head -n1 | cut -d: -f1) || true
+    maintenance_line=$(grep -nF -- '-s -m 10 -w' "$work/external.log" | tail -n1 | cut -d: -f1) || true
+    check_line=$(grep -nF -- "$filter" "$work/external.log" | head -n1 | cut -d: -f1) || true
+    case_ok=1
+    if [[ $stopped != 1 || -z $lock_line || -z $maintenance_line || -z $check_line ]] ||
+       ((lock_line > maintenance_line || maintenance_line > check_line)) ||
+       ! grep -q 'the egress check waits until maintenance serves' "$work/egress-down.out"; then
+      case_ok=0
+    elif [[ $EGRESS_COUNT == 1 ]]; then
+      grep -q ' render ' "$work/host.log" || case_ok=0
+    else
+      confirmed=$(grep -n 'maintenance confirmed from outside' "$work/egress-down.out" | cut -d: -f1) || true
+      refused=$(grep -n 'turn off VPNs such as Cloudflare WARP' "$work/egress-down.out" | cut -d: -f1) || true
+      if [[ -z $confirmed || -z $refused || $confirmed -gt $refused ]] ||
+         grep -q -e ' render ' -e ' migrate ' "$work/host.log" ||
+         ! grep -q 'restored the previous release' "$work/egress-down.out" ||
+         [[ $(tail -n 3 "$work/host.log" | awk '{ print $NF }' | paste -sd ' ' -) != 'app-up maintenance-down timers-start' ]]; then
+        case_ok=0
+      fi
+    fi
+    if ((!case_ok)); then
+      echo "$mode with no site answer and an egress count of $EGRESS_COUNT did not check once maintenance served" >&2
+      egress_failures=1
+    fi
+  done
+done
+unset SITE_CASE EGRESS_COUNT
+
+# An interrupted deploy joins its probe before it exits.
+export EGRESS_CASE=interrupt
+egress_reset
+status=0
+"$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/egress-interrupt.out" 2>&1 || status=$?
+pid=$(cat "$work/probe.pid" 2>/dev/null) || pid=''
+if [[ $status != 143 || -z $pid || -s $work/order.log || -s $work/host.log ]] || kill -0 "$pid" 2>/dev/null; then
+  echo "an interrupted deploy (exit $status) left its HTTPS probe running or passed the lock" >&2
+  egress_failures=1
+fi
+[[ -z $pid ]] || kill "$pid" 2>/dev/null || true
+rm -f "$work/probe.pid"
+unset EGRESS_CASE
 
 ((edge_failures == 0 && egress_failures == 0)) || exit 1
 echo "deployment failure test passed"

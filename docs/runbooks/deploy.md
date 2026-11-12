@@ -50,8 +50,9 @@ they differ, install the reviewed host bundle before retrying.
 The deployer then:
 
 1. Refuses unless the host sees one held HTTPS request from the SSH client
-   address, which the CrowdSec smoke bans; a first deploy checks after step 5.
-   Takes the host operation lock and rejects a tag below the release floor.
+   address, which the CrowdSec smoke bans; when the site does not answer or on a
+   first deploy, it checks once maintenance serves (step 5). Takes the host
+   operation lock and rejects a tag below the release floor.
 2. Pulls images while the old release serves and checks every referenced secret
    by name.
 3. Takes a pgBackRest incremental backup annotated with the tag.

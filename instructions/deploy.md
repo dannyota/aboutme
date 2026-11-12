@@ -7,7 +7,7 @@ Read this file for Podman, Caddy, container images, host access, or deployment w
 - `deploy/web.Dockerfile` copies named paths only. When the web app starts importing a new directory, add it there too; CI builds from the full checkout and cannot catch the gap, only the release image build does.
 - Avoid `podman ps | grep -q` under `pipefail`; capture output first.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the container; rootless pasta can lose its forward.
-- Before a laptop deploy, turn off VPNs such as Cloudflare WARP. The deploy refuses to start when the host does not see its HTTPS probe from the SSH client address, which the CrowdSec smoke bans; a first deploy checks once maintenance serves.
+- Before a laptop deploy, turn off VPNs such as Cloudflare WARP. Before the lock, or once maintenance serves when the site does not answer or on a first deploy, the deploy refuses unless the host sees its HTTPS probe from the SSH client address, which the CrowdSec smoke bans.
 - Production runs PostgreSQL on the Vietnam host; operator access uses SSH and the Unix socket. Never print row data or secrets.
 - Follow the [production runbook](../docs/runbooks/production.md) and prefer infrastructure as code. Production infrastructure and release paths beyond one-line changes need adversarial review before merge. The primary applies and deploys already reviewed commits under standing approval without a new review, and stops on unexpected destroys. Check that secrets exist; never read their values.
 

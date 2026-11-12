@@ -140,7 +140,10 @@ on_exit() {
     on_host fence.sh release "$op" >/dev/null ||
       { say "could not release the operation lock; fence.sh clear owns it"; status=1; }
   fi
-  if [[ -n $probe ]]; then kill "$probe" 2>/dev/null || true; fi
+  if [[ -n $probe ]]; then
+    kill "$probe" 2>/dev/null || true
+    wait "$probe" 2>/dev/null || true
+  fi
   if [[ -n ${ssh_opts[*]:-} ]]; then ssh_close; fi
   if [[ -n $work ]]; then rm -rf "$work"; fi
   if [[ -n $ssh_dir ]]; then rm -rf "$ssh_dir"; fi
@@ -297,7 +300,19 @@ egress_check() {
     return 1
   }
 }
-if ((!first)); then egress_check || exit 1; fi
+# The check needs a listener on 443. With none (a first deploy, or an outage
+# where nothing answers), it runs once maintenance serves, so a rollback or
+# forward fix can still reach maintenance.
+egress_after_maintenance=$first
+if ((!first)); then
+  code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$site/") || code=000
+  if [[ $code == 000 ]]; then
+    egress_after_maintenance=1
+    say "$site does not answer; the egress check waits until maintenance serves"
+  else
+    egress_check || exit 1
+  fi
+fi
 
 # 2. The lock. A lower tag or a held lock stops here, before any change.
 op=$(on_host fence.sh lock "$kind" "$tag") || exit 1
@@ -342,8 +357,7 @@ retry 5 3 maintenance_ok || {
   exit 1
 }
 say "maintenance confirmed from outside"
-# A first deploy has nothing listening on 443 before maintenance starts.
-if ((first)); then egress_check || exit 1; fi
+if ((egress_after_maintenance)); then egress_check || exit 1; fi
 
 # 7. Database work under the new units.
 if ((!first)); then previous=$(step release-json) || exit 1; fi
