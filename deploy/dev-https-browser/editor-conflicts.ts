@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 import {
   mutateRemoteHeadline,
   mutateRemoteMetadata,
@@ -58,29 +58,63 @@ export async function proveConflictAndTemplate(
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
   state.editorDiagnosticStage = 'conflict-same-value';
-  diagnostics.expectHTTPFailure(
-    'PATCH',
-    personalPath,
-    412,
-  );
-  const sameValuePause = diagnostics.pauseNextMutation('PATCH', personalPath);
-  const staleSameValue = page.waitForResponse((response) =>
-    response.status() === 412
-    && new URL(response.url()).pathname === personalPath,
-  );
-  await headline.fill('Same value elsewhere');
-  await headline.press('Tab');
-  await sameValuePause.waitUntilPaused();
+  // A realtime refetch after the remote save could adopt the winner before
+  // the paused write's 412 arrives. Reads of the resume issued after that
+  // save are held until the 412 has set the read barrier, so the editor
+  // itself must complete the barrier before it sends the next edit.
+  const resumePath = `/api/v1/resumes/${accepted.metadata.id}`;
+  let personalWrites = 0;
+  let holdReads = false;
+  let releaseReads = (): void => {};
+  const readsReleased = new Promise<void>((resolve) => {
+    releaseReads = resolve;
+  });
+  const sameValueRoutes = (url: URL): boolean =>
+    url.pathname === personalPath || url.pathname === resumePath;
+  const orderSameValue = async (route: Route): Promise<void> => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === personalPath && request.method() === 'PATCH') {
+      personalWrites += 1;
+      // The editor's write comes first; the second is the remote save.
+      if (personalWrites === 2) holdReads = true;
+    } else if (holdReads && request.method() === 'GET') {
+      await readsReleased;
+    }
+    await route.fallback();
+  };
+  await page.route(sameValueRoutes, orderSameValue);
   try {
-    await mutateRemoteHeadline(
-      page,
-      accepted.metadata.id,
-      'Same value elsewhere',
+    diagnostics.expectHTTPFailure(
+      'PATCH',
+      personalPath,
+      412,
     );
+    const sameValuePause = diagnostics.pauseNextMutation('PATCH', personalPath);
+    const staleSameValue = page.waitForResponse((response) =>
+      response.status() === 412
+      && new URL(response.url()).pathname === personalPath,
+    );
+    await headline.fill('Same value elsewhere');
+    await headline.press('Tab');
+    await sameValuePause.waitUntilPaused();
+    try {
+      await mutateRemoteHeadline(
+        page,
+        accepted.metadata.id,
+        'Same value elsewhere',
+      );
+    } finally {
+      sameValuePause.release();
+    }
+    expect((await staleSameValue).status()).toBe(412);
+    await expect(page.getByTestId('save-status'))
+      .toHaveAttribute('data-state', 'dirty');
   } finally {
-    sameValuePause.release();
+    holdReads = false;
+    releaseReads();
+    await page.unroute(sameValueRoutes, orderSameValue);
   }
-  expect((await staleSameValue).status()).toBe(412);
   const laterSave = page.waitForResponse((response) =>
     response.request().method() === 'PATCH'
     && new URL(response.url()).pathname === personalPath,

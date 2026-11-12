@@ -18,11 +18,13 @@ whatever set it. Once no write is in flight, the queue reads the complete resume
 before it sends any queued edit; any complete read at that revision or newer
 clears the barrier, including a realtime refetch or the read after signing in
 again. A failed read keeps the barrier and is retried on the queue's own timer
-after 1 second, doubling to 30 seconds and starting at 1 second again after a
-success, or after a longer `Retry-After`. A lost session waits for sign-in, a
-missing resume ends the retries, and closing the editor stops them until the
-resume is opened again. Queued edits are held, never dropped, and the save
-status shows unsaved and leaving the page warns until the read succeeds.
+with the delays in [Numeric budgets](budgets.md); no other edit, action, or
+flush runs it sooner. A lost session waits for sign-in, and a missing resume
+ends the retries. While the editor is open its queued edits are held, never
+dropped, the save status shows unsaved, and leaving warns. Discarding after a
+lost session drops them and lets the page go, though the barrier stays for the
+queue. Leaving anyway also drops them and stops the queue's reads and writes;
+the resume opens again from a fresh complete read.
 
 ## Refresh ladder
 

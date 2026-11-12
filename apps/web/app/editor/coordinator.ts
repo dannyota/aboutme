@@ -51,7 +51,7 @@ export function createMutationCoordinator(
     drains: new Map(),
     retainedCreates: new Map(),
     csrfRetries: new Set(),
-    readFailures: new Map(),
+    readRetries: new Map(),
     stopped: new Set(),
   };
 

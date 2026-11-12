@@ -40,9 +40,9 @@ export async function applyMine(
   );
   if (replacement === null) return;
   if (
-    !ctx.deps.store.replaceActiveAfterCompleteRead(
+    !ctx.deps.store.replaceConflictedAfterCompleteRead(
       resumeId,
-      conflict.command.id,
+      conflict.command,
       latest.accepted,
       replacement,
     )

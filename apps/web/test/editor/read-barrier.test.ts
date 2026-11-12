@@ -1,4 +1,3 @@
-import type { Resume } from '@aboutme/schema';
 import { createPinia, setActivePinia } from 'pinia';
 import { computed } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,186 +5,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // eslint-disable-next-line max-len
 import { createResumeEditorActions } from '../../app/composables/useResumeEditor';
 import { hasUnsafeWork } from '../../app/composables/useUnsavedNavigationGuard';
-import type {
-  AttemptResult,
-  FrozenAttempt,
-  ResumeReadResult,
-} from '../../app/editor/attempt';
 import type { AtomicCommandIntent } from '../../app/editor/commands';
 import { createMutationCoordinator } from '../../app/editor/coordinator';
 import { createPublishController } from '../../app/editor/publishController';
 import type { PublishApi } from '../../app/editor/publishApi';
-import { parentETag, parseRevision } from '../../app/editor/revision';
-import type { AcceptedResume } from '../../app/editor/types';
+import { parseRevision } from '../../app/editor/revision';
 import { useResumeStore } from '../../app/stores/resumes';
-import { acceptedFixture } from './fixture';
-
-type ReadFailure = Exclude<ResumeReadResult, { kind: 'complete' }>;
+import {
+  fakeServer,
+  fullName,
+  headline,
+  startingResume,
+  type FakeResumeServer,
+  type ReadFailure,
+} from './fake-resume-server';
 
 const FAILURES = [
   ['a network error', { kind: 'failed', reason: 'network' }],
   ['a server error', { kind: 'failed', reason: 'response-invalid' }],
   ['a lost session', { kind: 'session-lost' }],
 ] as const satisfies readonly (readonly [string, ReadFailure])[];
-
-const headline = (value: string): AtomicCommandIntent => ({
-  kind: 'personalField',
-  path: 'headline',
-  value: { present: true, value },
-});
-
-const fullName = (value: string): AtomicCommandIntent => ({
-  kind: 'personalField',
-  path: 'fullName',
-  value: { present: true, value },
-});
-
-function startingResume(): AcceptedResume {
-  const base = acceptedFixture();
-  return {
-    ...base,
-    document: {
-      ...base.document,
-      personalDetails: {
-        ...base.document.personalDetails,
-        photo: { key: 'photo-1' },
-      },
-      content: {
-        work: {
-          sectionType: 'work',
-          entries: [
-            { id: 'entry-1', jobTitle: 'Engineer' },
-            { id: 'entry-2', jobTitle: 'Lead' },
-          ],
-        },
-      },
-      customization: {
-        ...base.document.customization,
-        layout: {
-          ...base.document.customization.layout,
-          sections: { main: ['work'], sidebar: [] },
-        },
-      },
-    },
-  };
-}
-
-/**
- * The owner API over one stored resume. It checks If-Match as the server
- * does, answers a stale write with the stored document and revision, and
- * applies the writes these scenarios send.
- */
-function fakeServer(initial: AcceptedResume) {
-  let stored = structuredClone(initial);
-  const failedReads: ReadFailure[] = [];
-  const sent: { attempt: FrozenAttempt; result: AttemptResult['kind'] }[]
-    = [];
-  const readTimes: number[] = [];
-
-  const advance = (document: Resume): void => {
-    stored = {
-      ...stored,
-      document: structuredClone(document),
-      revision: parseRevision(String(Number(stored.revision) + 1)),
-    };
-  };
-  const apply = (attempt: FrozenAttempt): AttemptResult => {
-    const document = stored.document;
-    switch (attempt.operation) {
-      case 'updateResumePersonalDetails': {
-        if (attempt.payload.kind !== 'json') throw new Error('no body');
-        const body = JSON.parse(attempt.payload.utf8);
-        const photo = document.personalDetails.photo;
-        advance({
-          ...document,
-          personalDetails: photo === undefined ? body : { ...body, photo },
-        });
-        return { kind: 'complete', status: 200, accepted: copy() };
-      }
-      case 'deleteResumeEntry': {
-        const entryId = decodeURIComponent(attempt.url.split('/').at(-1)!);
-        const work = document.content.work!;
-        advance({
-          ...document,
-          content: {
-            work: {
-              ...work,
-              entries: work.entries.filter((entry) => entry.id !== entryId),
-            },
-          },
-        });
-        return childAck('entry');
-      }
-      case 'linkResumeProject':
-        return { kind: 'rejected', code: 'project_not_found' };
-      case 'deleteResumePhoto': {
-        const { photo: _photo, ...personalDetails } = document.personalDetails;
-        advance({ ...document, personalDetails });
-        return childAck('photo');
-      }
-      default:
-        throw new Error(`unexpected operation ${attempt.operation}`);
-    }
-  };
-  const childAck = (scope: 'entry' | 'photo'): AttemptResult => ({
-    kind: 'child-ack',
-    status: 204,
-    scope,
-    etag: parentETag(stored.revision),
-  });
-  const copy = (): AcceptedResume => structuredClone(stored);
-
-  const api = {
-    dispatch: vi.fn(async (attempt: FrozenAttempt): Promise<AttemptResult> => {
-      const result: AttemptResult = attempt.ifMatch === parentETag(
-        stored.revision,
-      )
-        ? apply(attempt)
-        : {
-            kind: 'stale',
-            status: 412,
-            winner: {
-              document: structuredClone(stored.document),
-              revision: stored.revision,
-            },
-          };
-      sent.push({ attempt, result: result.kind });
-      return result;
-    }),
-    read: vi.fn(async (): Promise<ResumeReadResult> => {
-      readTimes.push(Date.now());
-      return failedReads.shift() ?? { kind: 'complete', accepted: copy() };
-    }),
-  };
-
-  return {
-    api,
-    sent,
-    get stored() {
-      return copy();
-    },
-    get reads() {
-      return readTimes.length;
-    },
-    /** Milliseconds between consecutive reads. */
-    get readGaps() {
-      return readTimes.slice(1).map((time, index) => time - readTimes[index]!);
-    },
-    failNextRead(failure: ReadFailure): void {
-      failedReads.push(failure);
-    },
-    /** Another tab or agent changes the resume. */
-    otherWriter(change: (document: Resume) => Resume): void {
-      advance(change(structuredClone(stored.document)));
-    },
-    /** Attempts sent for one command, with what each got back. */
-    sentFor(commandId: string): AttemptResult['kind'][] {
-      return sent
-        .filter(({ attempt }) => attempt.id === commandId)
-        .map(({ result }) => result);
-    },
-  };
-}
 
 function editor(initial = startingResume()) {
   setActivePinia(createPinia());
@@ -198,7 +37,7 @@ function editor(initial = startingResume()) {
 /** An editor on a resume the store already holds, as the page builds it. */
 function openEditor(
   id: string,
-  server: ReturnType<typeof fakeServer>,
+  server: FakeResumeServer,
   store: ReturnType<typeof useResumeStore>,
 ) {
   const auth = {
@@ -246,8 +85,6 @@ function openEditor(
     expect(store.saveStateFor(id)).toBe('session-lost');
     await actions.resumeAfterAuth();
   };
-  /** The person comes back to this resume after its editor closed. */
-  const reopen = () => openEditor(id, server, store);
   return {
     actions,
     auth,
@@ -258,7 +95,6 @@ function openEditor(
     idle,
     reauthenticate,
     record,
-    reopen,
     runtime,
     server,
     store,
@@ -378,6 +214,32 @@ describe('the completing read', () => {
     return context;
   }
 
+  it('keeps its retry deadline when other edits and flushes arrive',
+    async () => {
+      const context = satisfiedStale();
+      context.server.failNextRead({
+        kind: 'rate-limited',
+        retryAfterMs: 5_000,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(context.server.reads).toBe(1);
+
+      context.edit(fullName('Ada Byron'));
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(context.server.reads).toBe(1);
+      context.edit({ kind: 'projectLink', projectId: 'p-1' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(context.server.reads).toBe(1);
+      await context.coordinator.flush(context.id);
+      expect(context.server.reads).toBe(1);
+      await vi.advanceTimersByTimeAsync(3_499);
+      expect(context.server.reads).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(context.server.reads).toBeGreaterThan(1);
+      expect(context.server.readGaps[0]).toBe(5_000);
+    });
+
   it('waits for Retry-After before retrying when rate limited', async () => {
     const context = satisfiedStale();
     context.server.failNextRead({ kind: 'rate-limited', retryAfterMs: 5_000 });
@@ -446,23 +308,6 @@ describe('the completing read', () => {
     expect(context.server.reads).toBe(1);
     expect(context.record().completeReadRequired).toBe(true);
     expect(context.store.saveStateFor(context.id)).toBe('dirty');
-  });
-
-  it('issues no read after its editor closes, and completes when the '
-    + 'resume is opened again', async () => {
-    const context = satisfiedStale();
-    context.server.failNextRead({ kind: 'failed', reason: 'network' });
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(context.server.reads).toBe(1);
-
-    context.actions.stop();
-    await vi.advanceTimersByTimeAsync(120_000);
-
-    expect(context.server.reads).toBe(1);
-    expect(hasUnsafeWork(context.record())).toBe(true);
-    const returned = context.reopen();
-    await expectLaterEditSent(returned);
-    expect(context.server.reads).toBe(2);
   });
 
   it('is completed by a realtime read at the held revision', async () => {
@@ -577,6 +422,86 @@ const DELETES = [
   ],
   ['a photo', { kind: 'photoDelete' }],
 ] as const satisfies readonly (readonly [string, AtomicCommandIntent])[];
+
+/**
+ * The headline write meets a winner that already holds that headline and a
+ * different name, so the queued name conflicts before it is sent.
+ */
+function queuedConflict(
+  queueLater = true,
+): Editor & { readonly later: string | undefined } {
+  const context = editor();
+  context.edit(headline('Staff engineer'));
+  context.edit(fullName('Ada King'));
+  const later = queueLater
+    ? context.edit(headline('Principal engineer'))
+    : undefined;
+  context.server.otherWriter((document) => ({
+    ...document,
+    personalDetails: {
+      ...document.personalDetails,
+      fullName: 'Ada Byron',
+      headline: 'Staff engineer',
+    },
+  }));
+  return { ...context, later };
+}
+
+describe('a queued edit that conflicts after the read barrier', () => {
+  it('applies mine and sends the edits queued behind it', async () => {
+    const context = queuedConflict();
+    await context.idle();
+    expect(context.record()).toMatchObject({
+      attempt: null,
+      conflicts: [{ command: { kind: 'personalField' } }],
+      completeReadRequired: false,
+    });
+
+    await context.actions.applyMine(context.conflictId(), { kind: 'field' });
+    await context.idle();
+
+    expect(context.server.stored.document.personalDetails).toMatchObject({
+      fullName: 'Ada King',
+      headline: 'Principal engineer',
+    });
+    expect(context.server.sentFor(context.later!)).toEqual(['complete']);
+    expect(context.record()).toMatchObject({ pending: [], conflicts: [] });
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+
+  it('accepts latest and sends the edits queued behind it', async () => {
+    const context = queuedConflict();
+    await context.idle();
+
+    await context.actions.acceptLatest(context.conflictId());
+    await context.idle();
+
+    expect(context.server.stored.document.personalDetails).toMatchObject({
+      fullName: 'Ada Byron',
+      headline: 'Principal engineer',
+    });
+    expect(context.server.sentFor(context.later!)).toEqual(['complete']);
+    expect(context.record()).toMatchObject({ pending: [], conflicts: [] });
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+
+  it('applies nothing while the conflicting edit has changed since it was '
+    + 'shown', async () => {
+    const context = queuedConflict(false);
+    await context.idle();
+    const conflictId = context.conflictId();
+    context.edit(fullName('Ada King-Noel'));
+    expect(context.record().pending).toHaveLength(1);
+
+    await context.actions.applyMine(conflictId, { kind: 'field' });
+
+    expect(context.record().conflicts).toHaveLength(1);
+    expect(context.record().current.document.personalDetails.fullName)
+      .toBe('Ada King-Noel');
+    expect(context.server.stored.document.personalDetails.fullName)
+      .toBe('Ada Byron');
+  });
+});
 
 describe('a delete acknowledged without a body', () => {
   it.each(DELETES)('sends the edit typed after %s', async (_name, intent) => {

@@ -58,7 +58,7 @@ export interface ResumeMutationCoordinator {
     confirmation: ConflictConfirmation,
   ): Promise<void>;
   resumeAfterAuth(resumeId: string): Promise<void>;
-  /** Stops the read retries for a resume whose editor closed. */
+  /** Ends all work on a resume whose editor closed. */
   stop(resumeId: string): void;
   resolveOpaquePhoto(
     resumeId: string,
@@ -93,8 +93,11 @@ export interface CoordinatorContext {
   drains: Map<string, Promise<void>>;
   retainedCreates: Map<string, RetainedCreate>;
   csrfRetries: Set<string>;
-  /** Failed completing reads in a row, which set the next retry delay. */
-  readFailures: Map<string, number>;
-  /** Resumes whose editor closed; their read barrier waits for its return. */
+  /**
+   * Failed completing reads in a row and the epoch time before which the
+   * read may not run again.
+   */
+  readRetries: Map<string, { failures: number; at: number }>;
+  /** Resumes whose editor closed; nothing more is scheduled for them. */
   stopped: Set<string>;
 }

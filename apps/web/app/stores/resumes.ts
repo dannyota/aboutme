@@ -3,6 +3,7 @@ import { toRaw } from 'vue';
 
 import { coalescePending, replayCommand } from '../editor/commands';
 import { cloneReactiveSafe } from '../editor/clone';
+import { equalProjection } from '../editor/projections';
 import { compareRevision, parseRevision } from '../editor/revision';
 import type {
   AttemptFailureCode,
@@ -100,6 +101,8 @@ export interface ResumeRecord {
   templateState: TemplateGroupState | null;
   photoRead: PhotoReadState;
   completeReadRequired: boolean;
+  /** Set by an explicit discard and cleared by the next queued edit. */
+  discarded: boolean;
   sessionLost: boolean;
   opaquePhotoOutcome: OpaquePhotoOutcome | null;
 }
@@ -130,9 +133,9 @@ interface ResumeStoreActions {
   requireCompleteRead(resumeId: string): void;
   acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag): void;
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
-  replaceActiveAfterCompleteRead(
+  replaceConflictedAfterCompleteRead(
     resumeId: string,
-    itemId: string,
+    conflicted: AtomicEditorCommand,
     accepted: AcceptedResume,
     replacement: EditorQueueItem,
   ): boolean;
@@ -194,6 +197,7 @@ const resumeStore = defineStore('resumes', {
         templateState: null,
         photoRead: { kind: 'none' },
         completeReadRequired: false,
+        discarded: false,
         sessionLost: false,
         opaquePhotoOutcome: null,
       });
@@ -208,6 +212,7 @@ const resumeStore = defineStore('resumes', {
       record.pending = (isAtomic(item)
         ? coalesceAtomicPending(pending, item)
         : [...pending, item]) as unknown as typeof record.pending;
+      record.discarded = false;
       replay(record);
     },
 
@@ -352,9 +357,9 @@ const resumeStore = defineStore('resumes', {
       this.records.delete(resumeId);
     },
 
-    replaceActiveAfterCompleteRead(
+    replaceConflictedAfterCompleteRead(
       resumeId: string,
-      itemId: string,
+      conflicted: AtomicEditorCommand,
       accepted: AcceptedResume,
       replacement: EditorQueueItem,
     ) {
@@ -362,15 +367,22 @@ const resumeStore = defineStore('resumes', {
         | ResumeRecord
         | undefined;
       if (
-        record?.attempt?.queueItem.id !== itemId
+        record === undefined
         || compareRevision(accepted.revision, record.accepted.revision) < 0
       ) {
         return false;
       }
+      const active = record.attempt?.queueItem.id === conflicted.id;
+      // A conflict found before sending leaves its command at the head of
+      // the queue, where a later edit of the same field may have merged in.
+      if (!active && !unchangedHead(record, conflicted)) return false;
       record.accepted = cloneAccepted(accepted);
       record.completeReadRequired = false;
       record.attempt = null;
-      record.pending = [replacement, ...record.pending];
+      record.pending = [
+        replacement,
+        ...(active ? record.pending : record.pending.slice(1)),
+      ];
       replay(record);
       return true;
     },
@@ -547,6 +559,7 @@ const resumeStore = defineStore('resumes', {
       record.templateState = null;
       record.sessionLost = false;
       record.opaquePhotoOutcome = null;
+      record.discarded = true;
       replay(record);
     },
 
@@ -644,6 +657,15 @@ function copy<T>(value: T): T {
 
 function isAtomic(item: EditorQueueItem): item is AtomicEditorCommand {
   return item.kind !== 'templateGroup';
+}
+
+function unchangedHead(record: ResumeRecord, command: AtomicEditorCommand) {
+  const head = record.pending[0];
+  if (record.attempt !== null || head?.id !== command.id) return false;
+  const intended = isAtomic(head) ? head.intended : null;
+  return intended === null || command.intended === null
+    ? intended === command.intended
+    : equalProjection(intended, command.intended);
 }
 
 function isBodylessChild(command: AtomicEditorCommand): boolean {
