@@ -83,10 +83,21 @@ fi
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
 
 # A deploy reads its schema floor from the tag's commit, never from this
-# checkout. A tree without the file has none.
+# checkout. Only a successful tree listing with no entry proves the file absent;
+# --full-tree resolves the path from the root, not from this directory.
 schema_floor_path=apps/server/migrations/schema-floor
-schema_floor_tag='' schema_floor=0
-if ((!rollback && !activate)) && git -C "$here" cat-file -e "$commit:$schema_floor_path" 2>/dev/null; then
+schema_floor_entry='' schema_floor_tag='' schema_floor=0
+if ((!rollback && !activate)); then
+  schema_floor_entry=$(git -C "$here" ls-tree --full-tree "$commit" -- "$schema_floor_path") || {
+    say "could not inspect $schema_floor_path at $tag"
+    exit 1
+  }
+fi
+if [[ -n $schema_floor_entry ]]; then
+  [[ $schema_floor_entry =~ ^100644\ blob\ [0-9a-f]{40,64}$'\t'"$schema_floor_path"$ ]] || {
+    say "$schema_floor_path at $tag is not a regular file"
+    exit 1
+  }
   schema_floor_text=$(git -C "$here" show "$commit:$schema_floor_path" && printf x) || {
     say "could not read $schema_floor_path at $tag"
     exit 1

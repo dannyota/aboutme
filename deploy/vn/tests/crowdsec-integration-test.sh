@@ -223,7 +223,11 @@ install -d -m 0700 "$retention_fixture/enabled" "$retention_fixture/active" /srv
 install -d -m 0755 /etc/aboutme
 mount -t tmpfs -o size=1m,mode=0700 tmpfs /etc/aboutme
 install -d -m 0700 /etc/aboutme/secrets /var/lib/aboutme/privacy-notice
-printf '{"release_number":8009}\n' >/var/lib/aboutme/release.json
+# The fresh fence's minimum is the installed tracked floor; check-current admits
+# that release.
+integration_release=$(sed -n 's/^floor_release=//p' /usr/local/lib/aboutme/fence.sh)
+[[ $integration_release =~ ^[0-9]+$ ]]
+printf '{"release_number":%s}\n' "$integration_release" >/var/lib/aboutme/release.json
 chmod 0644 /var/lib/aboutme/release.json
 install -m 0444 /dev/null /var/lib/aboutme/privacy-notice/activation.json
 systemctl stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service
