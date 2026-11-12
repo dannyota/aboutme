@@ -605,6 +605,15 @@ read_https_calls() {
   tr '\0' '\n' <"$HTTPS_CALLS"
 }
 
+# https_called reads the whole call log before matching. A `grep -q` on a pipe
+# exits at the first match, and under pipefail the writer's closed-pipe status
+# then fails the pipeline once the log outgrows the pipe buffer, as on macOS.
+https_called() {
+  local flag=$1 pattern=$2 calls
+  calls=$(read_https_calls)
+  grep "$flag" -- "$pattern" <<<"$calls" >/dev/null
+}
+
 assert_https_delegation() {
   local target=$1 expected=$2
   shift 2
@@ -637,7 +646,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-browser-image \
   printf 'makefile-safety-test: browser image passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Fxq podman; then
+if https_called -Fx podman; then
   printf 'makefile-safety-test: browser image mutated after failed status\n' >&2
   exit 1
 fi
@@ -662,7 +671,7 @@ if /bin/bash -c '(( BASH_VERSINFO[0] < 4 ))'; then
     printf 'makefile-safety-test: browser image lacked Bash setup message\n' >&2
     exit 1
   }
-  if read_https_calls | grep -Fxq podman; then
+  if https_called -Fx podman; then
     printf 'makefile-safety-test: old Bash reached the image build\n' >&2
     exit 1
   fi
@@ -706,19 +715,19 @@ grep -Eq '^source_sha256=[0-9a-f]{64}$' "$HTTPS_MANIFEST" || {
   printf 'makefile-safety-test: manifest lacks source hash\n' >&2
   exit 1
 }
-read_https_calls | grep -Fxq -- '--iidfile' || {
+https_called -Fx '--iidfile' || {
   printf 'makefile-safety-test: image build lacks IID capture\n' >&2
   exit 1
 }
-read_https_calls | grep -Fxq -- '--tag' || {
+https_called -Fx '--tag' || {
   printf 'makefile-safety-test: image build lacks the fixed tag\n' >&2
   exit 1
 }
-read_https_calls | grep -Fxq -- 'localhost/aboutme-dev-https-browser:local' || {
+https_called -Fx 'localhost/aboutme-dev-https-browser:local' || {
   printf 'makefile-safety-test: image build tag drifted\n' >&2
   exit 1
 }
-read_https_calls | grep -Fxq -- 'deploy/dev-https-browser' || {
+https_called -Fx 'deploy/dev-https-browser' || {
   printf 'makefile-safety-test: image build context drifted\n' >&2
   exit 1
 }
@@ -735,7 +744,7 @@ run_https_make dev-https-auth-check >"$WORK/https-source-drift.out" 2>&1 || {
   printf 'makefile-safety-test: spec drift blocked the check\n' >&2
   exit 1
 }
-read_https_calls | grep -Fxq podman || {
+https_called -Fx podman || {
   printf 'makefile-safety-test: spec-drift check never reached the runtime\n' >&2
   exit 1
 }
@@ -758,7 +767,7 @@ for image_source in run.sh spec-sources.txt; do
     printf 'makefile-safety-test: image drift returned the wrong diagnostic\n' >&2
     exit 1
   }
-  if read_https_calls | grep -Fxq podman; then
+  if https_called -Fx podman; then
     printf 'makefile-safety-test: image source drift reached the browser runtime\n' >&2
     exit 1
   fi
@@ -773,7 +782,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-auth-check \
   printf 'makefile-safety-test: auth check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Fxq podman; then
+if https_called -Fx podman; then
   printf 'makefile-safety-test: auth check mutated after failed status\n' >&2
   exit 1
 fi
@@ -856,7 +865,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-transport-check \
   printf 'makefile-safety-test: transport check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Fxq podman; then
+if https_called -Fx podman; then
   printf 'makefile-safety-test: transport check mutated after failed status\n' >&2
   exit 1
 fi
@@ -917,7 +926,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-editor-check \
   printf 'makefile-safety-test: editor check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Fxq podman; then
+if https_called -Fx podman; then
   printf 'makefile-safety-test: editor check mutated after failed status\n' >&2
   exit 1
 fi
@@ -969,7 +978,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-mcp-check \
   printf 'makefile-safety-test: mcp check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+if https_called -E '^(podman|fixture)$'; then
   printf 'makefile-safety-test: mcp check mutated after failed status\n' >&2
   exit 1
 fi
@@ -1030,7 +1039,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-entry-check \
   printf 'makefile-safety-test: entry check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+if https_called -E '^(podman|fixture)$'; then
   printf 'makefile-safety-test: entry check mutated after failed status\n' >&2
   exit 1
 fi
@@ -1072,7 +1081,7 @@ if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-publish-check \
   printf 'makefile-safety-test: publish check passed failed status\n' >&2
   exit 1
 fi
-if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+if https_called -E '^(podman|fixture)$'; then
   printf 'makefile-safety-test: publish check mutated after failed status\n' >&2
   exit 1
 fi

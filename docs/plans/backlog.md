@@ -35,8 +35,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - Project edit and rename advancement is deferred until project pages ship: `PUT` in `projectapi` (`apps/server/internal/projectapi/mutations.go`) writes only the project row and returns `changedResumes: []`. The change that adds the first public reader of library data must run `PUT` through the planned-set transaction deletion uses (`apps/server/internal/resumeapi/project_removal.go`) and advance each linking live resume, non-draining for an edit and revoking for a rename (`docs/design/projects-contract.md` "Generations and revocation"). Decide first: whether a `PUT` identical to the stored project advances; whether a revision-only advance changes the resume's `updated_at`; whether `resume_showcase` stores a resume revision that such an advance would leave stale.
 
-- `scripts/test/makefile-safety-test.sh` fails on macOS at "spec-drift check never reached the runtime" (line 739), on main as well, while Linux passes: the stubbed `make dev-https-auth-check` never calls `podman` on the Mac path. Make the check platform-aware or skip it on macOS with a reason, so `make operational-test-fast` passes on the owner's Mac.
-
 - `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with `stream status 503` at `apps/server/internal/realtimeapi/service_test.go:581` (main run 43127593670 attempt 1, 462454fa, Server integration); the rerun passed and the test did not change. Find what makes the owner stream answer 503 there, likely the coordinator or hub not ready.
 
 ## Production acceptance
