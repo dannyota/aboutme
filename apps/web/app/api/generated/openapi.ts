@@ -610,7 +610,7 @@ export interface paths {
         get: operations["getProject"];
         /**
          * Replace a complete owned library project
-         * @description Omitted optional fields are cleared and absent translations removed. Every successful write advances the project revision. A slug rename holds the old slug for 180 days and consumes the shared slug limiter. Slug release requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         * @description Omitted optional fields are cleared and absent translations removed. Every successful write advances the project revision. When the stored slug or the stored sanitized document changes, every published resume of the caller that links the project advances its revision by one in the same transaction, without a document change; unpublished resumes and a write that stores the same slug and document advance none. The linking resumes are planned first and must be unchanged under the owner lock; after three changed plans the request answers public_state_busy and changes nothing. A slug rename holds the old slug for 180 days and consumes the shared slug limiter. Slug release requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
          */
         put: operations["replaceProject"];
         post?: never;
@@ -1967,6 +1967,16 @@ export interface components {
             lng: string;
             downloadEnabled: boolean;
             document: components["schemas"]["PublicResumeDocument"];
+            /** @description The project link context: one page link per visible entry that links an available library project, in layout order (main, then sidebar) and entry order. Every public JSON read carries it, empty when there is none; other uses of this schema omit it. It never carries a project id. */
+            projectLinks?: components["schemas"]["PublicProjectLink"][];
+        };
+        /** @description One linking entry and the absolute address of its project page on the canonical origin. */
+        PublicProjectLink: {
+            /** Format: uuid */
+            entryId: string;
+            projectSlug: components["schemas"]["ProjectSlug"];
+            /** Format: uri */
+            url: string;
         };
         PublicResumeDocument: {
             schemaVersion: number;
@@ -2275,7 +2285,7 @@ export interface components {
                 changedResumes: components["schemas"]["ProjectChangedResumes"];
             };
         };
-        /** @description Each resume the mutation changed, with its new revision. A replacement changes none yet. */
+        /** @description Each resume the mutation changed, with its new revision, in resume id order. A replacement lists the published linking resumes it advanced and is empty when it stored the same slug and document. */
         ProjectChangedResumes: {
             /** Format: uuid */
             id: string;
@@ -7188,7 +7198,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The sanitized project and an empty changedResumes array. */
+            /** @description The sanitized project and each advanced resume. */
             200: {
                 headers: {
                     ETag: components["headers"]["ProjectETag"];
@@ -7210,6 +7220,7 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["ProjectPublicStateBusy"];
         };
     };
     deleteProject: {

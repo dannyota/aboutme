@@ -23,6 +23,7 @@ import (
 
 type readerStore struct {
 	row   store.Resume
+	links json.RawMessage
 	err   error
 	calls int
 }
@@ -83,9 +84,13 @@ func (r *trackingReadCloser) Close() error { r.closed = true; return r.closeErr 
 func (s *readerStore) GetPublicState(context.Context) (store.PublicState, error) {
 	return store.PublicState{}, errors.New("unused")
 }
-func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
+func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	s.calls++
-	return s.row, s.err
+	links := s.links
+	if links == nil {
+		links = json.RawMessage(`[]`)
+	}
+	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: links}, s.err
 }
 
 func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {

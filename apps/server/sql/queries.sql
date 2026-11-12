@@ -258,6 +258,18 @@ SET personal_details = $4, content = $5, customization = $6,
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING *;
 
+-- name: AdvanceResumeRevisionCAS :one
+-- Advances only the revision, the change signal every public artifact keys
+-- on, and leaves the document, updated_at and every other column unchanged
+-- (docs/design/projects-contract.md "Revision-only advance"). The returned
+-- revision is the NEW one. A stale or non-matching expected revision updates
+-- zero rows and surfaces as pgx.ErrNoRows.
+UPDATE resumes
+SET revision = revision + 1
+WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id)
+    AND revision = sqlc.arg(expected_revision)
+RETURNING *;
+
 -- name: UpdateResumeTitleCAS :one
 -- The returned revision is the NEW revision (revision + 1), never the
 -- caller's expected one. A stale or non-matching $3 updates zero rows and
@@ -521,8 +533,24 @@ RETURNING discovery_generation;
 -- Missing, never-published, private, renamed, and deleted rows all surface as
 -- pgx.ErrNoRows. Representation-specific flags are checked after this live
 -- gate without exposing a different lookup result.
-SELECT * FROM resumes
-WHERE slug = sqlc.arg(slug)::text AND live = true;
+--
+-- project_links is the project link context: for each entry that is not
+-- hidden and names a project of the same owner, the entry id and the project
+-- slug. One statement reads both, so the links always belong to the returned
+-- revision (docs/design/projects-contract.md "Project link context"). The
+-- project id never leaves the statement. The id is compared as text, so a
+-- malformed stored value matches nothing instead of failing the read.
+SELECT sqlc.embed(r), COALESCE((
+    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS project_links
+FROM resumes AS r
+WHERE r.slug = sqlc.arg(slug)::text AND r.live = true;
 
 -- name: GetPublicRealtimeResume :one
 SELECT id, revision, sign_in_to_view, view_pass_epoch FROM resumes

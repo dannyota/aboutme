@@ -20,6 +20,12 @@ SELECT octet_length(sqlc.arg(document)::jsonb::text)::int AS bytes;
 INSERT INTO projects (user_id, slug, document, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $4) RETURNING *;
 
+-- name: ProjectStoredDocumentEquals :one
+-- Compares the stored document with a replacement in the jsonb form
+-- ReplaceProjectCAS stores, so formatting or key order is never a change.
+SELECT (document = sqlc.arg(document)::jsonb)::bool AS equal
+FROM projects WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
+
 -- name: ReplaceProjectCAS :one
 UPDATE projects SET slug = sqlc.arg(slug), document = sqlc.arg(document),
     revision = revision + 1, updated_at = sqlc.arg(updated_at)

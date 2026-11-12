@@ -785,6 +785,7 @@ describe("Phase 5A publish and public wire contract", () => {
       "lng",
       "downloadEnabled",
       "document",
+      "projectLinks",
     ]);
     for (const ownerOnly of [
       "id",
