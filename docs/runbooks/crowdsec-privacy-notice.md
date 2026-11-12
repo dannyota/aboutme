@@ -123,6 +123,8 @@ still show the published date. Do not put the private operation ID in evidence.
 After the sealed campaign's app restart, raise the release floor to the capable
 notice release before any enqueue. This existing deployment action checks the
 running candidate; it does not activate the notice or enable changed ingestion.
+The notice tag must not be above the tracked floor in
+`deploy/vn/scripts/fence.sh` ([release floors](../design/release-floors.md)).
 
 ```sh
 # Operator computer, clean current reviewed main:

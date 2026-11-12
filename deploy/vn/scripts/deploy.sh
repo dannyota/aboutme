@@ -14,10 +14,11 @@
 # (ssh-lib.sh).
 #
 # Recovery follows docs/design/single-host-production.md, "Release and
-# deploy": a failure before any migration request restores the previous
-# release beside maintenance; once a migration may have run, maintenance stays
-# up with the app and timers stopped, and recovery is a forward fix or a
-# point-in-time restore. A failed recovery retains the operation lock.
+# deploy": a failure before any migration or schema-floor raise request
+# restores the previous release beside maintenance; once either may have run,
+# maintenance stays up with the app and timers stopped, and recovery is a
+# forward fix or a point-in-time restore. A failed recovery retains the
+# operation lock.
 set -euo pipefail
 
 repo=dannyota/aboutme
@@ -64,9 +65,46 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
   exit 1
 }
 
+# The host's fence.sh raise refuses a tag above the tracked floor
+# (docs/design/release-floors.md); an activation above this checkout's copy
+# stops here, before SSH or registry access.
+[[ $(grep '^floor_release=' "$here/fence.sh") =~ ^floor_release=([0-9]+)$ ]] || {
+  say "fence.sh does not set one tracked floor"
+  exit 1
+}
+tracked_floor=$((10#${BASH_REMATCH[1]}))
+if ((activate && candidate > tracked_floor)); then
+  say "$tag ($candidate) is above the tracked floor $tracked_floor in fence.sh; land a change that raises it first"
+  exit 1
+fi
+
 # Refuse before opening an SSH connection or querying the registry. Deployment
 # code comes from clean, current main, even when rolling back to an older tag.
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
+
+# A deploy reads its schema floor from the tag's commit, never from this
+# checkout. A tree without the file has none.
+schema_floor_path=apps/server/migrations/schema-floor
+schema_floor_tag='' schema_floor=0
+if ((!rollback && !activate)) && git -C "$here" cat-file -e "$commit:$schema_floor_path" 2>/dev/null; then
+  schema_floor_text=$(git -C "$here" show "$commit:$schema_floor_path" && printf x) || {
+    say "could not read $schema_floor_path at $tag"
+    exit 1
+  }
+  schema_floor_tag=${schema_floor_text%$'\n'x}
+  if [[ $schema_floor_text != "$schema_floor_tag"$'\n'x ]] || ! schema_floor=$(release_number "$schema_floor_tag"); then
+    say "$schema_floor_path at $tag must hold one strict tag and a newline"
+    exit 1
+  fi
+  if ((schema_floor > candidate)); then
+    say "$tag ($candidate) is below its schema floor $schema_floor_tag ($schema_floor)"
+    exit 1
+  fi
+  if ((schema_floor > tracked_floor)); then
+    say "the schema floor $schema_floor_tag of $tag is above the tracked floor $tracked_floor in fence.sh"
+    exit 1
+  fi
+fi
 
 work='' ssh_dir='' probe=''
 ssh_opts=()
@@ -105,7 +143,7 @@ retry() { # attempts delay command...
 restore() {
   if ((migration_may_be_applied)); then
     step fail-closed || return 1
-    say "a migration may have run: enforced maintenance with the app and job timers stopped"
+    say "a migration or schema-floor raise may have run: enforced maintenance with the app and job timers stopped"
     say "recover with a forward fix or a point-in-time restore (docs/design/vietnam-production.md, \"PostgreSQL\")"
     return 0
   fi
@@ -363,6 +401,21 @@ if ((egress_after_maintenance)); then egress_check || exit 1; fi
 if ((!first)); then previous=$(step release-json) || exit 1; fi
 render_requested=1
 step render "${image[server]}" "${image[web]}" "${image[caddy]}" "$observer_image"
+# The schema floor goes up before db-setup and migrate. A raise that may have
+# landed can refuse the previous release, so from here recovery fails closed.
+# The fence document holds the private operation ID; keep only its minimum.
+if [[ -n $schema_floor_tag ]]; then
+  fence_minimum=$(on_host fence.sh read | jq -r .minimum_release) || exit 1
+  [[ $fence_minimum =~ ^[0-9]+$ ]] || {
+    say "could not read the release fence minimum"
+    exit 1
+  }
+  if ((schema_floor > fence_minimum)); then
+    migration_may_be_applied=1
+    on_host fence.sh raise "$op" "$schema_floor_tag"
+    say "raised the release fence to the schema floor $schema_floor_tag ($schema_floor)"
+  fi
+fi
 if ((first)); then
   migration_may_be_applied=1
   step db-setup

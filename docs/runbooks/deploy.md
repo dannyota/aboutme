@@ -59,8 +59,11 @@ The deployer then:
 4. Stops job timers and active jobs. Starts maintenance beside Caddy with shared
    ports and certificate storage, then stops serving Caddy and Go.
 5. Requires the marked 503 maintenance page from outside the host.
-6. Renders the new units, runs migrations, and requires exit 0. `--first-deploy`
-   runs `db-setup` before migrations.
+6. Renders the new units. When the candidate's
+   `apps/server/migrations/schema-floor` names a release above the fence, raises
+   the fence to it; from then on a failure fails closed. Runs migrations and
+   requires exit 0. `--first-deploy` runs `db-setup` after any raise and before
+   migrations.
 7. Restarts Nuxt, starts Go, and waits for `/readyz` at `127.0.0.1:8080` on the
    host. Starts Caddy, then stops maintenance and proves it stopped.
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
@@ -126,6 +129,12 @@ Deploy a capable release with its feature flag off, prove it healthy, activate
 the floor, then enable the flag in `/etc/aboutme/flags.env` and redeploy the
 same tag. The floors are v0.4.2 for passkeys, v0.4.7 for TOTP, and v0.6.26 for
 sign in to view. A raised floor stays raised if a later step fails.
+
+`fence.sh raise` refuses a tag above the tracked floor in the installed
+`fence.sh` ([release floors](../design/release-floors.md)); the deployer refuses
+such an activation before SSH. Raising production's floor therefore first lands
+a reviewed change that raises `floor_tag` and `floor_release` in
+`deploy/vn/scripts/fence.sh`, then installs the host bundle, then activates.
 
 Before clearing a stale lock, prove that no laptop deploy, host deploy process,
 database command, or media writer from that operation can still run. Inspect
