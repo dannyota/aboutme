@@ -16,6 +16,7 @@ import ProjectLanguageDialog
 import ProjectLeaveDialog from '@/components/projects/ProjectLeaveDialog.vue';
 import ProjectReleaseDialog
   from '@/components/projects/ProjectReleaseDialog.vue';
+import ProjectResumes from '@/components/projects/ProjectResumes.vue';
 import ProjectTechnologies
   from '@/components/projects/ProjectTechnologies.vue';
 import ProjectTextFields from '@/components/projects/ProjectTextFields.vue';
@@ -25,6 +26,8 @@ import {
   type ProjectTextDraft,
 } from '@/components/projects/projectDocument';
 import { issueMessage, issueTarget } from '@/components/projects/projectIssues';
+import { takeUnlinked } from '@/components/projects/projectLinks';
+import { useProjectResumes } from '@/components/projects/projectResumes';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -95,6 +98,9 @@ const errors = computed<Record<string, string>>(() => Object.fromEntries(
 // A held draft, such as a start year without an end, is unsaved work too.
 const changed = computed(() =>
   editor.dirty.value || drafts.count.value > 0);
+const resumes = useProjectResumes(editor.loaded, changed, { api, auth });
+// Resumes a project created a moment ago could not join.
+const notLinked = takeUnlinked(id);
 const saveMark = computed(() => {
   if (editor.saving.value) return 'saving';
   if (!changed.value) return 'saved';
@@ -274,6 +280,14 @@ function closeRelease(): void {
         @focus-issue="focusIssue"
       />
       <StatusBanner
+        v-if="notLinked.length > 0"
+        class="mb-6"
+        kind="error"
+        testid="project-not-linked"
+      >
+        {{ copy.notLinked(notLinked) }}
+      </StatusBanner>
+      <StatusBanner
         v-if="noticeText !== null"
         ref="notice"
         class="mb-6"
@@ -426,6 +440,13 @@ function closeRelease(): void {
         />
       </section>
 
+      <ProjectResumes
+        :controller="resumes"
+        :project="loaded"
+        :dirty="changed"
+        :copy="copy"
+      />
+
       <section
         aria-labelledby="project-address-title"
         class="grid gap-3 border-t py-8"
@@ -519,6 +540,7 @@ function closeRelease(): void {
       :open="releaseKind !== null"
       :kind="releaseKind ?? 'address'"
       :project="loaded"
+      :linked-count="resumes.linked.value.size"
       :action="action"
       :copy="copy"
       @close="closeRelease"

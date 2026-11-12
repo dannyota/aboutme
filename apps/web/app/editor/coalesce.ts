@@ -49,6 +49,8 @@ function isValueCommand(command: AtomicEditorCommand): boolean {
     case 'photoUpload':
     case 'photoDelete':
     case 'resumeDelete':
+    case 'projectLink':
+    case 'projectRefresh':
       return false;
     default:
       return assertNever(command);

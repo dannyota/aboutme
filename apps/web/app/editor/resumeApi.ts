@@ -77,6 +77,8 @@ const FAILURE_CODES = new Set<AttemptFailureCode>([
   'precondition_malformed',
   'precondition_not_supported',
   'precondition_required',
+  'project_already_linked',
+  'project_not_found',
   'request_invalid',
   'response_invalid',
   'resume_cap_exceeded',

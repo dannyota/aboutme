@@ -9,6 +9,7 @@ import {
   dependenciesAcknowledged,
   dispatchToken,
 } from './coordinatorGuards';
+import { dropChangedRefresh } from './coordinatorProject';
 import { resolveUnknown, settle } from './coordinatorSettle';
 import type { CoordinatorContext } from './coordinatorTypes';
 
@@ -20,8 +21,14 @@ export function schedule(ctx: CoordinatorContext, resumeId: string): void {
     setTimeout(() => {
       ctx.timers.delete(resumeId);
       void flush(ctx, resumeId);
-    }, DEBOUNCE_MS),
+    }, deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS),
   );
+}
+
+/** A link or refresh is one chosen action, not typing, so it goes at once. */
+function deliberateAction(ctx: CoordinatorContext, resumeId: string): boolean {
+  const last = ctx.deps.store.recordFor(resumeId)?.pending.at(-1);
+  return last?.kind === 'projectLink' || last?.kind === 'projectRefresh';
 }
 
 export function flush(
@@ -97,6 +104,11 @@ async function drainResume(
       continue;
     }
     if (decision.kind === 'conflict') {
+      if (
+        await dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)
+      ) {
+        continue;
+      }
       ctx.deps.store.markConflict(resumeId, decision.conflict);
       return;
     }

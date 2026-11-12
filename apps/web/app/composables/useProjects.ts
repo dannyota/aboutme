@@ -5,6 +5,11 @@ import {
 
 import type { Locale } from '../i18n/locale';
 import {
+  createProjectLinker,
+  rememberUnlinked,
+  type ProjectLinker,
+} from '../components/projects/projectLinks';
+import {
   canonicalJSON,
   draftFromProject,
   emptyText,
@@ -18,6 +23,8 @@ import {
   type ProjectDraft,
   type ProjectIssue,
 } from '../components/projects/projectDocument';
+import { choosesTwoPublished } from '../editor/projectLinks';
+import type { ResumeSummary } from '../editor/resumeApi';
 import {
   createProjectsApi,
   sendWithCsrf,
@@ -31,6 +38,7 @@ export interface ProjectsDeps {
   readonly auth?: ProjectAuth;
   readonly uuid?: () => string;
   readonly navigate?: (path: string) => unknown;
+  readonly linker?: ProjectLinker;
 }
 
 interface ResolvedDeps {
@@ -119,8 +127,14 @@ export interface ProjectListController {
   readonly items: ComputedRef<readonly Project[]>;
   readonly atLimit: ComputedRef<boolean>;
   readonly createState: Ref<CreateState>;
+  /** The account's resumes a new project can be shown on. */
+  readonly resumes: Ref<readonly ResumeSummary[]>;
+  /** The privacy note a submit decided to show; cleared when it opens. */
+  readonly privacyNote: Ref<boolean>;
   retry(): Promise<void>;
-  create(name: string): Promise<void>;
+  loadResumes(): Promise<void>;
+  /** Creates the project, links each chosen resume, then opens it. */
+  create(name: string, resumeIds?: readonly string[]): Promise<void>;
   resetCreate(): void;
   adopt(project: Project): void;
   forget(id: string): void;
@@ -131,8 +145,11 @@ export function useProjectList(
   deps: ProjectsDeps = {},
 ): ProjectListController {
   const { api, auth, uuid, navigate } = resolve(deps);
+  const linker = deps.linker ?? createProjectLinker({ auth });
   const view = ref<ProjectListView>({ kind: 'waiting-auth' });
   const createState = ref<CreateState>('idle');
+  const resumes = ref<readonly ResumeSummary[]>([]);
+  const privacyNote = ref(false);
   const keys = intentKeys(uuid);
   const disposed = useDisposed();
 
@@ -173,7 +190,59 @@ export function useProjectList(
     }
   }
 
-  async function create(name: string): Promise<void> {
+  async function loadResumes(): Promise<void> {
+    const result = await linker.resumes();
+    if (!disposed.value) {
+      resumes.value = result.kind === 'ready' ? result.items : [];
+    }
+  }
+
+  /** Links each resume; the editor names the ones that did not take it. */
+  async function linkChosen(
+    ownerId: string,
+    projectId: string,
+    resumeIds: readonly string[],
+  ): Promise<void> {
+    const missed: string[] = [];
+    for (const resumeId of resumeIds) {
+      const result = await linker.link(ownerId, resumeId, projectId);
+      if (result.kind === 'failed' && result.failure !== 'already-linked') {
+        missed.push(resumes.value.find((item) => item.id === resumeId)?.title
+          ?? '');
+      }
+    }
+    rememberUnlinked(projectId, missed);
+  }
+
+  /**
+   * The privacy note, decided at submit for the resumes checked then, from
+   * the account's resumes read again (docs/design/projects.md "Privacy").
+   * When it applies and the dialog did not show it, it appears and nothing
+   * is created until the owner submits again. A failed read shows it for
+   * two or more checked resumes, since it cannot rule them out.
+   */
+  async function privacyNoteAppeared(
+    resumeIds: readonly string[],
+  ): Promise<boolean> {
+    const shown = privacyNote.value
+      || choosesTwoPublished(resumes.value, resumeIds);
+    createState.value = 'busy';
+    const result = await linker.resumes();
+    createState.value = 'idle';
+    if (disposed.value) return true;
+    if (result.kind === 'ready') resumes.value = result.items;
+    const applies = result.kind === 'ready'
+      ? choosesTwoPublished(result.items, resumeIds)
+      : resumeIds.length >= 2;
+    if (!applies || shown) return false;
+    privacyNote.value = true;
+    return true;
+  }
+
+  async function create(
+    name: string,
+    resumeIds: readonly string[] = [],
+  ): Promise<void> {
     const trimmed = name.trim();
     if (createState.value === 'busy') return;
     if (trimmed === '') {
@@ -189,6 +258,7 @@ export function useProjectList(
       createState.value = 'session-lost';
       return;
     }
+    if (resumeIds.length > 0 && await privacyNoteAppeared(resumeIds)) return;
     const language = locale.value;
     const body = {
       defaultLanguage: language,
@@ -201,8 +271,10 @@ export function useProjectList(
     if (disposed.value) return;
     if (result.kind === 'ok') {
       keys.settle();
-      createState.value = 'idle';
       setItems([...items.value, result.value]);
+      await linkChosen(ownerId, result.value.id, resumeIds);
+      createState.value = 'idle';
+      if (disposed.value) return;
       await navigate(`/app/projects/${encodeURIComponent(result.value.id)}`);
       return;
     }
@@ -223,10 +295,14 @@ export function useProjectList(
     items,
     atLimit,
     createState,
+    resumes,
+    privacyNote,
     retry: load,
+    loadResumes,
     create,
     resetCreate: () => {
       if (createState.value !== 'busy') createState.value = 'idle';
+      privacyNote.value = false;
     },
     adopt: (project) => setItems(items.value.map((item) =>
       item.id === project.id ? project : item)),

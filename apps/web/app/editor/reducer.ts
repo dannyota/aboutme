@@ -45,6 +45,8 @@ export function applyIntent(
     case 'photoDelete':
       return deletePhoto(snapshot);
     case 'resumeDelete':
+    case 'projectLink':
+    case 'projectRefresh':
       return snapshot;
     default:
       return assertNever(intent);

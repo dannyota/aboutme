@@ -15,6 +15,7 @@ import EducationEntryFields from './entries/EducationEntryFields.vue';
 import LanguageEntryFields from './entries/LanguageEntryFields.vue';
 import ProfileEntryFields from './entries/ProfileEntryFields.vue';
 import ProjectEntryFields from './entries/ProjectEntryFields.vue';
+import ProjectLinkNote from './entries/ProjectLinkNote.vue';
 import SkillEntryFields from './entries/SkillEntryFields.vue';
 import WorkEntryFields from './entries/WorkEntryFields.vue';
 import EntryCard from '../EntryCard.vue';
@@ -25,14 +26,26 @@ import StatusBanner from '../../app/StatusBanner.vue';
 import { Button } from '../../ui/button';
 import type { FieldIntent } from './fieldIntent';
 import { useFieldDrafts } from '../../../composables/useFieldDrafts';
+import {
+  linkedProjectIds,
+  projectPageLanguage,
+  type EntryLocation,
+} from '../../../editor/projectLinks';
+import { projectName } from '../../projects/projectDocument';
+import ProjectEntryMenu from './ProjectEntryMenu.vue';
+import { createProjectLibrary } from './projectLibrary';
+import { useProjectLinking } from './projectLinking';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly section: Section;
   readonly sectionKey: string;
+  readonly selectedEntryId?: string;
 }>();
+const emit = defineEmits<{ selectEntry: [location: EntryLocation] }>();
 const { locale } = useLocale();
 const copy = computed(() => editorFieldsCopy[locale.value].section);
+const linkCopy = computed(() => editorFieldsCopy[locale.value].projectLinks);
 
 interface DeleteTarget {
   readonly entry: Section['entries'][number];
@@ -78,6 +91,65 @@ watch(
     issueSummary.value?.$el?.focus();
   },
 );
+
+const isProject = computed(() => props.section.sectionType === 'project');
+const library = createProjectLibrary();
+const current = computed(() => props.actions.record.value?.current);
+const linkedProjects = computed(() => current.value === undefined
+  ? new Set<string>()
+  : linkedProjectIds(current.value.document));
+const linking = useProjectLinking({
+  actions: props.actions,
+  sectionKey: () => props.sectionKey,
+  library,
+  onLinked: (location) => emit('selectEntry', location),
+});
+const linkStatus = computed(() => {
+  switch (linking.status.value) {
+    case 'adding': return linkCopy.value.adding;
+    case 'not-added': return linkCopy.value.notAdded;
+    case 'changed-elsewhere': return linkCopy.value.changedElsewhere;
+    default: return '';
+  }
+});
+
+watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
+  linking.reset();
+  if (project) void library.load();
+}, { immediate: true });
+
+interface EntryLink {
+  readonly projectId: string;
+  readonly name: string;
+  /** The default language's name when the project page falls back to it. */
+  readonly fallbackLanguage: string | null;
+}
+
+/**
+ * Each linked entry's project. Until the library loads, the entry's own
+ * label stands in for the project name and no fallback is known.
+ */
+const entryLinks = computed(() => {
+  const links = new Map<string, EntryLink>();
+  if (!isProject.value) return links;
+  props.section.entries.forEach((entry, index) => {
+    if (!('projectId' in entry) || entry.projectId === undefined) return;
+    const project = library.find(entry.projectId);
+    const page = project === undefined
+      ? undefined
+      : projectPageLanguage(current.value?.metadata.lng, project);
+    links.set(entry.id, {
+      projectId: entry.projectId,
+      name: project === undefined
+        ? entryLabel(entry, index, locale.value)
+        : projectName(project),
+      fallbackLanguage: page?.fallback === true
+        ? linkCopy.value.languageName(page.key)
+        : null,
+    });
+  });
+  return links;
+});
 
 function add(): void {
   props.actions.edit({
@@ -292,7 +364,19 @@ function assertNever(value: never): never {
     tabindex="-1"
   >
     <template #actions>
+      <ProjectEntryMenu
+        v-if="isProject"
+        :library="library.view.value"
+        :linked="linkedProjects"
+        :busy="linking.busy.value"
+        :add-label="copy.addEntry"
+        :copy="linkCopy"
+        @blank="add"
+        @link="linking.choose"
+        @retry="library.load()"
+      />
       <Button
+        v-else
         data-action="add-entry"
         size="sm"
         @click="add"
@@ -300,6 +384,14 @@ function assertNever(value: never): never {
         {{ copy.addEntry }}
       </Button>
     </template>
+    <p
+      v-if="isProject"
+      class="text-sm text-muted-foreground empty:hidden"
+      data-testid="project-link-status"
+      role="status"
+    >
+      {{ linkStatus }}
+    </p>
     <StatusBanner
       v-if="issues.length > 0"
       ref="issueSummary"
@@ -331,11 +423,24 @@ function assertNever(value: never): never {
       :hidden="entry.isHidden ?? false"
       :index="index"
       :title="entryLabel(entry, index, locale)"
+      :project-name="entryLinks.get(entry.id)?.name"
+      :selected="entry.id === selectedEntryId"
       @delete="openDelete(entry, index)"
       @move-down="reorder(entry.id, 1)"
       @move-up="reorder(entry.id, -1)"
       @toggle-hidden="toggleHidden(entry.id, entry.isHidden)"
     >
+      <ProjectLinkNote
+        v-if="entryLinks.has(entry.id)"
+        class="mb-4"
+        :project-id="entryLinks.get(entry.id)!.projectId"
+        :name="entryLinks.get(entry.id)!.name"
+        :fallback-language="entryLinks.get(entry.id)!.fallbackLanguage"
+        :refreshing="linking.refreshingEntries.value.has(entry.id)"
+        :copy="linkCopy"
+        :cancel-label="copy.cancel"
+        @refresh="linking.refresh(entry.id)"
+      />
       <component
         :is="selectedComponent"
         :entry="entry"
@@ -368,5 +473,19 @@ function assertNever(value: never): never {
     >
       {{ copy.entryChanged }}
     </p>
+    <!-- docs/design/projects.md "Privacy": Cancel takes the first focus. -->
+    <ConfirmDialog
+      v-if="linking.asking.value !== null"
+      :open="true"
+      :title="linkCopy.sharedPublic"
+      :description="linkCopy.sharedReader"
+      :confirm-label="linkCopy.addAnyway"
+      :cancel-label="copy.cancel"
+      destructive
+      confirm-action="confirm-project-privacy"
+      cancel-action="cancel-project-privacy"
+      @confirm="linking.addAnyway()"
+      @cancel="linking.cancelAsk()"
+    />
   </InspectorPanel>
 </template>

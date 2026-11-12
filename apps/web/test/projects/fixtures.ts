@@ -1,3 +1,4 @@
+import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { computed, ref } from 'vue';
 import { vi } from 'vitest';
 
@@ -9,6 +10,8 @@ import type {
   ProjectsApi,
 } from '../../app/composables/projectsApi';
 import type { AuthState } from '../../app/composables/useAuth';
+import type { ResumeSummary } from '../../app/editor/resumeApi';
+import { parseRevision } from '../../app/editor/revision';
 
 export function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -21,6 +24,32 @@ export function project(overrides: Partial<Project> = {}): Project {
     text: { en: { name: 'Shop site', role: 'Lead engineer' } },
     technologies: ['Go', 'Vue'],
     linkedResumeIds: [],
+    ...overrides,
+  };
+}
+
+/** One resume of the account, as the resume list returns it. */
+export function resumeSummary(
+  id: string,
+  revision = '1',
+  title = id,
+  overrides: Partial<ResumeSummary> = {},
+): ResumeSummary {
+  return {
+    id,
+    title,
+    lng: 'en',
+    live: false,
+    downloadEnabled: false,
+    seoGeoEnabled: false,
+    signInToView: false,
+    slug: null,
+    publicTitle: null,
+    faviconEmoji: null,
+    schemaVersion: CURRENT_VERSION,
+    createdAt: '2026-11-01T00:00:00Z',
+    updatedAt: '2026-11-01T00:00:00Z',
+    revision: parseRevision(revision),
     ...overrides,
   };
 }

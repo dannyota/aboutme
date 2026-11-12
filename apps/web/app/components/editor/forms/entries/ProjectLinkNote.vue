@@ -1,0 +1,105 @@
+<script setup lang="ts">
+import { nextTick, ref, watch } from 'vue';
+
+import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
+import { Button } from '@/components/ui/button';
+import type { EditorFieldsCopy } from '@/i18n/editor-fields';
+
+// The note above a linked entry's fields (docs/design/ui/projects.md "In
+// the resume editor"). Refresh asks first, because it replaces text the
+// owner may have shortened for this resume.
+const props = defineProps<{
+  readonly projectId: string;
+  readonly name: string;
+  /** The default language's name when the project page falls back to it. */
+  readonly fallbackLanguage: string | null;
+  readonly refreshing: boolean;
+  readonly copy: EditorFieldsCopy['projectLinks'];
+  readonly cancelLabel: string;
+}>();
+const emit = defineEmits<{ refresh: [] }>();
+const asking = ref(false);
+const refreshButton = ref<{ $el?: HTMLElement } | null>(null);
+const openLink = ref<{ $el?: HTMLElement } | null>(null);
+// The dialog returns focus to Refresh, which is disabled while the refresh
+// is queued; focus waits on Open project and comes back when it is enabled.
+let returning: 'confirmed' | 'queued' | null = null;
+
+function confirm(): void {
+  asking.value = false;
+  returning = 'confirmed';
+  emit('refresh');
+}
+
+watch(() => props.refreshing, async (refreshing) => {
+  if (returning === null) return;
+  await nextTick();
+  if (refreshing) {
+    returning = 'queued';
+    openLink.value?.$el?.focus();
+  } else if (returning === 'queued') {
+    returning = null;
+    // Only focus this note put on Open project comes back; a field the
+    // person moved to meanwhile keeps it.
+    const link = openLink.value?.$el;
+    if (link !== undefined && document.activeElement === link) {
+      refreshButton.value?.$el?.focus();
+    }
+  }
+}, { flush: 'post' });
+</script>
+
+<template>
+  <div
+    class="grid gap-2 rounded-md bg-surface-blue p-3 text-sm text-foreground"
+    data-project-note
+  >
+    <p class="break-words">
+      {{ copy.note(name) }}
+    </p>
+    <p
+      v-if="fallbackLanguage !== null"
+      data-project-fallback
+    >
+      {{ copy.pageUses(fallbackLanguage) }}
+    </p>
+    <div class="flex flex-wrap gap-2">
+      <Button
+        ref="refreshButton"
+        data-action="refresh-project-entry"
+        :disabled="refreshing"
+        size="sm"
+        type="button"
+        variant="outline"
+        @click="asking = true"
+      >
+        {{ copy.refresh }}
+      </Button>
+      <Button
+        as-child
+        size="sm"
+        variant="ghost"
+      >
+        <NuxtLink
+          ref="openLink"
+          data-action="open-project"
+          :to="`/app/projects/${encodeURIComponent(projectId)}`"
+        >
+          {{ copy.openProject }}
+        </NuxtLink>
+      </Button>
+    </div>
+    <ConfirmDialog
+      v-if="asking"
+      :open="true"
+      :title="copy.refresh"
+      :description="copy.refreshQuestion"
+      :confirm-label="copy.replace"
+      :cancel-label="cancelLabel"
+      confirm-action="confirm-project-refresh"
+      cancel-action="cancel-project-refresh"
+      @confirm="confirm"
+      @cancel="asking = false"
+    />
+  </div>
+</template>

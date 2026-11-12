@@ -74,6 +74,7 @@ function focusNewProject(): void {
 
 function openCreate(): void {
   list.resetCreate();
+  void list.loadResumes();
   createOpen.value = true;
 }
 
@@ -213,6 +214,8 @@ function closeRelease(): void {
       :open="createOpen"
       :state="list.createState.value"
       :copy="copy"
+      :resumes="list.resumes.value"
+      :privacy-note="list.privacyNote.value"
       @close="closeCreate"
       @submit="list.create"
     />
