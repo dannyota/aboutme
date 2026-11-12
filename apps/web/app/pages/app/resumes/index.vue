@@ -21,6 +21,7 @@ import {
   useResumeList,
 } from '../../../composables/useResumeList';
 import { useNow } from '../../../composables/useNow';
+import { useLeaveGuard } from '../../../composables/useUnsavedNavigationGuard';
 import { workspaceTitles } from '@/i18n/meta';
 import { resumeListCopy } from '@/i18n/resume-list';
 
@@ -31,6 +32,9 @@ useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 
 const auth = useAuth();
 const list = useResumeList();
+// A rename or delete still being saved warns before the page goes, as the
+// editor does; leaving anyway drops it.
+useLeaveGuard(() => list.unsettled());
 let twinGeneration = 0;
 let twinOwner = auth.user.value?.id;
 let disposed = false;
@@ -203,6 +207,7 @@ async function remove(id: string, title: string): Promise<void> {
       v-else
       :items="list.items.value"
       :busy-ids="[...busyIds]"
+      :save-states="list.saveStates.value"
       :now="now"
       :removal-focus-id="list.removalFocusId.value"
       :removal-focus-version="list.removalFocusVersion.value"
@@ -210,6 +215,7 @@ async function remove(id: string, title: string): Promise<void> {
       @other-language="createOtherLanguage"
       @rename="renameItem = $event"
       @remove="deleteItem = $event"
+      @retry="list.retry"
     />
     <EditorListCreateResumeDialog
       :open="createOpen"

@@ -57,6 +57,14 @@ sheet radius on a half-opaque card fill, reading Empty slot. For an empty list,
 the first slot says “No resumes yet.” and how to start, and that three are
 allowed.
 
+A rename or delete from the list goes through the same save queue as the editor.
+While it is being saved, the card's mark reads “Đang lưu…” (“Saving…”). A rename
+the queue still holds after a failure reads “Chưa lưu được tên.” (“Name not
+saved.”) with Try again (“Thử lại”), which asks the queue to send it again; the
+queue also keeps retrying on its own. Leaving the page warns while a rename or
+delete is unsettled, as the editor does. Leaving anyway drops that unsent work
+and stops the page's reads and writes, and the resume opens afresh next time.
+
 The editor is a four-region workspace on the flat `--editor-canvas` fill, with
 no canvas glows:
 

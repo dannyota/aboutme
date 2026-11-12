@@ -24,6 +24,7 @@ import {
   type ResumeEditorActions,
 } from './useResumeEditor';
 import { useAuth, type AuthState } from './useAuth';
+import { hasUnsafeWork } from './useUnsavedNavigationGuard';
 
 type ResumeListView
   = | { readonly kind: 'waiting-auth' }
@@ -40,6 +41,12 @@ export type CreateNotice
 
 type ResumeListNotice = 'resume-changed' | null;
 
+/**
+ * What a card shows while the list's own rename or delete of it is not
+ * settled: being saved, or a rename the queue holds after a failure.
+ */
+export type ResumeCardSaveState = 'saving' | 'rename-held';
+
 interface CreateOpenOptions {
   readonly isCurrent?: () => boolean;
   readonly beforeOpen?: (resumeId: string) => void;
@@ -51,7 +58,14 @@ export interface ResumeListController {
   readonly actionNotice: Ref<ResumeListNotice>;
   readonly removalFocusId: Ref<string | null>;
   readonly removalFocusVersion: Ref<number>;
+  readonly saveStates: ComputedRef<
+    Readonly<Record<string, ResumeCardSaveState>>
+  >;
   settled(): Promise<void>;
+  /** A rename or delete this list made has not settled yet. */
+  unsettled(): boolean;
+  /** Sends a held rename or delete again through the queue. */
+  retry(id: string): Promise<void>;
   create(
     title: string,
     lng: string | null | undefined,
@@ -125,9 +139,18 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   let settling: Promise<void> = Promise.resolve();
   let wasAuthenticated = false;
   const disposed = ref(false);
+  /** Resumes this list renamed or deleted through its queue. */
+  const touched = ref(new Set<string>());
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {
       disposed.value = true;
+      // Leaving the list ends its queue's reads and writes and drops the
+      // work still unsent, as the leave warning said and as closing the
+      // editor does; the resume opens afresh.
+      for (const id of touched.value) {
+        coordinator.stop(id);
+        coordinator.discard(id);
+      }
     });
   }
 
@@ -148,6 +171,21 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const items = computed<readonly ResumeSummary[]>(() =>
     view.value.kind === 'ready' ? view.value.items : [],
   );
+
+  const saveStates = computed(() => {
+    const states: Record<string, ResumeCardSaveState> = {};
+    for (const id of touched.value) {
+      const record = store.recordFor(id);
+      if (!hasUnsafeWork(record)) continue;
+      const held = record!.attempt;
+      const rename = held?.command.kind === 'metadataField'
+        && held.command.field === 'title';
+      states[id] = rename && held.kind !== 'dispatching' && !held.sending
+        ? 'rename-held'
+        : 'saving';
+    }
+    return states;
+  });
 
   watch(
     () => [...store.records.keys()],
@@ -313,8 +351,10 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       actionNotice.value = 'resume-changed';
       return null;
     }
+    // Nothing re-initializes a record that holds unsent or in-flight work.
     if (store.recordFor(id) === undefined) store.initialize(read.accepted);
     else store.adoptCompleteRead(id, read.accepted);
+    touched.value = new Set([...touched.value, id]);
     return actionsFor(id);
   };
 
@@ -327,6 +367,40 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     };
   };
 
+  /**
+   * The card shows what the record holds: the title still being saved, or
+   * once settled, whatever the server kept.
+   */
+  const showRecord = (id: string): void => {
+    const record = store.recordFor(id);
+    if (record === undefined) return;
+    updateItem(id, {
+      title: hasUnsafeWork(record)
+        ? record.current.metadata.title
+        : record.accepted.metadata.title,
+      updatedAt: record.accepted.metadata.updatedAt,
+      revision: record.accepted.revision,
+    });
+  };
+
+  // A rename the queue settles later, on its own retries, shows its result.
+  watch(
+    () => [...touched.value].map((id) => {
+      const record = store.recordFor(id);
+      return record === undefined
+        ? id
+        : [
+            id,
+            record.accepted.revision,
+            record.accepted.metadata.title,
+            hasUnsafeWork(record),
+          ].join(':');
+    }).join('|'),
+    () => {
+      for (const id of touched.value) showRecord(id);
+    },
+  );
+
   const rename = async (id: string, title: string): Promise<void> => {
     const actions = await initializeForAction(id);
     const result = actions?.edit({
@@ -338,15 +412,18 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     // The card shows the new title at once, then whatever the server kept.
     updateItem(id, { title });
     await coordinator.flush(id);
-    const saved = store.recordFor(id)?.accepted;
-    if (saved !== undefined) {
-      updateItem(id, {
-        title: saved.metadata.title,
-        updatedAt: saved.metadata.updatedAt,
-        revision: saved.revision,
-      });
-    }
+    showRecord(id);
   };
+
+  const retry = (id: string): Promise<void> => {
+    const held = store.recordFor(id)?.attempt;
+    if (held === null || held === undefined) return Promise.resolve();
+    // Only the queue sends: this asks it to send the held write again.
+    return coordinator.retry(id, held.command.id);
+  };
+
+  const unsettled = (): boolean =>
+    [...touched.value].some((id) => hasUnsafeWork(store.recordFor(id)));
 
   const remove = async (id: string, confirmedTitle: string): Promise<void> => {
     const actions = await initializeForAction(id, confirmedTitle);
@@ -363,7 +440,10 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     actionNotice,
     removalFocusId,
     removalFocusVersion,
+    saveStates,
     settled: () => settling,
+    unsettled,
+    retry,
     create,
     refreshCreate,
     abandonCreate,

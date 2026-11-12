@@ -167,6 +167,8 @@ export function fakeServer(initial: AcceptedResume) {
         });
         return { kind: 'complete', status: 201, accepted: copy() };
       }
+      case 'deleteResume':
+        return { kind: 'resume-deleted', status: 204 };
       case 'deleteResumePhoto': {
         const { photo: _photo, ...personalDetails } = document.personalDetails;
         advance({ ...document, personalDetails });
@@ -212,7 +214,11 @@ export function fakeServer(initial: AcceptedResume) {
       };
     }
     const result = apply(attempt);
-    if (result.kind === 'complete' || result.kind === 'child-ack') {
+    if (
+      result.kind === 'complete'
+      || result.kind === 'child-ack'
+      || result.kind === 'resume-deleted'
+    ) {
       replays.set(attempt.idempotencyKey, { request, result });
     }
     return result;
