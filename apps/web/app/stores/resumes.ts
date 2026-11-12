@@ -127,6 +127,7 @@ interface ResumeStoreActions {
     accepted: AcceptedResume,
   ): CompletionAdoption;
   adoptStaleWinner(resumeId: string, accepted: AcceptedResume): void;
+  requireCompleteRead(resumeId: string): void;
   acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag): void;
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
   replaceActiveAfterCompleteRead(
@@ -304,6 +305,13 @@ const resumeStore = defineStore('resumes', {
       };
       record.completeReadRequired = true;
       replay(record);
+    },
+
+    requireCompleteRead(resumeId: string) {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      if (record !== undefined) record.completeReadRequired = true;
     },
 
     acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag) {

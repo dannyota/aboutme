@@ -11,7 +11,7 @@ import {
 
 // The workspace Projects screens (docs/design/ui/projects.md) against a
 // stateful fake of the owner project API (docs/api/openapi.yaml, /projects)
-// and of the resume routes a link or refresh writes through.
+// and of the resume routes a link, refresh or personal detail writes through.
 
 interface ProjectText {
   name?: string;
@@ -72,6 +72,7 @@ interface ResumeRow {
   revision: number;
   /** The project section's entries; null when the resume has none. */
   entries: ResumeEntry[] | null;
+  personalDetails?: Record<string, unknown>;
 }
 
 interface LibraryOptions {
@@ -82,6 +83,8 @@ interface LibraryOptions {
   readonly refreshDelayMs?: number;
   /** Resumes another tab saves just before their first link arrives. */
   readonly savedElsewhere?: readonly string[];
+  /** Headlines another tab saves just before a resume's first write. */
+  readonly headlinesElsewhere?: Readonly<Record<string, string>>;
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -111,7 +114,8 @@ function resumeRows(linked: Record<string, string> = {}): ResumeRow[] {
 function resumeDocument(row: ResumeRow) {
   return {
     schemaVersion: CURRENT_VERSION,
-    personalDetails: { fullName: 'Ada Lovelace', details: [] },
+    personalDetails: row.personalDetails
+      ?? { fullName: 'Ada Lovelace', details: [] },
     content: row.entries === null
       ? {}
       : {
@@ -189,6 +193,9 @@ async function fakeLibrary(
   const writes: Write[] = [];
   const resumeWrites: Write[] = [];
   const savedElsewhere = new Set(options.savedElsewhere ?? []);
+  const headlinesElsewhere = new Map(
+    Object.entries(options.headlinesElsewhere ?? {}),
+  );
   let nextEntry = 0;
   const reauths: string[] = [];
   let reauthenticated = false;
@@ -336,6 +343,13 @@ async function fakeLibrary(
         body: request.postData() ? request.postDataJSON() : null,
       });
       if (savedElsewhere.delete(row.id)) row.revision += 1;
+      const headline = headlinesElsewhere.get(row.id);
+      if (headlinesElsewhere.delete(row.id)) {
+        row.personalDetails = {
+          ...resumeDocument(row).personalDetails, headline,
+        };
+        row.revision += 1;
+      }
       if (request.headers()['if-match'] !== `"r${row.revision}"`) {
         await route.fulfill(problem(412, 'revision_mismatch', {
           revision: String(row.revision), document: resumeDocument(row),
@@ -343,7 +357,10 @@ async function fakeLibrary(
         return;
       }
       const entries = row.entries ?? [];
-      if (parts[5] === 'project-links') {
+      if (parts[5] === 'personal-details') {
+        row.personalDetails
+          = request.postDataJSON() as Record<string, unknown>;
+      } else if (parts[5] === 'project-links') {
         const { projectId } = request.postDataJSON() as { projectId: string };
         const project = projects.get(projectId);
         if (project === undefined) {
@@ -939,6 +956,34 @@ test('the resume editor adds a library project, selects it and refreshes it',
     });
     expect(fake.resumeWrites).toHaveLength(2);
   });
+
+test('the resume editor sends an edit typed after another tab saved the '
+  + 'same value', async ({ page }) => {
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: resumeRows(),
+    headlinesElsewhere: { [BACKEND]: 'Staff engineer' },
+  });
+  const field = (name: string) => page.locator(
+    `[data-region="inspector"] [data-field="${name}"] [data-field-input]`,
+  );
+  const status = page.getByTestId('save-status');
+  const personal = `/api/v1/resumes/${BACKEND}/personal-details`;
+
+  await field('headline').fill('Staff engineer');
+  await field('headline').press('Tab');
+  await expect.poll(() => fake.resumeWrites.length).toBe(1);
+  await expect(status).toHaveAttribute('data-state', 'saved');
+  await field('fullName').fill('Ada Byron');
+  await field('fullName').press('Tab');
+
+  await expect.poll(() => fake.resumeWrites.length).toBe(2);
+  await expect(status).toHaveAttribute('data-state', 'saved');
+  expect(fake.resumeWrites.map((write) => [write.path, write.ifMatch]))
+    .toEqual([[personal, '"r1"'], [personal, '"r2"']]);
+  expect(fake.resumes.get(BACKEND)!.personalDetails).toMatchObject({
+    fullName: 'Ada Byron', headline: 'Staff engineer',
+  });
+});
 
 test('deleting a linked project says how many resumes it leaves', async ({
   page,

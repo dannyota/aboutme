@@ -7,6 +7,8 @@ import type { CoordinatorContext } from './coordinatorTypes';
 
 export const DEBOUNCE_MS = 1_000;
 export const UNKNOWN_REPLAY_DELAY_MS = 250;
+export const READ_RETRY_FIRST_MS = 1_000;
+export const READ_RETRY_MAX_MS = 30_000;
 
 export function dispatchToken(
   ctx: CoordinatorContext,
@@ -63,6 +65,26 @@ export function canDrain(
     && authState === 'authenticated'
     && ownerId !== undefined
     && record.pending[0]!.ownerId === ownerId
+  );
+}
+
+/**
+ * The read barrier is completed before any queued edit, once no write is in
+ * flight. A lost session waits for sign-in instead.
+ */
+export function readBarrierDue(
+  record: ResumeRecord | undefined,
+  authState: ReturnType<typeof useAuth>['authState']['value'],
+  ownerId: string | undefined,
+): boolean {
+  return (
+    record !== undefined
+    && record.completeReadRequired
+    && record.attempt === null
+    && !record.sessionLost
+    && authState === 'authenticated'
+    && ownerId !== undefined
+    && (record.pending[0]?.ownerId ?? ownerId) === ownerId
   );
 }
 

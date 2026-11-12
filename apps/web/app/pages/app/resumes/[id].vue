@@ -236,6 +236,7 @@ watch(
 onBeforeUnmount(() => {
   stopRealtime();
   photo.clear();
+  actions.value?.stop();
 });
 
 async function bytesToDataURL(

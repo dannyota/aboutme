@@ -7,9 +7,15 @@ import {
 } from './coordinatorCreate';
 import { discard } from './coordinatorGuards';
 import { resolveOpaquePhoto } from './coordinatorPhoto';
-import { flush, resumeAfterAuth, retry, schedule } from './coordinatorQueue';
 import {
   completeReadBarrier,
+  flush,
+  resumeAfterAuth,
+  retry,
+  schedule,
+  stop,
+} from './coordinatorQueue';
+import {
   refreshAndReconcile,
   refreshConditionalAndReconcile,
 } from './coordinatorReconcile';
@@ -45,6 +51,8 @@ export function createMutationCoordinator(
     drains: new Map(),
     retainedCreates: new Map(),
     csrfRetries: new Set(),
+    readFailures: new Map(),
+    stopped: new Set(),
   };
 
   return {
@@ -64,6 +72,7 @@ export function createMutationCoordinator(
     applyMine: (resumeId, conflictId, confirmation) =>
       applyMine(ctx, resumeId, conflictId, confirmation),
     resumeAfterAuth: (resumeId) => resumeAfterAuth(ctx, resumeId),
+    stop: (resumeId) => stop(ctx, resumeId),
     resolveOpaquePhoto: (resumeId, commandId, decision) =>
       resolveOpaquePhoto(ctx, resumeId, commandId, decision),
     discard: (resumeId) => discard(ctx, resumeId),

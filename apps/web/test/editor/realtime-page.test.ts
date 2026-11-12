@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   actions: undefined as unknown,
   controllerOptions: undefined as unknown,
   stop: vi.fn(),
+  stopEditor: vi.fn(),
 }));
 
 mockNuxtImport('useAuth', () => () => mocks.auth);
@@ -65,6 +66,7 @@ describe('resume editor realtime session expiry', () => {
     };
     mocks.actions = {
       record: computed(() => record),
+      stop: mocks.stopEditor,
       refresh: vi.fn(async () => {
         record.sessionLost = true;
         return { kind: 'session-lost' };
@@ -76,6 +78,7 @@ describe('resume editor realtime session expiry', () => {
     };
     mocks.controllerOptions = undefined;
     mocks.stop.mockReset();
+    mocks.stopEditor.mockReset();
   });
 
   it.each(['unconditional', 'conditional'] as const)(
@@ -118,4 +121,17 @@ describe('resume editor realtime session expiry', () => {
     expect(mocks.stop).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
+
+  it('stops the editor\'s background reads when the page unmounts',
+    async () => {
+      const wrapper = await mountSuspended(ResumeEditorPage, {
+        global: { stubs: { EditorShell: { template: '<div />' } } },
+      });
+      await nextTick();
+      expect(mocks.stopEditor).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+
+      expect(mocks.stopEditor).toHaveBeenCalledOnce();
+    });
 });

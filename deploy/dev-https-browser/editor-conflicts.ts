@@ -57,6 +57,39 @@ export async function proveConflictAndTemplate(
   state.editorDiagnosticStage = 'conflict-safe-stale-complete';
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
+  state.editorDiagnosticStage = 'conflict-same-value';
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    personalPath,
+    412,
+  );
+  const sameValuePause = diagnostics.pauseNextMutation('PATCH', personalPath);
+  const staleSameValue = page.waitForResponse((response) =>
+    response.status() === 412
+    && new URL(response.url()).pathname === personalPath,
+  );
+  await headline.fill('Same value elsewhere');
+  await headline.press('Tab');
+  await sameValuePause.waitUntilPaused();
+  try {
+    await mutateRemoteHeadline(
+      page,
+      accepted.metadata.id,
+      'Same value elsewhere',
+    );
+  } finally {
+    sameValuePause.release();
+  }
+  expect((await staleSameValue).status()).toBe(412);
+  const laterSave = page.waitForResponse((response) =>
+    response.request().method() === 'PATCH'
+    && new URL(response.url()).pathname === personalPath,
+  );
+  await headline.fill('Typed after the same value');
+  await headline.press('Tab');
+  expect((await laterSave).status()).toBe(200);
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
   state.editorDiagnosticStage = 'conflict-accept-latest';
   diagnostics.expectHTTPFailure(
     'PATCH',

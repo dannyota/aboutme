@@ -93,7 +93,7 @@ function adoptAndReconcile(
 ): AcceptedResume | undefined {
   const record = ctx.deps.store.recordFor(resumeId);
   if (record === undefined) return undefined;
-  const adoption = ctx.deps.store.adoptComplete(resumeId, accepted);
+  const adoption = adoptRead(ctx, resumeId, accepted);
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
@@ -164,16 +164,17 @@ export async function refreshConditionalAndReconcile(
       };
 }
 
-export async function completeReadBarrier(
+/**
+ * Adopts a complete read of the resume. Any complete read at the held
+ * revision or newer completes the read barrier; without the barrier only a
+ * newer revision replaces what the editor holds.
+ */
+export function adoptRead(
   ctx: CoordinatorContext,
   resumeId: string,
-): Promise<boolean> {
-  const result = await ctx.deps.api.read(resumeId);
-  if (result.kind === 'session-lost') {
-    stopForSessionLoss(ctx, resumeId);
-    return false;
-  }
-  if (result.kind !== 'complete') return false;
-  ctx.deps.store.adoptCompleteRead(resumeId, result.accepted);
-  return !ctx.deps.store.recordFor(resumeId)?.completeReadRequired;
+  accepted: AcceptedResume,
+): ReturnType<CoordinatorContext['deps']['store']['adoptComplete']> {
+  return ctx.deps.store.recordFor(resumeId)?.completeReadRequired === true
+    ? ctx.deps.store.adoptCompleteRead(resumeId, accepted)
+    : ctx.deps.store.adoptComplete(resumeId, accepted);
 }

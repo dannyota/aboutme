@@ -85,6 +85,8 @@ export interface ResumeEditorActions {
     etag?: ParentETag,
   ) => Promise<ResumeConditionalReadResult>;
   discard(): void;
+  /** Ends background reads when the editor closes; queued edits remain. */
+  stop(): void;
   readonly downloadPdf: PdfDownloadController;
   readonly publish: PublishController;
 }
@@ -267,6 +269,7 @@ export function createResumeEditorActions(
               etag,
             ),
     discard: () => deps.coordinator.discard(deps.resumeId),
+    stop: () => deps.coordinator.stop(deps.resumeId),
     downloadPdf,
     publish,
   };

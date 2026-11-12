@@ -13,7 +13,7 @@ import {
   UNKNOWN_REPLAY_DELAY_MS,
 } from './coordinatorGuards';
 import {
-  completeReadBarrier,
+  adoptRead,
   refreshAndReconcile,
   settleTemplateComplete,
 } from './coordinatorReconcile';
@@ -42,7 +42,6 @@ export async function settle(
     case 'child-ack':
       ctx.deps.store.acknowledgeChild(resumeId, queueItem.id, result.etag);
       ctx.deps.store.dropHead(resumeId, queueItem.id);
-      await completeReadBarrier(ctx, resumeId);
       return;
     case 'resume-deleted':
       ctx.deps.store.acknowledgeResumeDelete(resumeId, queueItem.id);
@@ -70,7 +69,7 @@ export async function settle(
       stopForSessionLoss(ctx, resumeId);
       return;
     case 'validation-rejected':
-      if (await dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
+      if (dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
       ctx.deps.store.setIssues(resumeId, queueItem.id, result.issues);
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
@@ -114,9 +113,7 @@ export async function settle(
       await refreshAndReconcile(ctx, resumeId);
       return;
     case 'rejected':
-      if (
-        await dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)
-      ) {
+      if (dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)) {
         return;
       }
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
@@ -342,7 +339,7 @@ async function settleStale(
       });
       return;
     }
-    const adoption = ctx.deps.store.adoptComplete(resumeId, complete.accepted);
+    const adoption = adoptRead(ctx, resumeId, complete.accepted);
     snapshot = adoption.kind === 'adopted'
       ? adoption.accepted
       : adoption.winner;
@@ -363,7 +360,7 @@ async function settleStale(
     && (command.kind === 'structure' || command.kind === 'customization')
     ? reconcileTemplateChild(command, snapshot)
     : reconcileCommand(command, snapshot);
-  if (await settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
+  if (settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
     return;
   }
   if (secondStale) {
@@ -428,7 +425,7 @@ async function setOpaquePhoto(
       = result.accepted.document.personalDetails.photo?.key === before
         ? 'unchanged'
         : 'changed';
-    ctx.deps.store.adoptComplete(resumeId, result.accepted);
+    adoptRead(ctx, resumeId, result.accepted);
   }
   ctx.deps.store.setOpaquePhotoOutcome(resumeId, {
     kind: 'photo-cutoff',

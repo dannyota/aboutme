@@ -8,12 +8,21 @@ import {
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
+  READ_RETRY_FIRST_MS,
+  READ_RETRY_MAX_MS,
+  readBarrierDue,
+  stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
+import { adoptRead } from './coordinatorReconcile';
 import { resolveUnknown, settle } from './coordinatorSettle';
 import type { CoordinatorContext } from './coordinatorTypes';
 
-export function schedule(ctx: CoordinatorContext, resumeId: string): void {
+export function schedule(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  delayMs?: number,
+): void {
   const prior = ctx.timers.get(resumeId);
   if (prior !== undefined) clearTimeout(prior);
   ctx.timers.set(
@@ -21,7 +30,7 @@ export function schedule(ctx: CoordinatorContext, resumeId: string): void {
     setTimeout(() => {
       ctx.timers.delete(resumeId);
       void flush(ctx, resumeId);
-    }, deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS),
+    }, delayMs ?? (deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS)),
   );
 }
 
@@ -50,16 +59,21 @@ async function drainResume(
 ): Promise<void> {
   for (;;) {
     const record = ctx.deps.store.recordFor(resumeId);
-    if (
-      !canDrain(
-        record,
-        ctx.deps.auth.authState.value,
-        ctx.deps.auth.user.value?.id,
-      )
-    ) {
-      return;
+    const authState = ctx.deps.auth.authState.value;
+    const ownerId = ctx.deps.auth.user.value?.id;
+    if (record?.completeReadRequired === true) {
+      // Nothing is sent over an unread revision: the queue reads first.
+      if (
+        ctx.stopped.has(resumeId)
+        || !readBarrierDue(record, authState, ownerId)
+        || !(await completeReadBarrier(ctx, resumeId))
+      ) {
+        return;
+      }
+      continue;
     }
-    if (record.completeReadRequired) return;
+    ctx.readFailures.delete(resumeId);
+    if (!canDrain(record, authState, ownerId)) return;
     const queueItem = toRaw(record.pending[0]!);
     if (!dependenciesAcknowledged(record, queueItem)) return;
     if (queueItem.kind === 'templateGroup') {
@@ -104,9 +118,7 @@ async function drainResume(
       continue;
     }
     if (decision.kind === 'conflict') {
-      if (
-        await dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)
-      ) {
+      if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
         continue;
       }
       ctx.deps.store.markConflict(resumeId, decision.conflict);
@@ -171,18 +183,21 @@ export async function retry(
       attempt,
       'transport',
     );
-    return;
+  } else {
+    const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
+    if (csrfToken === null) return;
+    await settle(
+      ctx,
+      resumeId,
+      queueItem,
+      command,
+      attempt,
+      await ctx.deps.api.dispatch(attempt, csrfToken),
+    );
   }
-  const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (csrfToken === null) return;
-  await settle(
-    ctx,
-    resumeId,
-    queueItem,
-    command,
-    attempt,
-    await ctx.deps.api.dispatch(attempt, csrfToken),
-  );
+  // A retry settles outside the drain, so the drain resumes the queue and
+  // completes any read barrier the settlement left.
+  await flush(ctx, resumeId);
 }
 
 export async function resumeAfterAuth(
@@ -204,7 +219,7 @@ export async function resumeAfterAuth(
   }
   const result = await ctx.deps.api.read(resumeId);
   if (result.kind !== 'complete') return;
-  ctx.deps.store.adoptComplete(resumeId, result.accepted);
+  adoptRead(ctx, resumeId, result.accepted);
   ctx.deps.store.clearSessionLost(resumeId);
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
   if (active !== null && active !== undefined) {
@@ -212,4 +227,62 @@ export async function resumeAfterAuth(
   } else {
     schedule(ctx, resumeId);
   }
+}
+
+/**
+ * Reads the complete resume to clear the read barrier, which marks a resume
+ * the editor has not read in full: a 412 winner, a bodyless 204, or a
+ * dropped project command. A read that leaves it set is retried on the
+ * queue's own timer, 1 s after the first failure and doubling to 30 s, or
+ * after a longer Retry-After. A lost session waits for sign-in, whose read
+ * completes it; a missing resume ends the retries.
+ */
+export async function completeReadBarrier(
+  ctx: CoordinatorContext,
+  resumeId: string,
+): Promise<boolean> {
+  const result = await ctx.deps.api.read(resumeId);
+  if (result.kind === 'session-lost') {
+    stopForSessionLoss(ctx, resumeId);
+    return false;
+  }
+  if (result.kind === 'complete') {
+    ctx.deps.store.adoptCompleteRead(resumeId, result.accepted);
+  }
+  if (!ctx.deps.store.recordFor(resumeId)?.completeReadRequired) return true;
+  if (
+    ctx.stopped.has(resumeId)
+    || (result.kind !== 'complete'
+      && result.kind !== 'failed'
+      && result.kind !== 'rate-limited')
+  ) {
+    return false;
+  }
+  const failures = ctx.readFailures.get(resumeId) ?? 0;
+  ctx.readFailures.set(resumeId, failures + 1);
+  const backoff = Math.min(
+    READ_RETRY_FIRST_MS * 2 ** failures,
+    READ_RETRY_MAX_MS,
+  );
+  schedule(
+    ctx,
+    resumeId,
+    result.kind === 'rate-limited'
+      ? Math.max(result.retryAfterMs ?? 0, backoff)
+      : backoff,
+  );
+  return false;
+}
+
+/**
+ * Stops the read retries for a resume whose editor closed. Its queued edits
+ * stay in the store; an editor opened on it later completes the barrier.
+ */
+export function stop(ctx: CoordinatorContext, resumeId: string): void {
+  ctx.stopped.add(resumeId);
+  ctx.readFailures.delete(resumeId);
+  if (ctx.deps.store.recordFor(resumeId)?.completeReadRequired !== true) return;
+  const timer = ctx.timers.get(resumeId);
+  if (timer !== undefined) clearTimeout(timer);
+  ctx.timers.delete(resumeId);
 }

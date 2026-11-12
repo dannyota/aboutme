@@ -1226,14 +1226,7 @@ describe('mutation coordinator', () => {
 
     await coordinator.flush(accepted.metadata.id);
 
-    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
-      kind: 'running',
-      nextChild: 1,
-      lastRevision: parseRevision('2'),
-    });
-    await coordinator.completeRead(accepted.metadata.id);
-    await coordinator.flush(accepted.metadata.id);
-
+    expect(api.read).toHaveBeenCalledOnce();
     expect(api.dispatch).toHaveBeenCalledTimes(2);
     expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
       kind: 'partial',
