@@ -108,6 +108,23 @@ the deletion fails its precondition and refetches, as any concurrent edit does.
 **Rename** changes the slug, holds the old one, and advances the linking live
 resumes, in one transaction.
 
+**Replace** (`PUT`) always advances the project revision. It advances linking
+live resumes only when the stored slug or the stored canonical document differs
+from the result: a document change is non-draining, a slug change or both is
+revoking. It compares the stored, sanitized forms, so a request that differs
+only in formatting or in what sanitizing removes advances no resume. Its
+response lists each advanced resume with its new revision.
+
+**Revision-only advance.** An edit or rename that changes no resume document
+advances each resume's revision through its own compare-and-set query, which
+leaves `updated_at` and the document unchanged. The revision is the only change
+signal for public artifacts: leases, render caches and fences key on it, public
+ETags are digests of the response body, and no public response derives a
+validator, `lastmod` or discovery state from `updated_at`. A PDF re-rendered at
+an advanced revision therefore keeps the date of the resume's last document
+save. Showcase rows store no resume revision and the preview card is keyed by
+its own card version, so an advance changes neither.
+
 ## Owner API
 
 Proposed shapes; OpenAPI and generated clients change with the code.
