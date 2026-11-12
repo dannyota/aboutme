@@ -387,10 +387,11 @@ DEPLOY_HOST=<host> bash deploy/vn/scripts/operations.sh account-delete show repo
 
 Pin the host SSH key from a trusted source first. The operation wrapper refuses
 unknown keys, agent forwarding, ineligible releases, and installed helper/unit
-hashes that differ from its checkout. Installation preserves flags, secrets, and
-saved requests. It refuses unresolved operations or a key-change marker; never
-erase those records to reinstall. The bundle includes the operation runner,
-state and account helpers, request service, and daily retention timer.
+hashes that differ from its checkout, so reinstall after each `host/` change.
+Installation preserves flags, secrets, and saved requests. It refuses unresolved
+operations or a key-change marker; never erase those records to reinstall. The
+bundle includes the operation runner, state and account helpers, request
+service, and daily retention timer.
 
 Follow the [account-deletion runbook](../../docs/runbooks/account-delete.md) for
 exact confirmation, status/resume/abort, proof prerequisites, and independent

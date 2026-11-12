@@ -5,7 +5,6 @@ set -euo pipefail
 # The runner supplies these inputs before calling the account helpers.
 declare lib id operations_dir
 
-account_supported() { [[ $1 == v0.7.9 ]]; }
 account_secret_id() {
   local metadata
   metadata=$(podman secret inspect --format '{{.ID}}' db-app-password 2>/dev/null) || return 1
@@ -17,7 +16,7 @@ account_live() {
   local live tag component pin image running expected digests minimum flags platform metadata
   live=$("$lib/deploy-host.sh" - - release-json 2>/dev/null) || return 1
   tag=$(jq -r .release_tag <<<"$live")
-  account_supported "$tag" || return 1
+  operation_release_supported "$tag" || return 1
   for component in server web caddy; do
     systemctl is-active --quiet "aboutme-$component" || return 1
     expected=$(jq -r --arg c "$component" '.[$c+"_image"]' <<<"$live")

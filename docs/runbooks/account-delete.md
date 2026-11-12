@@ -5,7 +5,9 @@ reviewed image, install its reviewed host bundle, and deploy that release before
 using it. The [host guide](../../deploy/vn/README.md#host-account-deletion) owns
 installation. The [operations design](../design/vietnam-host-operations.md) owns
 execution and recovery; [ADR 0028](../adr/0028-community-showcase.md) owns the
-deletion decision. There is no operator screen or HTTP route.
+deletion decision. There is no operator screen or HTTP route. Host helpers
+installed with v0.7.9 accept only that release, so on a later release install
+the current reviewed host bundle before first use.
 
 ## When to use it
 
@@ -19,10 +21,16 @@ enqueues physical media deletion, and reserves its slugs for 180 days.
 
 Use a clean, current reviewed `main` checkout. Set `DEPLOY_HOST`; `SSH_PORT`
 defaults to 22922. Pin the host key in the operator's SSH known-hosts file from
-a trusted source. Unknown or changed host keys refuse access. The wrapper checks
-release eligibility, provenance, amd64 digests, and every installed operation
-helper and unit before sending a request. Ordinary installation preserves
-secrets, flags, and saved requests and refuses unresolved operations.
+a trusted source. Unknown or changed host keys refuse access. Before any SSH,
+the wrapper refuses a checkout that is unclean, off `main`, or different from
+the release repository's `main`. It accepts the release deployed on the host
+when that release is v0.7.9 or later. Before sending a request, it checks that
+release's eligibility, provenance, and amd64 digests, and that every installed
+operation helper and unit matches the checkout. So after any `deploy/vn/host/`
+change, install the reviewed bundle from this checkout with
+`sudo bash <bundle>/host/install.sh <bundle>` before running the wrapper.
+Ordinary installation preserves secrets, flags, and saved requests and refuses
+unresolved operations.
 
 ```sh
 export DEPLOY_HOST=<host>
