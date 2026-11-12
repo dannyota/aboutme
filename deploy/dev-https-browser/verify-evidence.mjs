@@ -136,10 +136,11 @@ async function verify(mode, path) {
       viewCleanup: true,
     },
     // The invite shows no sooner than its 5 s floor after view start and
-    // within the spec's 45 s wait.
+    // within the spec's 45 s wait. Any fallback value could be forged, so an
+    // invalid timing fails here.
     timings: { joinInviteMs: Number.isInteger(actual.timings?.joinInviteMs)
       && actual.timings.joinInviteMs >= 4900
-      && actual.timings.joinInviteMs <= 45000 ? actual.timings.joinInviteMs : -1 },
+      && actual.timings.joinInviteMs <= 45000 ? actual.timings.joinInviteMs : process.exit(1) },
   } : mode === 'password-auth' ? {
     ...common,
     scenario: 'password-authentication',

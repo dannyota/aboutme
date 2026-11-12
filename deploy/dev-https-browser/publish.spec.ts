@@ -103,6 +103,8 @@ function mutationHeaderPresence(request: Request) {
 let currentStage = "setup";
 let failedStage: string | undefined;
 let countedConsoleFailure: string | undefined;
+let createdID: string | undefined;
+let writePublishEvidence: (() => Promise<void>) | undefined;
 
 function stage(name: string): void {
   currentStage = name;
@@ -113,6 +115,36 @@ test.beforeEach(() => {
   currentStage = "setup";
   failedStage = undefined;
   countedConsoleFailure = undefined;
+  writePublishEvidence = undefined;
+});
+
+// Classify failures after cleanup, including failures in cleanup itself.
+test.afterEach(async ({ browser }, info) => {
+  if (info.status !== info.expectedStatus) failedStage ??= currentStage;
+  if (createdID === undefined) return;
+  info.setTimeout(info.timeout + 30_000);
+  let cleaning = true;
+  try {
+    for (const context of browser.contexts()) await context.close();
+    await deleteOutsideCounters(browser, createdID);
+    createdID = undefined;
+    cleaning = false;
+    if (info.title === "proves native HTTPS publish, discovery, and revocation") {
+      steps.cleanup = true;
+      stage("cleanup");
+      if (info.status === info.expectedStatus) {
+        if (writePublishEvidence === undefined) {
+          throw new Error("publish evidence is missing");
+        }
+        await writePublishEvidence();
+      }
+    }
+  } catch (error) {
+    if (info.status === info.expectedStatus) {
+      failedStage = cleaning ? "cleanup-failed" : currentStage;
+    }
+    throw error;
+  }
 });
 
 test.afterEach(async ({}, info) => {
@@ -249,9 +281,7 @@ async function signInWithPassword(page: Page): Promise<void> {
   );
 }
 
-// deleteOutsideCounters deletes a test's recorded resume from a context with
-// its own session, which no test counter watches. Callers close their counted
-// pages first, so none of them can react to the deletion with a counted error.
+// Cleanup uses a separate session after the counted contexts close.
 async function deleteOutsideCounters(
   browser: Browser,
   resumeID: string,
@@ -413,7 +443,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       `Publish proof ${crypto.randomUUID()}`,
       undefined,
       (accepted) => {
-        resumeID = accepted.metadata.id;
+        createdID = resumeID = accepted.metadata.id;
       },
     );
     resumeID = created.metadata.id;
@@ -912,9 +942,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     if (publicContext !== undefined) await publicContext.close();
     if (resumeID !== undefined) {
       await page.close();
-      await deleteOutsideCounters(browser, resumeID);
-      steps.cleanup = true;
-      stage("cleanup");
     }
   }
 
@@ -949,30 +976,32 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   expect(counters.externalRequests).toBe(0);
   stage("final-page-errors");
   expect(counters.pageErrors).toBe(0);
-  stage("final-steps");
-  expect(steps).toEqual(
-    Object.fromEntries(Object.keys(steps).map((key) => [key, true])),
-  );
-  stage("final-evidence");
-  await writeFile(
-    EVIDENCE_PATH,
-    `${JSON.stringify({
-      errors: {
-        certificate: counters.certificateErrors,
-        console: counters.consoleErrors,
-        externalRequest: counters.externalRequests,
-        page: counters.pageErrors,
-      },
-      origin: ORIGIN,
-      scenario: "native-https-publish",
-      schemaVersion: 1,
-      steps,
-      statuses,
-      elapsedMs: { revocation: revocationElapsed },
-      headers: headerPresence,
-    })}\n`,
-    { flag: "wx", mode: 0o600 },
-  );
+  writePublishEvidence = async () => {
+    stage("final-steps");
+    expect(steps).toEqual(
+      Object.fromEntries(Object.keys(steps).map((key) => [key, true])),
+    );
+    stage("final-evidence");
+    await writeFile(
+      EVIDENCE_PATH,
+      `${JSON.stringify({
+        errors: {
+          certificate: counters.certificateErrors,
+          console: counters.consoleErrors,
+          externalRequest: counters.externalRequests,
+          page: counters.pageErrors,
+        },
+        origin: ORIGIN,
+        scenario: "native-https-publish",
+        schemaVersion: 1,
+        steps,
+        statuses,
+        elapsedMs: { revocation: revocationElapsed },
+        headers: headerPresence,
+      })}\n`,
+      { flag: "wx", mode: 0o600 },
+    );
+  };
 });
 
 // The community showcase opt-in over the real stack. Nothing is reviewed:
@@ -1198,7 +1227,7 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       `Showcase proof ${crypto.randomUUID()}`,
       undefined,
       (accepted) => {
-        resumeID = accepted.metadata.id;
+        createdID = resumeID = accepted.metadata.id;
       },
     );
     resumeID = created.metadata.id;
@@ -1359,7 +1388,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     if (resumeID !== undefined) {
       stage("showcase-cleanup-resume");
       await page.close();
-      await deleteOutsideCounters(browser, resumeID);
     }
   }
 
@@ -1595,7 +1623,7 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
       page,
       `Deletion proof ${crypto.randomUUID()}`,
     );
-    resumeID = created.id;
+    createdID = resumeID = created.id;
     expect(created.status).toBe(201);
     const id = created.id ?? "";
     stage("deletion-publish-status");
@@ -1632,7 +1660,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
     if (publicContext !== undefined) await publicContext.close();
     if (resumeID !== undefined) {
       await page.close();
-      await deleteOutsideCounters(browser, resumeID);
     }
   }
 
