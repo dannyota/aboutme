@@ -18,6 +18,10 @@ import {
   settleTemplateComplete,
 } from './coordinatorReconcile';
 import type { CoordinatorContext } from './coordinatorTypes';
+import {
+  dropRefusedProjectCommand,
+  settleStaleProject,
+} from './coordinatorProject';
 
 export async function settle(
   ctx: CoordinatorContext,
@@ -66,6 +70,7 @@ export async function settle(
       stopForSessionLoss(ctx, resumeId);
       return;
     case 'validation-rejected':
+      if (await dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
       ctx.deps.store.setIssues(resumeId, queueItem.id, result.issues);
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
@@ -109,6 +114,11 @@ export async function settle(
       await refreshAndReconcile(ctx, resumeId);
       return;
     case 'rejected':
+      if (
+        await dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)
+      ) {
+        return;
+      }
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
         ctx.deps.store,
@@ -287,7 +297,13 @@ async function settleStale(
   },
 ): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined || attempt.staleRebases === 1) {
+  // A link or refresh is reconciled against every winner first, so a second
+  // mismatch can still drop one that landed or whose text changed; the
+  // one-retry limit then applies below.
+  const project = command.kind === 'projectLink'
+    || command.kind === 'projectRefresh';
+  const secondStale = attempt.staleRebases === 1;
+  if (record === undefined || (secondStale && !project)) {
     holdFailed(
       ctx.deps.store,
       resumeId,
@@ -347,6 +363,20 @@ async function settleStale(
     && (command.kind === 'structure' || command.kind === 'customization')
     ? reconcileTemplateChild(command, snapshot)
     : reconcileCommand(command, snapshot);
+  if (await settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
+    return;
+  }
+  if (secondStale) {
+    holdFailed(
+      ctx.deps.store,
+      resumeId,
+      queueItem,
+      command,
+      attempt,
+      'second-stale',
+    );
+    return;
+  }
   if (decision.kind === 'satisfied') {
     if (queueItem.kind === 'templateGroup') {
       settleTemplateComplete(ctx, resumeId, queueItem, snapshot);

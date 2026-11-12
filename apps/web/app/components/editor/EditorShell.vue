@@ -38,6 +38,7 @@ import { iconFor } from '../resume/icons';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import { useStamp } from '../../composables/useStamp';
+import { linkedEntry, type EntryLocation } from '../../editor/projectLinks';
 import { canonicalPublicPath } from '../../editor/publishApi';
 import type { SaveState } from '../../editor/types';
 import type { ResumeRecord } from '../../stores/resumes';
@@ -172,10 +173,25 @@ const saveState = computed<SaveState>(() => {
   return 'saved';
 });
 
+const selectedEntry = ref<string>();
+
 function selectOutline(key: string): void {
+  selectedEntry.value = undefined;
   inspector.value
     = key === 'personal' ? { kind: 'personal' } : { kind: 'section', key };
 }
+
+function selectEntry(location: EntryLocation): void {
+  inspector.value = { kind: 'section', key: location.sectionKey };
+  selectedEntry.value = location.entryId;
+}
+
+// Open in editor on a project's screen names it; its entry opens selected.
+const openedProject = useRoute().query.project;
+const opened = typeof openedProject === 'string'
+  ? linkedEntry(document.value, openedProject)
+  : undefined;
+if (opened !== undefined) selectEntry(opened);
 
 async function focusIssue(path: string): Promise<void> {
   const sectionMatch = path.match(/(?:content[./])([^./]+)/);
@@ -607,6 +623,8 @@ async function discardAndSignIn(): Promise<void> {
         :actions="actions"
         :section="selectedSection"
         :section-key="inspector.key"
+        :selected-entry-id="selectedEntry"
+        @select-entry="selectEntry"
       />
       <StructurePanel
         v-else-if="inspector.kind === 'structure'"

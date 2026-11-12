@@ -83,6 +83,9 @@ function controlFor(conflict: ConflictRecord): ConflictControl | undefined {
     case 'photoDelete':
     case 'photoUpload':
       return { kind: 'review-photo' };
+    case 'projectLink':
+    case 'projectRefresh':
+      return undefined;
     default:
       return assertNever(conflict.command);
   }

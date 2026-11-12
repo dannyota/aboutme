@@ -68,6 +68,9 @@ no canvas glows:
 4. An inspector for details, sections, structure, customization, templates, and
    photo: 22 rem, or dragged to 48 rem above 72 rem width, kept per browser.
 
+A project section's Add entry also offers library projects, and a linked entry
+names its project ([projects workspace](projects.md#in-the-resume-editor)).
+
 The top bar, rail, outline, and inspector sit on the card color with borders
 between them. Selection is shown by shape as well as color. The selected rail
 tool takes the `--surface-blue` fill, `--link` text, and a 3 px `--primary` bar

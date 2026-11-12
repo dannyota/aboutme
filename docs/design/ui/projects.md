@@ -1,10 +1,11 @@
 # Projects workspace
 
-Status: Accepted (2026-11-11); not yet implemented. The
+Status: Accepted (2026-11-11). The list, the editor and showing a project on
+resumes (accepted 2026-11-12) are implemented. The
 [projects design](../projects.md) owns the product and its limits, and the
 [projects contract](../projects-contract.md#owner-api) owns the API this screen
-calls. This document owns the two workspace screens. Choosing which resumes show
-a project arrives with resume linking and is not part of these screens yet.
+calls. This document owns the two workspace screens and the controls that show a
+project on a resume.
 
 ## Navigation
 
@@ -84,6 +85,82 @@ that links to the old address stop working. Delete opens a confirmation naming
 the project. Both need recent reauthentication and reuse the step the publish
 dialog uses for releasing a resume address. After deletion the page returns to
 the list.
+
+## Showing a project on resumes
+
+### In the project screens
+
+New project gains a second field under Name: “Hiển thị trên CV” or “Show on
+resumes”, a checkbox per resume of the account (at most three), each with the
+resume title and its Public or Draft mark, none checked by default. Create makes
+the project, then links each checked resume, and opens the editor. If a link
+fails, the project still exists; the editor opens with an alert naming the
+resumes that were not linked.
+
+The project editor gains a Resumes section between Details and Address. It lists
+every resume of the account:
+
+- a linked resume shows “Đang hiển thị” or “Shown”, and Open in editor, which
+  opens that resume with the linked entry selected;
+- an unlinked resume shows Add to this resume.
+
+Add to this resume links at once, without Save: it is a resume write, not a
+project write. It is disabled while the project has unsaved changes, with the
+hint “Lưu dự án trước.” or “Save the project first.”, so the prefill uses what
+the person sees. Removing a project from a resume is done in the resume, where
+the entry and its text live; this section says so in one muted line.
+
+Adding a project to a published resume while another published resume of the
+account already shows it asks first, with the two sentences from the
+[privacy rule](../projects.md#privacy) and Add anyway and Cancel; New project
+shows the same sentences as a note once two published resumes are checked.
+
+The decision uses the publication state read when the person acts; a change made
+in another tab while that request is in flight is not rechecked.
+
+A resume whose language has no text in the project shows “Trang dự án dùng
+{language}” or “Project page uses {language}”, naming the default language.
+
+Delete project names the resumes it will be removed from: “Dự án sẽ bị gỡ khỏi 2
+CV. Nội dung mục trong CV được giữ lại.” or “It will be removed from 2 resumes.
+The entries keep their text.”
+
+| Outcome                   | What the page does                                       |
+| ------------------------- | -------------------------------------------------------- |
+| Linked                    | The row turns to Shown; a polite status names the resume |
+| `project_already_linked`  | Reloads the list; the row shows Shown                    |
+| Resume revision mismatch  | Refetches the resume and repeats the link once           |
+| `document_invalid`        | Says the resume could not take the entry and links to it |
+| `public_state_busy`       | Says the resume is busy and to try again                 |
+| Rate limited, unavailable | Says to try again; nothing is retried automatically      |
+
+### In the resume editor
+
+A project section's Add entry control becomes a menu with two items: Blank
+entry, as today, and From your projects, which lists library projects not yet on
+this resume by name, with a link to Projects when the library is empty. Choosing
+one inserts the prefilled entry and selects it.
+
+A linked entry's card shows a library mark and the project name under its title,
+in muted text. Its form shows, above the fields, a `--surface-blue` note: “Mục
+này lấy từ dự án {name}. Nội dung ở đây là của riêng CV này.” or “This entry
+comes from the project {name}. The text here belongs to this resume.”, with two
+actions:
+
+- Refresh from library, which asks first (“Thay nội dung mục bằng nội dung hiện
+  tại của dự án?” or “Replace this entry's text with the project's current
+  text?”) and then replaces title, subtitle, link, dates and description;
+- Open project, to `/app/projects/{id}`.
+
+When the project has no text in the resume's language, the note adds the
+fallback line above. Deleting the entry removes the link, as any entry removal
+does. Editing, hiding, ordering and undo are unchanged. An entry whose project
+was deleted elsewhere arrives without its link after the editor reconciles; the
+note disappears and the text stays.
+
+The editor reads the library list once when a project section is opened and
+again after a link; it never blocks editing on that read. A failed read hides
+From your projects behind a Retry item.
 
 ## Accessibility and fit
 

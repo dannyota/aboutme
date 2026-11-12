@@ -98,6 +98,9 @@ const sources = [
   'components/projects/ProjectLeaveDialog.vue',
   'components/projects/projectIssues.ts',
   'components/projects/projectDocument.ts',
+  'components/projects/ProjectResumes.vue',
+  'components/projects/projectLinks.ts',
+  'components/projects/projectResumes.ts',
   'composables/useProjects.ts',
   'composables/projectsApi.ts',
 ];
@@ -120,6 +123,12 @@ const fixtures: Readonly<Record<string, readonly unknown[]>> = {
   'projects.errors.technologies': [20, 40],
   'projects.deleteDescription': ['Shop'],
   'projects.languageName': ['ja'],
+  'projects.notLinked': [['Backend', 'Data']],
+  'projects.pageUses': ['English'],
+  'projects.linkedTo': ['Backend'],
+  'projects.cannotTake': ['Backend'],
+  'projects.resumeBusy': ['Backend'],
+  'projects.deleteLinked': [2],
 };
 
 describe('leave confirmation', () => {

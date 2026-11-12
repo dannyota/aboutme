@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type { Section } from '@aboutme/schema';
 import { computed, ref } from 'vue';
@@ -322,6 +322,13 @@ describe('SectionPanel', () => {
       });
 
       await wrapper.get('[data-action="add-entry"]').trigger('click');
+      if (sectionType === 'project') {
+        // A project section's Add entry is a menu; Blank entry adds as before.
+        await flushPromises();
+        document.body
+          .querySelector<HTMLElement>('[data-action="add-blank-entry"]')!
+          .click();
+      }
       wrapper.findComponent(entryComponents[sectionType]).vm.$emit('field', {
         path: fields[0],
         intent: { kind: 'set', value: 'Ada' },

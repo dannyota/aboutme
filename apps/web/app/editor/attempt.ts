@@ -21,7 +21,9 @@ type ResumeOperation
     | 'uploadResumePhoto'
     | 'updateResumePhotoCrop'
     | 'deleteResumePhoto'
-    | 'deleteResume';
+    | 'deleteResume'
+    | 'linkResumeProject'
+    | 'refreshResumeProjectEntry';
 
 type AttemptPayload
   = | { readonly kind: 'json'; readonly utf8: string }
@@ -64,6 +66,8 @@ export type AttemptFailureCode
     | 'precondition_malformed'
     | 'precondition_not_supported'
     | 'precondition_required'
+    | 'project_already_linked'
+    | 'project_not_found'
     | 'request_invalid'
     | 'response_invalid'
     | 'resume_cap_exceeded'

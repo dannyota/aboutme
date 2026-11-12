@@ -234,6 +234,22 @@ function wireForCommand(
       };
     case 'resumeDelete':
       return { operation: 'deleteResume', url: base, method: 'DELETE' };
+    case 'projectLink':
+      return {
+        operation: 'linkResumeProject',
+        url: `${base}/project-links`,
+        method: 'POST',
+        body: {
+          projectId: command.projectId,
+        } as JsonBody<'linkResumeProject'>,
+      };
+    case 'projectRefresh':
+      return {
+        operation: 'refreshResumeProjectEntry',
+        url: `${base}/entries/${encodeURIComponent(command.entryId)}`
+          + '/project-refresh',
+        method: 'POST',
+      };
     default:
       return assertNever(command);
   }
