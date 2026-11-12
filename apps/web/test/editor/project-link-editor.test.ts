@@ -528,6 +528,40 @@ describe('focus after a refresh', () => {
     await flushPromises();
     expect(document.activeElement).toBe(refresh.element);
   });
+
+  it('stays on the field the person moved to while the refresh was out',
+    async () => {
+      const wrapper = await mountSuspended(ProjectLinkNote, {
+        attachTo: document.body,
+        props: {
+          projectId: SHOP,
+          name: 'Shop site',
+          fallbackLanguage: null,
+          refreshing: false,
+          copy: editorFieldsCopy.en.projectLinks,
+          cancelLabel: 'Cancel',
+        },
+      });
+      mounted.push(wrapper);
+      const field = document.createElement('input');
+      document.body.append(field);
+      const refresh = wrapper.get<HTMLButtonElement>(
+        '[data-action="refresh-project-entry"]',
+      );
+      refresh.element.focus();
+      await refresh.trigger('click');
+      await flushPromises();
+      inDocument('[data-action="confirm-project-refresh"]').click();
+      await wrapper.setProps({ refreshing: true });
+      await flushPromises();
+
+      field.focus();
+      await wrapper.setProps({ refreshing: false });
+      await flushPromises();
+
+      expect(document.activeElement).toBe(field);
+      field.remove();
+    });
 });
 
 describe('a linked entry', () => {

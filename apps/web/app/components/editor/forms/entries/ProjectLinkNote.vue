@@ -39,7 +39,12 @@ watch(() => props.refreshing, async (refreshing) => {
     openLink.value?.$el?.focus();
   } else if (returning === 'queued') {
     returning = null;
-    refreshButton.value?.$el?.focus();
+    // Only focus this note put on Open project comes back; a field the
+    // person moved to meanwhile keeps it.
+    const link = openLink.value?.$el;
+    if (link !== undefined && document.activeElement === link) {
+      refreshButton.value?.$el?.focus();
+    }
   }
 }, { flush: 'post' });
 </script>

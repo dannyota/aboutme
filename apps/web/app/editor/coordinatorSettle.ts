@@ -297,7 +297,13 @@ async function settleStale(
   },
 ): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined || attempt.staleRebases === 1) {
+  // A link or refresh is reconciled against every winner first, so a second
+  // mismatch can still drop one that landed or whose text changed; the
+  // one-retry limit then applies below.
+  const project = command.kind === 'projectLink'
+    || command.kind === 'projectRefresh';
+  const secondStale = attempt.staleRebases === 1;
+  if (record === undefined || (secondStale && !project)) {
     holdFailed(
       ctx.deps.store,
       resumeId,
@@ -358,6 +364,17 @@ async function settleStale(
     ? reconcileTemplateChild(command, snapshot)
     : reconcileCommand(command, snapshot);
   if (await settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
+    return;
+  }
+  if (secondStale) {
+    holdFailed(
+      ctx.deps.store,
+      resumeId,
+      queueItem,
+      command,
+      attempt,
+      'second-stale',
+    );
     return;
   }
   if (decision.kind === 'satisfied') {

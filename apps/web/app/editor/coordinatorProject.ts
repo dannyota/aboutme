@@ -34,6 +34,8 @@ async function drop(
   outcome?: ProjectOutcome,
 ): Promise<void> {
   if (outcome !== undefined) noteProjectOutcome(command.id, outcome);
+  // A conflict a realtime read recorded for this command goes with it.
+  ctx.deps.store.resolveConflict(resumeId, command.id);
   ctx.deps.store.dropHead(resumeId, command.id);
   await completeReadBarrier(ctx, resumeId);
 }

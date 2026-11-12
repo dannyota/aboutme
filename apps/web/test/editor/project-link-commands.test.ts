@@ -631,6 +631,94 @@ describe('the edits queued behind a project command', () => {
   });
 });
 
+describe('a refresh meeting newer text on its retry', () => {
+  it('is dropped with a notice when the second 412 brings changed text, '
+    + 'and the edit behind it is sent', async () => {
+    const { store, api, coordinator, id } = queuedAll(withEntries([
+      linked(), { id: OTHER, title: 'Other' } as Entry,
+    ]), [
+      { kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY },
+      {
+        kind: 'entryField', sectionKey: 'projects', entryId: OTHER,
+        path: 'subtitle', value: { present: true, value: 'Lead' },
+      },
+    ]);
+    const other = { id: OTHER, title: 'Other' } as Entry;
+    const changed = withEntries([linked({ title: 'Newer' }), other], '3');
+    api.dispatch
+      .mockResolvedValueOnce(stale(withEntries(
+        [linked({ isHidden: true }), other], '2',
+      )))
+      .mockResolvedValueOnce(stale(changed))
+      .mockResolvedValueOnce(complete(withEntries([
+        linked({ title: 'Newer' }), { ...other, subtitle: 'Lead' } as Entry,
+      ], '4')));
+    api.read.mockResolvedValue({ kind: 'complete', accepted: changed });
+
+    await coordinator.flush(id);
+
+    expect(api.dispatch.mock.calls.map(([attempt]) =>
+      [attempt.operation, attempt.ifMatch])).toEqual([
+      ['refreshResumeProjectEntry', '"r1"'],
+      ['refreshResumeProjectEntry', '"r2"'],
+      ['upsertResumeEntry', '"r3"'],
+    ]);
+    expect(takeProjectOutcome('command-1')).toBe('refresh-changed');
+    const record = store.recordFor(id)!;
+    expect(record.attempt).toBeNull();
+    expect(record.pending).toEqual([]);
+    expect(record.accepted.document.content.projects?.entries[0])
+      .toEqual(linked({ title: 'Newer' }));
+  });
+
+  it('still stops after one retry when the second 412 changed nothing it '
+    + 'overwrites', async () => {
+    const { store, api, coordinator, id } = queued(withEntries([linked()]), {
+      kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
+    });
+    api.dispatch
+      .mockResolvedValueOnce(stale(withEntries([linked({ isHidden: true })],
+        '2')))
+      .mockResolvedValueOnce(stale(withEntries([linked({ isHidden: false })],
+        '3')));
+
+    await coordinator.flush(id);
+
+    expect(api.dispatch).toHaveBeenCalledTimes(2);
+    expect(store.recordFor(id)?.attempt).toMatchObject({
+      kind: 'failed', reason: 'second-stale',
+    });
+  });
+});
+
+describe('a refresh dropped after a realtime read', () => {
+  it('takes its own conflict with it and leaves the others', async () => {
+    const { store, api, coordinator, id } = queued(withEntries([linked()]), {
+      kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
+    });
+    const changed = withEntries([linked({ title: 'Newer' })], '2');
+    store.markConflict(id, {
+      id: 'unrelated', subject: 'atomic', kind: 'target-changed',
+    } as never);
+    api.readConditional = vi.fn().mockResolvedValue({
+      kind: 'complete', accepted: changed, etag: '"r2"',
+    }) as never;
+    api.dispatch.mockImplementationOnce(async () => {
+      await coordinator.refreshConditionalAndReconcile!(id);
+      expect(store.recordFor(id)?.conflicts.map((item) => item.id))
+        .toEqual(['unrelated', 'command-1']);
+      return stale(changed);
+    });
+    api.read.mockResolvedValue({ kind: 'complete', accepted: changed });
+
+    await coordinator.flush(id);
+
+    const record = store.recordFor(id)!;
+    expect(record.attempt).toBeNull();
+    expect(record.conflicts.map((item) => item.id)).toEqual(['unrelated']);
+  });
+});
+
 describe('a link prepared while edits go out', () => {
   it('sends a field edit whose debounce ends during the privacy reads, '
     + 'then drops the link a realtime read shows already landed', async () => {
