@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { vi } from 'vitest';
 
 // eslint-disable-next-line max-len
@@ -19,11 +19,15 @@ export function openEditor() {
   const server = fakeServer(initial);
   const store = useResumeStore();
   store.initialize(initial);
+  /** The session's CSRF token; null makes the next write refresh it. */
+  const token = ref<string | null>('csrf-1');
   const auth = {
     user: computed(() => ({ id: 'owner-1' })),
-    csrfToken: computed(() => 'csrf-1'),
+    csrfToken: computed(() => token.value),
     authState: computed(() => 'authenticated'),
-    refresh: vi.fn(async () => {}),
+    refresh: vi.fn(async (): Promise<void> => {
+      token.value = 'csrf-2';
+    }),
   };
   let ids = 0;
   const runtime = {
@@ -54,11 +58,13 @@ export function openEditor() {
   return {
     actions,
     auth,
+    coordinator,
     edit,
     id,
     initial,
     server,
     store,
+    token,
     record: () => store.recordFor(id)!,
     /** Two minutes of the editor's own timers, with no flush from the test. */
     idle: () => vi.advanceTimersByTimeAsync(120_000),

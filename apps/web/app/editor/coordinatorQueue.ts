@@ -4,7 +4,7 @@ import type { AttemptState } from '../stores/resumeRecord';
 import type { AtomicEditorCommand } from './commands';
 import { reconcileCommand, reconcileTemplateGroup } from './reconcile';
 import { freezeAttempt } from './resumeApi';
-import { nextTemplateChild, type EditorQueueItem } from './templateGroup';
+import { nextTemplateChild } from './templateGroup';
 import {
   begin,
   canDrain,
@@ -22,13 +22,13 @@ import {
 import { dropChangedRefresh } from './coordinatorProject';
 import { adoptRead, reconcileHeld } from './coordinatorReconcile';
 import {
-  nextForHeld,
+  heldNext,
   rebaseHeld,
   requestRetry,
   startResend,
   waitsForPerson,
 } from './coordinatorRetry';
-import { send } from './coordinatorSettle';
+import { resolveUnknown, send } from './coordinatorSettle';
 import type {
   CoordinatorContext,
   OperationContext,
@@ -95,11 +95,15 @@ export function flush(
  * 4. the held write's retry deadline, Retry-After included;
  * 5. the send: the held write unchanged, or the head of the queue.
  * Settlement, timers and buttons only change state and wake the drain.
+ * Every await ends the pass, so the next pass chooses again: nothing is
+ * awaited between choosing a write and claiming it. The CSRF token is
+ * therefore had before the choice, refreshed at most once until a send.
  */
 async function drainResume(
   ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
+  let refreshed = false;
   for (;;) {
     if (!current(ctx, resumeId)) return;
     const record = ctx.deps.store.recordFor(resumeId);
@@ -132,14 +136,49 @@ async function drainResume(
     ctx.readRetries.delete(resumeId);
     if (record.opaquePhotoOutcome !== null) return;
     if (held !== null) {
-      const next = await nextForHeld(ctx, resumeId, held);
-      if (next === 'wait') return;
-      if (next === 'again') continue;
-      if (!(await resend(ctx, resumeId, held))) return;
+      const next = heldNext(ctx, resumeId, held);
+      if (next.kind === 'wait') return;
+      if (next.kind === 'sleep') {
+        await ctx.deps.runtime.delay(next.ms);
+        continue;
+      }
+      if (next.kind === 'cutoff') {
+        await resolveUnknown(
+          ctx,
+          resumeId,
+          held.queueItem,
+          held.command,
+          held.attempt,
+          next.reason,
+        );
+        continue;
+      }
+    } else {
+      clearWriteRetry(ctx, resumeId);
+      if (
+        !canDrain(
+          record,
+          ctx.deps.auth.authState.value,
+          ctx.deps.auth.user.value?.id,
+        )
+      ) {
+        return;
+      }
+    }
+    const ownerId = held?.queueItem.ownerId ?? record.pending[0]!.ownerId;
+    const csrfToken = dispatchToken(ctx, resumeId, ownerId);
+    if (csrfToken === null) {
+      if (refreshed || record.sessionLost || !(await refreshCsrf(ctx))) {
+        return;
+      }
+      refreshed = true;
       continue;
     }
-    clearWriteRetry(ctx, resumeId);
-    if (!(await sendHead(ctx, resumeId, record))) return;
+    const sent = held === null
+      ? await sendHead(ctx, resumeId, record, csrfToken)
+      : await resend(ctx, resumeId, held, csrfToken);
+    if (sent === 'stop') return;
+    if (sent === 'sent') refreshed = false;
   }
 }
 
@@ -210,25 +249,21 @@ function reconcileHead(
   return 'send';
 }
 
-/** Step 5 for the queue's head. Returns whether the drain looks again. */
+/**
+ * Step 5 for the queue's head: chooses it, freezes its attempt and claims it
+ * from the queue, with nothing awaited between, then sends it. Returns
+ * whether it was sent, the drain looks again, or the drain stops.
+ */
 async function sendHead(
   ctx: OperationContext,
   resumeId: string,
   record: ResumeRecord,
-): Promise<boolean> {
-  if (
-    !canDrain(
-      record,
-      ctx.deps.auth.authState.value,
-      ctx.deps.auth.user.value?.id,
-    )
-  ) {
-    return false;
-  }
+  csrfToken: string,
+): Promise<'sent' | 'again' | 'stop'> {
   const queueItem = toRaw(record.pending[0]!);
-  if (!dependenciesAcknowledged(record, queueItem)) return false;
+  if (!dependenciesAcknowledged(record, queueItem)) return 'stop';
   const next = reconcileHead(ctx, resumeId, record);
-  if (next !== 'send') return next === 'again';
+  if (next !== 'send') return next;
   const state = record.templateState;
   let command: AtomicEditorCommand | null = null;
   if (queueItem.kind !== 'templateGroup') {
@@ -236,57 +271,37 @@ async function sendHead(
   } else if (state?.kind === 'queued' || state?.kind === 'running') {
     command = nextTemplateChild(queueItem, state);
   }
-  if (command === null) return false;
-  return dispatchCommand(ctx, resumeId, queueItem, command);
-}
-
-/** A CSRF token for the owner's write, refreshed once if there is none. */
-async function csrfFor(
-  ctx: OperationContext,
-  resumeId: string,
-  ownerId: string,
-): Promise<string | null> {
-  const token = dispatchToken(ctx, resumeId, ownerId);
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (token !== null || record === undefined || record.sessionLost) {
-    return token;
-  }
-  try {
-    await ctx.deps.auth.refresh();
-  } catch {
-    return null;
-  }
-  if (!current(ctx, resumeId)) return null;
-  return dispatchToken(ctx, resumeId, ownerId);
-}
-
-async function dispatchCommand(
-  ctx: OperationContext,
-  resumeId: string,
-  queueItem: EditorQueueItem,
-  command: AtomicEditorCommand,
-): Promise<boolean> {
-  const csrfToken = await csrfFor(ctx, resumeId, queueItem.ownerId);
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined || csrfToken === null) return false;
+  if (command === null) return 'stop';
   const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
   ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  if (!owns(ctx, resumeId, attempt)) return false;
+  // Not claimed: the head is no longer this object, so choose again.
+  if (!owns(ctx, resumeId, attempt)) return 'again';
   await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
-  return true;
+  return 'sent';
+}
+
+/** Refreshes the session's CSRF token; whether the refresh completed. */
+async function refreshCsrf(ctx: OperationContext): Promise<boolean> {
+  try {
+    await ctx.deps.auth.refresh();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Step 5 for the held write: sends it again unchanged, marked as on its way
- * so its retry button waits. Returns whether the drain looks again.
+ * so its retry button waits. It is the write this pass chose, with nothing
+ * awaited since.
  */
 async function resend(
   ctx: OperationContext,
   resumeId: string,
   held: AttemptState,
-): Promise<boolean> {
-  const csrfToken = await csrfFor(ctx, resumeId, held.queueItem.ownerId);
-  if (csrfToken === null || !owns(ctx, resumeId, held.attempt)) return false;
+  csrfToken: string,
+): Promise<'sent' | 'again'> {
+  if (!owns(ctx, resumeId, held.attempt)) return 'again';
   const key = held.attempt.idempotencyKey;
   startResend(ctx, resumeId, held.queueItem.id);
   ctx.deps.store.markSending(resumeId, key, true);
@@ -304,7 +319,7 @@ async function resend(
       ctx.deps.store.markSending(resumeId, key, false);
     }
   }
-  return true;
+  return 'sent';
 }
 
 /**

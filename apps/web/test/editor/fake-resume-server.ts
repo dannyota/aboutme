@@ -88,6 +88,8 @@ export function fakeServer(initial: AcceptedResume) {
     attempt: FrozenAttempt;
     result: AttemptResult['kind'];
     at: number;
+    /** What the server fingerprints for the request. */
+    request: string;
   }[] = [];
   const readTimes: number[] = [];
 
@@ -155,6 +157,16 @@ export function fakeServer(initial: AcceptedResume) {
         };
         return { kind: 'complete', status: 200, accepted: copy() };
       }
+      case 'uploadResumePhoto': {
+        advance({
+          ...document,
+          personalDetails: {
+            ...document.personalDetails,
+            photo: { key: `photo-upload-${Number(stored.revision) + 1}` },
+          },
+        });
+        return { kind: 'complete', status: 201, accepted: copy() };
+      }
       case 'deleteResumePhoto': {
         const { photo: _photo, ...personalDetails } = document.personalDetails;
         advance({ ...document, personalDetails });
@@ -172,18 +184,20 @@ export function fakeServer(initial: AcceptedResume) {
   });
   const copy = (): AcceptedResume => structuredClone(stored);
   /** What the server fingerprints: the target, If-Match and body. */
-  const request = (attempt: FrozenAttempt): string => JSON.stringify([
-    attempt.method,
-    attempt.url,
-    attempt.ifMatch ?? 'absent',
-    attempt.payload.kind === 'json'
-      ? attempt.payload.utf8
-      : attempt.payload.kind,
-  ]);
-  const answer = (attempt: FrozenAttempt): AttemptResult => {
+  const requestOf = (attempt: FrozenAttempt, body: string): string =>
+    JSON.stringify([
+      attempt.method,
+      attempt.url,
+      attempt.ifMatch ?? 'absent',
+      body,
+    ]);
+  /** A photo's raw bytes are its body. */
+  const photoBody = async (file: File): Promise<string> =>
+    `photo:${Buffer.from(await file.arrayBuffer()).toString('base64')}`;
+  const answer = (attempt: FrozenAttempt, request: string): AttemptResult => {
     const replay = replays.get(attempt.idempotencyKey);
     if (replay !== undefined) {
-      return replay.request === request(attempt)
+      return replay.request === request
         ? replay.result
         : { kind: 'idempotency-reuse' };
     }
@@ -199,10 +213,7 @@ export function fakeServer(initial: AcceptedResume) {
     }
     const result = apply(attempt);
     if (result.kind === 'complete' || result.kind === 'child-ack') {
-      replays.set(attempt.idempotencyKey, {
-        request: request(attempt),
-        result,
-      });
+      replays.set(attempt.idempotencyKey, { request, result });
     }
     return result;
   };
@@ -210,23 +221,32 @@ export function fakeServer(initial: AcceptedResume) {
   const api = {
     dispatch: vi.fn(async (attempt: FrozenAttempt): Promise<AttemptResult> => {
       if (sent.length >= WRITE_LIMIT) return new Promise<never>(() => {});
+      const { payload } = attempt;
+      let body: string = payload.kind;
+      if (payload.kind === 'json') body = payload.utf8;
+      // Only a photo's bytes are read asynchronously.
+      if (payload.kind === 'photo') body = await photoBody(payload.file);
+      const request = requestOf(attempt, body);
+      const record = (result: AttemptResult['kind']): void => {
+        sent.push({ attempt, result, at: Date.now(), request });
+      };
       beforeWrites.shift()?.();
       const lost = lostResponses.shift() ?? everyResponseLost;
       if (lost?.applied === false) {
-        sent.push({ attempt, result: 'unknown', at: Date.now() });
+        record('unknown');
         return { kind: 'unknown', reason: 'transport' };
       }
       const failed = lost === undefined ? failedWrites.shift() : undefined;
       if (failed !== undefined) {
-        sent.push({ attempt, result: failed.kind, at: Date.now() });
+        record(failed.kind);
         return failed;
       }
-      const result = answer(attempt);
+      const result = answer(attempt, request);
       if (lost !== undefined) {
-        sent.push({ attempt, result: 'unknown', at: Date.now() });
+        record('unknown');
         return { kind: 'unknown', reason: 'transport' };
       }
-      sent.push({ attempt, result: result.kind, at: Date.now() });
+      record(result.kind);
       const held = heldResponses.shift();
       if (held !== undefined) await held;
       return result;

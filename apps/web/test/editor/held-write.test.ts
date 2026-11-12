@@ -1,3 +1,5 @@
+import { File as NodeFile } from 'node:buffer';
+
 import type { Resume } from '@aboutme/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -294,15 +296,11 @@ const setHeadline = (value: string) => (document: Resume): Resume => ({
   personalDetails: { ...document.personalDetails, headline: value },
 });
 
-/** The requests sent for one command: key, If-Match and body. */
+/** The requests sent for one command: key, If-Match and body bytes. */
 function requestsFor(context: OpenEditor, commandId: string): string[] {
   return context.server.sent
     .filter(({ attempt }) => attempt.id === commandId)
-    .map(({ attempt }) => JSON.stringify([
-      attempt.idempotencyKey,
-      attempt.ifMatch,
-      attempt.payload,
-    ]));
+    .map(({ attempt, request }) => `${attempt.idempotencyKey} ${request}`);
 }
 
 describe('a held write and the read barrier', () => {
@@ -443,6 +441,32 @@ describe('the request a held write sends again', () => {
     expect(context.server.sentFor(later)).toEqual(['complete']);
     expect(context.server.stored.document.personalDetails.headline)
       .toBe('Staff engineer');
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+
+  it('carries the same photo bytes on every replay', async () => {
+    const context = editor();
+    // Node's File keeps its bytes through the store's structured clone, as
+    // a browser File does; the test DOM's File would not.
+    const file = new NodeFile(
+      [new Uint8Array([137, 80, 78, 71, 1, 2, 3])],
+      'photo.png',
+      { type: 'image/png' },
+    ) as unknown as File;
+    const mine = context.edit({ kind: 'photoUpload', file });
+    context.server.loseNextResponse({ applied: true });
+    context.server.loseNextResponse({ applied: true });
+
+    await context.idle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      'unknown', 'unknown', 'complete',
+    ]);
+    const requests = requestsFor(context, mine);
+    expect(new Set(requests).size).toBe(1);
+    expect(requests[0]).toContain('photo:iVBORwECAw==');
+    expect(context.server.stored.document.personalDetails.photo?.key)
+      .toBe('photo-upload-2');
     expect(context.store.saveStateFor(context.id)).toBe('saved');
   });
 

@@ -5,7 +5,6 @@ import {
   retryDelay,
 } from './coordinatorGuards';
 import { schedule } from './coordinatorQueue';
-import { resolveUnknown } from './coordinatorSettle';
 import type {
   CoordinatorContext,
   OperationContext,
@@ -186,41 +185,43 @@ export function waitsForPerson(
   ) && heldRetry(ctx, resumeId, held.queueItem.id)?.requested !== true;
 }
 
+/** What step 4 of the drain does with the held write. */
+export type HeldNext
+  = | { readonly kind: 'send' }
+    | { readonly kind: 'wait' }
+    | { readonly kind: 'sleep'; readonly ms: number }
+    | { readonly kind: 'cutoff'; readonly reason: 'transport' | 'server' };
+
 /**
- * Step 4 of the drain: whether the held write is sent now, waits, or the
- * drain looks again after a wait or a read. Past its retry window a write
- * is read and reconciled instead of sent.
+ * Step 4 of the drain: whether the held write is sent now, waits on the
+ * queue timer, or the drain sleeps a short wait first. Past its retry
+ * window a write is read and reconciled instead of sent. It decides
+ * without awaiting, so the drain sends the write it just chose.
  */
-export async function nextForHeld(
+export function heldNext(
   ctx: OperationContext,
   resumeId: string,
   held: AttemptState,
-): Promise<'send' | 'again' | 'wait'> {
+): HeldNext {
   const retry = heldRetry(ctx, resumeId, held.queueItem.id);
   if (ctx.deps.runtime.nowEpochMs() >= held.attempt.retryCutoff) {
     clearWriteRetry(ctx, resumeId);
-    await resolveUnknown(
-      ctx,
-      resumeId,
-      held.queueItem,
-      held.command,
-      held.attempt,
-      held.kind === 'unknown' && held.reason !== 'cutoff'
+    return {
+      kind: 'cutoff',
+      reason: held.kind === 'unknown' && held.reason !== 'cutoff'
         ? held.reason
         : 'transport',
-    );
-    return 'again';
+    };
   }
   if (retry !== undefined && retry.wait > 0) {
-    const wait = retry.wait;
+    const ms = retry.wait;
     retry.wait = 0;
-    await ctx.deps.runtime.delay(wait);
-    return 'again';
+    return { kind: 'sleep', ms };
   }
   const due = Math.max(retry?.at ?? 0, retry?.notBefore ?? 0) - Date.now();
   if (due > 0) {
     schedule(ctx, resumeId, due);
-    return 'wait';
+    return { kind: 'wait' };
   }
-  return 'send';
+  return { kind: 'send' };
 }
