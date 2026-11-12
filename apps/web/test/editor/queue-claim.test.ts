@@ -110,30 +110,50 @@ describe('text typed while the queue chooses what to send', () => {
   });
 });
 
+/** Mulberry32, seeded, so every case is the same on every run. */
+function seeded(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
 describe('a field typed into at any step of the queue', () => {
   const values = ['S', 'St', 'Sta', 'Staf', 'Staff'];
-  const cases = [false, true].flatMap((refresh) =>
-    Array.from({ length: 24 }, (_, turns) => [refresh, turns] as const));
+  // Each keystroke waits its own number of microtask turns, 0 to 23, and
+  // finds the token cached or missing on its own.
+  const cases = Array.from({ length: 36 }, (_, seed) => {
+    const next = seeded(seed + 1);
+    return [
+      seed + 1,
+      values.map(() => ({
+        turns: Math.floor(next() * 24),
+        refresh: next() < 0.5,
+      })),
+    ] as const;
+  });
 
-  it.each(cases)(
-    'ends with the last value typed (token refreshed: %s, %i turns between '
-    + 'edits)',
-    async (refresh, turns) => {
-      const context = openEditor();
-      context.auth.refresh.mockImplementation(async () => {
-        await Promise.resolve();
-        context.token.value = 'csrf-2';
-      });
-      for (const value of values) {
-        if (refresh) context.token.value = null;
-        context.edit(headline(value));
-        void context.coordinator.flush(context.id);
-        for (let turn = 0; turn < turns; turn += 1) await Promise.resolve();
-      }
+  it.each(cases)('ends with the last value typed (seed %i)', async (
+    _seed,
+    keystrokes,
+  ) => {
+    const context = openEditor();
+    context.auth.refresh.mockImplementation(async () => {
+      await Promise.resolve();
+      context.token.value = 'csrf-2';
+    });
+    for (const [index, { turns, refresh }] of keystrokes.entries()) {
+      if (refresh) context.token.value = null;
+      context.edit(headline(values[index]!));
+      void context.coordinator.flush(context.id);
+      for (let turn = 0; turn < turns; turn += 1) await Promise.resolve();
+    }
 
-      await expectAllSaved(context);
-      expect(context.server.stored.document.personalDetails.headline)
-        .toBe('Staff');
-    },
-  );
+    await expectAllSaved(context);
+    expect(context.server.stored.document.personalDetails.headline)
+      .toBe('Staff');
+  });
 });

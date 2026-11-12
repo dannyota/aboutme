@@ -90,6 +90,8 @@ interface LibraryOptions {
   readonly otherTab?: Page;
   /** Resume writes whose connection drops before they reach the server. */
   readonly lostWrites?: number;
+  /** Resume writes refused for a stale CSRF token. */
+  readonly csrfRejectedWrites?: number;
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -205,6 +207,7 @@ async function fakeLibrary(
     Object.entries(options.headlinesElsewhere ?? {}),
   );
   let lostWrites = options.lostWrites ?? 0;
+  let csrfRejectedWrites = options.csrfRejectedWrites ?? 0;
   let nextEntry = 0;
   const reauths: string[] = [];
   let reauthenticated = false;
@@ -364,6 +367,11 @@ async function fakeLibrary(
       if (lostWrites > 0) {
         lostWrites -= 1;
         await route.abort('failed');
+        return;
+      }
+      if (csrfRejectedWrites > 0) {
+        csrfRejectedWrites -= 1;
+        await route.fulfill(problem(403, 'csrf_rejected'));
         return;
       }
       if (savedElsewhere.delete(row.id)) row.revision += 1;
@@ -1032,6 +1040,46 @@ test('the resume editor sends a write again with the same key after its '
   const sent = fake.resumeWrites.map((write) => [write.key, write.ifMatch]);
   expect(sent).toEqual([sent[0], sent[0], sent[0]]);
   expect(sent[0]).toEqual([expect.any(String), '"r1"']);
+  expect(fake.resumes.get(BACKEND)!.personalDetails).toMatchObject({
+    headline: 'Staff engineer',
+  });
+});
+
+test('the resume editor keeps an edit while the session check fails, and '
+  + 'saves it after Try again', async ({ page }) => {
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: resumeRows(), csrfRejectedWrites: 1,
+  });
+  // The token refresh after the refused write cannot reach the session.
+  let sessionDown = true;
+  await page.route('**/api/v1/me', async (route) => {
+    if (!sessionDown) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 503, headers: HEADERS,
+      json: { error: { code: 'unavailable', message: 'fixed' } },
+    });
+  });
+  const headline = page.locator(
+    '[data-region="inspector"] [data-field="headline"] [data-field-input]',
+  );
+  const status = page.getByTestId('save-status');
+  const banner = page.locator('[data-session-check]');
+
+  await headline.fill('Staff engineer');
+  await headline.press('Tab');
+  await expect(banner).toContainText('Can\'t check your sign-in');
+  await expect(status).toHaveAttribute('data-state', 'retrying');
+  await expect(headline).toHaveValue('Staff engineer');
+
+  sessionDown = false;
+  await banner.getByRole('button', { name: 'Try again' }).click();
+  await expect(status).toHaveAttribute('data-state', 'saved');
+  await expect(banner).toBeHidden();
+  const keys = fake.resumeWrites.map((write) => write.key);
+  expect(keys).toEqual([keys[0], keys[0]]);
   expect(fake.resumes.get(BACKEND)!.personalDetails).toMatchObject({
     headline: 'Staff engineer',
   });

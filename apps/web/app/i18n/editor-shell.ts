@@ -56,6 +56,8 @@ export type EditorShellCopy = {
   readonly retryNow: string;
   readonly staleWriteTitle: string;
   readonly staleWriteDescription: string;
+  readonly sessionCheckTitle: string;
+  readonly sessionCheckDescription: string;
   readonly acceptLatest: string;
   readonly conflictControl: (control: ConflictControlKind) => string;
   readonly previewLabel: string;
@@ -125,6 +127,9 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     staleWriteDescription:
       'CV này đang được thay đổi ở nơi khác. Thay đổi của bạn vẫn được giữ '
       + 'ở đây.',
+    sessionCheckTitle: 'Không kiểm tra được phiên đăng nhập',
+    sessionCheckDescription:
+      'Các thay đổi vẫn ở trong thẻ này và sẽ được lưu khi có kết nối trở lại.',
     acceptLatest: 'Chấp nhận bản mới nhất',
     conflictControl: (control) => ({
       'apply-field': 'Áp dụng giá trị của tôi',
@@ -218,6 +223,10 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     staleWriteTitle: 'Your change keeps meeting newer edits',
     staleWriteDescription:
       'This resume is being changed elsewhere. Your change is kept here.',
+    sessionCheckTitle: 'Can\'t check your sign-in',
+    sessionCheckDescription:
+      'Your changes stay in this tab and are saved when the connection is '
+      + 'back.',
     acceptLatest: 'Accept latest',
     conflictControl: (control) => ({
       'apply-field': 'Apply my value',

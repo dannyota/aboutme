@@ -168,7 +168,14 @@ async function drainResume(
     const ownerId = held?.queueItem.ownerId ?? record.pending[0]!.ownerId;
     const csrfToken = dispatchToken(ctx, resumeId, ownerId);
     if (csrfToken === null) {
-      if (refreshed || record.sessionLost || !(await refreshCsrf(ctx))) {
+      // Only a signed-in session missing its token refreshes here; while the
+      // session itself is in doubt the page's session check runs instead.
+      if (
+        refreshed
+        || record.sessionLost
+        || ctx.deps.auth.authState.value !== 'authenticated'
+        || !(await refreshCsrf(ctx))
+      ) {
         return;
       }
       refreshed = true;

@@ -60,6 +60,7 @@ const vueSources = [
   'components/editor/PublishPageFields.vue',
   'components/editor/PublishShowcase.vue',
   'components/editor/SaveStatus.vue',
+  'components/editor/SessionCheckBanner.vue',
   'components/editor/customization/ColorField.vue',
   'components/editor/customization/CustomizationPanel.vue',
   'components/editor/customization/PageSettings.vue',

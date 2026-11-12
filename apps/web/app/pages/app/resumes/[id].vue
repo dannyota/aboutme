@@ -41,6 +41,7 @@ import {
   createFieldDrafts,
   FieldDraftsKey,
 } from '../../../composables/useFieldDrafts';
+import { createSessionCheck } from '../../../composables/sessionCheck';
 import { pageTitle, workspaceTitles } from '@/i18n/meta';
 import { editorShellCopy } from '@/i18n/editor-shell';
 
@@ -72,6 +73,10 @@ const photo = createPhotoController({ api, store, codec });
 const drafts = createFieldDrafts();
 provide(FieldDraftsKey, drafts);
 useUnsavedNavigationGuard(record, drafts);
+const sessionCheck = createSessionCheck({
+  check: () => auth.refresh(),
+  authState: auth.authState,
+});
 
 function stopRealtime(): void {
   realtime?.stop();
@@ -84,6 +89,13 @@ async function load(): Promise<void> {
   const result = await api.read(id);
   switch (result.kind) {
     case 'complete':
+      // Nothing re-initializes a record that holds unsent or in-flight work.
+      // This page's first complete read is its only initialize, before the
+      // editor shows the record: once it is open, a failed session check
+      // keeps the record and checks again instead of reading it afresh, and
+      // Try again under Editor unavailable exists only before that first
+      // load. A resume opened again after leaving anyway starts afresh, as
+      // the person chose to drop that work.
       store.initialize(result.accepted);
       parentRevisionETag.value = parentETag(result.accepted.revision);
       loadState.value = 'ready';
@@ -192,6 +204,15 @@ onMounted(() => {
     auth.authState,
     async (state) => {
       if (state !== 'authenticated') stopRealtime();
+      // A check in flight passes through `loading`; only an answer ends it.
+      if (state === 'authenticated' || state === 'anonymous') {
+        const recovered = sessionCheck.failing.value;
+        sessionCheck.stop();
+        // The queue waited while the session was unknown; it goes on now.
+        if (state === 'authenticated' && recovered) {
+          void actions.value?.resumeAfterAuth();
+        }
+      }
       if (state === 'authenticated') {
         wasAuthenticated = true;
         initializeActions();
@@ -209,7 +230,12 @@ onMounted(() => {
         // page had already loaded is this page's own to send on.
         if (wasAuthenticated) await navigateTo('/login');
       }
-      if (state === 'error') loadState.value = 'failed';
+      // Once the editor is open, a failed session check keeps it open with
+      // its work and checks again; only a first load shows Editor unavailable.
+      if (state === 'error') {
+        if (loadState.value === 'ready') sessionCheck.start();
+        else loadState.value = 'failed';
+      }
     },
     { immediate: true },
   );
@@ -236,6 +262,7 @@ watch(
 onBeforeUnmount(() => {
   stopRealtime();
   photo.clear();
+  sessionCheck.stop();
   actions.value?.stop();
 });
 
@@ -260,6 +287,7 @@ async function bytesToDataURL(
     "
     :actions="actions"
     :record="record"
+    :session-check="sessionCheck"
   />
   <main
     v-else

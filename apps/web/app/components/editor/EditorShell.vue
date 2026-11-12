@@ -53,6 +53,8 @@ import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import HeldWriteAlert from './HeldWriteAlert.vue';
+import SessionCheckBanner from './SessionCheckBanner.vue';
+import type { SessionCheck } from '../../composables/sessionCheck';
 import LanguageTwinReview from './LanguageTwinReview.vue';
 import EditorPreview from './EditorPreview.vue';
 import EditorRegionTabs from './EditorRegionTabs.vue';
@@ -76,6 +78,7 @@ type InspectorPanel
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
+  readonly sessionCheck?: SessionCheck;
 }>();
 const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
@@ -149,8 +152,13 @@ const issues = computed(() => Object.values(props.record.issues).flat());
 // Held field edits (rich text mid-debounce, an unfinished date) count too.
 const drafts = useFieldDrafts();
 const saveState = computed<SaveState>(() => {
-  const state = recordSaveState(props.record);
-  return state === 'saved' && (drafts?.count.value ?? 0) > 0 ? 'dirty' : state;
+  const recorded = recordSaveState(props.record);
+  const state = recorded === 'saved' && (drafts?.count.value ?? 0) > 0
+    ? 'dirty'
+    : recorded;
+  // Work waiting on a failed session check is being retried, not lost.
+  const waiting = state === 'dirty' || state === 'saving';
+  return waiting && props.sessionCheck?.failing.value ? 'retrying' : state;
 });
 
 const selectedEntry = ref<string>();
@@ -590,7 +598,13 @@ async function discardAndSignIn(): Promise<void> {
         :conflicts="record.conflicts"
         @open-inspector="openInspector"
       />
+      <!-- The queue waits for the session check, and so does Retry now. -->
+      <SessionCheckBanner
+        v-if="sessionCheck?.failing.value"
+        :session-check="sessionCheck"
+      />
       <HeldWriteAlert
+        v-else
         :actions="actions"
         :record="record"
       />

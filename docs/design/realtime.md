@@ -43,6 +43,14 @@ a held write as not saved and retrying, and tells the person when its outcome
 has stayed unknown for the alert time in Numeric budgets or it has used every
 rebase.
 
+When the session check fails for a reason other than a lost session, an open
+editor stays open with its work. Its queue waits, the check runs again with the
+delays in Numeric budgets, and Try again runs it at once. When the check
+succeeds the queue goes on as after signing in again; when it finds the session
+gone, the editor asks the person to sign in. Nothing re-initializes a record
+that holds unsent or in-flight work; the editor reads the resume afresh only for
+its first load.
+
 ## Refresh ladder
 
 | Rung | Mechanism                                     | Trigger                                   |

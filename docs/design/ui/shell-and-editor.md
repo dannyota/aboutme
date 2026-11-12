@@ -103,6 +103,14 @@ which starts the rebases again. Either button is disabled while the write is on
 its way. A held write with a conflict shows the conflict panel instead of this
 banner.
 
+When the session check fails for a reason other than a lost session, the editor
+stays on screen and shows an error banner in the same place: “Không kiểm tra
+được phiên đăng nhập” and “Các thay đổi vẫn ở trong thẻ này và sẽ được lưu khi
+có kết nối trở lại.” (“Can't check your sign-in” and “Your changes stay in this
+tab and are saved when the connection is back.”), with Try again (“Thử lại”),
+which checks at once. While it shows, unsaved work reads “Chưa lưu, đang thử
+lại”. Editor unavailable is shown only when the first load fails.
+
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF
 mode shows each page as its own sheet, then an estimated page count beside a
