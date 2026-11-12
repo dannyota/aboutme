@@ -249,23 +249,25 @@ assert.match(fn('ownerPublish'), /slug,\n\s*live: true,/);
 // after each test closes its counted page.
 const cleanup = fn('deleteOutsideCounters');
 assert.match(cleanup, /const cleanupContext = await browser\.newContext\(\);/);
+assert.match(cleanup, /await installPublicGuards\(cleanupContext, cleanupCounters\);/);
+assert.match(cleanup, /await signInWithPassword\(cleanupPage\);/);
 assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);/);
+assert.match(cleanup, /expect\(cleanupCounters\.externalRequests\)\.toBe\(0\);/);
 assert.doesNotMatch(cleanup, /\bcounters\b|hooks|pageDiagnosticsAttacher/);
 assert.equal(count(spec, /deleteRecordedResume\(/g), 1);
-// Each test cleans up whenever it recorded a resume, whatever its own steps
-// returned; the helper treats an already deleted resume as done.
+// Record each created resume before waiting for the rest of creation.
 for (const title of [
   '"proves native HTTPS publish, discovery, and revocation"',
   '"proves the showcase opt-in, its revocations, and delivery rules"',
   'DELETION_TEST_TITLE',
 ]) {
-  assert.match(
-    testBody(title),
-    /\} finally \{\n(?:(?!\n {2}\}\n)[^])*\n {4}if \(resumeID !== undefined\) \{\n(?: {6}stage\("[a-z-]+"\);\n)? {6}await page\.close\(\);\n {6}await deleteOutsideCounters\(browser, resumeID\);/,
-    title,
-  );
+  assert.match(testBody(title), /createdID = resumeID = (?:accepted\.metadata\.id|created\.id)/, title);
 }
-assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 3);
+assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID\)/);
+assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID\);/);
+assert.match(spec, /steps\.cleanup = true;[^]*?await writePublishEvidence\(\);/);
+assert.ok(spec.indexOf('test.afterEach(async ({ browser }') < spec.indexOf('test.afterEach(async ({}, info)'));
+assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 1);
 NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
   fail 'published base has the wrong Playwright base'
@@ -1007,6 +1009,42 @@ try {
   ]) {
     assert.equal(accepted((evidence) => { evidence.elapsedMs.revocation = elapsed; }), ok, `revocation ${elapsed}`);
   }
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+NODE
+# Public invite timings must be integers within the accepted window.
+node --input-type=module - "$SOURCE" <<'NODE' || fail 'public evidence timing rules drifted'
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const verifier = join(process.argv[2], 'verify-evidence.mjs');
+const dir = mkdtempSync(join(tmpdir(), 'public-evidence-'));
+const evidence = {
+  schemaVersion: 1, scenario: 'public-resume-hydration', origin: 'https://localhost:20443',
+  errors: { console: 0, externalRequest: 0, page: 0 },
+  steps: Object.fromEntries([
+    'published', 'ssr', 'hydrated', 'gate', 'gatedRoutes', 'googlePass',
+    'linkedinPass', 'passCookie', 'ownerGated', 'joinInvite', 'joinInviteClosed',
+    'switchOff', 'viewCleanup',
+  ].map((name) => [name, true])),
+  timings: { joinInviteMs: 4900 },
+};
+const accepted = () => {
+  const path = join(dir, 'public-proof.json');
+  writeFileSync(path, JSON.stringify(evidence));
+  return spawnSync(process.execPath, [verifier, 'public', path]).status === 0;
+};
+try {
+  for (const [value, ok] of [[4900, true], [45000, true], [-1, false], [0, false], [null, false], ['invalid', false], [4900.5, false], [4899, false], [45001, false]]) {
+    evidence.timings.joinInviteMs = value;
+    assert.equal(accepted(), ok, `joinInviteMs ${value}`);
+  }
+  delete evidence.timings.joinInviteMs;
+  assert.equal(accepted(), false, 'joinInviteMs missing');
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
