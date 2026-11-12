@@ -5,13 +5,12 @@ import { noteProjectOutcome, type ProjectOutcome } from './projectOutcomes';
 import type { ReconcileDecision } from './reconcile';
 import type { EditorQueueItem } from './templateGroup';
 import type { ResumeSnapshot } from './types';
-import { completeReadBarrier } from './coordinatorReconcile';
 import type { CoordinatorContext } from './coordinatorTypes';
 
 // How a link or refresh leaves the queue when it is not simply applied
-// (docs/design/ui/projects.md "In the resume editor"). Each path completes
-// the read barrier before the queue continues, so the edits behind it are
-// sent; a stale winner adopted on the way leaves that barrier set.
+// (docs/design/ui/projects.md "In the resume editor"). The server builds the
+// entry, so a dropped command sets the read barrier: the queue reads what the
+// resume holds before it sends the edits behind it.
 
 type ProjectCommand = Extract<
   AtomicEditorCommand,
@@ -27,17 +26,17 @@ function isProjectCommand(item: EditorQueueItem): item is ProjectCommand {
   return item.kind === 'projectLink' || item.kind === 'projectRefresh';
 }
 
-async function drop(
+function drop(
   ctx: CoordinatorContext,
   resumeId: string,
   command: ProjectCommand,
   outcome?: ProjectOutcome,
-): Promise<void> {
+): void {
   if (outcome !== undefined) noteProjectOutcome(command.id, outcome);
   // A conflict a realtime read recorded for this command goes with it.
   ctx.deps.store.resolveConflict(resumeId, command.id);
   ctx.deps.store.dropHead(resumeId, command.id);
-  await completeReadBarrier(ctx, resumeId);
+  ctx.deps.store.requireCompleteRead(resumeId);
 }
 
 /**
@@ -46,15 +45,15 @@ async function drop(
  * holding the edits behind it, and the read shows what the resume holds:
  * a link another tab made, or an entry whose project was deleted.
  */
-export async function dropRefusedProjectCommand(
+export function dropRefusedProjectCommand(
   ctx: CoordinatorContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   code?: AttemptFailureCode,
-): Promise<boolean> {
+): boolean {
   if (!isProjectCommand(queueItem)) return false;
   if (code !== undefined && !REFUSALS.has(code)) return false;
-  await drop(ctx, resumeId, queueItem);
+  drop(ctx, resumeId, queueItem);
   return true;
 }
 
@@ -78,14 +77,14 @@ function refreshChange(
  * A refresh whose entry changed after the person confirmed it is not sent
  * over that text; it leaves the queue so Refresh asks again.
  */
-export async function dropChangedRefresh(
+export function dropChangedRefresh(
   ctx: CoordinatorContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   latest: ResumeSnapshot,
-): Promise<boolean> {
+): boolean {
   if (queueItem.kind !== 'projectRefresh') return false;
-  await drop(ctx, resumeId, queueItem, refreshChange(queueItem, latest));
+  drop(ctx, resumeId, queueItem, refreshChange(queueItem, latest));
   return true;
 }
 
@@ -95,16 +94,16 @@ export async function dropChangedRefresh(
  * on the new revision by the caller. A refresh is resent only over
  * unchanged text.
  */
-export async function settleStaleProject(
+export function settleStaleProject(
   ctx: CoordinatorContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   latest: ResumeSnapshot,
   decision: ReconcileDecision,
-): Promise<boolean> {
+): boolean {
   if (queueItem.kind === 'projectLink') {
     if (decision.kind !== 'satisfied') return false;
-    await drop(ctx, resumeId, queueItem);
+    drop(ctx, resumeId, queueItem);
     return true;
   }
   if (decision.kind !== 'conflict') return false;

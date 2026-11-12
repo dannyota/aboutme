@@ -9,6 +9,14 @@ describe('editor navigation guard', () => {
     expect(hasUnsafeWork(record())).toBe(false);
   });
 
+  it('allows an unread revision to leave once local work is discarded', () => {
+    const value = record();
+    value.completeReadRequired = true;
+    value.discarded = true;
+
+    expect(hasUnsafeWork(value)).toBe(false);
+  });
+
   it.each([
     'pending',
     'attempt',
@@ -66,6 +74,7 @@ function record(): ResumeRecord {
     templateState: null,
     photoRead: { kind: 'none' },
     completeReadRequired: false,
+    discarded: false,
     sessionLost: false,
     opaquePhotoOutcome: null,
   };

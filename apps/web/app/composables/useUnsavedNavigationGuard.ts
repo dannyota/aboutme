@@ -12,7 +12,8 @@ export function hasUnsafeWork(record: ResumeRecord | undefined): boolean {
       || record.conflicts.length > 0
       || Object.keys(record.issues).length > 0
       || record.templateState?.kind === 'partial'
-      || record.completeReadRequired
+      // After an explicit discard the unread revision holds no work.
+      || (record.completeReadRequired && !record.discarded)
       || record.sessionLost
       || record.opaquePhotoOutcome !== null)
   );

@@ -9,8 +9,11 @@ import {
 } from './templateGroup';
 import type { AcceptedResume, ParentETag } from './types';
 import type { ResumeReadResult } from './attempt';
-import { stopForSessionLoss } from './coordinatorGuards';
-import type { CoordinatorContext } from './coordinatorTypes';
+import { current, stopForSessionLoss } from './coordinatorGuards';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
 export function settleTemplateComplete(
   ctx: CoordinatorContext,
@@ -69,10 +72,11 @@ export function settleTemplateComplete(
 }
 
 export async function refreshAndReconcile(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
 ): Promise<ResumeReadResult> {
   const result = await ctx.deps.api.read(resumeId);
+  if (!current(ctx, resumeId)) return result;
   if (result.kind === 'session-lost') {
     stopForSessionLoss(ctx, resumeId);
     return result;
@@ -93,7 +97,7 @@ function adoptAndReconcile(
 ): AcceptedResume | undefined {
   const record = ctx.deps.store.recordFor(resumeId);
   if (record === undefined) return undefined;
-  const adoption = ctx.deps.store.adoptComplete(resumeId, accepted);
+  const adoption = adoptRead(ctx, resumeId, accepted);
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
@@ -142,11 +146,12 @@ function adoptAndReconcile(
 }
 
 export async function refreshConditionalAndReconcile(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   etag?: ParentETag,
 ): Promise<ResumeConditionalReadResult> {
   const result = await ctx.deps.api.readConditional(resumeId, etag);
+  if (!current(ctx, resumeId)) return result;
   if (result.kind === 'session-lost') {
     stopForSessionLoss(ctx, resumeId);
     return result;
@@ -164,16 +169,17 @@ export async function refreshConditionalAndReconcile(
       };
 }
 
-export async function completeReadBarrier(
+/**
+ * Adopts a complete read of the resume. Any complete read at the held
+ * revision or newer completes the read barrier; without the barrier only a
+ * newer revision replaces what the editor holds.
+ */
+export function adoptRead(
   ctx: CoordinatorContext,
   resumeId: string,
-): Promise<boolean> {
-  const result = await ctx.deps.api.read(resumeId);
-  if (result.kind === 'session-lost') {
-    stopForSessionLoss(ctx, resumeId);
-    return false;
-  }
-  if (result.kind !== 'complete') return false;
-  ctx.deps.store.adoptCompleteRead(resumeId, result.accepted);
-  return !ctx.deps.store.recordFor(resumeId)?.completeReadRequired;
+  accepted: AcceptedResume,
+): ReturnType<CoordinatorContext['deps']['store']['adoptComplete']> {
+  return ctx.deps.store.recordFor(resumeId)?.completeReadRequired === true
+    ? ctx.deps.store.adoptCompleteRead(resumeId, accepted)
+    : ctx.deps.store.adoptComplete(resumeId, accepted);
 }

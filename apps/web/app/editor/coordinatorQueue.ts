@@ -4,25 +4,55 @@ import { reconcileCommand, reconcileTemplateGroup } from './reconcile';
 import { freezeAttempt } from './resumeApi';
 import { nextTemplateChild, type EditorQueueItem } from './templateGroup';
 import {
+  begin,
   canDrain,
+  current,
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
+  owns,
+  READ_RETRY_FIRST_MS,
+  READ_RETRY_MAX_MS,
+  readBarrierDue,
+  stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
-import { resolveUnknown, settle } from './coordinatorSettle';
-import type { CoordinatorContext } from './coordinatorTypes';
+import { adoptRead } from './coordinatorReconcile';
+import { resolveUnknown, send } from './coordinatorSettle';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
-export function schedule(ctx: CoordinatorContext, resumeId: string): void {
+export function schedule(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  delayMs?: number,
+): void {
+  if (ctx.stopped.has(resumeId)) return;
   const prior = ctx.timers.get(resumeId);
   if (prior !== undefined) clearTimeout(prior);
+  const requested
+    = delayMs ?? (deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS);
   ctx.timers.set(
     resumeId,
     setTimeout(() => {
       ctx.timers.delete(resumeId);
       void flush(ctx, resumeId);
-    }, deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS),
+    }, Math.max(requested, retryWait(ctx, resumeId))),
   );
+}
+
+/** Time left before a failed completing read may run again. */
+function retryWait(ctx: CoordinatorContext, resumeId: string): number {
+  const retry = ctx.readRetries.get(resumeId);
+  if (
+    retry === undefined
+    || ctx.deps.store.recordFor(resumeId)?.completeReadRequired !== true
+  ) {
+    return 0;
+  }
+  return Math.max(0, retry.at - Date.now());
 }
 
 /** A link or refresh is one chosen action, not typing, so it goes at once. */
@@ -37,7 +67,7 @@ export function flush(
 ): Promise<void> {
   const active = ctx.drains.get(resumeId);
   if (active !== undefined) return active;
-  const drain = drainResume(ctx, resumeId).finally(() =>
+  const drain = drainResume(begin(ctx, resumeId), resumeId).finally(() =>
     ctx.drains.delete(resumeId),
   );
   ctx.drains.set(resumeId, drain);
@@ -45,21 +75,26 @@ export function flush(
 }
 
 async function drainResume(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
   for (;;) {
+    if (!current(ctx, resumeId)) return;
     const record = ctx.deps.store.recordFor(resumeId);
-    if (
-      !canDrain(
-        record,
-        ctx.deps.auth.authState.value,
-        ctx.deps.auth.user.value?.id,
-      )
-    ) {
-      return;
+    const authState = ctx.deps.auth.authState.value;
+    const ownerId = ctx.deps.auth.user.value?.id;
+    if (record?.completeReadRequired === true) {
+      // Nothing is sent over an unread revision: the queue reads first.
+      if (
+        !readBarrierDue(record, authState, ownerId)
+        || !(await completeReadBarrier(ctx, resumeId))
+      ) {
+        return;
+      }
+      continue;
     }
-    if (record.completeReadRequired) return;
+    ctx.readRetries.delete(resumeId);
+    if (!canDrain(record, authState, ownerId)) return;
     const queueItem = toRaw(record.pending[0]!);
     if (!dependenciesAcknowledged(record, queueItem)) return;
     if (queueItem.kind === 'templateGroup') {
@@ -104,9 +139,7 @@ async function drainResume(
       continue;
     }
     if (decision.kind === 'conflict') {
-      if (
-        await dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)
-      ) {
+      if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
         continue;
       }
       ctx.deps.store.markConflict(resumeId, decision.conflict);
@@ -117,7 +150,7 @@ async function drainResume(
 }
 
 async function dispatchCommand(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
@@ -130,24 +163,19 @@ async function dispatchCommand(
     } catch {
       return false;
     }
+    if (!current(ctx, resumeId)) return false;
     csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   }
   if (record === undefined || csrfToken === null) return false;
   const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
   ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  await settle(
-    ctx,
-    resumeId,
-    queueItem,
-    command,
-    attempt,
-    await ctx.deps.api.dispatch(attempt, csrfToken),
-  );
+  if (!owns(ctx, resumeId, queueItem)) return false;
+  await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
   return true;
 }
 
 export async function retry(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   commandId: string,
 ): Promise<void> {
@@ -171,25 +199,23 @@ export async function retry(
       attempt,
       'transport',
     );
-    return;
+  } else {
+    const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
+    if (csrfToken === null) return;
+    await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
   }
-  const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (csrfToken === null) return;
-  await settle(
-    ctx,
-    resumeId,
-    queueItem,
-    command,
-    attempt,
-    await ctx.deps.api.dispatch(attempt, csrfToken),
-  );
+  if (!current(ctx, resumeId)) return;
+  // A retry settles outside the drain, so the drain resumes the queue and
+  // completes any read barrier the settlement left.
+  await flush(ctx, resumeId);
 }
 
 export async function resumeAfterAuth(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
   await ctx.deps.auth.refresh();
+  if (!current(ctx, resumeId)) return;
   const record = ctx.deps.store.recordFor(resumeId);
   const ownerId = ctx.deps.auth.user.value?.id;
   const retainedOwner
@@ -203,8 +229,8 @@ export async function resumeAfterAuth(
     return;
   }
   const result = await ctx.deps.api.read(resumeId);
-  if (result.kind !== 'complete') return;
-  ctx.deps.store.adoptComplete(resumeId, result.accepted);
+  if (!current(ctx, resumeId) || result.kind !== 'complete') return;
+  adoptRead(ctx, resumeId, result.accepted);
   ctx.deps.store.clearSessionLost(resumeId);
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
   if (active !== null && active !== undefined) {
@@ -212,4 +238,73 @@ export async function resumeAfterAuth(
   } else {
     schedule(ctx, resumeId);
   }
+}
+
+/**
+ * Reads the complete resume to clear the read barrier, which marks a resume
+ * the editor has not read in full: a 412 winner, a bodyless 204, or a
+ * dropped project command. A read that leaves it set is retried on the
+ * queue's own timer, 1 s after the first failure and doubling to 30 s, or
+ * after a longer Retry-After; no schedule or flush runs it sooner. A lost
+ * session waits for sign-in, whose read completes it; a missing resume ends
+ * the retries.
+ */
+export async function completeReadBarrier(
+  ctx: OperationContext,
+  resumeId: string,
+): Promise<boolean> {
+  if (!current(ctx, resumeId)) return false;
+  const wait = retryWait(ctx, resumeId);
+  if (wait > 0) {
+    schedule(ctx, resumeId, wait);
+    return false;
+  }
+  const result = await ctx.deps.api.read(resumeId);
+  if (!current(ctx, resumeId)) return false;
+  if (result.kind === 'session-lost') {
+    stopForSessionLoss(ctx, resumeId);
+    return false;
+  }
+  if (result.kind === 'complete') {
+    ctx.deps.store.adoptCompleteRead(resumeId, result.accepted);
+  }
+  if (!ctx.deps.store.recordFor(resumeId)?.completeReadRequired) {
+    ctx.readRetries.delete(resumeId);
+    return true;
+  }
+  if (
+    result.kind !== 'complete'
+    && result.kind !== 'failed'
+    && result.kind !== 'rate-limited'
+  ) {
+    return false;
+  }
+  const failures = ctx.readRetries.get(resumeId)?.failures ?? 0;
+  const backoff = Math.min(
+    READ_RETRY_FIRST_MS * 2 ** failures,
+    READ_RETRY_MAX_MS,
+  );
+  const delay = result.kind === 'rate-limited'
+    ? Math.max(result.retryAfterMs ?? 0, backoff)
+    : backoff;
+  ctx.readRetries.set(resumeId, {
+    failures: failures + 1,
+    at: Date.now() + delay,
+  });
+  schedule(ctx, resumeId, delay);
+  return false;
+}
+
+/**
+ * Ends this coordinator's work on a resume whose editor closed: no timer,
+ * read or write starts for it again, though a request already sent
+ * completes. Unsent edits stay behind until the resume is opened again,
+ * which reads it afresh and drops them; leaving with them warns first.
+ */
+export function stop(ctx: CoordinatorContext, resumeId: string): void {
+  ctx.stopped.add(resumeId);
+  ctx.readRetries.delete(resumeId);
+  const timer = ctx.timers.get(resumeId);
+  if (timer !== undefined) clearTimeout(timer);
+  ctx.timers.delete(resumeId);
 }

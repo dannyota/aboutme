@@ -9,22 +9,43 @@ import {
   assertNever,
   dispatchToken,
   holdFailed,
+  owns,
   stopForSessionLoss,
   UNKNOWN_REPLAY_DELAY_MS,
 } from './coordinatorGuards';
 import {
-  completeReadBarrier,
+  adoptRead,
   refreshAndReconcile,
   settleTemplateComplete,
 } from './coordinatorReconcile';
-import type { CoordinatorContext } from './coordinatorTypes';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 import {
   dropRefusedProjectCommand,
   settleStaleProject,
 } from './coordinatorProject';
 
-export async function settle(
-  ctx: CoordinatorContext,
+/**
+ * Sends the write in flight and settles its answer. An answer that comes
+ * back after the write stopped belonging to this operation is ignored.
+ */
+export async function send(
+  ctx: OperationContext,
+  resumeId: string,
+  queueItem: EditorQueueItem,
+  command: AtomicEditorCommand,
+  attempt: FrozenAttempt,
+  csrfToken: string,
+): Promise<void> {
+  const result = await ctx.deps.api.dispatch(attempt, csrfToken);
+  if (!owns(ctx, resumeId, queueItem)) return;
+  await settle(ctx, resumeId, queueItem, command, attempt, result);
+}
+
+async function settle(
+  ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
@@ -42,7 +63,6 @@ export async function settle(
     case 'child-ack':
       ctx.deps.store.acknowledgeChild(resumeId, queueItem.id, result.etag);
       ctx.deps.store.dropHead(resumeId, queueItem.id);
-      await completeReadBarrier(ctx, resumeId);
       return;
     case 'resume-deleted':
       ctx.deps.store.acknowledgeResumeDelete(resumeId, queueItem.id);
@@ -70,7 +90,7 @@ export async function settle(
       stopForSessionLoss(ctx, resumeId);
       return;
     case 'validation-rejected':
-      if (await dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
+      if (dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
       ctx.deps.store.setIssues(resumeId, queueItem.id, result.issues);
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
@@ -114,9 +134,7 @@ export async function settle(
       await refreshAndReconcile(ctx, resumeId);
       return;
     case 'rejected':
-      if (
-        await dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)
-      ) {
+      if (dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)) {
         return;
       }
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
@@ -200,7 +218,7 @@ function markTemplateChildFailed(
 }
 
 async function refreshThenRetrySameAttemptOnce(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
@@ -220,20 +238,14 @@ async function refreshThenRetrySameAttemptOnce(
   }
   ctx.csrfRetries.add(key);
   await ctx.deps.auth.refresh();
+  if (!owns(ctx, resumeId, queueItem)) return;
   const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   if (csrfToken === null) return;
-  await settle(
-    ctx,
-    resumeId,
-    queueItem,
-    command,
-    attempt,
-    await ctx.deps.api.dispatch(attempt, csrfToken),
-  );
+  await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
 }
 
 export async function resolveUnknown(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
@@ -253,20 +265,14 @@ export async function resolveUnknown(
       reason,
     });
     await ctx.deps.runtime.delay(UNKNOWN_REPLAY_DELAY_MS);
+    if (!owns(ctx, resumeId, queueItem)) return;
     const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
     if (csrfToken === null) return;
     if (ctx.deps.runtime.nowEpochMs() >= replay.retryCutoff) {
       await resolveUnknown(ctx, resumeId, queueItem, command, replay, reason);
       return;
     }
-    await settle(
-      ctx,
-      resumeId,
-      queueItem,
-      command,
-      replay,
-      await ctx.deps.api.dispatch(replay, csrfToken),
-    );
+    await send(ctx, resumeId, queueItem, command, replay, csrfToken);
     return;
   }
   ctx.deps.store.holdAttempt(resumeId, {
@@ -279,14 +285,14 @@ export async function resolveUnknown(
   });
   if (ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff) return;
   if (command.kind === 'photoUpload') {
-    await setOpaquePhoto(ctx, resumeId, command, attempt);
+    await setOpaquePhoto(ctx, resumeId, queueItem, command, attempt);
     return;
   }
   await refreshAndReconcile(ctx, resumeId);
 }
 
 async function settleStale(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
@@ -317,6 +323,7 @@ async function settleStale(
   let snapshot: AcceptedResume;
   if (command.kind === 'metadataField' || command.kind === 'resumeDelete') {
     const complete = await ctx.deps.api.read(resumeId);
+    if (!owns(ctx, resumeId, queueItem)) return;
     if (complete.kind === 'session-lost') {
       stopForSessionLoss(ctx, resumeId);
       return;
@@ -342,7 +349,7 @@ async function settleStale(
       });
       return;
     }
-    const adoption = ctx.deps.store.adoptComplete(resumeId, complete.accepted);
+    const adoption = adoptRead(ctx, resumeId, complete.accepted);
     snapshot = adoption.kind === 'adopted'
       ? adoption.accepted
       : adoption.winner;
@@ -363,7 +370,7 @@ async function settleStale(
     && (command.kind === 'structure' || command.kind === 'customization')
     ? reconcileTemplateChild(command, snapshot)
     : reconcileCommand(command, snapshot);
-  if (await settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
+  if (settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
     return;
   }
   if (secondStale) {
@@ -402,19 +409,13 @@ async function settleStale(
   });
   const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
   if (csrfToken === null) return;
-  await settle(
-    ctx,
-    resumeId,
-    queueItem,
-    command,
-    rebased,
-    await ctx.deps.api.dispatch(rebased, csrfToken),
-  );
+  await send(ctx, resumeId, queueItem, command, rebased, csrfToken);
 }
 
 async function setOpaquePhoto(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
+  queueItem: EditorQueueItem,
   command: Extract<AtomicEditorCommand, { kind: 'photoUpload' }>,
   attempt: FrozenAttempt,
 ): Promise<void> {
@@ -422,13 +423,14 @@ async function setOpaquePhoto(
     = ctx.deps.store.recordFor(resumeId)?.accepted.document.personalDetails
       .photo?.key;
   const result = await ctx.deps.api.read(resumeId);
+  if (!owns(ctx, resumeId, queueItem)) return;
   let observed: 'unchanged' | 'changed' | 'unavailable' = 'unavailable';
   if (result.kind === 'complete') {
     observed
       = result.accepted.document.personalDetails.photo?.key === before
         ? 'unchanged'
         : 'changed';
-    ctx.deps.store.adoptComplete(resumeId, result.accepted);
+    adoptRead(ctx, resumeId, result.accepted);
   }
   ctx.deps.store.setOpaquePhotoOutcome(resumeId, {
     kind: 'photo-cutoff',

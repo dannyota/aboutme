@@ -11,6 +11,21 @@ second of inactivity it sends the pending change as one granular HTTP mutation,
 which keeps preconditions, idempotency, status codes, request logs, and
 route-specific rate limits. There is no WebSocket write path.
 
+The editor sets a read barrier when it adopts a revision it has not read in
+full: the winner of a `412`, the revision a bodyless `204` acknowledges, or a
+project link or refresh the queue dropped. The mutation queue owns that barrier,
+whatever set it. Once no write is in flight, the queue reads the complete resume
+before it sends any queued edit; any complete read at that revision or newer
+clears the barrier, including a realtime refetch or the read after signing in
+again. A failed read keeps the barrier and is retried on the queue's own timer
+with the delays in [Numeric budgets](budgets.md); no other edit, action, or
+flush runs it sooner. A lost session waits for sign-in, and a missing resume
+ends the retries. While the editor is open its queued edits are held, never
+dropped, the save status shows unsaved, and leaving warns. Discarding after a
+lost session drops them and lets the page go, though the barrier stays for the
+queue. Leaving anyway also drops them and stops the queue's reads and writes;
+the resume opens again from a fresh complete read.
+
 ## Refresh ladder
 
 | Rung | Mechanism                                     | Trigger                                   |

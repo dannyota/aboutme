@@ -2,9 +2,12 @@ import {
   createReplacementCommand,
   type ConflictConfirmation,
 } from './reconcile';
-import { completeReadBarrier } from './coordinatorReconcile';
+import { current, stopForSessionLoss } from './coordinatorGuards';
 import { flush, schedule } from './coordinatorQueue';
-import type { CoordinatorContext } from './coordinatorTypes';
+import type {
+  CoordinatorContext,
+  OperationContext,
+} from './coordinatorTypes';
 
 export async function acceptLatest(
   ctx: CoordinatorContext,
@@ -17,17 +20,11 @@ export async function acceptLatest(
   if (conflict === undefined) return;
   ctx.deps.store.dropHead(resumeId, conflict.id);
   ctx.deps.store.resolveConflict(resumeId, conflictId);
-  if (
-    ctx.deps.store.recordFor(resumeId)?.completeReadRequired === true
-    && !(await completeReadBarrier(ctx, resumeId))
-  ) {
-    return;
-  }
   await flush(ctx, resumeId);
 }
 
 export async function applyMine(
-  ctx: CoordinatorContext,
+  ctx: OperationContext,
   resumeId: string,
   conflictId: string,
   confirmation: ConflictConfirmation,
@@ -37,6 +34,8 @@ export async function applyMine(
     ?.conflicts.find((candidate) => candidate.id === conflictId);
   if (conflict?.subject !== 'atomic') return;
   const latest = await ctx.deps.api.read(resumeId);
+  if (!current(ctx, resumeId)) return;
+  if (latest.kind === 'session-lost') stopForSessionLoss(ctx, resumeId);
   if (latest.kind !== 'complete') return;
   const replacement = createReplacementCommand(
     conflict,
@@ -45,9 +44,9 @@ export async function applyMine(
   );
   if (replacement === null) return;
   if (
-    !ctx.deps.store.replaceActiveAfterCompleteRead(
+    !ctx.deps.store.replaceConflictedAfterCompleteRead(
       resumeId,
-      conflict.command.id,
+      conflict.command,
       latest.accepted,
       replacement,
     )
