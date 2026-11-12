@@ -30,9 +30,13 @@ point-in-time restore goes below the floor it started with.
 A migration can make older releases unsafe, for example by dropping a column
 they read. `apps/server/migrations/schema-floor` holds one strict tag: the
 lowest published release that runs against the schema after that tree's
-migrations. Goose embeds only `*.sql`, so the file is not a migration. A change
-that adds such a migration raises this file and the tracked floor together. A
-static test keeps the tracked floor at or above the file.
+migrations. Goose embeds only `*.sql`, so the file is not a migration. A
+breaking change ships in two releases. The first stops depending on what the
+migration removes and runs against both schemas; it is published and verified
+first. A later change adds the migration and raises this file and the tracked
+floor together to that published release. The showcase review columns follow
+this order: v0.8.29 no longer reads them. A static test keeps the tracked floor
+at or above the file.
 
 The deploy reads the file from the candidate's commit, which the release
 eligibility check binds to the tag, never from the checkout. It refuses a
