@@ -220,6 +220,26 @@ func (q *Queries) ProjectDocumentBytes(ctx context.Context, document json.RawMes
 	return bytes, err
 }
 
+const projectStoredDocumentEquals = `-- name: ProjectStoredDocumentEquals :one
+SELECT (document = $1::jsonb)::bool AS equal
+FROM projects WHERE id = $2 AND user_id = $3
+`
+
+type ProjectStoredDocumentEqualsParams struct {
+	Document json.RawMessage
+	ID       uuid.UUID
+	UserID   uuid.UUID
+}
+
+// Compares the stored document with a replacement in the jsonb form
+// ReplaceProjectCAS stores, so formatting or key order is never a change.
+func (q *Queries) ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, projectStoredDocumentEquals, arg.Document, arg.ID, arg.UserID)
+	var equal bool
+	err := row.Scan(&equal)
+	return equal, err
+}
+
 const proposeProjectSlug = `-- name: ProposeProjectSlug :one
 WITH occupied AS MATERIALIZED (
     SELECT p.slug FROM projects AS p WHERE p.user_id = $1::uuid

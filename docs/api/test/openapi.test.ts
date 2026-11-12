@@ -210,10 +210,23 @@ describe("openapi contract", () => {
       "lng",
       "downloadEnabled",
       "document",
+      "projectLinks",
     ]);
+    expect(publicResume.required).not.toContain("projectLinks");
     expect(publicResume.properties.revision.$ref).toBe(
       "#/components/schemas/Revision",
     );
+    const link = doc.components.schemas.PublicProjectLink;
+    expect(publicResume.properties.projectLinks.items.$ref).toBe(
+      "#/components/schemas/PublicProjectLink",
+    );
+    expect(link.additionalProperties).toBe(false);
+    expect(Object.keys(link.properties)).toEqual([
+      "entryId",
+      "projectSlug",
+      "url",
+    ]);
+    expect(link.required).toEqual(["entryId", "projectSlug", "url"]);
     expect(doc.components.schemas.Resume.properties).toBeUndefined();
     expect(JSON.stringify(publicResume)).not.toMatch(
       /createdAt|updatedAt|seoGeoEnabled|\"key\"|\"isHidden\"/,

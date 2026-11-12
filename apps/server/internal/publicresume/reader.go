@@ -44,7 +44,11 @@ type Snapshot struct {
 	// "Gated routes"). The epoch never leaves this process in any response.
 	SignInToView  bool
 	ViewPassEpoch int32
-	photoKey      string
+	// ProjectLinks is the project link context of the served revision: one
+	// link per visible entry that links a project of the owner, in layout
+	// and entry order. Only the public JSON carries it.
+	ProjectLinks []ProjectLink
+	photoKey     string
 }
 
 // ReaderDependencies contains the stores and services needed to read a resume.
@@ -78,7 +82,8 @@ func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 // conditional work can be performed without the returned lease.
 func (r *Reader) ReadResume(ctx context.Context, slug string, representation publicstate.Representation) (Snapshot, *publicstate.Lease, error) {
 	for attempt := 0; attempt < 2; attempt++ {
-		row, err := r.store.GetPublicResumeBySlug(ctx, slug)
+		read, err := r.store.GetPublicResumeBySlug(ctx, slug)
+		row := read.Resume
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Snapshot{}, nil, ErrNotFound
 		}
@@ -100,6 +105,9 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 			return Snapshot{}, nil, ErrUnavailable
 		}
 		snapshot, err := r.snapshot(row)
+		if err == nil {
+			snapshot.ProjectLinks, err = projectLinks(read.ProjectLinks, snapshot.Public, r.origin)
+		}
 		if err != nil {
 			lease.Release()
 			return Snapshot{}, nil, ErrUnavailable

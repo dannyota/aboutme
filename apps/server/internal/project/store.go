@@ -160,6 +160,49 @@ func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.
 	return FromRow(row)
 }
 
+// Change is how a complete replacement changes a project's stored forms.
+type Change int
+
+const (
+	// Unchanged stores the same slug and the same document.
+	Unchanged Change = iota
+	// DocumentChanged keeps the slug and stores a different document.
+	DocumentChanged
+	// SlugChanged stores a different slug, with or without a document change.
+	SlugChanged
+)
+
+// ChangeTx reports how ReplaceTx with the same arguments would change the
+// stored project. It matches the revision, prepares d as ReplaceTx does, and
+// compares the stored slug and the stored document with what the
+// replacement would store, so a request that differs only in formatting or
+// in what sanitizing removes is Unchanged.
+func (s *Store) ChangeTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, slug string, d Document) (Change, error) {
+	current, err := s.MatchTx(ctx, q, owner, id, revision)
+	if err != nil {
+		return Unchanged, err
+	}
+	raw, _, err := prepareStored(ctx, q, d)
+	if err != nil {
+		return Unchanged, err
+	}
+	sameDocument, err := q.ProjectStoredDocumentEquals(ctx, store.ProjectStoredDocumentEqualsParams{Document: raw, ID: id, UserID: owner})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Unchanged, ErrNotFound
+	}
+	if err != nil {
+		return Unchanged, fmt.Errorf("project: compare stored document: %w", err)
+	}
+	switch {
+	case current.Slug != slug:
+		return SlugChanged, nil
+	case !sameDocument:
+		return DocumentChanged, nil
+	default:
+		return Unchanged, nil
+	}
+}
+
 // DeleteTx removes a matched owned row and holds its released slug.
 func (s *Store) DeleteTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, now time.Time) error {
 	current, err := s.MatchTx(ctx, q, owner, id, revision)

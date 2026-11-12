@@ -159,8 +159,8 @@ func (unusedReadStore) GetPublicState(context.Context) (store.PublicState, error
 	return store.PublicState{}, errors.New("unused")
 }
 
-func (unusedReadStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return store.Resume{}, errors.New("unused")
+func (unusedReadStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
+	return store.GetPublicResumeBySlugRow{}, errors.New("unused")
 }
 
 func (unusedReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {

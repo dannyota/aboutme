@@ -202,15 +202,16 @@ func formatTestReaderWithError(t *testing.T, discovery bool, readErr error) (str
 }
 
 type formatReadStore struct {
-	row store.Resume
-	err error
+	row   store.Resume
+	links json.RawMessage
+	err   error
 }
 
 func (s formatReadStore) GetPublicState(context.Context) (store.PublicState, error) {
 	return store.PublicState{Singleton: true, DiscoveryGeneration: 1}, nil
 }
-func (s formatReadStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return s.row, s.err
+func (s formatReadStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
+	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: linkContext(s.links)}, s.err
 }
 func (s formatReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")

@@ -147,6 +147,7 @@ func TestOriginAdmissionBoundaryAroundCompletedEdgeValidation(t *testing.T) {
 
 type publicServiceStore struct {
 	row   store.Resume
+	links json.RawMessage
 	calls int
 }
 
@@ -154,9 +155,17 @@ func (s *publicServiceStore) GetPublicState(context.Context) (store.PublicState,
 	return store.PublicState{}, errors.New("unused")
 }
 
-func (s *publicServiceStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
+func (s *publicServiceStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	s.calls++
-	return s.row, nil
+	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: linkContext(s.links)}, nil
+}
+
+// linkContext is the statement's link column for links, or no links.
+func linkContext(links json.RawMessage) json.RawMessage {
+	if links == nil {
+		return json.RawMessage(`[]`)
+	}
+	return links
 }
 func (s *publicServiceStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")

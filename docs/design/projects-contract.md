@@ -1,8 +1,10 @@
 # Projects contract
 
-Status: Accepted by the owner (2026-11-11); not yet implemented. Product scope
-is in [projects](projects.md); the decision is
-[ADR 0029](../adr/0029-account-project-library.md). Nothing here is implemented.
+Status: Accepted by the owner (2026-11-11). Implemented: the library, linking,
+deletion, replace advancement, and the public link context with `projectLinks`.
+Project pages, their dispatch, and the entry points are not yet implemented.
+Product scope is in [projects](projects.md); the decision is
+[ADR 0029](../adr/0029-account-project-library.md).
 
 ## Routes and dispatch
 
@@ -60,10 +62,6 @@ holds unchanged.
 | Slug rename, deletion                      | Revoking                                 |
 | Deletion, for each linking draft resume    | Non-draining over that resume            |
 | Any edit of a project no live resume links | None; an ordinary row write              |
-
-Until project pages ship, a project edit or rename advances no resume, because
-no public response reads library data; the change that adds the first public
-reader adds the advancement with it.
 
 Link, unlink, hide, unpublish and sign in to view are existing resume writes and
 transitions.

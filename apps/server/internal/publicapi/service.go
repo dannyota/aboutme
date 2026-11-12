@@ -159,7 +159,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
 			return
 		}
-		response, err := NewPublicJSON(snapshot.Public)
+		response, err := NewPublicJSON(snapshot.Public, snapshot.ProjectLinks)
 		if err != nil {
 			servePublicJSONError(w, request, http.StatusServiceUnavailable)
 			return

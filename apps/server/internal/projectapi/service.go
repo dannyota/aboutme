@@ -32,16 +32,21 @@ type Options struct {
 	AllowSlug func(uuid.UUID, time.Time) bool
 	// Clock returns the current time; nil uses time.Now.
 	Clock func() time.Time
-	// Links reads and removes the owner's resume links to library projects.
+	// Links reads the owner's resume links to library projects and runs the
+	// library mutations that change those resumes.
 	Links LinkedResumes
 }
 
 // LinkedResumes is the resume side of the library: which resumes link a
-// project, and the deletion that unlinks a project from all of them.
+// project, the replacement that advances the linking live resumes, and the
+// deletion that unlinks a project from all of them.
 type LinkedResumes interface {
 	// LinkedResumeIDs maps each linked project to the owner's linking
 	// resume ids; q may be a pool or a transaction.
 	LinkedResumeIDs(context.Context, *store.Queries, uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
+	// ReplaceProject runs a project replacement under the public-state
+	// fences of the linking live resumes it advances.
+	ReplaceProject(context.Context, resumeapi.ProjectReplacement) (resume.ExecuteResult, error)
 	// RemoveProject runs a project deletion under the linking resumes'
 	// public-state fences.
 	RemoveProject(context.Context, resumeapi.ProjectRemoval) (resume.ExecuteResult, error)

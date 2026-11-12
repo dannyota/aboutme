@@ -9,7 +9,7 @@ import (
 // PublicReadQueries is the read-only public publication storage contract.
 type PublicReadQueries interface {
 	GetPublicState(context.Context) (PublicState, error)
-	GetPublicResumeBySlug(context.Context, string) (Resume, error)
+	GetPublicResumeBySlug(context.Context, string) (GetPublicResumeBySlugRow, error)
 	GetPublicResumeByOwner(context.Context, GetPublicResumeByOwnerParams) (Resume, error)
 	ListEligiblePublicSlugs(context.Context) ([]string, error)
 }
