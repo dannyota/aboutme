@@ -96,6 +96,7 @@ apps/web/app/components/editor/customization/labels.ts
 apps/web/app/components/editor/forms/ContactList.vue
 apps/web/app/components/editor/forms/DateRangeField.vue
 apps/web/app/components/editor/forms/PersonalDetailsPanel.vue
+apps/web/app/components/editor/forms/ProjectEntryMenu.vue
 apps/web/app/components/editor/forms/ResumeLanguageField.vue
 apps/web/app/components/editor/forms/SectionPanel.vue
 apps/web/app/components/editor/forms/YearMonthField.vue
@@ -106,10 +107,12 @@ apps/web/app/components/editor/forms/entries/EntryLinkField.vue
 apps/web/app/components/editor/forms/entries/LanguageEntryFields.vue
 apps/web/app/components/editor/forms/entries/ProfileEntryFields.vue
 apps/web/app/components/editor/forms/entries/ProjectEntryFields.vue
+apps/web/app/components/editor/forms/entries/ProjectLinkNote.vue
 apps/web/app/components/editor/forms/entries/SkillEntryFields.vue
 apps/web/app/components/editor/forms/entries/WorkEntryFields.vue
 apps/web/app/components/editor/forms/entries/levels.ts
 apps/web/app/components/editor/forms/fieldIntent.ts
+apps/web/app/components/editor/forms/projectLibrary.ts
 apps/web/app/components/editor/list/CreateResumeDialog.vue
 apps/web/app/components/editor/list/DeleteResumeDialog.vue
 apps/web/app/components/editor/list/RenameResumeDialog.vue
@@ -151,10 +154,13 @@ apps/web/app/components/projects/ProjectLanguageDialog.vue
 apps/web/app/components/projects/ProjectLeaveDialog.vue
 apps/web/app/components/projects/ProjectList.vue
 apps/web/app/components/projects/ProjectReleaseDialog.vue
+apps/web/app/components/projects/ProjectResumes.vue
 apps/web/app/components/projects/ProjectTechnologies.vue
 apps/web/app/components/projects/ProjectTextFields.vue
 apps/web/app/components/projects/projectDocument.ts
 apps/web/app/components/projects/projectIssues.ts
+apps/web/app/components/projects/projectLinks.ts
+apps/web/app/components/projects/projectResumes.ts
 apps/web/app/components/public/JoinInvite.vue
 apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicMark.vue
@@ -375,6 +381,7 @@ apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
 apps/web/app/editor/photoCrop.ts
 apps/web/app/editor/previewZoom.ts
+apps/web/app/editor/projectLinks.ts
 apps/web/app/editor/projections.ts
 apps/web/app/editor/publicPageMeta.ts
 apps/web/app/editor/publishApi.ts

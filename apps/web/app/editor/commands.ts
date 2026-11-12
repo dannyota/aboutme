@@ -144,7 +144,9 @@ export type AtomicCommandIntent
     | { kind: 'photoCrop'; crop: PhotoCrop | null }
     | { kind: 'photoUpload'; file: File }
     | { kind: 'photoDelete' }
-    | { kind: 'resumeDelete'; confirmedTitle: string };
+    | { kind: 'resumeDelete'; confirmedTitle: string }
+    | { kind: 'projectLink'; projectId: string }
+    | { kind: 'projectRefresh'; sectionKey: string; entryId: string };
 
 export type AtomicEditorCommand = CommandEnvelope & AtomicCommandIntent;
 
@@ -175,14 +177,7 @@ export function captureCommand(
   const intent = cloneIntent(input.intent);
   const before = projectIntent(snapshot, intent);
   const next = applyIntent(snapshot, intent);
-  const intended = intent.kind === 'photoUpload'
-    ? null
-    : intent.kind === 'resumeDelete'
-      ? {
-          target: { present: false } as const,
-          context: { ownerId: { present: false } as const },
-        }
-      : projectIntent(next, intent);
+  const intended = intendedOf(before, next, intent);
   const baseProjection = withOwnerContext(before, intent, input.ownerId);
   const intendedProjection = intended === null
     ? null
@@ -249,8 +244,40 @@ function targetKey(
       return 'photo:object';
     case 'resumeDelete':
       return `resume:${resumeId ?? sequence}`;
+    case 'projectLink':
+      return `project-link:${intent.projectId}`;
+    case 'projectRefresh':
+      return `entry:${intent.sectionKey}:${intent.entryId}:project-refresh`;
     default:
       return assertNever(intent);
+  }
+}
+
+/**
+ * What the server state looks like once the command lands. A link changes
+ * nothing locally, because the server chooses the new entry's id and text,
+ * so its intent is only that the resume links the project. A refresh's
+ * text comes from the library at send time, so it has no predicted result
+ * and is never treated as already applied.
+ */
+function intendedOf(
+  before: Projection,
+  next: ResumeSnapshot,
+  intent: AtomicCommandIntent,
+): Projection | null {
+  switch (intent.kind) {
+    case 'photoUpload':
+    case 'projectRefresh':
+      return null;
+    case 'resumeDelete':
+      return {
+        target: { present: false },
+        context: { ownerId: { present: false } },
+      };
+    case 'projectLink':
+      return { ...before, target: { present: true, value: true } };
+    default:
+      return projectIntent(next, intent);
   }
 }
 

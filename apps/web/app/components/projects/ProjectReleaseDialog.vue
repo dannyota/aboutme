@@ -17,6 +17,8 @@ const props = defineProps<{
   readonly project: Project | null;
   readonly action: ReleaseAction;
   readonly copy: ProjectsCopy;
+  /** Resumes that show the project; the project's own list by default. */
+  readonly linkedCount?: number;
 }>();
 const emit = defineEmits<{ close: [] }>();
 
@@ -46,6 +48,8 @@ const slugError = computed(() => {
   if (state.value.kind === 'slug-held') return props.copy.slugHeld;
   return undefined;
 });
+const linkedCount = computed(() =>
+  props.linkedCount ?? props.project?.linkedResumeIds?.length ?? 0);
 const canSubmit = computed(() =>
   props.project !== null
   && (props.kind === 'delete'
@@ -126,6 +130,13 @@ function close(): void {
         {{ copy.addressNote }}
       </p>
     </template>
+    <p
+      v-if="kind === 'delete' && linkedCount > 0"
+      class="text-sm"
+      data-testid="project-delete-linked"
+    >
+      {{ copy.deleteLinked(linkedCount) }}
+    </p>
     <p
       v-if="reauthStep"
       class="text-sm"

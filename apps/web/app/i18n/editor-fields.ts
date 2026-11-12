@@ -96,7 +96,13 @@ export type EditorFieldsCopy = {
   >;
   readonly links: Record<'invalid', string>;
   readonly entryCard: Record<
-    'collapse' | 'expand' | 'hidden' | 'moveUp' | 'moveDown' | 'delete',
+    | 'collapse'
+    | 'expand'
+    | 'hidden'
+    | 'moveUp'
+    | 'moveDown'
+    | 'delete'
+    | 'libraryMark',
     string
   >;
   readonly section: Record<
@@ -113,12 +119,38 @@ export type EditorFieldsCopy = {
     | 'cancel',
     string
   > & { readonly deleteDescription: (entry: string) => string };
+  /** A project section's library controls (docs/design/ui/projects.md). */
+  readonly projectLinks: Record<
+    | 'blankEntry'
+    | 'fromProjects'
+    | 'openProjects'
+    | 'retry'
+    | 'adding'
+    | 'notAdded'
+    | 'refresh'
+    | 'refreshQuestion'
+    | 'replace'
+    | 'openProject'
+    | 'sharedPublic'
+    | 'sharedReader'
+    | 'addAnyway',
+    string
+  > & {
+    readonly note: (name: string) => string;
+    readonly pageUses: (language: string) => string;
+    readonly languageName: (key: string) => string;
+  };
   readonly levels: {
     readonly unset: string;
     readonly skill: readonly string[];
     readonly language: readonly string[];
   };
   readonly entry: EntryCopy;
+};
+
+const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
+  vi: 'Tiếng Việt',
+  en: 'English',
 };
 
 export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
@@ -192,6 +224,27 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       moveUp: 'Di chuyển mục lên',
       moveDown: 'Di chuyển mục xuống',
       delete: 'Xóa mục',
+      libraryMark: 'Từ thư viện dự án',
+    },
+    projectLinks: {
+      blankEntry: 'Mục trống',
+      fromProjects: 'Từ dự án của bạn',
+      openProjects: 'Mở Dự án',
+      retry: 'Thử lại',
+      adding: 'Đang thêm dự án…',
+      notAdded: 'Chưa thêm được dự án. Hãy thử lại.',
+      refresh: 'Làm mới từ thư viện',
+      refreshQuestion: 'Thay nội dung mục bằng nội dung hiện tại của dự án?',
+      replace: 'Thay nội dung',
+      openProject: 'Mở dự án',
+      sharedPublic: 'Dự án này đã hiển thị trên một CV công khai khác.',
+      sharedReader:
+        'Người đọc cả hai CV có thể nhận ra chúng thuộc về cùng một người.',
+      addAnyway: 'Vẫn thêm',
+      note: (name) => `Mục này lấy từ dự án ${name}. `
+        + 'Nội dung ở đây là của riêng CV này.',
+      pageUses: (language) => `Trang dự án dùng ${language}`,
+      languageName: (key) => LANGUAGE_NAMES[key] ?? key,
     },
     section: {
       addEntry: 'Thêm mục',
@@ -336,6 +389,28 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       moveUp: 'Move entry up',
       moveDown: 'Move entry down',
       delete: 'Delete entry',
+      libraryMark: 'From the project library',
+    },
+    projectLinks: {
+      blankEntry: 'Blank entry',
+      fromProjects: 'From your projects',
+      openProjects: 'Open Projects',
+      retry: 'Retry',
+      adding: 'Adding the project…',
+      notAdded: 'The project could not be added. Try again.',
+      refresh: 'Refresh from library',
+      refreshQuestion:
+        'Replace this entry\'s text with the project\'s current text?',
+      replace: 'Replace text',
+      openProject: 'Open project',
+      sharedPublic: 'This project is already shown on another public resume.',
+      sharedReader:
+        'A reader of both can tell they belong to the same person.',
+      addAnyway: 'Add anyway',
+      note: (name) => `This entry comes from the project ${name}. `
+        + 'The text here belongs to this resume.',
+      pageUses: (language) => `Project page uses ${language}`,
+      languageName: (key) => LANGUAGE_NAMES[key] ?? key,
     },
     section: {
       addEntry: 'Add entry',

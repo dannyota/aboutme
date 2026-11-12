@@ -76,6 +76,20 @@ export function projectIntent(
         },
         context: { ownerId: { present: false } },
       };
+    case 'projectLink':
+      return commonProjection(
+        presence(linksProject(snapshot.document, intent.projectId)),
+        snapshot,
+      );
+    case 'projectRefresh': {
+      const entry = findEntry(snapshot.document, intent.entryId);
+      return sectionProjection(
+        presenceOf(entry?.entry, 'projectId'),
+        snapshot,
+        intent.sectionKey,
+        intent.entryId,
+      );
+    }
     default:
       return assertNever(intent);
   }
@@ -246,6 +260,12 @@ function findEntry(
     if (entry !== undefined) return { sectionKey, entry };
   }
   return undefined;
+}
+
+function linksProject(document: Resume, projectId: string): boolean {
+  return Object.values(document.content).some((section) =>
+    section.entries.some((entry) =>
+      'projectId' in entry && entry.projectId === projectId));
 }
 
 function getPathPresence(

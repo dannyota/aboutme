@@ -123,6 +123,8 @@ function replacementIntent(
     }
     case 'photoUpload':
     case 'photoDelete':
+    case 'projectLink':
+    case 'projectRefresh':
       return null;
     case 'resumeDelete':
       return confirmation.kind === 'destructive'

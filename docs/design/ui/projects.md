@@ -1,7 +1,7 @@
 # Projects workspace
 
-Status: Accepted (2026-11-11). The list and editor are implemented; showing a
-project on resumes is accepted (2026-11-12) and not yet implemented. The
+Status: Accepted (2026-11-11). The list, the editor and showing a project on
+resumes (accepted 2026-11-12) are implemented. The
 [projects design](../projects.md) owns the product and its limits, and the
 [projects contract](../projects-contract.md#owner-api) owns the API this screen
 calls. This document owns the two workspace screens and the controls that show a
@@ -109,6 +109,11 @@ project write. It is disabled while the project has unsaved changes, with the
 hint “Lưu dự án trước.” or “Save the project first.”, so the prefill uses what
 the person sees. Removing a project from a resume is done in the resume, where
 the entry and its text live; this section says so in one muted line.
+
+Adding a project to a published resume while another published resume of the
+account already shows it asks first, with the two sentences from the
+[privacy rule](../projects.md#privacy) and Add anyway and Cancel; New project
+shows the same sentences as a note once two published resumes are checked.
 
 A resume whose language has no text in the project shows “Trang dự án dùng
 {language}” or “Project page uses {language}”, naming the default language.

@@ -233,11 +233,13 @@ const SESSION_LOST = { kind: 'failed', failure: 'session-lost' } as const;
  * switch the session to a different account meanwhile: then nothing more
  * is sent and no result is handed back for the new account to adopt.
  */
-export async function sendWithCsrf<T>(
+export async function sendWithCsrf<
+  R extends { readonly kind: string; readonly failure?: string },
+>(
   auth: ProjectAuth,
   ownerId: string,
-  send: (csrfToken: string) => Promise<ProjectResult<T>>,
-): Promise<ProjectResult<T>> {
+  send: (csrfToken: string) => Promise<R>,
+): Promise<R | typeof SESSION_LOST> {
   const first = tokenFor(auth, ownerId);
   if (first === null) return SESSION_LOST;
   const result = await send(first);
@@ -355,7 +357,7 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
 
   function send(current: ReleaseAttempt): Promise<ProjectResult<unknown>> {
     const { project } = current;
-    return sendWithCsrf<unknown>(deps.auth, current.ownerId, (csrfToken) =>
+    const once = (csrfToken: string): Promise<ProjectResult<unknown>> =>
       current.kind === 'delete'
         ? deps.api.remove(project.id, project.revision, current.key, csrfToken)
         : deps.api.replace(
@@ -364,7 +366,8 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
             requestFromProject(project, current.slug),
             current.key,
             csrfToken,
-          ));
+          );
+    return sendWithCsrf(deps.auth, current.ownerId, once);
   }
 
   async function dispatch(

@@ -20,8 +20,14 @@ export function schedule(ctx: CoordinatorContext, resumeId: string): void {
     setTimeout(() => {
       ctx.timers.delete(resumeId);
       void flush(ctx, resumeId);
-    }, DEBOUNCE_MS),
+    }, deliberateAction(ctx, resumeId) ? 0 : DEBOUNCE_MS),
   );
+}
+
+/** A link or refresh is one chosen action, not typing, so it goes at once. */
+function deliberateAction(ctx: CoordinatorContext, resumeId: string): boolean {
+  const last = ctx.deps.store.recordFor(resumeId)?.pending.at(-1);
+  return last?.kind === 'projectLink' || last?.kind === 'projectRefresh';
 }
 
 export function flush(

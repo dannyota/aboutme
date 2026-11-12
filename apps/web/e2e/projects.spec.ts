@@ -1,3 +1,4 @@
+import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { expect, test, type Page } from '@playwright/test';
 
 import { expectScreen, type ScreenContract } from './display-assertions';
@@ -9,7 +10,8 @@ import {
 } from './support';
 
 // The workspace Projects screens (docs/design/ui/projects.md) against a
-// stateful fake of the owner project API (docs/api/openapi.yaml, /projects).
+// stateful fake of the owner project API (docs/api/openapi.yaml, /projects)
+// and of the resume routes a link or refresh writes through.
 
 interface ProjectText {
   name?: string;
@@ -60,9 +62,109 @@ function seed(id: string, name: string, updatedAt: string): Project {
   };
 }
 
+type ResumeEntry = Record<string, unknown> & { id: string; projectId?: string };
+
+interface ResumeRow {
+  id: string;
+  title: string;
+  lng: string;
+  slug: string | null;
+  revision: number;
+  /** The project section's entries; null when the resume has none. */
+  entries: ResumeEntry[] | null;
+}
+
 interface LibraryOptions {
   /** The account has a second factor, so a password only opens it. */
   readonly enrolled?: boolean;
+  readonly resumes?: readonly ResumeRow[];
+}
+
+const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
+const FRONTEND = '0190f000-0000-7000-8000-0000000000b2';
+const DATA = '0190f000-0000-7000-8000-0000000000b3';
+
+/** Three resumes; `linked` maps a resume to the project it already shows. */
+function resumeRows(linked: Record<string, string> = {}): ResumeRow[] {
+  const entries = (id: string): ResumeEntry[] => {
+    const projectId = linked[id];
+    if (projectId === undefined) return [];
+    return [{ id: `${id.slice(0, -2)}e${id.slice(-1)}`, title: 'Linked',
+      projectId }];
+  };
+  return [
+    { id: BACKEND, title: 'Backend', lng: 'en', slug: 'ada-backend',
+      revision: 1, entries: entries(BACKEND) },
+    { id: FRONTEND, title: 'Frontend', lng: 'vi', slug: null,
+      revision: 1, entries: entries(FRONTEND) },
+    // Data has no project section until a link creates one.
+    { id: DATA, title: 'Data', lng: 'und', slug: null,
+      revision: 1,
+      entries: linked[DATA] === undefined ? null : entries(DATA) },
+  ];
+}
+
+function resumeDocument(row: ResumeRow) {
+  return {
+    schemaVersion: CURRENT_VERSION,
+    personalDetails: { fullName: 'Ada Lovelace', details: [] },
+    content: row.entries === null
+      ? {}
+      : {
+          projects: {
+            sectionType: 'project',
+            displayName: 'Projects',
+            entries: row.entries,
+          },
+        },
+    customization: {
+      font: { family: 'inter', baseSizePx: 14 },
+      colors: { primary: '#1a1a1a', text: '#1a1a1a', background: '#ffffff' },
+      spacing: { sectionGap: 16, entryGap: 8, lineHeight: 1.4 },
+      heading: { style: 'normal', showRule: false },
+      layout: {
+        columns: 1,
+        sections: {
+          main: row.entries === null ? [] : ['projects'], sidebar: [],
+        },
+      },
+      sectionDisplay: {
+        skill: { style: 'text' }, language: { style: 'text' },
+      },
+      pageFormat: 'a4',
+      dateFormat: 'MM/YYYY',
+    },
+  };
+}
+
+function resumeData(row: ResumeRow, withDocument: boolean) {
+  return {
+    id: row.id, title: row.title, lng: row.lng, live: row.slug !== null,
+    downloadEnabled: false, seoGeoEnabled: false, signInToView: false,
+    slug: row.slug, publicTitle: null, faviconEmoji: null,
+    schemaVersion: CURRENT_VERSION,
+    createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+    revision: String(row.revision),
+    ...(withDocument ? { document: resumeDocument(row) } : {}),
+  };
+}
+
+/** The server's prefill: the resume language's text, else the default. */
+function prefill(entry: ResumeEntry, project: Project, lng: string) {
+  const primary = lng.toLowerCase().split('-')[0] ?? '';
+  const text = (primary === 'und' ? undefined : project.text[primary])
+    ?? project.text[project.defaultLanguage] ?? {};
+  const link = project.repositoryUrl ?? project.demoUrl;
+  return {
+    id: entry.id,
+    projectId: entry.projectId,
+    ...(text.name === undefined ? {} : { title: text.name }),
+    ...(text.role === undefined ? {} : { subtitle: text.role }),
+    ...(link === undefined ? {} : { link }),
+    ...(text.summary === undefined
+      ? {}
+      : { description: `<p>${text.summary}</p>` }),
+  };
 }
 
 async function fakeLibrary(
@@ -73,7 +175,16 @@ async function fakeLibrary(
   const projects = new Map(
     initial.map((item) => [item.id, structuredClone(item)]),
   );
+  const resumes = new Map((options.resumes ?? []).map((row) =>
+    [row.id, structuredClone(row)]));
+  const linkedTo = (id: string) => [...resumes.values()]
+    .filter((row) => row.entries?.some((entry) => entry.projectId === id))
+    .map((row) => row.id);
+  const shown = (project: Project): Project =>
+    ({ ...project, linkedResumeIds: linkedTo(project.id) });
   const writes: Write[] = [];
+  const resumeWrites: Write[] = [];
+  let nextEntry = 0;
   const reauths: string[] = [];
   let reauthenticated = false;
   const problem = (status: number, code: string, details?: unknown) => ({
@@ -110,7 +221,8 @@ async function fakeLibrary(
     }
     if (id === undefined && method === 'GET') {
       await route.fulfill({
-        headers: HEADERS, json: { data: { projects: [...projects.values()] } },
+        headers: HEADERS,
+        json: { data: { projects: [...projects.values()].map(shown) } },
       });
       return;
     }
@@ -133,7 +245,7 @@ async function fakeLibrary(
       return;
     }
     if (method === 'GET') {
-      await route.fulfill({ headers: HEADERS, json: { data: current } });
+      await route.fulfill({ headers: HEADERS, json: { data: shown(current) } });
       return;
     }
     if (request.headers()['if-match'] !== `"r${current.revision}"`) {
@@ -149,9 +261,15 @@ async function fakeLibrary(
       return;
     }
     if (method === 'DELETE') {
+      const changedResumes = linkedTo(current.id).map((resumeId) => {
+        const row = resumes.get(resumeId)!;
+        row.entries = row.entries!.map(({ projectId: _, ...entry }) => entry);
+        row.revision += 1;
+        return { id: row.id, revision: String(row.revision) };
+      });
       projects.delete(current.id);
       await route.fulfill({
-        headers: HEADERS, json: { data: { changedResumes: [] } },
+        headers: HEADERS, json: { data: { changedResumes } },
       });
       return;
     }
@@ -162,12 +280,93 @@ async function fakeLibrary(
     };
     projects.set(current.id, next);
     await route.fulfill({
-      headers: HEADERS, json: { data: { project: next, changedResumes: [] } },
+      headers: HEADERS,
+      json: { data: { project: shown(next), changedResumes: [] } },
     });
   });
+  // A successful, immediately closed stream keeps the editor's live
+  // connection quiet.
+  await page.route('**/api/v1/events', async (route) => {
+    await route.fulfill({
+      status: 200, contentType: 'text/event-stream', body: '',
+    });
+  });
+  const written = (row: ResumeRow, withDocument = true) => ({
+    headers: {
+      ...HEADERS,
+      'ETag': `"r${row.revision}"`,
+      'X-Resume-Schema-Version': String(CURRENT_VERSION),
+    },
+    json: { data: resumeData(row, withDocument) },
+  });
+  await page.route((url) => url.pathname.startsWith('/api/v1/resumes'),
+    async (route) => {
+      const request = route.request();
+      const parts = new URL(request.url()).pathname.split('/');
+      const method = request.method();
+      if (parts.length === 4 && method === 'GET') {
+        await route.fulfill({
+          headers: {
+            ...HEADERS, 'X-Resume-Schema-Version': String(CURRENT_VERSION),
+          },
+          json: {
+            data: [...resumes.values()].map((row) => resumeData(row, false)),
+          },
+        });
+        return;
+      }
+      const row = resumes.get(parts[4] ?? '');
+      if (row === undefined) {
+        await route.fulfill(problem(404, 'resume_not_found'));
+        return;
+      }
+      if (parts.length === 5 && method === 'GET') {
+        await route.fulfill(written(row));
+        return;
+      }
+      resumeWrites.push({
+        method, path: parts.join('/'),
+        ifMatch: request.headers()['if-match'] ?? null,
+        key: request.headers()['idempotency-key'] ?? null,
+        body: request.postData() ? request.postDataJSON() : null,
+      });
+      if (request.headers()['if-match'] !== `"r${row.revision}"`) {
+        await route.fulfill(problem(412, 'revision_mismatch', {
+          revision: String(row.revision), document: resumeDocument(row),
+        }));
+        return;
+      }
+      const entries = row.entries ?? [];
+      if (parts[5] === 'project-links') {
+        const { projectId } = request.postDataJSON() as { projectId: string };
+        const project = projects.get(projectId);
+        if (project === undefined) {
+          await route.fulfill(problem(404, 'project_not_found'));
+          return;
+        }
+        nextEntry += 1;
+        const id = `0190f000-0000-7000-8000-0000000001${
+          String(nextEntry).padStart(2, '0')}`;
+        row.entries = [
+          ...entries, prefill({ id, projectId }, project, row.lng),
+        ];
+      } else {
+        const index = entries.findIndex((entry) => entry.id === parts[6]);
+        const project = projects.get(entries[index]?.projectId ?? '');
+        if (project === undefined) {
+          await route.fulfill(problem(404, 'project_not_found'));
+          return;
+        }
+        entries[index] = prefill(entries[index]!, project, row.lng);
+      }
+      row.revision += 1;
+      await route.fulfill(written(row));
+    });
   return {
     projects,
+    resumes,
     writes,
+    resumeWrites,
     reauths,
     /** The owner finishes the factor in the other tab. */
     completeFactor: () => {
@@ -509,6 +708,174 @@ test('an enrolled account cancels the second factor step, then deletes '
   expect(fake.writes[2]?.key).toBe(fake.writes[1]?.key);
 });
 
+test('a new project is created on the two resumes checked, then shown on '
+  + 'them', async ({ page }) => {
+  const fake = await open(page, '/app/projects', [], {
+    resumes: resumeRows(),
+  });
+  await page.getByTestId('projects-empty')
+    .getByRole('button', { name: 'New project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New project' });
+  const choices = dialog.getByRole('group', { name: 'Show on resumes' })
+    .getByRole('checkbox');
+  await expect(choices).toHaveCount(3);
+  for (const choice of await choices.all()) {
+    await expect(choice).not.toBeChecked();
+  }
+  await expect(dialog.locator('[data-resume-choice] p'))
+    .toHaveText(['Public', 'Draft', 'Draft']);
+  await dialog.getByLabel('Name').fill('Shop site');
+  await dialog.getByRole('checkbox', { name: 'Backend' }).check();
+  await dialog.getByRole('checkbox', { name: 'Data' }).check();
+  await dialog.getByRole('button', { name: 'Create' }).click();
+
+  await expect(page).toHaveURL(`/app/projects/${CREATED}`);
+  const rows = page.getByTestId('project-resumes').locator('[data-resume-row]');
+  await expect(rows.filter({ hasText: 'Shown' })).toHaveCount(2);
+  await expect(page.locator(`[data-resume-row="${FRONTEND}"]`)
+    .getByRole('button', { name: 'Add to this resume' })).toBeVisible();
+  expect(fake.resumeWrites.map((write) =>
+    [write.method, write.path, write.ifMatch, write.body])).toEqual([
+    ['POST', `/api/v1/resumes/${BACKEND}/project-links`, '"r1"',
+      { projectId: CREATED }],
+    ['POST', `/api/v1/resumes/${DATA}/project-links`, '"r1"',
+      { projectId: CREATED }],
+  ]);
+  expect(new Set(fake.resumeWrites.map((write) => write.key)).size).toBe(2);
+});
+
+test('the project editor adds the project to a resume without saving',
+  async ({ page }) => {
+    const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+      resumes: resumeRows(),
+    });
+    const row = page.locator(`[data-resume-row="${FRONTEND}"]`);
+    await expect(row.locator('[data-project-fallback]'))
+      .toHaveText('Project page uses English');
+
+    await row.getByRole('button', { name: 'Add to this resume' }).click();
+
+    await expect(row).toContainText('Shown');
+    await expect(page.getByTestId('project-resumes-status'))
+      .toHaveText('Added to “Frontend”.');
+    await expect(row.getByRole('link', { name: 'Open in editor' }))
+      .toHaveAttribute('href', `/app/resumes/${FRONTEND}?project=${FIRST}`);
+    expect(fake.writes).toEqual([]);
+    expect(fake.resumeWrites).toEqual([expect.objectContaining({
+      method: 'POST', path: `/api/v1/resumes/${FRONTEND}/project-links`,
+      ifMatch: '"r1"', body: { projectId: FIRST },
+    })]);
+
+    await page.getByLabel('Role').fill('Typed');
+    await expect(page.locator(`[data-resume-row="${DATA}"]`)
+      .getByRole('button', { name: 'Add to this resume' })).toBeDisabled();
+    await expect(page.getByTestId('project-resumes'))
+      .toContainText('Save the project first.');
+  });
+
+test('adding to a second published resume asks first', async ({ page }) => {
+  const rows = resumeRows({ [BACKEND]: FIRST });
+  rows[1]!.slug = 'ada-frontend';
+  const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+    resumes: rows,
+  });
+  const row = page.locator(`[data-resume-row="${FRONTEND}"]`);
+  const ask = page.getByRole('alertdialog', {
+    name: 'This project is already shown on another public resume.',
+  });
+
+  await row.getByRole('button', { name: 'Add to this resume' }).click();
+  await expect(ask).toContainText(
+    'A reader of both can tell they belong to the same person.',
+  );
+  await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toBeHidden();
+  expect(fake.resumeWrites).toEqual([]);
+
+  await row.getByRole('button', { name: 'Add to this resume' }).click();
+  await ask.getByRole('button', { name: 'Add anyway' }).click();
+  await expect(row).toContainText('Shown');
+  expect(fake.resumeWrites).toHaveLength(1);
+});
+
+test('the resume editor adds a library project, selects it and refreshes it',
+  async ({ page }) => {
+    const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+      resumes: resumeRows(),
+    });
+    await page.locator('[data-region="outline"] [data-outline-key="projects"]')
+      .click();
+    await page.locator('[data-region="inspector"] [data-action="add-entry"]')
+      .click();
+    await page.getByRole('menuitem', { name: 'From your projects' }).click();
+    await expect(page.locator('[data-project-option]'))
+      .toHaveText(['Shop site', 'Ops tool']);
+    await page.getByRole('menuitem', { name: 'Ops tool' }).click();
+
+    const card = page.locator('[data-entry-id][data-selected]');
+    await expect(card).toBeFocused();
+    await expect(card.locator('[data-entry-project]'))
+      .toContainText('Ops tool');
+    await expect(card.locator('[data-project-note]')).toContainText(
+      'This entry comes from the project Ops tool. '
+      + 'The text here belongs to this resume.',
+    );
+    await expect(card.locator('[data-entry-field="title"] input'))
+      .toHaveValue('Ops tool');
+    const entryId = fake.resumes.get(BACKEND)!.entries![0]!.id;
+    expect(fake.resumeWrites[0]).toMatchObject({
+      method: 'POST', path: `/api/v1/resumes/${BACKEND}/project-links`,
+      ifMatch: '"r1"', body: { projectId: SECOND },
+    });
+
+    fake.projects.get(SECOND)!.text.en = {
+      name: 'Ops console', role: 'Lead engineer',
+    };
+    await card.getByRole('button', { name: 'Refresh from library' }).click();
+    const confirm = page.getByRole('alertdialog', {
+      name: 'Refresh from library',
+    });
+    await expect(confirm).toContainText(
+      'Replace this entry\'s text with the project\'s current text?',
+    );
+    await confirm.getByRole('button', { name: 'Replace text' }).click();
+
+    await expect(card.locator('[data-entry-field="title"] input'))
+      .toHaveValue('Ops console');
+    await expect(page.getByTestId('save-status'))
+      .toHaveAttribute('data-state', 'saved');
+    expect(fake.resumeWrites[1]).toMatchObject({
+      method: 'POST',
+      path: `/api/v1/resumes/${BACKEND}/entries/${entryId}/project-refresh`,
+      ifMatch: '"r2"', body: null,
+    });
+    expect(fake.resumeWrites).toHaveLength(2);
+  });
+
+test('deleting a linked project says how many resumes it leaves', async ({
+  page,
+}) => {
+  const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+    resumes: resumeRows({ [BACKEND]: FIRST, [DATA]: FIRST }),
+  });
+  await page.getByRole('button', { name: 'Delete project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete project' });
+
+  await expect(dialog.getByTestId('project-delete-linked')).toHaveText(
+    'It will be removed from 2 resumes. The entries keep their text.',
+  );
+  await dialog.locator('[data-action="project-delete-submit"]').click();
+  await dialog.getByLabel('Current password').fill('correct horse');
+  await dialog.getByRole('button', { name: 'Reauthenticate and continue' })
+    .click();
+
+  await expect(page).toHaveURL('/app/projects');
+  expect([...fake.resumes.values()].map((row) =>
+    [row.revision, row.entries?.map((entry) => entry.projectId ?? null)]))
+    .toEqual([[2, [null]], [1, []], [2, [null]]]);
+});
+
 function listContract(): ScreenContract {
   return chromeScreenContract('[data-testid="projects-page"]',
     '[data-testid="projects-page"] :is(h1, p, [data-project-link], '
@@ -527,7 +894,9 @@ function editorContract(): ScreenContract {
 
 async function openListAt320(page: Page): Promise<void> {
   await page.setViewportSize({ width: 320, height: 900 });
-  await open(page, '/app/projects', library());
+  await open(page, '/app/projects', library(), {
+    resumes: resumeRows({ [BACKEND]: FIRST }),
+  });
   await expect(page.getByTestId('project-list')).toBeVisible();
 }
 
@@ -546,8 +915,22 @@ test('both screens fit 320 px without horizontal overflow', async ({
   expect(rowBox!.x + rowBox!.width - (menuBox!.x + menuBox!.width))
     .toBeLessThan(16);
 
+  await page.getByRole('button', { name: 'New project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New project' });
+  await expect(dialog.getByRole('checkbox')).toHaveCount(3);
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth
+    <= document.documentElement.clientWidth), 'Dialog fit at 320px.')
+    .toBe(true);
+  const box = await dialog.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+
   await page.locator('[data-project-link]').last().click();
   await expect(page.getByTestId('project-title')).toHaveText('Shop site');
+  await expect(page.locator('[data-resume-row]')).toHaveCount(3);
   await expectScreen(page, editorContract());
   // The signed-in English bar overflows 640 px without the Projects link
   // too, so only the page column is checked there.

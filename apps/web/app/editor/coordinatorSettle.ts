@@ -1,5 +1,9 @@
 import type { AtomicEditorCommand } from './commands';
-import type { AttemptResult, FrozenAttempt } from './attempt';
+import type {
+  AttemptFailureCode,
+  AttemptResult,
+  FrozenAttempt,
+} from './attempt';
 import { createSupersededConflict, reconcileCommand } from './reconcile';
 import { compareRevision } from './revision';
 import { freezeAttempt } from './resumeApi';
@@ -66,6 +70,7 @@ export async function settle(
       stopForSessionLoss(ctx, resumeId);
       return;
     case 'validation-rejected':
+      if (await dropRefusedProjectCommand(ctx, resumeId, queueItem)) return;
       ctx.deps.store.setIssues(resumeId, queueItem.id, result.issues);
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
@@ -109,6 +114,12 @@ export async function settle(
       await refreshAndReconcile(ctx, resumeId);
       return;
     case 'rejected':
+      if (
+        PROJECT_REFUSALS.has(result.code)
+        && await dropRefusedProjectCommand(ctx, resumeId, queueItem)
+      ) {
+        return;
+      }
       if (markTemplateChildFailed(ctx, resumeId, queueItem)) return;
       holdFailed(
         ctx.deps.store,
@@ -132,6 +143,30 @@ export async function settle(
     default:
       return assertNever(result);
   }
+}
+
+const PROJECT_REFUSALS: ReadonlySet<AttemptFailureCode> = new Set([
+  'project_not_found',
+  'project_already_linked',
+]);
+
+/**
+ * A refused link or refresh wrote nothing, and its entry is built by the
+ * server, so no edit can make it succeed. It leaves the queue rather than
+ * holding the edits behind it, and the reread shows what the resume holds:
+ * a link another tab made, or an entry whose project was deleted.
+ */
+async function dropRefusedProjectCommand(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  queueItem: EditorQueueItem,
+): Promise<boolean> {
+  if (queueItem.kind !== 'projectLink' && queueItem.kind !== 'projectRefresh') {
+    return false;
+  }
+  ctx.deps.store.dropHead(resumeId, queueItem.id);
+  await refreshAndReconcile(ctx, resumeId);
+  return true;
 }
 
 function settleAtomicComplete(

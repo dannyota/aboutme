@@ -120,12 +120,37 @@ export type ProjectsCopy = {
   readonly leaveTitle: string;
   readonly stay: string;
   readonly leave: string;
+  readonly showOnResumes: string;
+  readonly publicMark: string;
+  readonly draftMark: string;
+  readonly notLinked: (titles: readonly string[]) => string;
+  readonly resumesSection: string;
+  readonly removeInResume: string;
+  readonly resumesLoading: string;
+  readonly resumesUnavailable: string;
+  readonly noResumes: string;
+  readonly shown: string;
+  readonly openInEditor: string;
+  readonly addToResume: string;
+  readonly saveFirst: string;
+  readonly pageUses: (language: string) => string;
+  readonly linkedTo: (title: string) => string;
+  readonly cannotTake: (title: string) => string;
+  readonly openResume: string;
+  readonly resumeBusy: (title: string) => string;
+  readonly deleteLinked: (count: number) => string;
+  readonly sharedPublic: string;
+  readonly sharedReader: string;
+  readonly addAnyway: string;
 };
 
 const NAMES: Readonly<Record<string, string>> = {
   vi: 'Tiếng Việt',
   en: 'English',
 };
+
+const quoted = (titles: readonly string[]): string =>
+  titles.map((title) => `“${title}”`).join(', ');
 
 export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
   vi: {
@@ -256,6 +281,31 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
     leaveTitle: 'Bạn có thay đổi chưa lưu.',
     stay: 'Ở lại',
     leave: 'Rời đi không lưu',
+    showOnResumes: 'Hiển thị trên CV',
+    publicMark: 'Công khai',
+    draftMark: 'Bản nháp',
+    notLinked: (titles) => `Chưa thêm được dự án vào ${quoted(titles)}.`,
+    resumesSection: 'CV',
+    removeInResume:
+      'Muốn gỡ dự án khỏi một CV, hãy xóa mục của nó trong CV đó.',
+    resumesLoading: 'Đang tải CV.',
+    resumesUnavailable: 'Không thể tải danh sách CV. Hãy thử lại.',
+    noResumes: 'Bạn chưa có CV nào.',
+    shown: 'Đang hiển thị',
+    openInEditor: 'Mở trong trình chỉnh sửa',
+    addToResume: 'Thêm vào CV này',
+    saveFirst: 'Lưu dự án trước.',
+    pageUses: (language) => `Trang dự án dùng ${language}`,
+    linkedTo: (title) => `Đã thêm vào “${title}”.`,
+    cannotTake: (title) => `“${title}” không nhận được mục này.`,
+    openResume: 'Mở CV',
+    resumeBusy: (title) => `“${title}” đang bận. Hãy thử lại sau giây lát.`,
+    deleteLinked: (count) => `Dự án sẽ bị gỡ khỏi ${count} CV. `
+      + 'Nội dung mục trong CV được giữ lại.',
+    sharedPublic: 'Dự án này đã hiển thị trên một CV công khai khác.',
+    sharedReader:
+      'Người đọc cả hai CV có thể nhận ra chúng thuộc về cùng một người.',
+    addAnyway: 'Vẫn thêm',
   },
   en: {
     title: 'Projects',
@@ -387,5 +437,33 @@ export const projectsCopy: WorkspaceCopy<ProjectsCopy> = {
     leaveTitle: 'You have unsaved changes.',
     stay: 'Stay',
     leave: 'Leave without saving',
+    showOnResumes: 'Show on resumes',
+    publicMark: 'Public',
+    draftMark: 'Draft',
+    notLinked: (titles) =>
+      `The project was not added to ${quoted(titles)}.`,
+    resumesSection: 'Resumes',
+    removeInResume:
+      'To remove the project from a resume, delete its entry in that resume.',
+    resumesLoading: 'Loading your resumes.',
+    resumesUnavailable: 'Your resumes could not be loaded. Try again.',
+    noResumes: 'You have no resumes yet.',
+    shown: 'Shown',
+    openInEditor: 'Open in editor',
+    addToResume: 'Add to this resume',
+    saveFirst: 'Save the project first.',
+    pageUses: (language) => `Project page uses ${language}`,
+    linkedTo: (title) => `Added to “${title}”.`,
+    cannotTake: (title) => `“${title}” could not take this entry.`,
+    openResume: 'Open the resume',
+    resumeBusy: (title) => `“${title}” is busy. Try again in a moment.`,
+    deleteLinked: (count) => (count === 1
+      ? 'It will be removed from 1 resume. The entry keeps its text.'
+      : `It will be removed from ${count} resumes. `
+        + 'The entries keep their text.'),
+    sharedPublic: 'This project is already shown on another public resume.',
+    sharedReader:
+      'A reader of both can tell they belong to the same person.',
+    addAnyway: 'Add anyway',
   },
 };
