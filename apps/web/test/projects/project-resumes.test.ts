@@ -3,6 +3,7 @@ import { effectScope, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createProjectLinker,
   takeUnlinked,
   type LinkResult,
 } from '../../app/components/projects/projectLinks';
@@ -13,6 +14,7 @@ import type { ResumeListResult } from '../../app/editor/resumeApi';
 import { useProjectList } from '../../app/composables/useProjects';
 import {
   fakeApi,
+  failed,
   fakeAuth,
   ok,
   project,
@@ -113,6 +115,93 @@ describe('new project shown on resumes', () => {
       expect(takeUnlinked('created')).toEqual(['Backend', 'Data']);
     });
 
+  it('asks on submit when checked resumes became public after loading',
+    async () => {
+      const { list, linker, navigate } = createSetup();
+      await flushPromises();
+      await list.loadResumes();
+      linker.link.mockResolvedValueOnce(linkOk)
+        .mockResolvedValueOnce(linkFailed('privacy-required'))
+        .mockResolvedValueOnce(linkOk);
+
+      const creating = list.create('Shop', ['resume-1', 'resume-2']);
+      await flushPromises();
+      expect(list.askingPrivacy.value).toBe(true);
+      expect(navigate).not.toHaveBeenCalled();
+      list.cancelPrivacy();
+      await creating;
+
+      expect(linker.link).toHaveBeenCalledTimes(2);
+      expect(takeUnlinked('created')).toEqual(['Frontend']);
+      expect(navigate).toHaveBeenCalledWith('/app/projects/created');
+    });
+
+  it('does not infer consent from publication state updated while creating',
+    async () => {
+      const { list, linker, api } = createSetup();
+      await flushPromises();
+      await list.loadResumes();
+      api.create.mockImplementation(async () => {
+        list.resumes.value = three().map((item) => ({ ...item, live: true }));
+        return ok(project({ id: 'created' }));
+      });
+      linker.link.mockResolvedValueOnce(linkOk)
+        .mockResolvedValueOnce(linkFailed('privacy-required'));
+
+      const creating = list.create('Shop', ['resume-1', 'resume-2']);
+      await flushPromises();
+
+      expect(list.askingPrivacy.value).toBe(true);
+      expect(linker.link.mock.calls).toEqual([
+        ['owner-1', 'resume-1', 'created'],
+        ['owner-1', 'resume-2', 'created'],
+      ]);
+      list.cancelPrivacy();
+      await creating;
+      expect(takeUnlinked('created')).toEqual(['Frontend']);
+    });
+
+  it('rereads privacy before linking each checked resume on submit',
+    async () => {
+      const api = fakeApi();
+      const { auth } = fakeAuth();
+      const linkedResumeIds: string[] = [];
+      let items = three();
+      const resumeApi = { list: vi.fn(async () => ({
+        kind: 'ready' as const, items,
+      })) };
+      api.list.mockResolvedValue(ok([]));
+      api.create.mockResolvedValue(ok(project({ id: 'created' })));
+      api.read.mockImplementation(async () => ok(project({
+        id: 'created', linkedResumeIds: [...linkedResumeIds],
+      })));
+      const links = { link: vi.fn(async (id: string) => {
+        linkedResumeIds.push(id);
+        return linkOk;
+      }) };
+      const linker = createProjectLinker({
+        auth, links, resumes: resumeApi, projects: api, uuid: sequence(),
+      });
+      const list = inScope(() => useProjectList(ref('en'), {
+        api, auth, linker, navigate: vi.fn(), uuid: sequence(),
+      }));
+      await flushPromises();
+      await list.loadResumes();
+      items = three().map((item) => ({ ...item, live: true }));
+
+      const creating = list.create('Shop', ['resume-1', 'resume-2']);
+      await flushPromises();
+
+      expect(resumeApi.list).toHaveBeenCalledTimes(3);
+      expect(api.read).toHaveBeenCalledTimes(2);
+      expect(list.askingPrivacy.value).toBe(true);
+      expect(links.link).toHaveBeenCalledOnce();
+      list.cancelPrivacy();
+      await creating;
+      expect(linkedResumeIds).toEqual(['resume-1']);
+      expect(takeUnlinked('created')).toEqual(['Frontend']);
+    });
+
   it('links nothing when the create fails', async () => {
     const { api, list, linker } = createSetup();
     await flushPromises();
@@ -133,6 +222,7 @@ function resumesSetup(
   const { auth } = fakeAuth();
   const linker = options.linker ?? fakeLinker();
   const loaded = ref(project({ linkedResumeIds: ['resume-1'] }));
+  api.read.mockResolvedValue(ok(loaded.value));
   const dirty = ref(options.dirty ?? false);
   const resumes = inScope(() => useProjectResumes(loaded, dirty, {
     api, auth, linker,
@@ -181,14 +271,16 @@ describe('project resumes section', () => {
       const { resumes, linker, api } = resumesSetup();
       await flushPromises();
       linker.link.mockResolvedValue(linkFailed('already-linked'));
-      api.read.mockResolvedValue(ok(project({
+      api.read.mockResolvedValueOnce(ok(project({
+        linkedResumeIds: ['resume-1'],
+      }))).mockResolvedValueOnce(ok(project({
         linkedResumeIds: ['resume-1', 'resume-2'],
       })));
 
       await resumes.add('resume-2');
 
       expect(api.read).toHaveBeenCalledWith('project-1');
-      expect(linker.resumes).toHaveBeenCalledTimes(2);
+      expect(linker.resumes).toHaveBeenCalledTimes(3);
       expect(resumes.linked.value.has('resume-2')).toBe(true);
       expect(resumes.status.value).toBeNull();
     });
@@ -248,11 +340,71 @@ describe('adding to a second published resume', () => {
     const { auth } = fakeAuth();
     const linker = fakeLinker(published());
     const loaded = ref(project({ linkedResumeIds }));
+    api.read.mockResolvedValue(ok(loaded.value));
     const resumes = inScope(() => useProjectResumes(loaded, ref(false), {
       api, auth, linker,
     }));
-    return { linker, resumes };
+    return { api, linker, resumes };
   }
+
+  it('asks when the target was published elsewhere after loading', async () => {
+    const linker = fakeLinker(three());
+    const { resumes, api } = resumesSetup({ linker });
+    await flushPromises();
+    linker.resumes.mockResolvedValue({ kind: 'ready', items: published() });
+    api.read.mockResolvedValue(ok(project({ linkedResumeIds: ['resume-1'] })));
+
+    await resumes.add('resume-2');
+
+    expect(resumes.asking.value).toBe('resume-2');
+    expect(linker.link).not.toHaveBeenCalled();
+    resumes.cancelAsk();
+    expect(linker.link).not.toHaveBeenCalled();
+  });
+
+  it('asks when another public resume linked the project after loading',
+    async () => {
+      const { resumes, linker, api } = privacySetup([]);
+      await flushPromises();
+      api.read.mockResolvedValue(ok(project({
+        linkedResumeIds: ['resume-1'],
+      })));
+
+      await resumes.add('resume-2');
+
+      expect(resumes.asking.value).toBe('resume-2');
+      expect(linker.link).not.toHaveBeenCalled();
+    });
+
+  it.each(['resumes', 'project'] as const)(
+    'asks conservatively when the fresh %s read fails', async (read) => {
+      const { resumes, linker, api } = privacySetup([]);
+      await flushPromises();
+      if (read === 'resumes') {
+        linker.resumes.mockResolvedValue({ kind: 'failed', reason: 'network' });
+      } else api.read.mockResolvedValue(failed('unavailable'));
+
+      await resumes.add('resume-2');
+
+      expect(resumes.asking.value).toBe('resume-2');
+      expect(linker.link).not.toHaveBeenCalled();
+      resumes.cancelAsk();
+      expect(linker.link).not.toHaveBeenCalled();
+    },
+  );
+
+  it('asks if the linker finds new exposure before its revision retry',
+    async () => {
+      const { resumes, linker } = privacySetup([]);
+      await flushPromises();
+      linker.link.mockResolvedValue(linkFailed('privacy-required'));
+
+      await resumes.add('resume-2');
+
+      expect(resumes.asking.value).toBe('resume-2');
+      resumes.cancelAsk();
+      expect(linker.link).toHaveBeenCalledOnce();
+    });
 
   it('asks first when another published resume already shows it',
     async () => {
@@ -306,7 +458,7 @@ describe('adding to a second published resume', () => {
     await resumes.addAnyway();
 
     expect(linker.link.mock.calls)
-      .toEqual([['owner-1', 'resume-2', 'project-1']]);
+      .toEqual([['owner-1', 'resume-2', 'project-1', true]]);
     expect(resumes.linked.value.has('resume-2')).toBe(true);
   });
 });

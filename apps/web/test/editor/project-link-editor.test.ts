@@ -4,6 +4,9 @@ import { flushPromises } from '@vue/test-utils';
 import { computed, ref, type Ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import ConflictPanel from '../../app/components/editor/ConflictPanel.vue';
+import { captureCommand } from '../../app/editor/commands';
+import { makeAtomicConflict } from '../../app/editor/conflicts';
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import SectionPanel from '../../app/components/editor/forms/SectionPanel.vue';
 import type {
@@ -86,8 +89,9 @@ function actionsFor(record: Ref<ResumeRecord>) {
   return {
     record: computed(() => record.value),
     createEntityId: vi.fn(() => NEW_ENTRY),
+    acceptLatest: vi.fn(async () => {}),
     edit: vi.fn((intent: { kind: string }) => {
-      const command = { id: `${intent.kind}-command`, kind: intent.kind };
+      const command = { ...intent, id: `${intent.kind}-command` };
       record.value = {
         ...record.value,
         pending: [...record.value.pending, command as never],
@@ -235,7 +239,7 @@ describe('From your projects', () => {
 
     expect(wrapper.emitted('selectEntry'))
       .toEqual([[{ sectionKey: 'projects', entryId: NEW_ENTRY }]]);
-    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(3);
     expect(wrapper.get('[data-testid="project-link-status"]').text())
       .toBe('');
   });
@@ -263,12 +267,70 @@ describe('adding a project another published resume shows', () => {
 
   async function choose(live: boolean, ...linkedResumeIds: string[]) {
     api.list.mockResolvedValue(ok([shownOn(...linkedResumeIds)]));
+    resumeList.mockResolvedValue({
+      kind: 'ready', items: [
+        resumeSummary('resume-1', '1', 'Fixture', { live }),
+        resumeSummary('other-public', '1', 'Other', { live: true }),
+        resumeSummary('other-draft', '1', 'Draft'),
+      ],
+    });
     const mountedPanel = await mountPanel(ref(recordWith([], 'en', live)));
     await openProjects();
     inDocument(`[data-project-option="${OPS}"]`).click();
     await flushPromises();
     return mountedPanel;
   }
+
+  it('asks if the resume was published elsewhere after the section loaded',
+    async () => {
+      api.list.mockResolvedValue(ok([shownOn('other-public')]));
+      const { actions } = await mountPanel(ref(recordWith([], 'en', false)));
+      await openProjects();
+
+      inDocument(`[data-project-option="${OPS}"]`).click();
+      await flushPromises();
+
+      expect(document.body.querySelector('[role="alertdialog"]'))
+        .not.toBeNull();
+      inDocument('[data-action="cancel-project-privacy"]').click();
+      await flushPromises();
+      expect(actions.edit).not.toHaveBeenCalled();
+    });
+
+  it('asks if another public resume linked the project after loading',
+    async () => {
+      api.list.mockResolvedValueOnce(ok([shownOn()]));
+      const { actions } = await mountPanel(ref(recordWith([], 'en', true)));
+      api.list.mockResolvedValue(ok([shownOn('other-public')]));
+      await openProjects();
+
+      inDocument(`[data-project-option="${OPS}"]`).click();
+      await flushPromises();
+
+      expect(document.body.querySelector('[role="alertdialog"]'))
+        .not.toBeNull();
+      expect(actions.edit).not.toHaveBeenCalled();
+    });
+
+  it.each(['resumes', 'project'] as const)(
+    'asks if the fresh %s read fails', async (read) => {
+      api.list.mockResolvedValueOnce(ok([shownOn()]));
+      const { actions } = await mountPanel(ref(recordWith([])));
+      if (read === 'resumes') {
+        resumeList.mockResolvedValue({ kind: 'failed', reason: 'network' });
+      } else api.list.mockResolvedValue(failed('unavailable'));
+      await openProjects();
+
+      inDocument(`[data-project-option="${OPS}"]`).click();
+      await flushPromises();
+
+      expect(document.body.querySelector('[role="alertdialog"]'))
+        .not.toBeNull();
+      inDocument('[data-action="cancel-project-privacy"]').click();
+      await flushPromises();
+      expect(actions.edit).not.toHaveBeenCalled();
+    },
+  );
 
   it('asks first on a published resume, focused on Cancel', async () => {
     const { actions } = await choose(true, 'other-public');
@@ -300,7 +362,9 @@ describe('adding a project another published resume shows', () => {
     await flushPromises();
 
     expect(actions.edit.mock.calls)
-      .toEqual([[{ kind: 'projectLink', projectId: OPS }]]);
+      .toEqual([[{
+        kind: 'projectLink', projectId: OPS, privacyConfirmed: true,
+      }]]);
   });
 
   it('does not ask on a draft resume', async () => {
@@ -308,7 +372,7 @@ describe('adding a project another published resume shows', () => {
 
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
     expect(actions.edit).toHaveBeenCalledOnce();
-    expect(resumeList).not.toHaveBeenCalled();
+    expect(resumeList).toHaveBeenCalledOnce();
   });
 
   it('does not ask when no other published resume shows it', async () => {
@@ -370,6 +434,33 @@ describe('a linked entry', () => {
       });
     });
 
+  it('focuses Open project while refresh waits and leaves focus there',
+    async () => {
+      api.list.mockResolvedValue(ok([shop()]));
+      const record = ref(recordWith([linkedEntry()]));
+      const { wrapper } = await mountPanel(record);
+      const trigger = wrapper.get<HTMLButtonElement>(
+        '[data-action="refresh-project-entry"]',
+      );
+      trigger.element.focus();
+      await trigger.trigger('click');
+      await flushPromises();
+
+      inDocument('[data-action="confirm-project-refresh"]').click();
+      await flushPromises();
+
+      expect(trigger.element.disabled).toBe(true);
+      expect(document.activeElement).toBe(
+        wrapper.get('[data-action="open-project"]').element,
+      );
+      record.value = { ...record.value, pending: [] };
+      await flushPromises();
+      expect(trigger.element.disabled).toBe(false);
+      expect(document.activeElement).toBe(
+        wrapper.get('[data-action="open-project"]').element,
+      );
+    });
+
   it.each([
     ['vi', true],
     ['vi-VN', true],
@@ -404,6 +495,72 @@ describe('a linked entry', () => {
       expect(wrapper.find('[data-entry-project]').exists()).toBe(false);
       expect(wrapper.get<HTMLInputElement>('[data-entry-field="title"] input')
         .element.value).toBe('My shop');
+    });
+});
+
+describe('project command feedback', () => {
+  async function feedback(kind: 'projectRefresh' | 'projectLink') {
+    const record = recordWith([]);
+    const command = captureCommand(record.current, {
+      resumeId: 'resume-1', ownerId: 'owner-1', sequence: 1, dependencyIds: [],
+      intent: kind === 'projectLink'
+        ? { kind, projectId: OPS }
+        : { kind, sectionKey: 'projects', entryId: ENTRY },
+    }, { nowEpochMs: () => 0, uuid: () => 'command', delay: async () => {} });
+    const conflict = makeAtomicConflict(command, record.accepted, command.base,
+      kind === 'projectLink' ? 'project-privacy' : 'target-changed');
+    const actions = {
+      ...actionsFor(ref(record)), acceptLatest: vi.fn(), applyMine: vi.fn(),
+    };
+    const wrapper = await mountSuspended(ConflictPanel, {
+      attachTo: document.body, props: { actions, conflicts: [conflict] },
+    });
+    mounted.push(wrapper);
+    await flushPromises();
+    return { wrapper, actions };
+  }
+
+  it.each([
+    ['en', 'This entry changed elsewhere. Refresh again if you still want to.'],
+    ['vi', 'Mục đã thay đổi ở nơi khác. Hãy làm mới lại nếu bạn vẫn muốn.'],
+  ] as const)('announces a dropped refresh politely in %s',
+    async (locale, text) => {
+      setSiteLocale(locale);
+      const { wrapper } = await feedback('projectRefresh');
+
+      expect(wrapper.get('[role="status"]').text()).toContain(text);
+    });
+
+  it('acknowledges a dropped refresh conflict while keeping its status',
+    async () => {
+      const { wrapper, actions } = await feedback('projectRefresh');
+
+      expect(actions.acceptLatest).toHaveBeenCalledWith('command');
+      expect(wrapper.get('[role="status"]').text()).toContain(
+        'This entry changed elsewhere. Refresh again if you still want to.',
+      );
+    });
+
+  it('offers Cancel for privacy discovered by the queue', async () => {
+    const { actions } = await feedback('projectLink');
+
+    expect(document.activeElement?.getAttribute('data-action'))
+      .toBe('cancel-project-privacy');
+    inDocument('[data-action="cancel-project-privacy"]').click();
+    await flushPromises();
+    expect(actions.acceptLatest).toHaveBeenCalledWith('command');
+    expect(actions.applyMine).not.toHaveBeenCalled();
+  });
+
+  it('confirms privacy discovered by the queue through its conflict action',
+    async () => {
+      const { actions } = await feedback('projectLink');
+
+      inDocument('[data-action="confirm-project-privacy"]').click();
+      await flushPromises();
+
+      expect(actions.applyMine)
+        .toHaveBeenCalledWith('command', { kind: 'field' });
     });
 });
 

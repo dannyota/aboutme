@@ -10,7 +10,8 @@ export type ConflictKind
     | 'membership-changed'
     | 'photo-changed'
     | 'superseded-after-success'
-    | 'destructive-reconfirmation';
+    | 'destructive-reconfirmation'
+    | 'project-privacy';
 
 export interface AtomicConflictRecord {
   readonly id: string;
@@ -50,7 +51,7 @@ export function createAtomicReplacement(
   confirmation: ConflictConfirmation,
 ): AtomicEditorCommand | null {
   const command = conflict.command;
-  const intent = replacementIntent(command, latest, confirmation);
+  const intent = replacementIntent(conflict, latest, confirmation);
   if (intent === null) return null;
 
   const base = projectIntent(latest, intent);
@@ -59,15 +60,18 @@ export function createAtomicReplacement(
     ...command,
     ...intent,
     base: withOwnerContext(base, intent.kind, command.ownerId),
-    intended: withOwnerContext(intended, intent.kind, command.ownerId),
+    intended: intent.kind === 'projectLink'
+      ? { ...base, target: { present: true, value: true } }
+      : withOwnerContext(intended, intent.kind, command.ownerId),
   } as AtomicEditorCommand;
 }
 
 function replacementIntent(
-  command: AtomicEditorCommand,
+  conflict: AtomicConflictRecord,
   latest: ResumeSnapshot,
   confirmation: ConflictConfirmation,
 ): AtomicEditorCommand | null {
+  const command = conflict.command;
   switch (command.kind) {
     case 'metadataField':
     case 'personalField':
@@ -121,9 +125,13 @@ function replacementIntent(
       const photoKey = latest.document.personalDetails.photo?.key;
       return photoKey === confirmation.photoKey ? command : null;
     }
+    case 'projectLink':
+      return conflict.kind === 'project-privacy'
+        && confirmation.kind === 'field'
+        ? { ...command, privacyConfirmed: true }
+        : null;
     case 'photoUpload':
     case 'photoDelete':
-    case 'projectLink':
     case 'projectRefresh':
       return null;
     case 'resumeDelete':

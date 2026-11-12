@@ -1,6 +1,8 @@
 import { createApiClient, type ApiClientOptions } from '../../api/client';
 import {
+  createProjectsApi,
   sendWithCsrf,
+  type ProjectsApi,
   type ProjectAuth,
 } from '../../composables/projectsApi';
 import {
@@ -8,6 +10,7 @@ import {
   type ResumeApi,
   type ResumeListResult,
 } from '../../editor/resumeApi';
+import { projectPrivacyRequired } from '../../editor/projectLinks';
 import { canonicalJSON } from './projectDocument';
 
 // Linking a library project to a resume from the project screens
@@ -24,7 +27,8 @@ export type LinkFailure
     | 'rate-limited'
     | 'unavailable'
     | 'project-not-found'
-    | 'resume-not-found';
+    | 'resume-not-found'
+    | 'privacy-required';
 
 export type LinkResult
   = | { readonly kind: 'ok' }
@@ -107,12 +111,14 @@ export interface ProjectLinker {
     ownerId: string,
     resumeId: string,
     projectId: string,
+    privacyConfirmed?: boolean,
   ): Promise<LinkResult>;
 }
 
 export interface ProjectLinkerDeps {
   readonly links: ProjectLinksApi;
   readonly resumes: Pick<ResumeApi, 'list'>;
+  readonly projects: Pick<ProjectsApi, 'read'>;
   readonly auth: ProjectAuth;
   readonly uuid: () => string;
 }
@@ -133,13 +139,24 @@ export function createProjectLinker(
 ): ProjectLinker {
   const links = deps.links ?? createProjectLinksApi();
   const resumes = deps.resumes ?? createResumeApi();
+  const projects = deps.projects ?? createProjectsApi();
   const uuid = deps.uuid ?? (() => crypto.randomUUID());
   const keys = new Map<string, string>();
 
   async function revisionOf(
     resumeId: string,
+    projectId: string,
+    privacyConfirmed: boolean,
   ): Promise<{ revision: string } | LinkResult> {
-    const result = await resumes.list();
+    const [result, project] = await Promise.all([
+      resumes.list(), projects.read(projectId),
+    ]);
+    const required = projectPrivacyRequired(
+      resumeId,
+      project.kind === 'ok' ? project.value.linkedResumeIds ?? [] : null,
+      result.kind === 'ready' ? result.items : null,
+    );
+    if (required && !privacyConfirmed) return failed('privacy-required');
     if (result.kind === 'session-lost') return failed('session-lost');
     if (result.kind === 'rate-limited') return failed('rate-limited');
     if (result.kind !== 'ready') return failed('unavailable');
@@ -153,8 +170,9 @@ export function createProjectLinker(
     ownerId: string,
     resumeId: string,
     projectId: string,
+    privacyConfirmed: boolean,
   ): Promise<LinkResult> {
-    const read = await revisionOf(resumeId);
+    const read = await revisionOf(resumeId, projectId, privacyConfirmed);
     if ('kind' in read) return read;
     const { revision } = read;
     const fingerprint = canonicalJSON({
@@ -172,16 +190,18 @@ export function createProjectLinker(
 
   return {
     resumes: () => resumes.list(),
-    async link(ownerId, resumeId, projectId) {
+    async link(ownerId, resumeId, projectId, privacyConfirmed = false) {
       if (
         deps.auth.authState.value !== 'authenticated'
         || deps.auth.user.value?.id !== ownerId
       ) {
         return failed('session-lost');
       }
-      const first = await attempt(ownerId, resumeId, projectId);
+      const first = await attempt(
+        ownerId, resumeId, projectId, privacyConfirmed,
+      );
       if (first.kind === 'failed' && first.failure === 'stale') {
-        return attempt(ownerId, resumeId, projectId);
+        return attempt(ownerId, resumeId, projectId, privacyConfirmed);
       }
       return first;
     },

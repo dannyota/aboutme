@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 import { Button } from '@/components/ui/button';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import type { ConflictRecord } from '../../editor/reconcile';
 import StatusBanner from '../app/StatusBanner.vue';
+import ConfirmDialog from '../app/ConfirmDialog.vue';
 import {
   editorShellCopy,
   type ConflictControlKind,
@@ -20,6 +22,40 @@ const emit = defineEmits<{
 }>();
 const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
+const linkCopy = computed(() => editorFieldsCopy[locale.value].projectLinks);
+const privacy = computed(() => props.conflicts.find((conflict) =>
+  conflict.subject === 'atomic' && conflict.kind === 'project-privacy'));
+const refreshNotices = ref<ReadonlySet<string>>(new Set());
+const notices = computed(() => props.conflicts.filter((conflict) =>
+  conflict !== privacy.value && !refreshNotices.value.has(conflict.id)));
+
+// A refused refresh is a status after its read completes, with no unsaved edit.
+watch(() => {
+  const record = props.actions.record.value;
+  return {
+    conflicts: props.conflicts,
+    readRequired: record?.completeReadRequired,
+    queued: record === undefined
+      ? []
+      : [
+          ...record.pending,
+          ...(record.attempt === null ? [] : [record.attempt.queueItem]),
+        ],
+  };
+}, ({ conflicts, readRequired, queued }) => {
+  if (queued.some((item) => item.kind === 'projectRefresh')) {
+    refreshNotices.value = new Set();
+  }
+  if (readRequired !== false) return;
+  for (const conflict of conflicts) {
+    if (conflict.subject !== 'atomic'
+      || conflict.command.kind !== 'projectRefresh'
+      || queued.some((item) => item.id === conflict.id)
+      || refreshNotices.value.has(conflict.id)) continue;
+    refreshNotices.value = new Set([...refreshNotices.value, conflict.id]);
+    void props.actions.acceptLatest(conflict.id);
+  }
+}, { immediate: true });
 
 type InspectorTarget
   = | { readonly kind: 'section'; readonly key: string }
@@ -188,18 +224,27 @@ function assertNever(value: never): never {
 
 <template>
   <StatusBanner
-    v-if="conflicts.length > 0"
+    v-if="refreshNotices.size > 0"
+    kind="info"
+  >
+    {{ linkCopy.refreshChanged }}
+  </StatusBanner>
+  <StatusBanner
+    v-if="notices.length > 0"
     class="editor-conflicts"
     kind="info"
     :title="copy.conflictTitle"
   >
     <article
-      v-for="conflict in conflicts"
+      v-for="conflict in notices"
       :key="conflict.id"
       :data-conflict="conflictKey(conflict)"
     >
       <p>
-        {{ copy.conflictDescription }}
+        {{ conflict.subject === 'atomic'
+          && conflict.command.kind === 'projectRefresh'
+          ? editorFieldsCopy[locale].projectLinks.refreshChanged
+          : copy.conflictDescription }}
       </p>
       <Button
         v-if="canAcceptLatest(conflict)"
@@ -224,4 +269,17 @@ function assertNever(value: never): never {
       </Button>
     </article>
   </StatusBanner>
+  <ConfirmDialog
+    v-if="privacy !== undefined"
+    :open="true"
+    :title="linkCopy.sharedPublic"
+    :description="linkCopy.sharedReader"
+    :confirm-label="linkCopy.addAnyway"
+    :cancel-label="editorFieldsCopy[locale].section.cancel"
+    destructive
+    confirm-action="confirm-project-privacy"
+    cancel-action="cancel-project-privacy"
+    @confirm="actions.applyMine(privacy.id, { kind: 'field' })"
+    @cancel="acceptLatest(privacy.id)"
+  />
 </template>

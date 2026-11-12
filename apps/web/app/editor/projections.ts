@@ -84,7 +84,10 @@ export function projectIntent(
     case 'projectRefresh': {
       const entry = findEntry(snapshot.document, intent.entryId);
       return sectionProjection(
-        presenceOf(entry?.entry, 'projectId'),
+        presence(Object.fromEntries(
+          ['projectId', 'title', 'subtitle', 'link', 'dates', 'description']
+            .map((field) => [field, presenceOf(entry?.entry, field)]),
+        )),
         snapshot,
         intent.sectionKey,
         intent.entryId,

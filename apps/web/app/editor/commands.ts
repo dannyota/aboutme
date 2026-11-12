@@ -145,7 +145,7 @@ export type AtomicCommandIntent
     | { kind: 'photoUpload'; file: File }
     | { kind: 'photoDelete' }
     | { kind: 'resumeDelete'; confirmedTitle: string }
-    | { kind: 'projectLink'; projectId: string }
+    | { kind: 'projectLink'; projectId: string; privacyConfirmed?: boolean }
     | { kind: 'projectRefresh'; sectionKey: string; entryId: string };
 
 export type AtomicEditorCommand = CommandEnvelope & AtomicCommandIntent;

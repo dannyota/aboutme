@@ -799,6 +799,69 @@ test('adding to a second published resume asks first', async ({ page }) => {
   expect(fake.resumeWrites).toHaveLength(1);
 });
 
+test('publishing elsewhere after load asks before Add sends a link',
+  async ({ page }) => {
+    const fake = await open(page, `/app/projects/${FIRST}`, library(), {
+      resumes: resumeRows({ [BACKEND]: FIRST }),
+    });
+    const target = fake.resumes.get(FRONTEND)!;
+    const row = page.locator(`[data-resume-row="${FRONTEND}"]`);
+    await expect(row).toContainText('Draft');
+    target.slug = 'ada-frontend';
+    target.revision += 1;
+
+    await row.getByRole('button', { name: 'Add to this resume' }).click();
+    const ask = page.getByRole('alertdialog', {
+      name: 'This project is already shown on another public resume.',
+    });
+    await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(ask).toBeHidden();
+    expect(fake.resumeWrites).toEqual([]);
+  });
+
+test('a stale editor link asks again when its privacy inputs changed',
+  async ({ page }) => {
+    const fake = await open(page, `/app/resumes/${FRONTEND}`, library(), {
+      resumes: resumeRows({ [BACKEND]: FIRST }),
+    });
+    let attempts = 0;
+    await page.route(`**/resumes/${FRONTEND}/project-links`, async (route) => {
+      attempts += 1;
+      const target = fake.resumes.get(FRONTEND)!;
+      target.slug = 'ada-frontend';
+      target.revision += 1;
+      await route.fulfill({
+        status: 412, headers: HEADERS, json: {
+          error: {
+            code: 'revision_mismatch', message: 'fixed', details: {
+              revision: String(target.revision),
+              document: resumeDocument(target),
+            },
+          },
+        },
+      });
+    });
+    await page.locator('[data-region="outline"] [data-outline-key="projects"]')
+      .click();
+    await page.locator('[data-region="inspector"] [data-action="add-entry"]')
+      .click();
+    await page.getByRole('menuitem', { name: 'From your projects' }).click();
+    await page.getByRole('menuitem', { name: 'Shop site' }).click();
+    const ask = page.getByRole('alertdialog', {
+      name: 'This project is already shown on another public resume.',
+    });
+    await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(ask).toBeHidden();
+    await expect(page.getByTestId('save-status'))
+      .toHaveAttribute('data-state', 'saved');
+    expect(attempts).toBe(1);
+    expect(fake.resumes.get(FRONTEND)!.entries).toEqual([]);
+  });
+
 test('the resume editor adds a library project, selects it and refreshes it',
   async ({ page }) => {
     const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
@@ -839,7 +902,21 @@ test('the resume editor adds a library project, selects it and refreshes it',
     await expect(confirm).toContainText(
       'Replace this entry\'s text with the project\'s current text?',
     );
+    let releaseRefresh!: () => void;
+    const refreshHeld = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    await page.route(`**/entries/${entryId}/project-refresh`, async (route) => {
+      await refreshHeld;
+      await route.fallback();
+    });
     await confirm.getByRole('button', { name: 'Replace text' }).click();
+    const openProject = card.getByRole('link', { name: 'Open project' });
+    await expect(card.getByRole('button', { name: 'Refresh from library' }))
+      .toBeDisabled();
+    await expect(confirm).toBeHidden();
+    await expect(openProject).toBeFocused();
+    releaseRefresh();
 
     await expect(card.locator('[data-entry-field="title"] input'))
       .toHaveValue('Ops console');
@@ -851,6 +928,7 @@ test('the resume editor adds a library project, selects it and refreshes it',
       ifMatch: '"r2"', body: null,
     });
     expect(fake.resumeWrites).toHaveLength(2);
+    await expect(openProject).toBeFocused();
   });
 
 test('deleting a linked project says how many resumes it leaves', async ({

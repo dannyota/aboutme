@@ -4,7 +4,7 @@ import {
 } from 'vue';
 
 import type { ProjectAuth, ProjectsApi } from '../../composables/projectsApi';
-import { revealsAcrossResumes } from '../../editor/projectLinks';
+import { projectPrivacyRequired } from '../../editor/projectLinks';
 import type { ResumeSummary } from '../../editor/resumeApi';
 import type { Project } from './projectDocument';
 import { createProjectLinker, type ProjectLinker } from './projectLinks';
@@ -109,8 +109,25 @@ export function useProjectResumes(
     const resume = addable(resumeId);
     if (resume === undefined || asking.value !== null) return;
     status.value = null;
-    const items = view.value.kind === 'ready' ? view.value.items : [];
-    if (revealsAcrossResumes(resumeId, linkedIds.value, items)) {
+    pending.value = resumeId;
+    const project = loaded.value!;
+    const [resumes, fresh] = await Promise.all([
+      linker.resumes(), deps.api.read(project.id),
+    ]);
+    pending.value = null;
+    if (disposed || dirty.value || loaded.value?.id !== project.id) return;
+    if (fresh.kind === 'ok') {
+      linkedIds.value = fresh.value.linkedResumeIds ?? [];
+    }
+    if (resumes.kind === 'ready') {
+      view.value = { kind: 'ready', items: resumes.items };
+    }
+    if (linked.value.has(resumeId)) return;
+    if (projectPrivacyRequired(
+      resumeId,
+      fresh.kind === 'ok' ? fresh.value.linkedResumeIds ?? [] : null,
+      resumes.kind === 'ready' ? resumes.items : null,
+    )) {
       asking.value = resumeId;
       return;
     }
@@ -121,10 +138,12 @@ export function useProjectResumes(
     const resumeId = asking.value;
     asking.value = null;
     const resume = resumeId === null ? undefined : addable(resumeId);
-    if (resume !== undefined) await send(resume);
+    if (resume !== undefined) await send(resume, true);
   }
 
-  async function send(resume: ResumeSummary): Promise<void> {
+  async function send(
+    resume: ResumeSummary, privacyConfirmed = false,
+  ): Promise<void> {
     const project = loaded.value!;
     const resumeId = resume.id;
     if (ownerId === null) {
@@ -132,7 +151,9 @@ export function useProjectResumes(
       return;
     }
     pending.value = resumeId;
-    const result = await linker.link(ownerId, resumeId, project.id);
+    const result = privacyConfirmed
+      ? await linker.link(ownerId, resumeId, project.id, true)
+      : await linker.link(ownerId, resumeId, project.id);
     pending.value = null;
     if (disposed) return;
     if (result.kind === 'ok') {
@@ -141,6 +162,9 @@ export function useProjectResumes(
       return;
     }
     switch (result.failure) {
+      case 'privacy-required':
+        asking.value = resumeId;
+        return;
       case 'already-linked':
         await reload(project.id);
         return;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 
 import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
@@ -19,15 +19,20 @@ defineProps<{
 }>();
 const emit = defineEmits<{ refresh: [] }>();
 const asking = ref(false);
+const note = ref<HTMLElement>();
 
-function confirm(): void {
+async function confirm(): Promise<void> {
   asking.value = false;
   emit('refresh');
+  await nextTick();
+  note.value
+    ?.querySelector<HTMLElement>('[data-action="open-project"]')?.focus();
 }
 </script>
 
 <template>
   <div
+    ref="note"
     class="grid gap-2 rounded-md bg-surface-blue p-3 text-sm text-foreground"
     data-project-note
   >

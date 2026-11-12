@@ -283,9 +283,36 @@ describe('a second published resume', () => {
     inDocument('[data-action="confirm-project-privacy"]').click();
     await flushPromises();
     expect(linker.link.mock.calls)
-      .toEqual([['owner-1', 'resume-2', 'project-1']]);
+      .toEqual([['owner-1', 'resume-2', 'project-1', true]]);
     expect(row(wrapper, 'resume-2').text()).toContain('Shown');
   });
+
+  it('asks during creation after a fresh decision; Cancel sends no new link',
+    async () => {
+      api.create.mockResolvedValue(ok(project({ id: 'created' })));
+      const wrapper = await mountList();
+      await wrapper.get('[data-testid="new-project"]').trigger('click');
+      await flushPromises();
+      await typeInto('#project-create-name', 'Shop');
+      inDocument('[data-resume-choice="resume-1"] [role="checkbox"]').click();
+      inDocument('[data-resume-choice="resume-2"] [role="checkbox"]').click();
+      await flushPromises();
+      linker.link.mockResolvedValueOnce(linkOk)
+        .mockResolvedValueOnce(linkFailed('privacy-required'));
+
+      await submitDialog();
+
+      // The dialog holds the two sentences as its title and description.
+      const asked = inDocument('[role="alertdialog"]').textContent ?? '';
+      for (const sentence of PRIVACY.split('. ')) {
+        expect(asked).toContain(sentence.replace(/\.$/u, ''));
+      }
+      expect(navigateTo).not.toHaveBeenCalled();
+      inDocument('[data-action="cancel-project-privacy"]').click();
+      await flushPromises();
+      expect(linker.link).toHaveBeenCalledTimes(2);
+      expect(navigateTo).toHaveBeenCalledWith('/app/projects/created');
+    });
 
   it('shows the note in New project once two published resumes are checked',
     async () => {

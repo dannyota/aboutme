@@ -1,6 +1,9 @@
 import type { useAuth } from '../composables/useAuth';
 import type { ResumeRecord, useResumeStore } from '../stores/resumes';
-import type { AtomicEditorCommand } from './commands';
+import { projectCommand, type AtomicEditorCommand } from './commands';
+import { makeAtomicConflict } from './conflicts';
+import { projectPrivacyRequired } from './projectLinks';
+import { createProjectsApi } from '../composables/projectsApi';
 import type { AttemptFailureCode, FrozenAttempt } from './attempt';
 import type { EditorQueueItem } from './templateGroup';
 import type { CoordinatorContext } from './coordinatorTypes';
@@ -30,6 +33,32 @@ export function dispatchToken(
     stopForSessionLoss(ctx, resumeId);
   }
   return null;
+}
+
+/** Checks privacy at dispatch and before a revision retry. */
+export async function allowProjectLink(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  command: AtomicEditorCommand,
+): Promise<boolean> {
+  if (command.kind !== 'projectLink') return true;
+  const [resumes, project] = await Promise.all([
+    ctx.deps.api.list(),
+    (ctx.deps.projects ?? createProjectsApi()).read(command.projectId),
+  ]);
+  const record = ctx.deps.store.recordFor(resumeId);
+  if (record?.attempt?.queueItem.id !== command.id) return false;
+  const required = projectPrivacyRequired(
+    resumeId,
+    project.kind === 'ok' ? project.value.linkedResumeIds ?? [] : null,
+    resumes.kind === 'ready' ? resumes.items : null,
+  );
+  if (command.privacyConfirmed || !required) return true;
+  ctx.deps.store.markConflict(resumeId, makeAtomicConflict(
+    command, record.accepted, projectCommand(record.accepted, command),
+    'project-privacy',
+  ));
+  return false;
 }
 
 export function stopForSessionLoss(
