@@ -72,7 +72,7 @@ func (s *Service) preflight(w http.ResponseWriter, r *http.Request) ([]byte, boo
 			api.WriteError(w, http.StatusRequestEntityTooLarge, "body_too_large", "request body exceeds the 4096 byte limit")
 			return nil, false
 		}
-		writeInvalid(w)
+		writeInvalid(w, invalidRequestMessage)
 		return nil, false
 	}
 	return body, true
@@ -91,18 +91,34 @@ func jsonMediaType(header http.Header) bool {
 	return len(params) == 0
 }
 
-func writeInvalid(w http.ResponseWriter) {
-	api.WriteError(w, http.StatusBadRequest, "request_invalid", "request is invalid")
+// invalidRequestMessage is the request_invalid message when no single field
+// is at fault.
+const invalidRequestMessage = "request is invalid"
+
+func writeInvalid(w http.ResponseWriter, message string) {
+	api.WriteError(w, http.StatusBadRequest, "request_invalid", message)
 }
 
-// decodeStrict decodes exactly one JSON value with no unknown fields.
-func decodeStrict(body []byte, into any) bool {
+// decodeStrict decodes exactly one JSON value whose property names match
+// into's exactly, with no unknown fields. On failure it returns the client
+// message, which names the failing field when there is one.
+func decodeStrict(body []byte, into any) (string, bool) {
+	if err := api.CheckJSONBinding(body, into); err != nil {
+		var pathErr *api.JSONPathError
+		if errors.As(err, &pathErr) {
+			return pathErr.Error(), false
+		}
+		return invalidRequestMessage, false
+	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(into); err != nil {
-		return false
+		return invalidRequestMessage, false
 	}
-	return errors.Is(decoder.Decode(new(json.RawMessage)), io.EOF)
+	if !errors.Is(decoder.Decode(new(json.RawMessage)), io.EOF) {
+		return invalidRequestMessage, false
+	}
+	return "", true
 }
 
 type startResponse struct {
@@ -117,8 +133,12 @@ type startResponse struct {
 
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byte) {
 	var request struct{}
-	if !bytes.HasPrefix(bytes.TrimSpace(body), []byte("{")) || !decodeStrict(body, &request) {
-		writeInvalid(w)
+	if !bytes.HasPrefix(bytes.TrimSpace(body), []byte("{")) {
+		writeInvalid(w, (&api.JSONPathError{Problem: "must be an object"}).Error())
+		return
+	}
+	if message, ok := decodeStrict(body, &request); !ok {
+		writeInvalid(w, message)
 		return
 	}
 	slug := r.PathValue("slug")
@@ -209,8 +229,12 @@ const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 // client cannot learn which check rejected it.
 func (s *Service) handleCollect(w http.ResponseWriter, r *http.Request, body []byte) {
 	var request collectRequest
-	if !decodeStrict(body, &request) || !request.valid() {
-		writeInvalid(w)
+	message, ok := decodeStrict(body, &request)
+	if ok && !request.valid() {
+		message, ok = invalidRequestMessage, false
+	}
+	if !ok {
+		writeInvalid(w, message)
 		return
 	}
 	outcome := s.counter.Collect(r.Context(), viewcount.CollectInput{
