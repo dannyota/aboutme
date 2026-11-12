@@ -97,6 +97,14 @@ func TestMutationRoutes_RejectInexactPropertyNames(t *testing.T) {
 				`{"projectId":"` + projectID + `","ProjectId":"` + projectID + `"}`: "ProjectId",
 			},
 		},
+		{
+			name: "linkResumeProject existing entry", method: http.MethodPost, match: true, handler: (*Service).handleLinkResumeProject,
+			exact: `{"projectId":"` + projectID + `","entryId":"` + entryID + `"}`,
+			rejected: map[string]string{
+				`{"projectId":"` + projectID + `","EntryId":"` + entryID + `"}`:                             "EntryId",
+				`{"projectId":"` + projectID + `","entryId":"` + entryID + `","entryID":"` + entryID + `"}`: "entryID",
+			},
+		},
 	}
 	send := func(t *testing.T, r route, body string) (int, errorObject) {
 		t.Helper()

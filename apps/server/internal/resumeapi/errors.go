@@ -25,6 +25,7 @@ var productionErrorVocabulary = map[string]struct{}{
 	"media_busy": {}, "media_not_found": {},
 	"publish_invalid": {}, "slug_taken": {}, "reauth_required": {}, "public_state_busy": {},
 	"project_not_found": {}, "project_already_linked": {}, "scope_denied": {},
+	"entry_not_found": {},
 }
 
 var genericErrorVocabulary = map[string]struct{}{

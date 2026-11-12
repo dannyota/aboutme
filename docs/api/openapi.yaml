@@ -2791,19 +2791,25 @@ paths:
       security:
         - sessionCookie: []
           csrfToken: []
-      summary: Link one library project as a prefilled project entry
+      summary: Link one library project as a prefilled or existing project entry
       description: >-
-        Appends one project entry that names the project to the resume's
-        first project section in layout order. When the resume has none, a
-        section keyed `projects` is created at the end of the main column
-        through the structure command. The entry is prefilled from the
-        project text whose key equals the resume language's primary subtag,
-        or else the default language: `title` from `name`, `subtitle` from
-        `role`, `link` from `repositoryUrl` or else `demoUrl`, `dates`, and
-        `description` from `summary` as one paragraph. The entry text is the
-        resume's own afterwards; nothing but a refresh overwrites it. The
-        write uses the entry-write chain and returns its response; an older
-        declared schema version is emitted without the link.
+        Without `entryId`, appends one project entry that names the project
+        to the resume's first project section in layout order. When the
+        resume has none, a section keyed `projects` is created at the end of
+        the main column through the structure command. The entry is
+        prefilled from the project text whose key equals the resume
+        language's primary subtag, or else the default language: `title`
+        from `name`, `subtitle` from `role`, `link` from `repositoryUrl` or
+        else `demoUrl`, `dates`, and `description` from `summary` as one
+        paragraph. With `entryId`, sets `projectId` on that existing entry
+        instead and changes nothing else: the entry keeps its text, position
+        and visibility, and nothing is prefilled. It must be an unlinked
+        entry of a project section of the same resume. The entry text is the
+        resume's own afterwards; nothing but a refresh overwrites it. Either
+        way the project must be the owner's and linked by no other entry of
+        the resume. The write uses the entry-write chain and returns its
+        response; every declared schema version gets the same answer, and an
+        older one is emitted without the link.
       parameters:
         - $ref: "#/components/parameters/ResumeID"
         - $ref: "#/components/parameters/IfMatch"
@@ -2825,11 +2831,11 @@ paths:
         "403":
           $ref: "#/components/responses/ResumeCsrfRejected"
         "404":
-          $ref: "#/components/responses/ResumeOrProjectNotFound"
+          $ref: "#/components/responses/ProjectLinkNotFound"
         "405":
           $ref: "#/components/responses/MethodNotAllowedPostOnly"
         "409":
-          $ref: "#/components/responses/ResumeProjectLinkConflict"
+          $ref: "#/components/responses/ProjectLinkConflict"
         "412":
           $ref: "#/components/responses/ResumeRevisionMismatch"
         "413":
@@ -5498,6 +5504,35 @@ components:
             error:
               code: project_not_found
               message: project not found
+    ProjectLinkNotFound:
+      description: >-
+        `resume_not_found` when the resume is missing or owned by another
+        account, `entry_not_found` when `entryId` names no entry of the
+        resume, or `project_not_found` when the project is missing or owned
+        by another account. The project answer is identical for a missing
+        and a foreign id. Nothing is written.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: entry_not_found
+              message: entry not found
+    ProjectLinkConflict:
+      description: >-
+        `project_already_linked` when another entry of the resume already
+        names the project, or when `entryId` names an entry that already
+        links a project; or `idempotency_key_reuse` when the same key arrives
+        with a different request fingerprint. Nothing is written.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: project_already_linked
+              message: the resume already links this project
     ProjectPublicStateBusy:
       description: >-
         `public_state_busy`: a linking resume's public-generation drain did
@@ -9084,15 +9119,23 @@ components:
     ProjectLinkRequest:
       type: object
       description: >-
-        The owned library project to link. The new entry is prefilled from
-        the project text in the resume language, or else the project's
-        default language.
+        The owned library project to link. Without `entryId` a new entry is
+        prefilled from the project text in the resume language, or else the
+        project's default language; with it, that existing entry gains the
+        link and keeps its text.
       additionalProperties: false
       required: [projectId]
       properties:
         projectId:
           type: string
           format: uuid
+        entryId:
+          type: string
+          format: uuid
+          description: >-
+            An unlinked entry of a project section of this resume to link
+            instead of inserting one. An entry of another section type
+            answers `document_invalid`.
       example:
         projectId: 018f5b6a-9a3e-7c21-8b1e-0000000000c1
     EntryUpsert:

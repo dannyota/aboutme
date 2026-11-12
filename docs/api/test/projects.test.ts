@@ -127,6 +127,14 @@ describe("project library surface", () => {
       ]);
     }
     expect(schemas.ProjectLinkRequest.required).toEqual(["projectId"]);
+    expect(Object.keys(schemas.ProjectLinkRequest.properties).sort()).toEqual([
+      "entryId",
+      "projectId",
+    ]);
+    expect(schemas.ProjectLinkRequest.properties.entryId).toMatchObject({
+      type: "string",
+      format: "uuid",
+    });
     expect(schemas.ProjectLinkRequest.additionalProperties).toBe(false);
   });
 

@@ -762,8 +762,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Link one library project as a prefilled project entry
-         * @description Appends one project entry that names the project to the resume's first project section in layout order. When the resume has none, a section keyed `projects` is created at the end of the main column through the structure command. The entry is prefilled from the project text whose key equals the resume language's primary subtag, or else the default language: `title` from `name`, `subtitle` from `role`, `link` from `repositoryUrl` or else `demoUrl`, `dates`, and `description` from `summary` as one paragraph. The entry text is the resume's own afterwards; nothing but a refresh overwrites it. The write uses the entry-write chain and returns its response; an older declared schema version is emitted without the link.
+         * Link one library project as a prefilled or existing project entry
+         * @description Without `entryId`, appends one project entry that names the project to the resume's first project section in layout order. When the resume has none, a section keyed `projects` is created at the end of the main column through the structure command. The entry is prefilled from the project text whose key equals the resume language's primary subtag, or else the default language: `title` from `name`, `subtitle` from `role`, `link` from `repositoryUrl` or else `demoUrl`, `dates`, and `description` from `summary` as one paragraph. With `entryId`, sets `projectId` on that existing entry instead and changes nothing else: the entry keeps its text, position and visibility, and nothing is prefilled. It must be an unlinked entry of a project section of the same resume. The entry text is the resume's own afterwards; nothing but a refresh overwrites it. Either way the project must be the owner's and linked by no other entry of the resume. The write uses the entry-write chain and returns its response; every declared schema version gets the same answer, and an older one is emitted without the link.
          */
         post: operations["linkResumeProject"];
         delete?: never;
@@ -2470,7 +2470,7 @@ export interface components {
          */
         ResumeDocument: Record<string, never>;
         /**
-         * @description The owned library project to link. The new entry is prefilled from the project text in the resume language, or else the project's default language.
+         * @description The owned library project to link. Without `entryId` a new entry is prefilled from the project text in the resume language, or else the project's default language; with it, that existing entry gains the link and keeps its text.
          * @example {
          *       "projectId": "018f5b6a-9a3e-7c21-8b1e-0000000000c1"
          *     }
@@ -2478,6 +2478,11 @@ export interface components {
         ProjectLinkRequest: {
             /** Format: uuid */
             projectId: string;
+            /**
+             * Format: uuid
+             * @description An unlinked entry of a project section of this resume to link instead of inserting one. An entry of another section type answers `document_invalid`.
+             */
+            entryId?: string;
         };
         /**
          * @description One entry to create or replace. Identity is `entry.id`: an existing id replaces that entry in place and keeps its position, a new id appends. The entry's own shape is governed by `packages/schema/resume.schema.json` at the declared version.
@@ -3449,6 +3454,40 @@ export interface components {
                  *       "error": {
                  *         "code": "project_not_found",
                  *         "message": "project not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `resume_not_found` when the resume is missing or owned by another account, `entry_not_found` when `entryId` names no entry of the resume, or `project_not_found` when the project is missing or owned by another account. The project answer is identical for a missing and a foreign id. Nothing is written. */
+        ProjectLinkNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "entry_not_found",
+                 *         "message": "entry not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `project_already_linked` when another entry of the resume already names the project, or when `entryId` names an entry that already links a project; or `idempotency_key_reuse` when the same key arrives with a different request fingerprint. Nothing is written. */
+        ProjectLinkConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "project_already_linked",
+                 *         "message": "the resume already links this project"
                  *       }
                  *     }
                  */
@@ -7850,9 +7889,9 @@ export interface operations {
             400: components["responses"]["ResumeWriteBadRequest"];
             401: components["responses"]["ResumeUnauthorized"];
             403: components["responses"]["ResumeCsrfRejected"];
-            404: components["responses"]["ResumeOrProjectNotFound"];
+            404: components["responses"]["ProjectLinkNotFound"];
             405: components["responses"]["MethodNotAllowedPostOnly"];
-            409: components["responses"]["ResumeProjectLinkConflict"];
+            409: components["responses"]["ProjectLinkConflict"];
             412: components["responses"]["ResumeRevisionMismatch"];
             413: components["responses"]["ResumeBodyTooLarge"];
             422: components["responses"]["ResumeDocumentInvalid"];

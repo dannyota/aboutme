@@ -1,8 +1,8 @@
 package resumeapi
 
 // Project link and refresh routes: each inserts or rewrites one prefilled
-// project entry through the entry-write chain (docs/design/projects.md
-// "Selection").
+// project entry, or links one existing entry, through the entry-write chain
+// (docs/design/projects.md "Selection").
 
 import (
 	"context"
@@ -31,16 +31,20 @@ func projectLinkRoutes() []routeSpec {
 	}
 }
 
-// projectLinkPrepared is a link or a refresh. A link names ProjectID and a
-// refresh names EntryID; the other is zero.
+// projectLinkPrepared is a link or a refresh. A link names ProjectID, and
+// EntryID too when it links an existing entry; a refresh names only EntryID.
 type projectLinkPrepared struct {
 	// ResumeID is the resume the entry belongs to.
 	ResumeID uuid.UUID
-	// ProjectID is the project a link adds.
+	// ProjectID is the project a link adds; zero for a refresh.
 	ProjectID uuid.UUID
-	// EntryID is the linked entry a refresh rewrites.
+	// EntryID is the existing entry a link names or a refresh rewrites;
+	// empty for a link that inserts an entry.
 	EntryID string
 }
+
+// refresh reports whether the input is a refresh rather than a link.
+func (p projectLinkPrepared) refresh() bool { return p.ProjectID == uuid.Nil }
 
 func decodeProjectLink(r *http.Request) (boundedInput, error) {
 	resumeID, pathErr := parseResumePathID(r)
@@ -50,6 +54,9 @@ func decodeProjectLink(r *http.Request) (boundedInput, error) {
 	var body struct {
 		// ProjectID is the canonical UUID of an owned library project.
 		ProjectID *string `json:"projectId"`
+		// EntryID, when present, is the canonical UUID of an existing entry
+		// to link instead of inserting one.
+		EntryID *string `json:"entryId"`
 	}
 	input, err := decodeJSONBody(r, &body)
 	if err != nil {
@@ -62,7 +69,15 @@ func decodeProjectLink(r *http.Request) (boundedInput, error) {
 	if err != nil || projectID == uuid.Nil || projectID.String() != *body.ProjectID {
 		return boundedInput{}, requestInvalid("projectId must be one canonical UUID")
 	}
-	input.Value = projectLinkPrepared{ResumeID: resumeID, ProjectID: projectID}
+	prepared := projectLinkPrepared{ResumeID: resumeID, ProjectID: projectID}
+	if body.EntryID != nil {
+		entryID, entryErr := uuid.Parse(*body.EntryID)
+		if entryErr != nil || entryID.String() != *body.EntryID {
+			return boundedInput{}, requestInvalid("entryId must be one canonical UUID")
+		}
+		prepared.EntryID = entryID.String()
+	}
+	input.Value = prepared
 	return input, nil
 }
 
@@ -88,16 +103,19 @@ func projectLinkTargets(input boundedInput) ([]string, error) {
 	if !ok {
 		return nil, errors.New("project link input has the wrong type")
 	}
-	if prepared.EntryID != "" {
+	if prepared.refresh() {
 		return []string{"resume_id", prepared.ResumeID.String(), "entry_id", prepared.EntryID}, nil
 	}
+	// A link keeps one identity whether it inserts or names an entry, so a
+	// key cannot do both for the same project.
 	return []string{"resume_id", prepared.ResumeID.String(), "project_id", prepared.ProjectID.String()}, nil
 }
 
 type projectLinkOperation struct{ service *Service }
 
-// Run reads the owned project under the owner lock, writes the prefilled
-// entry, and saves the document at the next revision.
+// Run writes the prefilled entry, links the named one or refreshes one, and
+// saves the document at the next revision. The save checks under the owner
+// lock that the link names an owned project no other entry links.
 func (op projectLinkOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -135,17 +153,21 @@ func (op projectLinkOperation) Run(ctx context.Context, qtx *store.Queries, muta
 }
 
 // linkedDocument returns the current-version document with the linked entry
-// inserted or refreshed. It works on the current version whatever the wire
-// version, because an older client cannot express the link it asks for.
+// inserted, linked or refreshed. It works on the current version whatever
+// the wire version, because an older client cannot express the link it asks
+// for, so every declared version gets the same answer.
 func linkedDocument(ctx context.Context, qtx *store.Queries, current resume.Resume, input projectLinkPrepared) (json.RawMessage, error) {
 	raw, err := resume.AssembleCanonical(current.Doc)
 	if err != nil {
 		return nil, err
 	}
+	if !input.refresh() && input.EntryID != "" {
+		return linkExistingEntry(raw, input.EntryID, input.ProjectID)
+	}
 	projectID := input.ProjectID
 	var entry schema.ProjectEntry
 	var sectionKey string
-	if input.EntryID != "" {
+	if input.refresh() {
 		var found bool
 		sectionKey, entry, found = findProjectEntry(current.Doc, input.EntryID)
 		if !found {
