@@ -361,10 +361,15 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
 
 The [production runbook](../runbooks/production.md#deploy) owns release gates,
 deployment, rollback, and recovery; the [host guide](../../deploy/vn/README.md)
-maps `deploy/vn/`. Before reporting success, the laptop deploy proves the
-operator can reach `/` with HTTP 200 after its CrowdSec test ban is removed; an
-unreadable ticker or continued denial fails the deploy. Backend settings,
-provider variables, and state stay ignored.
+maps `deploy/vn/`. The CrowdSec smoke bans the laptop's SSH client address, so
+before the lock, or once maintenance serves when the site does not answer or on
+a first deploy, the deploy holds an HTTPS request open and refuses unless the
+host sees it from that address; a VPN such as Cloudflare WARP splits the two.
+The smoke then waits up to 150 s after adding its 3-minute test ban for a 403.
+Before reporting success, the laptop deploy proves the operator can reach `/`
+with HTTP 200 after its CrowdSec test ban is removed; an unreadable ticker or
+continued denial fails the deploy. Backend settings, provider variables, and
+state stay ignored.
 
 ## AWS reference and recovery
 
