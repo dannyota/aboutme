@@ -24,6 +24,12 @@ type Querier interface {
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error)
+	// Advances only the revision, the change signal every public artifact keys
+	// on, and leaves the document, updated_at and every other column unchanged
+	// (docs/design/projects-contract.md "Revision-only advance"). The returned
+	// revision is the NEW one. A stale or non-matching expected revision updates
+	// zero rows and surfaces as pgx.ErrNoRows.
+	AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResumeRevisionCASParams) (Resume, error)
 	// Compare-and-advance on a valid code: the WHERE guard is the single-use
 	// rule, so a replayed step (equal, not greater) affects zero rows and the
 	// caller sees pgx.ErrNoRows. Requires the row already locked by
@@ -418,7 +424,14 @@ type Querier interface {
 	// Missing, never-published, private, renamed, and deleted rows all surface as
 	// pgx.ErrNoRows. Representation-specific flags are checked after this live
 	// gate without exposing a different lookup result.
-	GetPublicResumeBySlug(ctx context.Context, slug string) (Resume, error)
+	//
+	// project_links is the project link context: for each entry that is not
+	// hidden and names a project of the same owner, the entry id and the project
+	// slug. One statement reads both, so the links always belong to the returned
+	// revision (docs/design/projects-contract.md "Project link context"). The
+	// project id never leaves the statement. The id is compared as text, so a
+	// malformed stored value matches nothing instead of failing the read.
+	GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error)
 	GetPublicState(ctx context.Context) (PublicState, error)
 	// System-job read for the document-version backfill. It is intentionally
 	// not user-scoped, unlike product reads. It adds no write path.
@@ -650,6 +663,9 @@ type Querier interface {
 	PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error)
 	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
 	ProjectDocumentBytes(ctx context.Context, document json.RawMessage) (int32, error)
+	// Compares the stored document with a replacement in the jsonb form
+	// ReplaceProjectCAS stores, so formatting or key order is never a change.
+	ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error)
 	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)
 	// sign_in_to_view is the caller's already-merged final value (an omitted
 	// publish field keeps the stored value before this query ever runs; see

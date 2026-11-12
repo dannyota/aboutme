@@ -72,6 +72,7 @@ interface ResumeRow {
   revision: number;
   /** The project section's entries; null when the resume has none. */
   entries: ResumeEntry[] | null;
+  /** The last personal details saved; the fixed details until then. */
   personalDetails?: Record<string, unknown>;
 }
 
@@ -85,6 +86,8 @@ interface LibraryOptions {
   readonly savedElsewhere?: readonly string[];
   /** Headlines another tab saves just before a resume's first write. */
   readonly headlinesElsewhere?: Readonly<Record<string, string>>;
+  /** A second tab of the same session, served by the same fake. */
+  readonly otherTab?: Page;
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -176,10 +179,13 @@ function prefill(entry: ResumeEntry, project: Project, lng: string) {
 }
 
 async function fakeLibrary(
-  page: Page,
+  tabs: readonly Page[],
   initial: readonly Project[],
   options: LibraryOptions = {},
 ) {
+  const routeAll = async (...args: Parameters<Page['route']>) => {
+    for (const tab of tabs) await tab.route(...args);
+  };
   const projects = new Map(
     initial.map((item) => [item.id, structuredClone(item)]),
   );
@@ -206,7 +212,7 @@ async function fakeLibrary(
       error: { code, message: 'fixed', ...(details ? { details } : {}) },
     },
   });
-  await page.route('**/api/v1/auth/password/reauth', async (route) => {
+  await routeAll('**/api/v1/auth/password/reauth', async (route) => {
     reauths.push(route.request().method());
     if (options.enrolled) {
       await route.fulfill({
@@ -218,7 +224,7 @@ async function fakeLibrary(
     reauthenticated = true;
     await route.fulfill({ status: 204 });
   });
-  await page.route(/\/api\/v1\/projects(?:\/[^/?]+)?$/u, async (route) => {
+  await routeAll(/\/api\/v1\/projects(?:\/[^/?]+)?$/u, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const id = path.split('/')[4];
@@ -291,14 +297,24 @@ async function fakeLibrary(
       updatedAt: '2026-11-11T01:00:00Z', linkedResumeIds: [],
     };
     projects.set(current.id, next);
+    // Every replacement in these tests changes the project, so each
+    // published resume linking it advances its revision and keeps its
+    // document.
+    const changedResumes = linkedTo(current.id)
+      .map((resumeId) => resumes.get(resumeId)!)
+      .filter((row) => row.slug !== null)
+      .map((row) => {
+        row.revision += 1;
+        return { id: row.id, revision: String(row.revision) };
+      });
     await route.fulfill({
       headers: HEADERS,
-      json: { data: { project: shown(next), changedResumes: [] } },
+      json: { data: { project: shown(next), changedResumes } },
     });
   });
   // A successful, immediately closed stream keeps the editor's live
   // connection quiet.
-  await page.route('**/api/v1/events', async (route) => {
+  await routeAll('**/api/v1/events', async (route) => {
     await route.fulfill({
       status: 200, contentType: 'text/event-stream', body: '',
     });
@@ -311,7 +327,7 @@ async function fakeLibrary(
     },
     json: { data: resumeData(row, withDocument) },
   });
-  await page.route((url) => url.pathname.startsWith('/api/v1/resumes'),
+  await routeAll((url) => url.pathname.startsWith('/api/v1/resumes'),
     async (route) => {
       const request = route.request();
       const parts = new URL(request.url()).pathname.split('/');
@@ -408,12 +424,15 @@ async function open(
   initial: readonly Project[],
   options: LibraryOptions = {},
 ) {
-  await denyExternalRequests(page);
+  const tabs = options.otherTab === undefined
+    ? [page]
+    : [page, options.otherTab];
+  for (const tab of tabs) await denyExternalRequests(tab);
   await page.context().addCookies([{
     name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
   }]);
-  await mockSignedInSession(page);
-  const library = await fakeLibrary(page, initial, options);
+  for (const tab of tabs) await mockSignedInSession(tab);
+  const library = await fakeLibrary(tabs, initial, options);
   await page.goto(path);
   await page.evaluate(() => document.fonts.ready);
   return library;
@@ -1006,6 +1025,73 @@ test('deleting a linked project says how many resumes it leaves', async ({
   expect([...fake.resumes.values()].map((row) =>
     [row.revision, row.entries?.map((entry) => entry.projectId ?? null)]))
     .toEqual([[2, [null]], [1, []], [2, [null]]]);
+});
+
+test('a held resume edit saves after a project replacement advances only '
+  + 'the resume revision', async ({ page }) => {
+  test.setTimeout(40_000);
+  const other = await page.context().newPage();
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: resumeRows({ [BACKEND]: FIRST }), otherTab: other,
+  });
+  const linked = structuredClone(fake.resumes.get(BACKEND)!.entries);
+  const personalPath = `/api/v1/resumes/${BACKEND}/personal-details`;
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  // The first save waits here, so it reaches the fake after the replacement.
+  await page.route(`**${personalPath}`, async (route) => {
+    await released;
+    await route.fallback();
+  }, { times: 1 });
+  const held = page.waitForRequest((request) => request.method() === 'PATCH'
+    && new URL(request.url()).pathname === personalPath);
+  await page.locator('[data-region="outline"] [data-outline-key="personal"]')
+    .click();
+  const headline = page.locator('[data-region="inspector"]')
+    .getByLabel('Headline');
+  await headline.fill('Analytical engineer');
+  await headline.press('Tab');
+  expect((await held).headers()['if-match']).toBe('"r1"');
+
+  // The other tab replaces the project's summary.
+  await other.goto(`/app/projects/${FIRST}`);
+  const replaced = other.waitForResponse((response) =>
+    response.request().method() === 'PUT'
+    && new URL(response.url()).pathname === `/api/v1/projects/${FIRST}`);
+  await other.getByLabel('Summary', { exact: true })
+    .fill('Ships every order in a day.');
+  await other.locator('[data-action="project-save"]').click();
+  const replacement = await (await replaced).json() as {
+    data: { changedResumes: unknown };
+  };
+  expect(replacement.data.changedResumes)
+    .toEqual([{ id: BACKEND, revision: '2' }]);
+
+  // The held save meets revision 2 with the document it was based on.
+  release();
+  await expect(page.getByTestId('save-status'))
+    .toHaveAttribute('data-state', 'saved');
+  await expect(page.locator('[data-conflict]')).toHaveCount(0);
+  expect(fake.resumeWrites.map((write) => [write.path, write.ifMatch]))
+    .toEqual([[personalPath, '"r1"'], [personalPath, '"r2"']]);
+  expect(fake.resumeWrites[1]?.body).toEqual(fake.resumeWrites[0]?.body);
+  const reread = await page.evaluate(async (path) => {
+    const response = await fetch(path, { credentials: 'include' });
+    return await response.json() as unknown;
+  }, `/api/v1/resumes/${BACKEND}`);
+  expect(reread).toEqual({
+    data: expect.objectContaining({
+      revision: '3',
+      document: expect.objectContaining({
+        personalDetails: expect.objectContaining({
+          headline: 'Analytical engineer',
+        }),
+        content: { projects: expect.objectContaining({ entries: linked }) },
+      }),
+    }),
+  });
 });
 
 function listContract(): ScreenContract {

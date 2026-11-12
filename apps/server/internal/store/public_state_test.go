@@ -172,8 +172,8 @@ func TestPublicReadUniformAbsence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPublicResumeBySlug(live) error: %v", err)
 	}
-	if live.ID != liveID {
-		t.Fatalf("live resume ID = %s, want %s", live.ID, liveID)
+	if live.Resume.ID != liveID {
+		t.Fatalf("live resume ID = %s, want %s", live.Resume.ID, liveID)
 	}
 
 	owned, err := queries.GetPublicResumeByOwner(ctx, store.GetPublicResumeByOwnerParams{

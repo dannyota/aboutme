@@ -196,6 +196,27 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 	return saved, nil
 }
 
+// AdvanceRevisionTx advances the revision of userID's resume id from
+// expectedRevision by one and changes nothing else: not the document, not
+// updated_at, and no showcase state, since no showcase input changed. A
+// library edit that changes no resume document uses it so every public
+// artifact keyed by the revision rebuilds (docs/design/projects-contract.md
+// "Revision-only advance"). It returns the advanced resume without its
+// showcase state. A stale expectedRevision surfaces the winning row as
+// *RevisionMismatchError; a wrong-owner or missing id is ErrNotFound.
+func (s *Store) AdvanceRevisionTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, expectedRevision int64) (Resume, error) {
+	row, err := qtx.AdvanceResumeRevisionCAS(ctx, store.AdvanceResumeRevisionCASParams{
+		ID: id, UserID: userID, ExpectedRevision: expectedRevision,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return Resume{}, fmt.Errorf("resume: advance revision: %w", err)
+		}
+		return Resume{}, s.afterCASMiss(ctx, qtx, userID, id)
+	}
+	return s.projectRow(row)
+}
+
 // SaveMetadataAndDocumentTx writes title, lng, and the caller-supplied
 // already-projected, sanitized, validated current-version aggregate under
 // ONE revision CAS. The store persists the document

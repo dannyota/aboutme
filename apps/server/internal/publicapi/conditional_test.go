@@ -25,8 +25,8 @@ type admissionStore struct{ row store.Resume }
 func (s admissionStore) GetPublicState(context.Context) (store.PublicState, error) {
 	return store.PublicState{}, errors.New("unused")
 }
-func (s admissionStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return s.row, nil
+func (s admissionStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
+	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: json.RawMessage(`[]`)}, nil
 }
 func (s admissionStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")

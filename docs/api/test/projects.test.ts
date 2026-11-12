@@ -43,6 +43,7 @@ const STATUSES: Record<string, string[]> = {
     "428",
     "429",
     "500",
+    "503",
   ],
   deleteProject: [
     "200",
@@ -185,6 +186,7 @@ describe("project library surface", () => {
     ]);
     expect(responseCodes(put, "422")).toEqual(["document_invalid"]);
     expect(responseCodes(put, "412")).toEqual(["revision_mismatch"]);
+    expect(responseCodes(put, "503")).toEqual(["public_state_busy"]);
     const remove = doc.paths["/projects/{id}"].delete;
     expect(responseCodes(remove, "503")).toEqual(["public_state_busy"]);
     const mismatch = schemas.ProjectRevisionError.properties.error;

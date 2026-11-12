@@ -2158,11 +2158,18 @@ paths:
       summary: Replace a complete owned library project
       description: >-
         Omitted optional fields are cleared and absent translations removed.
-        Every successful write advances the project revision. A slug rename
-        holds the old slug for 180 days and consumes the shared slug limiter.
-        Slug release requires recent primary proof and, for an enrolled account,
-        recent second-factor proof. Writes share the resume write limiter.
-        Every response uses Cache-Control no-store, no-transform.
+        Every successful write advances the project revision. When the stored
+        slug or the stored sanitized document changes, every published resume
+        of the caller that links the project advances its revision by one in
+        the same transaction, without a document change; unpublished resumes
+        and a write that stores the same slug and document advance none. The
+        linking resumes are planned first and must be unchanged under the
+        owner lock; after three changed plans the request answers
+        public_state_busy and changes nothing. A slug rename holds the old
+        slug for 180 days and consumes the shared slug limiter. Slug release
+        requires recent primary proof and, for an enrolled account, recent
+        second-factor proof. Writes share the resume write limiter. Every
+        response uses Cache-Control no-store, no-transform.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -2177,7 +2184,7 @@ paths:
               $ref: "#/components/schemas/ReplaceProjectRequest"
       responses:
         "200":
-          description: The sanitized project and an empty changedResumes array.
+          description: The sanitized project and each advanced resume.
           headers:
             ETag:
               $ref: "#/components/headers/ProjectETag"
@@ -2209,6 +2216,8 @@ paths:
           $ref: "#/components/responses/ResumeRateLimited"
         "500":
           $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          $ref: "#/components/responses/ProjectPublicStateBusy"
     delete:
       operationId: deleteProject
       tags: [projects]
@@ -7786,6 +7795,33 @@ components:
           type: boolean
         document:
           $ref: "#/components/schemas/PublicResumeDocument"
+        projectLinks:
+          type: array
+          description: >-
+            The project link context: one page link per visible entry that
+            links an available library project, in layout order (main, then
+            sidebar) and entry order. Every public JSON read carries it, empty
+            when there is none; other uses of this schema omit it. It never
+            carries a project id.
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/PublicProjectLink"
+    PublicProjectLink:
+      type: object
+      description: >-
+        One linking entry and the absolute address of its project page on the
+        canonical origin.
+      additionalProperties: false
+      required: [entryId, projectSlug, url]
+      properties:
+        entryId:
+          type: string
+          format: uuid
+        projectSlug:
+          $ref: "#/components/schemas/ProjectSlug"
+        url:
+          type: string
+          format: uri
     PublicResumeDocument:
       type: object
       additionalProperties: false
@@ -8640,8 +8676,9 @@ components:
     ProjectChangedResumes:
       type: array
       description: >-
-        Each resume the mutation changed, with its new revision. A
-        replacement changes none yet.
+        Each resume the mutation changed, with its new revision, in resume id
+        order. A replacement lists the published linking resumes it advanced
+        and is empty when it stored the same slug and document.
       maxItems: 3
       items:
         type: object

@@ -110,6 +110,52 @@ func (q *Queries) AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePr
 	return result.RowsAffected(), nil
 }
 
+const advanceResumeRevisionCAS = `-- name: AdvanceResumeRevisionCAS :one
+UPDATE resumes
+SET revision = revision + 1
+WHERE id = $1 AND user_id = $2
+    AND revision = $3
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+`
+
+type AdvanceResumeRevisionCASParams struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	ExpectedRevision int64
+}
+
+// Advances only the revision, the change signal every public artifact keys
+// on, and leaves the document, updated_at and every other column unchanged
+// (docs/design/projects-contract.md "Revision-only advance"). The returned
+// revision is the NEW one. A stale or non-matching expected revision updates
+// zero rows and surfaces as pgx.ErrNoRows.
+func (q *Queries) AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResumeRevisionCASParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, advanceResumeRevisionCAS, arg.ID, arg.UserID, arg.ExpectedRevision)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
+	)
+	return i, err
+}
+
 const advanceUserAuthEpoch = `-- name: AdvanceUserAuthEpoch :one
 UPDATE users
 SET auth_epoch = auth_epoch + 1
@@ -3029,36 +3075,58 @@ func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResum
 }
 
 const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
-WHERE slug = $1::text AND live = true
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS project_links
+FROM resumes AS r
+WHERE r.slug = $1::text AND r.live = true
 `
+
+type GetPublicResumeBySlugRow struct {
+	Resume       Resume
+	ProjectLinks json.RawMessage
+}
 
 // Missing, never-published, private, renamed, and deleted rows all surface as
 // pgx.ErrNoRows. Representation-specific flags are checked after this live
 // gate without exposing a different lookup result.
-func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (Resume, error) {
+//
+// project_links is the project link context: for each entry that is not
+// hidden and names a project of the same owner, the entry id and the project
+// slug. One statement reads both, so the links always belong to the returned
+// revision (docs/design/projects-contract.md "Project link context"). The
+// project id never leaves the statement. The id is compared as text, so a
+// malformed stored value matches nothing instead of failing the read.
+func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getPublicResumeBySlug, slug)
-	var i Resume
+	var i GetPublicResumeBySlugRow
 	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Title,
-		&i.Slug,
-		&i.Live,
-		&i.DownloadEnabled,
-		&i.SEOGeoEnabled,
-		&i.SchemaVersion,
-		&i.Revision,
-		&i.Lng,
-		&i.PersonalDetails,
-		&i.Content,
-		&i.Customization,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PublicTitle,
-		&i.FaviconEmoji,
-		&i.SignInToView,
-		&i.ViewPassEpoch,
+		&i.Resume.ID,
+		&i.Resume.UserID,
+		&i.Resume.Title,
+		&i.Resume.Slug,
+		&i.Resume.Live,
+		&i.Resume.DownloadEnabled,
+		&i.Resume.SEOGeoEnabled,
+		&i.Resume.SchemaVersion,
+		&i.Resume.Revision,
+		&i.Resume.Lng,
+		&i.Resume.PersonalDetails,
+		&i.Resume.Content,
+		&i.Resume.Customization,
+		&i.Resume.CreatedAt,
+		&i.Resume.UpdatedAt,
+		&i.Resume.PublicTitle,
+		&i.Resume.FaviconEmoji,
+		&i.Resume.SignInToView,
+		&i.Resume.ViewPassEpoch,
+		&i.ProjectLinks,
 	)
 	return i, err
 }

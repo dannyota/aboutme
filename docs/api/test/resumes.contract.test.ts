@@ -49,14 +49,20 @@ interface Success {
 // The exact success contract. A parent ETag is `"r<revision>"`; the photo GET's
 // object ETag is derived from the immutable normalized object key.
 const SUCCESS: Record<string, Success[]> = {
-  downloadResumePDF: [{
-    status: "200", mediaTypes: ["application/pdf"],
-    headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
-  }],
-  headResumePDF: [{
-    status: "200", mediaTypes: ["application/pdf"],
-    headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
-  }],
+  downloadResumePDF: [
+    {
+      status: "200",
+      mediaTypes: ["application/pdf"],
+      headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
+    },
+  ],
+  headResumePDF: [
+    {
+      status: "200",
+      mediaTypes: ["application/pdf"],
+      headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
+    },
+  ],
   listResumes: [
     {
       status: "200",
@@ -224,14 +230,18 @@ const itemDelete = (extra: Record<string, string[]> = {}) => {
 const ERRORS: Record<string, Record<string, string[]>> = {
   downloadResumePDF: {
     "400": [...COMMON_400, "request_invalid"],
-    "401": ["session_required"], "404": ["resume_not_found"],
-    "405": ["method_not_allowed"], "429": ["rate_limited"],
+    "401": ["session_required"],
+    "404": ["resume_not_found"],
+    "405": ["method_not_allowed"],
+    "429": ["rate_limited"],
     "503": ["internal_error"],
   },
   headResumePDF: {
     "400": [...COMMON_400, "request_invalid"],
-    "401": ["session_required"], "404": ["resume_not_found"],
-    "405": ["method_not_allowed"], "429": ["rate_limited"],
+    "401": ["session_required"],
+    "404": ["resume_not_found"],
+    "405": ["method_not_allowed"],
+    "429": ["rate_limited"],
     "503": ["internal_error"],
   },
   listResumes: {
@@ -785,6 +795,7 @@ describe("Phase 5A publish and public wire contract", () => {
       "lng",
       "downloadEnabled",
       "document",
+      "projectLinks",
     ]);
     for (const ownerOnly of [
       "id",
@@ -994,7 +1005,9 @@ describe("Phase 5A publish and public wire contract", () => {
           ? ["image/jpeg", "image/png"]
           : path.endsWith("/pdf")
             ? ["application/pdf"]
-            : path.endsWith("/og.png") ? ["image/png"] : ["application/json"];
+            : path.endsWith("/og.png")
+              ? ["image/png"]
+              : ["application/json"];
         expect(Object.keys(success.content ?? {}).sort()).toEqual(wantedMedia);
         expect(Object.keys(success.headers ?? {}).sort()).toEqual([
           "Cache-Control",
