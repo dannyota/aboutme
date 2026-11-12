@@ -158,6 +158,25 @@ does. Editing, hiding, ordering and undo are unchanged. An entry whose project
 was deleted elsewhere arrives without its link after the editor reconciles; the
 note disappears and the text stays.
 
+An unlinked project entry's form shows two quiet actions under its fields
+(accepted 2026-11-12; not yet implemented):
+
+- Link to a project (“Gắn với dự án”), which lists library projects not yet on
+  this resume; choosing one links the entry and keeps its text. The linked note
+  then appears, and Refresh from library stays available for a person who wants
+  the library's text.
+- Save to my projects (“Lưu vào Dự án”), which creates a library project from
+  the entry and links it, then offers Open project. It is hidden at the limit of
+  30 projects, with the limit line in its place.
+
+Choosing From your projects for a project the resume already shows as an
+unlinked entry, matched by title ignoring case and surrounding space or by the
+same link, asks first: “CV này đã có mục “{title}”. Gắn mục đó với dự án, hay
+thêm mục mới?” or “This resume already has an entry “{title}”. Link that entry
+to the project, or add a new one?”, with Link that entry (default) and Add a new
+entry. The [privacy rule](../projects.md#privacy) applies to both actions as to
+any link.
+
 The editor reads the library list once when a project section is opened and
 again after a link; it never blocks editing on that read. A failed read hides
 From your projects behind a Retry item.
