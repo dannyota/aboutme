@@ -200,7 +200,7 @@ func decodeInput(r *http.Request) ([]byte, projectInput, *clientError) {
 	}
 	var input projectInput
 	if err = project.Decode(body, &input); err != nil {
-		return nil, projectInput{}, requestError()
+		return nil, projectInput{}, decodeError(err)
 	}
 	if input.Slug != nil && !project.ValidSlug(*input.Slug) {
 		return nil, projectInput{}, mapError(project.ErrInvalid)

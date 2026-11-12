@@ -1413,7 +1413,7 @@ INSERT INTO oauth_authorization_codes (
     sqlc.arg(code_challenge), sqlc.arg(redirect_uri),
     sqlc.arg(created_at)::timestamptz,
     sqlc.arg(created_at)::timestamptz + interval '60 seconds',
-    sqlc.narg(grant_id)::uuid, sqlc.narg(auth_epoch)::bigint
+    sqlc.arg(grant_id)::uuid, sqlc.arg(auth_epoch)::bigint
 )
 RETURNING *;
 

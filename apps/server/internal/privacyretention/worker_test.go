@@ -745,7 +745,7 @@ func insertOAuthRetentionRows(ctx context.Context, t *testing.T, q *store.Querie
 		CodeDigest: []byte(uuid.NewString() + uuid.NewString())[:32], ClientID: liveClient.ID, UserID: userID,
 		Scopes: "resumes:read", CodeChallenge: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		RedirectURI: "https://agent.example/callback", CreatedAt: codeCreated,
-		GrantID: &grant.ID, AuthEpoch: &grant.AuthEpoch,
+		GrantID: grant.ID, AuthEpoch: grant.AuthEpoch,
 	}); codeErr != nil {
 		t.Fatalf("create expired authorization code: %v", codeErr)
 	}

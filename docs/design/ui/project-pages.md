@@ -23,8 +23,9 @@ layout and copy.
 Both pages reuse the resume's public page: the public page bar on top, the same
 color scheme and theme switch, and `.public-measure` for the column. They load
 the resume's chrome typeface and tokens and none of the template's own layout,
-so a project page looks the same under every template. Content is one column, at
-most 44 rem wide, with the bar's inner row aligned to it.
+so a project page looks the same under every template. The list is one column,
+at most 44 rem wide; the project page is at most 59 rem wide with a facts column
+beside its text. The bar's inner row aligns to the page's column.
 
 The bar keeps the credit. Its right side shows one outlined link back to the
 resume and no Download PDF (owner, 2026-11-12): "← {resume owner's name}" with
@@ -36,30 +37,48 @@ Download PDF when at least one project is available.
 
 - h1: “Dự án” or “Projects”; under it, muted, the owner's name linking to the
   resume.
-- One card per available project, in the resume's entry order: the name as a
-  link to its page (h2), role and dates on one muted line, the summary as one
-  paragraph, and up to six technology chips with “+n” (owner, 2026-11-12).
+- Projects are rows in one bordered card, in the resume's entry order, not a
+  grid of cards (owner, 2026-11-12, after comparing both layouts): the name as a
+  link to its page (h2) with role and dates muted on the same line, the summary
+  as one paragraph, and up to six technology chips with “+n”. Below 40 rem, role
+  and dates move under the name.
 - A resume with no available project has no list page: it answers as an unknown
   resume, like every other unavailable state.
 
 ## Project page, `/{slug}/projects/{project-slug}`
 
-In order:
+The owner chose text with a facts column on 2026-11-12, after comparing both
+layouts. Above both columns, in order:
 
 1. Breadcrumb: owner's name (to the resume), then Projects (to the list).
-2. h1: the project name. Under it one muted line: role, then dates.
-3. Links row: Repository and Demo as outlined buttons with an external-link
-   icon, `rel="noopener noreferrer nofollow"`, shown only when set.
-4. Technologies: all chips, wrapping.
-5. “Kết quả” or “Outcome”: the outcome text, when present.
-6. “Mô tả” or “About the project”: the sanitized rich text.
-7. Footer link: “Xem các dự án khác” or “See other projects”, when the resume
+2. h1: the project name.
+3. The summary as a lead paragraph, when present.
+
+Then two columns from 56 rem: the text, and beside it a facts column 17.5 rem
+wide. Below 56 rem the facts column comes first, full width, then the text.
+
+Text column:
+
+1. “Kết quả” or “Outcome”: the outcome text in a bordered panel, when present.
+2. “Mô tả” or “About the project”: the sanitized rich text.
+3. Footer link: “Xem các dự án khác” or “See other projects”, when the resume
    has more than one available project.
 
-Empty optional parts are omitted with their headings; a project with only a name
-shows the h1 and the breadcrumb. When the page uses the project's default
-language because the resume's language has no text, the content region carries
-that language in `lang`, and nothing else marks it.
+Facts column, one bordered panel:
+
+1. Repository as a filled button and Demo as an outlined button, each with an
+   icon, `rel="noopener noreferrer nofollow"`, shown only when set. With only a
+   demo link, Demo is the filled button.
+2. “Vai trò” or “Role”, and “Thời gian” or “Dates”, as a definition list.
+3. “Công nghệ” or “Technologies”: all chips, wrapping.
+4. GitHub evidence, when that feature ships ([design](../github-evidence.md));
+   until then the panel ends at Technologies and shows no placeholder.
+
+Empty optional parts are omitted with their headings. A project with no link,
+role, dates or technology has no facts column and its text takes the full width;
+a project with only a name shows the h1 and the breadcrumb. When the page uses
+the project's default language because the resume's language has no text, the
+content region carries that language in `lang`, and nothing else marks it.
 
 Dates are the library project's and show even when the resume entry hides its
 own dates; hiding is per entry (owner, 2026-11-12). They follow the resume's

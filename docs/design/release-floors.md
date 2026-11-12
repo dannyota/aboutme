@@ -35,8 +35,13 @@ migrations. Goose embeds only `*.sql`, so the file is not a migration. A
 breaking change ships in two releases. The first stops depending on what the
 migration removes and runs against both schemas; it is published and verified
 first. A later change adds the migration and raises this file and the tracked
-floor together to that published release. The showcase review columns follow
-this order: v0.8.29 no longer reads them. A static test keeps the tracked floor
+floor together to that published release. For the showcase review columns, a
+release whose queries name only the kept columns ships first, and the later drop
+names that release as its schema floor. sqlc expands `*` and `alias.*` into the
+full column list when it generates code, so a released binary names every column
+even where the source says `*`. The first release therefore converts each `*`
+query on the affected table to an explicit list and adds a static test that no
+generated query names the removed columns. A static test keeps the tracked floor
 at or above the file.
 
 The deploy reads the file from the candidate's commit, which the release

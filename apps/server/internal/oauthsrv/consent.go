@@ -250,7 +250,7 @@ func (s *Service) approveConsent(ctx context.Context, sess store.Session, reques
 	}
 	if _, err := qtx.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
 		CodeDigest: digest[:], ClientID: request.ClientID, UserID: user.ID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now,
-		GrantID: &updatedGrant.ID, AuthEpoch: &epoch,
+		GrantID: updatedGrant.ID, AuthEpoch: epoch,
 	}); err != nil {
 		return "", fmt.Errorf("create authorization code: %w", err)
 	}
@@ -361,7 +361,7 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 	}
 	if _, err := qtx.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
 		CodeDigest: digest[:], ClientID: request.ClientID, UserID: user.ID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now,
-		GrantID: &updatedGrant.ID, AuthEpoch: &epoch,
+		GrantID: updatedGrant.ID, AuthEpoch: epoch,
 	}); err != nil {
 		return "", fmt.Errorf("create authorization code: %w", err)
 	}

@@ -157,7 +157,7 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 	verifier := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abcdefgh"
 	challengeSum := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(challengeSum[:])
-	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: &grant.ID, AuthEpoch: &user.AuthEpoch}); err != nil {
+	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: grant.ID, AuthEpoch: user.AuthEpoch}); err != nil {
 		t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
 	}
 	body := "grant_type=authorization_code&code=" + code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + client.ID.String() + "&code_verifier=" + verifier
@@ -371,7 +371,7 @@ func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCode: %v", err)
 	}
-	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read resumes:write", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: &grant.ID, AuthEpoch: &user.AuthEpoch}); err != nil {
+	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read resumes:write", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: grant.ID, AuthEpoch: user.AuthEpoch}); err != nil {
 		t.Fatalf("seed code: %v", err)
 	}
 	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: now}); err != nil {
@@ -559,7 +559,7 @@ func newCodeFixture(t *testing.T, now time.Time) codeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: &grant.ID, AuthEpoch: &user.AuthEpoch}); err != nil {
+	if _, err := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: challenge, RedirectURI: "http://127.0.0.1:20090/callback", CreatedAt: now, GrantID: grant.ID, AuthEpoch: user.AuthEpoch}); err != nil {
 		t.Fatal(err)
 	}
 	return codeFixture{s: s, pool: pool, q: q, clientID: client.ID, userID: user.ID, grantID: grant.ID, code: code, verifier: verifier, digest: digest, now: now}

@@ -1,6 +1,6 @@
 # AC-PROJ traceability rows
 
-Eighteen acceptance-criterion rows use the `AC-PROJ-` prefix, for the account
+Twenty acceptance-criterion rows use the `AC-PROJ-` prefix, for the account
 project library and project pages ([design](../../design/projects.md),
 [contract](../../design/projects-contract.md),
 [ADR 0029](../../adr/0029-account-project-library.md)), and for GitHub
@@ -31,3 +31,5 @@ controls that show a project on resumes have landed; every other row is
 | AC-PROJ-016 | GitHub evidence: outbound | Outbound requests go only to the fixed GitHub API host within the time, size and count bounds; a pasted link is rebuilt, redirects are refused, and recheck follows a renamed repository by id | v0.9 | PLANNED | None yet |
 | AC-PROJ-017 | GitHub evidence: page and writes | Evidence shows its label and checked date, follows the project page's gating and revocation, is unchanged by a project `PUT` or agent write, and no request reaches GitHub when a page is viewed | v0.9 | PLANNED | None yet |
 | AC-PROJ-018 | GitHub evidence: removal | Disconnect and account deletion leave no connection or session, and no bearer token or agent tool can connect, attach, recheck or remove evidence | v0.9 | PLANNED | None yet |
+| AC-PROJ-019 | Selection | Linking an existing unlinked project entry keeps its text, order and visibility and adds only the reference; an unknown, already linked or non-project entry is refused with nothing written; a bearer write is refused as for any new link | v0.9 | PLANNED | None yet |
+| AC-PROJ-020 | Selection | Adding a library project that matches an unlinked entry by title or link asks before inserting; creating a library project from an entry maps the fields as designed and links it | v0.9 | PLANNED | None yet |

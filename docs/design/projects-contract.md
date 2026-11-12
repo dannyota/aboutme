@@ -127,21 +127,29 @@ its own card version, so an advance changes neither.
 
 Proposed shapes; OpenAPI and generated clients change with the code.
 
-| Method and path                                               | Request                         | Response                                      |
-| ------------------------------------------------------------- | ------------------------------- | --------------------------------------------- |
-| `GET /api/v1/projects`                                        | None                            | Projects, each with linked resume ids         |
-| `POST /api/v1/projects`                                       | Project document, optional slug | The project; slug proposed from the name      |
-| `GET /api/v1/projects/{id}`                                   | None                            | The project                                   |
-| `PUT /api/v1/projects/{id}`                                   | Complete project document       | The project and each advanced resume revision |
-| `DELETE /api/v1/projects/{id}`                                | None                            | Each changed resume with its new revision     |
-| `POST /api/v1/resumes/{id}/project-links`                     | `{projectId}`                   | The existing entry-write response             |
-| `POST /api/v1/resumes/{id}/entries/{entryId}/project-refresh` | None                            | The existing entry-write response             |
+| Method and path                                               | Request                           | Response                                      |
+| ------------------------------------------------------------- | --------------------------------- | --------------------------------------------- |
+| `GET /api/v1/projects`                                        | None                              | Projects, each with linked resume ids         |
+| `POST /api/v1/projects`                                       | Project document, optional slug   | The project; slug proposed from the name      |
+| `GET /api/v1/projects/{id}`                                   | None                              | The project                                   |
+| `PUT /api/v1/projects/{id}`                                   | Complete project document         | The project and each advanced resume revision |
+| `DELETE /api/v1/projects/{id}`                                | None                              | Each changed resume with its new revision     |
+| `POST /api/v1/resumes/{id}/project-links`                     | `{projectId}`, optional `entryId` | The existing entry-write response             |
+| `POST /api/v1/resumes/{id}/entries/{entryId}/project-refresh` | None                              | The existing entry-write response             |
 
 A project document is `slug`, `dates`, `repositoryUrl`, `demoUrl`,
 `technologies`, `defaultLanguage` and `text`. `PUT` replaces it whole: an
 omitted optional field is cleared, and a language absent from `text` is removed.
 Every write carries `If-Match` with the project or resume revision and an
 `Idempotency-Key`.
+
+With `entryId`, `project-links` links that existing entry instead of inserting
+one: the entry must be an unlinked entry of a project section of the same
+resume, its text is left as stored, and the response is the same entry-write
+response. An unknown entry answers `entry_not_found`; an entry that is already
+linked, or of another section type, answers `project_already_linked` or the
+existing validation error. The ownership, uniqueness and bearer rules of the
+write boundary apply unchanged.
 
 A slug rename and a deletion release a slug, so each needs recent
 reauthentication, and for an account with a second factor also a recent

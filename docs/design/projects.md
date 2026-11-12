@@ -83,6 +83,17 @@ The resume document stays the only authority for what a resume shows.
 - Linking inserts an entry in the resume's project section. When the resume has
   none, linking creates a section with key `projects` at the end of the main
   column, through the existing structure command.
+- Linking can instead take an existing, unlinked project entry of the resume
+  (owner, 2026-11-12). The entry keeps its text, order and visibility, and only
+  gains the reference; nothing is prefilled. A person who wrote project entries
+  before the library existed links them this way, and can create the library
+  project from such an entry: `name` from `title`, `role` from `subtitle`,
+  `repositoryUrl` or `demoUrl` from `link` (repository when the host is a code
+  host, demo otherwise), `dates` from `dates`, and `summary` from the entry's
+  description as plain text, cut to the summary limit.
+- Adding a library project to a resume that already has an unlinked project
+  entry with the same title or the same link asks whether to link that entry or
+  add a new one, so a project is not shown twice by accident.
 - Prefill from the text chosen by the [language rule](#language): `title` from
   `name`, `subtitle` from `role`, `link` from `repositoryUrl` or else `demoUrl`,
   `dates` from `dates`, `description` from `summary` as one paragraph.

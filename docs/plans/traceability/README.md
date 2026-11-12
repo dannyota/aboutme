@@ -49,6 +49,6 @@ rows are never split by number range.
 | `AC-UI`     | 14   | [ac-ui.md](./ac-ui.md)         |
 | `AC-VIEW`   | 10   | [ac-view.md](./ac-view.md)     |
 | `AC-SHOW`   | 15   | [ac-showcase.md](./ac-showcase.md) |
-| `AC-PROJ`   | 18   | [ac-proj.md](./ac-proj.md) |
+| `AC-PROJ`   | 20   | [ac-proj.md](./ac-proj.md) |
 
-Total: 231 rows across 20 prefixes.
+Total: 233 rows across 20 prefixes.

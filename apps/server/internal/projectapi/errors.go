@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
@@ -26,6 +27,16 @@ func failure(status int, code, message string) *clientError {
 }
 func requestError() *clientError {
 	return failure(400, "request_invalid", "request does not match the operation")
+}
+
+// decodeError answers request_invalid. When one value is at fault the message
+// names its path; request_invalid carries no details.
+func decodeError(err error) *clientError {
+	var pathErr *api.JSONPathError
+	if errors.As(err, &pathErr) {
+		return failure(400, "request_invalid", pathErr.Error())
+	}
+	return requestError()
 }
 func internalError() *clientError {
 	return failure(500, "internal_error", "an internal error occurred")

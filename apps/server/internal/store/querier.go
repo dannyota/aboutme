@@ -445,10 +445,13 @@ type Querier interface {
 	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
 	// Community showcase queries (docs/design/showcase.md, ADR 0028). The
-	// resume_showcase row exists only while the opt-in does.
-	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
+	// resume_showcase row exists only while the opt-in does. Statements name their
+	// columns, never * or s.*: sqlc expands a star into every column when it
+	// generates, so a released binary fails once a migration drops one
+	// (docs/design/release-floors.md "Schema floor").
+	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseRow, error)
 	// Locks the opt-in row so concurrent derived-value writes serialize.
-	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
+	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseForUpdateRow, error)
 	// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
 	// and the pass epoch, by resume ID, with no user scoping since the callback
 	// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
@@ -598,7 +601,7 @@ type Querier interface {
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
-	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error)
+	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ListResumeShowcasesForUserRow, error)
 	ListResumeViewDays(ctx context.Context, arg ListResumeViewDaysParams) ([]ListResumeViewDaysRow, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
 	// The public listing. One statement checks all three listing conditions: the

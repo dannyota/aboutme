@@ -123,7 +123,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 				t.Fatalf("NewCode: %v", err)
 			}
 			var epoch int64 // the fixture's new user is at epoch 0
-			if _, err = f.q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), RedirectURI: "http://127.0.0.1/callback", CreatedAt: now, GrantID: &f.grantID, AuthEpoch: &epoch}); err != nil {
+			if _, err = f.q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), RedirectURI: "http://127.0.0.1/callback", CreatedAt: now, GrantID: f.grantID, AuthEpoch: epoch}); err != nil {
 				t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
 			}
 			raw := f.raw
