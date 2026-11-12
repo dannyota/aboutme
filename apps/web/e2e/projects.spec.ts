@@ -78,6 +78,10 @@ interface LibraryOptions {
   /** The account has a second factor, so a password only opens it. */
   readonly enrolled?: boolean;
   readonly resumes?: readonly ResumeRow[];
+  /** Holds each refresh response this long, as a slow server would. */
+  readonly refreshDelayMs?: number;
+  /** Resumes another tab saves just before their first link arrives. */
+  readonly savedElsewhere?: readonly string[];
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -184,6 +188,7 @@ async function fakeLibrary(
     ({ ...project, linkedResumeIds: linkedTo(project.id) });
   const writes: Write[] = [];
   const resumeWrites: Write[] = [];
+  const savedElsewhere = new Set(options.savedElsewhere ?? []);
   let nextEntry = 0;
   const reauths: string[] = [];
   let reauthenticated = false;
@@ -330,6 +335,7 @@ async function fakeLibrary(
         key: request.headers()['idempotency-key'] ?? null,
         body: request.postData() ? request.postDataJSON() : null,
       });
+      if (savedElsewhere.delete(row.id)) row.revision += 1;
       if (request.headers()['if-match'] !== `"r${row.revision}"`) {
         await route.fulfill(problem(412, 'revision_mismatch', {
           revision: String(row.revision), document: resumeDocument(row),
@@ -351,6 +357,10 @@ async function fakeLibrary(
           ...entries, prefill({ id, projectId }, project, row.lng),
         ];
       } else {
+        if (options.refreshDelayMs !== undefined) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, options.refreshDelayMs));
+        }
         const index = entries.findIndex((entry) => entry.id === parts[6]);
         const project = projects.get(entries[index]?.projectId ?? '');
         if (project === undefined) {
@@ -773,11 +783,13 @@ test('the project editor adds the project to a resume without saving',
       .toContainText('Save the project first.');
   });
 
-test('adding to a second published resume asks first', async ({ page }) => {
+test('adding to a second published resume asks first, once', async ({
+  page,
+}) => {
   const rows = resumeRows({ [BACKEND]: FIRST });
   rows[1]!.slug = 'ada-frontend';
   const fake = await open(page, `/app/projects/${FIRST}`, library(), {
-    resumes: rows,
+    resumes: rows, savedElsewhere: [FRONTEND],
   });
   const row = page.locator(`[data-resume-row="${FRONTEND}"]`);
   const ask = page.getByRole('alertdialog', {
@@ -796,13 +808,82 @@ test('adding to a second published resume asks first', async ({ page }) => {
   await row.getByRole('button', { name: 'Add to this resume' }).click();
   await ask.getByRole('button', { name: 'Add anyway' }).click();
   await expect(row).toContainText('Shown');
-  expect(fake.resumeWrites).toHaveLength(1);
+  // The first link meets a revision another tab saved; the same request is
+  // sent once more on the new revision without asking again.
+  await expect(ask).toBeHidden();
+  expect(fake.resumeWrites.map((write) => [write.path, write.ifMatch]))
+    .toEqual([
+      [`/api/v1/resumes/${FRONTEND}/project-links`, '"r1"'],
+      [`/api/v1/resumes/${FRONTEND}/project-links`, '"r2"'],
+    ]);
 });
+
+test('the resume editor asks before showing a project on a second '
+  + 'published resume', async ({ page }) => {
+  const rows = resumeRows({ [FRONTEND]: SECOND });
+  rows[1]!.slug = 'ada-frontend';
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: rows,
+  });
+  const ask = page.getByRole('alertdialog', {
+    name: 'This project is already shown on another public resume.',
+  });
+  const choose = async () => {
+    await page.locator('[data-region="inspector"] [data-action="add-entry"]')
+      .click();
+    await page.getByRole('menuitem', { name: 'From your projects' }).click();
+    await page.getByRole('menuitem', { name: 'Ops tool' }).click();
+  };
+  await page.locator('[data-region="outline"] [data-outline-key="projects"]')
+    .click();
+
+  await choose();
+  await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  expect(fake.resumeWrites).toEqual([]);
+
+  await choose();
+  await ask.getByRole('button', { name: 'Add anyway' }).click();
+  await expect(page.locator('[data-entry-id][data-selected]'))
+    .toContainText('Ops tool');
+  expect(fake.resumeWrites.map((write) => [write.path, write.body])).toEqual([
+    [`/api/v1/resumes/${BACKEND}/project-links`, { projectId: SECOND }],
+  ]);
+});
+
+test('New project decides the note at submit from the resumes read then',
+  async ({ page }) => {
+    const fake = await open(page, '/app/projects', [], {
+      resumes: resumeRows(),
+    });
+    await page.getByTestId('projects-empty')
+      .getByRole('button', { name: 'New project' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New project' });
+    const note = dialog.getByTestId('project-create-privacy');
+    await dialog.getByLabel('Name').fill('Shop site');
+    await dialog.getByRole('checkbox', { name: 'Backend' }).check();
+    await dialog.getByRole('checkbox', { name: 'Frontend' }).check();
+    await expect(note).toHaveCount(0);
+    // Another tab publishes Frontend after the dialog read the resumes.
+    fake.resumes.get(FRONTEND)!.slug = 'ada-frontend';
+
+    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect(note).toHaveText(
+      'This project is already shown on another public resume. '
+      + 'A reader of both can tell they belong to the same person.',
+    );
+    expect(fake.writes).toEqual([]);
+
+    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect(page).toHaveURL(`/app/projects/${CREATED}`);
+    expect(fake.writes.map((write) => write.method)).toEqual(['POST']);
+    expect(fake.resumeWrites).toHaveLength(2);
+  });
 
 test('the resume editor adds a library project, selects it and refreshes it',
   async ({ page }) => {
     const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
-      resumes: resumeRows(),
+      resumes: resumeRows(), refreshDelayMs: 1_000,
     });
     await page.locator('[data-region="outline"] [data-outline-key="projects"]')
       .click();
@@ -841,8 +922,14 @@ test('the resume editor adds a library project, selects it and refreshes it',
     );
     await confirm.getByRole('button', { name: 'Replace text' }).click();
 
+    // Refresh is disabled while the refresh is out, so focus waits on Open
+    // project and returns once the response has landed.
+    await expect(card.getByRole('link', { name: 'Open project' }))
+      .toBeFocused();
     await expect(card.locator('[data-entry-field="title"] input'))
       .toHaveValue('Ops console');
+    await expect(card.getByRole('button', { name: 'Refresh from library' }))
+      .toBeFocused();
     await expect(page.getByTestId('save-status'))
       .toHaveAttribute('data-state', 'saved');
     expect(fake.resumeWrites[1]).toMatchObject({

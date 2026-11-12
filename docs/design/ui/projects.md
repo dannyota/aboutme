@@ -115,6 +115,9 @@ account already shows it asks first, with the two sentences from the
 [privacy rule](../projects.md#privacy) and Add anyway and Cancel; New project
 shows the same sentences as a note once two published resumes are checked.
 
+The decision uses the publication state read when the person acts; a change made
+in another tab while that request is in flight is not rechecked.
+
 A resume whose language has no text in the project shows “Trang dự án dùng
 {language}” or “Project page uses {language}”, naming the default language.
 

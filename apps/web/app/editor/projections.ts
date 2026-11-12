@@ -84,7 +84,9 @@ export function projectIntent(
     case 'projectRefresh': {
       const entry = findEntry(snapshot.document, intent.entryId);
       return sectionProjection(
-        presenceOf(entry?.entry, 'projectId'),
+        entry === undefined
+          ? { present: false }
+          : presence(refreshedFields(entry.entry)),
         snapshot,
         intent.sectionKey,
         intent.entryId,
@@ -260,6 +262,18 @@ function findEntry(
     if (entry !== undefined) return { sectionKey, entry };
   }
   return undefined;
+}
+
+// A refresh overwrites these, so it waits for a fresh confirmation when any
+// of them, or the link itself, changed after the person confirmed.
+const REFRESHED_FIELDS = [
+  'projectId', 'title', 'subtitle', 'link', 'dates', 'description',
+] as const;
+
+function refreshedFields(entry: Section['entries'][number]) {
+  return Object.fromEntries(REFRESHED_FIELDS
+    .filter((key) => hasOwn(entry, key))
+    .map((key) => [key, entry[key as keyof typeof entry]])) as ProjectionValue;
 }
 
 function linksProject(document: Resume, projectId: string): boolean {

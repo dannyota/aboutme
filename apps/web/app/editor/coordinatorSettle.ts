@@ -1,9 +1,5 @@
 import type { AtomicEditorCommand } from './commands';
-import type {
-  AttemptFailureCode,
-  AttemptResult,
-  FrozenAttempt,
-} from './attempt';
+import type { AttemptResult, FrozenAttempt } from './attempt';
 import { createSupersededConflict, reconcileCommand } from './reconcile';
 import { compareRevision } from './revision';
 import { freezeAttempt } from './resumeApi';
@@ -22,6 +18,10 @@ import {
   settleTemplateComplete,
 } from './coordinatorReconcile';
 import type { CoordinatorContext } from './coordinatorTypes';
+import {
+  dropRefusedProjectCommand,
+  settleStaleProject,
+} from './coordinatorProject';
 
 export async function settle(
   ctx: CoordinatorContext,
@@ -115,8 +115,7 @@ export async function settle(
       return;
     case 'rejected':
       if (
-        PROJECT_REFUSALS.has(result.code)
-        && await dropRefusedProjectCommand(ctx, resumeId, queueItem)
+        await dropRefusedProjectCommand(ctx, resumeId, queueItem, result.code)
       ) {
         return;
       }
@@ -143,30 +142,6 @@ export async function settle(
     default:
       return assertNever(result);
   }
-}
-
-const PROJECT_REFUSALS: ReadonlySet<AttemptFailureCode> = new Set([
-  'project_not_found',
-  'project_already_linked',
-]);
-
-/**
- * A refused link or refresh wrote nothing, and its entry is built by the
- * server, so no edit can make it succeed. It leaves the queue rather than
- * holding the edits behind it, and the reread shows what the resume holds:
- * a link another tab made, or an entry whose project was deleted.
- */
-async function dropRefusedProjectCommand(
-  ctx: CoordinatorContext,
-  resumeId: string,
-  queueItem: EditorQueueItem,
-): Promise<boolean> {
-  if (queueItem.kind !== 'projectLink' && queueItem.kind !== 'projectRefresh') {
-    return false;
-  }
-  ctx.deps.store.dropHead(resumeId, queueItem.id);
-  await refreshAndReconcile(ctx, resumeId);
-  return true;
 }
 
 function settleAtomicComplete(
@@ -382,6 +357,9 @@ async function settleStale(
     && (command.kind === 'structure' || command.kind === 'customization')
     ? reconcileTemplateChild(command, snapshot)
     : reconcileCommand(command, snapshot);
+  if (await settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
+    return;
+  }
   if (decision.kind === 'satisfied') {
     if (queueItem.kind === 'templateGroup') {
       settleTemplateComplete(ctx, resumeId, queueItem, snapshot);

@@ -105,18 +105,46 @@ export function useProjectResumes(
       : resume;
   }
 
+  /**
+   * The privacy notice, decided once when the person clicks, from the
+   * account's resumes and the project's links read again then: another tab
+   * may have published a resume or linked the project since this page
+   * loaded (docs/design/projects.md "Privacy"). A read that fails asks.
+   */
+  async function asksFirst(
+    project: Project,
+    resumeId: string,
+  ): Promise<boolean> {
+    const [listed, read] = await Promise.all([
+      linker.resumes(), deps.api.read(project.id),
+    ]);
+    if (listed.kind === 'ready') {
+      view.value = { kind: 'ready', items: listed.items };
+    }
+    if (read.kind === 'ok') linkedIds.value = read.value.linkedResumeIds;
+    return revealsAcrossResumes(
+      resumeId,
+      read.kind === 'ok' ? read.value.linkedResumeIds : null,
+      listed.kind === 'ready' ? listed.items : null,
+    );
+  }
+
   async function add(resumeId: string): Promise<void> {
     const resume = addable(resumeId);
     if (resume === undefined || asking.value !== null) return;
     status.value = null;
-    const items = view.value.kind === 'ready' ? view.value.items : [];
-    if (revealsAcrossResumes(resumeId, linkedIds.value, items)) {
+    pending.value = resumeId;
+    const ask = await asksFirst(loaded.value!, resumeId);
+    pending.value = null;
+    if (disposed) return;
+    if (ask) {
       asking.value = resumeId;
       return;
     }
     await send(resume);
   }
 
+  /** The owner's answer covers this one link only; nothing keeps it. */
   async function addAnyway(): Promise<void> {
     const resumeId = asking.value;
     asking.value = null;

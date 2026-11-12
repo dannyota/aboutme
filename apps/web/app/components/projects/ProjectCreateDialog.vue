@@ -6,6 +6,7 @@ import FormDialog from '@/components/app/FormDialog.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import TextField from '@/components/app/TextField.vue';
 import type { CreateState } from '@/composables/useProjects';
+import { choosesTwoPublished } from '@/editor/projectLinks';
 import type { ResumeSummary } from '@/editor/resumeApi';
 import type { ProjectsCopy } from '@/i18n/projects';
 import {
@@ -20,6 +21,8 @@ const props = defineProps<{
   readonly copy: ProjectsCopy;
   /** The account's resumes the new project may be shown on. */
   readonly resumes: readonly ResumeSummary[];
+  /** The note the last submit decided to show. */
+  readonly privacyNote?: boolean;
 }>();
 const emit = defineEmits<{
   submit: [name: string, resumeIds: readonly string[]];
@@ -30,8 +33,9 @@ const name = ref('');
 const chosen = ref<readonly string[]>([]);
 // docs/design/projects.md "Privacy": two published resumes would let a
 // reader of both connect them.
-const sharesPublic = computed(() => props.resumes.filter((resume) =>
-  resume.live && chosen.value.includes(resume.id)).length >= 2);
+const sharesPublic = computed(() =>
+  choosesTwoPublished(props.resumes, chosen.value)
+  || (props.privacyNote === true && chosen.value.length >= 2));
 const valid = computed(() =>
   name.value.trim() !== '' && characterCount(name.value) <= TEXT_LIMITS.name);
 const message = computed(() => {

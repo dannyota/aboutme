@@ -99,6 +99,7 @@ const vueSources = [
 const helperSources = [
   'components/editor/customization/labels.ts',
   'components/editor/forms/projectLibrary.ts',
+  'components/editor/forms/projectLinking.ts',
   'editor/projectLinks.ts',
   'editor/pageSettings.ts',
   'components/editor/forms/entries/levels.ts',

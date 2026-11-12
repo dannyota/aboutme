@@ -215,6 +215,7 @@ function closeRelease(): void {
       :state="list.createState.value"
       :copy="copy"
       :resumes="list.resumes.value"
+      :privacy-note="list.privacyNote.value"
       @close="closeCreate"
       @submit="list.create"
     />

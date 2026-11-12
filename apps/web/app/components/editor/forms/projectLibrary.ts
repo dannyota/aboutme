@@ -20,6 +20,8 @@ export interface ProjectLibrary {
   find(id: string): Project | undefined;
   /** Which resumes of the account are published; null when unreadable. */
   published(): Promise<readonly PublishedState[] | null>;
+  /** The resumes that link a project now; null when unreadable. */
+  linkedTo(projectId: string): Promise<readonly string[] | null>;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface ProjectLibrary {
  * reread keeps the last list on screen until the new one arrives.
  */
 export function createProjectLibrary(
-  api: Pick<ProjectsApi, 'list'> = createProjectsApi(),
+  api: Pick<ProjectsApi, 'list' | 'read'> = createProjectsApi(),
   resumes: Pick<ResumeApi, 'list'> = createResumeApi(),
 ): ProjectLibrary {
   const view = ref<ProjectLibraryView>({ kind: 'idle' });
@@ -54,6 +56,10 @@ export function createProjectLibrary(
     async published() {
       const result = await resumes.list();
       return result.kind === 'ready' ? result.items : null;
+    },
+    async linkedTo(projectId) {
+      const result = await api.read(projectId);
+      return result.kind === 'ok' ? result.value.linkedResumeIds : null;
     },
   };
 }

@@ -48,10 +48,17 @@ function resumes() {
 }
 
 let api: ReturnType<typeof fakeApi>;
+type Link = (
+  owner: string,
+  resume: string,
+  project: string,
+) => Promise<LinkResult>;
 let linker: {
   resumes: ReturnType<typeof vi.fn<() => Promise<ResumeListResult>>>;
-  link: ReturnType<typeof vi.fn<(...args: string[]) => Promise<LinkResult>>>;
+  link: ReturnType<typeof vi.fn<Link>>;
 };
+/** The links the fake linker sent. */
+let sent: string[][];
 const mounted: { unmount: () => void }[] = [];
 
 beforeEach(() => {
@@ -59,11 +66,14 @@ beforeEach(() => {
   clearNuxtData();
   registerSignedIn();
   api = fakeApi();
+  sent = [];
   linker = {
     resumes: vi.fn<() => Promise<ResumeListResult>>()
       .mockResolvedValue({ kind: 'ready', items: resumes() }),
-    link: vi.fn<(...args: string[]) => Promise<LinkResult>>()
-      .mockResolvedValue(linkOk),
+    link: vi.fn<Link>(async (owner, resume, project) => {
+      sent.push([owner, resume, project]);
+      return linkOk;
+    }),
   };
   fake.api = api;
   fake.linker = linker;
@@ -134,7 +144,7 @@ describe('New project shown on resumes', () => {
 
     await submitDialog();
 
-    expect(linker.link.mock.calls).toEqual([
+    expect(sent).toEqual([
       ['owner-1', 'resume-1', 'created'],
       ['owner-1', 'resume-3', 'created'],
     ]);
@@ -168,8 +178,7 @@ describe('project editor Resumes section', () => {
       .trigger('click');
     await flushPromises();
 
-    expect(linker.link)
-      .toHaveBeenCalledWith('owner-1', 'resume-3', 'project-1');
+    expect(sent).toEqual([['owner-1', 'resume-3', 'project-1']]);
     expect(api.replace).not.toHaveBeenCalled();
     expect(row(wrapper, 'resume-3').text()).toContain('Shown');
     const status = wrapper.get('[data-testid="project-resumes-status"]');
@@ -275,15 +284,14 @@ describe('a second published resume', () => {
       .toBe('cancel-project-privacy');
     inDocument('[data-action="cancel-project-privacy"]').click();
     await flushPromises();
-    expect(linker.link).not.toHaveBeenCalled();
+    expect(sent).toEqual([]);
 
     await row(wrapper, 'resume-2').get('[data-action="project-add-to-resume"]')
       .trigger('click');
     await flushPromises();
     inDocument('[data-action="confirm-project-privacy"]').click();
     await flushPromises();
-    expect(linker.link.mock.calls)
-      .toEqual([['owner-1', 'resume-2', 'project-1']]);
+    expect(sent).toEqual([['owner-1', 'resume-2', 'project-1']]);
     expect(row(wrapper, 'resume-2').text()).toContain('Shown');
   });
 

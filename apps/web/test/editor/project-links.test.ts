@@ -24,11 +24,9 @@ describe('a project shown on two published resumes', () => {
       .toBe(false);
   });
 
-  it('is assumed when the other resumes could not be read', () => {
-    expect(revealsAcrossResumes('public-2', ['public-1'], null, true))
-      .toBe(true);
-    expect(revealsAcrossResumes('public-2', [], null, true)).toBe(false);
-    expect(revealsAcrossResumes('public-2', ['public-1'], null, false))
-      .toBe(false);
+  it('is assumed when a reread fails, except for a draft', () => {
+    expect(revealsAcrossResumes('public-2', [], null)).toBe(true);
+    expect(revealsAcrossResumes('public-2', null, resumes)).toBe(true);
+    expect(revealsAcrossResumes('draft', null, resumes)).toBe(false);
   });
 });

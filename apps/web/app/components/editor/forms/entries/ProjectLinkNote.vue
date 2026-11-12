@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 
 import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import type { EditorFieldsCopy } from '@/i18n/editor-fields';
 // The note above a linked entry's fields (docs/design/ui/projects.md "In
 // the resume editor"). Refresh asks first, because it replaces text the
 // owner may have shortened for this resume.
-defineProps<{
+const props = defineProps<{
   readonly projectId: string;
   readonly name: string;
   /** The default language's name when the project page falls back to it. */
@@ -19,11 +19,29 @@ defineProps<{
 }>();
 const emit = defineEmits<{ refresh: [] }>();
 const asking = ref(false);
+const refreshButton = ref<{ $el?: HTMLElement } | null>(null);
+const openLink = ref<{ $el?: HTMLElement } | null>(null);
+// The dialog returns focus to Refresh, which is disabled while the refresh
+// is queued; focus waits on Open project and comes back when it is enabled.
+let returning: 'confirmed' | 'queued' | null = null;
 
 function confirm(): void {
   asking.value = false;
+  returning = 'confirmed';
   emit('refresh');
 }
+
+watch(() => props.refreshing, async (refreshing) => {
+  if (returning === null) return;
+  await nextTick();
+  if (refreshing) {
+    returning = 'queued';
+    openLink.value?.$el?.focus();
+  } else if (returning === 'queued') {
+    returning = null;
+    refreshButton.value?.$el?.focus();
+  }
+}, { flush: 'post' });
 </script>
 
 <template>
@@ -42,6 +60,7 @@ function confirm(): void {
     </p>
     <div class="flex flex-wrap gap-2">
       <Button
+        ref="refreshButton"
         data-action="refresh-project-entry"
         :disabled="refreshing"
         size="sm"
@@ -57,6 +76,7 @@ function confirm(): void {
         variant="ghost"
       >
         <NuxtLink
+          ref="openLink"
           data-action="open-project"
           :to="`/app/projects/${encodeURIComponent(projectId)}`"
         >

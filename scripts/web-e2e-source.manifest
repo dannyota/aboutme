@@ -113,6 +113,7 @@ apps/web/app/components/editor/forms/entries/WorkEntryFields.vue
 apps/web/app/components/editor/forms/entries/levels.ts
 apps/web/app/components/editor/forms/fieldIntent.ts
 apps/web/app/components/editor/forms/projectLibrary.ts
+apps/web/app/components/editor/forms/projectLinking.ts
 apps/web/app/components/editor/list/CreateResumeDialog.vue
 apps/web/app/components/editor/list/DeleteResumeDialog.vue
 apps/web/app/components/editor/list/RenameResumeDialog.vue
@@ -367,6 +368,7 @@ apps/web/app/editor/coordinatorConflicts.ts
 apps/web/app/editor/coordinatorCreate.ts
 apps/web/app/editor/coordinatorGuards.ts
 apps/web/app/editor/coordinatorPhoto.ts
+apps/web/app/editor/coordinatorProject.ts
 apps/web/app/editor/coordinatorQueue.ts
 apps/web/app/editor/coordinatorReconcile.ts
 apps/web/app/editor/coordinatorSettle.ts
@@ -382,6 +384,7 @@ apps/web/app/editor/photoController.ts
 apps/web/app/editor/photoCrop.ts
 apps/web/app/editor/previewZoom.ts
 apps/web/app/editor/projectLinks.ts
+apps/web/app/editor/projectOutcomes.ts
 apps/web/app/editor/projections.ts
 apps/web/app/editor/publicPageMeta.ts
 apps/web/app/editor/publishApi.ts

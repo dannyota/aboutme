@@ -63,22 +63,31 @@ export interface PublishedState {
 /**
  * Whether linking `targetId` would show the project on a second published
  * resume, so a reader of both can tell they belong to the same person
- * (docs/design/projects.md "Privacy"). Drafts never count. When the other
- * resumes could not be read, any other linking resume counts, so the owner
- * is asked rather than not.
+ * (docs/design/projects.md "Privacy"). Drafts never count. An input that
+ * could not be read (null) counts as revealing, so the owner is asked
+ * rather than not; only a target known to be a draft is never asked about.
  */
 export function revealsAcrossResumes(
   targetId: string,
-  linkedResumeIds: Iterable<string>,
+  linkedResumeIds: Iterable<string> | null,
   resumes: readonly PublishedState[] | null,
-  targetLive = resumes?.some((item) => item.id === targetId && item.live)
-    ?? false,
 ): boolean {
-  if (!targetLive) return false;
+  if (resumes === null) return true;
   const published = (id: string) =>
-    resumes === null || resumes.some((item) => item.id === id && item.live);
+    resumes.some((item) => item.id === id && item.live);
+  if (!published(targetId)) return false;
+  if (linkedResumeIds === null) return true;
   for (const id of linkedResumeIds) {
     if (id !== targetId && published(id)) return true;
   }
   return false;
+}
+
+/** Whether the chosen resumes include two published ones. */
+export function choosesTwoPublished(
+  resumes: readonly PublishedState[],
+  chosen: readonly string[],
+): boolean {
+  return resumes.filter((item) =>
+    item.live && chosen.includes(item.id)).length >= 2;
 }

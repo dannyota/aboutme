@@ -133,7 +133,8 @@ export type EditorFieldsCopy = {
     | 'openProject'
     | 'sharedPublic'
     | 'sharedReader'
-    | 'addAnyway',
+    | 'addAnyway'
+    | 'changedElsewhere',
     string
   > & {
     readonly note: (name: string) => string;
@@ -241,6 +242,8 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       sharedReader:
         'Người đọc cả hai CV có thể nhận ra chúng thuộc về cùng một người.',
       addAnyway: 'Vẫn thêm',
+      changedElsewhere:
+        'Mục đã thay đổi ở nơi khác. Hãy làm mới lại nếu bạn vẫn muốn.',
       note: (name) => `Mục này lấy từ dự án ${name}. `
         + 'Nội dung ở đây là của riêng CV này.',
       pageUses: (language) => `Trang dự án dùng ${language}`,
@@ -407,6 +410,8 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       sharedReader:
         'A reader of both can tell they belong to the same person.',
       addAnyway: 'Add anyway',
+      changedElsewhere:
+        'This entry changed elsewhere. Refresh again if you still want to.',
       note: (name) => `This entry comes from the project ${name}. `
         + 'The text here belongs to this resume.',
       pageUses: (language) => `Project page uses ${language}`,

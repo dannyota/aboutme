@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import SectionPanel from '../../app/components/editor/forms/SectionPanel.vue';
+import ProjectLinkNote
+  from '../../app/components/editor/forms/entries/ProjectLinkNote.vue';
+import { noteProjectOutcome } from '../../app/editor/projectOutcomes';
+import { editorFieldsCopy } from '../../app/i18n/editor-fields';
 import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
@@ -210,6 +214,7 @@ describe('From your projects', () => {
 
   it('inserts the chosen project and selects its entry', async () => {
     api.list.mockResolvedValue(ok([shop(), ops()]));
+    api.read.mockResolvedValue(ok(ops()));
     const record = ref(recordWith([]));
     const { wrapper, actions } = await mountPanel(record);
     await openProjects();
@@ -242,6 +247,7 @@ describe('From your projects', () => {
 
   it('says so when the project could not be added', async () => {
     api.list.mockResolvedValue(ok([ops()]));
+    api.read.mockResolvedValue(ok(ops()));
     const record = ref(recordWith([]));
     const { wrapper } = await mountPanel(record);
     await openProjects();
@@ -260,18 +266,55 @@ describe('From your projects', () => {
 describe('adding a project another published resume shows', () => {
   const shownOn = (...linkedResumeIds: string[]) =>
     project({ id: OPS, text: { en: { name: 'Ops tool' } }, linkedResumeIds });
+  const listed = (thisLive: boolean) => ({
+    kind: 'ready',
+    items: [
+      resumeSummary('resume-1', '1', 'Fixture', thisLive
+        ? { live: true, slug: 'ada' }
+        : {}),
+      resumeSummary('other-public', '1', 'Other', {
+        live: true, slug: 'ada-2',
+      }),
+      resumeSummary('other-draft', '1', 'Draft'),
+    ],
+  });
 
-  async function choose(live: boolean, ...linkedResumeIds: string[]) {
-    api.list.mockResolvedValue(ok([shownOn(...linkedResumeIds)]));
-    const mountedPanel = await mountPanel(ref(recordWith([], 'en', live)));
+  interface Choice {
+    /** This resume as the editor loaded it. */
+    readonly live: boolean;
+    /** The project's links as the library list showed them. */
+    readonly cached?: readonly string[];
+    /** The project's links when read again; null when that read fails. */
+    readonly fresh?: readonly string[] | null;
+    /** This resume in the account list read again; null when it fails. */
+    readonly listedLive?: boolean | null;
+  }
+
+  async function choose(choice: Choice) {
+    const fresh = choice.fresh === undefined ? choice.cached : choice.fresh;
+    api.list.mockResolvedValue(ok([shownOn(...(choice.cached ?? []))]));
+    api.read.mockResolvedValue(fresh === null
+      ? failed('unavailable')
+      : ok(shownOn(...(fresh ?? []))));
+    const listedLive = choice.listedLive === undefined
+      ? choice.live
+      : choice.listedLive;
+    resumeList.mockResolvedValue(listedLive === null
+      ? { kind: 'failed', reason: 'network' }
+      : listed(listedLive));
+    const mountedPanel = await mountPanel(
+      ref(recordWith([], 'en', choice.live)),
+    );
     await openProjects();
     inDocument(`[data-project-option="${OPS}"]`).click();
     await flushPromises();
     return mountedPanel;
   }
 
+  const asked = () => document.body.querySelector('[role="alertdialog"]');
+
   it('asks first on a published resume, focused on Cancel', async () => {
-    const { actions } = await choose(true, 'other-public');
+    const { actions } = await choose({ live: true, cached: ['other-public'] });
 
     const ask = inDocument('[role="alertdialog"]');
     expect(ask.querySelector('h2')?.textContent?.trim())
@@ -284,17 +327,17 @@ describe('adding a project another published resume shows', () => {
   });
 
   it('Cancel sends nothing', async () => {
-    const { actions } = await choose(true, 'other-public');
+    const { actions } = await choose({ live: true, cached: ['other-public'] });
 
     inDocument('[data-action="cancel-project-privacy"]').click();
     await flushPromises();
 
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(asked()).toBeNull();
     expect(actions.edit).not.toHaveBeenCalled();
   });
 
   it('Add anyway sends the link once', async () => {
-    const { actions } = await choose(true, 'other-public');
+    const { actions } = await choose({ live: true, cached: ['other-public'] });
 
     inDocument('[data-action="confirm-project-privacy"]').click();
     await flushPromises();
@@ -304,22 +347,186 @@ describe('adding a project another published resume shows', () => {
   });
 
   it('does not ask on a draft resume', async () => {
-    const { actions } = await choose(false, 'other-public');
+    const { actions } = await choose({ live: false, cached: ['other-public'] });
 
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(asked()).toBeNull();
     expect(actions.edit).toHaveBeenCalledOnce();
-    expect(resumeList).not.toHaveBeenCalled();
   });
 
   it('does not ask when no other published resume shows it', async () => {
-    const first = await choose(true);
+    const first = await choose({ live: true });
     expect(first.actions.edit).toHaveBeenCalledOnce();
     for (const wrapper of mounted.splice(0)) wrapper.unmount();
 
-    const { actions } = await choose(true, 'other-draft');
+    const { actions } = await choose({ live: true, cached: ['other-draft'] });
 
-    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(asked()).toBeNull();
     expect(actions.edit).toHaveBeenCalledOnce();
+  });
+
+  it('asks when another resume linked it after the library loaded',
+    async () => {
+      const { actions } = await choose({
+        live: true, cached: [], fresh: ['other-public'],
+      });
+
+      expect(api.read).toHaveBeenCalledWith(OPS);
+      expect(asked()).not.toBeNull();
+      expect(actions.edit).not.toHaveBeenCalled();
+    });
+
+  it('asks when this resume was published elsewhere after it loaded',
+    async () => {
+      const { actions } = await choose({
+        live: false, cached: ['other-public'], listedLive: true,
+      });
+
+      expect(asked()).not.toBeNull();
+      expect(actions.edit).not.toHaveBeenCalled();
+    });
+
+  it.each([
+    ['the account resumes', { listedLive: null }],
+    ['the project', { fresh: null }],
+  ] as const)('asks when %s cannot be read again', async (_name, failure) => {
+    const { actions } = await choose({
+      live: true, cached: [], ...failure,
+    });
+
+    expect(asked()).not.toBeNull();
+    expect(actions.edit).not.toHaveBeenCalled();
+  });
+
+  it('decides once per choice; the queue resending the link reads nothing',
+    async () => {
+      const record = ref(recordWith([], 'en', true));
+      api.list.mockResolvedValue(ok([shownOn()]));
+      api.read.mockResolvedValue(ok(shownOn()));
+      resumeList.mockResolvedValue(listed(true));
+      const { wrapper, actions } = await mountPanel(record);
+      await openProjects();
+      inDocument(`[data-project-option="${OPS}"]`).click();
+      await flushPromises();
+      expect([resumeList.mock.calls.length, api.read.mock.calls.length])
+        .toEqual([1, 1]);
+
+      // The queue holds the link through a retry, then it lands.
+      const held = record.value.pending[0]!;
+      record.value = {
+        ...record.value,
+        pending: [],
+        attempt: { kind: 'unknown', queueItem: held } as never,
+      };
+      await flushPromises();
+      api.read.mockResolvedValue(ok(shownOn('other-public')));
+      record.value = {
+        ...record.value,
+        attempt: null,
+        current: {
+          ...record.value.current,
+          document: recordWith([
+            { id: NEW_ENTRY, projectId: OPS } as Entry,
+          ]).current.document,
+        },
+      };
+      await flushPromises();
+
+      expect(asked()).toBeNull();
+      expect(actions.edit).toHaveBeenCalledOnce();
+      expect([resumeList.mock.calls.length, api.read.mock.calls.length])
+        .toEqual([1, 1]);
+      expect(wrapper.emitted('selectEntry'))
+        .toEqual([[{ sectionKey: 'projects', entryId: NEW_ENTRY }]]);
+    });
+
+  it('keeps no answer: the next choice asks again', async () => {
+    const record = ref(recordWith([], 'en', true));
+    api.list.mockResolvedValue(ok([
+      shownOn('other-public'),
+      project({
+        id: SHOP, text: { en: { name: 'Shop site' } },
+        linkedResumeIds: ['other-public'],
+      }),
+    ]));
+    api.read.mockImplementation(async (id: string) => ok(id === SHOP
+      ? project({ id: SHOP, linkedResumeIds: ['other-public'] })
+      : shownOn('other-public')));
+    resumeList.mockResolvedValue(listed(true));
+    const { actions } = await mountPanel(record);
+    await openProjects();
+    inDocument(`[data-project-option="${OPS}"]`).click();
+    await flushPromises();
+    inDocument('[data-action="confirm-project-privacy"]').click();
+    await flushPromises();
+    expect(actions.edit).toHaveBeenCalledOnce();
+    record.value = { ...record.value, pending: [] };
+    await flushPromises();
+
+    await openProjects();
+    inDocument(`[data-project-option="${SHOP}"]`).click();
+    await flushPromises();
+
+    expect(asked()).not.toBeNull();
+    expect(actions.edit).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a refresh the text changed under', () => {
+  it('says so politely, so Refresh asks again', async () => {
+    api.list.mockResolvedValue(ok([shop()]));
+    const record = ref(recordWith([
+      { id: ENTRY, title: 'My shop', projectId: SHOP } as Entry,
+    ]));
+    const { wrapper } = await mountPanel(record);
+    await wrapper.get('[data-action="refresh-project-entry"]')
+      .trigger('click');
+    await flushPromises();
+    inDocument('[data-action="confirm-project-refresh"]').click();
+    await flushPromises();
+
+    noteProjectOutcome('projectRefresh-command', 'refresh-changed');
+    record.value = { ...record.value, pending: [] };
+    await flushPromises();
+
+    const status = wrapper.get('[data-testid="project-link-status"]');
+    expect(status.attributes('role')).toBe('status');
+    expect(status.text()).toBe(
+      'This entry changed elsewhere. Refresh again if you still want to.',
+    );
+  });
+});
+
+describe('focus after a refresh', () => {
+  it('rests on Open project while the refresh is queued, then returns to '
+    + 'Refresh', async () => {
+    const wrapper = await mountSuspended(ProjectLinkNote, {
+      attachTo: document.body,
+      props: {
+        projectId: SHOP,
+        name: 'Shop site',
+        fallbackLanguage: null,
+        refreshing: false,
+        copy: editorFieldsCopy.en.projectLinks,
+        cancelLabel: 'Cancel',
+      },
+    });
+    mounted.push(wrapper);
+    const refresh = wrapper.get<HTMLButtonElement>(
+      '[data-action="refresh-project-entry"]',
+    );
+    refresh.element.focus();
+    await refresh.trigger('click');
+    await flushPromises();
+
+    inDocument('[data-action="confirm-project-refresh"]').click();
+    await wrapper.setProps({ refreshing: true });
+    await flushPromises();
+    expect(document.activeElement?.getAttribute('data-action'))
+      .toBe('open-project');
+
+    await wrapper.setProps({ refreshing: false });
+    await flushPromises();
+    expect(document.activeElement).toBe(refresh.element);
   });
 });
 

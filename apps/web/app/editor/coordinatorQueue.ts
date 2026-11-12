@@ -9,6 +9,7 @@ import {
   dependenciesAcknowledged,
   dispatchToken,
 } from './coordinatorGuards';
+import { dropChangedRefresh } from './coordinatorProject';
 import { resolveUnknown, settle } from './coordinatorSettle';
 import type { CoordinatorContext } from './coordinatorTypes';
 
@@ -103,6 +104,11 @@ async function drainResume(
       continue;
     }
     if (decision.kind === 'conflict') {
+      if (
+        await dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)
+      ) {
+        continue;
+      }
       ctx.deps.store.markConflict(resumeId, decision.conflict);
       return;
     }

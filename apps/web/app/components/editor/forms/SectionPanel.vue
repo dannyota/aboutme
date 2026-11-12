@@ -27,15 +27,14 @@ import { Button } from '../../ui/button';
 import type { FieldIntent } from './fieldIntent';
 import { useFieldDrafts } from '../../../composables/useFieldDrafts';
 import {
-  linkedEntry,
   linkedProjectIds,
   projectPageLanguage,
-  revealsAcrossResumes,
   type EntryLocation,
 } from '../../../editor/projectLinks';
 import { projectName } from '../../projects/projectDocument';
 import ProjectEntryMenu from './ProjectEntryMenu.vue';
 import { createProjectLibrary } from './projectLibrary';
+import { useProjectLinking } from './projectLinking';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -95,96 +94,29 @@ watch(
 
 const isProject = computed(() => props.section.sectionType === 'project');
 const library = createProjectLibrary();
-const linking = ref<{ commandId: string; projectId: string } | null>(null);
-const linkFailed = ref(false);
-/** The project waiting for the owner's privacy answer. */
-const asking = ref<string | null>(null);
 const current = computed(() => props.actions.record.value?.current);
 const linkedProjects = computed(() => current.value === undefined
   ? new Set<string>()
   : linkedProjectIds(current.value.document));
-const queuedRefreshes = computed(() => {
-  const record = props.actions.record.value;
-  if (record === undefined) return new Set<string>();
-  const items = record.attempt === null
-    ? record.pending
-    : [record.attempt.queueItem, ...record.pending];
-  return new Set(items.flatMap((item) =>
-    item.kind === 'projectRefresh' ? [item.entryId] : []));
+const linking = useProjectLinking({
+  actions: props.actions,
+  sectionKey: () => props.sectionKey,
+  library,
+  onLinked: (location) => emit('selectEntry', location),
 });
 const linkStatus = computed(() => {
-  if (linking.value !== null) return linkCopy.value.adding;
-  return linkFailed.value ? linkCopy.value.notAdded : '';
+  switch (linking.status.value) {
+    case 'adding': return linkCopy.value.adding;
+    case 'not-added': return linkCopy.value.notAdded;
+    case 'changed-elsewhere': return linkCopy.value.changedElsewhere;
+    default: return '';
+  }
 });
 
 watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
-  linkFailed.value = false;
+  linking.reset();
   if (project) void library.load();
 }, { immediate: true });
-
-/**
- * Asks first when this published resume would be the second published one
- * to show the project (docs/design/projects.md "Privacy"). The account's
- * other resumes are read only then.
- */
-async function choose(projectId: string): Promise<void> {
-  const record = props.actions.record.value;
-  const others = (library.find(projectId)?.linkedResumeIds ?? [])
-    .filter((id) => id !== record?.accepted.metadata.id);
-  if (record?.accepted.metadata.live === true && others.length > 0) {
-    const published = await library.published();
-    if (revealsAcrossResumes(
-      record.accepted.metadata.id, others, published, true,
-    )) {
-      asking.value = projectId;
-      return;
-    }
-  }
-  link(projectId);
-}
-
-function addAnyway(): void {
-  const projectId = asking.value;
-  asking.value = null;
-  if (projectId !== null) link(projectId);
-}
-
-function link(projectId: string): void {
-  linkFailed.value = false;
-  const result = props.actions.edit({ kind: 'projectLink', projectId });
-  if (result.kind === 'enqueued') {
-    linking.value = { commandId: result.command.id, projectId };
-  }
-}
-
-/** Where the link landed once it left the queue, or `missing` if nowhere. */
-function linkOutcome(): EntryLocation | 'missing' | null {
-  const pending = linking.value;
-  const record = props.actions.record.value;
-  if (pending === null || record === undefined) return null;
-  const queued = record.attempt?.queueItem.id === pending.commandId
-    || record.pending.some((item) => item.id === pending.commandId);
-  if (queued) return null;
-  return linkedEntry(record.current.document, pending.projectId) ?? 'missing';
-}
-
-// The server chooses the new entry's id, so it is selected only once the
-// link has left the queue and the resume shows where it landed.
-watch(linkOutcome, (outcome) => {
-  if (outcome === null) return;
-  linking.value = null;
-  void library.load();
-  if (outcome === 'missing') linkFailed.value = true;
-  else emit('selectEntry', outcome);
-});
-
-function refresh(entryId: string): void {
-  props.actions.edit({
-    kind: 'projectRefresh',
-    sectionKey: props.sectionKey,
-    entryId,
-  });
-}
 
 interface EntryLink {
   readonly projectId: string;
@@ -436,11 +368,11 @@ function assertNever(value: never): never {
         v-if="isProject"
         :library="library.view.value"
         :linked="linkedProjects"
-        :busy="linking !== null"
+        :busy="linking.busy.value"
         :add-label="copy.addEntry"
         :copy="linkCopy"
         @blank="add"
-        @link="choose"
+        @link="linking.choose"
         @retry="library.load()"
       />
       <Button
@@ -504,10 +436,10 @@ function assertNever(value: never): never {
         :project-id="entryLinks.get(entry.id)!.projectId"
         :name="entryLinks.get(entry.id)!.name"
         :fallback-language="entryLinks.get(entry.id)!.fallbackLanguage"
-        :refreshing="queuedRefreshes.has(entry.id)"
+        :refreshing="linking.refreshingEntries.value.has(entry.id)"
         :copy="linkCopy"
         :cancel-label="copy.cancel"
-        @refresh="refresh(entry.id)"
+        @refresh="linking.refresh(entry.id)"
       />
       <component
         :is="selectedComponent"
@@ -543,7 +475,7 @@ function assertNever(value: never): never {
     </p>
     <!-- docs/design/projects.md "Privacy": Cancel takes the first focus. -->
     <ConfirmDialog
-      v-if="asking !== null"
+      v-if="linking.asking.value !== null"
       :open="true"
       :title="linkCopy.sharedPublic"
       :description="linkCopy.sharedReader"
@@ -552,8 +484,8 @@ function assertNever(value: never): never {
       destructive
       confirm-action="confirm-project-privacy"
       cancel-action="cancel-project-privacy"
-      @confirm="addAnyway"
-      @cancel="asking = null"
+      @confirm="linking.addAnyway()"
+      @cancel="linking.cancelAsk()"
     />
   </InspectorPanel>
 </template>
