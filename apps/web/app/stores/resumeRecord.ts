@@ -1,3 +1,5 @@
+import { toRaw } from 'vue';
+
 import { replayCommand } from '../editor/commands';
 import { cloneReactiveSafe } from '../editor/clone';
 import type {
@@ -58,6 +60,8 @@ export type AttemptState
     readonly reason: 'transport' | 'server' | 'cutoff';
     /** The write has been failing long enough to tell the person. */
     readonly alert?: true;
+    /** The held write is on its way to the server again. */
+    readonly sending?: true;
   }
   | {
     readonly kind: 'retry-later';
@@ -66,6 +70,8 @@ export type AttemptState
     readonly attempt: FrozenAttempt;
     readonly reason: 'rate-limited' | 'media-busy';
     readonly retryAfterMs: number | null;
+    /** The held write is on its way to the server again. */
+    readonly sending?: true;
   }
   | {
     readonly kind: 'failed';
@@ -77,6 +83,8 @@ export type AttemptState
       | 'csrf-rejected'
       | 'idempotency-reuse'
       | 'stale-limit';
+    /** The held write is on its way to the server again. */
+    readonly sending?: true;
   };
 
 export type OpaquePhotoOutcome = {
@@ -161,8 +169,10 @@ function replayQueueItem(
   snapshot: ResumeSnapshot,
   item: EditorQueueItem,
 ): ResumeSnapshot {
+  // A held write is a copy the store made reactive; the reducer clones the
+  // values it inserts, which a reactive proxy does not allow.
   return isAtomic(item)
-    ? copy(replayCommand(snapshot, item))
+    ? copy(replayCommand(snapshot, toRaw(item)))
     : copy(item.intendedFinal);
 }
 
@@ -170,12 +180,9 @@ export function saveState(record: ResumeRecord): SaveState {
   if (record.sessionLost) return 'session-lost';
   if (record.conflicts.length > 0) return 'conflict';
   if (record.attempt?.kind === 'unknown') {
-    // A held write is retried on its own; it is only reported as failed
-    // once the alert is up or the retry window has closed.
-    if (record.attempt.reason !== 'cutoff' && !record.attempt.alert) {
-      return 'retrying';
-    }
-    return record.attempt.reason === 'transport' ? 'offline' : 'error';
+    // A held write is retried on its own until its retry window closes; its
+    // alert is told apart in a banner, not here.
+    return record.attempt.reason === 'cutoff' ? 'error' : 'retrying';
   }
   if (
     record.attempt?.kind === 'failed'

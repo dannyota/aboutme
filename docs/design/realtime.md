@@ -35,12 +35,13 @@ until its 23-hour retry window closes; then the editor reads the resume and
 reconciles the write against it. Nothing queued behind it is sent meanwhile, and
 a read that shows it landed releases the queue at once. A write that meets a
 newer revision is checked against it: a change the newer version already holds
-is dropped, a real conflict opens the conflict panel, and an unchanged field is
-rebased and sent with a new key, up to the rebase limit in Numeric budgets. A
-title or delete write whose stale read fails is held and retried the same way.
-The editor shows a held write as not saved and retrying, and tells the person
-when its outcome has stayed unknown for the alert time in Numeric budgets or it
-has used every rebase.
+is dropped, a real conflict opens the conflict panel and stops the write's
+retries until the person resolves it, and an unchanged field is rebased and sent
+with a new key, up to the rebase limit in Numeric budgets. A title or delete
+write whose stale read fails is held and retried the same way. The editor shows
+a held write as not saved and retrying, and tells the person when its outcome
+has stayed unknown for the alert time in Numeric budgets or it has used every
+rebase.
 
 ## Refresh ladder
 

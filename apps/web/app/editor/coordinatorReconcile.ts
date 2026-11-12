@@ -96,19 +96,40 @@ function adoptAndReconcile(
   resumeId: string,
   accepted: AcceptedResume,
 ): AcceptedResume | undefined {
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined) return undefined;
+  if (ctx.deps.store.recordFor(resumeId) === undefined) return undefined;
   const adoption = adoptRead(ctx, resumeId, accepted);
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (active === null || active === undefined) return latest;
+  // A held write the read shows landed no longer blocks the queue.
+  if (reconcileHeld(ctx, resumeId, latest) && active?.kind !== 'dispatching') {
+    void flush(ctx, resumeId);
+  }
+  return latest;
+}
+
+/**
+ * Reconciles the write the queue holds against `latest`, a complete read:
+ * one the resume already holds leaves the queue and a conflict waits for the
+ * person. A template child is settled here only past its retry window.
+ * Returns whether the write left the queue.
+ */
+export function reconcileHeld(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  latest: AcceptedResume,
+): boolean {
+  const record = ctx.deps.store.recordFor(resumeId);
+  const active = record?.attempt;
+  if (record === undefined || active === null || active === undefined) {
+    return false;
+  }
   if (active.queueItem.kind === 'templateGroup') {
     if (
       active.command.kind !== 'structure'
       && active.command.kind !== 'customization'
     ) {
-      return latest;
+      return false;
     }
     const decision = reconcileTemplateChild(toRaw(active.command), latest);
     if (
@@ -135,17 +156,17 @@ function adoptAndReconcile(
     } else if (decision.kind === 'conflict') {
       ctx.deps.store.markConflict(resumeId, decision.conflict);
     }
-    return latest;
+    return false;
   }
   const decision = reconcileCommand(toRaw(active.command), latest);
   if (decision.kind === 'satisfied') {
     ctx.deps.store.dropHead(resumeId, active.queueItem.id);
-    // A held write the read shows landed no longer blocks the queue.
-    if (active.kind !== 'dispatching') void flush(ctx, resumeId);
-  } else if (decision.kind === 'conflict') {
+    return true;
+  }
+  if (decision.kind === 'conflict') {
     ctx.deps.store.markConflict(resumeId, decision.conflict);
   }
-  return latest;
+  return false;
 }
 
 export async function refreshConditionalAndReconcile(

@@ -64,6 +64,28 @@ export function holdAttempt(
   replay(record);
 }
 
+/**
+ * Marks the held write whose attempt has `idempotencyKey` as on its way to
+ * the server again, or no longer, so its retry button waits for it.
+ */
+export function markSending(
+  record: ResumeRecord,
+  idempotencyKey: string,
+  sending: boolean,
+): void {
+  const held = record.attempt;
+  if (
+    held === null
+    || held.kind === 'dispatching'
+    || held.attempt.idempotencyKey !== idempotencyKey
+    || (held.sending === true) === sending
+  ) {
+    return;
+  }
+  const { sending: _sending, ...rest } = copy(held);
+  record.attempt = sending ? { ...rest, sending: true } : rest;
+}
+
 /** Raises the alert for a write that is still held as unknown. */
 export function markHeldAlert(record: ResumeRecord, itemId: string): void {
   const held = record.attempt;

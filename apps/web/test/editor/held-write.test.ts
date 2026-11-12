@@ -1,74 +1,16 @@
-import { createPinia, setActivePinia } from 'pinia';
-import { computed } from 'vue';
+import type { Resume } from '@aboutme/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// eslint-disable-next-line max-len
-import { createResumeEditorActions } from '../../app/composables/useResumeEditor';
-import { createMutationCoordinator } from '../../app/editor/coordinator';
-import type { AtomicCommandIntent } from '../../app/editor/commands';
 import { parseRevision } from '../../app/editor/revision';
-import { useResumeStore } from '../../app/stores/resumes';
+import { fullName, headline } from './fake-resume-server';
 import {
-  fakeServer,
-  fullName,
-  headline,
-  startingResume,
-} from './fake-resume-server';
+  openEditor as editor,
+  type OpenEditor,
+} from './held-write-editor';
 
 // A write the queue holds because its outcome is unknown or because it keeps
 // meeting newer revisions: how it is retried, when the person is told, and
 // that the edits queued behind it still reach the server, in order.
-
-function editor() {
-  setActivePinia(createPinia());
-  const initial = startingResume();
-  const server = fakeServer(initial);
-  const store = useResumeStore();
-  store.initialize(initial);
-  const auth = {
-    user: computed(() => ({ id: 'owner-1' })),
-    csrfToken: computed(() => 'csrf-1'),
-    authState: computed(() => 'authenticated'),
-    refresh: vi.fn(async () => {}),
-  };
-  let ids = 0;
-  const runtime = {
-    nowEpochMs: () => Date.now(),
-    uuid: () => `id-${(ids += 1)}`,
-    delay: (ms: number) =>
-      new Promise<void>((resolve) => setTimeout(resolve, ms)),
-  };
-  const id = initial.metadata.id;
-  const coordinator = createMutationCoordinator({
-    api: server.api as never,
-    store,
-    auth: auth as never,
-    runtime,
-  });
-  const actions = createResumeEditorActions({
-    resumeId: id,
-    store,
-    coordinator,
-    auth: auth as never,
-    runtime,
-  });
-  const edit = (intent: AtomicCommandIntent): string => {
-    const result = actions.edit(intent);
-    if (result.kind !== 'enqueued') throw new Error(result.reason);
-    return result.command.id;
-  };
-  return {
-    actions,
-    edit,
-    id,
-    initial,
-    server,
-    store,
-    record: () => store.recordFor(id)!,
-    /** Two minutes of the editor's own timers, with no flush from the test. */
-    idle: () => vi.advanceTimersByTimeAsync(120_000),
-  };
-}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -186,7 +128,7 @@ describe('the retry of a write whose outcome is unknown', () => {
       expect(context.store.saveStateFor(context.id)).toBe('saved');
     });
 
-  it('raises the alert after exactly a minute and clears it on success',
+  it('raises the alert after exactly a minute and still reads retrying',
     async () => {
       const context = editor();
       context.server.loseEveryResponse({ applied: false });
@@ -202,7 +144,7 @@ describe('the retry of a write whose outcome is unknown', () => {
         kind: 'unknown',
         alert: true,
       });
-      expect(context.store.saveStateFor(context.id)).toBe('offline');
+      expect(context.store.saveStateFor(context.id)).toBe('retrying');
 
       context.server.loseEveryResponse(undefined);
       await vi.advanceTimersByTimeAsync(30_000);
@@ -325,6 +267,225 @@ describe('the rebases of a write that meets newer revisions', () => {
       expect(context.server.readGaps.slice(0, 2)).toEqual([1_000, 2_000]);
       expect(context.server.sentFor(mine).at(-1)).toBe('complete');
       expect(context.server.stored.metadata.title).toBe('Ada resume');
+      expect(context.store.saveStateFor(context.id)).toBe('saved');
+    });
+});
+
+/** Another tab renames the second job, a change no test edit touches. */
+function renameSecondJob(document: Resume): Resume {
+  const work = document.content.work!;
+  return {
+    ...document,
+    content: {
+      ...document.content,
+      work: {
+        ...work,
+        entries: work.entries.map((entry) =>
+          entry.id === 'entry-2' ? { ...entry, jobTitle: 'Director' } : entry,
+        ),
+      },
+    },
+  };
+}
+
+/** Another tab sets the headline. */
+const setHeadline = (value: string) => (document: Resume): Resume => ({
+  ...document,
+  personalDetails: { ...document.personalDetails, headline: value },
+});
+
+/** The requests sent for one command: key, If-Match and body. */
+function requestsFor(context: OpenEditor, commandId: string): string[] {
+  return context.server.sent
+    .filter(({ attempt }) => attempt.id === commandId)
+    .map(({ attempt }) => JSON.stringify([
+      attempt.idempotencyKey,
+      attempt.ifMatch,
+      attempt.payload,
+    ]));
+}
+
+describe('a held write and the read barrier', () => {
+  it('reads the newer revision before the replay of a rebased write whose '
+    + 'responses were lost, and sends the edits behind it', async () => {
+    const context = editor();
+    context.edit(headline('Staff engineer'));
+    context.edit(fullName('Ada King'));
+    // The first write meets a revision another tab made; the rebased write
+    // lands, but its response and the replay's are lost.
+    context.server.beforeNextWrite(() => {
+      context.server.otherWriter(renameSecondJob);
+    });
+    for (let lost = 0; lost < 2; lost += 1) {
+      context.server.beforeNextWrite(() => {
+        context.server.loseNextResponse({ applied: true });
+      });
+    }
+
+    await context.idle();
+
+    expect(context.server.stored.document.personalDetails).toMatchObject({
+      headline: 'Staff engineer',
+      fullName: 'Ada King',
+    });
+    expect(context.record()).toMatchObject({
+      attempt: null,
+      pending: [],
+      conflicts: [],
+      completeReadRequired: false,
+    });
+    expect(context.server.reads).toBeGreaterThan(0);
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+});
+
+describe('a held write that meets a conflicting change', () => {
+  it('is not sent again until the person resolves the conflict',
+    async () => {
+      const context = editor();
+      const mine = context.edit(headline('Staff engineer'));
+      const later = context.edit(fullName('Ada King'));
+      context.server.loseNextResponse({ applied: false });
+      context.server.loseNextResponse({ applied: false });
+      await vi.advanceTimersByTimeAsync(1_250);
+      // Another tab sets the headline, and a realtime read brings it here.
+      context.server.otherWriter(setHeadline('Principal engineer'));
+      await context.actions.refresh();
+
+      await context.idle();
+
+      expect(context.server.sentFor(mine)).toEqual(['unknown', 'unknown']);
+      expect(context.server.sentFor(later)).toEqual([]);
+      expect(context.store.saveStateFor(context.id)).toBe('conflict');
+
+      await context.actions.acceptLatest(mine);
+      await context.idle();
+
+      expect(context.server.sentFor(mine)).toHaveLength(2);
+      expect(context.server.sentFor(later)).toEqual(['complete']);
+      expect(context.server.stored.document.personalDetails).toMatchObject({
+        headline: 'Principal engineer',
+        fullName: 'Ada King',
+      });
+      expect(context.store.saveStateFor(context.id)).toBe('saved');
+    });
+});
+
+describe('the last revision a write meets after every rebase', () => {
+  it.each([
+    ['drops the write when that revision holds it already', 'Staff engineer',
+      'saved', ['complete']],
+    ['opens a conflict when that revision changed the field',
+      'Principal engineer', 'conflict', []],
+  ] as const)('%s', async (_case, theirs, state, laterSent) => {
+    const context = editor();
+    const mine = context.edit(headline('Staff engineer'));
+    const later = context.edit(fullName('Ada King'));
+    for (let bump = 0; bump < 3; bump += 1) {
+      context.server.beforeNextWrite(() => {
+        context.server.otherWriter((document) => document);
+      });
+    }
+    context.server.beforeNextWrite(() => {
+      context.server.otherWriter(setHeadline(theirs));
+    });
+
+    await context.idle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      'stale', 'stale', 'stale', 'stale',
+    ]);
+    expect(context.server.sentFor(later)).toEqual(laterSent);
+    expect(context.server.stored.document.personalDetails.headline)
+      .toBe(theirs);
+    expect(context.store.saveStateFor(context.id)).toBe(state);
+  });
+});
+
+describe('an unknown write the server rate-limits', () => {
+  it('is sent again unchanged after its Retry-After, and the edits behind '
+    + 'it follow', async () => {
+    const context = editor();
+    const mine = context.edit(headline('Staff engineer'));
+    const later = context.edit(fullName('Ada King'));
+    context.server.loseNextResponse({ applied: false });
+    context.server.failNextWrite({ kind: 'rate-limited', retryAfterMs: 5_000 });
+
+    await vi.advanceTimersByTimeAsync(1_250);
+    expect(context.store.saveStateFor(context.id)).toBe('retrying');
+    await context.idle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      'unknown', 'rate-limited', 'complete',
+    ]);
+    expect(context.server.sendGapsFor(mine)).toEqual([250, 5_000]);
+    expect(new Set(requestsFor(context, mine)).size).toBe(1);
+    expect(context.server.sentFor(later)).toEqual(['complete']);
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+});
+
+describe('the request a held write sends again', () => {
+  it('stays the same while the same field is typed again', async () => {
+    const context = editor();
+    const mine = context.edit(headline('Staff'));
+    context.server.loseNextResponse({ applied: false });
+    context.server.loseNextResponse({ applied: true });
+    await vi.advanceTimersByTimeAsync(1_250);
+
+    const later = context.edit(headline('Staff engineer'));
+    await context.idle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      'unknown', 'unknown', 'complete',
+    ]);
+    expect(new Set(requestsFor(context, mine)).size).toBe(1);
+    expect(context.server.sentFor(later)).toEqual(['complete']);
+    expect(context.server.stored.document.personalDetails.headline)
+      .toBe('Staff engineer');
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+
+  it('stays the same after a CSRF refresh', async () => {
+    const context = editor();
+    const mine = context.edit(headline('Staff engineer'));
+    context.server.loseNextResponse({ applied: true });
+    context.server.failNextWrite({ kind: 'csrf-rejected' });
+
+    await context.idle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      'unknown', 'csrf-rejected', 'complete',
+    ]);
+    expect(new Set(requestsFor(context, mine)).size).toBe(1);
+    expect(context.auth.refresh).toHaveBeenCalledOnce();
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+});
+
+describe('the read at the retry cutoff', () => {
+  it('finds an entry insert that landed and sends the edits behind it',
+    async () => {
+      const context = editor();
+      context.server.loseEveryResponse({ applied: true });
+      const mine = context.edit({
+        kind: 'entryUpsert',
+        sectionKey: 'work',
+        entry: { id: 'entry-3', jobTitle: 'Director' } as never,
+      });
+      const later = context.edit(fullName('Ada King'));
+      await vi.advanceTimersByTimeAsync(5_000);
+      const sends = context.server.sentFor(mine).length;
+
+      vi.setSystemTime(Date.now() + 23 * 60 * 60 * 1_000);
+      context.server.loseEveryResponse(undefined);
+      await vi.advanceTimersByTimeAsync(31_000);
+
+      expect(context.server.sentFor(mine)).toHaveLength(sends);
+      expect(context.server.stored.document.content.work?.entries
+        .map(({ id }) => id)).toEqual(['entry-1', 'entry-2', 'entry-3']);
+      expect(context.server.sentFor(later)).toEqual(['complete']);
+      expect(context.record()).toMatchObject({ attempt: null, pending: [] });
       expect(context.store.saveStateFor(context.id)).toBe('saved');
     });
 });

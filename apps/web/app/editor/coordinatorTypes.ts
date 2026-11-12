@@ -100,17 +100,31 @@ export interface CoordinatorContext {
   readRetries: Map<string, { failures: number; at: number }>;
   /** Resumes whose editor closed; nothing more is scheduled for them. */
   stopped: Set<string>;
-  /**
-   * A write held with an unknown outcome: retries so far, the epoch time
-   * before which the next may not run, and the timer that raises its alert.
-   */
+  /** When and how the write the queue holds may go out again. */
   writeRetries: Map<string, WriteRetry>;
 }
 
+/**
+ * The schedule of the write a resume's queue holds. Only the drain reads it
+ * to send; everything else only changes it and wakes the drain.
+ */
 export interface WriteRetry {
+  /** The queue item of the held write; a schedule for another is stale. */
+  readonly itemId: string;
+  /** Unknown outcomes after the quick replay; they set the backoff. */
   failures: number;
+  /** Epoch ms before which the next automatic retry may not go. */
   at: number;
-  readonly alert: ReturnType<typeof setTimeout>;
+  /** Epoch ms before which nothing may be sent: the server's Retry-After. */
+  notBefore: number;
+  /** A wait the drain sleeps itself first: the quick replay or a rebase. */
+  wait: number;
+  /** The write is a rebase built from a 412 winner, so it needs no read. */
+  rebase: boolean;
+  /** The person, or a session signed in again, asked to send it again. */
+  requested: boolean;
+  /** Raises the alert once the outcome has stayed unknown long enough. */
+  alert?: ReturnType<typeof setTimeout>;
 }
 
 /**

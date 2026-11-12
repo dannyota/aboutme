@@ -10,7 +10,9 @@ import { editorShellCopy } from '../../i18n/editor-shell';
 
 // A write the queue still holds after its automatic retries have had their
 // time: one whose outcome has stayed unknown for a minute, or one that met
-// a newer revision on every rebase (docs/design/realtime.md, Writes).
+// a newer revision on every rebase (docs/design/realtime.md, Writes). A
+// conflict on the write waits for the person in the conflict panel instead,
+// and the button waits while the write is on its way.
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -21,19 +23,29 @@ const copy = computed(() => editorShellCopy[locale.value]);
 
 const held = computed(() => {
   const attempt = props.record.attempt;
-  if (attempt?.kind === 'unknown' && attempt.alert === true) {
+  if (
+    attempt === null
+    || props.record.conflicts.some(
+      ({ id }) => id === attempt.queueItem.id || id === attempt.command.id,
+    )
+  ) {
+    return undefined;
+  }
+  if (attempt.kind === 'unknown' && attempt.alert === true) {
     return {
       kind: 'unknown' as const,
       commandId: attempt.command.id,
+      sending: attempt.sending === true,
       title: copy.value.unknownWriteTitle,
       description: copy.value.unknownWriteDescription,
       action: copy.value.retryNow,
     };
   }
-  if (attempt?.kind === 'failed' && attempt.reason === 'stale-limit') {
+  if (attempt.kind === 'failed' && attempt.reason === 'stale-limit') {
     return {
       kind: 'stale' as const,
       commandId: attempt.command.id,
+      sending: attempt.sending === true,
       title: copy.value.staleWriteTitle,
       description: copy.value.staleWriteDescription,
       action: copy.value.tryAgain,
@@ -57,6 +69,7 @@ function retry(commandId: string): void {
     <p>{{ held.description }}</p>
     <Button
       data-action="retry-held-write"
+      :disabled="held.sending"
       size="sm"
       type="button"
       @click="retry(held.commandId)"

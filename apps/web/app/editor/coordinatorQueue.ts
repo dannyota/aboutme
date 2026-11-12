@@ -1,4 +1,6 @@
 import { toRaw } from 'vue';
+import type { ResumeRecord } from '../stores/resumes';
+import type { AttemptState } from '../stores/resumeRecord';
 import type { AtomicEditorCommand } from './commands';
 import { reconcileCommand, reconcileTemplateGroup } from './reconcile';
 import { freezeAttempt } from './resumeApi';
@@ -11,16 +13,22 @@ import {
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
-  heldWriteDue,
+  heldConflict,
   owns,
   readBarrierDue,
   retryDelay,
   stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
-import { adoptRead } from './coordinatorReconcile';
-import { retryHeldWrite } from './coordinatorRetry';
-import { resolveUnknown, send } from './coordinatorSettle';
+import { adoptRead, reconcileHeld } from './coordinatorReconcile';
+import {
+  nextForHeld,
+  rebaseHeld,
+  requestRetry,
+  startResend,
+  waitsForPerson,
+} from './coordinatorRetry';
+import { send } from './coordinatorSettle';
 import type {
   CoordinatorContext,
   OperationContext,
@@ -76,6 +84,18 @@ export function flush(
   return drain;
 }
 
+/**
+ * The resume's only sender. Each pass decides in one place, in this order:
+ * 1. the epoch: a closed editor or a resume opened again ends the drain;
+ * 2. the head waits for the person: a conflict, or a held write only the
+ *    person may send again;
+ * 3. the read barrier: nothing is sent over an unread revision, so the read
+ *    completes first, and a held write is reconciled against it before it
+ *    is sent again; only a rebase built from a 412 winner skips it;
+ * 4. the held write's retry deadline, Retry-After included;
+ * 5. the send: the held write unchanged, or the head of the queue.
+ * Settlement, timers and buttons only change state and wake the drain.
+ */
 async function drainResume(
   ctx: OperationContext,
   resumeId: string,
@@ -83,82 +103,161 @@ async function drainResume(
   for (;;) {
     if (!current(ctx, resumeId)) return;
     const record = ctx.deps.store.recordFor(resumeId);
-    const authState = ctx.deps.auth.authState.value;
-    const ownerId = ctx.deps.auth.user.value?.id;
-    if (record?.completeReadRequired === true) {
-      // Nothing is sent over an unread revision: the queue reads first.
+    if (record === undefined || record.sessionLost) return;
+    const held = record.attempt === null ? null : toRaw(record.attempt);
+    if (held !== null && heldConflict(record)) {
+      clearWriteRetry(ctx, resumeId);
+      return;
+    }
+    if (held !== null && waitsForPerson(ctx, resumeId, held)) return;
+    if (held === null && queuedConflict(record)) {
+      const next = reconcileHead(ctx, resumeId, record);
+      if (next === 'stop') return;
+      if (next === 'again') continue;
+    }
+    if (record.completeReadRequired && !rebaseHeld(ctx, resumeId, held)) {
       if (
-        !readBarrierDue(record, authState, ownerId)
+        !readBarrierDue(
+          record,
+          ctx.deps.auth.authState.value,
+          ctx.deps.auth.user.value?.id,
+        )
         || !(await completeReadBarrier(ctx, resumeId))
       ) {
         return;
       }
+      reconcileHeld(ctx, resumeId, record.accepted);
       continue;
     }
     ctx.readRetries.delete(resumeId);
-    if (record?.attempt?.kind === 'unknown') {
-      if (
-        !heldWriteDue(record, authState, ownerId)
-        || !(await retryHeldWrite(ctx, resumeId))
-      ) {
-        return;
-      }
+    if (record.opaquePhotoOutcome !== null) return;
+    if (held !== null) {
+      const next = await nextForHeld(ctx, resumeId, held);
+      if (next === 'wait') return;
+      if (next === 'again') continue;
+      if (!(await resend(ctx, resumeId, held))) return;
       continue;
     }
     clearWriteRetry(ctx, resumeId);
-    if (!canDrain(record, authState, ownerId)) return;
-    const queueItem = toRaw(record.pending[0]!);
-    if (!dependenciesAcknowledged(record, queueItem)) return;
-    if (queueItem.kind === 'templateGroup') {
-      if (record.templateState === null) {
-        ctx.deps.store.setTemplateState(resumeId, {
-          kind: 'queued',
-          nextChild: 0,
-        });
-        continue;
-      }
-      if (record.templateState.kind === 'partial') return;
-      if (record.templateState.kind === 'complete') {
-        ctx.deps.store.dropHead(resumeId, queueItem.id);
-        continue;
-      }
-      if (
-        record.templateState.kind === 'queued'
-        && record.templateState.nextChild === 0
-      ) {
-        const groupDecision = reconcileTemplateGroup(
-          queueItem,
-          record.accepted,
-        );
-        if (groupDecision.kind === 'satisfied') {
-          ctx.deps.store.setTemplateState(resumeId, null);
-          ctx.deps.store.dropHead(resumeId, queueItem.id);
-          continue;
-        }
-        if (groupDecision.kind === 'conflict') {
-          ctx.deps.store.markConflict(resumeId, groupDecision.conflict);
-          return;
-        }
-      }
-      const command = nextTemplateChild(queueItem, record.templateState);
-      if (command === null) return;
-      if (!(await dispatchCommand(ctx, resumeId, queueItem, command))) return;
-      continue;
-    }
-    const decision = reconcileCommand(queueItem, record.accepted);
-    if (decision.kind === 'satisfied') {
-      ctx.deps.store.dropHead(resumeId, queueItem.id);
-      continue;
-    }
-    if (decision.kind === 'conflict') {
-      if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
-        continue;
-      }
-      ctx.deps.store.markConflict(resumeId, decision.conflict);
-      return;
-    }
-    if (!(await dispatchCommand(ctx, resumeId, queueItem, queueItem))) return;
+    if (!(await sendHead(ctx, resumeId, record))) return;
   }
+}
+
+/** The queue's head, not sent yet, has a conflict recorded. */
+function queuedConflict(record: ResumeRecord): boolean {
+  const head = record.pending[0];
+  return head !== undefined
+    && record.conflicts.some(({ id }) => id === head.id);
+}
+
+/**
+ * Settles the queue's head against what the editor last accepted, before it
+ * is sent: one the resume already holds leaves the queue, a conflict stops
+ * the queue for the person, and a refresh over changed text is dropped. A
+ * recorded conflict is reconciled again, so it follows later typing.
+ */
+function reconcileHead(
+  ctx: OperationContext,
+  resumeId: string,
+  record: ResumeRecord,
+): 'send' | 'again' | 'stop' {
+  const queueItem = toRaw(record.pending[0]!);
+  if (queueItem.kind === 'templateGroup') {
+    if (record.templateState === null) {
+      ctx.deps.store.setTemplateState(resumeId, {
+        kind: 'queued',
+        nextChild: 0,
+      });
+      return 'again';
+    }
+    if (record.templateState.kind === 'partial') return 'stop';
+    if (record.templateState.kind === 'complete') {
+      ctx.deps.store.dropHead(resumeId, queueItem.id);
+      return 'again';
+    }
+    if (
+      record.templateState.kind === 'queued'
+      && record.templateState.nextChild === 0
+    ) {
+      const groupDecision = reconcileTemplateGroup(
+        queueItem,
+        record.accepted,
+      );
+      if (groupDecision.kind === 'satisfied') {
+        ctx.deps.store.setTemplateState(resumeId, null);
+        ctx.deps.store.dropHead(resumeId, queueItem.id);
+        return 'again';
+      }
+      if (groupDecision.kind === 'conflict') {
+        ctx.deps.store.markConflict(resumeId, groupDecision.conflict);
+        return 'stop';
+      }
+    }
+    return 'send';
+  }
+  const decision = reconcileCommand(queueItem, record.accepted);
+  if (decision.kind === 'satisfied') {
+    ctx.deps.store.dropHead(resumeId, queueItem.id);
+    return 'again';
+  }
+  if (decision.kind === 'conflict') {
+    if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
+      return 'again';
+    }
+    ctx.deps.store.markConflict(resumeId, decision.conflict);
+    return 'stop';
+  }
+  return 'send';
+}
+
+/** Step 5 for the queue's head. Returns whether the drain looks again. */
+async function sendHead(
+  ctx: OperationContext,
+  resumeId: string,
+  record: ResumeRecord,
+): Promise<boolean> {
+  if (
+    !canDrain(
+      record,
+      ctx.deps.auth.authState.value,
+      ctx.deps.auth.user.value?.id,
+    )
+  ) {
+    return false;
+  }
+  const queueItem = toRaw(record.pending[0]!);
+  if (!dependenciesAcknowledged(record, queueItem)) return false;
+  const next = reconcileHead(ctx, resumeId, record);
+  if (next !== 'send') return next === 'again';
+  const state = record.templateState;
+  let command: AtomicEditorCommand | null = null;
+  if (queueItem.kind !== 'templateGroup') {
+    command = queueItem;
+  } else if (state?.kind === 'queued' || state?.kind === 'running') {
+    command = nextTemplateChild(queueItem, state);
+  }
+  if (command === null) return false;
+  return dispatchCommand(ctx, resumeId, queueItem, command);
+}
+
+/** A CSRF token for the owner's write, refreshed once if there is none. */
+async function csrfFor(
+  ctx: OperationContext,
+  resumeId: string,
+  ownerId: string,
+): Promise<string | null> {
+  const token = dispatchToken(ctx, resumeId, ownerId);
+  const record = ctx.deps.store.recordFor(resumeId);
+  if (token !== null || record === undefined || record.sessionLost) {
+    return token;
+  }
+  try {
+    await ctx.deps.auth.refresh();
+  } catch {
+    return null;
+  }
+  if (!current(ctx, resumeId)) return null;
+  return dispatchToken(ctx, resumeId, ownerId);
 }
 
 async function dispatchCommand(
@@ -167,62 +266,62 @@ async function dispatchCommand(
   queueItem: EditorQueueItem,
   command: AtomicEditorCommand,
 ): Promise<boolean> {
+  const csrfToken = await csrfFor(ctx, resumeId, queueItem.ownerId);
   const record = ctx.deps.store.recordFor(resumeId);
-  let csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (record !== undefined && csrfToken === null && !record.sessionLost) {
-    try {
-      await ctx.deps.auth.refresh();
-    } catch {
-      return false;
-    }
-    if (!current(ctx, resumeId)) return false;
-    csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  }
   if (record === undefined || csrfToken === null) return false;
   const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
   ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  if (!owns(ctx, resumeId, queueItem)) return false;
+  if (!owns(ctx, resumeId, attempt)) return false;
   await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
   return true;
 }
 
-export async function retry(
+/**
+ * Step 5 for the held write: sends it again unchanged, marked as on its way
+ * so its retry button waits. Returns whether the drain looks again.
+ */
+async function resend(
+  ctx: OperationContext,
+  resumeId: string,
+  held: AttemptState,
+): Promise<boolean> {
+  const csrfToken = await csrfFor(ctx, resumeId, held.queueItem.ownerId);
+  if (csrfToken === null || !owns(ctx, resumeId, held.attempt)) return false;
+  const key = held.attempt.idempotencyKey;
+  startResend(ctx, resumeId, held.queueItem.id);
+  ctx.deps.store.markSending(resumeId, key, true);
+  try {
+    await send(
+      ctx,
+      resumeId,
+      held.queueItem,
+      held.command,
+      held.attempt,
+      csrfToken,
+    );
+  } finally {
+    if (current(ctx, resumeId)) {
+      ctx.deps.store.markSending(resumeId, key, false);
+    }
+  }
+  return true;
+}
+
+/**
+ * Asks for the held write `commandId` to go out again: Retry now, Try
+ * again, or a photo retry. It only changes the schedule; the drain sends.
+ */
+export function retry(
   ctx: OperationContext,
   resumeId: string,
   commandId: string,
 ): Promise<void> {
-  const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (
-    active === null
-    || active === undefined
-    || active.command.id !== commandId
-  ) {
-    return;
+  const held = ctx.deps.store.recordFor(resumeId)?.attempt;
+  if (held === null || held === undefined || held.command.id !== commandId) {
+    return Promise.resolve();
   }
-  const queueItem = toRaw(active.queueItem);
-  const command = toRaw(active.command);
-  // Try again after the rebase limit starts a fresh cycle of rebases.
-  const attempt = active.kind === 'failed' && active.reason === 'stale-limit'
-    ? { ...toRaw(active.attempt), staleRebases: 0 }
-    : toRaw(active.attempt);
-  if (ctx.deps.runtime.nowEpochMs() >= attempt.retryCutoff) {
-    await resolveUnknown(
-      ctx,
-      resumeId,
-      queueItem,
-      command,
-      attempt,
-      'transport',
-    );
-  } else {
-    const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-    if (csrfToken === null) return;
-    await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
-  }
-  if (!current(ctx, resumeId)) return;
-  // A retry settles outside the drain, so the drain resumes the queue and
-  // completes any read barrier the settlement left.
-  await flush(ctx, resumeId);
+  requestRetry(ctx, resumeId, toRaw(held));
+  return flush(ctx, resumeId);
 }
 
 export async function resumeAfterAuth(
@@ -247,9 +346,10 @@ export async function resumeAfterAuth(
   if (!current(ctx, resumeId) || result.kind !== 'complete') return;
   adoptRead(ctx, resumeId, result.accepted);
   ctx.deps.store.clearSessionLost(resumeId);
-  const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (active !== null && active !== undefined) {
-    await retry(ctx, resumeId, active.command.id);
+  const held = ctx.deps.store.recordFor(resumeId)?.attempt;
+  if (held !== null && held !== undefined) {
+    requestRetry(ctx, resumeId, toRaw(held));
+    await flush(ctx, resumeId);
   } else {
     schedule(ctx, resumeId);
   }

@@ -51,16 +51,19 @@ export function current(ctx: OperationContext, resumeId: string): boolean {
   );
 }
 
-/** The operation is current and `queueItem` is still the write in flight. */
+/**
+ * The operation is current and `attempt`, the attempt it sent, is still the
+ * write the queue holds: an answer to any other attempt settles nothing.
+ */
 export function owns(
   ctx: OperationContext,
   resumeId: string,
-  queueItem: EditorQueueItem,
+  attempt: FrozenAttempt,
 ): boolean {
   return (
     current(ctx, resumeId)
-    && ctx.deps.store.recordFor(resumeId)?.attempt?.queueItem.id
-    === queueItem.id
+    && ctx.deps.store.recordFor(resumeId)?.attempt?.attempt.idempotencyKey
+    === attempt.idempotencyKey
   );
 }
 
@@ -125,26 +128,6 @@ export function clearWriteRetry(
   ctx.writeRetries.delete(resumeId);
 }
 
-/**
- * A write held with an unknown outcome is sent again, unchanged, while the
- * session is the owner's and its retry window is open.
- */
-export function heldWriteDue(
-  record: ResumeRecord | undefined,
-  authState: ReturnType<typeof useAuth>['authState']['value'],
-  ownerId: string | undefined,
-): boolean {
-  const held = record?.attempt;
-  return (
-    held?.kind === 'unknown'
-    && held.reason !== 'cutoff'
-    && !record!.sessionLost
-    && record!.opaquePhotoOutcome === null
-    && authState === 'authenticated'
-    && held.queueItem.ownerId === ownerId
-  );
-}
-
 export function canDrain(
   record: ResumeRecord | undefined,
   authState: ReturnType<typeof useAuth>['authState']['value'],
@@ -163,22 +146,34 @@ export function canDrain(
 }
 
 /**
- * The read barrier is completed before any queued edit, once no write is in
- * flight. A lost session waits for sign-in instead.
+ * The read barrier is completed before any write is sent, a held one
+ * included: the drain sends nothing else while it runs. A lost session
+ * waits for sign-in instead.
  */
 export function readBarrierDue(
   record: ResumeRecord | undefined,
   authState: ReturnType<typeof useAuth>['authState']['value'],
   ownerId: string | undefined,
 ): boolean {
+  const head = record?.attempt?.queueItem ?? record?.pending[0];
   return (
     record !== undefined
     && record.completeReadRequired
-    && record.attempt === null
     && !record.sessionLost
     && authState === 'authenticated'
     && ownerId !== undefined
-    && (record.pending[0]?.ownerId ?? ownerId) === ownerId
+    && (head?.ownerId ?? ownerId) === ownerId
+  );
+}
+
+/**
+ * Step 2 of the drain: the held write has a conflict, which waits for the
+ * person. A template child's conflict carries the child's id.
+ */
+export function heldConflict(record: ResumeRecord): boolean {
+  const held = record.attempt;
+  return held !== null && record.conflicts.some(
+    ({ id }) => id === held.queueItem.id || id === held.command.id,
   );
 }
 

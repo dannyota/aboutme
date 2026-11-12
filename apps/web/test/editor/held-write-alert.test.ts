@@ -1,9 +1,8 @@
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HeldWriteAlert from '../../app/components/editor/HeldWriteAlert.vue';
-// eslint-disable-next-line max-len
-import type { ResumeEditorActions } from '../../app/composables/useResumeEditor';
 import type { AtomicEditorCommand } from '../../app/editor/commands';
 import { editorShellCopy } from '../../app/i18n/editor-shell';
 import {
@@ -12,7 +11,12 @@ import {
   type ResumeRecord,
 } from '../../app/stores/resumeRecord';
 import { setSiteLocale } from '../support/locale';
+import { fullName, headline } from './fake-resume-server';
 import { acceptedFixture } from './fixture';
+import { openEditor, type OpenEditor } from './held-write-editor';
+
+// The banner for a write the queue still holds, and its buttons, driven
+// through the real coordinator against the fake server.
 
 const command = {
   id: 'command-1',
@@ -20,8 +24,11 @@ const command = {
   path: 'headline',
 } as unknown as AtomicEditorCommand;
 
-function recordWith(attempt: AttemptState | null): ResumeRecord {
-  return { ...createRecord(acceptedFixture()), attempt };
+function recordWith(
+  attempt: AttemptState | null,
+  conflicts: ResumeRecord['conflicts'] = [],
+): ResumeRecord {
+  return { ...createRecord(acceptedFixture()), attempt, conflicts };
 }
 
 function held(
@@ -35,62 +42,159 @@ function held(
   } as AttemptState;
 }
 
-function mountAlert(record: ResumeRecord) {
-  const retry = vi.fn();
-  const actions = { retry } as unknown as ResumeEditorActions;
-  const wrapper = mount(HeldWriteAlert, { props: { actions, record } });
-  return { retry, wrapper };
+function mountAlert(context: OpenEditor, record = context.record()) {
+  return mount(HeldWriteAlert, { props: { actions: context.actions, record } });
+}
+
+/** Lets the editor's promises settle and the banner render again. */
+async function settle(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+  await nextTick();
+}
+
+/** An edit whose outcome has stayed unknown for a minute. */
+async function unknownForAMinute(context: OpenEditor): Promise<string> {
+  context.server.loseEveryResponse({ applied: false });
+  const mine = context.edit(headline('Staff engineer'));
+  await vi.advanceTimersByTimeAsync(61_000);
+  expect(context.record().attempt).toMatchObject({ alert: true });
+  context.server.loseEveryResponse(undefined);
+  return mine;
 }
 
 beforeEach(() => {
   setSiteLocale('en');
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('the held-write alert', () => {
   it.each([
-    ['no write held', null],
-    ['an unknown write before its alert', held({
+    ['no write held', recordWith(null)],
+    ['an unknown write before its alert', recordWith(held({
       kind: 'unknown', reason: 'transport',
-    })],
-    ['an unknown write past its retry window', held({
+    }))],
+    ['an unknown write past its retry window', recordWith(held({
       kind: 'unknown', reason: 'cutoff',
-    })],
-    ['a write refused for another reason', held({
+    }))],
+    ['a write refused for another reason', recordWith(held({
       kind: 'failed', reason: 'request_invalid',
-    })],
-  ] as const)('is absent for %s', (_name, attempt) => {
-    const { wrapper } = mountAlert(recordWith(attempt));
+    }))],
+    ['a held write with a conflict', recordWith(held({
+      kind: 'unknown', reason: 'transport', alert: true,
+    }), [{ id: 'command-1' } as ResumeRecord['conflicts'][number]])],
+  ] as const)('is absent for %s', (_name, record) => {
+    const wrapper = mountAlert(openEditor(), record);
 
     expect(wrapper.find('[data-held-write]').exists()).toBe(false);
   });
 
-  it('asks to retry now once an unknown write has raised its alert',
+  it('explains an unknown write once it has raised its alert', async () => {
+    const context = openEditor();
+    await unknownForAMinute(context);
+    const banner = mountAlert(context).get('[data-held-write="unknown"]');
+
+    expect(banner.attributes('role')).toBe('alert');
+    expect(banner.text()).toContain(editorShellCopy.en.unknownWriteTitle);
+    expect(banner.text()).toContain(editorShellCopy.en.unknownWriteDescription);
+    expect(banner.text()).toContain(editorShellCopy.en.retryNow);
+  });
+});
+
+describe('Retry now', () => {
+  it('sends the held write once on two quick clicks and stays disabled '
+    + 'while it is on its way', async () => {
+    const context = openEditor();
+    const mine = await unknownForAMinute(context);
+    const sends = context.server.sentFor(mine).length;
+    const release = context.server.holdNextResponse();
+    const wrapper = mountAlert(context);
+    const button = wrapper.get('[data-action="retry-held-write"]');
+
+    await button.trigger('click');
+    await button.trigger('click');
+    await settle();
+
+    expect(context.server.sentFor(mine)).toEqual([
+      ...Array(sends).fill('unknown'), 'complete',
+    ]);
+    expect(button.attributes('disabled')).toBeDefined();
+
+    release();
+    await settle();
+
+    expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
+    expect(wrapper.find('[data-held-write]').exists()).toBe(false);
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+  });
+
+  it('sends nothing more when the automatic retry is already on its way',
     async () => {
-      const { retry, wrapper } = mountAlert(recordWith(held({
-        kind: 'unknown', reason: 'transport', alert: true,
-      })));
-      const banner = wrapper.get('[data-held-write="unknown"]');
+      const context = openEditor();
+      const mine = await unknownForAMinute(context);
+      const sends = context.server.sentFor(mine).length;
+      const release = context.server.holdNextResponse();
+      const wrapper = mountAlert(context);
+      const button = wrapper.get('[data-action="retry-held-write"]');
 
-      expect(banner.attributes('role')).toBe('alert');
-      expect(banner.text()).toContain(editorShellCopy.en.unknownWriteTitle);
-      expect(banner.text()).toContain(
-        editorShellCopy.en.unknownWriteDescription,
-      );
-      await banner.get('[data-action="retry-held-write"]').trigger('click');
-      expect(banner.text()).toContain(editorShellCopy.en.retryNow);
-      expect(retry).toHaveBeenCalledWith('command-1');
+      // The 30-second retry that started at 32.25 s goes out at 62.25 s.
+      await vi.advanceTimersByTimeAsync(1_250);
+      expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
+      await nextTick();
+      await button.trigger('click');
+      void context.actions.retry(mine);
+      await settle();
+
+      expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
+      expect(button.attributes('disabled')).toBeDefined();
+
+      release();
+      await settle();
+
+      expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
+      expect(context.store.saveStateFor(context.id)).toBe('saved');
     });
+});
 
-  it('offers Try again once a write has used every rebase', async () => {
-    const { retry, wrapper } = mountAlert(recordWith(held({
+describe('Try again', () => {
+  it('starts one cycle of rebases on two quick clicks and stays disabled '
+    + 'while it is on its way', async () => {
+    const context = openEditor();
+    const mine = context.edit(headline('Staff engineer'));
+    const later = context.edit(fullName('Ada King'));
+    for (let bump = 0; bump < 4; bump += 1) {
+      context.server.beforeNextWrite(() => {
+        context.server.otherWriter((document) => document);
+      });
+    }
+    await context.idle();
+    expect(context.record().attempt).toMatchObject({
       kind: 'failed', reason: 'stale-limit',
-    })));
-    const banner = wrapper.get('[data-held-write="stale"]');
+    });
+    const sends = context.server.sentFor(mine).length;
+    const release = context.server.holdNextResponse();
+    const wrapper = mountAlert(context);
+    const button = wrapper
+      .get('[data-held-write="stale"]')
+      .get('[data-action="retry-held-write"]');
+    expect(button.text()).toBe(editorShellCopy.en.tryAgain);
 
-    expect(banner.text()).toContain(editorShellCopy.en.staleWriteTitle);
-    expect(banner.text()).toContain(editorShellCopy.en.staleWriteDescription);
-    expect(banner.text()).toContain(editorShellCopy.en.tryAgain);
-    await banner.get('[data-action="retry-held-write"]').trigger('click');
-    expect(retry).toHaveBeenCalledWith('command-1');
+    await button.trigger('click');
+    await button.trigger('click');
+    await settle();
+
+    expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
+    expect(button.attributes('disabled')).toBeDefined();
+
+    release();
+    await context.idle();
+
+    expect(context.server.sentFor(mine).slice(sends)).toEqual(['complete']);
+    expect(context.server.sentFor(later)).toEqual(['complete']);
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
   });
 });

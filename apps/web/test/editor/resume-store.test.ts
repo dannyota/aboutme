@@ -215,7 +215,7 @@ const saveStateBlockers: readonly [
       reason: 'server',
     });
   }],
-  ['unknown transport after its alert', 'offline', (store, accepted) => {
+  ['unknown transport after its alert', 'retrying', (store, accepted) => {
     const command = startAttempt(store, accepted, 'Unknown');
     store.holdAttempt(accepted.metadata.id, {
       kind: 'unknown',
@@ -226,7 +226,7 @@ const saveStateBlockers: readonly [
     });
     store.markHeldAlert(accepted.metadata.id, command.id);
   }],
-  ['unknown server after its alert', 'error', (store, accepted) => {
+  ['unknown server after its alert', 'retrying', (store, accepted) => {
     const command = startAttempt(store, accepted, 'Unknown');
     store.holdAttempt(accepted.metadata.id, {
       kind: 'unknown',

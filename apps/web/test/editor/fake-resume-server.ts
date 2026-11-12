@@ -61,11 +61,15 @@ export interface LostResponse {
   readonly applied: boolean;
 }
 
+/** Writes after this many never answer, so a client that loops cannot hang. */
+const WRITE_LIMIT = 200;
+
 /**
  * The owner API over one stored resume. It checks If-Match as the server
  * does, answers a stale write with the stored document and revision, and
  * applies the writes these scenarios send. A key it already applied replays
- * that result without running the write again (ADR 0006).
+ * that result without running the write again when the request is the same,
+ * and refuses it when the If-Match or body differ (ADR 0006).
  */
 export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
@@ -75,7 +79,11 @@ export function fakeServer(initial: AcceptedResume) {
   const lostResponses: LostResponse[] = [];
   let everyResponseLost: LostResponse | undefined;
   const beforeWrites: (() => void)[] = [];
-  const replays = new Map<string, AttemptResult>();
+  const failedWrites: AttemptResult[] = [];
+  const replays = new Map<
+    string,
+    { readonly request: string; readonly result: AttemptResult }
+  >();
   const sent: {
     attempt: FrozenAttempt;
     result: AttemptResult['kind'];
@@ -100,6 +108,25 @@ export function fakeServer(initial: AcceptedResume) {
         advance({
           ...document,
           personalDetails: photo === undefined ? body : { ...body, photo },
+        });
+        return { kind: 'complete', status: 200, accepted: copy() };
+      }
+      case 'upsertResumeEntry': {
+        if (attempt.payload.kind !== 'json') throw new Error('no body');
+        const { entry } = JSON.parse(attempt.payload.utf8);
+        const sectionKey = decodeURIComponent(attempt.url.split('/').at(-1)!);
+        const section = document.content[sectionKey]!;
+        const others = section.entries.filter(({ id }) => id !== entry.id);
+        const at = section.entries.findIndex(({ id }) => id === entry.id);
+        const entries = at === -1
+          ? [...section.entries, entry]
+          : [...others.slice(0, at), entry, ...others.slice(at)];
+        advance({
+          ...document,
+          content: {
+            ...document.content,
+            [sectionKey]: { ...section, entries },
+          },
         });
         return { kind: 'complete', status: 200, accepted: copy() };
       }
@@ -144,31 +171,57 @@ export function fakeServer(initial: AcceptedResume) {
     etag: parentETag(stored.revision),
   });
   const copy = (): AcceptedResume => structuredClone(stored);
+  /** What the server fingerprints: the target, If-Match and body. */
+  const request = (attempt: FrozenAttempt): string => JSON.stringify([
+    attempt.method,
+    attempt.url,
+    attempt.ifMatch ?? 'absent',
+    attempt.payload.kind === 'json'
+      ? attempt.payload.utf8
+      : attempt.payload.kind,
+  ]);
+  const answer = (attempt: FrozenAttempt): AttemptResult => {
+    const replay = replays.get(attempt.idempotencyKey);
+    if (replay !== undefined) {
+      return replay.request === request(attempt)
+        ? replay.result
+        : { kind: 'idempotency-reuse' };
+    }
+    if (attempt.ifMatch !== parentETag(stored.revision)) {
+      return {
+        kind: 'stale',
+        status: 412,
+        winner: {
+          document: structuredClone(stored.document),
+          revision: stored.revision,
+        },
+      };
+    }
+    const result = apply(attempt);
+    if (result.kind === 'complete' || result.kind === 'child-ack') {
+      replays.set(attempt.idempotencyKey, {
+        request: request(attempt),
+        result,
+      });
+    }
+    return result;
+  };
 
   const api = {
     dispatch: vi.fn(async (attempt: FrozenAttempt): Promise<AttemptResult> => {
+      if (sent.length >= WRITE_LIMIT) return new Promise<never>(() => {});
       beforeWrites.shift()?.();
       const lost = lostResponses.shift() ?? everyResponseLost;
       if (lost?.applied === false) {
         sent.push({ attempt, result: 'unknown', at: Date.now() });
         return { kind: 'unknown', reason: 'transport' };
       }
-      const replay = replays.get(attempt.idempotencyKey);
-      const result: AttemptResult = replay ?? (attempt.ifMatch === parentETag(
-        stored.revision,
-      )
-        ? apply(attempt)
-        : {
-            kind: 'stale',
-            status: 412,
-            winner: {
-              document: structuredClone(stored.document),
-              revision: stored.revision,
-            },
-          });
-      if (result.kind === 'complete' || result.kind === 'child-ack') {
-        replays.set(attempt.idempotencyKey, result);
+      const failed = lost === undefined ? failedWrites.shift() : undefined;
+      if (failed !== undefined) {
+        sent.push({ attempt, result: failed.kind, at: Date.now() });
+        return failed;
       }
+      const result = answer(attempt);
       if (lost !== undefined) {
         sent.push({ attempt, result: 'unknown', at: Date.now() });
         return { kind: 'unknown', reason: 'transport' };
@@ -230,6 +283,13 @@ export function fakeServer(initial: AcceptedResume) {
     /** The next write's response never reaches the editor. */
     loseNextResponse(lost: LostResponse): void {
       lostResponses.push(lost);
+    },
+    /**
+     * The next write that reaches the server is refused with `result`
+     * before it runs: a rate limit or a rejected CSRF token.
+     */
+    failNextWrite(result: AttemptResult): void {
+      failedWrites.push(result);
     },
     /** Every write's response is lost until this is called again. */
     loseEveryResponse(lost: LostResponse | undefined): void {

@@ -94,11 +94,14 @@ held. Once a write's outcome has stayed unknown for a minute, the banner reads
 “Thay đổi gần nhất chưa được lưu” and “Không kết nối được với máy chủ. Hệ thống
 vẫn thử lại mỗi 30 giây.” (“Your latest change isn't saved yet” and “We couldn't
 reach the server. We keep trying every 30 seconds.”), with Retry now (“Thử lại
-ngay”), which sends it again at once. Once a write has used every rebase, it
-reads “Thay đổi của bạn liên tục gặp chỉnh sửa mới hơn” and “CV này đang được
-thay đổi ở nơi khác. Thay đổi của bạn vẫn được giữ ở đây.” (“Your change keeps
-meeting newer edits” and “This resume is being changed elsewhere. Your change is
-kept here.”), with Try again (“Thử lại”), which starts the rebases again.
+ngay”), which sends it again at once, or after the server's Retry-After. Once a
+write has used every rebase, it reads “Thay đổi của bạn liên tục gặp chỉnh sửa
+mới hơn” and “CV này đang được thay đổi ở nơi khác. Thay đổi của bạn vẫn được
+giữ ở đây.” (“Your change keeps meeting newer edits” and “This resume is being
+changed elsewhere. Your change is kept here.”), with Try again (“Thử lại”),
+which starts the rebases again. Either button is disabled while the write is on
+its way. A held write with a conflict shows the conflict panel instead of this
+banner.
 
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF

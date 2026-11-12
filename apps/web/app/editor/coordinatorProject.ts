@@ -90,9 +90,9 @@ export function dropChangedRefresh(
 
 /**
  * Settles a project command after a revision mismatch. A link that already
- * landed leaves the queue; any other link is the same request, resent once
- * on the new revision by the caller. A refresh is resent only over
- * unchanged text.
+ * landed leaves the queue; any other link is the same request, rebased onto
+ * the new revision by the caller within its rebase limit. A refresh is
+ * rebased only over unchanged text.
  */
 export function settleStaleProject(
   ctx: CoordinatorContext,
