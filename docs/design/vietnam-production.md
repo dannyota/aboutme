@@ -45,13 +45,13 @@ hold no personal data.
 
 Nothing stands in front of the host (owner, 2026-10-10). The apex and `www`
 resolve to the floating IP; Caddy terminates TLS with Let's Encrypt certificates
-by ACME HTTP-01, and serves hashed `/_nuxt/*` assets with Nuxt's immutable cache
-headers. The security group admits TCP 80 and 443 from anywhere and TCP 22922
-from all sources (owner, 2026-10-10). Caddy takes the client address from the
-socket, strips every forwarding header, and sends one `X-Real-IP` to Go; Go
-keeps trusting only loopback. The CloudFront listener with
-`CloudFront-Viewer-Address` remains in the code for the AWS path. Production
-uses `EDGES=direct`.
+by ACME HTTP-01 or TLS-ALPN-01, Caddy's default challenges, and serves hashed
+`/_nuxt/*` assets with Nuxt's immutable cache headers. The security group admits
+TCP 80 and 443 from anywhere and TCP 22922 from all sources (owner, 2026-10-10).
+Caddy takes the client address from the socket, strips every forwarding header,
+and sends one `X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront
+listener with `CloudFront-Viewer-Address` remains in the code for the AWS path.
+Production uses `EDGES=direct`.
 
 Serving Caddy uses `grace_period 5s` to bound SSE and MCP stream draining below
 Podman's default 10s stop timeout.
@@ -156,10 +156,10 @@ The host enforces these trust boundaries:
 - `aboutme-caddy` and `aboutme-maintenance` do not conflict. A deploy runs them
   side by side on ports 80 and 443 with `SO_REUSEPORT`, which Linux allows only
   for sockets of one effective user, so both run as the same user. They share
-  one Caddy storage directory. Either process then answers an ACME HTTP-01
-  challenge for the other's order and they do not race to issue; with separate
-  storage, each would order its own certificate and a challenge could reach the
-  process that did not order it, so issuance fails or hits rate limits.
+  one Caddy storage directory. Either process then answers an ACME challenge for
+  the other's order and they do not race to issue; with separate storage, each
+  would order its own certificate and a challenge could reach the process that
+  did not order it, so issuance fails or hits rate limits.
 - One-shot containers reach PostgreSQL only through the mounted socket; only
   media jobs get outbound network, for vStorage.
 - Chromium keeps its sandbox and its blocked proxy; the probe checks the user
