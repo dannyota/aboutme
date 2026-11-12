@@ -39,6 +39,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - `scripts/test/makefile-safety-test.sh` fails on macOS at "spec-drift check never reached the runtime" (line 739), on main as well, while Linux passes: the stubbed `make dev-https-auth-check` never calls `podman` on the Mac path. Make the check platform-aware or skip it on macOS with a reason, so `make operational-test-fast` passes on the owner's Mac.
 
+- `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with `stream status 503` at `apps/server/internal/realtimeapi/service_test.go:581` (main run 43127593670 attempt 1, 462454fa, Server integration); the rerun passed and the test did not change. Find what makes the owner stream answer 503 there, likely the coordinator or hub not ready.
+
 ## Production acceptance
 
 - Dispatch the first `action=renew` of `.github/workflows/vmonitor-renew.yml` after 2026-11-28T06:54:54Z (the 72-hour threshold for the term ending 2026-12-01T06:54:54Z) and confirm the later expiry by read-back; then add the schedule in a separate reviewed change. `action=check` passed on 2026-11-01 (run 41302010198) and the owner delegated closing hold issue #146, which is now closed. If the renewal fails or stays unconfirmed, reconcile with the provider before any retry. Evidence: [renewal design](../design/vmonitor-quota-renewal.md).
