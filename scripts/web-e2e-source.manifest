@@ -490,6 +490,9 @@ apps/web/app/public/public-resume.client.ts
 apps/web/app/public/viewBeacon.ts
 apps/web/app/realtime/controller.ts
 apps/web/app/realtime/owner.ts
+apps/web/app/stores/resumeAdoption.ts
+apps/web/app/stores/resumeQueue.ts
+apps/web/app/stores/resumeRecord.ts
 apps/web/app/stores/resumes.ts
 apps/web/app/templates/atsText.ts
 apps/web/app/templates/catalog.ts

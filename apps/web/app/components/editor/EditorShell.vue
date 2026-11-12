@@ -42,6 +42,7 @@ import { linkedEntry, type EntryLocation } from '../../editor/projectLinks';
 import { canonicalPublicPath } from '../../editor/publishApi';
 import type { SaveState } from '../../editor/types';
 import type { ResumeRecord } from '../../stores/resumes';
+import { saveState as recordSaveState } from '../../stores/resumeRecord';
 import AccountMenu from '../app/AccountMenu.vue';
 import CustomizationPanel from './customization/CustomizationPanel.vue';
 import PersonalDetailsPanel from './forms/PersonalDetailsPanel.vue';
@@ -147,30 +148,8 @@ const issues = computed(() => Object.values(props.record.issues).flat());
 // Held field edits (rich text mid-debounce, an unfinished date) count too.
 const drafts = useFieldDrafts();
 const saveState = computed<SaveState>(() => {
-  const record = props.record;
-  if (record.sessionLost) return 'session-lost';
-  if (record.conflicts.length > 0) return 'conflict';
-  if (record.attempt?.kind === 'unknown') {
-    return record.attempt.reason === 'transport' ? 'offline' : 'error';
-  }
-  if (
-    record.attempt?.kind === 'failed'
-    || record.attempt?.kind === 'retry-later'
-    || record.templateState?.kind === 'partial'
-    || record.opaquePhotoOutcome !== null
-    || issues.value.length > 0
-  ) {
-    return 'error';
-  }
-  if (record.attempt?.kind === 'dispatching') return 'saving';
-  if (
-    record.pending.length > 0
-    || record.completeReadRequired
-    || (drafts?.count.value ?? 0) > 0
-  ) {
-    return 'dirty';
-  }
-  return 'saved';
+  const state = recordSaveState(props.record);
+  return state === 'saved' && (drafts?.count.value ?? 0) > 0 ? 'dirty' : state;
 });
 
 const selectedEntry = ref<string>();
