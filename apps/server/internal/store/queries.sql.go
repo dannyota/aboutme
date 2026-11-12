@@ -973,8 +973,8 @@ type CreateOAuthAuthorizationCodeParams struct {
 	CodeChallenge string
 	RedirectURI   string
 	CreatedAt     time.Time
-	GrantID       *uuid.UUID
-	AuthEpoch     *int64
+	GrantID       uuid.UUID
+	AuthEpoch     int64
 }
 
 // Code issue. expires_at is computed here, not passed in, so the exact

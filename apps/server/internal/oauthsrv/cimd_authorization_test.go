@@ -324,7 +324,7 @@ func TestCIMDCodeWriteFailureRollsBackClientAndGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	epoch := user.AuthEpoch
-	if _, codeErr := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: strings.Repeat("A", 43), RedirectURI: "http://localhost/callback", CreatedAt: s.clock(), GrantID: &grant.ID, AuthEpoch: &epoch}); codeErr != nil {
+	if _, codeErr := q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: client.ID, UserID: user.ID, Scopes: "resumes:read", CodeChallenge: strings.Repeat("A", 43), RedirectURI: "http://localhost/callback", CreatedAt: s.clock(), GrantID: grant.ID, AuthEpoch: epoch}); codeErr != nil {
 		t.Fatal(codeErr)
 	}
 	s.entropy = &lockedEntropy{reader: bytes.NewReader(entropy)}
