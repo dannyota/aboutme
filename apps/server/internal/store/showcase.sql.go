@@ -60,51 +60,60 @@ func (q *Queries) DeleteResumeShowcase(ctx context.Context, resumeID uuid.UUID) 
 
 const getResumeShowcase = `-- name: GetResumeShowcase :one
 
-SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
+SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = $1
 `
 
+type GetResumeShowcaseRow struct {
+	ResumeID    uuid.UUID
+	RequestedAt time.Time
+	Role        *string
+	CardVersion string
+	TemplateID  *string
+}
+
 // Community showcase queries (docs/design/showcase.md, ADR 0028). The
-// resume_showcase row exists only while the opt-in does.
-func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
+// resume_showcase row exists only while the opt-in does. Statements name their
+// columns, never * or s.*: sqlc expands a star into every column when it
+// generates, so a released binary fails once a migration drops one
+// (docs/design/release-floors.md "Schema floor").
+func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseRow, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcase, resumeID)
-	var i ResumeShowcase
+	var i GetResumeShowcaseRow
 	err := row.Scan(
 		&i.ResumeID,
 		&i.RequestedAt,
 		&i.Role,
-		&i.ReviewKey,
 		&i.CardVersion,
 		&i.TemplateID,
-		&i.ReviewedKey,
-		&i.ReviewOutcome,
-		&i.ReviewedAt,
-		&i.FirstListedAt,
 	)
 	return i, err
 }
 
 const getResumeShowcaseForUpdate = `-- name: GetResumeShowcaseForUpdate :one
-SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
+SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = $1
 FOR UPDATE
 `
 
+type GetResumeShowcaseForUpdateRow struct {
+	ResumeID    uuid.UUID
+	RequestedAt time.Time
+	Role        *string
+	CardVersion string
+	TemplateID  *string
+}
+
 // Locks the opt-in row so concurrent derived-value writes serialize.
-func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
+func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcaseForUpdate, resumeID)
-	var i ResumeShowcase
+	var i GetResumeShowcaseForUpdateRow
 	err := row.Scan(
 		&i.ResumeID,
 		&i.RequestedAt,
 		&i.Role,
-		&i.ReviewKey,
 		&i.CardVersion,
 		&i.TemplateID,
-		&i.ReviewedKey,
-		&i.ReviewOutcome,
-		&i.ReviewedAt,
-		&i.FirstListedAt,
 	)
 	return i, err
 }
@@ -164,32 +173,35 @@ func (q *Queries) ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error
 }
 
 const listResumeShowcasesForUser = `-- name: ListResumeShowcasesForUser :many
-SELECT s.resume_id, s.requested_at, s.role, s.review_key, s.card_version, s.template_id, s.reviewed_key, s.review_outcome, s.reviewed_at, s.first_listed_at
+SELECT s.resume_id, s.requested_at, s.role, s.card_version, s.template_id
 FROM resume_showcase s
 JOIN resumes r ON r.id = s.resume_id
 WHERE r.user_id = $1
 `
 
-func (q *Queries) ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error) {
+type ListResumeShowcasesForUserRow struct {
+	ResumeID    uuid.UUID
+	RequestedAt time.Time
+	Role        *string
+	CardVersion string
+	TemplateID  *string
+}
+
+func (q *Queries) ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ListResumeShowcasesForUserRow, error) {
 	rows, err := q.db.Query(ctx, listResumeShowcasesForUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ResumeShowcase
+	var items []ListResumeShowcasesForUserRow
 	for rows.Next() {
-		var i ResumeShowcase
+		var i ListResumeShowcasesForUserRow
 		if err := rows.Scan(
 			&i.ResumeID,
 			&i.RequestedAt,
 			&i.Role,
-			&i.ReviewKey,
 			&i.CardVersion,
 			&i.TemplateID,
-			&i.ReviewedKey,
-			&i.ReviewOutcome,
-			&i.ReviewedAt,
-			&i.FirstListedAt,
 		); err != nil {
 			return nil, err
 		}
