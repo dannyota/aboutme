@@ -88,8 +88,8 @@ public views without a page reload or scroll reset, enables discovery, then
 unpublishes and observes automatic public `404` navigation within five seconds.
 Its `afterEach` cleanup, which also runs after a test timeout, deletes only the
 resume created for that run with a fresh CSRF token, current revision, and new
-idempotency key. The check signs out and
-leaves the shared account and sample resume intact.
+idempotency key. The check signs out and leaves the shared account and sample
+resume intact.
 
 The browser image imports only the root exported by this harness. It uses no TLS
 bypass and permits network traffic only to the fixed HTTPS origin. Each check
