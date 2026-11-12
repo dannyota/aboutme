@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"net/netip"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -99,11 +100,11 @@ func writeInvalid(w http.ResponseWriter, message string) {
 	api.WriteError(w, http.StatusBadRequest, "request_invalid", message)
 }
 
-// decodeStrict decodes exactly one JSON value whose property names match
-// into's exactly, with no unknown fields. On failure it returns the client
-// message, which names the failing field when there is one.
-func decodeStrict(body []byte, into any) (string, bool) {
-	if err := api.CheckJSONBinding(body, into); err != nil {
+// decodeStrict checks body against shape, then decodes exactly one JSON value
+// into into with no unknown fields. On failure it returns the client message,
+// which names the failing field when there is one.
+func decodeStrict(body []byte, shape *api.JSONShape, into any) (string, bool) {
+	if err := api.CheckJSONShape(body, shape); err != nil {
 		var pathErr *api.JSONPathError
 		if errors.As(err, &pathErr) {
 			return pathErr.Error(), false
@@ -137,7 +138,7 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		writeInvalid(w, (&api.JSONPathError{Problem: "must be an object"}).Error())
 		return
 	}
-	if message, ok := decodeStrict(body, &request); !ok {
+	if message, ok := decodeStrict(body, api.JSONShapeOf(reflect.TypeOf(request)), &request); !ok {
 		writeInvalid(w, message)
 		return
 	}
@@ -229,7 +230,7 @@ const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 // client cannot learn which check rejected it.
 func (s *Service) handleCollect(w http.ResponseWriter, r *http.Request, body []byte) {
 	var request collectRequest
-	message, ok := decodeStrict(body, &request)
+	message, ok := decodeStrict(body, collectShape(), &request)
 	if ok && !request.valid() {
 		message, ok = invalidRequestMessage, false
 	}

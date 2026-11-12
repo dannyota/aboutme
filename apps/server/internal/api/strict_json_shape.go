@@ -14,7 +14,8 @@ import (
 // for every struct level, free keys for maps, elements for slices and arrays,
 // and scalar kinds. Null is admitted everywhere, as encoding/json admits it.
 // A type with its own UnmarshalJSON accepts any value; a text unmarshaler
-// accepts a string.
+// accepts a string. []byte and json.Number keep every form encoding/json
+// accepts for them.
 func JSONShapeOf(t reflect.Type) *JSONShape {
 	return shapeOf(t, make(map[reflect.Type]*JSONShape))
 }
@@ -28,25 +29,34 @@ func shapeOf(t reflect.Type, built map[reflect.Type]*JSONShape) *JSONShape {
 	}
 	shape := &JSONShape{Nullable: true}
 	built[t] = shape
-	pointer := reflect.PointerTo(t)
-	jsonUnmarshaler := reflect.TypeFor[json.Unmarshaler]()
-	textUnmarshaler := reflect.TypeFor[encoding.TextUnmarshaler]()
 	switch {
-	case t.Implements(jsonUnmarshaler) || pointer.Implements(jsonUnmarshaler):
-	case t.Implements(textUnmarshaler) || pointer.Implements(textUnmarshaler):
+	case decodesItself(t, reflect.TypeFor[json.Unmarshaler]()):
+	case decodesItself(t, reflect.TypeFor[encoding.TextUnmarshaler]()):
 		shape.Kind = JSONString
+	case t == reflect.TypeFor[json.Number]():
+		shape.Kind = JSONNumeral
 	case t.Kind() == reflect.Struct:
 		shape.Fields = structShapes(t, built)
 	case t.Kind() == reflect.Map:
 		shape.Values = shapeOf(t.Elem(), built)
 	case t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8:
-		shape.Kind = JSONString
+		// encoding/json decodes a string as base64 and an array element by
+		// element, through the element's own decoder when it has one.
+		if !decodesItself(t.Elem(), reflect.TypeFor[json.Unmarshaler]()) &&
+			!decodesItself(t.Elem(), reflect.TypeFor[encoding.TextUnmarshaler]()) {
+			shape.Kind = JSONBytes
+		}
 	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
 		shape.Items = shapeOf(t.Elem(), built)
 	default:
 		shape.Kind = scalarKind(t.Kind())
 	}
 	return shape
+}
+
+// decodesItself reports whether t or *t implements the decoder interface.
+func decodesItself(t, face reflect.Type) bool {
+	return t.Implements(face) || reflect.PointerTo(t).Implements(face)
 }
 
 func scalarKind(kind reflect.Kind) JSONKind {
@@ -75,7 +85,8 @@ type jsonField struct {
 	depth int
 	// typ is the field's Go type.
 	typ reflect.Type
-	// quoted reports the ",string" option, which wraps the value in a string.
+	// quoted reports a ",string" option encoding/json honors, which wraps a
+	// string, number, or boolean value in a JSON string.
 	quoted bool
 }
 
@@ -95,7 +106,7 @@ func structShapes(t reflect.Type, built map[reflect.Type]*JSONShape) map[string]
 		switch {
 		case !ok:
 		case field.quoted:
-			fields[name] = &JSONShape{Nullable: true}
+			fields[name] = &JSONShape{Kind: JSONString, Nullable: true}
 		default:
 			fields[name] = shapeOf(field.typ, built)
 		}
@@ -140,9 +151,26 @@ func collectFields(t reflect.Type, depth int, visiting map[reflect.Type]bool, ou
 		}
 		quoted := false
 		for option := range strings.SplitSeq(options, ",") {
-			quoted = quoted || option == "string"
+			quoted = quoted || (option == "string" && quotable(field.Type))
 		}
 		*out = append(*out, jsonField{name: name, tagged: tagged, depth: depth, typ: field.Type, quoted: quoted})
+	}
+}
+
+// quotable reports whether encoding/json honors ",string" on a field of type
+// t: a string, number, or boolean, through one unnamed pointer.
+func quotable(t reflect.Type) bool {
+	if t.Name() == "" && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
 	}
 }
 

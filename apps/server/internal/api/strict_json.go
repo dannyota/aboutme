@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -23,6 +24,10 @@ const maxJSONShapeDepth = 100
 
 // maxPathKeyBytes bounds each client-supplied key copied into a path.
 const maxPathKeyBytes = 64
+
+// jsonNumberText is the JSON number grammar, which encoding/json requires of
+// a string decoded into json.Number.
+var jsonNumberText = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
 
 // JSONKind is the scalar form a JSONShape leaf accepts.
 type JSONKind uint8
@@ -38,6 +43,12 @@ const (
 	JSONInteger
 	// JSONBoolean accepts true or false.
 	JSONBoolean
+	// JSONBytes accepts what encoding/json accepts for []byte: a base64
+	// string, or an array of numbers and nulls.
+	JSONBytes
+	// JSONNumeral accepts what encoding/json accepts for json.Number: a JSON
+	// number, or a string holding one.
+	JSONNumeral
 )
 
 // JSONShape is the closed form of one JSON value in a request body. A shape
@@ -151,16 +162,22 @@ func walkJSON(dec *json.Decoder, s *JSONShape, path string, depth int) error {
 		if token != json.Delim('[') {
 			return &JSONPathError{Path: path, Problem: "must be an array"}
 		}
-		for index := 0; dec.More(); index++ {
-			if err = walkJSON(dec, s.Items, path+"["+strconv.Itoa(index)+"]", depth+1); err != nil {
-				return err
-			}
-		}
-		_, err = dec.Token()
-		return err
+		return walkArray(dec, s.Items, path, depth)
+	case s.Kind == JSONBytes && token == json.Delim('['):
+		return walkArray(dec, &JSONShape{Kind: JSONNumber, Nullable: true}, path, depth)
 	default:
 		return checkScalar(token, s.Kind, path)
 	}
+}
+
+func walkArray(dec *json.Decoder, items *JSONShape, path string, depth int) error {
+	for index := 0; dec.More(); index++ {
+		if err := walkJSON(dec, items, path+"["+strconv.Itoa(index)+"]", depth+1); err != nil {
+			return err
+		}
+	}
+	_, err := dec.Token()
+	return err
 }
 
 func walkObject(dec *json.Decoder, s *JSONShape, path string, depth int) error {
@@ -232,6 +249,14 @@ func checkScalar(token json.Token, kind JSONKind, path string) error {
 		_, parseErr := strconv.ParseInt(string(number), 10, 64)
 		ok = isNumber && parseErr == nil
 		problem = "must be an integer"
+	case JSONBytes:
+		_, ok = token.(string)
+		problem = "must be a base64 string or an array of numbers"
+	case JSONNumeral:
+		text, isString := token.(string)
+		_, isNumber := token.(json.Number)
+		ok = isNumber || (isString && jsonNumberText.MatchString(text))
+		problem = "must be a number"
 	default:
 		_, delim := token.(json.Delim)
 		ok = !delim
