@@ -1050,6 +1050,15 @@ test('the resume editor keeps an edit while the session check fails, and '
   const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
     resumes: resumeRows(), csrfRejectedWrites: 1,
   });
+  const headline = page.locator(
+    '[data-region="inspector"] [data-field="headline"] [data-field-input]',
+  );
+  const status = page.getByTestId('save-status');
+  const banner = page.locator('[data-session-check]');
+  // The session goes down only once the editor is open: a check that fails
+  // before the first load shows Editor unavailable instead.
+  await expect(headline).toBeVisible();
+  await expect(status).toHaveAttribute('data-state', 'saved');
   // The token refresh after the refused write cannot reach the session.
   let sessionDown = true;
   await page.route('**/api/v1/me', async (route) => {
@@ -1062,11 +1071,6 @@ test('the resume editor keeps an edit while the session check fails, and '
       json: { error: { code: 'unavailable', message: 'fixed' } },
     });
   });
-  const headline = page.locator(
-    '[data-region="inspector"] [data-field="headline"] [data-field-input]',
-  );
-  const status = page.getByTestId('save-status');
-  const banner = page.locator('[data-session-check]');
 
   await headline.fill('Staff engineer');
   await headline.press('Tab');

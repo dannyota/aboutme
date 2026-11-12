@@ -162,6 +162,9 @@ export function useAuth(): UseAuthReturn {
   } = useFetch<MeEnvelope>('/api/v1/me', {
     credentials: 'include',
     server: false,
+    // A failed check is retried on the caller's own schedule, never sooner
+    // than the server's Retry-After, so the client does not resend it.
+    retry: 0,
   });
 
   // Optional-chain all the way through: an unexpected response shape (a
@@ -196,6 +199,7 @@ export function useAuth(): UseAuthReturn {
         const recovered = await $fetch<unknown>('/api/v1/me', {
           cache: 'no-store',
           credentials: 'include',
+          retry: 0,
         });
         if (isRecoveredMeEnvelope(recovered, currentUserId)) {
           data.value = recovered;

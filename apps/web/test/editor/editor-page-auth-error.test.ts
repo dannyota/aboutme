@@ -76,20 +76,12 @@ type MeAnswer
     | { readonly kind: 'error' }
     | { readonly kind: 'anonymous' };
 
-/**
- * What `/api/v1/me` answers next, and when each request arrived. The fetch
- * client sends a failed GET once more at once, so a check is one time.
- */
+/** What `/api/v1/me` answers next, and when each request arrived. */
 const me = {
   answer: { kind: 'user', id: 'owner-1' } as MeAnswer,
   calls: [] as number[],
   held: undefined as Promise<void> | undefined,
 };
-
-/** The times the session was checked after the `from`th request. */
-function checkTimes(from: number): number[] {
-  return [...new Set(me.calls.slice(from))];
-}
 
 registerEndpoint('/api/v1/me', {
   method: 'GET',
@@ -307,7 +299,7 @@ describe('a failed session check while the editor is open', () => {
 
     await context.settle(120_000);
 
-    expect(checkTimes(outageAt)).toEqual([
+    expect(me.calls.slice(outageAt)).toEqual([
       1_000, 3_000, 7_000, 15_000, 31_000, 61_000, 91_000,
     ]);
     context.wrapper.unmount();
@@ -329,7 +321,7 @@ describe('a failed session check while the editor is open', () => {
     await context.settle(120_000);
 
     // No extra check from the held write's own retries in between.
-    expect(checkTimes(outageAt)).toEqual([
+    expect(me.calls.slice(outageAt)).toEqual([
       2_250, 4_250, 8_250, 16_250, 32_250, 62_250, 92_250,
     ]);
     expect(context.server.sent).toHaveLength(2);
@@ -481,6 +473,72 @@ describe('an older page whose first read arrives late', () => {
       .headline).toBe('Staff engineer');
     second.unmount();
   });
+});
+
+describe('a session answer while the first read is out', () => {
+  /** Opens the page with its first read held until `arrive` is called. */
+  async function openWithReadOut() {
+    const server = fakeServer(startingResume());
+    mocks.server = server;
+    const auth = await sessionAnswers({ kind: 'user', id: 'owner-1' });
+    let arrive = (): void => {};
+    const read = server.api.read.getMockImplementation()!;
+    server.api.read.mockImplementationOnce(() => new Promise((resolve) => {
+      arrive = () => void read().then(resolve);
+    }));
+    mocks.realtimeStarts = 0;
+    const wrapper = await mountPage();
+    await vi.waitFor(() => expect(server.api.read).toHaveBeenCalledOnce());
+    vi.useFakeTimers(FAKE_TIMERS);
+    vi.setSystemTime(0);
+    return { arrive: () => arrive(), auth, server, wrapper };
+  }
+
+  it('opens the editor with the banner and a scheduled check when a check '
+    + 'fails meanwhile', async () => {
+    const context = await openWithReadOut();
+    me.answer = { kind: 'error' };
+    await context.auth.refresh();
+    await run(0);
+    expect(context.wrapper.find('[data-editor-shell]').exists()).toBe(false);
+
+    context.arrive();
+    await run(0);
+
+    expect(context.wrapper.find('[data-editor-shell]').exists()).toBe(true);
+    expect(context.wrapper.find('[data-action="retry-session-check"]')
+      .exists()).toBe(true);
+    expect(mocks.realtimeStarts).toBe(0);
+    const checks = me.calls.length;
+    await run(1_000);
+    expect(me.calls).toHaveLength(checks + 1);
+
+    me.answer = { kind: 'user', id: 'owner-1' };
+    const actions = mocks.editors.at(-1) as ResumeEditorActions;
+    expect(actions.edit(headline('Staff engineer')).kind).toBe('enqueued');
+    await run(5_000);
+    expect(context.server.stored.document.personalDetails.headline)
+      .toBe('Staff engineer');
+    expect(mocks.realtimeStarts).toBe(1);
+  });
+
+  it('starts realtime once when a failed check recovers meanwhile',
+    async () => {
+      const context = await openWithReadOut();
+      me.answer = { kind: 'error' };
+      await context.auth.refresh();
+      me.answer = { kind: 'user', id: 'owner-1' };
+      await context.auth.refresh();
+      await run(0);
+
+      context.arrive();
+      await run(5_000);
+
+      expect(context.wrapper.find('[data-editor-shell]').exists()).toBe(true);
+      expect(context.wrapper.find('[data-action="retry-session-check"]')
+        .exists()).toBe(false);
+      expect(mocks.realtimeStarts).toBe(1);
+    });
 });
 
 describe('a failed session check before the editor opened', () => {

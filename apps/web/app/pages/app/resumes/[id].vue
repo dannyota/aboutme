@@ -85,6 +85,8 @@ let owner: string | undefined;
 let recovering = false;
 /** The page closed: a read it started no longer touches the store. */
 let disposed = false;
+/** Counts the session's answers; a newer one supersedes an older one. */
+let answers = 0;
 
 function stopRealtime(): void {
   realtime?.stop();
@@ -219,9 +221,12 @@ function openActions(ownerId: string): void {
  * check failed; nothing else starts or stops the session check or starts
  * realtime. The owner's session opens or wakes the editor; an error keeps
  * the open editor and checks again; any other answer, signed out or another
- * person, holds the editor's work for its owner and sends none of it.
+ * person, holds the editor's work for its owner and sends none of it. Its
+ * one await is the first load: if a newer answer came meanwhile, the opened
+ * editor settles against the session as it is now instead.
  */
 async function settleSession(state: AuthState): Promise<void> {
+  const answer = ++answers;
   // A check in flight passes through `loading`; only an answer acts.
   if (state === 'loading') return;
   if (state === 'error') {
@@ -244,9 +249,14 @@ async function settleSession(state: AuthState): Promise<void> {
       void actions.value?.wake(recovered);
     } else {
       await load();
+      if (disposed) return;
+      if (answer !== answers) {
+        await settleSession(auth.authState.value);
+        return;
+      }
     }
     recovering = false;
-    if (loadState.value === 'ready' && !disposed) startRealtime();
+    if (loadState.value === 'ready') startRealtime();
     return;
   }
   stopRealtime();
