@@ -142,6 +142,42 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('a satisfied stale write while every resume read is held', () => {
+  it('is not saved while its completing read is held, and is saved with '
+    + 'the later edit sent once the read returns', async () => {
+    const context = editor();
+    context.edit(headline('Staff engineer'));
+    context.server.otherWriter((document) => ({
+      ...document,
+      personalDetails: {
+        ...document.personalDetails,
+        headline: 'Staff engineer',
+      },
+    }));
+    const releaseWrite = context.server.holdNextResponse();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const releaseReads = context.server.holdReads();
+    const realtime = context.actions.refresh();
+    releaseWrite();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(context.server.sent.map(({ result }) => result))
+      .toEqual(['stale']);
+    expect(context.server.reads).toBe(2);
+    expect(context.record()).toMatchObject({
+      attempt: null,
+      completeReadRequired: true,
+    });
+    expect(context.store.saveStateFor(context.id)).toBe('dirty');
+
+    releaseReads();
+    await realtime;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(context.store.saveStateFor(context.id)).toBe('saved');
+    await expectLaterEditSent(context);
+  });
+});
+
 describe('a satisfied stale write', () => {
   it('sends the edit typed after it', async () => {
     const context = editor();

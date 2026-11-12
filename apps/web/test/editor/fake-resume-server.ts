@@ -64,6 +64,7 @@ export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
   const failedReads: ReadFailure[] = [];
   const heldResponses: Promise<void>[] = [];
+  let readsHeld: Promise<void> | undefined;
   const sent: { attempt: FrozenAttempt; result: AttemptResult['kind'] }[]
     = [];
   const readTimes: number[] = [];
@@ -142,6 +143,7 @@ export function fakeServer(initial: AcceptedResume) {
     }),
     read: vi.fn(async (): Promise<ResumeReadResult> => {
       readTimes.push(Date.now());
+      if (readsHeld !== undefined) await readsHeld;
       return failedReads.shift() ?? { kind: 'complete', accepted: copy() };
     }),
   };
@@ -166,6 +168,17 @@ export function fakeServer(initial: AcceptedResume) {
      * Applies the next write at once but holds its response until the
      * returned function is called.
      */
+    /** Holds every read until the returned function is called. */
+    holdReads(): () => void {
+      let release = (): void => {};
+      readsHeld = new Promise<void>((resolve) => {
+        release = () => {
+          readsHeld = undefined;
+          resolve();
+        };
+      });
+      return () => release();
+    },
     holdNextResponse(): () => void {
       let release = (): void => {};
       heldResponses.push(new Promise<void>((resolve) => {

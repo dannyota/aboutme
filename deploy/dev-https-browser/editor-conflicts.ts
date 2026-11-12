@@ -1,4 +1,4 @@
-import { expect, type Page, type Route } from '@playwright/test';
+import { expect, type Page, type Request, type Route } from '@playwright/test';
 import {
   mutateRemoteHeadline,
   mutateRemoteMetadata,
@@ -14,6 +14,7 @@ import {
   expectNoPersistenceWrites,
   expectSavedOrDiagnose,
   isTemplateChildRequest,
+  safeSaveState,
 } from './editor-proof-state';
 
 export async function proveConflictAndTemplate(
@@ -61,10 +62,14 @@ export async function proveConflictAndTemplate(
   // A realtime refetch after the remote save could adopt the winner before
   // the paused write's 412 arrives. Reads of the resume issued after that
   // save are held until the 412 has set the read barrier, so the editor
-  // itself must complete the barrier before it sends the next edit.
+  // itself must complete the barrier before it sends the next edit. The
+  // runner prints only the stage, so each step renames it, and a failed
+  // barrier check names what the route saw and the save state on screen.
   const resumePath = `/api/v1/resumes/${accepted.metadata.id}`;
+  const saveStatus = page.getByTestId('save-status');
   let personalWrites = 0;
   let holdReads = false;
+  const heldReads: Request[] = [];
   let releaseReads = (): void => {};
   const readsReleased = new Promise<void>((resolve) => {
     releaseReads = resolve;
@@ -79,6 +84,7 @@ export async function proveConflictAndTemplate(
       // The editor's write comes first; the second is the remote save.
       if (personalWrites === 2) holdReads = true;
     } else if (holdReads && request.method() === 'GET') {
+      heldReads.push(request);
       await readsReleased;
     }
     await route.fallback();
@@ -98,6 +104,7 @@ export async function proveConflictAndTemplate(
     await headline.fill('Same value elsewhere');
     await headline.press('Tab');
     await sameValuePause.waitUntilPaused();
+    state.editorDiagnosticStage = 'conflict-same-value-remote-save';
     try {
       await mutateRemoteHeadline(
         page,
@@ -107,21 +114,35 @@ export async function proveConflictAndTemplate(
     } finally {
       sameValuePause.release();
     }
+    state.editorDiagnosticStage = 'conflict-same-value-stale';
     expect((await staleSameValue).status()).toBe(412);
-    await expect(page.getByTestId('save-status'))
-      .toHaveAttribute('data-state', 'dirty');
+    // While every read is held the 412 leaves the barrier set and nothing
+    // queued, which the editor shows as unsaved.
+    state.editorDiagnosticStage = 'conflict-same-value-barrier';
+    try {
+      await expect(saveStatus).toHaveAttribute('data-state', 'dirty');
+    } catch (error) {
+      const shown = safeSaveState(await saveStatus.getAttribute('data-state'));
+      state.editorDiagnosticStage = `conflict-same-value-barrier-writes-${
+        personalWrites}-held-${heldReads.length}-shown-${shown}`;
+      throw error;
+    }
   } finally {
     holdReads = false;
     releaseReads();
-    await page.unroute(sameValueRoutes, orderSameValue);
   }
+  state.editorDiagnosticStage = 'conflict-same-value-released';
+  await Promise.all(heldReads.map((request) => request.response()));
+  await page.unroute(sameValueRoutes, orderSameValue);
   const laterSave = page.waitForResponse((response) =>
     response.request().method() === 'PATCH'
     && new URL(response.url()).pathname === personalPath,
   );
   await headline.fill('Typed after the same value');
   await headline.press('Tab');
+  state.editorDiagnosticStage = 'conflict-same-value-later-save';
   expect((await laterSave).status()).toBe(200);
+  state.editorDiagnosticStage = 'conflict-same-value-saved';
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
   state.editorDiagnosticStage = 'conflict-accept-latest';
