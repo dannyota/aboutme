@@ -265,7 +265,17 @@ for (const title of [
 }
 assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID\)/);
 assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID\);/);
-assert.match(spec, /steps\.cleanup = true;[^]*?await writePublishEvidence\(\);/);
+// The cleanup hook ends where the next hook starts; inside it, deletion comes
+// before the cleanup step and the evidence write.
+const cleanupHook = spec.slice(
+  spec.indexOf('test.afterEach(async ({ browser }'),
+  spec.indexOf('test.afterEach(async ({}, info)'),
+);
+const deletionAt = cleanupHook.indexOf('await deleteOutsideCounters(browser, createdID);');
+const cleanupStepAt = cleanupHook.indexOf('steps.cleanup = true;');
+const evidenceAt = cleanupHook.indexOf('await writePublishEvidence();');
+assert.ok(deletionAt > 0 && deletionAt < cleanupStepAt && cleanupStepAt < evidenceAt);
+assert.equal(count(spec, /await writePublishEvidence\(\);/g), 1);
 assert.ok(spec.indexOf('test.afterEach(async ({ browser }') < spec.indexOf('test.afterEach(async ({}, info)'));
 assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 1);
 NODE
