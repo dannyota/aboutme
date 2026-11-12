@@ -29,6 +29,7 @@ Current behavior lives in code, deployment configuration, and
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations                   |
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms                         |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM                           |
+| Other   | [Release floors](release-floors.md)                                    | Rebuilt-host floor and schema floors for breaking migrations                  |
 | 6c      | [Single-host AWS reference](single-host-production.md)                 | Retained AWS deployment design                                                |
 | 6d      | [CloudFront edge](cloudfront-edge.md)                                  | Undeployed AWS edge reference; not live operations                            |
 | Other   | [CloudFront origin](cloudfront-origin.md)                              | AWS reference origin access, certificates, and client-address trust           |

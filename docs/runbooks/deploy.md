@@ -84,10 +84,11 @@ Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 
 ## Failed deploy
 
-Before migrations, failure restores the previous release and job timers through
-maintenance; first deploy failures keep maintenance up. After a possible
-migration, fix forward or restore with the app and jobs stopped. Failed recovery
-retains the operation lock; inspect units and the host journal before retrying.
+Before migrations and any schema-floor raise, failure restores the previous
+release and job timers through maintenance; first deploy failures keep
+maintenance up. After a possible migration, fix forward or restore with the app
+and jobs stopped. Failed recovery retains the operation lock; inspect units and
+the host journal before retrying.
 
 A CrowdSec retention failure stops both edge modes. Follow
 [CrowdSec incident recovery](crowdsec-postgresql.md#interrupted-deploy).
