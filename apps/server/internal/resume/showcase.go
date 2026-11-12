@@ -23,8 +23,8 @@ type Showcase struct {
 	Role  *string
 }
 
-func showcaseOf(row store.ResumeShowcase) *Showcase {
-	return &Showcase{State: ShowcaseListed, Role: row.Role}
+func showcaseOf(role *string) *Showcase {
+	return &Showcase{State: ShowcaseListed, Role: role}
 }
 
 // ShowcaseSync keeps the showcase row's derived values current inside a
@@ -60,7 +60,7 @@ func attachShowcase(ctx context.Context, qtx *store.Queries, r *Resume) error {
 	if err != nil {
 		return fmt.Errorf("resume: read showcase: %w", err)
 	}
-	r.Showcase = showcaseOf(row)
+	r.Showcase = showcaseOf(row.Role)
 	return nil
 }
 
@@ -73,13 +73,13 @@ func attachShowcases(ctx context.Context, qtx *store.Queries, userID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("resume: list showcase: %w", err)
 	}
-	byResume := make(map[uuid.UUID]store.ResumeShowcase, len(rows))
+	roles := make(map[uuid.UUID]*string, len(rows))
 	for _, row := range rows {
-		byResume[row.ResumeID] = row
+		roles[row.ResumeID] = row.Role
 	}
 	for i := range resumes {
-		if row, found := byResume[resumes[i].ID]; found {
-			resumes[i].Showcase = showcaseOf(row)
+		if role, found := roles[resumes[i].ID]; found {
+			resumes[i].Showcase = showcaseOf(role)
 		}
 	}
 	return nil

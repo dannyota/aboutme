@@ -1,18 +1,21 @@
 -- Community showcase queries (docs/design/showcase.md, ADR 0028). The
--- resume_showcase row exists only while the opt-in does.
+-- resume_showcase row exists only while the opt-in does. Statements name their
+-- columns, never * or s.*: sqlc expands a star into every column when it
+-- generates, so a released binary fails once a migration drops one
+-- (docs/design/release-floors.md "Schema floor").
 
 -- name: GetResumeShowcase :one
-SELECT * FROM resume_showcase
+SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = sqlc.arg(resume_id);
 
 -- name: GetResumeShowcaseForUpdate :one
 -- Locks the opt-in row so concurrent derived-value writes serialize.
-SELECT * FROM resume_showcase
+SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = sqlc.arg(resume_id)
 FOR UPDATE;
 
 -- name: ListResumeShowcasesForUser :many
-SELECT s.*
+SELECT s.resume_id, s.requested_at, s.role, s.card_version, s.template_id
 FROM resume_showcase s
 JOIN resumes r ON r.id = s.resume_id
 WHERE r.user_id = sqlc.arg(user_id);
