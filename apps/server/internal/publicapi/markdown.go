@@ -77,7 +77,7 @@ func NewMarkdownHandler(dependencies MarkdownDependencies) (http.Handler, error)
 		defer lease.Release()
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationMarkdown, Variant: "discoverable", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: publicformat.MarkdownFormatVersion, AppDigest: dependencies.AppDigest}
 		if cached, ok := dependencies.Cache.Get(key); ok {
-			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
+			serveLeasedSelected(w, request, lease, SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, serveTextError)
 			return
 		}
 		body, err := publicformat.Markdown(snapshot.Public)
@@ -91,6 +91,6 @@ func NewMarkdownHandler(dependencies MarkdownDependencies) (http.Handler, error)
 			return
 		}
 		dependencies.Cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		response.ServeHTTP(w, request)
+		serveLeasedSelected(w, request, lease, response, serveTextError)
 	}), nil
 }

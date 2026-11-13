@@ -95,7 +95,7 @@ func newDiscoveryHandler(dependencies DiscoveryDependencies, representation publ
 			serveTextError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		response.ServeHTTP(w, request)
+		serveLeasedSelected(w, request, lease, response, serveTextError)
 	}), nil
 }
 

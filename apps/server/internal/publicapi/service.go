@@ -156,7 +156,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 		}
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationJSON, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: jsonFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
+			serveLeasedSelected(w, request, lease, withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView), servePublicJSONError)
 			return
 		}
 		response, err := NewPublicJSON(snapshot.Public, snapshot.ProjectLinks)
@@ -165,7 +165,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
+		serveLeasedSelected(w, request, lease, withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView), servePublicJSONError)
 	})
 }
 
@@ -193,7 +193,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 		}
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationPhoto, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: photoFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
+			serveLeasedSelected(w, request, lease, withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView), servePublicJSONError)
 			return
 		}
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
@@ -208,7 +208,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
+		serveLeasedSelected(w, request, lease, withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView), servePublicJSONError)
 	})
 }
 
