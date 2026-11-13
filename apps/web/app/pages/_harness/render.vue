@@ -8,6 +8,8 @@ import fullSource from '../../../../../packages/schema/fixtures/full.json';
 import vnFullSource from '../../../../../packages/schema/fixtures/vn-full.json';
 import type { components } from '../../api/generated/openapi';
 import JoinInvite from '../../components/public/JoinInvite.vue';
+import ProjectListPage from '../../components/public/ProjectListPage.vue';
+import ProjectPage from '../../components/public/ProjectPage.vue';
 import PublicGate from '../../components/public/PublicGate.vue';
 import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
@@ -23,6 +25,9 @@ import type {
   PublicGateProvider,
 } from '../../../server/utils/public-render/envelope';
 import { GATE_STYLE } from '../../../server/workers/public-render/gate-style';
+import {
+  PROJECT_PAGE_STYLE,
+} from '../../../server/workers/public-render/project-style';
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
@@ -35,6 +40,12 @@ import {
 } from './print-fixtures';
 import { loadSampleFixture } from './sample-fixtures';
 import { printProbe, PRINT_PROBES, type PrintProbe } from './print-probes';
+import {
+  projectFixture,
+  projectListFixture,
+  type ProjectFixture,
+  type ProjectListFixture,
+} from './project-fixtures';
 
 type RenderMode = 'continuous' | 'paged' | 'public';
 type FixtureId = 'full' | 'vn-full' | PrintFixtureId
@@ -86,6 +97,12 @@ const GATE_MESSAGES: ReadonlySet<string> = new Set([
 let gateLng: 'en' | 'vi' = 'en';
 let gateProviders: readonly PublicGateProvider[] = [];
 let gateMessage: PublicGateMessage = 'none';
+// The public project pages as the public render worker draws them
+// (docs/design/ui/project-pages.md), in the owner's color scheme.
+const isProject = !isCorpus
+  && (route.query.mode === 'project-list' || route.query.mode === 'project');
+let projectList: ProjectListFixture | undefined;
+let projectDetail: ProjectFixture | undefined;
 // The join invite the real client mounts on a sign_in resume's page.
 let inviteHref: '/register' | '/login' | undefined;
 const corpusHtml = ref('');
@@ -127,6 +144,29 @@ if (isCorpus) {
   useHead({
     htmlAttrs: { class: 'harness-gate', lang: gateLng },
     style: [{ textContent: GATE_STYLE }],
+  });
+} else if (isProject) {
+  requireAllowedKeys(new Set(['lng', 'mode', 'scheme']));
+  const lng = singleton('lng', true);
+  if (lng !== 'en' && lng !== 'vi') badQuery();
+  const scheme = singleton('scheme', true);
+  if (scheme !== 'light' && scheme !== 'dark' && scheme !== 'system') {
+    badQuery();
+  }
+  const pageLng = lng as 'en' | 'vi';
+  const pageScheme = scheme as 'light' | 'dark' | 'system';
+  if (route.query.mode === 'project-list') {
+    projectList = projectListFixture(pageLng, pageScheme);
+  } else {
+    projectDetail = projectFixture(pageLng, pageScheme);
+  }
+  // The pages wear Be Vietnam Pro from the print-fonts sheet.
+  selectedFontId = 'be-vietnam-pro';
+  useHead({
+    htmlAttrs: {
+      'class': 'harness-project', 'lang': pageLng, 'data-scheme': pageScheme,
+    },
+    style: [{ textContent: PROJECT_PAGE_STYLE }],
   });
 } else {
   requireAllowedKeys(
@@ -481,6 +521,25 @@ onMounted(async () => {
     page-title="Nguyễn Văn An, Backend Engineer"
     :providers="gateProviders"
     slug="harness-public"
+  />
+  <ProjectListPage
+    v-else-if="projectList !== undefined"
+    data-render-mode="project-list"
+    :data-fonts-ready="fontsSettled ? 'true' : undefined"
+    :home-href="HOME_HREF"
+    :projects="projectList.projects"
+    :resume="projectList.resume"
+  />
+  <ProjectPage
+    v-else-if="projectDetail !== undefined"
+    data-render-mode="project"
+    :data-fonts-ready="fontsSettled ? 'true' : undefined"
+    :entry-link="projectDetail.entryLink"
+    :home-href="HOME_HREF"
+    :list-url="projectDetail.listUrl"
+    :other-projects="projectDetail.otherProjects"
+    :project="projectDetail.project"
+    :resume="projectDetail.resume"
   />
   <main
     v-else-if="

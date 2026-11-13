@@ -1,6 +1,23 @@
 import type { components } from '../../../app/api/generated/openapi';
 
 import validatePublicResume from '#public-render-validator';
+import {
+  normalizedOrigin,
+  validCardImageURL,
+  validFaviconHref,
+  validPageTitle,
+  validPreview,
+  validProjectSlug,
+  validSlug,
+} from './envelope-fields';
+import {
+  decodeProjectEnvelope,
+  decodeProjectListEnvelope,
+} from './project-decode';
+import type {
+  PublicRenderProjectListRequest,
+  PublicRenderProjectRequest,
+} from './project-envelope';
 
 export const PUBLIC_RENDER_REQUEST_MAX_BYTES = 532_480;
 export const PUBLIC_RENDER_HTML_MAX_BYTES = 2_097_152;
@@ -72,34 +89,9 @@ export interface PublicRenderGateRequest {
 
 export type PublicRenderRequest
   = | PublicRenderResumeRequest
-    | PublicRenderGateRequest;
-
-// The server percent-encodes every byte outside the URL-unreserved set, so a
-// favicon href holds only these characters and cannot leave its attribute.
-const FAVICON_HREF = /^data:image\/svg\+xml,[A-Za-z0-9._~%-]{1,2048}$/u;
-
-const validPageTitle = (value: unknown): value is string =>
-  typeof value === 'string' && value.length > 0 && value.length <= 4096;
-
-const validFaviconHref = (value: unknown): value is string =>
-  value === '' || (typeof value === 'string' && FAVICON_HREF.test(value));
-
-const PREVIEW_LOCALE = /^[a-z]{2,3}_[A-Z]{2}$/u;
-const PREVIEW_KEYS = ['description', 'imageAlt', 'locale', 'title'].join(',');
-const PREVIEW_KEYS_WITH_IMAGE
-  = ['description', 'imageAlt', 'imageUrl', 'locale', 'title'].join(',');
-
-const boundedText = (value: unknown, maxBytes: number): value is string =>
-  typeof value === 'string'
-  && value.length > 0
-  && Buffer.byteLength(value, 'utf8') <= maxBytes;
-
-// Same shape the public page's own slug validates against
-// (app/public/public-resume.client.ts).
-const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
-
-const validSlug = (value: unknown): value is string =>
-  typeof value === 'string' && SLUG.test(value);
+    | PublicRenderGateRequest
+    | PublicRenderProjectListRequest
+    | PublicRenderProjectRequest;
 
 const validLng = (value: unknown): value is 'vi' | 'en' =>
   value === 'vi' || value === 'en';
@@ -129,19 +121,13 @@ const validMessage = (value: unknown): value is PublicGateMessage =>
 const validJoinInvite = (value: unknown): value is PublicRenderJoinInvite =>
   value === '/register' || value === '/login';
 
-const validPreview = (value: unknown): value is PublicRenderPreview => {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  const preview = value as Record<string, unknown>;
-  const keys = Object.keys(preview).sort().join(',');
-  return (keys === PREVIEW_KEYS || keys === PREVIEW_KEYS_WITH_IMAGE)
-    && boundedText(preview.title, 2240)
-    && boundedText(preview.description, 1024)
-    && boundedText(preview.imageAlt, 1024)
-    && typeof preview.locale === 'string'
-    && (preview.locale === '' || PREVIEW_LOCALE.test(preview.locale));
-};
+// The project list or one project page. The provider links append it to
+// their query unencoded, so it holds nothing but a fixed word, a slash and a
+// project slug.
+const validGatePage = (value: unknown): value is string =>
+  value === 'projects'
+  || (typeof value === 'string' && value.startsWith('projects/')
+    && validProjectSlug(value.slice('projects/'.length)));
 
 const fail = (): never => {
   throw new Error(PUBLIC_RENDER_FAILURE);
@@ -246,42 +232,6 @@ class DuplicateKeyScanner {
   }
 }
 
-function normalizedOrigin(value: unknown): value is string {
-  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 512) {
-    return false;
-  }
-  if ([...value].some((character) => character.codePointAt(0)! > 0x7f)) {
-    return false;
-  }
-  try {
-    const parsed = new URL(value);
-    return (
-      (parsed.protocol === 'http:' || parsed.protocol === 'https:')
-      && parsed.username === ''
-      && parsed.password === ''
-      && parsed.pathname === '/'
-      && parsed.search === ''
-      && parsed.hash === ''
-      && parsed.origin === value
-    );
-  } catch {
-    return false;
-  }
-}
-
-// The versioned card URL Go names (docs/design/link-previews.md, "Page
-// head"): this page's own origin and slug, and a 16-hex-digit version.
-const validCardImageURL = (
-  value: unknown,
-  canonicalOrigin: string,
-  slug: string,
-): boolean => {
-  if (typeof value !== 'string') return false;
-  const prefix = `${canonicalOrigin}/api/v1/public/resumes/${slug}/og/`;
-  return value.startsWith(prefix)
-    && /^[0-9a-f]{16}\.png$/u.test(value.slice(prefix.length));
-};
-
 function isPublicResume(value: unknown): value is PublicResume {
   return validatePublicResume(value) === true;
 }
@@ -302,6 +252,12 @@ export function decodePublicRenderEnvelope(
     const keys = Object.keys(envelope).sort();
     if (envelope.mode === 'gate') {
       return decodeGateEnvelope(envelope, keys);
+    }
+    if (envelope.mode === 'project-list') {
+      return decodeProjectListEnvelope(envelope);
+    }
+    if (envelope.mode === 'project') {
+      return decodeProjectEnvelope(envelope);
     }
     return decodeResumeEnvelope(envelope, keys);
   } catch {
@@ -368,6 +324,7 @@ function decodeGateEnvelope(
   envelope: Record<string, unknown>,
   keys: readonly string[],
 ): PublicRenderGateRequest {
+  const hasPage = keys.includes('page');
   const expectedKeys = [
     'canonicalOrigin',
     'faviconHref',
@@ -378,8 +335,12 @@ function decodeGateEnvelope(
     'preview',
     'providers',
     'slug',
+    ...(hasPage ? ['page'] : []),
   ].sort().join(',');
   if (keys.join(',') !== expectedKeys) {
+    fail();
+  }
+  if (hasPage && !validGatePage(envelope.page)) {
     fail();
   }
   if (
