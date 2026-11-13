@@ -285,6 +285,42 @@ geometry, so [print rules](templates/print.md) and the product page images are
 unaffected; a display check proves a linked and an unlinked title measure the
 same. An unpublished resume and the editor preview of one carry no map.
 
+The envelope is version 2 only when the map is non-empty; otherwise it stays
+version 1, byte for byte. Its `projectLinks` maps each visible project entry
+with an available page to that page's absolute URL. Go computes the map by the
+same rule as the public JSON, so a resume's PDF, its page and its JSON link the
+same projects. The public PDF and the owner's export of a live resume both carry
+it, and the PDF format version rises with it.
+
+## Entry points on the resume page
+
+The resume page's render request gains `projectLinks`, the same `entryId` and
+`url` pairs as the public JSON's `projectLinks` at that revision, in layout and
+entry order, and `projectsUrl`, the project list's address. Both are present
+only together, and only when at least one project is available. Go computes the
+links with the project pages' own availability rule, including a name the page
+can show, so a title never links to a page that answers 404.
+
+- The renderer injects the map into every template's project section. A linked
+  entry's title links to its project page instead of the entry's own `link`. It
+  keeps the title's weight (`<strong><a>`) and otherwise the link styling the
+  template already gives a title with its own link. A display check proves a
+  linked and an unlinked title of the same text measure the same in every
+  template, on screen and at the A4 and Letter print widths, including a title
+  that wraps.
+- The page bar shows one `a.public-projects` link, "Dự án" or "Projects", left
+  of Download PDF, when the map is non-empty. Its accessible name is its visible
+  label. No count of projects appears anywhere on the public page.
+- Go's resume page validator accepts `a.public-projects` once, with exactly
+  `projectsUrl`, and only when links exist. Any anchor under the resume's
+  `/projects/` path must equal one map URL, each at most once. The HTML format
+  version rises with this change.
+- The server-rendered root carries `data-project-links` only when the request
+  carried links. The browser builds the map from the public JSON it fetches only
+  when that marker is present, and replaces the map whole on every refetch, so a
+  renamed, hidden or removed project's link disappears with the revision that
+  changed it.
+
 ## Export and deletion
 
 - The account export moves to `exportVersion` 2 and gains `projects`, ordered by
