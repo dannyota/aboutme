@@ -5,14 +5,11 @@ import (
 	"os"
 )
 
-// Fixed by the design: the observer serves one environment and one site
-// (docs/design/deployment-transparency/document.md, "Fields").
 const (
 	environment = "production"
 	site        = "https://aboutme.vn"
 )
 
-// Supported OBSERVER_PLATFORM values.
 const (
 	platformECS        = "ecs"
 	platformKubernetes = "kubernetes"
@@ -24,10 +21,6 @@ const defaultTUFCacheDir = "/tmp/sigstore-tuf"
 const defaultObservationFile = "/observation/observation.json"
 const defaultOutputDir = "/public"
 
-// config holds every value the observer reads from its environment. Every
-// value is non-secret (docs/design/deployment-transparency/README.md,
-// "Access on AWS": "Its environment holds only the cluster name, the three
-// service names, and the bucket name; none of them reaches the document").
 type config struct {
 	Platform           string
 	Cluster            string
@@ -43,9 +36,6 @@ type config struct {
 	OutputDir          string
 }
 
-// loadConfig reads and validates the observer's configuration from the
-// environment. It never logs a value it reads (docs/design/deployment-
-// transparency/README.md, "Run, freshness, and staleness").
 func loadConfig() (config, error) {
 	cfg := config{
 		Platform:           os.Getenv("OBSERVER_PLATFORM"),
@@ -82,10 +72,7 @@ func loadConfig() (config, error) {
 			}
 		}
 	case platformKubernetes:
-		// Namespace defaults, and the in-cluster host, port, token, and CA
-		// come from the pod's own environment and service account.
 	case platformPodman:
-		// The root reporter supplies a file; publication and caching are local.
 	case "":
 		return config{}, fmt.Errorf("OBSERVER_PLATFORM is required (ecs, kubernetes, or podman)")
 	default:

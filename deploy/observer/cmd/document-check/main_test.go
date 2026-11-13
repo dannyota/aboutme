@@ -39,8 +39,6 @@ func TestFreshDocumentListsEveryRunningImage(t *testing.T) {
 
 func TestRejects(t *testing.T) {
 	verified := example(t, "verified.json")
-	// stale_after 20 minutes out still goes stale 600 seconds after
-	// observed_at.
 	lateStaleAfter := bytes.Replace(verified,
 		[]byte(`"stale_after": "2026-10-02T03:23:00Z"`), []byte(`"stale_after": "2026-10-02T03:40:00Z"`), 1)
 	if bytes.Equal(lateStaleAfter, verified) {

@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// projectRouteParityCase is one row of the route parity fixture shared with
-// the Go route classifier and the Caddy route-table test.
 type projectRouteParityCase struct {
 	Path  string `json:"path"`
 	Owner string `json:"owner"`
@@ -32,9 +30,6 @@ func readProjectRouteParity(t *testing.T) []projectRouteParityCase {
 	return fixture.Cases
 }
 
-// TestCrowdSecFeedEncoderProjectRouteParity proves both project page shapes
-// are public, so a 404 for a project that does not exist keeps no exact path
-// sample, while every other shape of the fixture keeps its class.
 func TestCrowdSecFeedEncoderProjectRouteParity(t *testing.T) {
 	t.Parallel()
 	for _, tc := range readProjectRouteParity(t) {
@@ -51,8 +46,6 @@ func TestCrowdSecFeedEncoderProjectRouteParity(t *testing.T) {
 	}
 }
 
-// TestCrowdSecFeedEncoderProjectProtectedViews proves the project shapes stay
-// public through every exclusion view, as the resume page does.
 func TestCrowdSecFeedEncoderProjectProtectedViews(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{
@@ -89,9 +82,6 @@ func TestCrowdSecFeedEncoderProjectProtectedViews(t *testing.T) {
 	}
 }
 
-// TestCrowdSecFeedEncoderProjectComponentBounds proves a component longer
-// than a project slug matches no protected route: it keeps its target sample
-// wherever it sits, so a long component cannot borrow a protected class.
 func TestCrowdSecFeedEncoderProjectComponentBounds(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("a", 41)
@@ -109,8 +99,6 @@ func TestCrowdSecFeedEncoderProjectComponentBounds(t *testing.T) {
 			assertFeedTarget(t, feedModeServing, path, 404, "unknown", feedProbeForTest(path), path)
 		})
 	}
-	// Removing the long component with a dot segment leaves a project shape,
-	// which is public in that normalized view.
 	assertFeedTarget(t, feedModeServing, "/aaaa/projects/"+long+"/../analytical-engine", 404, "public", "none", "")
 }
 

@@ -23,9 +23,6 @@ func init() {
 	caddy.RegisterModule(WAFMetadataEncoder{})
 }
 
-// WAFMetadataEncoder keeps only fixed event metadata from Coraza match logs.
-// Coraza messages contain request values and client addresses, so unknown
-// message shapes must never pass through this encoder.
 type WAFMetadataEncoder struct {
 	zapcore.Encoder `json:"-"`
 }
@@ -96,8 +93,7 @@ func (e *wafMetadataEncoder) EncodeEntry(entry zapcore.Entry, _ []zapcore.Field)
 	}).EncodeEntry(entry, fields)
 }
 
-// Coraza and its Caddy connector share the rule callback's logger. Recognize
-// only their fixed diagnostic messages; discard all context and error fields.
+// Coraza and its Caddy connector share the rule callback's logger (coraza-caddy).
 func wafEngineDiagnosticKind(message string) string {
 	switch message {
 	case "key not found in collection, returning the original text":
@@ -152,8 +148,7 @@ func wafEngineDiagnosticKind(message string) string {
 		return "response_body_error"
 	case "Failed to close the transaction":
 		return "transaction_close_error"
-	// The connector reports any interruption, including body limits,
-	// with this summary. It does not establish a separate rule match.
+	// The connector logs every interruption, including body limits, with this summary; it is no separate rule match (coraza-caddy).
 	case "WAF rule violation detected":
 		return "interruption_summary"
 	default:

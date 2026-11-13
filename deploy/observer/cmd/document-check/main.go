@@ -1,16 +1,3 @@
-// Command document-check checks a fetched copy of
-// https://aboutme.vn/.well-known/deployment.json the way a reader must
-// (docs/design/deployment-transparency/document.md): at most 64 KiB, valid
-// against the closed version 1 schema, free of the identifiers the
-// sanitizer forbids, and not stale at the given time
-// (docs/design/deployment-transparency/README.md, "Run, freshness, and
-// staleness"). It also fails unless the summary and every image's signature
-// and SBOM status are "verified", since the release check expects a fully
-// verified deployment. On success it prints one line per running image,
-// "<image> <digest> <version>", so the caller can verify each digest with
-// gh attestation verify.
-//
-// Usage: document-check -now <RFC 3339 time> <document.json
 package main
 
 import (
@@ -27,11 +14,8 @@ import (
 	"danny.vn/aboutme/deploy/observer/schema"
 )
 
-// maxBytes is the document cap the observer enforces before it writes.
 const maxBytes = 64 << 10
 
-// maxAge is how long after observed_at a reader treats the document as
-// stale, whatever stale_after says.
 const maxAge = 600 * time.Second
 
 // maxSkew is how far -now may sit before observed_at. A larger gap means
@@ -121,7 +105,6 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	return nil
 }
 
-// readCapped reads r and fails when it holds more than maxBytes.
 func readCapped(r io.Reader) ([]byte, error) {
 	b, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
 	if err != nil {

@@ -62,7 +62,11 @@ linters:
           arguments:
             - checkPrivateReceivers
             - sayRepetitiveInsteadOfStutters
-        - name: package-comments
+            - disableChecksOnConstants
+            - disableChecksOnFunctions
+            - disableChecksOnMethods
+            - disableChecksOnTypes
+            - disableChecksOnVariables
         - name: error-strings
         - name: error-naming
         - name: error-return

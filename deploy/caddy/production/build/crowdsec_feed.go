@@ -29,10 +29,8 @@ const (
 )
 
 var (
-	feedBufferPool = buffer.NewPool()
-	publicSlugPath = regexp.MustCompile(`^/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.md)?$`)
-	// projectSlugComponent is the project slug grammar; its length is
-	// checked separately.
+	feedBufferPool       = buffer.NewPool()
+	publicSlugPath       = regexp.MustCompile(`^/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.md)?$`)
 	projectSlugComponent = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
@@ -40,9 +38,6 @@ func init() {
 	caddy.RegisterModule(CrowdSecFeedEncoder{})
 }
 
-// CrowdSecFeedEncoder emits only the bounded fields CrowdSec needs. It reads
-// the socket address and route shape from Caddy's request object, then discards
-// that object and every other access-log field.
 type CrowdSecFeedEncoder struct {
 	Mode            string `json:"mode,omitempty"`
 	zapcore.Encoder `json:"-"`
@@ -115,8 +110,7 @@ func (e *CrowdSecFeedEncoder) AddObject(key string, marshaler zapcore.ObjectMars
 		return nil
 	}
 	request := logged.Request
-	// Caddy snapshots the original parsed URL before its handler chain. Reading
-	// the object preserves RawPath, which its generic marshaler discards.
+	// Caddy snapshots the original parsed URL before its handler chain; its generic marshaler drops RawPath (caddyhttp.OriginalRequestCtxKey).
 	if original, exists := request.Context().Value(caddyhttp.OriginalRequestCtxKey).(http.Request); exists {
 		request = &original
 	}
@@ -216,8 +210,6 @@ func feedTarget(mode string, target url.URL, invalid bool, status int) (string, 
 	if !firstValid || !secondValid || !feedRawPathValid(target) {
 		return route, "invalid", ""
 	}
-	// Escaping can only grow Path. Do not allocate escaped or decoded copies
-	// of an oversized target; classification above uses fixed-size buffers.
 	if len(target.Path) > feedTargetLimit || len(target.RawPath) > feedTargetLimit {
 		return route, "oversized", ""
 	}
@@ -228,7 +220,7 @@ func feedTarget(mode string, target url.URL, invalid bool, status int) (string, 
 	if len(escaped) > feedTargetLimit {
 		return route, "oversized", ""
 	}
-	decoded, _ := url.PathUnescape(target.Path) // the scanner validated every triplet
+	decoded, _ := url.PathUnescape(target.Path)
 	return route, feedProbeClass([]string{target.Path, decoded}), escaped
 }
 
@@ -282,14 +274,8 @@ func feedRootClass(root string, leaf bool) string {
 	}
 }
 
-// feedComponentLimit is the longest component a protected route can match: a
-// project slug of 40 characters. A longer component is kept as a value that
-// matches nothing, so it can never borrow a protected class.
 const feedComponentLimit = 40
 
-// feedComponents holds the first three components of one view and its depth.
-// Only these matter for protected routes: a root, and the two literal-led
-// segments of the project page shapes.
 type feedComponents struct {
 	first [3]string
 	depth int
@@ -312,9 +298,6 @@ func (c *feedComponents) pop() {
 	}
 }
 
-// feedPathClass examines one decoded view without allocating a copy of a
-// visitor-sized path. Only the first three components and the depth matter
-// for protected routes; a long component cannot match a protected route.
 func feedPathClass(path string, decode bool) (string, bool) {
 	reader := bufio.NewReaderSize(&feedPathReader{path: path, decode: decode}, feedTargetLimit)
 	var component [feedComponentLimit]byte
@@ -356,7 +339,7 @@ func feedPathClass(path string, decode bool) (string, bool) {
 			char += 'a' - 'A'
 		}
 		if char > 127 {
-			char = 0 // protected route roots and resume handles contain ASCII only
+			char = 0
 		}
 		if length < len(component) {
 			component[length] = byte(char)
@@ -367,9 +350,6 @@ func feedPathClass(path string, decode bool) (string, bool) {
 	return feedPriority(feedViewClass(raw, valid), feedViewClass(normalized, valid)), valid
 }
 
-// feedViewClass classifies one view by its root, then by the project page
-// shapes /{slug}/projects and /{slug}/projects/{project-slug}. A fixed root
-// keeps its own class, so /app/projects stays auth.
 func feedViewClass(view feedComponents, valid bool) string {
 	class := feedRootClass(view.first[0], valid && view.depth <= 1)
 	if class == "unknown" && valid && feedProjectShape(view) {
@@ -378,8 +358,6 @@ func feedViewClass(view feedComponents, valid bool) string {
 	return class
 }
 
-// feedProjectShape reports a valid, unreserved resume slug, the literal
-// projects, and, at depth three, a valid project slug of 2 to 40 characters.
 func feedProjectShape(view feedComponents) bool {
 	if view.depth != 2 && view.depth != 3 || view.first[1] != "projects" {
 		return false

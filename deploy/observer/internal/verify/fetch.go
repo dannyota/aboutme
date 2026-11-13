@@ -13,26 +13,14 @@ import (
 	"strings"
 )
 
-// maxBody bounds every response the verifier reads.
 const maxBody = 4 << 20
 
-// bundleMediaType is the Sigstore bundle layer actions/attest pushes.
 const bundleMediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 
-// registryRepositories are searched for a bundle when the GitHub API is
-// rate limited. The digest alone does not say which image it belongs to;
-// the document checks the subject name against the component afterward.
 var registryRepositories = []string{"dannyota/aboutme-server", "dannyota/aboutme-web", "dannyota/aboutme-caddy"}
 
-// errRateLimited marks a GitHub API answer that sends the lookup to the
-// registry.
 var errRateLimited = errors.New("github api rate limited")
 
-// fetch returns the raw bundles for one digest and predicate. It asks the
-// GitHub attestations API first, then the registry when the API is rate
-// limited or holds nothing. It returns an error whenever either source did
-// not answer, so an empty result means both answered with nothing
-// (verification.md, "not_found").
 func (v *Verifier) fetch(ctx context.Context, digest, predicate, apiFilter string) ([][]byte, error) {
 	bundles, apiErr := v.fetchAPI(ctx, digest, apiFilter)
 	switch {
@@ -46,7 +34,6 @@ func (v *Verifier) fetch(ctx context.Context, digest, predicate, apiFilter strin
 		return nil, err
 	}
 	if len(bundles) == 0 && apiErr != nil {
-		// A rate-limited GitHub never answered, so absence is not proven.
 		return nil, apiErr
 	}
 	return bundles, nil
@@ -85,9 +72,6 @@ func (v *Verifier) fetchAPI(ctx context.Context, digest, apiFilter string) ([][]
 	return out, nil
 }
 
-// fetchRegistry reads bundles stored beside the image under the OCI
-// referrers tag schema: the index tagged sha256-<hex> lists one manifest per
-// attestation, annotated with its predicate type.
 func (v *Verifier) fetchRegistry(ctx context.Context, digest, predicate string) ([][]byte, error) {
 	var out [][]byte
 	for _, repo := range registryRepositories {

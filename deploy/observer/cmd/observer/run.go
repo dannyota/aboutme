@@ -10,19 +10,12 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// run performs one observation: list the running images, check every
-// distinct digest, build and encode the document, and publish it. A
-// platform read failure or an encode failure writes nothing
-// (docs/design/deployment-transparency/README.md, "Run, freshness, and
-// staleness").
 func (o *observer) run(ctx context.Context, now func() time.Time) error {
 	images, err := o.lister.Running(ctx)
 	if err != nil {
 		return fmt.Errorf("list running images: %w", err)
 	}
 
-	// Verification stops early enough to leave time to publish, so a slow
-	// GitHub or registry turns into unchecked images, not a missed write.
 	vctx, cancel := verificationContext(ctx)
 	defer cancel()
 	evidence := make(map[string]verify.Evidence, len(images))
@@ -61,11 +54,8 @@ func (o *observer) run(ctx context.Context, now func() time.Time) error {
 	return nil
 }
 
-// publishReserve is the time a run keeps for building and publishing the
-// document after verification stops.
 const publishReserve = 5 * time.Second
 
-// verificationContext ends publishReserve before ctx's deadline.
 func verificationContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	deadline, ok := ctx.Deadline()
 	if !ok {

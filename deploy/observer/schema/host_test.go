@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// TestHostDocument validates the generator's output against the shared schema.
 func TestHostDocument(t *testing.T) {
 	work := t.TempDir()
 	bin := filepath.Join(work, "bin")

@@ -30,14 +30,12 @@ import (
 	"danny.vn/aboutme/deploy/observer/schema"
 )
 
-// The fixtures under testdata/leak fill every field the design says must
-// never be written with a canary: most contain "canary", and these do not.
 var plainCanaries = []string{
-	"123456789012",                        // account ID
-	"10.9.8.7", "10-9-8-7", "fd00:9:8::7", // addresses
-	"ap-southeast-1b",                                                  // availability zone
-	"c0ffee00c0ffee00",                                                 // task and container instance IDs
-	"3f2a9c1e-7b4d", "0f1e2d3c-4b5a", "9d8c7b6a-5f4e", "1a2b3c4d-5e6f", // UUIDs
+	"123456789012",
+	"10.9.8.7", "10-9-8-7", "fd00:9:8::7",
+	"ap-southeast-1b",
+	"c0ffee00c0ffee00",
+	"3f2a9c1e-7b4d", "0f1e2d3c-4b5a", "9d8c7b6a-5f4e", "1a2b3c4d-5e6f",
 	"0a:1b:2c:3d", "subnet-", "ReplicaSet", "ExecuteCommandAgent", "ElasticNetworkInterface",
 	"HEALTHY", "RUNNING", "ecs.cpu-architecture", "arn:", "task-definition", "role/",
 }
@@ -53,8 +51,6 @@ func leakFixture(t *testing.T, name string) []byte {
 	return b
 }
 
-// withoutUnknownMember removes every unknownMemberCanary key, giving the
-// fixture as the adapters' known AWS and Kubernetes shapes describe it.
 func withoutUnknownMember(t *testing.T, raw []byte) []byte {
 	t.Helper()
 	var v any
@@ -83,8 +79,6 @@ func withoutUnknownMember(t *testing.T, raw []byte) []byte {
 	return out
 }
 
-// ecsImages runs the real ECS adapter and SDK against a fake endpoint
-// serving the recorded-shape responses.
 func ecsImages(t *testing.T, strip bool) []platform.Image {
 	t.Helper()
 	load := func(name string) []byte {
@@ -143,8 +137,6 @@ func ecsImages(t *testing.T, strip bool) []platform.Image {
 	return imgs
 }
 
-// kubernetesImages runs the real Kubernetes adapter against a TLS API
-// server serving the recorded-shape PodList.
 func kubernetesImages(t *testing.T, strip bool) []platform.Image {
 	t.Helper()
 	body := leakFixture(t, "pod-list.json")
@@ -184,8 +176,6 @@ func kubernetesImages(t *testing.T, strip bool) []platform.Image {
 	return imgs
 }
 
-// build turns adapter output into document bytes, with every digest
-// verified so every optional field and link is filled.
 func build(t *testing.T, imgs []platform.Image, info platform.Info) []byte {
 	t.Helper()
 	ev := map[string]verify.Evidence{}
@@ -223,14 +213,11 @@ func build(t *testing.T, imgs []platform.Image, info platform.Info) []byte {
 	return b
 }
 
-// reporter is the part of testing.TB the leak checks use, so a test can
-// record their failures without failing itself.
 type reporter interface {
 	Helper()
 	Errorf(format string, args ...any)
 }
 
-// recorder counts failures for TestLeakChecksCatchLeaks.
 type recorder struct{ failures int }
 
 func (r *recorder) Helper() {}
@@ -253,8 +240,6 @@ func assertNoLeak(t reporter, b []byte) {
 	}
 }
 
-// schemaPaths lists every key path the JSON Schema allows, with [] for
-// array items, by walking properties, items, $ref, and oneOf.
 func schemaPaths(t *testing.T) map[string]bool {
 	t.Helper()
 	var root map[string]any
@@ -332,8 +317,6 @@ func documentPaths(t *testing.T, b []byte) []string {
 	return out
 }
 
-// TestDocumentLeaksNothing is the sanitizer's contract
-// (docs/design/deployment-transparency/document.md, "Sanitizer").
 func TestDocumentLeaksNothing(t *testing.T) {
 	adapters := map[string]struct {
 		images func(*testing.T, bool) []platform.Image
@@ -359,7 +342,6 @@ func TestDocumentLeaksNothing(t *testing.T) {
 					t.Errorf("key path %q is not in the schema allowlist", p)
 				}
 			}
-			// A response member the adapters do not know changes nothing.
 			if again := build(t, a.images(t, true), a.info); !bytes.Equal(b, again) {
 				t.Errorf("an unknown platform field changed the document")
 			}
@@ -367,8 +349,6 @@ func TestDocumentLeaksNothing(t *testing.T) {
 	}
 }
 
-// TestLeakChecksCatchLeaks proves the pattern checks above fail on each kind
-// of identifier, so a passing TestDocumentLeaksNothing means something.
 func TestLeakChecksCatchLeaks(t *testing.T) {
 	leaks := []string{
 		`{"x":"canary-cluster-7f3a"}`, `{"x":"123456789012"}`, `{"x":"arn:aws:ecs:x"}`,

@@ -17,8 +17,6 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// fakeBucket is a minimal path-style S3 stand-in: enough of PutObject and
-// GetObject to exercise Publisher and Cache against the real SDK client.
 type fakeBucket struct {
 	mu        sync.Mutex
 	objects   map[string]put
@@ -35,7 +33,7 @@ func newFakeBucket(t *testing.T) (*httptest.Server, *fakeBucket) {
 	t.Helper()
 	fb := &fakeBucket{objects: map[string]put{}, forbidden: map[string]bool{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.URL.Path // path-style: /<bucket>/<key>
+		key := r.URL.Path
 		switch r.Method {
 		case http.MethodPut:
 			body, err := io.ReadAll(r.Body)
@@ -52,10 +50,6 @@ func newFakeBucket(t *testing.T) (*httptest.Server, *fakeBucket) {
 			obj, ok := fb.objects[key]
 			forbidden := fb.forbidden[key]
 			fb.mu.Unlock()
-			// The observer's role has no s3:ListBucket, so a real bucket
-			// answers AccessDenied rather than NoSuchKey for a key it
-			// cannot list (docs/design/deployment-transparency/README.md,
-			// "Access on AWS").
 			if forbidden {
 				w.Header().Set("Content-Type", "application/xml")
 				w.WriteHeader(http.StatusForbidden)
@@ -118,10 +112,6 @@ func TestPublisherPut(t *testing.T) {
 	}
 }
 
-// TestDocumentKeyMatchesTheServedPath asserts the document is written under
-// the path CloudFront serves, since it appends the viewer's path to the S3
-// origin rather than always fetching one fixed key
-// (docs/design/deployment-transparency/README.md, "Serving and caching").
 func TestDocumentKeyMatchesTheServedPath(t *testing.T) {
 	if documentKey != ".well-known/deployment.json" {
 		t.Errorf("documentKey = %q, want .well-known/deployment.json", documentKey)
@@ -146,10 +136,6 @@ func TestCacheGetNotFound(t *testing.T) {
 	}
 }
 
-// TestCacheGetAccessDenied asserts a missing key answered as AccessDenied
-// (HTTP 403), as a bucket with no s3:ListBucket grant answers, is treated
-// the same as NoSuchKey: found=false with no error
-// (docs/design/deployment-transparency/README.md, "Access on AWS").
 func TestCacheGetAccessDenied(t *testing.T) {
 	srv, fb := newFakeBucket(t)
 	cfg := aws.Config{

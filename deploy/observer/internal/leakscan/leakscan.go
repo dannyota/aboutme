@@ -1,8 +1,3 @@
-// Package leakscan finds infrastructure identifiers in deployment document
-// bytes: the patterns the sanitizer rules forbid
-// (docs/design/deployment-transparency/document.md, "Sanitizer"). The
-// observer's leak test and the production document check share it, so both
-// apply the same list.
 package leakscan
 
 import (
@@ -25,9 +20,7 @@ var (
 		"32-hex ID":         regexp.MustCompile(`(?i)[0-9a-f]{32}`),
 		"UUID":              regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
 	}
-	scheme = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
-	// urlPrefixes are the only URL starts the document may hold. The two
-	// entries ending in a quote are whole JSON string values.
+	scheme      = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 	urlPrefixes = []string{
 		"https://aboutme.vn\"",
 		"https://github.com/dannyota/aboutme\"",
@@ -37,9 +30,6 @@ var (
 	}
 )
 
-// Find returns one sorted line per forbidden match in b, or nil when b holds
-// none. Digests, commit hashes, and timestamps are allowed values; Find
-// removes them before looking for identifiers hidden inside other strings.
 func Find(b []byte) []string {
 	s := string(b)
 	var found []string

@@ -49,9 +49,6 @@ func (f *fakePublisher) Put(_ context.Context, body []byte) error {
 
 func fixedNow() time.Time { return time.Date(2026, 10, 2, 3, 14, 5, 0, time.UTC) }
 
-// serverImage and webImage are enough to build a document past its required
-// components (docs/design/deployment-transparency/document.md, "Summary and
-// release").
 func serverImage(digest string, since time.Time) platform.Image {
 	return platform.Image{Component: platform.Server, Digest: digest, Replicas: 1, RunningSince: since}
 }

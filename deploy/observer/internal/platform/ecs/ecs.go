@@ -1,9 +1,3 @@
-// Package ecs adapts the Amazon ECS control plane to platform.Lister
-// (docs/design/deployment-transparency/README.md, "Run, freshness, and
-// staleness"; docs/design/deployment-transparency/document.md, "Component
-// mapping"). It calls only ecs:ListTasks and ecs:DescribeTasks, and returns
-// platform.Image values built from nothing but a container's name, image
-// digest, last status, and start time.
 package ecs
 
 import (
@@ -16,12 +10,9 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
-// maxDescribeTasks is the largest task list ecs:DescribeTasks accepts in one
-// call.
+// ecs:DescribeTasks accepts at most 100 tasks per call (Amazon ECS API reference).
 const maxDescribeTasks = 100
 
-// role names the configured service a task came from, independent of the
-// task's own group string, which the adapter never reads.
 type role string
 
 const (
@@ -30,9 +21,6 @@ const (
 	roleMaintenance role = "maintenance"
 )
 
-// Config names the ECS cluster and the three serving services
-// (docs/design/deployment-transparency/README.md, "Run, freshness, and
-// staleness").
 type Config struct {
 	Cluster            string
 	AppService         string
@@ -40,21 +28,15 @@ type Config struct {
 	MaintenanceService string
 }
 
-// Lister lists the running images of the configured cluster's serving
-// services. It implements platform.Lister.
 type Lister struct {
 	client *awsecs.Client
 	cfg    Config
 }
 
-// New returns a Lister that calls client against cfg's cluster and services.
 func New(client *awsecs.Client, cfg Config) *Lister {
 	return &Lister{client: client, cfg: cfg}
 }
 
-// Running implements platform.Lister. It calls ListTasks once per serving
-// service and DescribeTasks once for every task returned, then aggregates
-// the RUNNING containers into platform.Image values.
 func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	var arns []string
 	roleByARN := map[string]role{}
@@ -88,8 +70,6 @@ func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("describe tasks: %w", err)
 	}
-	// A task ListTasks returned but DescribeTasks could not describe would
-	// silently drop out of the document; treat it as a failed read.
 	if len(out.Failures) > 0 {
 		return nil, fmt.Errorf("describe tasks: %d of %d tasks could not be described", len(out.Failures), len(arns))
 	}
@@ -100,8 +80,6 @@ func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	return platform.Aggregate(obs)
 }
 
-// listRunningTaskARNs pages through ecs:ListTasks for one service, filtered
-// to the RUNNING desired status.
 func (l *Lister) listRunningTaskARNs(ctx context.Context, service string) ([]string, error) {
 	var arns []string
 	paginator := awsecs.NewListTasksPaginator(l.client, &awsecs.ListTasksInput{
@@ -119,10 +97,6 @@ func (l *Lister) listRunningTaskARNs(ctx context.Context, service string) ([]str
 	return arns, nil
 }
 
-// observations maps DescribeTasks output to platform.Observation values. A
-// RUNNING container with no valid digest fails the whole run rather than
-// being dropped (docs/design/deployment-transparency/document.md,
-// "Sanitizer").
 func observations(tasks []types.Task, roleByARN map[string]role) ([]platform.Observation, error) {
 	var obs []platform.Observation
 	for _, t := range tasks {
@@ -164,11 +138,6 @@ func observations(tasks []types.Task, roleByARN map[string]role) ([]platform.Obs
 	return obs, nil
 }
 
-// mapComponent is the pure form of the component mapping table
-// (docs/design/deployment-transparency/document.md, "Component mapping"). It
-// maps the service a task belongs to and a container's name to a document
-// component, or reports that the container is not one this document
-// describes.
 func mapComponent(r role, container string) (string, bool) {
 	switch r {
 	case roleApp:

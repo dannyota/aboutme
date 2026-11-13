@@ -21,8 +21,6 @@ import (
 	"github.com/theupdateframework/go-tuf/v2/metadata/fetcher"
 )
 
-// The signing identity every release image must carry (verification.md,
-// "What verified means").
 const (
 	Issuer           = "https://token.actions.githubusercontent.com"
 	SourceRepository = "https://github.com/dannyota/aboutme"
@@ -31,8 +29,6 @@ const (
 	ProvenancePredicate = "https://slsa.dev/provenance/v1"
 	SPDXPredicate       = "https://spdx.dev/Document/v2.3"
 
-	// signerPattern is the exact certificate identity: the release workflow
-	// at a strict version tag.
 	signerPattern = `^https://github\.com/dannyota/aboutme/\.github/workflows/release-images\.yml@refs/tags/(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$`
 )
 
@@ -43,24 +39,16 @@ var (
 	digestRE = regexp.MustCompile(`^sha256:([0-9a-f]{64})$`)
 )
 
-// Options configure a Verifier.
 type Options struct {
-	HTTPClient *http.Client
-	// Cache is required. A result is reused for CacheTTL.
-	Cache Cache
-	Now   func() time.Time
-	// TUFCacheDir holds sigstore's TUF metadata; "" keeps it in memory.
-	TUFCacheDir string
-	// GitHubAPI and Registry default to https://api.github.com and
-	// https://ghcr.io.
-	GitHubAPI string
-	Registry  string
-	// TrustedMaterial replaces the TUF-fetched public-good trust root. Tests
-	// set it to a recorded trusted root.
+	HTTPClient      *http.Client
+	Cache           Cache
+	Now             func() time.Time
+	TUFCacheDir     string
+	GitHubAPI       string
+	Registry        string
 	TrustedMaterial root.TrustedMaterial
 }
 
-// Verifier checks digests against their attestations.
 type Verifier struct {
 	opts Options
 
@@ -68,8 +56,6 @@ type Verifier struct {
 	trusted root.TrustedMaterial
 }
 
-// New returns a Verifier. It does not fetch the trust root; the first Check
-// does, and a failure there makes that Check's result Unchecked.
 func New(_ context.Context, opts Options) (*Verifier, error) {
 	if opts.Cache == nil {
 		return nil, errors.New("verify: a cache is required")
@@ -91,10 +77,6 @@ func New(_ context.Context, opts Options) (*Verifier, error) {
 	return &Verifier{opts: opts, trusted: opts.TrustedMaterial}, nil
 }
 
-// Check returns the evidence for one digest. Provenance and SBOM are
-// cached separately: a part checked less than CacheTTL ago is reused, and
-// only the other part is checked again. It never fails: anything that stops
-// a check from finishing makes that part Unchecked, which is never reused.
 func (v *Verifier) Check(ctx context.Context, digest string) Evidence {
 	ev := Evidence{Digest: digest, Provenance: Provenance{Status: Unchecked}, SBOM: SBOM{Status: Unchecked}}
 	m := digestRE.FindStringSubmatch(digest)
@@ -128,10 +110,7 @@ func (v *Verifier) Check(ctx context.Context, digest string) Evidence {
 	if !haveSBOM {
 		ev.SBOM = v.sbom(ctx, trusted, digest, sum, now)
 	}
-	// The cache holds an entry only with a final provenance; an unchecked
-	// SBOM beside it is checked again next run.
 	if ev.Provenance.Status != Unchecked {
-		// A failed cache write only costs API calls on the next run.
 		if err := v.opts.Cache.Put(ctx, ev); err != nil {
 			slog.Warn("verification cache write failed", "digest", digest)
 		}
@@ -139,7 +118,6 @@ func (v *Verifier) Check(ctx context.Context, digest string) Evidence {
 	return ev
 }
 
-// fresh reports whether a cached part is final and younger than CacheTTL.
 func fresh(status Status, checkedAt, now time.Time) bool {
 	switch status {
 	case Verified, NotFound, Invalid:
@@ -150,17 +128,14 @@ func fresh(status Status, checkedAt, now time.Time) bool {
 	return age >= 0 && age < CacheTTL
 }
 
-// trustedMaterial fetches the public-good trust root once. Its daily TUF
-// refresh runs for the life of the process, not of one run, so it takes no
-// run context.
+// sigstore-go's NewLiveTrustedRoot refreshes TUF daily for the life of the process, so it takes no run context (sigstore-go root).
 func (v *Verifier) trustedMaterial() (root.TrustedMaterial, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.trusted != nil {
 		return v.trusted, nil
 	}
-	// The default fetcher's client has no timeout; a hanging TUF mirror
-	// must not hold the verifier past a run's deadline.
+	// The default TUF fetcher's HTTP client has no timeout, so a hanging mirror could outlast the run (go-tuf fetcher).
 	f := fetcher.NewDefaultFetcher()
 	f.SetHTTPClient(&http.Client{Timeout: 10 * time.Second})
 	opts := tuf.DefaultOptions().WithFetcher(f)
@@ -177,7 +152,6 @@ func (v *Verifier) trustedMaterial() (root.TrustedMaterial, error) {
 	return tr, nil
 }
 
-// verified is what one bundle proves when every check passes.
 type verified struct {
 	subjects []string
 	version  string
@@ -216,9 +190,6 @@ func (v *Verifier) sbom(ctx context.Context, trusted root.TrustedMaterial, diges
 	return s
 }
 
-// check finds the bundles for one predicate and verifies them. Any bundle
-// that passes every check makes the result Verified; bundles that all fail
-// make it Invalid; no bundle anywhere makes it NotFound.
 func (v *Verifier) check(ctx context.Context, trusted root.TrustedMaterial, digest string, sum []byte, predicate, apiFilter string) (Status, verified) {
 	bundles, err := v.fetch(ctx, digest, predicate, apiFilter)
 	if err != nil {
@@ -235,9 +206,6 @@ func (v *Verifier) check(ctx context.Context, trusted root.TrustedMaterial, dige
 	return Invalid, verified{}
 }
 
-// verifyBundle applies the whole policy to one bundle: signature, Fulcio
-// chain, Rekor inclusion and timestamp, issuer, exact signer identity,
-// source repository, hosted runner, subject digest, and predicate type.
 func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicate string) (verified, error) {
 	var b bundle.Bundle
 	if err := b.UnmarshalJSON(raw); err != nil {
@@ -290,8 +258,6 @@ func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicat
 	if len(got.subjects) == 0 {
 		return verified{}, errors.New("no subject names this digest")
 	}
-	// Exactly one entry, so the published index is the entry the verifier
-	// checked, never an unverified one placed beside it.
 	entries, err := b.TlogEntries()
 	if err != nil || len(entries) != 1 {
 		return verified{}, errors.New("want exactly one transparency log entry")
@@ -303,9 +269,6 @@ func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicat
 	return got, nil
 }
 
-// certificateFacts reads version, commit, and build link from the verified
-// certificate, which Fulcio filled from GitHub's OIDC token, and requires
-// them to agree with each other and with the signer identity.
 func certificateFacts(c certificate.Summary) (verified, error) {
 	m := signerRE.FindStringSubmatch(c.SubjectAlternativeName)
 	if m == nil {

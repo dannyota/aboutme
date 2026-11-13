@@ -12,8 +12,6 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// updateExamples rewrites testdata/examples/*.json from the current
-// Build/Encode output, for an intentional change to the document shape.
 var updateExamples = flag.Bool("update", false, "update golden files in testdata/examples")
 
 const (
@@ -168,8 +166,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		Evidence: map[string]verify.Evidence{
 			exampleDigestServer: verifiedEvidence(exampleDigestServer, "v0.6.5", exampleCommit65, platform.Server),
 			exampleDigestWebNew: verifiedEvidence(exampleDigestWebNew, "v0.6.5", exampleCommit65, platform.Web),
-			// exampleDigestUnchecked has no entry: the observer has not
-			// finished checking it yet.
 		},
 		Observer: BuildInfo{Version: "v0.6.5", Commit: exampleCommit65},
 	}
@@ -205,9 +201,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		Evidence: map[string]verify.Evidence{
 			exampleDigestServer: verifiedEvidence(exampleDigestServer, "v0.6.5", exampleCommit65, platform.Server),
 			exampleDigestWebNew: verifiedEvidence(exampleDigestWebNew, "v0.6.5", exampleCommit65, platform.Web),
-			// The signed statement for this digest names the web image, not
-			// caddy's own: a build for a different component running under
-			// this component's name.
 			exampleDigestInvalid: {
 				Digest:     exampleDigestInvalid,
 				Provenance: exampleVerifiedProvenance("v0.6.5", exampleCommit65, checked, platform.Web),
@@ -225,7 +218,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
 			exampleImage(platform.Caddy, exampleDigestCaddy, "2026-10-02T03:12:00Z", t),
-			// No web task or pod is running at all.
 		},
 		Evidence: map[string]verify.Evidence{
 			exampleDigestServer: verifiedEvidence(exampleDigestServer, "v0.6.5", exampleCommit65, platform.Server),
@@ -245,9 +237,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 			exampleImage(platform.Caddy, exampleDigestCaddy, "2026-10-02T03:12:00Z", t),
 		},
 		Evidence: map[string]verify.Evidence{
-			// server predates the SBOM-attestation release
-			// (docs/design/deployment-transparency/README.md, "Release plan
-			// and compatibility"): it has signed provenance but no SBOM.
 			exampleDigestSBOMMiss: {
 				Digest:     exampleDigestSBOMMiss,
 				Provenance: exampleVerifiedProvenance("v0.5.21", exampleCommit521, checked, platform.Server),
@@ -259,7 +248,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		Observer: BuildInfo{Version: "v0.5.21", Commit: exampleCommit521},
 	}
 
-	// A stale document was checked before it was observed, long ago.
 	staleChecked := exampleMustParse(t, "2026-01-01T00:10:00Z")
 	staleEvidence := func(digest, component string) verify.Evidence {
 		return verify.Evidence{
@@ -289,10 +277,6 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	return scenarios
 }
 
-// TestExamples builds every state the /verify page renders from fixed
-// inputs and compares the encoded bytes against testdata/examples/*.json.
-// Run with -update to regenerate a golden file after an intentional change
-// (deploy/observer/README.md, "Example documents").
 func TestExamples(t *testing.T) {
 	scenarios := exampleScenarios(t)
 	for name, in := range scenarios {
@@ -324,9 +308,6 @@ func TestExamples(t *testing.T) {
 	}
 }
 
-// TestFutureVersionIsNeverValidated asserts the hand-written
-// future-version.json is not schema_version 1 and is only used by the
-// frontend, never by this package's own validation.
 func TestFutureVersionIsNeverValidated(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "examples", "future-version.json")
 	b, err := os.ReadFile(path)

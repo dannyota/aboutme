@@ -1,7 +1,3 @@
-// Package document builds /.well-known/deployment.json, schema version 1
-// (docs/design/deployment-transparency/document.md). The builder fills
-// closed output types from platform.Image values, verification evidence, and
-// constants only; Encode validates the bytes before anything is written.
 package document
 
 import (
@@ -15,19 +11,14 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// Constants every document carries.
 const (
 	SchemaVersion    = 1
 	Project          = "aboutme"
 	SourceRepository = "https://github.com/dannyota/aboutme"
-	// StaleAfter is how long after observed_at a reader treats the
-	// document as stale.
-	StaleAfter = 180 * time.Second
-	// MaxImages bounds the distinct digests per component.
-	MaxImages = 8
+	StaleAfter       = 180 * time.Second
+	MaxImages        = 8
 )
 
-// Summary values.
 const (
 	SummaryVerified   = "verified"
 	SummaryRollingOut = "rolling_out"
@@ -35,11 +26,8 @@ const (
 	SummaryMismatch   = "mismatch"
 )
 
-// SPDXFormat is the only SBOM format the release workflow attests.
 const SPDXFormat = "spdx-2.3"
 
-// Document is the whole published object. Every struct here is closed: the
-// schema sets additionalProperties false at every level.
 type Document struct {
 	SchemaVersion    int         `json:"schema_version"`
 	Project          string      `json:"project"`
@@ -55,29 +43,24 @@ type Document struct {
 	Observer         Observer    `json:"observer"`
 }
 
-// Platform names where the components run.
 type Platform struct {
 	Provider     string `json:"provider"`
 	Orchestrator string `json:"orchestrator"`
 	Region       string `json:"region"`
 }
 
-// Release is set only when every required component runs one verified
-// digest of the same version and commit.
 type Release struct {
 	Version    string `json:"version"`
 	Commit     string `json:"commit"`
 	DeployedAt string `json:"deployed_at"`
 }
 
-// Component is one serving component and the digests it runs.
 type Component struct {
 	Name          string         `json:"name"`
 	Image         string         `json:"image"`
 	RunningImages []RunningImage `json:"running_images"`
 }
 
-// RunningImage is one distinct digest of a component.
 type RunningImage struct {
 	Digest       string    `json:"digest"`
 	Replicas     int       `json:"replicas"`
@@ -89,7 +72,6 @@ type RunningImage struct {
 	Links        Links     `json:"links"`
 }
 
-// Signature is the provenance check's result.
 type Signature struct {
 	Status               string  `json:"status"`
 	CheckedAt            *string `json:"checked_at"`
@@ -97,13 +79,11 @@ type Signature struct {
 	TransparencyLogIndex *int64  `json:"transparency_log_index"`
 }
 
-// SBOM is the SBOM attestation check's result.
 type SBOM struct {
 	Status string  `json:"status"`
 	Format *string `json:"format"`
 }
 
-// Links are built from constants and verified values only.
 type Links struct {
 	Commit          *string `json:"commit"`
 	Release         *string `json:"release"`
@@ -113,35 +93,27 @@ type Links struct {
 	TransparencyLog *string `json:"transparency_log"`
 }
 
-// Observer is the observer binary's own build information. It is
-// self-reported and says so.
 type Observer struct {
 	Version *string `json:"version"`
 	Commit  *string `json:"commit"`
 	Source  string  `json:"source"`
 }
 
-// BuildInfo is the observer's own version and commit, empty when unknown.
 type BuildInfo struct {
 	Version string
 	Commit  string
 }
 
-// Input is everything a document is built from.
 type Input struct {
 	Environment string
 	Site        string
 	Platform    platform.Info
 	ObservedAt  time.Time
 	Images      []platform.Image
-	// Evidence is keyed by digest. A digest without evidence is unchecked.
-	Evidence map[string]verify.Evidence
-	Observer BuildInfo
+	Evidence    map[string]verify.Evidence
+	Observer    BuildInfo
 }
 
-// Build fills a Document from in. It never copies a platform string other
-// than a digest, and never a verification string other than the fixed
-// fields of verify.Provenance.
 func Build(in Input) (*Document, error) {
 	if in.ObservedAt.IsZero() {
 		return nil, errors.New("observed_at is required")
@@ -160,8 +132,6 @@ func Build(in Input) (*Document, error) {
 		},
 		ObservedAt: stamp(observed),
 		StaleAfter: stamp(observed.Add(StaleAfter)),
-		// A self-reported value outside its pattern (a local or
-		// pre-release build) is left out, never allowed to stop the write.
 		Observer: Observer{
 			Version: optional(matching(versionRE, in.Observer.Version)),
 			Commit:  optional(matching(commitRE, in.Observer.Commit)),
@@ -210,8 +180,6 @@ func runningImage(component, orchestrator string, img platform.Image, ev verify.
 	if status == "" {
 		status = verify.Unchecked
 	}
-	// A digest whose signed subject names another image (the web image
-	// running as server) is invalid for this component.
 	if status == verify.Verified && !slices.Contains(p.Subjects, repo) {
 		status = verify.Invalid
 	}
@@ -242,8 +210,6 @@ func runningImage(component, orchestrator string, img platform.Image, ev verify.
 	ri.Links.Commit = optional(SourceRepository + "/commit/" + p.Commit)
 	ri.Links.Build = optional(p.BuildURL)
 	ri.Links.TransparencyLog = optional(fmt.Sprintf("https://search.sigstore.dev/?logIndex=%d", p.LogIndex))
-	// GitHub Releases exist only for tags built with a signed SBOM, so the
-	// release and SBOM links are set together.
 	if sbomStatus == verify.Verified {
 		ri.Links.Release = optional(SourceRepository + "/releases/tag/" + p.Version)
 		asset := imageBase(repo)
@@ -306,7 +272,6 @@ func release(summary string, components []Component) *Release {
 		} else if *ri.Version != version || *ri.Commit != commit {
 			return nil
 		}
-		// Timestamps share one fixed format, so they order as strings.
 		if ri.RunningSince > deployed {
 			deployed = ri.RunningSince
 		}
