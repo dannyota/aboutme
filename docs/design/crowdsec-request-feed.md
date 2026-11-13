@@ -35,17 +35,18 @@ Route classification uses the first matching row:
 | `auth`        | App, authorize, OAuth, login, registration, password reset, and verification routes           |
 | `api`         | `/api` and its children                                                                       |
 | `mcp`         | `/mcp` and its children                                                                       |
-| `public`      | Root, valid public resume routes, guide, privacy, terms, showcase, and templates routes       |
+| `public`      | Root, valid public resume and project page routes, guide, privacy, terms, showcase, templates |
 | `unknown`     | Every other path, including reserved names and probes                                         |
 
 Only `route_class=unknown` with status 400, 404, or 405 permits a target sample;
 every other request emits `probe_class: "none"` and `target_path: ""`, including
-known routes returning those statuses. Valid public resume route syntax stays
-`public` even when the resume does not exist. Match protected route classes
-ASCII case-insensitively against the original parsed path and every exclusion
-view (the escaped path's first two decoded views and their dot-segment and slash
-normalizations), matching pinned Caddy path behavior. If any view matches, emit
-that class by table priority and no target sample.
+known routes returning those statuses. Valid public resume and project page
+route syntax (`/{slug}`, `/{slug}/projects`, `/{slug}/projects/{project-slug}`)
+stays `public` even when the resume or project does not exist. Match protected
+route classes ASCII case-insensitively against the original parsed path and
+every exclusion view (the escaped path's first two decoded views and their
+dot-segment and slash normalizations), matching pinned Caddy path behavior. If
+any view matches, emit that class by table priority and no target sample.
 
 Capture the original parsed URL before rewrites. For an eligible valid URL,
 `target_path` equals Go `URL.EscapedPath()`: preserve valid original escapes and

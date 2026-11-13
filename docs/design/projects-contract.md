@@ -1,8 +1,8 @@
 # Projects contract
 
 Status: Accepted by the owner (2026-11-11). Implemented: the library, linking,
-deletion, replace advancement, and the public link context with `projectLinks`.
-Project pages, their dispatch, and the entry points are not yet implemented.
+deletion, replace advancement, the public link context with `projectLinks`, and
+the project pages with their dispatch. The entry points are not yet implemented.
 Product scope is in [projects](projects.md); the decision is
 [ADR 0029](../adr/0029-account-project-library.md).
 
@@ -18,9 +18,17 @@ Product scope is in [projects](projects.md); the decision is
   shapes. `projects` is a literal second segment, so the public root registry
   gets no new row and `projects` stays claimable as a resume slug. Route parity
   fixtures cover both shapes and a third unknown segment, which stays 404.
-- Go admits the request on the resume's fence, applies sign in to view after
-  admission and before any cache lookup, and renders through the existing direct
-  render boundary with a frozen request. Nuxt never authorizes.
+- Go handles a request in this order: it reads and admits the resume on its
+  fence, and an unknown or non-live resume answers the uniform 404; then sign in
+  to view without a valid pass serves the resume's gate for any well-formed
+  project address, whether or not that project or any project is available; then
+  an unavailable list or project answers the same uniform 404; then the cache;
+  then it renders through the existing direct render boundary with a frozen
+  request. The gate therefore reveals no more than the resume page's gate does.
+  Nuxt never authorizes.
+- A malformed shape, such as a trailing slash, `.md`, uppercase or an extra
+  segment, matches no Go route and falls to Nuxt's 404, as `/{slug}/` does; the
+  decision depends only on the path's form, never on stored data.
 - The request feed classifies both shapes as `public`, so a 404 keeps no exact
   path sample. The route locale helper treats them as public resume routes.
 
@@ -45,9 +53,11 @@ validator accepts them as it accepts other absolute links.
 
 ## Generations and revocation
 
-Admission, leases, fences, cache keys and recovery stay exactly as for a resume
+Admission, leases, fences and recovery stay exactly as for a resume
 ([ADR 0010](../adr/0010-public-artifact-revocation.md)): the generation is the
-resume revision, and nothing is keyed by a project revision.
+resume revision, and nothing is keyed by a project revision. The cache key adds
+the route class (`project-list` or `project`) and, for a project page, the
+project slug, beside the resume's variant and revision.
 
 **Rule.** Every library mutation that can change a public page advances the
 revision of each live resume of the owner that links the project, in the same

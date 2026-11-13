@@ -124,8 +124,8 @@ OAuth start methods are purpose-specific:
 - `GET /api/v1/auth/{provider}/start` starts an unauthenticated login by
   default.
 - The same `GET` route also starts the unauthenticated `view` purpose with
-  `?purpose=view&slug={slug}`, which gates one public resume for sign in to view
-  and never an account
+  `?purpose=view&slug={slug}` and an optional `&page=` for a project page, which
+  gates one public resume for sign in to view and never an account
   ([sign in to view](viewer-analytics/sign-in-to-view.md#sign-in-flow)).
 - Authenticated link and reauthentication starts use a CSRF-protected `POST`.
   The response contains an authorize URL that the browser opens as a top-level

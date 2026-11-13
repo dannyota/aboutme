@@ -41,6 +41,7 @@ a new fixed root cannot be added only to Caddy, Go, or Nuxt.
 | `/api/v1/events`, `/api/v1/live/*`                       | Go      | Server-Sent Events (SSE); long origin timeout and 25-second heartbeat |
 | `/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/{slug}.md` | Go      | Generated from current publish state                                  |
 | `/{slug}`                                                | Go→Nuxt | Go holds the generation lease and origin response; Nuxt renders bytes |
+| `/{slug}/projects`, `/{slug}/projects/{project-slug}`    | Go→Nuxt | As `/{slug}`, under the resume's lease; malformed shapes go to Nuxt   |
 | `/healthz`, `/readyz`                                    | Go      | Unversioned infrastructure probes; both accept `GET` and `HEAD`       |
 | `/print/*`                                               | Nuxt    | One-use Go capability required; Caddy also denies viewer requests     |
 | `/internal-render/public`                                | Nuxt    | Direct bounded Go POST only; Caddy denies every viewer request        |
