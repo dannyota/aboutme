@@ -748,6 +748,7 @@ describe('a link prepared while edits go out', () => {
       sectionKey: () => 'projects',
       library: {
         load: async () => {},
+        find: () => undefined,
         published: async () => {
           await reads;
           return [{ id, live: false }];

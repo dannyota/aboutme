@@ -134,12 +134,24 @@ export type EditorFieldsCopy = {
     | 'sharedPublic'
     | 'sharedReader'
     | 'addAnyway'
-    | 'changedElsewhere',
+    | 'changedElsewhere'
+    | 'linkToProject'
+    | 'saveToProjects'
+    | 'linkThatEntry'
+    | 'addNewEntry'
+    | 'linkingEntry'
+    | 'entryNotLinked'
+    | 'saving'
+    | 'saved'
+    | 'savedNotLinked'
+    | 'saveFailed',
     string
   > & {
     readonly note: (name: string) => string;
     readonly pageUses: (language: string) => string;
     readonly languageName: (key: string) => string;
+    readonly duplicateQuestion: (title: string) => string;
+    readonly saveNeedsTitle: (limit: number) => string;
   };
   readonly levels: {
     readonly unset: string;
@@ -248,6 +260,21 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
         + 'Nội dung ở đây là của riêng CV này.',
       pageUses: (language) => `Trang dự án dùng ${language}`,
       languageName: (key) => LANGUAGE_NAMES[key] ?? key,
+      linkToProject: 'Gắn với dự án',
+      saveToProjects: 'Lưu vào Dự án',
+      duplicateQuestion: (title) => `CV này đã có mục “${title}”. `
+        + 'Gắn mục đó với dự án, hay thêm mục mới?',
+      linkThatEntry: 'Gắn mục đó',
+      addNewEntry: 'Thêm mục mới',
+      linkingEntry: 'Đang gắn mục với dự án…',
+      entryNotLinked: 'Chưa gắn được mục với dự án. Hãy thử lại.',
+      saving: 'Đang lưu vào Dự án…',
+      saved: 'Đã lưu vào Dự án.',
+      savedNotLinked: 'Dự án đã được lưu nhưng chưa gắn được với mục này. '
+        + 'Hãy bấm “Gắn với dự án”.',
+      saveFailed: 'Chưa lưu được vào Dự án. Hãy thử lại.',
+      saveNeedsTitle: (limit) => 'Để lưu thành dự án, mục cần có tiêu đề; '
+        + `tiêu đề và phụ đề tối đa ${limit} ký tự mỗi trường.`,
     },
     section: {
       addEntry: 'Thêm mục',
@@ -416,6 +443,23 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
         + 'The text here belongs to this resume.',
       pageUses: (language) => `Project page uses ${language}`,
       languageName: (key) => LANGUAGE_NAMES[key] ?? key,
+      linkToProject: 'Link to a project',
+      saveToProjects: 'Save to my projects',
+      duplicateQuestion: (title) => `This resume already has an entry `
+        + `“${title}”. Link that entry to the project, or add a new one?`,
+      linkThatEntry: 'Link that entry',
+      addNewEntry: 'Add a new entry',
+      linkingEntry: 'Linking the entry to the project…',
+      entryNotLinked:
+        'The entry could not be linked to the project. Try again.',
+      saving: 'Saving to your projects…',
+      saved: 'Saved to your projects.',
+      savedNotLinked: 'The project was saved, but this entry could not be '
+        + 'linked to it. Use Link to a project.',
+      saveFailed: 'Could not save to your projects. Try again.',
+      saveNeedsTitle: (limit) => 'To save it as a project, the entry needs a '
+        + `title, and its title and subtitle can have at most ${limit} `
+        + 'characters each.',
     },
     section: {
       addEntry: 'Add entry',

@@ -1,6 +1,6 @@
 // Migration 00017: the authorization-code binding-fill trigger and the four
-// indexes 00015 superseded are gone, Down restores them, and the showcase
-// review columns that earlier releases read stay.
+// indexes 00015 superseded are gone, Down restores them, and at version 17 the
+// showcase review columns that releases before v0.9.2 read stay.
 package migrations_test
 
 import (
@@ -26,8 +26,9 @@ var (
 		"auth_email_jobs_claim_order_idx", "auth_email_jobs_finished_idx",
 		"sessions_user_revoked_idx", "oauth_grants_client_revoked_idx",
 	}
-	// keptShowcaseColumns are the unused review columns earlier releases read.
-	keptShowcaseColumns = []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
+	// showcaseReviewColumns are the unused review columns that releases before
+	// v0.9.2 read; 00018 drops them.
+	showcaseReviewColumns = []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
 )
 
 const (
@@ -94,23 +95,12 @@ func requireNotNullViolation(t *testing.T, err error, column string) {
 	}
 }
 
-// At head nothing 00017 drops remains, the previous release's showcase read
-// still runs, and with no trigger to fill them an authorization code needs its
-// grant and epoch from the caller.
+// At head nothing 00017 drops remains, and with no trigger to fill them an
+// authorization code needs its grant and epoch from the caller.
 func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 	requireObsoleteStateGone(ctx, t, tx)
-
-	if n := queryCountNamed(ctx, t, tx, showcaseColumnsQuery, keptShowcaseColumns); n != len(keptShowcaseColumns) {
-		t.Errorf("showcase review columns = %d, want %d", n, len(keptShowcaseColumns))
-	}
-	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
-		return sp.QueryRow(ctx, releasedShowcaseRead, uuid.New()).Scan()
-	})
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Errorf("v0.8.28 showcase read = %v, want no rows", err)
-	}
 
 	userID := createTestUser(ctx, t, tx)
 	clientID := insertOAuthClient(ctx, t, tx)
@@ -126,7 +116,7 @@ func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 		return execErr
 	}
 	epoch := int64(0)
-	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, nil, &epoch) })
+	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, nil, &epoch) })
 	requireNotNullViolation(t, err, "grant_id")
 	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error { return insert(sp, &grantID, nil) })
 	requireNotNullViolation(t, err, "auth_epoch")
@@ -135,8 +125,9 @@ func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	}
 }
 
-// Down restores the four indexes and the trigger, which fills an omitted code
-// binding again, and Up drops them once more.
+// At version 17 the showcase review columns stay and the v0.8.28 showcase read
+// runs. Down restores the four indexes and the trigger, which fills an omitted
+// code binding again, and Up drops them once more.
 func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)
@@ -161,6 +152,12 @@ func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 		t.Fatalf("UpTo(17) error: %v", err)
 	}
 	requireObsoleteStateGone(ctx, t, conn)
+	if n := queryCountNamed(ctx, t, conn, showcaseColumnsQuery, showcaseReviewColumns); n != len(showcaseReviewColumns) {
+		t.Errorf("showcase review columns = %d, want %d", n, len(showcaseReviewColumns))
+	}
+	if err = conn.QueryRow(ctx, releasedShowcaseRead, uuid.New()).Scan(); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("v0.8.28 showcase read = %v, want no rows", err)
+	}
 
 	if _, err = provider.DownTo(ctx, 16); err != nil {
 		t.Fatalf("DownTo(16) error: %v", err)

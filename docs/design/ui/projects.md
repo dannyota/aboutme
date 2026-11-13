@@ -1,11 +1,11 @@
 # Projects workspace
 
-Status: Accepted (2026-11-11). The list, the editor and showing a project on
-resumes (accepted 2026-11-12) are implemented. The
-[projects design](../projects.md) owns the product and its limits, and the
-[projects contract](../projects-contract.md#owner-api) owns the API this screen
-calls. This document owns the two workspace screens and the controls that show a
-project on a resume.
+Status: Accepted (2026-11-11). The list, the editor, showing a project on
+resumes and linking an existing entry (both accepted 2026-11-12) are
+implemented. The [projects design](../projects.md) owns the product and its
+limits, and the [projects contract](../projects-contract.md#owner-api) owns the
+API this screen calls. This document owns the two workspace screens and the
+controls that show a project on a resume.
 
 ## Navigation
 
@@ -158,8 +158,7 @@ does. Editing, hiding, ordering and undo are unchanged. An entry whose project
 was deleted elsewhere arrives without its link after the editor reconciles; the
 note disappears and the text stays.
 
-An unlinked project entry's form shows two quiet actions under its fields
-(accepted 2026-11-12; not yet implemented):
+An unlinked project entry's form shows two quiet actions under its fields:
 
 - Link to a project (“Gắn với dự án”), which lists library projects not yet on
   this resume; choosing one links the entry and keeps its text. The linked note
@@ -176,6 +175,16 @@ thêm mục mới?” or “This resume already has an entry “{title}”. Link
 to the project, or add a new one?”, with Link that entry (default) and Add a new
 entry. The [privacy rule](../projects.md#privacy) applies to both actions as to
 any link.
+
+The prompt also offers Cancel, which adds nothing. A match is the project's name
+in any of its languages against the entry title, ignoring case and surrounding
+space, or either of its links against the entry's link; hidden entries count,
+and the first match in the section's order is offered. Save to my projects
+writes the project in the resume's primary language (the site language for a
+resume without one), keeps only https links, and refuses an entry with no title
+or a title or subtitle over the project limits instead of shortening them. Its
+privacy question is decided after the project is created and before it is
+linked; Cancel there leaves the project in the library, unlinked.
 
 The editor reads the library list once when a project section is opened and
 again after a link; it never blocks editing on that read. A failed read hides

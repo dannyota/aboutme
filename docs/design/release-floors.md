@@ -1,9 +1,9 @@
 # Release floors for rebuilt hosts and schema changes
 
-Status: accepted, 2026-11-12. Implemented for the deploy and fence; no tree has
-a schema floor yet. Owns where the Vietnam host's release floor comes from on a
-rebuilt host and how a migration that breaks older releases raises it. The fence
-itself, its lock, and its checks are in
+Status: accepted, 2026-11-12. Implemented for the deploy and fence. The first
+schema floor, v0.9.2, comes with migration 00018. Owns where the Vietnam host's
+release floor comes from on a rebuilt host and how a migration that breaks older
+releases raises it. The fence itself, its lock, and its checks are in
 [Vietnam production](vietnam-production.md#release-fence).
 
 ## Tracked floor

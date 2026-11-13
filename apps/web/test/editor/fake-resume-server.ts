@@ -148,8 +148,13 @@ export function fakeServer(initial: AcceptedResume) {
         });
         return childAck('entry');
       }
-      case 'linkResumeProject':
-        return { kind: 'rejected', code: 'project_not_found' };
+      case 'linkResumeProject': {
+        if (attempt.payload.kind !== 'json') throw new Error('no body');
+        const { projectId, entryId } = JSON.parse(attempt.payload.utf8);
+        return entryId === undefined
+          ? { kind: 'rejected', code: 'project_not_found' }
+          : linkEntry(projectId, entryId);
+      }
       case 'updateResumeMetadata': {
         if (attempt.payload.kind !== 'json') throw new Error('no body');
         advance(document);
@@ -180,6 +185,45 @@ export function fakeServer(initial: AcceptedResume) {
       default:
         throw new Error(`unexpected operation ${attempt.operation}`);
     }
+  };
+  /**
+   * Links an existing entry as the server does: the entry keeps its text,
+   * and only an unlinked entry of a project section takes a project the
+   * resume does not show yet.
+   */
+  const linkEntry = (projectId: string, entryId: string): AttemptResult => {
+    const document = stored.document;
+    const sections = Object.entries(document.content);
+    const found = sections.find(([, section]) =>
+      section.entries.some(({ id }) => id === entryId));
+    if (found === undefined) {
+      return { kind: 'rejected', code: 'entry_not_found' };
+    }
+    const [sectionKey, section] = found;
+    const shown = sections.some(([, other]) => other.entries.some((entry) =>
+      'projectId' in entry && entry.projectId === projectId));
+    const entry = section.entries.find(({ id }) => id === entryId)!;
+    if (shown || ('projectId' in entry && entry.projectId !== undefined)) {
+      return { kind: 'rejected', code: 'project_already_linked' };
+    }
+    if (section.sectionType !== 'project') {
+      return {
+        kind: 'validation-rejected',
+        issues: [{ path: 'entryId', code: 'invalid' }],
+      };
+    }
+    advance({
+      ...document,
+      content: {
+        ...document.content,
+        [sectionKey]: {
+          ...section,
+          entries: section.entries.map((candidate) =>
+            candidate.id === entryId ? { ...candidate, projectId } : candidate),
+        } as typeof section,
+      },
+    });
+    return { kind: 'complete', status: 200, accepted: copy() };
   };
   const childAck = (scope: 'entry' | 'photo'): AttemptResult => ({
     kind: 'child-ack',

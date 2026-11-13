@@ -27,8 +27,8 @@ lockfile=$dir/fence.lock
 mutation_file=$dir/cutover-mutation.json
 # The tracked floor (docs/design/release-floors.md): a rebuilt host starts
 # here, and raise never goes above it. Never below production's floor.
-floor_tag=v0.8.10
-floor_release=8010
+floor_tag=v0.9.2
+floor_release=9002
 
 say() { printf 'fence: %s\n' "$*" >&2; }
 die() {

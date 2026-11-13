@@ -44,6 +44,8 @@ export function applyIntent(
       return snapshot;
     case 'photoDelete':
       return deletePhoto(snapshot);
+    case 'projectLinkEntry':
+      return linkEntry(snapshot, intent);
     case 'resumeDelete':
     case 'projectLink':
     case 'projectRefresh':
@@ -85,6 +87,23 @@ function updateEntryField(
       return next as unknown as Section['entries'][number];
     }),
   }));
+}
+
+/** Adds the reference to an unlinked project entry; its text stays. */
+function linkEntry(
+  snapshot: ResumeSnapshot,
+  intent: Extract<AtomicCommandIntent, { kind: 'projectLinkEntry' }>,
+): ResumeSnapshot {
+  return updateSection(snapshot, intent.sectionKey, (section) => {
+    if (section.sectionType !== 'project') return section;
+    return {
+      ...section,
+      entries: section.entries.map((entry) =>
+        entry.id !== intent.entryId || entry.projectId !== undefined
+          ? entry
+          : { ...entry, projectId: intent.projectId }),
+    };
+  });
 }
 
 function upsertEntry(

@@ -250,9 +250,13 @@ export async function provePhotoSessionPersistence(
     await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
     await expectURLUnchanged(page, baseline);
     await expectNoPersistenceWrites(probes);
-    state.editorDiagnosticStage = 'session-reauthenticated';
-    await loginAsDevelopmentUser(reauthPage);
+    state.editorDiagnosticStage = 'session-reauth-signin-start';
+    await loginAsDevelopmentUser(reauthPage, (step) => {
+      state.editorDiagnosticStage = `session-reauth-signin-${step}`;
+    });
+    state.editorDiagnosticStage = `session-reads-release-start-${readHold.heldLabel()}`;
     await readHold.release();
+    state.editorDiagnosticStage = 'session-reads-released';
     state.editorDiagnosticStage = 'session-reauth-url';
     await expectURLUnchanged(page, baseline);
     state.editorDiagnosticStage = 'session-reauth-persistence';
@@ -272,6 +276,10 @@ export async function provePhotoSessionPersistence(
     if (sessionWindow !== undefined) {
       state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${sessionWindow.label()}`;
     }
+    const releaseOutcomes = readHold?.outcomeLabel();
+    if (releaseOutcomes !== undefined) {
+      state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${releaseOutcomes}`;
+    }
     throw error;
   } finally {
     editPause.release();
@@ -284,13 +292,40 @@ export async function provePhotoSessionPersistence(
   return reauthPage;
 }
 
+type HeldReadKind = 'resume' | 'events';
+
+interface SessionReadHold {
+  releaseBeforeSignIn(): Promise<void>;
+  release(expectFailures?: boolean): Promise<void>;
+  /** Reads held now, by kind, for the release stage. */
+  heldLabel(): string;
+  /** How the reads `release` let through ended, by kind; undefined before it starts. */
+  outcomeLabel(): string | undefined;
+}
+
 async function holdSessionReads(
   page: Page,
   resumeID: string,
   diagnostics: Diagnostics,
-): Promise<{ releaseBeforeSignIn(): Promise<void>; release(expectFailures?: boolean): Promise<void> }> {
+): Promise<SessionReadHold> {
   const held: { request: Request; release(): void }[] = [];
   let released = false;
+  // Each held read's kind and the first way it ended, a response or a request
+  // failure, from the moment it is held, so a read that fails while held is
+  // counted too. The listeners only count; nothing waits on them.
+  const outcomes = new Map<Request, { kind: HeldReadKind; ended?: 'response' | 'failed' }>();
+  let releasing: Request[] | undefined;
+  const kindOf = (request: Request): HeldReadKind => (
+    new URL(request.url()).pathname === '/api/v1/events' ? 'events' : 'resume'
+  );
+  const onResponse = (response: Response): void => {
+    const outcome = outcomes.get(response.request());
+    if (outcome !== undefined && outcome.ended === undefined) outcome.ended = 'response';
+  };
+  const onRequestFailed = (request: Request): void => {
+    const outcome = outcomes.get(request);
+    if (outcome !== undefined && outcome.ended === undefined) outcome.ended = 'failed';
+  };
   const matches = (url: URL): boolean => url.origin === ORIGIN && (
     url.pathname === `/api/v1/resumes/${resumeID}`
     || url.pathname === '/api/v1/events'
@@ -298,12 +333,35 @@ async function holdSessionReads(
   const handle = async (route: Route): Promise<void> => {
     const request = route.request();
     if (request.method() === 'GET' && !released) {
+      outcomes.set(request, { kind: kindOf(request) });
       await new Promise<void>((resolve) => held.push({ request, release: resolve }));
     }
     await route.fallback();
   };
+  page.on('response', onResponse);
+  page.on('requestfailed', onRequestFailed);
   await page.route(matches, handle);
   return {
+    heldLabel: (): string => {
+      const kinds = held.map((item) => kindOf(item.request));
+      const resume = kinds.filter((kind) => kind === 'resume').length;
+      return `held-resume-${resume}-events-${kinds.length - resume}`;
+    },
+    outcomeLabel: (): string | undefined => {
+      const releasedReads = releasing;
+      if (releasedReads === undefined) return undefined;
+      const count = (kind: HeldReadKind, ended: 'response' | 'failed'): number => (
+        releasedReads.filter((request) => {
+          const outcome = outcomes.get(request);
+          return outcome?.kind === kind && outcome.ended === ended;
+        }).length
+      );
+      return [
+        'ended',
+        `resume-response-${count('resume', 'response')}-failed-${count('resume', 'failed')}`,
+        `events-response-${count('events', 'response')}-failed-${count('events', 'failed')}`,
+      ].join('-');
+    },
     releaseBeforeSignIn: async (): Promise<void> => {
       // Reads arriving during this batch stay held until sign-in completes.
       const pending = [...held];
@@ -322,6 +380,7 @@ async function holdSessionReads(
       if (released) return;
       released = true;
       const pending = held.splice(0);
+      releasing = pending.map((item) => item.request);
       try {
         while (pending.length > 0) {
           const item = pending.shift()!;
@@ -336,6 +395,8 @@ async function holdSessionReads(
           diagnostics.expectHTTPFailure('GET', new URL(item.request.url()).pathname, 401);
           item.release();
         }
+        page.off('response', onResponse);
+        page.off('requestfailed', onRequestFailed);
         await page.unroute(matches, handle);
       }
     },

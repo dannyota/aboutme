@@ -1,11 +1,22 @@
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 
+/**
+ * Writes the public pages' fixed-name stylesheets and fonts beside the
+ * hydration bundle: print.css from the print worker build, print-fonts.css,
+ * and project-pages.css, the project pages' stylesheet text.
+ */
 export function buildPrintAssets(
   assetsDir: string,
   fontsDir: string,
   printCSS: string,
+  projectCSS: string,
 ): void {
   const sourceCSS = resolve('app/assets/css/fonts.css');
   const fontCSS = readFileSync(sourceCSS, 'utf8');
@@ -19,6 +30,7 @@ export function buildPrintAssets(
   mkdirSync(fontsDir, { recursive: true });
   copyFileSync(printCSS, resolve(assetsDir, 'print.css'));
   copyFileSync(sourceCSS, resolve(assetsDir, 'print-fonts.css'));
+  writeFileSync(resolve(assetsDir, 'project-pages.css'), projectCSS);
   for (const font of new Set(fonts)) {
     copyFileSync(
       resolve('app/assets/fonts', font),
@@ -28,12 +40,18 @@ export function buildPrintAssets(
 }
 
 /**
- * Version of the resume stylesheets the public page links. The files keep
- * fixed names and are cached as immutable, so the public page appends this
- * content hash as a query to fetch fresh CSS whenever either file changes.
+ * Version of the stylesheets the public pages link: print.css and
+ * print-fonts.css on the resume page, print-fonts.css and project-pages.css
+ * on the project pages. The files keep fixed names and are cached as
+ * immutable, so each page appends this content hash as a query to fetch
+ * fresh CSS whenever any of them changes.
  */
-export function publicStyleVersion(printCSS: string, fontsCSS: string): string {
-  return contentVersion(printCSS, fontsCSS);
+export function publicStyleVersion(
+  printCSS: string,
+  fontsCSS: string,
+  projectCSS: string,
+): string {
+  return contentVersion(printCSS, fontsCSS, projectCSS);
 }
 
 /**

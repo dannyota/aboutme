@@ -14,16 +14,19 @@ import type { CoordinatorContext } from './coordinatorTypes';
 
 type ProjectCommand = Extract<
   AtomicEditorCommand,
-  { kind: 'projectLink' | 'projectRefresh' }
+  { kind: 'projectLink' | 'projectLinkEntry' | 'projectRefresh' }
 >;
 
 const REFUSALS: ReadonlySet<AttemptFailureCode> = new Set([
   'project_not_found',
   'project_already_linked',
+  'entry_not_found',
 ]);
 
 function isProjectCommand(item: EditorQueueItem): item is ProjectCommand {
-  return item.kind === 'projectLink' || item.kind === 'projectRefresh';
+  return item.kind === 'projectLink'
+    || item.kind === 'projectLinkEntry'
+    || item.kind === 'projectRefresh';
 }
 
 function drop(
@@ -75,14 +78,20 @@ function refreshChange(
 
 /**
  * A refresh whose entry changed after the person confirmed it is not sent
- * over that text; it leaves the queue so Refresh asks again.
+ * over that text; it leaves the queue so Refresh asks again. A link of an
+ * existing entry that was removed, moved or linked to another project
+ * cannot apply; it leaves the queue too, and the form shows it unlinked.
  */
-export function dropChangedRefresh(
+export function dropConflictingProject(
   ctx: CoordinatorContext,
   resumeId: string,
   queueItem: EditorQueueItem,
   latest: ResumeSnapshot,
 ): boolean {
+  if (queueItem.kind === 'projectLinkEntry') {
+    drop(ctx, resumeId, queueItem);
+    return true;
+  }
   if (queueItem.kind !== 'projectRefresh') return false;
   drop(ctx, resumeId, queueItem, refreshChange(queueItem, latest));
   return true;
@@ -92,7 +101,8 @@ export function dropChangedRefresh(
  * Settles a project command after a revision mismatch. A link that already
  * landed leaves the queue; any other link is the same request, rebased onto
  * the new revision by the caller within its rebase limit. A refresh is
- * rebased only over unchanged text.
+ * rebased only over unchanged text, and a link of an existing entry only
+ * while that entry is still unlinked where it was.
  */
 export function settleStaleProject(
   ctx: CoordinatorContext,
@@ -107,5 +117,5 @@ export function settleStaleProject(
     return true;
   }
   if (decision.kind !== 'conflict') return false;
-  return dropChangedRefresh(ctx, resumeId, queueItem, latest);
+  return dropConflictingProject(ctx, resumeId, queueItem, latest);
 }

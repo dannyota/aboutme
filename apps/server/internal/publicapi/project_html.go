@@ -78,7 +78,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 				gatePage += "/" + projectSlug
 			}
 			//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
-			serveGate(lease.Context(), w, request, dependencies, snapshot, gatePage)
+			serveGate(lease.Context(), w, request, dependencies, snapshot, gatePage, lease)
 			return
 		}
 		pages, err := read.Pages()

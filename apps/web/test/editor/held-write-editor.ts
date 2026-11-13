@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { createResumeEditorActions } from '../../app/composables/useResumeEditor';
 import { createMutationCoordinator } from '../../app/editor/coordinator';
 import type { AtomicCommandIntent } from '../../app/editor/commands';
+import type { AcceptedResume } from '../../app/editor/types';
 import { useResumeStore } from '../../app/stores/resumes';
 import { fakeServer, startingResume } from './fake-resume-server';
 
@@ -13,16 +14,17 @@ import { fakeServer, startingResume } from './fake-resume-server';
  * One open editor on the fake server: the real store, coordinator and
  * actions, driven by fake timers the caller installs.
  */
-export function openEditor() {
+export function openEditor(initial: AcceptedResume = startingResume()) {
   setActivePinia(createPinia());
-  const initial = startingResume();
   const server = fakeServer(initial);
   const store = useResumeStore();
   store.initialize(initial);
   /** The session's CSRF token; null makes the next write refresh it. */
   const token = ref<string | null>('csrf-1');
+  /** Who is signed in; another id is another person's session. */
+  const userId = ref('owner-1');
   const auth = {
-    user: computed(() => ({ id: 'owner-1' })),
+    user: computed(() => ({ id: userId.value })),
     csrfToken: computed(() => token.value),
     authState: computed(() => 'authenticated'),
     refresh: vi.fn(async (): Promise<void> => {
@@ -65,6 +67,7 @@ export function openEditor() {
     server,
     store,
     token,
+    userId,
     record: () => store.recordFor(id)!,
     /** Two minutes of the editor's own timers, with no flush from the test. */
     idle: () => vi.advanceTimersByTimeAsync(120_000),

@@ -18,12 +18,20 @@ const props = defineProps<{
   readonly message: PublicGateMessage;
   /** `{origin}/`, the home link's href. */
   readonly homeHref: string;
+  /**
+   * 'projects' or 'projects/{project-slug}' when the gate stands in for a
+   * project page; sign-in then returns to it
+   * (docs/design/projects-contract.md "Render envelope"). The envelope
+   * decoder admits only that word and a project slug.
+   */
+  readonly page?: string;
 }>();
 
 const vietnamese = computed(() => props.lng === 'vi');
 
 const providerHref = (provider: PublicGateProvider): string =>
-  `/api/v1/auth/${provider}/start?purpose=view&slug=${props.slug}`;
+  `/api/v1/auth/${provider}/start?purpose=view&slug=${props.slug}`
+  + (props.page === undefined ? '' : `&page=${props.page}`);
 
 const PROVIDER_NAME: Record<PublicGateProvider, string> = {
   google: 'Google',

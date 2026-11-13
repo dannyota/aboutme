@@ -81,6 +81,15 @@ export function projectIntent(
         presence(linksProject(snapshot.document, intent.projectId)),
         snapshot,
       );
+    case 'projectLinkEntry':
+      // Only the reference: text edited elsewhere never stops the link.
+      return sectionProjection(
+        presenceOf(findEntry(snapshot.document, intent.entryId)?.entry,
+          'projectId'),
+        snapshot,
+        intent.sectionKey,
+        intent.entryId,
+      );
     case 'projectRefresh': {
       const entry = findEntry(snapshot.document, intent.entryId);
       return sectionProjection(

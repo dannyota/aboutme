@@ -104,6 +104,13 @@ export async function installExternalWebSocketFirewall(
 
 export const DEVELOPMENT_USER_LABEL = 'Development User — developer@example.invalid';
 
+export type SignInWithGoogleStep
+  = | 'login-page-loaded'
+    | 'heading-visible'
+    | 'authorize-url-seen'
+    | 'account-checked'
+    | 'callback-reached';
+
 export interface SignInWithGoogleOptions {
   /** Account radio label on the authorize page (default: development user). */
   readonly accountLabel?: string;
@@ -115,6 +122,8 @@ export interface SignInWithGoogleOptions {
   readonly returnPath?: string;
   /** The link that starts the flow (default: the "Continue with Google" link). */
   readonly activator?: Locator;
+  /** Called with each step's bounded label as the step completes. */
+  readonly onStep?: ((step: SignInWithGoogleStep) => void) | undefined;
 }
 
 // pinEnglish sets the site-language cookie so the homepage and account pages
@@ -143,7 +152,9 @@ export async function signInWithGoogle(
     await pinEnglish(page.context());
     const response = await page.goto('/login');
     expect(response?.status()).toBe(200);
+    options.onStep?.('login-page-loaded');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    options.onStep?.('heading-visible');
   }
   await Promise.all([
     page.waitForURL((url) =>
@@ -155,6 +166,7 @@ export async function signInWithGoogle(
         ?? page.getByRole('link', { name: 'Continue with Google' }),
     ),
   ]);
+  options.onStep?.('authorize-url-seen');
   const accountLabel = options.accountLabel ?? DEVELOPMENT_USER_LABEL;
   const account = page.getByLabel(accountLabel);
   if (accountLabel === DEVELOPMENT_USER_LABEL) {
@@ -162,6 +174,7 @@ export async function signInWithGoogle(
   } else {
     await account.check();
   }
+  options.onStep?.('account-checked');
   const returnPath = options.returnPath ?? '/app/resumes';
   await Promise.all([
     page.waitForURL((url) =>
@@ -169,6 +182,7 @@ export async function signInWithGoogle(
     ),
     activate(page.getByRole('button', { name: 'Continue with Google' })),
   ]);
+  options.onStep?.('callback-reached');
 }
 
 // The mock LinkedIn accounts (docs/design/linkedin-sign-in.md "Design"), one

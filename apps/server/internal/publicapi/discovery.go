@@ -80,7 +80,7 @@ func newDiscoveryHandler(dependencies DiscoveryDependencies, representation publ
 			serveTextError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		// Encode the slugs this request read and never cache the bytes.
 		// Operator account deletion removes slugs without a new discovery
 		// generation, so a generation-keyed entry stored after its cache
@@ -95,7 +95,7 @@ func newDiscoveryHandler(dependencies DiscoveryDependencies, representation publ
 			serveTextError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		response.ServeHTTP(w, request)
+		serveLeasedSelected(w, request, lease, response, serveTextError)
 	}), nil
 }
 

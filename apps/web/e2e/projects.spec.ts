@@ -393,10 +393,31 @@ async function fakeLibrary(
         row.personalDetails
           = request.postDataJSON() as Record<string, unknown>;
       } else if (parts[5] === 'project-links') {
-        const { projectId } = request.postDataJSON() as { projectId: string };
+        const { projectId, entryId } = request.postDataJSON() as {
+          projectId: string;
+          entryId?: string;
+        };
         const project = projects.get(projectId);
         if (project === undefined) {
           await route.fulfill(problem(404, 'project_not_found'));
+          return;
+        }
+        if (entryId !== undefined) {
+          // An existing entry gains the reference and keeps its text.
+          const index = entries.findIndex((entry) => entry.id === entryId);
+          if (index === -1) {
+            await route.fulfill(problem(404, 'entry_not_found'));
+            return;
+          }
+          if (entries.some((entry) => entry.projectId !== undefined
+            && (entry.projectId === projectId || entry.id === entryId))) {
+            await route.fulfill(problem(409, 'project_already_linked'));
+            return;
+          }
+          entries[index] = { ...entries[index]!, projectId };
+          row.entries = entries;
+          row.revision += 1;
+          await route.fulfill(written(row));
           return;
         }
         nextEntry += 1;
@@ -991,6 +1012,106 @@ test('the resume editor adds a library project, selects it and refreshes it',
     });
     expect(fake.resumeWrites).toHaveLength(2);
   });
+
+const OLD_ENTRY = '0190f000-0000-7000-8000-0000000000d1';
+
+test('the resume editor saves an entry to my projects, links it and offers '
+  + 'Open project', async ({ page }) => {
+  const rows = resumeRows();
+  const entry = {
+    id: OLD_ENTRY,
+    title: 'Old shop',
+    subtitle: 'Lead',
+    link: 'https://github.com/ada/old-shop',
+    description: '<p>Built &amp; ran it.</p>',
+  };
+  rows[0]!.entries = [entry];
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: rows,
+  });
+  await page.locator('[data-region="outline"] [data-outline-key="projects"]')
+    .click();
+  const card = page.locator(
+    `[data-region="inspector"] [data-entry-id="${OLD_ENTRY}"]`,
+  );
+
+  await card.getByRole('button', { name: 'Save to my projects' }).click();
+
+  await expect(card.locator('[data-entry-project-status]'))
+    .toHaveText('Saved to your projects.');
+  await expect(card.locator('[data-project-note]')).toContainText(
+    'This entry comes from the project Old shop. '
+    + 'The text here belongs to this resume.',
+  );
+  await expect(card.getByRole('link', { name: 'Open project' }))
+    .toHaveAttribute('href', `/app/projects/${CREATED}`);
+  await expect(card.getByRole('button', { name: 'Save to my projects' }))
+    .toHaveCount(0);
+  await expect(card.locator('[data-entry-field="title"] input'))
+    .toHaveValue('Old shop');
+  expect(fake.writes).toEqual([expect.objectContaining({
+    method: 'POST', path: '/api/v1/projects', ifMatch: null,
+    key: expect.any(String),
+    body: {
+      defaultLanguage: 'en',
+      repositoryUrl: 'https://github.com/ada/old-shop',
+      text: {
+        en: { name: 'Old shop', role: 'Lead', summary: 'Built & ran it.' },
+      },
+    },
+  })]);
+  expect(fake.resumeWrites.map((write) =>
+    [write.path, write.ifMatch, write.body])).toEqual([[
+    `/api/v1/resumes/${BACKEND}/project-links`, '"r1"',
+    { projectId: CREATED, entryId: OLD_ENTRY },
+  ]]);
+  expect(fake.resumes.get(BACKEND)!.entries)
+    .toEqual([{ ...entry, projectId: CREATED }]);
+});
+
+test('the resume editor asks before adding a project it already has as an '
+  + 'entry, and links that entry', async ({ page }) => {
+  const rows = resumeRows();
+  const entry = { id: OLD_ENTRY, title: 'ops tool ', subtitle: 'My words' };
+  rows[0]!.entries = [entry];
+  const fake = await open(page, `/app/resumes/${BACKEND}`, library(), {
+    resumes: rows,
+  });
+  await page.locator('[data-region="outline"] [data-outline-key="projects"]')
+    .click();
+  await page.locator('[data-region="inspector"] [data-action="add-entry"]')
+    .click();
+  await page.getByRole('menuitem', { name: 'From your projects' }).click();
+  await page.getByRole('menuitem', { name: 'Ops tool' }).click();
+
+  const ask = page.getByRole('alertdialog', { name: 'From your projects' });
+  await expect(ask).toContainText('This resume already has an entry '
+    + '“ops tool”. Link that entry to the project, or add a new one?');
+  const linkThat = ask.getByRole('button', { name: 'Link that entry' });
+  await expect(linkThat).toBeFocused();
+  await expect(ask.getByRole('button', { name: 'Add a new entry' }))
+    .toBeVisible();
+  await linkThat.click();
+
+  const card = page.locator(
+    `[data-region="inspector"] [data-entry-id="${OLD_ENTRY}"]`,
+  );
+  await expect(card).toHaveAttribute('data-selected', '');
+  await expect(card.locator('[data-project-note]'))
+    .toContainText('This entry comes from the project Ops tool.');
+  await expect(card.locator('[data-entry-field="subtitle"] input'))
+    .toHaveValue('My words');
+  await expect(page.locator('[data-region="inspector"] [data-entry-id]'))
+    .toHaveCount(1);
+  await expect.poll(() => fake.resumeWrites.length).toBe(1);
+  expect(fake.resumeWrites.map((write) =>
+    [write.path, write.ifMatch, write.body])).toEqual([[
+    `/api/v1/resumes/${BACKEND}/project-links`, '"r1"',
+    { projectId: SECOND, entryId: OLD_ENTRY },
+  ]]);
+  expect(fake.resumes.get(BACKEND)!.entries)
+    .toEqual([{ ...entry, projectId: SECOND }]);
+});
 
 test('the resume editor sends an edit typed after another tab saved the '
   + 'same value', async ({ page }) => {

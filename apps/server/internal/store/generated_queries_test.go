@@ -11,8 +11,8 @@ import (
 	"testing"
 )
 
-// showcaseReviewObjects matches the unused showcase review columns and the
-// approval index that a later migration drops. A release whose statements name
+// showcaseReviewObjects matches the showcase review columns and the approval
+// index that migration 00018 drops. A release whose statements name
 // none of them runs on the schema before and after that drop
 // (docs/design/release-floors.md "Schema floor").
 var showcaseReviewObjects = regexp.MustCompile(`\b(review_key|reviewed_key|review_outcome|reviewed_at|first_listed_at|resume_showcase_listing_idx)\b`)

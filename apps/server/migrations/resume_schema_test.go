@@ -34,6 +34,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"danny.vn/aboutme/apps/server/internal/testutil"
+	"danny.vn/aboutme/apps/server/migrations"
 )
 
 // sqlExecer is the minimal pgx surface resumeSchemaTx's raw-SQL helpers
@@ -55,8 +56,39 @@ type sqlExecer interface {
 // internal/store's generated query layer.
 func newResumeSchemaTx(t *testing.T) (pgx.Tx, context.Context) {
 	t.Helper()
-	dsn := testutil.RequireMigratedTestDatabaseURL(t)
+	return beginSchemaTx(t, testutil.RequireMigratedTestDatabaseURL(t))
+}
 
+// newResumeSchemaTxAt is newResumeSchemaTx on a private database migrated to
+// version, for tests of schema objects that a later migration drops.
+func newResumeSchemaTxAt(t *testing.T, version int64) (pgx.Tx, context.Context) {
+	t.Helper()
+	dsn := newTestDatabase(t)
+	db, err := migrations.Open(dsn)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
+		}
+	})
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		t.Fatalf("NewProvider() error: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), harnessTimeout)
+	defer cancel()
+	if _, err = provider.UpTo(ctx, version); err != nil {
+		t.Fatalf("UpTo(%d) error: %v", version, err)
+	}
+	return beginSchemaTx(t, dsn)
+}
+
+// beginSchemaTx opens a pool on dsn and begins the transaction that
+// newResumeSchemaTx and newResumeSchemaTxAt return.
+func beginSchemaTx(t *testing.T, dsn string) (pgx.Tx, context.Context) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
