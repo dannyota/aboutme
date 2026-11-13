@@ -3,7 +3,6 @@ package publicapi
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -19,8 +18,6 @@ import (
 // projects. The web suite runs the renderer's decoder on each
 // (apps/web/test/public-render/project-envelope-parity.test.ts), so a
 // builder change the renderer would refuse fails there.
-var updateProjectEnvelopes = flag.Bool("update", false, "rewrite "+projectEnvelopesPath+" from the builder")
-
 const projectEnvelopesPath = "testdata/project-envelopes.json"
 
 // projectEnvelopeCase is one named envelope the builder makes.
@@ -155,7 +152,7 @@ func TestProjectEnvelopes_MatchTheGoldenFile(t *testing.T) {
 	if err := encoder.Encode(map[string]any{"cases": cases}); err != nil {
 		t.Fatal(err)
 	}
-	if *updateProjectEnvelopes {
+	if *updateGolden {
 		if err := os.WriteFile(projectEnvelopesPath, encoded.Bytes(), 0o644); err != nil {
 			t.Fatal(err)
 		}
