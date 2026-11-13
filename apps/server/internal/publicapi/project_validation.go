@@ -8,6 +8,7 @@ package publicapi
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 
@@ -85,6 +86,9 @@ type projectValidator struct {
 }
 
 func projectPageRejection(source []byte, want projectExpectation, origin publicresume.PublicOrigin) string {
+	if !projectPreviewWithinBounds(want.preview) {
+		return "preview_bounds"
+	}
 	if len(source) == 0 || len(source) > 2_097_152 {
 		return "size"
 	}
@@ -271,6 +275,16 @@ func (v *projectValidator) finish() string {
 		}
 	}
 	return ""
+}
+
+// projectPreviewWithinBounds reports whether the request's preview text fits
+// the project page bounds agreed with the renderer: a title of 1 to 683 code
+// points and at most 2,727 bytes, and a description of at most 300 code
+// points and 1,200 bytes.
+func projectPreviewWithinBounds(preview previewmeta.Meta) bool {
+	return preview.Title != "" &&
+		utf8.RuneCountInString(preview.Title) <= maxProjectPreviewTitleRunes && len(preview.Title) <= maxProjectPreviewTitleBytes &&
+		utf8.RuneCountInString(preview.Description) <= maxProjectPreviewDescriptionRunes && len(preview.Description) <= maxProjectPreviewDescriptionBytes
 }
 
 // newProjectHeadMeta expects the resume page's preview elements with

@@ -7,6 +7,7 @@ package publicapi
 import (
 	"errors"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
@@ -23,11 +24,15 @@ import (
 // maxListTechnologies is the number of technologies one list row shows.
 const maxListTechnologies = 6
 
-// maxPreviewTitleBytes bounds a preview title: as many bytes as the longest
-// public page title can hold, publicpage.MaxTitleRunes code points of four
-// bytes. A project title adds the project name to the owner's name, so it
-// can be longer.
-const maxPreviewTitleBytes = publicpage.MaxTitleRunes * utf8.UTFMax
+// The bounds of a project page's preview text, agreed with the renderer:
+// a title of a 120-character name, " · " and the longest owner name, and a
+// description of the longest summary. Nothing is cut to fit them.
+const (
+	maxProjectPreviewTitleRunes       = 683
+	maxProjectPreviewTitleBytes       = 2727
+	maxProjectPreviewDescriptionRunes = 300
+	maxProjectPreviewDescriptionBytes = 1200
+)
 
 // maxOutcomeDescriptionRunes bounds a project page description taken from
 // its outcome.
@@ -100,7 +105,7 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 		Project: directrender.ProjectDetail{
 			Slug: available.Slug, URL: available.URL, Lang: lang, Name: text.Name, Role: text.Role, Dates: document.Dates,
 			Summary: text.Summary, Outcome: text.Outcome, Description: text.Description,
-			Technologies: append([]string{}, document.Technologies...), RepositoryURL: document.RepositoryURL, DemoURL: document.DemoURL,
+			Technologies: append([]string{}, document.Technologies...), RepositoryURL: renderableLink(document.RepositoryURL), DemoURL: renderableLink(document.DemoURL),
 		},
 		EntryLink:     projectEntryLink(available.EntryLink, document.RepositoryURL, document.DemoURL),
 		ListURL:       input.origin.Resolve("/" + input.snapshot.Public.Slug + "/projects"),
@@ -110,12 +115,17 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 
 // projectPageResume is what both pages show of their resume: the owner's
 // full name, or the effective page title when the name is blank, the
-// language, the color scheme ("light" when unset) and the date format.
+// language, the color scheme ("light" when unset) and the date format. A
+// public title the renderer reads as blank gives way to the default title,
+// which never is.
 func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 	public := input.snapshot.Public
 	owner := public.Document.PersonalDetails.FullName
-	if strings.TrimSpace(owner) == "" {
+	if blankText(owner) {
 		owner = publicpage.EffectiveTitle(input.snapshot.PublicTitle, owner)
+	}
+	if blankText(owner) {
+		owner = publicpage.EffectiveTitle(nil, public.Document.PersonalDetails.FullName)
 	}
 	scheme := schema.Light
 	if public.Document.Customization.ColorScheme != nil {
@@ -127,34 +137,11 @@ func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 	}
 }
 
-// projectPreview is this page's title and description with the resume's
-// locale, card image and alt text. Each text is cut, on a grapheme boundary,
-// to the size the renderer accepts: a title as long as the longest public
-// page title, and a description as long as a resume page's.
+// projectPreview is this page's title and description, uncut, with the
+// resume's locale, card image and alt text.
 func projectPreview(input projectPageInput, title, description string) previewmeta.Meta {
 	resume := previewmeta.For(input.snapshot.Public, input.snapshot.PublicTitle)
-	return previewmeta.Meta{
-		Title: cutToBytes(title, maxPreviewTitleBytes), Description: cutToBytes(description, previewmeta.MaxDescriptionBytes),
-		Locale: resume.Locale, ImageAlt: resume.ImageAlt, ImageURL: input.imageURL,
-	}
-}
-
-// cutToBytes returns the longest prefix of text, ending on a grapheme
-// boundary, of at most maxBytes bytes.
-func cutToBytes(text string, maxBytes int) string {
-	if len(text) <= maxBytes {
-		return text
-	}
-	end := 0
-	graphemes := uniseg.NewGraphemes(text)
-	for graphemes.Next() {
-		_, to := graphemes.Positions()
-		if to > maxBytes {
-			break
-		}
-		end = to
-	}
-	return text[:end]
+	return previewmeta.Meta{Title: title, Description: description, Locale: resume.Locale, ImageAlt: resume.ImageAlt, ImageURL: input.imageURL}
 }
 
 // projectFaviconHref is the resume's favicon, or "" when it has none.
@@ -173,11 +160,11 @@ func projectFaviconHref(snapshot publicresume.Snapshot) string {
 func chooseProjectText(document project.Document, resumeLng string) (project.Text, string, error) {
 	primary, _, _ := strings.Cut(strings.ToLower(resumeLng), "-")
 	key := document.DefaultLanguage
-	if text, found := document.Text[primary]; found && primary != "und" && strings.TrimSpace(text.Name) != "" {
+	if text, found := document.Text[primary]; found && primary != "und" && !blankText(text.Name) {
 		key = primary
 	}
 	text, found := document.Text[key]
-	if !found || strings.TrimSpace(text.Name) == "" {
+	if !found || blankText(text.Name) {
 		return project.Text{}, "", errProjectWithoutName
 	}
 	if key == primary {
@@ -189,16 +176,53 @@ func chooseProjectText(document project.Document, resumeLng string) (project.Tex
 // projectDescription is the summary, else the first 160 characters of the
 // outcome, else "".
 func projectDescription(text project.Text) string {
-	if strings.TrimSpace(text.Summary) != "" {
+	if !blankText(text.Summary) {
 		return text.Summary
 	}
-	if strings.TrimSpace(text.Outcome) == "" {
+	if blankText(text.Outcome) {
 		return ""
 	}
-	if utf8.RuneCountInString(text.Outcome) <= maxOutcomeDescriptionRunes {
-		return text.Outcome
+	return firstGraphemes(text.Outcome, maxOutcomeDescriptionRunes)
+}
+
+// firstGraphemes returns text up to the last grapheme boundary at or below
+// maxRunes runes, so a letter is never parted from its combining marks.
+func firstGraphemes(text string, maxRunes int) string {
+	if utf8.RuneCountInString(text) <= maxRunes {
+		return text
 	}
-	return string([]rune(text.Outcome)[:maxOutcomeDescriptionRunes])
+	end, runes := 0, 0
+	graphemes := uniseg.NewGraphemes(text)
+	for graphemes.Next() {
+		runes += len(graphemes.Runes())
+		if runes > maxRunes {
+			break
+		}
+		_, end = graphemes.Positions()
+	}
+	return text[:end]
+}
+
+// blankText reports whether text is empty or only whitespace as the
+// renderer's String.prototype.trim reads it: Unicode space separators, tab,
+// vertical tab, form feed, the byte order mark and line terminators. It is
+// not Go's strings.TrimSpace, which also trims U+0085 and keeps U+FEFF.
+func blankText(text string) bool {
+	return strings.IndexFunc(text, func(r rune) bool {
+		switch r {
+		case '\t', '\v', '\f', '\n', '\r', '\ufeff', '\u2028', '\u2029':
+			return false
+		}
+		return !unicode.Is(unicode.Zs, r)
+	}) < 0
+}
+
+// renderableLink is link when the renderer's URL parser accepts it, else "".
+func renderableLink(link string) string {
+	if !rendererLink(link) {
+		return ""
+	}
+	return link
 }
 
 // projectEntryLink is the entry's own link as stored when it is an https
@@ -209,7 +233,7 @@ func projectEntryLink(entryLink, repositoryURL, demoURL string) string {
 	if !strings.HasPrefix(entryLink, "https://") {
 		return ""
 	}
-	if normalized, ok := project.NormalizeLink(entryLink); !ok || normalized != entryLink {
+	if normalized, ok := project.NormalizeLink(entryLink); !ok || normalized != entryLink || !rendererLink(entryLink) {
 		return ""
 	}
 	own := comparableLink(entryLink)

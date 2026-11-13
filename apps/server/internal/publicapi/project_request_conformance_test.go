@@ -126,7 +126,7 @@ func TestProjectDecoderRules_CatchEachViolation(t *testing.T) {
 	page.Resume.UILng = "vi"
 	page.EntryLink = page.Project.DemoURL
 	page.Project.URL += "/"
-	page.Preview.Title = wideText(561)
+	page.Preview.Title = wideText(684)
 	raw, err := json.Marshal(page)
 	if err != nil {
 		t.Fatal(err)
@@ -135,11 +135,15 @@ func TestProjectDecoderRules_CatchEachViolation(t *testing.T) {
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	decoderObject(envelope["project"])["role"] = ""
+	project, isObject := envelope["project"].(map[string]any)
+	if !isObject {
+		t.Fatal("the page envelope has no project object")
+	}
+	project["role"] = ""
 	broken := strings.Join(decodeProjectEnvelopeRules(t, envelope), "\n")
 	for _, rule := range []string{
 		"uiLng follows lng's primary subtag", "entryLink differs from both buttons", "project url is listUrl/slug",
-		"preview title is 1 to 2240 bytes", "role is omitted or 1 to its limit",
+		"preview title is 1 to 683 code points and 2727 bytes", "role is omitted or 1 to its limit",
 	} {
 		if !strings.Contains(broken, rule) {
 			t.Errorf("decoder mirror missed %q; broken = %q", rule, broken)
