@@ -1,10 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The signal cases need HUP trappable. A shell started with HUP ignored, as
+# under nohup or some job runners, cannot trap it, so restart once with the
+# default disposition.
+if [[ -z ${ABOUTME_SAFETY_SIGNALS_RESET:-} ]]; then
+  ABOUTME_SAFETY_SIGNALS_RESET=1 exec env --default-signal=HUP,INT,TERM "$BASH" "${BASH_SOURCE[0]}" "$@"
+fi
+
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# Release every fixture waiter and join the background jobs before removing
+# $work, so no stub keeps polling a deleted directory after a failure.
+cleanup() {
+  touch "$work/state/command-release" "$work/state/failure-release" \
+    "$work/state/admission-release" 2>/dev/null || true
+  local pid
+  for pid in $(jobs -p); do
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  rm -rf "$work"
+}
+trap cleanup EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
+# Every wait for a fixture's state ends as soon as the state appears, or after
+# this many seconds, so its length does not depend on how fast the host forks.
+export ABOUTME_TEST_WAIT_SECONDS=${ABOUTME_TEST_WAIT_SECONDS:-60}
+wait_for_file() { # path
+  local deadline=$((SECONDS + ABOUTME_TEST_WAIT_SECONDS))
+  while [[ ! -e $1 ]] && ((SECONDS < deadline)); do sleep 0.01; done
+  [[ -e $1 ]]
+}
 
 # fence.sh's floor_tag and floor_release name one release, and a tree's schema
 # floor never sits above it (docs/design/release-floors.md).
@@ -57,7 +84,9 @@ state=${ABOUTME_TEST_STATE:?}
 if [[ -e $state/pause-admission && ( $* == *'start aboutme-crowdsec-retention-startup.service'* ||
   $* == *'is-active --quiet aboutme-crowdsec-retention-startup.service'* ) ]]; then
   touch "$state/admission-entered"
-  while [[ ! -e $state/admission-release ]]; do sleep 0.01; done
+  deadline=$((SECONDS + ${ABOUTME_TEST_WAIT_SECONDS:?}))
+  while [[ ! -e $state/admission-release ]] && ((SECONDS < deadline)); do sleep 0.01; done
+  [[ -e $state/admission-release ]] || { touch "$state/fixture-expired"; exit 1; }
   if [[ $1 == start ]]; then
     rm -f "$state/../run/crowdsec-retention-failed"
     touch "$state/../run/crowdsec-retention-ok"
@@ -97,18 +126,14 @@ case $1 in
       case "$*" in
         aboutme-caddy)
           touch "$state/transition-pending" "$state/command-entered"
-          for ((i=0; i<500; i++)); do
-            [[ ! -e $state/command-release ]] || break
-            sleep 0.01
-          done
+          deadline=$((SECONDS + ${ABOUTME_TEST_WAIT_SECONDS:?}))
+          while [[ ! -e $state/command-release ]] && ((SECONDS < deadline)); do sleep 0.01; done
           [[ -e $state/command-release ]] || exit 1
           exit 0 ;;
         aboutme-crowdsec-retention-failure.service)
           touch "$state/failure-entered"
-          for ((i=0; i<500; i++)); do
-            [[ ! -e $state/failure-release ]] || break
-            sleep 0.01
-          done
+          deadline=$((SECONDS + ${ABOUTME_TEST_WAIT_SECONDS:?}))
+          while [[ ! -e $state/failure-release ]] && ((SECONDS < deadline)); do sleep 0.01; done
           [[ -e $state/failure-release ]] || exit 1
           rm -f "$state/transition-pending"
           exit 0 ;;
@@ -168,17 +193,10 @@ for signal in HUP TERM; do
   touch "$ABOUTME_TEST_STATE/signal-transition" "$work/run/crowdsec-retention-ok"
   aboutme_edge_transition signal_edge_command &
   transition_pid=$!
-  for ((i=0; i<200; i++)); do
-    [[ ! -e $ABOUTME_TEST_STATE/command-entered ]] || break
-    sleep 0.01
-  done
-  [[ -e $ABOUTME_TEST_STATE/command-entered ]] || fail 'signal fixture did not enter the edge command'
+  wait_for_file "$ABOUTME_TEST_STATE/command-entered" || fail 'signal fixture did not enter the edge command'
   kill -s "$signal" "$(cat "$ABOUTME_TEST_STATE/edge-owner")"
   touch "$ABOUTME_TEST_STATE/command-release"
-  for ((i=0; i<200; i++)); do
-    [[ ! -e $ABOUTME_TEST_STATE/failure-entered ]] || break
-    sleep 0.01
-  done
+  wait_for_file "$ABOUTME_TEST_STATE/failure-entered" || true
   [[ -e $ABOUTME_TEST_STATE/failure-entered &&
     -e $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok ]] ||
     fail "$signal bypassed admission revocation and joined shutdown"
@@ -220,7 +238,8 @@ real_flock=$(command -v flock)
 flock() {
   if [[ -e $ABOUTME_TEST_STATE/pause-admission && $* == '-x -w 65 '* ]]; then
     touch "$ABOUTME_TEST_STATE/admission-entered"
-    while [[ ! -e $ABOUTME_TEST_STATE/admission-release ]]; do sleep 0.01; done
+    wait_for_file "$ABOUTME_TEST_STATE/admission-release" ||
+      { touch "$ABOUTME_TEST_STATE/fixture-expired"; return 1; }
   fi
   "$real_flock" "$@"
 }
@@ -229,15 +248,12 @@ touch "$ABOUTME_TEST_STATE/pause-admission"
   if aboutme_edge_start aboutme-maintenance; then echo accepted; else echo refused; fi
 ) >"$work/admission-result" &
 admission_pid=$!
-for ((i=0; i<100; i++)); do
-  [[ ! -e $ABOUTME_TEST_STATE/admission-entered ]] || break
-  sleep 0.01
-done
-[[ -e $ABOUTME_TEST_STATE/admission-entered ]] || fail 'edge admission fixture did not pause'
+wait_for_file "$ABOUTME_TEST_STATE/admission-entered" || fail 'edge admission fixture did not pause'
 printf 'retention-failed\n' >"$work/run/crowdsec-retention-failed"
 rm -f "$work/run/crowdsec-retention-ok" "$ABOUTME_TEST_STATE/active/aboutme-maintenance"
 touch "$ABOUTME_TEST_STATE/admission-release"
 wait "$admission_pid"
+[[ ! -e $ABOUTME_TEST_STATE/fixture-expired ]] || fail 'edge admission fixture expired before its release'
 [[ $(cat "$work/admission-result") == refused &&
   -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok &&
   ! -e $ABOUTME_TEST_STATE/unwanted-startup &&

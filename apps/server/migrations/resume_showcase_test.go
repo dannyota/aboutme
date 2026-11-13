@@ -1,6 +1,7 @@
 // Community showcase table (docs/design/showcase.md "Data and contract", ADR
 // 0028; AC-SHOW-001, AC-SHOW-009, AC-SHOW-015): its column checks, cascades,
-// listing index, and the slug refusal.
+// listing index, and the slug refusal. Tests that name the review columns or
+// their index run at the last version that has them.
 package migrations_test
 
 import (
@@ -18,6 +19,9 @@ import (
 const (
 	showcaseHexA = "0123456789abcdef"
 	showcaseHexB = "fedcba9876543210"
+	// showcaseReviewVersion is the last schema version with the showcase
+	// review columns, their checks, and the approval index; 00018 drops them.
+	showcaseReviewVersion = 17
 )
 
 // showcaseRow is every column of a resume_showcase insert the tests vary.
@@ -59,7 +63,7 @@ func showcaseCount(ctx context.Context, t *testing.T, tx pgx.Tx, resumeID uuid.U
 // AC-SHOW-015: every column rule of the design is a CHECK constraint.
 func TestResumeShowcaseConstraints(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
 	resumeID := insertLiveCardResume(ctx, t, tx, createTestUser(ctx, t, tx), uniqueCardSlug())
 	now := time.Now().UTC()
 	approved, declined, other := "approved", "declined", "maybe"
@@ -138,7 +142,7 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 // approved one needs its first-listed time.
 func TestResumeShowcaseAcceptsReviewedRows(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
 	userID := createTestUser(ctx, t, tx)
 	now := time.Now().UTC()
 	approved, declined := "approved", "declined"
@@ -163,7 +167,7 @@ func TestResumeShowcaseAcceptsReviewedRows(t *testing.T) {
 // through the resume.
 func TestResumeShowcaseCascades(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
 	userID := createTestUser(ctx, t, tx)
 	resumeID := insertLiveCardResume(ctx, t, tx, userID, uniqueCardSlug())
 	if err := insertShowcase(ctx, tx, resumeID, validShowcaseRow()); err != nil {
@@ -188,11 +192,12 @@ func TestResumeShowcaseCascades(t *testing.T) {
 	}
 }
 
-// The partial index on the first approval stays for the previous release; the
-// listing index of the current release is checked with migration 00011.
+// Through version 17 the partial index on the first approval serves releases
+// before v0.9.2; the listing index of the current release is checked with
+// migration 00011.
 func TestResumeShowcaseListingIndex(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
 	var definition string
 	if err := tx.QueryRow(ctx, `
 		SELECT indexdef FROM pg_indexes
