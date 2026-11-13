@@ -10,6 +10,7 @@ import {
 import type { AcceptedResume, ParentETag } from './types';
 import type { ResumeReadResult } from './attempt';
 import { current, stopForSessionLoss } from './coordinatorGuards';
+import { flush } from './coordinatorQueue';
 import type {
   CoordinatorContext,
   OperationContext,
@@ -95,19 +96,43 @@ function adoptAndReconcile(
   resumeId: string,
   accepted: AcceptedResume,
 ): AcceptedResume | undefined {
-  const record = ctx.deps.store.recordFor(resumeId);
-  if (record === undefined) return undefined;
+  const before = ctx.deps.store.recordFor(resumeId);
+  if (before === undefined) return undefined;
+  const barrier = before.completeReadRequired;
   const adoption = adoptRead(ctx, resumeId, accepted);
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (active === null || active === undefined) return latest;
+  // A held write the read shows landed, or a read barrier the read
+  // completed, no longer holds the queue back.
+  const released = reconcileHeld(ctx, resumeId, latest)
+    || (barrier && !ctx.deps.store.recordFor(resumeId)?.completeReadRequired);
+  if (released && active?.kind !== 'dispatching') void flush(ctx, resumeId);
+  return latest;
+}
+
+/**
+ * Reconciles the write the queue holds against `latest`, a complete read:
+ * one the resume already holds leaves the queue and a conflict waits for the
+ * person. A template child is settled here only past its retry window.
+ * Returns whether the write left the queue.
+ */
+export function reconcileHeld(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  latest: AcceptedResume,
+): boolean {
+  const record = ctx.deps.store.recordFor(resumeId);
+  const active = record?.attempt;
+  if (record === undefined || active === null || active === undefined) {
+    return false;
+  }
   if (active.queueItem.kind === 'templateGroup') {
     if (
       active.command.kind !== 'structure'
       && active.command.kind !== 'customization'
     ) {
-      return latest;
+      return false;
     }
     const decision = reconcileTemplateChild(toRaw(active.command), latest);
     if (
@@ -134,15 +159,17 @@ function adoptAndReconcile(
     } else if (decision.kind === 'conflict') {
       ctx.deps.store.markConflict(resumeId, decision.conflict);
     }
-    return latest;
+    return false;
   }
   const decision = reconcileCommand(toRaw(active.command), latest);
   if (decision.kind === 'satisfied') {
     ctx.deps.store.dropHead(resumeId, active.queueItem.id);
-  } else if (decision.kind === 'conflict') {
+    return true;
+  }
+  if (decision.kind === 'conflict') {
     ctx.deps.store.markConflict(resumeId, decision.conflict);
   }
-  return latest;
+  return false;
 }
 
 export async function refreshConditionalAndReconcile(

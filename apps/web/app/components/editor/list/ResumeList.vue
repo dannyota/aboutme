@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { twinTarget } from '../../../editor/languageTwin';
 import type { ResumeSummary } from '../../../editor/resumeApi';
+import type { ResumeCardSaveState } from '../../../composables/useResumeList';
 import { languageTwinCopy } from '@/i18n/language-twin';
 import { resumeListCopy } from '@/i18n/resume-list';
 import { formatRelativeTime } from '../../../utils/relativeTime';
@@ -25,15 +26,18 @@ const props = withDefaults(
     busyIds: readonly string[];
     removalFocusId: string | null;
     removalFocusVersion: number;
+    /** The list's own rename or delete of a card that has not settled. */
+    saveStates?: Readonly<Record<string, ResumeCardSaveState>>;
     now?: Date;
   }>(),
-  { now: undefined },
+  { now: undefined, saveStates: () => ({}) },
 );
 const emit = defineEmits<{
   create: [];
   otherLanguage: [item: ResumeSummary];
   rename: [item: ResumeSummary];
   remove: [item: ResumeSummary];
+  retry: [id: string];
 }>();
 const root = ref<HTMLElement | null>(null);
 const now = props.now ?? useNow();
@@ -133,10 +137,34 @@ watch(
         </NuxtLink>
         <span
           class="relative z-10 mt-auto block px-6 pb-5"
-          :class="{ 'pointer-events-none': !item.live || !item.slug }"
+          :class="{
+            'pointer-events-none': saveStates[item.id] !== 'rename-held'
+              && (!item.live || !item.slug),
+          }"
         >
           <StateMark
-            v-if="item.live && item.slug"
+            v-if="saveStates[item.id] === 'saving'"
+            state="saving"
+          />
+          <span
+            v-else-if="saveStates[item.id] === 'rename-held'"
+            class="flex flex-wrap items-center gap-2 text-sm text-destructive"
+            data-rename-held
+            role="alert"
+          >
+            {{ copy.renameHeld }}
+            <Button
+              data-action="retry-rename"
+              size="sm"
+              type="button"
+              variant="outline"
+              @click="emit('retry', item.id)"
+            >
+              {{ copy.tryAgain }}
+            </Button>
+          </span>
+          <StateMark
+            v-else-if="item.live && item.slug"
             state="public"
             :link="`/${item.slug}`"
           />

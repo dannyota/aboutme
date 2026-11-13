@@ -42,6 +42,7 @@ import { linkedEntry, type EntryLocation } from '../../editor/projectLinks';
 import { canonicalPublicPath } from '../../editor/publishApi';
 import type { SaveState } from '../../editor/types';
 import type { ResumeRecord } from '../../stores/resumes';
+import { saveState as recordSaveState } from '../../stores/resumeRecord';
 import AccountMenu from '../app/AccountMenu.vue';
 import CustomizationPanel from './customization/CustomizationPanel.vue';
 import PersonalDetailsPanel from './forms/PersonalDetailsPanel.vue';
@@ -51,6 +52,9 @@ import StructurePanel from './structure/StructurePanel.vue';
 import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
+import HeldWriteAlert from './HeldWriteAlert.vue';
+import SessionCheckBanner from './SessionCheckBanner.vue';
+import type { SessionCheck } from '../../composables/sessionCheck';
 import LanguageTwinReview from './LanguageTwinReview.vue';
 import EditorPreview from './EditorPreview.vue';
 import EditorRegionTabs from './EditorRegionTabs.vue';
@@ -74,6 +78,7 @@ type InspectorPanel
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
+  readonly sessionCheck?: SessionCheck;
 }>();
 const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
@@ -147,30 +152,13 @@ const issues = computed(() => Object.values(props.record.issues).flat());
 // Held field edits (rich text mid-debounce, an unfinished date) count too.
 const drafts = useFieldDrafts();
 const saveState = computed<SaveState>(() => {
-  const record = props.record;
-  if (record.sessionLost) return 'session-lost';
-  if (record.conflicts.length > 0) return 'conflict';
-  if (record.attempt?.kind === 'unknown') {
-    return record.attempt.reason === 'transport' ? 'offline' : 'error';
-  }
-  if (
-    record.attempt?.kind === 'failed'
-    || record.attempt?.kind === 'retry-later'
-    || record.templateState?.kind === 'partial'
-    || record.opaquePhotoOutcome !== null
-    || issues.value.length > 0
-  ) {
-    return 'error';
-  }
-  if (record.attempt?.kind === 'dispatching') return 'saving';
-  if (
-    record.pending.length > 0
-    || record.completeReadRequired
-    || (drafts?.count.value ?? 0) > 0
-  ) {
-    return 'dirty';
-  }
-  return 'saved';
+  const recorded = recordSaveState(props.record);
+  const state = recorded === 'saved' && (drafts?.count.value ?? 0) > 0
+    ? 'dirty'
+    : recorded;
+  // Work waiting on a failed session check is being retried, not lost.
+  const waiting = state === 'dirty' || state === 'saving';
+  return waiting && props.sessionCheck?.failing.value ? 'retrying' : state;
 });
 
 const selectedEntry = ref<string>();
@@ -609,6 +597,16 @@ async function discardAndSignIn(): Promise<void> {
         :actions="actions"
         :conflicts="record.conflicts"
         @open-inspector="openInspector"
+      />
+      <!-- The queue waits for the session check, and so does Retry now. -->
+      <SessionCheckBanner
+        v-if="sessionCheck?.failing.value"
+        :session-check="sessionCheck"
+      />
+      <HeldWriteAlert
+        v-else
+        :actions="actions"
+        :record="record"
       />
       <PersonalDetailsPanel
         v-if="inspector.kind === 'personal'"

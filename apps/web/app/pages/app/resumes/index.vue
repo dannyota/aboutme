@@ -21,8 +21,11 @@ import {
   useResumeList,
 } from '../../../composables/useResumeList';
 import { useNow } from '../../../composables/useNow';
+import { useLeaveGuard } from '../../../composables/useUnsavedNavigationGuard';
 import { workspaceTitles } from '@/i18n/meta';
+import { projectsCopy } from '@/i18n/projects';
 import { resumeListCopy } from '@/i18n/resume-list';
+import ProjectLeaveDialog from '@/components/projects/ProjectLeaveDialog.vue';
 
 const { locale } = useLocale();
 const copy = computed(() => resumeListCopy[locale.value]);
@@ -31,6 +34,21 @@ useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 
 const auth = useAuth();
 const list = useResumeList();
+const leaveChoice = ref<((leave: boolean) => void) | null>(null);
+
+function confirmLeave(): Promise<boolean> {
+  leaveChoice.value?.(false);
+  return new Promise((resolve) => {
+    leaveChoice.value = (leave) => {
+      leaveChoice.value = null;
+      resolve(leave);
+    };
+  });
+}
+
+// A rename or delete still being saved asks before the page goes, with the
+// projects editor's wording; leaving anyway drops it.
+useLeaveGuard(() => list.unsettled(), confirmLeave);
 let twinGeneration = 0;
 let twinOwner = auth.user.value?.id;
 let disposed = false;
@@ -203,6 +221,7 @@ async function remove(id: string, title: string): Promise<void> {
       v-else
       :items="list.items.value"
       :busy-ids="[...busyIds]"
+      :save-states="list.saveStates.value"
       :now="now"
       :removal-focus-id="list.removalFocusId.value"
       :removal-focus-version="list.removalFocusVersion.value"
@@ -210,6 +229,7 @@ async function remove(id: string, title: string): Promise<void> {
       @other-language="createOtherLanguage"
       @rename="renameItem = $event"
       @remove="deleteItem = $event"
+      @retry="list.retry"
     />
     <EditorListCreateResumeDialog
       :open="createOpen"
@@ -232,6 +252,12 @@ async function remove(id: string, title: string): Promise<void> {
       :busy="deleteItem !== null && busyIds.has(deleteItem.id)"
       @close="deleteItem = null"
       @submit="remove"
+    />
+    <ProjectLeaveDialog
+      :open="leaveChoice !== null"
+      :copy="projectsCopy[locale]"
+      @stay="leaveChoice?.(false)"
+      @leave="leaveChoice?.(true)"
     />
     <StatusBanner
       v-if="createMessage !== null || actionMessage !== null"

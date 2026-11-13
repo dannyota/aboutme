@@ -57,6 +57,14 @@ sheet radius on a half-opaque card fill, reading Empty slot. For an empty list,
 the first slot says “No resumes yet.” and how to start, and that three are
 allowed.
 
+A rename or delete from the list goes through the same save queue as the editor.
+While it is being saved, the card's mark reads “Đang lưu…” (“Saving…”). A rename
+the queue still holds after a failure reads “Chưa lưu được tên.” (“Name not
+saved.”) with Try again (“Thử lại”), which asks the queue to send it again; the
+queue also keeps retrying on its own. Leaving the page warns while a rename or
+delete is unsettled, as the editor does. Leaving anyway drops that unsent work
+and stops the page's reads and writes, and the resume opens afresh next time.
+
 The editor is a four-region workspace on the flat `--editor-canvas` fill, with
 no canvas glows:
 
@@ -84,6 +92,32 @@ account menu. Publish is the seal button. Below 56 rem the logo shows the mark
 alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
 title and the public link truncate with an ellipsis before any control moves;
 the link's `title` attribute holds the whole address.
+
+The save state reads “Đã lưu”, “Chưa lưu”, “Đang lưu…”, “Chưa lưu, đang thử lại”
+or “Lưu không thành công” (Saved, Unsaved, Saving…, Not saved, retrying, or Save
+failed). A write the editor still holds after its automatic retries shows an
+error banner at the top of the inspector, below any conflicts. The banner never
+offers to discard the change, and leaving the page warns while the write is
+held. Once a write's outcome has stayed unknown for a minute, the banner reads
+“Thay đổi gần nhất chưa được lưu” and “Không kết nối được với máy chủ. Hệ thống
+vẫn thử lại mỗi 30 giây.” (“Your latest change isn't saved yet” and “We couldn't
+reach the server. We keep trying every 30 seconds.”), with Retry now (“Thử lại
+ngay”), which sends it again at once, or after the server's Retry-After. Once a
+write has used every rebase, it reads “Thay đổi của bạn liên tục gặp chỉnh sửa
+mới hơn” and “CV này đang được thay đổi ở nơi khác. Thay đổi của bạn vẫn được
+giữ ở đây.” (“Your change keeps meeting newer edits” and “This resume is being
+changed elsewhere. Your change is kept here.”), with Try again (“Thử lại”),
+which starts the rebases again. Either button is disabled while the write is on
+its way. A held write with a conflict shows the conflict panel instead of this
+banner.
+
+When the session check fails for a reason other than a lost session, the editor
+stays on screen and shows an error banner in the same place: “Không kiểm tra
+được phiên đăng nhập” and “Các thay đổi vẫn ở trong thẻ này và sẽ được lưu khi
+có kết nối trở lại.” (“Can't check your sign-in” and “Your changes stay in this
+tab and are saved when the connection is back.”), with Try again (“Thử lại”),
+which checks at once. While it shows, unsaved work reads “Chưa lưu, đang thử
+lại”. Editor unavailable is shown only when the first load fails.
 
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF

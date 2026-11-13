@@ -11,9 +11,10 @@ import {
 import { Button } from '@/components/ui/button';
 import type { ProjectsCopy } from '@/i18n/projects';
 
+// Also asks on the resume list, with the same wording.
 defineProps<{
   readonly open: boolean;
-  readonly copy: ProjectsCopy;
+  readonly copy: Pick<ProjectsCopy, 'leaveTitle' | 'stay' | 'leave'>;
 }>();
 const emit = defineEmits<{ stay: []; leave: [] }>();
 

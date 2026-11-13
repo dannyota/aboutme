@@ -21,6 +21,8 @@ export type ResumeListCopy = {
   readonly retryLater: string;
   readonly sessionLost: string;
   readonly resumeChanged: string;
+  readonly renameHeld: string;
+  readonly tryAgain: string;
   readonly renameTitle: string;
   readonly renameDescription: string;
   readonly renameFieldLabel: string;
@@ -64,6 +66,8 @@ export const resumeListCopy: WorkspaceCopy<ResumeListCopy> = {
     sessionLost: 'Phiên đăng nhập đã kết thúc. Hãy đăng nhập lại.',
     resumeChanged:
       'CV này đã thay đổi. Hãy mở lại phần xóa và xác nhận tên mới.',
+    renameHeld: 'Chưa lưu được tên.',
+    tryAgain: 'Thử lại',
     renameTitle: 'Đổi tên CV',
     renameDescription: 'Nhập tên CV mới.',
     renameFieldLabel: 'Tên CV',
@@ -106,6 +110,8 @@ export const resumeListCopy: WorkspaceCopy<ResumeListCopy> = {
     sessionLost: 'Your session ended. Sign in again.',
     resumeChanged:
       'This resume changed. Reopen deletion and confirm its current title.',
+    renameHeld: 'Name not saved.',
+    tryAgain: 'Try again',
     renameTitle: 'Rename resume',
     renameDescription: 'Enter the new resume title.',
     renameFieldLabel: 'Title',

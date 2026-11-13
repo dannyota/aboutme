@@ -671,22 +671,22 @@ describe('a refresh meeting newer text on its retry', () => {
       .toEqual(linked({ title: 'Newer' }));
   });
 
-  it('still stops after one retry when the second 412 changed nothing it '
+  it('stops after three rebases when every 412 changed nothing it '
     + 'overwrites', async () => {
     const { store, api, coordinator, id } = queued(withEntries([linked()]), {
       kind: 'projectRefresh', sectionKey: 'projects', entryId: ENTRY,
     });
-    api.dispatch
-      .mockResolvedValueOnce(stale(withEntries([linked({ isHidden: true })],
-        '2')))
-      .mockResolvedValueOnce(stale(withEntries([linked({ isHidden: false })],
-        '3')));
+    for (const revision of ['2', '3', '4', '5']) {
+      api.dispatch.mockResolvedValueOnce(stale(withEntries([
+        linked({ isHidden: Number(revision) % 2 === 0 }),
+      ], revision)));
+    }
 
     await coordinator.flush(id);
 
-    expect(api.dispatch).toHaveBeenCalledTimes(2);
+    expect(api.dispatch).toHaveBeenCalledTimes(4);
     expect(store.recordFor(id)?.attempt).toMatchObject({
-      kind: 'failed', reason: 'second-stale',
+      kind: 'failed', reason: 'stale-limit',
     });
   });
 });

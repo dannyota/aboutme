@@ -195,7 +195,7 @@ const saveStateBlockers: readonly [
   ['dispatching', 'saving', (store, accepted) => {
     startAttempt(store, accepted, 'Dispatching');
   }],
-  ['unknown transport', 'offline', (store, accepted) => {
+  ['unknown transport', 'retrying', (store, accepted) => {
     const command = startAttempt(store, accepted, 'Unknown');
     store.holdAttempt(accepted.metadata.id, {
       kind: 'unknown',
@@ -205,7 +205,7 @@ const saveStateBlockers: readonly [
       reason: 'transport',
     });
   }],
-  ['unknown server', 'error', (store, accepted) => {
+  ['unknown server', 'retrying', (store, accepted) => {
     const command = startAttempt(store, accepted, 'Unknown');
     store.holdAttempt(accepted.metadata.id, {
       kind: 'unknown',
@@ -214,6 +214,28 @@ const saveStateBlockers: readonly [
       attempt: attemptFor(command),
       reason: 'server',
     });
+  }],
+  ['unknown transport after its alert', 'retrying', (store, accepted) => {
+    const command = startAttempt(store, accepted, 'Unknown');
+    store.holdAttempt(accepted.metadata.id, {
+      kind: 'unknown',
+      queueItem: command,
+      command,
+      attempt: attemptFor(command),
+      reason: 'transport',
+    });
+    store.markHeldAlert(accepted.metadata.id, command.id);
+  }],
+  ['unknown server after its alert', 'retrying', (store, accepted) => {
+    const command = startAttempt(store, accepted, 'Unknown');
+    store.holdAttempt(accepted.metadata.id, {
+      kind: 'unknown',
+      queueItem: command,
+      command,
+      attempt: attemptFor(command),
+      reason: 'server',
+    });
+    store.markHeldAlert(accepted.metadata.id, command.id);
   }],
   ['unknown cutoff', 'error', (store, accepted) => {
     const command = startAttempt(store, accepted, 'Unknown');

@@ -14,6 +14,7 @@ import {
   retry,
   schedule,
   stop,
+  wake,
 } from './coordinatorQueue';
 import {
   refreshAndReconcile,
@@ -53,6 +54,7 @@ export function createMutationCoordinator(
     csrfRetries: new Set(),
     readRetries: new Map(),
     stopped: new Set(),
+    writeRetries: new Map(),
   };
 
   return {
@@ -76,6 +78,8 @@ export function createMutationCoordinator(
       applyMine(begin(ctx, resumeId), resumeId, conflictId, confirmation),
     resumeAfterAuth: (resumeId) =>
       resumeAfterAuth(begin(ctx, resumeId), resumeId),
+    wake: (resumeId, recovered) =>
+      wake(begin(ctx, resumeId), resumeId, recovered),
     stop: (resumeId) => stop(ctx, resumeId),
     resolveOpaquePhoto: (resumeId, commandId, decision) =>
       resolveOpaquePhoto(ctx, resumeId, commandId, decision),
