@@ -1,118 +1,46 @@
 import { defineStore } from 'pinia';
-import { toRaw } from 'vue';
 
-import { coalescePending, replayCommand } from '../editor/commands';
-import { cloneReactiveSafe } from '../editor/clone';
-import { equalProjection } from '../editor/projections';
-import { compareRevision, parseRevision } from '../editor/revision';
-import type {
-  AttemptFailureCode,
-  FrozenAttempt,
-  ObjectETag,
-  ServerValidationIssue,
-} from '../editor/attempt';
+import type { FrozenAttempt, ServerValidationIssue } from '../editor/attempt';
 import type { AtomicEditorCommand } from '../editor/commands';
 import type { ConflictRecord } from '../editor/reconcile';
 import type {
   EditorQueueItem,
   TemplateGroupState,
 } from '../editor/templateGroup';
-import { templateUndoAvailable } from '../editor/templateGroup';
-import type {
-  AcceptedResume,
-  ParentETag,
-  ResumeSnapshot,
-  SaveState,
-} from '../editor/types';
+import type { AcceptedResume, ParentETag, SaveState } from '../editor/types';
+import * as adoption from './resumeAdoption';
+import * as queue from './resumeQueue';
+import {
+  copy,
+  createRecord,
+  photoBinding,
+  replay,
+  saveState,
+  type AttemptState,
+  type CompletionAdoption,
+  type OpaquePhotoOutcome,
+  type PhotoReadState,
+  type ResumeRecord,
+} from './resumeRecord';
 
-export type PhotoReadState
-  = | { readonly kind: 'none' }
-    | {
-      readonly kind: 'loading';
-      readonly binding: string;
-      readonly generation: number;
-    }
-    | {
-      readonly kind: 'ready';
-      readonly binding: string;
-      readonly generation: number;
-      readonly etag: ObjectETag;
-      readonly dataUrl: string;
-    }
-    | {
-      readonly kind: 'suspended';
-      readonly binding: string;
-      readonly generation: number;
-      readonly reason: 'read-failed' | 'binding-mismatch' | 'session-lost';
-    };
-
-type AttemptState
-  = | {
-    readonly kind: 'dispatching';
-    readonly queueItem: EditorQueueItem;
-    readonly command: AtomicEditorCommand;
-    readonly attempt: FrozenAttempt;
-  }
-  | {
-    readonly kind: 'unknown';
-    readonly queueItem: EditorQueueItem;
-    readonly command: AtomicEditorCommand;
-    readonly attempt: FrozenAttempt;
-    readonly reason: 'transport' | 'server' | 'cutoff';
-  }
-  | {
-    readonly kind: 'retry-later';
-    readonly queueItem: EditorQueueItem;
-    readonly command: AtomicEditorCommand;
-    readonly attempt: FrozenAttempt;
-    readonly reason: 'rate-limited' | 'media-busy';
-    readonly retryAfterMs: number | null;
-  }
-  | {
-    readonly kind: 'failed';
-    readonly queueItem: EditorQueueItem;
-    readonly command: AtomicEditorCommand;
-    readonly attempt: FrozenAttempt;
-    readonly reason:
-      | AttemptFailureCode
-      | 'csrf-rejected'
-      | 'idempotency-reuse'
-      | 'second-stale';
-  };
-
-type OpaquePhotoOutcome = {
-  readonly kind: 'photo-cutoff';
-  readonly command: Extract<AtomicEditorCommand, { kind: 'photoUpload' }>;
-  readonly attempt: FrozenAttempt;
-  readonly observed: 'unchanged' | 'changed' | 'unavailable';
-};
-
-type CompletionAdoption
-  = | { readonly kind: 'adopted'; readonly accepted: AcceptedResume }
-    | { readonly kind: 'older'; readonly winner: AcceptedResume };
-
-export interface ResumeRecord {
-  accepted: AcceptedResume;
-  current: ResumeSnapshot;
-  pending: readonly EditorQueueItem[];
-  attempt: AttemptState | null;
-  conflicts: readonly ConflictRecord[];
-  issues: Readonly<Record<string, readonly ServerValidationIssue[]>>;
-  templateState: TemplateGroupState | null;
-  photoRead: PhotoReadState;
-  completeReadRequired: boolean;
-  /** Set by an explicit discard and cleared by the next queued edit. */
-  discarded: boolean;
-  sessionLost: boolean;
-  opaquePhotoOutcome: OpaquePhotoOutcome | null;
-}
+export type { PhotoReadState, ResumeRecord } from './resumeRecord';
+export { dependencyIdsForNewCommand, nextSequence } from './resumeRecord';
 
 interface ResumeStoreState {
   records: Map<string, ResumeRecord>;
+  /** Editor pages open on each resume; other pages leave its record alone. */
+  editors: Map<string, number>;
+  /** Times another page left a resume's record to its open editor. */
+  handovers: Map<string, number>;
 }
 
 interface ResumeStoreActions {
-  initialize(accepted: AcceptedResume): void;
+  /**
+   * Starts a record from a complete read, unless the one held for the
+   * resume has unsent or in-flight work, which nothing replaces. Returns
+   * whether it started the record.
+   */
+  initialize(accepted: AcceptedResume): boolean;
   enqueue(resumeId: string, item: EditorQueueItem): void;
   startAttempt(
     resumeId: string,
@@ -124,6 +52,8 @@ interface ResumeStoreActions {
     resumeId: string,
     state: Exclude<AttemptState, { kind: 'dispatching' }>,
   ): void;
+  markHeldAlert(resumeId: string, itemId: string): void;
+  markSending(resumeId: string, idempotencyKey: string, sending: boolean): void;
   adoptComplete(resumeId: string, accepted: AcceptedResume): CompletionAdoption;
   adoptCompleteRead(
     resumeId: string,
@@ -158,16 +88,40 @@ interface ResumeStoreActions {
     state: OpaquePhotoOutcome | null,
   ): void;
   discardLocal(resumeId: string): void;
+  /**
+   * Removes the queued or held commands `commandIds`, and nothing else, from
+   * the resume's record: the work a page queued and is leaving behind.
+   */
+  dropCommands(resumeId: string, commandIds: ReadonlySet<string>): void;
+  /** An editor page opened on the resume, or closed. */
+  markEditorOpen(resumeId: string, open: boolean): void;
+  /** Leaves the record to the open editor, whose queue then looks at it. */
+  handOver(resumeId: string): void;
   removeResume(resumeId: string): void;
 }
 
 interface ResumeStore extends ResumeStoreState, ResumeStoreActions {
   recordFor(resumeId: string): ResumeRecord | undefined;
   saveStateFor(resumeId: string): SaveState;
+  /** An editor page has the resume's record open. */
+  openInEditor(resumeId: string): boolean;
+  handoversFor(resumeId: string): number;
+}
+
+/** The store's record for `resumeId`, as its reactive state holds it. */
+function recordIn(
+  store: { readonly records: Map<string, unknown> },
+  resumeId: string,
+): ResumeRecord | undefined {
+  return store.records.get(resumeId) as ResumeRecord | undefined;
 }
 
 const resumeStore = defineStore('resumes', {
-  state: () => ({ records: new Map<string, unknown>() }),
+  state: () => ({
+    records: new Map<string, unknown>(),
+    editors: new Map<string, number>(),
+    handovers: new Map<string, number>(),
+  }),
 
   getters: {
     recordFor:
@@ -182,38 +136,30 @@ const resumeStore = defineStore('resumes', {
             | undefined;
           return record === undefined ? 'idle' : saveState(record);
         },
+    openInEditor:
+      (state) =>
+        (resumeId: string): boolean =>
+          (state.editors.get(resumeId) ?? 0) > 0,
+    handoversFor:
+      (state) =>
+        (resumeId: string): number =>
+          state.handovers.get(resumeId) ?? 0,
   },
 
   actions: {
     initialize(accepted: AcceptedResume) {
-      const copied = cloneAccepted(accepted);
-      this.records.set(copied.metadata.id, {
-        accepted: copied,
-        current: snapshotFromAccepted(copied),
-        pending: [],
-        attempt: null,
-        conflicts: [],
-        issues: {},
-        templateState: null,
-        photoRead: { kind: 'none' },
-        completeReadRequired: false,
-        discarded: false,
-        sessionLost: false,
-        opaquePhotoOutcome: null,
-      });
+      const held = recordIn(this, accepted.metadata.id);
+      const working = held !== undefined
+        && (held.pending.length > 0 || held.attempt !== null);
+      if (working) return false;
+      const record = createRecord(accepted);
+      this.records.set(record.accepted.metadata.id, record);
+      return true;
     },
 
     enqueue(resumeId: string, item: EditorQueueItem) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      const pending = toRaw(record.pending) as readonly EditorQueueItem[];
-      record.pending = (isAtomic(item)
-        ? coalesceAtomicPending(pending, item)
-        : [...pending, item]) as unknown as typeof record.pending;
-      record.discarded = false;
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.enqueue(record, item);
     },
 
     startAttempt(
@@ -222,132 +168,65 @@ const resumeStore = defineStore('resumes', {
       command: AtomicEditorCommand,
       attempt: FrozenAttempt,
     ) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (
-        record === undefined
-        || record.attempt !== null
-        || record.pending[0]?.id !== queueItem.id
-      ) {
-        return;
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) {
+        queue.startAttempt(record, queueItem, command, attempt);
       }
-      record.pending = record.pending.slice(1);
-      record.attempt = { kind: 'dispatching', queueItem, command, attempt };
-      replay(record);
     },
 
     holdAttempt(
       resumeId: string,
       state: Exclude<AttemptState, { kind: 'dispatching' }>,
     ) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (
-        record === undefined
-        || record.attempt?.queueItem.id !== state.queueItem.id
-      ) {
-        return;
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.holdAttempt(record, state);
+    },
+
+    markHeldAlert(resumeId: string, itemId: string) {
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.markHeldAlert(record, itemId);
+    },
+
+    markSending(resumeId: string, idempotencyKey: string, sending: boolean) {
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) {
+        queue.markSending(record, idempotencyKey, sending);
       }
-      record.attempt = copy(state);
-      replay(record);
     },
 
     adoptComplete(
       resumeId: string,
       accepted: AcceptedResume,
     ): CompletionAdoption {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) {
-        return { kind: 'older', winner: cloneAccepted(accepted) };
-      }
-      if (compareRevision(accepted.revision, record.accepted.revision) <= 0) {
-        return { kind: 'older', winner: record.accepted };
-      }
-      record.accepted = cloneAccepted(accepted);
-      record.completeReadRequired = false;
-      replay(record);
-      return { kind: 'adopted', accepted: cloneAccepted(record.accepted) };
+      return adoption.adoptComplete(recordIn(this, resumeId), accepted);
     },
 
     adoptCompleteRead(
       resumeId: string,
       accepted: AcceptedResume,
     ): CompletionAdoption {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) {
-        return { kind: 'older', winner: cloneAccepted(accepted) };
-      }
-      if (compareRevision(accepted.revision, record.accepted.revision) < 0) {
-        return { kind: 'older', winner: record.accepted };
-      }
-      record.accepted = cloneAccepted(accepted);
-      record.completeReadRequired = false;
-      replay(record);
-      return { kind: 'adopted', accepted: cloneAccepted(record.accepted) };
+      return adoption.adoptCompleteRead(recordIn(this, resumeId), accepted);
     },
 
     adoptStaleWinner(resumeId: string, accepted: AcceptedResume) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (
-        record === undefined
-        || compareRevision(accepted.revision, record.accepted.revision) <= 0
-      ) {
-        return;
-      }
-      record.accepted = {
-        ...copy(record.accepted),
-        document: copy(accepted.document),
-        revision: accepted.revision,
-        metadataFreshness: 'stale',
-      };
-      record.completeReadRequired = true;
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) adoption.adoptStaleWinner(record, accepted);
     },
 
     requireCompleteRead(resumeId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record !== undefined) record.completeReadRequired = true;
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) adoption.requireCompleteRead(record);
     },
 
     acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined || record.attempt === null) return;
-      const active = record.attempt as AttemptState;
-      if (active.queueItem.id !== itemId || !isBodylessChild(active.command)) {
-        return;
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) {
+        adoption.acknowledgeChild(record, itemId, etag);
       }
-      const revision = revisionFromParentETag(etag);
-      if (compareRevision(revision, record.accepted.revision) <= 0) return;
-      const reduced = replayCommand(
-        snapshotFromAccepted(record.accepted),
-        toRaw(active.command) as AtomicEditorCommand,
-      );
-      record.accepted = {
-        ...copy(record.accepted),
-        document: copy(reduced.document),
-        revision,
-        metadataFreshness: 'stale',
-      };
-      record.completeReadRequired = true;
-      replay(record);
     },
 
     acknowledgeResumeDelete(resumeId: string, itemId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
+      const record = recordIn(this, resumeId);
       if (
         record?.attempt?.queueItem.id !== itemId
         || record.attempt.command.kind !== 'resumeDelete'
@@ -363,101 +242,39 @@ const resumeStore = defineStore('resumes', {
       accepted: AcceptedResume,
       replacement: EditorQueueItem,
     ) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (
-        record === undefined
-        || compareRevision(accepted.revision, record.accepted.revision) < 0
-      ) {
-        return false;
-      }
-      const active = record.attempt?.queueItem.id === conflicted.id;
-      // A conflict found before sending leaves its command at the head of
-      // the queue, where a later edit of the same field may have merged in.
-      if (!active && !unchangedHead(record, conflicted)) return false;
-      record.accepted = cloneAccepted(accepted);
-      record.completeReadRequired = false;
-      record.attempt = null;
-      record.pending = [
-        replacement,
-        ...(active ? record.pending : record.pending.slice(1)),
-      ];
-      replay(record);
-      return true;
+      const record = recordIn(this, resumeId);
+      return record !== undefined
+        && adoption.replaceConflictedAfterCompleteRead(
+          record,
+          conflicted,
+          accepted,
+          replacement,
+        );
     },
 
     replaceHead(resumeId: string, item: EditorQueueItem) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined || record.attempt !== null) return;
-      if (record.pending[0] === undefined) return;
-      record.pending = [item, ...record.pending.slice(1)];
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.replaceHead(record, item);
     },
 
     dropHead(resumeId: string, itemId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      if (record.attempt?.queueItem.id === itemId) {
-        record.attempt = null;
-      } else if (record.pending[0]?.id === itemId) {
-        record.pending = record.pending.slice(1);
-      } else {
-        return;
-      }
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.dropHead(record, itemId);
     },
 
     markConflict(resumeId: string, conflict: ConflictRecord) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      const existing = record.conflicts.findIndex(
-        (candidate) => candidate.id === conflict.id,
-      );
-      record.conflicts = existing === -1
-        ? [...record.conflicts, copy(conflict)]
-        : record.conflicts.map((candidate, index) =>
-            index === existing ? copy(conflict) : candidate,
-          );
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.markConflict(record, conflict);
     },
 
     resolveConflict(resumeId: string, conflictId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      const conflicts = record.conflicts.filter(
-        (conflict) => conflict.id !== conflictId,
-      );
-      if (conflicts.length === record.conflicts.length) return;
-      record.conflicts = conflicts;
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.resolveConflict(record, conflictId);
     },
 
     continueTemplateGroup(resumeId: string, groupId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      const active = record.attempt;
-      if (
-        active === null
-        || active === undefined
-        || active.queueItem.kind !== 'templateGroup'
-        || active.queueItem.id !== groupId
-      ) {
-        return;
-      }
-      record.attempt = null;
-      record.pending = [active.queueItem, ...record.pending];
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.continueTemplateGroup(record, groupId);
     },
 
     setIssues(
@@ -465,31 +282,17 @@ const resumeStore = defineStore('resumes', {
       itemId: string,
       issues: readonly ServerValidationIssue[],
     ) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      const next = issues.length === 0
-        ? Object.fromEntries(
-            Object.entries(record.issues).filter(([id]) => id !== itemId),
-          )
-        : { ...record.issues, [itemId]: copy(issues) };
-      record.issues = next;
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.setIssues(record, itemId, issues);
     },
 
     setTemplateState(resumeId: string, state: TemplateGroupState | null) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      record.templateState = state === null ? null : copy(state);
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.setTemplateState(record, state);
     },
 
     setPhotoRead(resumeId: string, state: PhotoReadState) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
+      const record = recordIn(this, resumeId);
       if (record === undefined) return;
       if (state.kind === 'none') {
         record.photoRead = { kind: 'none' };
@@ -514,9 +317,7 @@ const resumeStore = defineStore('resumes', {
     },
 
     markSessionLost(resumeId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
+      const record = recordIn(this, resumeId);
       if (record === undefined) return;
       record.sessionLost = true;
       if (record.photoRead.kind !== 'none') {
@@ -531,36 +332,36 @@ const resumeStore = defineStore('resumes', {
     },
 
     clearSessionLost(resumeId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
+      const record = recordIn(this, resumeId);
       if (record === undefined) return;
       record.sessionLost = false;
       replay(record);
     },
 
     setOpaquePhotoOutcome(resumeId: string, state: OpaquePhotoOutcome | null) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
+      const record = recordIn(this, resumeId);
       if (record === undefined) return;
       record.opaquePhotoOutcome = state === null ? null : copy(state);
     },
 
     discardLocal(resumeId: string) {
-      const record = this.records.get(resumeId) as unknown as
-        | ResumeRecord
-        | undefined;
-      if (record === undefined) return;
-      record.pending = [];
-      record.attempt = null;
-      record.conflicts = [];
-      record.issues = {};
-      record.templateState = null;
-      record.sessionLost = false;
-      record.opaquePhotoOutcome = null;
-      record.discarded = true;
-      replay(record);
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.discardLocal(record);
+    },
+
+    dropCommands(resumeId: string, commandIds: ReadonlySet<string>) {
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.dropCommands(record, commandIds);
+    },
+
+    markEditorOpen(resumeId: string, open: boolean) {
+      const count = (this.editors.get(resumeId) ?? 0) + (open ? 1 : -1);
+      if (count > 0) this.editors.set(resumeId, count);
+      else this.editors.delete(resumeId);
+    },
+
+    handOver(resumeId: string) {
+      this.handovers.set(resumeId, (this.handovers.get(resumeId) ?? 0) + 1);
     },
 
     removeResume(resumeId: string) {
@@ -570,121 +371,3 @@ const resumeStore = defineStore('resumes', {
 });
 
 export const useResumeStore = resumeStore as unknown as () => ResumeStore;
-
-export function nextSequence(record: ResumeRecord): number {
-  const sequences = [
-    ...(record.attempt === null ? [] : [record.attempt.queueItem.sequence]),
-    ...record.pending.map((item) => item.sequence),
-  ];
-  return (sequences.length === 0 ? 0 : Math.max(...sequences)) + 1;
-}
-
-export function dependencyIdsForNewCommand(
-  record: ResumeRecord,
-): readonly string[] {
-  return [
-    ...(record.attempt === null ? [] : [record.attempt.queueItem.id]),
-    ...record.pending.map((item) => item.id),
-  ];
-}
-
-function replay(value: unknown): void {
-  const record = value as ResumeRecord;
-  const active = record.attempt === null ? [] : [record.attempt.queueItem];
-  record.current = [...active, ...record.pending].reduce(
-    replayQueueItem,
-    snapshotFromAccepted(record.accepted),
-  );
-  if (
-    record.templateState?.kind === 'complete'
-    && !templateUndoAvailable(record.templateState.undo, record.current)
-  ) {
-    record.templateState = null;
-  }
-  clearPhotoWhenUnbound(record);
-}
-
-function replayQueueItem(
-  snapshot: ResumeSnapshot,
-  item: EditorQueueItem,
-): ResumeSnapshot {
-  return isAtomic(item)
-    ? copy(replayCommand(snapshot, item))
-    : copy(item.intendedFinal);
-}
-
-function coalesceAtomicPending(
-  pending: readonly EditorQueueItem[],
-  item: AtomicEditorCommand,
-): readonly EditorQueueItem[] {
-  const last = pending.at(-1);
-  if (last === undefined || !isAtomic(last)) return [...pending, item];
-  return [...pending.slice(0, -1), ...coalescePending([last], item)];
-}
-
-function saveState(record: ResumeRecord): SaveState {
-  if (record.sessionLost) return 'session-lost';
-  if (record.conflicts.length > 0) return 'conflict';
-  if (record.attempt?.kind === 'unknown') {
-    return record.attempt.reason === 'transport' ? 'offline' : 'error';
-  }
-  if (
-    record.attempt?.kind === 'failed'
-    || record.attempt?.kind === 'retry-later'
-    || record.templateState?.kind === 'partial'
-    || record.opaquePhotoOutcome !== null
-    || Object.keys(record.issues).length > 0
-  ) {
-    return 'error';
-  }
-  if (record.attempt?.kind === 'dispatching') return 'saving';
-  if (record.pending.length > 0 || record.completeReadRequired) return 'dirty';
-  return 'saved';
-}
-
-function snapshotFromAccepted(accepted: AcceptedResume): ResumeSnapshot {
-  const copied = copy(accepted);
-  return { document: copied.document, metadata: copied.metadata };
-}
-
-function cloneAccepted(accepted: AcceptedResume): AcceptedResume {
-  return copy(accepted);
-}
-
-function copy<T>(value: T): T {
-  return cloneReactiveSafe(value);
-}
-
-function isAtomic(item: EditorQueueItem): item is AtomicEditorCommand {
-  return item.kind !== 'templateGroup';
-}
-
-function unchangedHead(record: ResumeRecord, command: AtomicEditorCommand) {
-  const head = record.pending[0];
-  if (record.attempt !== null || head?.id !== command.id) return false;
-  const intended = isAtomic(head) ? head.intended : null;
-  return intended === null || command.intended === null
-    ? intended === command.intended
-    : equalProjection(intended, command.intended);
-}
-
-function isBodylessChild(command: AtomicEditorCommand): boolean {
-  return command.kind === 'entryDelete' || command.kind === 'photoDelete';
-}
-
-function revisionFromParentETag(etag: ParentETag) {
-  return parseRevision(etag.slice(2, -1));
-}
-
-function photoBinding(snapshot: ResumeSnapshot): string | undefined {
-  return snapshot.document.personalDetails.photo?.key;
-}
-
-function clearPhotoWhenUnbound(record: ResumeRecord): void {
-  if (
-    record.photoRead.kind === 'ready'
-    && record.photoRead.binding !== photoBinding(record.current)
-  ) {
-    record.photoRead = { kind: 'none' };
-  }
-}

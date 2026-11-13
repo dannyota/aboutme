@@ -12,8 +12,20 @@ import type {
 
 export const DEBOUNCE_MS = 1_000;
 export const UNKNOWN_REPLAY_DELAY_MS = 250;
-export const READ_RETRY_FIRST_MS = 1_000;
-export const READ_RETRY_MAX_MS = 30_000;
+export const RETRY_FIRST_MS = 1_000;
+export const RETRY_MAX_MS = 30_000;
+/** Rebases one write may have onto newer revisions before it is held. */
+export const STALE_REBASE_LIMIT = 3;
+/** How long a write may stay unknown before the person is told. */
+export const HELD_WRITE_ALERT_MS = 60_000;
+
+/**
+ * The wait before retry number `failures + 1` of a failed read or of a write
+ * whose outcome is unknown: 1 s, doubling to 30 s (docs/design/budgets.md).
+ */
+export function retryDelay(failures: number): number {
+  return Math.min(RETRY_FIRST_MS * 2 ** failures, RETRY_MAX_MS);
+}
 
 /**
  * Starts an operation on the record the editor holds for `resumeId` now.
@@ -39,16 +51,19 @@ export function current(ctx: OperationContext, resumeId: string): boolean {
   );
 }
 
-/** The operation is current and `queueItem` is still the write in flight. */
+/**
+ * The operation is current and `attempt`, the attempt it sent, is still the
+ * write the queue holds: an answer to any other attempt settles nothing.
+ */
 export function owns(
   ctx: OperationContext,
   resumeId: string,
-  queueItem: EditorQueueItem,
+  attempt: FrozenAttempt,
 ): boolean {
   return (
     current(ctx, resumeId)
-    && ctx.deps.store.recordFor(resumeId)?.attempt?.queueItem.id
-    === queueItem.id
+    && ctx.deps.store.recordFor(resumeId)?.attempt?.attempt.idempotencyKey
+    === attempt.idempotencyKey
   );
 }
 
@@ -98,7 +113,19 @@ export function discard(ctx: CoordinatorContext, resumeId: string): void {
   const timer = ctx.timers.get(resumeId);
   if (timer !== undefined) clearTimeout(timer);
   ctx.timers.delete(resumeId);
+  clearWriteRetry(ctx, resumeId);
   ctx.deps.store.discardLocal(resumeId);
+}
+
+/** Forgets the retry schedule and alert timer of a held write. */
+export function clearWriteRetry(
+  ctx: CoordinatorContext,
+  resumeId: string,
+): void {
+  const retry = ctx.writeRetries.get(resumeId);
+  if (retry === undefined) return;
+  clearTimeout(retry.alert);
+  ctx.writeRetries.delete(resumeId);
 }
 
 export function canDrain(
@@ -119,22 +146,34 @@ export function canDrain(
 }
 
 /**
- * The read barrier is completed before any queued edit, once no write is in
- * flight. A lost session waits for sign-in instead.
+ * The read barrier is completed before any write is sent, a held one
+ * included: the drain sends nothing else while it runs. A lost session
+ * waits for sign-in instead.
  */
 export function readBarrierDue(
   record: ResumeRecord | undefined,
   authState: ReturnType<typeof useAuth>['authState']['value'],
   ownerId: string | undefined,
 ): boolean {
+  const head = record?.attempt?.queueItem ?? record?.pending[0];
   return (
     record !== undefined
     && record.completeReadRequired
-    && record.attempt === null
     && !record.sessionLost
     && authState === 'authenticated'
     && ownerId !== undefined
-    && (record.pending[0]?.ownerId ?? ownerId) === ownerId
+    && (head?.ownerId ?? ownerId) === ownerId
+  );
+}
+
+/**
+ * Step 2 of the drain: the held write has a conflict, which waits for the
+ * person. A template child's conflict carries the child's id.
+ */
+export function heldConflict(record: ResumeRecord): boolean {
+  const held = record.attempt;
+  return held !== null && record.conflicts.some(
+    ({ id }) => id === held.queueItem.id || id === held.command.id,
   );
 }
 
@@ -156,7 +195,7 @@ export function holdFailed(
   command: AtomicEditorCommand,
   attempt: FrozenAttempt,
   reason:
-    AttemptFailureCode | 'csrf-rejected' | 'idempotency-reuse' | 'second-stale',
+    AttemptFailureCode | 'csrf-rejected' | 'idempotency-reuse' | 'stale-limit',
 ): void {
   // `request_invalid` is the stable holder for a validation issue; individual
   // field issue codes remain on the record for the UI.

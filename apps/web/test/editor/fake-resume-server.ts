@@ -55,18 +55,44 @@ export function startingResume(): AcceptedResume {
   };
 }
 
+/** How a write's response is lost on the way back to the editor. */
+export interface LostResponse {
+  /** Whether the server had already applied the write. */
+  readonly applied: boolean;
+}
+
+/** Writes after this many never answer, so a client that loops cannot hang. */
+const WRITE_LIMIT = 200;
+
 /**
  * The owner API over one stored resume. It checks If-Match as the server
  * does, answers a stale write with the stored document and revision, and
- * applies the writes these scenarios send.
+ * applies the writes these scenarios send. A key it already applied replays
+ * that result without running the write again when the request is the same,
+ * and refuses it when the If-Match or body differ (ADR 0006).
  */
 export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
+  /** The resume was deleted: later lists leave it out and reads miss it. */
+  let deleted = false;
   const failedReads: ReadFailure[] = [];
   const heldResponses: Promise<void>[] = [];
   let readsHeld: Promise<void> | undefined;
-  const sent: { attempt: FrozenAttempt; result: AttemptResult['kind'] }[]
-    = [];
+  const lostResponses: LostResponse[] = [];
+  let everyResponseLost: LostResponse | undefined;
+  const beforeWrites: (() => void)[] = [];
+  const failedWrites: AttemptResult[] = [];
+  const replays = new Map<
+    string,
+    { readonly request: string; readonly result: AttemptResult }
+  >();
+  const sent: {
+    attempt: FrozenAttempt;
+    result: AttemptResult['kind'];
+    at: number;
+    /** What the server fingerprints for the request. */
+    request: string;
+  }[] = [];
   const readTimes: number[] = [];
 
   const advance = (document: Resume): void => {
@@ -89,6 +115,25 @@ export function fakeServer(initial: AcceptedResume) {
         });
         return { kind: 'complete', status: 200, accepted: copy() };
       }
+      case 'upsertResumeEntry': {
+        if (attempt.payload.kind !== 'json') throw new Error('no body');
+        const { entry } = JSON.parse(attempt.payload.utf8);
+        const sectionKey = decodeURIComponent(attempt.url.split('/').at(-1)!);
+        const section = document.content[sectionKey]!;
+        const others = section.entries.filter(({ id }) => id !== entry.id);
+        const at = section.entries.findIndex(({ id }) => id === entry.id);
+        const entries = at === -1
+          ? [...section.entries, entry]
+          : [...others.slice(0, at), entry, ...others.slice(at)];
+        advance({
+          ...document,
+          content: {
+            ...document.content,
+            [sectionKey]: { ...section, entries },
+          },
+        });
+        return { kind: 'complete', status: 200, accepted: copy() };
+      }
       case 'deleteResumeEntry': {
         const entryId = decodeURIComponent(attempt.url.split('/').at(-1)!);
         const work = document.content.work!;
@@ -105,6 +150,28 @@ export function fakeServer(initial: AcceptedResume) {
       }
       case 'linkResumeProject':
         return { kind: 'rejected', code: 'project_not_found' };
+      case 'updateResumeMetadata': {
+        if (attempt.payload.kind !== 'json') throw new Error('no body');
+        advance(document);
+        stored = {
+          ...stored,
+          metadata: { ...stored.metadata, ...JSON.parse(attempt.payload.utf8) },
+        };
+        return { kind: 'complete', status: 200, accepted: copy() };
+      }
+      case 'uploadResumePhoto': {
+        advance({
+          ...document,
+          personalDetails: {
+            ...document.personalDetails,
+            photo: { key: `photo-upload-${Number(stored.revision) + 1}` },
+          },
+        });
+        return { kind: 'complete', status: 201, accepted: copy() };
+      }
+      case 'deleteResume':
+        deleted = true;
+        return { kind: 'resume-deleted', status: 204 };
       case 'deleteResumePhoto': {
         const { photo: _photo, ...personalDetails } = document.personalDetails;
         advance({ ...document, personalDetails });
@@ -121,30 +188,92 @@ export function fakeServer(initial: AcceptedResume) {
     etag: parentETag(stored.revision),
   });
   const copy = (): AcceptedResume => structuredClone(stored);
+  /** What the server fingerprints: the target, If-Match and body. */
+  const requestOf = (attempt: FrozenAttempt, body: string): string =>
+    JSON.stringify([
+      attempt.method,
+      attempt.url,
+      attempt.ifMatch ?? 'absent',
+      body,
+    ]);
+  /** A photo's raw bytes are its body. */
+  const photoBody = async (file: File): Promise<string> =>
+    `photo:${Buffer.from(await file.arrayBuffer()).toString('base64')}`;
+  const answer = (attempt: FrozenAttempt, request: string): AttemptResult => {
+    const replay = replays.get(attempt.idempotencyKey);
+    if (replay !== undefined) {
+      return replay.request === request
+        ? replay.result
+        : { kind: 'idempotency-reuse' };
+    }
+    if (attempt.ifMatch !== parentETag(stored.revision)) {
+      return {
+        kind: 'stale',
+        status: 412,
+        winner: {
+          document: structuredClone(stored.document),
+          revision: stored.revision,
+        },
+      };
+    }
+    const result = apply(attempt);
+    if (
+      result.kind === 'complete'
+      || result.kind === 'child-ack'
+      || result.kind === 'resume-deleted'
+    ) {
+      replays.set(attempt.idempotencyKey, { request, result });
+    }
+    return result;
+  };
 
   const api = {
     dispatch: vi.fn(async (attempt: FrozenAttempt): Promise<AttemptResult> => {
-      const result: AttemptResult = attempt.ifMatch === parentETag(
-        stored.revision,
-      )
-        ? apply(attempt)
-        : {
-            kind: 'stale',
-            status: 412,
-            winner: {
-              document: structuredClone(stored.document),
-              revision: stored.revision,
-            },
-          };
-      sent.push({ attempt, result: result.kind });
+      if (sent.length >= WRITE_LIMIT) return new Promise<never>(() => {});
+      const { payload } = attempt;
+      let body: string = payload.kind;
+      if (payload.kind === 'json') body = payload.utf8;
+      // Only a photo's bytes are read asynchronously.
+      if (payload.kind === 'photo') body = await photoBody(payload.file);
+      const request = requestOf(attempt, body);
+      const record = (result: AttemptResult['kind']): void => {
+        sent.push({ attempt, result, at: Date.now(), request });
+      };
+      beforeWrites.shift()?.();
+      const lost = lostResponses.shift() ?? everyResponseLost;
+      if (lost?.applied === false) {
+        record('unknown');
+        return { kind: 'unknown', reason: 'transport' };
+      }
+      const failed = lost === undefined ? failedWrites.shift() : undefined;
+      if (failed !== undefined) {
+        record(failed.kind);
+        return failed;
+      }
+      const result = answer(attempt, request);
+      if (lost !== undefined) {
+        record('unknown');
+        return { kind: 'unknown', reason: 'transport' };
+      }
+      record(result.kind);
       const held = heldResponses.shift();
       if (held !== undefined) await held;
       return result;
     }),
+    list: vi.fn(async () => ({
+      kind: 'ready' as const,
+      items: deleted
+        ? []
+        : [{ ...stored.metadata, revision: stored.revision }],
+    })),
     read: vi.fn(async (): Promise<ResumeReadResult> => {
       readTimes.push(Date.now());
       if (readsHeld !== undefined) await readsHeld;
-      return failedReads.shift() ?? { kind: 'complete', accepted: copy() };
+      const failed = failedReads.shift();
+      if (failed !== undefined) return failed;
+      return deleted
+        ? { kind: 'unavailable' }
+        : { kind: 'complete', accepted: copy() };
     }),
   };
 
@@ -164,10 +293,6 @@ export function fakeServer(initial: AcceptedResume) {
     failNextRead(failure: ReadFailure): void {
       failedReads.push(failure);
     },
-    /**
-     * Applies the next write at once but holds its response until the
-     * returned function is called.
-     */
     /** Holds every read until the returned function is called. */
     holdReads(): () => void {
       let release = (): void => {};
@@ -179,12 +304,42 @@ export function fakeServer(initial: AcceptedResume) {
       });
       return () => release();
     },
+    /**
+     * Applies the next write at once but holds its response until the
+     * returned function is called.
+     */
     holdNextResponse(): () => void {
       let release = (): void => {};
       heldResponses.push(new Promise<void>((resolve) => {
         release = resolve;
       }));
       return release;
+    },
+    /** The next write's response never reaches the editor. */
+    loseNextResponse(lost: LostResponse): void {
+      lostResponses.push(lost);
+    },
+    /**
+     * The next write that reaches the server is refused with `result`
+     * before it runs: a rate limit or a rejected CSRF token.
+     */
+    failNextWrite(result: AttemptResult): void {
+      failedWrites.push(result);
+    },
+    /** Every write's response is lost until this is called again. */
+    loseEveryResponse(lost: LostResponse | undefined): void {
+      everyResponseLost = lost;
+    },
+    /** Milliseconds between the attempts sent for one command. */
+    sendGapsFor(commandId: string): number[] {
+      const times = sent
+        .filter(({ attempt }) => attempt.id === commandId)
+        .map(({ at }) => at);
+      return times.slice(1).map((time, index) => time - times[index]!);
+    },
+    /** Runs `change` as the next write arrives, before it is checked. */
+    beforeNextWrite(change: () => void): void {
+      beforeWrites.push(change);
     },
     /** Another tab or agent changes the resume. */
     otherWriter(change: (document: Resume) => Resume): void {

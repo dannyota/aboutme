@@ -1,6 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { mountSuspended } from '@nuxt/test-utils/runtime';
-import { computed, defineComponent, inject, type ComputedRef } from 'vue';
+import {
+  computed,
+  defineComponent,
+  inject,
+  ref,
+  type ComputedRef,
+} from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -12,6 +18,7 @@ import {
   EDITOR_PREVIEW_MIN_REM,
 } from '../../app/composables/useResizablePanel';
 import EditorShell from '../../app/components/editor/EditorShell.vue';
+import { createSessionCheck } from '../../app/composables/sessionCheck';
 import AccountMenu from '../../app/components/app/AccountMenu.vue';
 import IconButton from '../../app/components/app/IconButton.vue';
 import type {
@@ -181,6 +188,70 @@ describe('EditorShell', () => {
       expect(status().attributes('data-state')).toBe('dirty');
       expect(status().text()).toBe('Unsaved');
     });
+  });
+
+  it('shows retrying and the session banner while work waits on a failed '
+    + 'session check', async () => {
+    const record = editorRecord();
+    record.pending = [{ id: 'pending-1' }] as never;
+    const sessionCheck = createSessionCheck({
+      check: vi.fn(async () => {}),
+      authState: ref('error' as const),
+    });
+    const retry = vi.spyOn(sessionCheck, 'retry');
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record, sessionCheck },
+      global: { stubs: heavyStubs() },
+    });
+    const status = () => wrapper.get('[data-save-status]');
+    expect(status().attributes('data-state')).toBe('dirty');
+    expect(wrapper.find('[data-session-check]').exists()).toBe(false);
+
+    sessionCheck.start();
+    await wrapper.vm.$nextTick();
+    expect(status().attributes('data-state')).toBe('retrying');
+    expect(status().text()).toBe('Not saved, retrying');
+    const banner = wrapper.get('[data-session-check]');
+    expect(banner.text()).toContain('Can\'t check your sign-in');
+    await banner.get('[data-action="retry-session-check"]').trigger('click');
+    expect(retry).toHaveBeenCalledOnce();
+
+    sessionCheck.stop();
+    await wrapper.vm.$nextTick();
+    expect(status().attributes('data-state')).toBe('dirty');
+    expect(wrapper.find('[data-session-check]').exists()).toBe(false);
+  });
+
+  it('shows the session banner in place of a held write\'s alert while the '
+    + 'check fails', async () => {
+    const record = editorRecord();
+    const command = { id: 'command-1', kind: 'personalField' } as never;
+    record.attempt = {
+      kind: 'unknown',
+      reason: 'transport',
+      alert: true,
+      queueItem: command,
+      command,
+      attempt: {} as never,
+    };
+    const sessionCheck = createSessionCheck({
+      check: vi.fn(async () => {}),
+      authState: ref('error' as const),
+    });
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record, sessionCheck },
+      global: { stubs: heavyStubs() },
+    });
+    expect(wrapper.find('[data-held-write="unknown"]').exists()).toBe(true);
+
+    sessionCheck.start();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-held-write]').exists()).toBe(false);
+    expect(wrapper.find('[data-session-check]').exists()).toBe(true);
+
+    sessionCheck.stop();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-held-write="unknown"]').exists()).toBe(true);
   });
 
   it(

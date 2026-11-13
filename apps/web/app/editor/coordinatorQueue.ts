@@ -1,23 +1,33 @@
 import { toRaw } from 'vue';
+import type { ResumeRecord } from '../stores/resumes';
+import type { AttemptState } from '../stores/resumeRecord';
 import type { AtomicEditorCommand } from './commands';
 import { reconcileCommand, reconcileTemplateGroup } from './reconcile';
 import { freezeAttempt } from './resumeApi';
-import { nextTemplateChild, type EditorQueueItem } from './templateGroup';
+import { nextTemplateChild } from './templateGroup';
 import {
   begin,
   canDrain,
+  clearWriteRetry,
   current,
   DEBOUNCE_MS,
   dependenciesAcknowledged,
   dispatchToken,
+  heldConflict,
   owns,
-  READ_RETRY_FIRST_MS,
-  READ_RETRY_MAX_MS,
   readBarrierDue,
+  retryDelay,
   stopForSessionLoss,
 } from './coordinatorGuards';
 import { dropChangedRefresh } from './coordinatorProject';
-import { adoptRead } from './coordinatorReconcile';
+import { reconcileHeld } from './coordinatorReconcile';
+import {
+  heldNext,
+  rebaseHeld,
+  requestRetry,
+  startResend,
+  waitsForPerson,
+} from './coordinatorRetry';
 import { resolveUnknown, send } from './coordinatorSettle';
 import type {
   CoordinatorContext,
@@ -74,170 +84,311 @@ export function flush(
   return drain;
 }
 
+/**
+ * The resume's only sender. Each pass decides in one place, in this order:
+ * 1. the epoch: a closed editor or a resume opened again ends the drain;
+ * 2. the head waits for the person: a conflict, or a held write only the
+ *    person may send again;
+ * 3. the read barrier: nothing is sent over an unread revision, so the read
+ *    completes first, and a held write is reconciled against it before it
+ *    is sent again; only a rebase built from a 412 winner skips it;
+ * 4. the held write's retry deadline, Retry-After included;
+ * 5. the send: the held write unchanged, or the head of the queue.
+ * Settlement, timers and buttons only change state and wake the drain.
+ * Every await ends the pass, so the next pass chooses again: nothing is
+ * awaited between choosing a write and claiming it. The CSRF token is
+ * therefore had before the choice, refreshed at most once until a send.
+ */
 async function drainResume(
   ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
+  let refreshed = false;
   for (;;) {
     if (!current(ctx, resumeId)) return;
     const record = ctx.deps.store.recordFor(resumeId);
-    const authState = ctx.deps.auth.authState.value;
-    const ownerId = ctx.deps.auth.user.value?.id;
-    if (record?.completeReadRequired === true) {
-      // Nothing is sent over an unread revision: the queue reads first.
+    if (record === undefined || record.sessionLost) return;
+    const held = record.attempt === null ? null : toRaw(record.attempt);
+    if (held !== null && heldConflict(record)) {
+      clearWriteRetry(ctx, resumeId);
+      return;
+    }
+    if (held !== null && waitsForPerson(ctx, resumeId, held)) return;
+    if (held === null && queuedConflict(record)) {
+      const next = reconcileHead(ctx, resumeId, record);
+      if (next === 'stop') return;
+      if (next === 'again') continue;
+    }
+    if (record.completeReadRequired && !rebaseHeld(ctx, resumeId, held)) {
       if (
-        !readBarrierDue(record, authState, ownerId)
+        !readBarrierDue(
+          record,
+          ctx.deps.auth.authState.value,
+          ctx.deps.auth.user.value?.id,
+        )
         || !(await completeReadBarrier(ctx, resumeId))
       ) {
         return;
       }
+      reconcileHeld(ctx, resumeId, record.accepted);
       continue;
     }
     ctx.readRetries.delete(resumeId);
-    if (!canDrain(record, authState, ownerId)) return;
-    const queueItem = toRaw(record.pending[0]!);
-    if (!dependenciesAcknowledged(record, queueItem)) return;
-    if (queueItem.kind === 'templateGroup') {
-      if (record.templateState === null) {
-        ctx.deps.store.setTemplateState(resumeId, {
-          kind: 'queued',
-          nextChild: 0,
-        });
+    if (record.opaquePhotoOutcome !== null) return;
+    if (held !== null) {
+      const next = heldNext(ctx, resumeId, held);
+      if (next.kind === 'wait') return;
+      if (next.kind === 'sleep') {
+        await ctx.deps.runtime.delay(next.ms);
         continue;
       }
-      if (record.templateState.kind === 'partial') return;
-      if (record.templateState.kind === 'complete') {
-        ctx.deps.store.dropHead(resumeId, queueItem.id);
-        continue;
-      }
-      if (
-        record.templateState.kind === 'queued'
-        && record.templateState.nextChild === 0
-      ) {
-        const groupDecision = reconcileTemplateGroup(
-          queueItem,
-          record.accepted,
+      if (next.kind === 'cutoff') {
+        await resolveUnknown(
+          ctx,
+          resumeId,
+          held.queueItem,
+          held.command,
+          held.attempt,
+          next.reason,
         );
-        if (groupDecision.kind === 'satisfied') {
-          ctx.deps.store.setTemplateState(resumeId, null);
-          ctx.deps.store.dropHead(resumeId, queueItem.id);
-          continue;
-        }
-        if (groupDecision.kind === 'conflict') {
-          ctx.deps.store.markConflict(resumeId, groupDecision.conflict);
-          return;
-        }
-      }
-      const command = nextTemplateChild(queueItem, record.templateState);
-      if (command === null) return;
-      if (!(await dispatchCommand(ctx, resumeId, queueItem, command))) return;
-      continue;
-    }
-    const decision = reconcileCommand(queueItem, record.accepted);
-    if (decision.kind === 'satisfied') {
-      ctx.deps.store.dropHead(resumeId, queueItem.id);
-      continue;
-    }
-    if (decision.kind === 'conflict') {
-      if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
         continue;
       }
-      ctx.deps.store.markConflict(resumeId, decision.conflict);
-      return;
+    } else {
+      clearWriteRetry(ctx, resumeId);
+      if (
+        !canDrain(
+          record,
+          ctx.deps.auth.authState.value,
+          ctx.deps.auth.user.value?.id,
+        )
+      ) {
+        return;
+      }
     }
-    if (!(await dispatchCommand(ctx, resumeId, queueItem, queueItem))) return;
+    const ownerId = held?.queueItem.ownerId ?? record.pending[0]!.ownerId;
+    const csrfToken = dispatchToken(ctx, resumeId, ownerId);
+    if (csrfToken === null) {
+      // Only a signed-in session missing its token refreshes here; while the
+      // session itself is in doubt the page's session check runs instead.
+      if (
+        refreshed
+        || record.sessionLost
+        || ctx.deps.auth.authState.value !== 'authenticated'
+        || !(await refreshCsrf(ctx))
+      ) {
+        return;
+      }
+      refreshed = true;
+      continue;
+    }
+    const sent = held === null
+      ? await sendHead(ctx, resumeId, record, csrfToken)
+      : await resend(ctx, resumeId, held, csrfToken);
+    if (sent === 'stop') return;
+    if (sent === 'sent') refreshed = false;
   }
 }
 
-async function dispatchCommand(
+/** The queue's head, not sent yet, has a conflict recorded. */
+function queuedConflict(record: ResumeRecord): boolean {
+  const head = record.pending[0];
+  return head !== undefined
+    && record.conflicts.some(({ id }) => id === head.id);
+}
+
+/**
+ * Settles the queue's head against what the editor last accepted, before it
+ * is sent: one the resume already holds leaves the queue, a conflict stops
+ * the queue for the person, and a refresh over changed text is dropped. A
+ * recorded conflict is reconciled again, so it follows later typing.
+ */
+function reconcileHead(
   ctx: OperationContext,
   resumeId: string,
-  queueItem: EditorQueueItem,
-  command: AtomicEditorCommand,
-): Promise<boolean> {
-  const record = ctx.deps.store.recordFor(resumeId);
-  let csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (record !== undefined && csrfToken === null && !record.sessionLost) {
-    try {
-      await ctx.deps.auth.refresh();
-    } catch {
-      return false;
+  record: ResumeRecord,
+): 'send' | 'again' | 'stop' {
+  const queueItem = toRaw(record.pending[0]!);
+  if (queueItem.kind === 'templateGroup') {
+    if (record.templateState === null) {
+      ctx.deps.store.setTemplateState(resumeId, {
+        kind: 'queued',
+        nextChild: 0,
+      });
+      return 'again';
     }
-    if (!current(ctx, resumeId)) return false;
-    csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
+    if (record.templateState.kind === 'partial') return 'stop';
+    if (record.templateState.kind === 'complete') {
+      ctx.deps.store.dropHead(resumeId, queueItem.id);
+      return 'again';
+    }
+    if (
+      record.templateState.kind === 'queued'
+      && record.templateState.nextChild === 0
+    ) {
+      const groupDecision = reconcileTemplateGroup(
+        queueItem,
+        record.accepted,
+      );
+      if (groupDecision.kind === 'satisfied') {
+        ctx.deps.store.setTemplateState(resumeId, null);
+        ctx.deps.store.dropHead(resumeId, queueItem.id);
+        return 'again';
+      }
+      if (groupDecision.kind === 'conflict') {
+        ctx.deps.store.markConflict(resumeId, groupDecision.conflict);
+        return 'stop';
+      }
+    }
+    return 'send';
   }
-  if (record === undefined || csrfToken === null) return false;
-  const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
-  ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  if (!owns(ctx, resumeId, queueItem)) return false;
-  await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
-  return true;
+  const decision = reconcileCommand(queueItem, record.accepted);
+  if (decision.kind === 'satisfied') {
+    ctx.deps.store.dropHead(resumeId, queueItem.id);
+    return 'again';
+  }
+  if (decision.kind === 'conflict') {
+    if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
+      return 'again';
+    }
+    ctx.deps.store.markConflict(resumeId, decision.conflict);
+    return 'stop';
+  }
+  return 'send';
 }
 
-export async function retry(
+/**
+ * Step 5 for the queue's head: chooses it, freezes its attempt and claims it
+ * from the queue, with nothing awaited between, then sends it. Returns
+ * whether it was sent, the drain looks again, or the drain stops.
+ */
+async function sendHead(
+  ctx: OperationContext,
+  resumeId: string,
+  record: ResumeRecord,
+  csrfToken: string,
+): Promise<'sent' | 'again' | 'stop'> {
+  const queueItem = toRaw(record.pending[0]!);
+  if (!dependenciesAcknowledged(record, queueItem)) return 'stop';
+  const next = reconcileHead(ctx, resumeId, record);
+  if (next !== 'send') return next;
+  const state = record.templateState;
+  let command: AtomicEditorCommand | null = null;
+  if (queueItem.kind !== 'templateGroup') {
+    command = queueItem;
+  } else if (state?.kind === 'queued' || state?.kind === 'running') {
+    command = nextTemplateChild(queueItem, state);
+  }
+  if (command === null) return 'stop';
+  const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
+  ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
+  // Not claimed: the head is no longer this object, so choose again.
+  if (!owns(ctx, resumeId, attempt)) return 'again';
+  await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
+  return 'sent';
+}
+
+/** Refreshes the session's CSRF token; whether the refresh completed. */
+async function refreshCsrf(ctx: OperationContext): Promise<boolean> {
+  try {
+    await ctx.deps.auth.refresh();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Step 5 for the held write: sends it again unchanged, marked as on its way
+ * so its retry button waits. It is the write this pass chose, with nothing
+ * awaited since.
+ */
+async function resend(
+  ctx: OperationContext,
+  resumeId: string,
+  held: AttemptState,
+  csrfToken: string,
+): Promise<'sent' | 'again'> {
+  if (!owns(ctx, resumeId, held.attempt)) return 'again';
+  const key = held.attempt.idempotencyKey;
+  startResend(ctx, resumeId, held.queueItem.id);
+  ctx.deps.store.markSending(resumeId, key, true);
+  try {
+    await send(
+      ctx,
+      resumeId,
+      held.queueItem,
+      held.command,
+      held.attempt,
+      csrfToken,
+    );
+  } finally {
+    if (current(ctx, resumeId)) {
+      ctx.deps.store.markSending(resumeId, key, false);
+    }
+  }
+  return 'sent';
+}
+
+/**
+ * Asks for the held write `commandId` to go out again: Retry now, Try
+ * again, or a photo retry. It only changes the schedule; the drain sends.
+ */
+export function retry(
   ctx: OperationContext,
   resumeId: string,
   commandId: string,
 ): Promise<void> {
-  const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (
-    active === null
-    || active === undefined
-    || active.command.id !== commandId
-  ) {
-    return;
+  const held = ctx.deps.store.recordFor(resumeId)?.attempt;
+  if (held === null || held === undefined || held.command.id !== commandId) {
+    return Promise.resolve();
   }
-  const queueItem = toRaw(active.queueItem);
-  const command = toRaw(active.command);
-  const attempt = toRaw(active.attempt);
-  if (ctx.deps.runtime.nowEpochMs() >= attempt.retryCutoff) {
-    await resolveUnknown(
-      ctx,
-      resumeId,
-      queueItem,
-      command,
-      attempt,
-      'transport',
-    );
-  } else {
-    const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-    if (csrfToken === null) return;
-    await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
-  }
-  if (!current(ctx, resumeId)) return;
-  // A retry settles outside the drain, so the drain resumes the queue and
-  // completes any read barrier the settlement left.
-  await flush(ctx, resumeId);
+  requestRetry(ctx, resumeId, toRaw(held));
+  return flush(ctx, resumeId);
 }
 
+/** Checks the session again, then goes on as `wake` does after recovery. */
 export async function resumeAfterAuth(
   ctx: OperationContext,
   resumeId: string,
 ): Promise<void> {
   await ctx.deps.auth.refresh();
   if (!current(ctx, resumeId)) return;
+  await wake(ctx, resumeId, true);
+}
+
+/**
+ * Goes on with the queue once the session is known to be its owner's: every
+ * drain that stopped for authentication runs again. After the session was in
+ * doubt or lost (`recovered`), the queue first reads the resume in full,
+ * through the read barrier, so the read is retried on the schedule and the
+ * queue goes on when it completes; a held write is then sent at once. Work
+ * owned by someone else than the signed-in person is left alone.
+ */
+export function wake(
+  ctx: OperationContext,
+  resumeId: string,
+  recovered: boolean,
+): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
   const ownerId = ctx.deps.auth.user.value?.id;
   const retainedOwner
     = record?.attempt?.queueItem.ownerId ?? record?.pending[0]?.ownerId;
   if (
-    record === undefined
+    !current(ctx, resumeId)
+    || record === undefined
     || ownerId === undefined
     || ctx.deps.auth.authState.value !== 'authenticated'
     || (retainedOwner !== undefined && retainedOwner !== ownerId)
   ) {
-    return;
+    return Promise.resolve();
   }
-  const result = await ctx.deps.api.read(resumeId);
-  if (!current(ctx, resumeId) || result.kind !== 'complete') return;
-  adoptRead(ctx, resumeId, result.accepted);
-  ctx.deps.store.clearSessionLost(resumeId);
-  const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  if (active !== null && active !== undefined) {
-    await retry(ctx, resumeId, active.command.id);
-  } else {
-    schedule(ctx, resumeId);
+  if (recovered) {
+    ctx.deps.store.clearSessionLost(resumeId);
+    ctx.deps.store.requireCompleteRead(resumeId);
+    const held = record.attempt;
+    if (held !== null) requestRetry(ctx, resumeId, toRaw(held));
   }
+  return flush(ctx, resumeId);
 }
 
 /**
@@ -280,10 +431,7 @@ export async function completeReadBarrier(
     return false;
   }
   const failures = ctx.readRetries.get(resumeId)?.failures ?? 0;
-  const backoff = Math.min(
-    READ_RETRY_FIRST_MS * 2 ** failures,
-    READ_RETRY_MAX_MS,
-  );
+  const backoff = retryDelay(failures);
   const delay = result.kind === 'rate-limited'
     ? Math.max(result.retryAfterMs ?? 0, backoff)
     : backoff;
@@ -304,6 +452,7 @@ export async function completeReadBarrier(
 export function stop(ctx: CoordinatorContext, resumeId: string): void {
   ctx.stopped.add(resumeId);
   ctx.readRetries.delete(resumeId);
+  clearWriteRetry(ctx, resumeId);
   const timer = ctx.timers.get(resumeId);
   if (timer !== undefined) clearTimeout(timer);
   ctx.timers.delete(resumeId);

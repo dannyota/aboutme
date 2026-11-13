@@ -7,6 +7,7 @@ export type WorkspaceCopy<T extends object> = Readonly<
 type StateMarkCopy = {
   readonly saved: string;
   readonly unsaved: string;
+  readonly retrying: string;
   readonly saving: string;
   readonly failed: string;
   readonly draft: string;
@@ -17,6 +18,7 @@ export const workspaceCopy: WorkspaceCopy<StateMarkCopy> = {
   vi: {
     saved: 'Đã lưu',
     unsaved: 'Chưa lưu',
+    retrying: 'Chưa lưu, đang thử lại',
     saving: 'Đang lưu…',
     failed: 'Lưu không thành công',
     draft: 'Bản nháp',
@@ -25,6 +27,7 @@ export const workspaceCopy: WorkspaceCopy<StateMarkCopy> = {
   en: {
     saved: 'Saved',
     unsaved: 'Unsaved',
+    retrying: 'Not saved, retrying',
     saving: 'Saving…',
     failed: 'Save failed',
     draft: 'Draft',

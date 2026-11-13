@@ -7,12 +7,21 @@ import { reconcileTemplateChild, type EditorQueueItem } from './templateGroup';
 import type { AcceptedResume } from './types';
 import {
   assertNever,
-  dispatchToken,
+  clearWriteRetry,
   holdFailed,
   owns,
+  retryDelay,
+  STALE_REBASE_LIMIT,
   stopForSessionLoss,
   UNKNOWN_REPLAY_DELAY_MS,
 } from './coordinatorGuards';
+import {
+  askAgain,
+  backOff,
+  startWriteRetry,
+  waitBriefly,
+  waitForServer,
+} from './coordinatorRetry';
 import {
   adoptRead,
   refreshAndReconcile,
@@ -28,8 +37,10 @@ import {
 } from './coordinatorProject';
 
 /**
- * Sends the write in flight and settles its answer. An answer that comes
- * back after the write stopped belonging to this operation is ignored.
+ * Sends `attempt` and settles its answer; only the drain calls it. An answer
+ * that comes back after the queue stopped holding that attempt is ignored.
+ * Settling never sends: it leaves the write held, scheduled or gone, and the
+ * drain decides what goes next.
  */
 export async function send(
   ctx: OperationContext,
@@ -40,7 +51,7 @@ export async function send(
   csrfToken: string,
 ): Promise<void> {
   const result = await ctx.deps.api.dispatch(attempt, csrfToken);
-  if (!owns(ctx, resumeId, queueItem)) return;
+  if (!owns(ctx, resumeId, attempt)) return;
   await settle(ctx, resumeId, queueItem, command, attempt, result);
 }
 
@@ -78,13 +89,7 @@ async function settle(
       );
       return;
     case 'csrf-rejected':
-      await refreshThenRetrySameAttemptOnce(
-        ctx,
-        resumeId,
-        queueItem,
-        command,
-        attempt,
-      );
+      await refreshForSameAttempt(ctx, resumeId, queueItem, command, attempt);
       return;
     case 'session-lost':
       stopForSessionLoss(ctx, resumeId);
@@ -103,24 +108,16 @@ async function settle(
       );
       return;
     case 'rate-limited':
-      ctx.deps.store.holdAttempt(resumeId, {
-        kind: 'retry-later',
-        queueItem,
-        command,
-        attempt,
-        reason: 'rate-limited',
-        retryAfterMs: result.retryAfterMs,
-      });
-      return;
     case 'media-busy':
-      ctx.deps.store.holdAttempt(resumeId, {
-        kind: 'retry-later',
+      holdForLater(
+        ctx,
+        resumeId,
         queueItem,
         command,
         attempt,
-        reason: 'media-busy',
-        retryAfterMs: result.retryAfterMs,
-      });
+        result.kind,
+        result.retryAfterMs,
+      );
       return;
     case 'idempotency-reuse':
       holdFailed(
@@ -217,7 +214,47 @@ function markTemplateChildFailed(
   return true;
 }
 
-async function refreshThenRetrySameAttemptOnce(
+/**
+ * A rate limit or busy media. A write whose outcome was already unknown
+ * keeps recovering, unchanged, after the server's Retry-After; a write
+ * refused before it ran waits there until the person retries it.
+ */
+function holdForLater(
+  ctx: CoordinatorContext,
+  resumeId: string,
+  queueItem: EditorQueueItem,
+  command: AtomicEditorCommand,
+  attempt: FrozenAttempt,
+  reason: 'rate-limited' | 'media-busy',
+  retryAfterMs: number | null,
+): void {
+  if (attempt.automaticReplays > 0) {
+    ctx.deps.store.holdAttempt(resumeId, {
+      kind: 'unknown',
+      queueItem,
+      command,
+      attempt,
+      reason: 'server',
+    });
+    backOff(ctx, resumeId, queueItem.id, retryAfterMs ?? 0);
+    return;
+  }
+  ctx.deps.store.holdAttempt(resumeId, {
+    kind: 'retry-later',
+    queueItem,
+    command,
+    attempt,
+    reason,
+    retryAfterMs,
+  });
+  waitForServer(ctx, resumeId, queueItem.id, retryAfterMs ?? 0);
+}
+
+/**
+ * Refreshes the CSRF token once per attempt; the drain then sends the same
+ * attempt again with the new token. A second rejection holds it.
+ */
+async function refreshForSameAttempt(
   ctx: OperationContext,
   resumeId: string,
   queueItem: EditorQueueItem,
@@ -238,12 +275,15 @@ async function refreshThenRetrySameAttemptOnce(
   }
   ctx.csrfRetries.add(key);
   await ctx.deps.auth.refresh();
-  if (!owns(ctx, resumeId, queueItem)) return;
-  const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (csrfToken === null) return;
-  await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
+  // A write the person asked to send stays asked for.
+  if (owns(ctx, resumeId, attempt)) askAgain(ctx, resumeId, queueItem.id);
 }
 
+/**
+ * Holds a write whose outcome is unknown. Inside its retry window it is
+ * replayed once after UNKNOWN_REPLAY_DELAY_MS, then backed off; past the
+ * window the resume is read and the write reconciled against it.
+ */
 export async function resolveUnknown(
   ctx: OperationContext,
   resumeId: string,
@@ -252,27 +292,21 @@ export async function resolveUnknown(
   attempt: FrozenAttempt,
   reason: 'transport' | 'server',
 ): Promise<void> {
-  if (
-    attempt.automaticReplays === 0
-    && ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff
-  ) {
-    const replay = { ...attempt, automaticReplays: 1 as const };
+  if (ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff) {
+    const replay = attempt.automaticReplays === 0;
     ctx.deps.store.holdAttempt(resumeId, {
       kind: 'unknown',
       queueItem,
       command,
-      attempt: replay,
+      attempt: replay ? { ...attempt, automaticReplays: 1 } : attempt,
       reason,
     });
-    await ctx.deps.runtime.delay(UNKNOWN_REPLAY_DELAY_MS);
-    if (!owns(ctx, resumeId, queueItem)) return;
-    const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-    if (csrfToken === null) return;
-    if (ctx.deps.runtime.nowEpochMs() >= replay.retryCutoff) {
-      await resolveUnknown(ctx, resumeId, queueItem, command, replay, reason);
-      return;
+    startWriteRetry(ctx, resumeId, queueItem.id);
+    if (replay) {
+      waitBriefly(ctx, resumeId, queueItem.id, UNKNOWN_REPLAY_DELAY_MS);
+    } else {
+      backOff(ctx, resumeId, queueItem.id);
     }
-    await send(ctx, resumeId, queueItem, command, replay, csrfToken);
     return;
   }
   ctx.deps.store.holdAttempt(resumeId, {
@@ -280,10 +314,9 @@ export async function resolveUnknown(
     queueItem,
     command,
     attempt,
-    reason:
-      ctx.deps.runtime.nowEpochMs() >= attempt.retryCutoff ? 'cutoff' : reason,
+    reason: 'cutoff',
   });
-  if (ctx.deps.runtime.nowEpochMs() < attempt.retryCutoff) return;
+  clearWriteRetry(ctx, resumeId);
   if (command.kind === 'photoUpload') {
     await setOpaquePhoto(ctx, resumeId, queueItem, command, attempt);
     return;
@@ -291,6 +324,13 @@ export async function resolveUnknown(
   await refreshAndReconcile(ctx, resumeId);
 }
 
+/**
+ * Settles a 412 against the newer revision: a change it already holds
+ * leaves the queue, a conflict waits for the person, and an unchanged base
+ * is rebased with a new key, sent by the drain after 1, 2 and 4 s. Every
+ * winner is reconciled; only a further rebase counts against the limit,
+ * after which the rebased write waits for Try again.
+ */
 async function settleStale(
   ctx: OperationContext,
   resumeId: string,
@@ -303,43 +343,18 @@ async function settleStale(
   },
 ): Promise<void> {
   const record = ctx.deps.store.recordFor(resumeId);
-  // A link or refresh is reconciled against every winner first, so a second
-  // mismatch can still drop one that landed or whose text changed; the
-  // one-retry limit then applies below.
-  const project = command.kind === 'projectLink'
-    || command.kind === 'projectRefresh';
-  const secondStale = attempt.staleRebases === 1;
-  if (record === undefined || (secondStale && !project)) {
-    holdFailed(
-      ctx.deps.store,
-      resumeId,
-      queueItem,
-      command,
-      attempt,
-      'second-stale',
-    );
-    return;
-  }
+  if (record === undefined) return;
   let snapshot: AcceptedResume;
   if (command.kind === 'metadataField' || command.kind === 'resumeDelete') {
     const complete = await ctx.deps.api.read(resumeId);
-    if (!owns(ctx, resumeId, queueItem)) return;
+    if (!owns(ctx, resumeId, attempt)) return;
     if (complete.kind === 'session-lost') {
       stopForSessionLoss(ctx, resumeId);
       return;
     }
-    if (complete.kind === 'rate-limited') {
-      ctx.deps.store.holdAttempt(resumeId, {
-        kind: 'retry-later',
-        queueItem,
-        command,
-        attempt,
-        reason: 'rate-limited',
-        retryAfterMs: complete.retryAfterMs,
-      });
-      return;
-    }
     if (complete.kind !== 'complete') {
+      // The write is held as unknown and sent again on the retry schedule;
+      // its next 412 reads the resume again.
       ctx.deps.store.holdAttempt(resumeId, {
         kind: 'unknown',
         queueItem,
@@ -347,6 +362,12 @@ async function settleStale(
         attempt,
         reason: 'server',
       });
+      backOff(
+        ctx,
+        resumeId,
+        queueItem.id,
+        complete.kind === 'rate-limited' ? complete.retryAfterMs ?? 0 : 0,
+      );
       return;
     }
     const adoption = adoptRead(ctx, resumeId, complete.accepted);
@@ -373,17 +394,6 @@ async function settleStale(
   if (settleStaleProject(ctx, resumeId, queueItem, snapshot, decision)) {
     return;
   }
-  if (secondStale) {
-    holdFailed(
-      ctx.deps.store,
-      resumeId,
-      queueItem,
-      command,
-      attempt,
-      'second-stale',
-    );
-    return;
-  }
   if (decision.kind === 'satisfied') {
     if (queueItem.kind === 'templateGroup') {
       settleTemplateComplete(ctx, resumeId, queueItem, snapshot);
@@ -398,8 +408,19 @@ async function settleStale(
   }
   const rebased = {
     ...freezeAttempt(command, snapshot, ctx.deps.runtime),
-    staleRebases: 1 as const,
+    staleRebases: attempt.staleRebases + 1,
   };
+  if (attempt.staleRebases >= STALE_REBASE_LIMIT) {
+    holdFailed(
+      ctx.deps.store,
+      resumeId,
+      queueItem,
+      command,
+      { ...rebased, staleRebases: attempt.staleRebases },
+      'stale-limit',
+    );
+    return;
+  }
   ctx.deps.store.holdAttempt(resumeId, {
     kind: 'unknown',
     queueItem,
@@ -407,9 +428,15 @@ async function settleStale(
     attempt: rebased,
     reason: 'server',
   });
-  const csrfToken = dispatchToken(ctx, resumeId, queueItem.ownerId);
-  if (csrfToken === null) return;
-  await send(ctx, resumeId, queueItem, command, rebased, csrfToken);
+  // Rebases wait 1, 2 and 4 s, so revisions bumped in quick succession
+  // settle before the write is sent over them again.
+  waitBriefly(
+    ctx,
+    resumeId,
+    queueItem.id,
+    retryDelay(attempt.staleRebases),
+    true,
+  );
 }
 
 async function setOpaquePhoto(
@@ -423,7 +450,7 @@ async function setOpaquePhoto(
     = ctx.deps.store.recordFor(resumeId)?.accepted.document.personalDetails
       .photo?.key;
   const result = await ctx.deps.api.read(resumeId);
-  if (!owns(ctx, resumeId, queueItem)) return;
+  if (!owns(ctx, resumeId, attempt)) return;
   let observed: 'unchanged' | 'changed' | 'unavailable' = 'unavailable';
   if (result.kind === 'complete') {
     observed

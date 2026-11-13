@@ -6,7 +6,9 @@ import type { SaveState } from '../../editor/types';
 
 const props = defineProps<{ readonly state: SaveState }>();
 
-const mappedState = computed<'saved' | 'unsaved' | 'saving' | 'failed'>(() => {
+const mappedState = computed<
+  'saved' | 'unsaved' | 'retrying' | 'saving' | 'failed'
+>(() => {
   switch (props.state) {
     case 'idle':
     case 'saved':
@@ -15,6 +17,8 @@ const mappedState = computed<'saved' | 'unsaved' | 'saving' | 'failed'>(() => {
       return 'saving';
     case 'dirty':
       return 'unsaved';
+    case 'retrying':
+      return 'retrying';
     case 'offline':
     case 'error':
     case 'conflict':

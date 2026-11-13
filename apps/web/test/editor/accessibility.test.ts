@@ -33,6 +33,7 @@ describe('editor accessibility boundaries', () => {
     'dirty',
     'saving',
     'saved',
+    'retrying',
     'offline',
     'error',
     'conflict',

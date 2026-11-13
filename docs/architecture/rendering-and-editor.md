@@ -42,8 +42,9 @@ reduced-motion behavior stay on the shared accessible component boundary.
 The web app carries a full optimistic-save editor behind a per-resume mutation
 queue. User actions become typed commands that capture target/base/intended/
 context before replay, coalesce only adjacent same-target value edits, and
-dispatch after one second of inactivity. A revision CAS reconciles stale writes,
-offers one safe rebase per conflict, and surfaces dedicated field, entry,
+dispatch after one second of inactivity. A revision CAS reconciles every stale
+winner, rebases a write whose base is unchanged with a new key up to three
+times, then holds it for Try again, and surfaces dedicated field, entry,
 reorder, structure, crop/photo, and destructive reconfirmation actions.
 Templates apply against optimistic state, preserve content, and emit a
 deterministic placement delta with exact partial recovery and guarded undo. Text

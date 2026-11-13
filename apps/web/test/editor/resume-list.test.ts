@@ -484,7 +484,7 @@ describe('useResumeList', () => {
       store,
       coordinator,
       actionsFor: () => ({
-        edit: vi.fn(() => ({ kind: 'enqueued' })),
+        edit: vi.fn(() => ({ kind: 'enqueued', command: { id: 'command-1' } })),
       }) as never,
       authState: computed(() => 'authenticated') as never,
     });
@@ -517,7 +517,7 @@ describe('useResumeList', () => {
       store: useResumeStore(),
       coordinator: { flush: vi.fn(async () => {}) } as never,
       actionsFor: () => ({
-        edit: vi.fn(() => ({ kind: 'enqueued' })),
+        edit: vi.fn(() => ({ kind: 'enqueued', command: { id: 'command-1' } })),
       }) as never,
       authState: computed(() => 'authenticated') as never,
     });
@@ -601,7 +601,9 @@ describe('useResumeList', () => {
     const list = useResumeList({
       api,
       store,
-      actionsFor: () => ({ edit: () => ({ kind: 'enqueued' }) }) as never,
+      actionsFor: () => ({
+        edit: () => ({ kind: 'enqueued', command: { id: 'command-1' } }),
+      }) as never,
       authState: computed(() => 'authenticated') as never,
     });
     await nextTick();
@@ -635,7 +637,7 @@ describe('useResumeList', () => {
         coordinator: { flush } as unknown as ResumeMutationCoordinator,
         refreshAuth,
         actionsFor: () => ({
-          edit: () => ({ kind: 'enqueued' }),
+          edit: () => ({ kind: 'enqueued', command: { id: 'command-1' } }),
         }) as never,
         authState: computed(() => 'authenticated') as never,
       });

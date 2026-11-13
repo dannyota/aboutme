@@ -133,6 +133,7 @@ export function safeSaveState(saveState: string | null): string {
     'dirty',
     'error',
     'offline',
+    'retrying',
     'saved',
     'saving',
     'session-lost',
