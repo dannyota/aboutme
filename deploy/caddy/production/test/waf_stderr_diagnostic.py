@@ -8,7 +8,7 @@ import sys
 
 
 class JSONObject(list):
-    """Keep duplicate keys so ambiguous metadata stays redacted."""
+    pass
 
 
 LOGGERS = frozenset({

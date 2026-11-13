@@ -1,5 +1,3 @@
-"""Compatibility entry point for the owned-process lifecycle suite."""
-
 from pathlib import Path
 import runpy
 import sys

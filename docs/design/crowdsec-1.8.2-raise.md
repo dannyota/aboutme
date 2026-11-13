@@ -21,7 +21,7 @@ Baseline references below `host/`, `tests/`, and `edge/` start at `deploy/vn/`.
 | `tests/crowdsec-offline-test.sh:24`, `:27`, `:30`, `:91`, `:221`                                                           | Package/archive pins, reviewed 1.8.2 digest, version and suppression assertions. |
 | `tests/crowdsec-retention-fixture.sh:62`, `:340`                                                                           | Proof module and catalog fixture.                                                |
 | `tests/install-packages-test.sh:253`, `:257`, `:278`, `:288`                                                               | Held/exact package cases, commands, diagnostics.                                 |
-| `tests/install-admission-test.sh:90`, `:287`, `tests/crowdsec-vacuum-test.sh:18`, `tests/crowdsec-integration-test.sh:975` | Catalog fixtures and success label.                                              |
+| `tests/install-admission-test.sh:90`, `:287`, `tests/crowdsec-vacuum-test.sh:18`, `tests/crowdsec-integration-test.sh:982` | Catalog fixtures and success label.                                              |
 | `.github/workflows/vn-infra.yml:154`                                                                                       | Derivation delimiters and artifact filename.                                     |
 | `edge/crowdsec/scenarios/aboutme-http-rate.yaml:12`, `edge/crowdsec/scenarios/aboutme-http-status.yaml:14`                 | Version-neutral comments after re-proving six-sample bounds; keep values.        |
 | `deploy/vn/README.md:311`, `docs/design/crowdsec-http-privacy.md:42`, `:83`                                                | Current package/catalog and verified engine behavior.                            |

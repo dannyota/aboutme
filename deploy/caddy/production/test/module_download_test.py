@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Exercise image download commands with deterministic transport failures."""
-
 import re
 import subprocess
 import tempfile

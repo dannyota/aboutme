@@ -1,5 +1,3 @@
-"""Native shutdown preserves watchdog ownership until cleanup finishes."""
-
 import os
 from pathlib import Path
 import shutil

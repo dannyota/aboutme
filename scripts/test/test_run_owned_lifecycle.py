@@ -1,5 +1,3 @@
-"""Deterministic watchdog lifecycles with real process groups and sample hooks."""
-
 import importlib.util
 import os
 from pathlib import Path

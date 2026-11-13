@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Check precise WAF leak detection and redacted failure output."""
-
 import json
 import subprocess
 import tempfile

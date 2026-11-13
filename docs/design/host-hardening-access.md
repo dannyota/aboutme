@@ -84,7 +84,7 @@ Literal/default search found these locations; values are intentionally omitted:
 - `V/README.md:68,73,74`; `V/scripts/ssh-lib.sh:2`; `V/probe/probe.sh:8`;
   `V/probe/README.md:14,15,46`.
 - `V/tests/cutover-ssh-failure-test.sh:42`;
-  `V/tests/deploy-failure-test.sh:168`; `V/tests/host-operations-test.sh:117`.
+  `V/tests/deploy-failure-test.sh:168`; `V/tests/host-operations-test.sh:126`.
 - `docs/design/vietnam-production.md:49,153`;
   `docs/design/restore-drill-networking.md:33`;
   `docs/runbooks/production.md:11,16`; `docs/runbooks/account-delete.md:21`;
