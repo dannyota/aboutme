@@ -124,12 +124,6 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
       ? value
       : 0;
   });
-  // Sticky: `refresh()` (called after every successful mutation) sends
-  // `status` back through `pending` while the replacement read is in
-  // flight. A plain `status`-derived flag would flip back to unresolved
-  // then, swapping the whole section back to the loading skeleton and
-  // hiding the success banner and passkey list a person is looking at.
-  // Once genuinely resolved once, stay resolved.
   const resolvedOnce = ref(
     status.value === 'success'
     || status.value === 'error'

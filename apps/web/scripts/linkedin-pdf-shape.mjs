@@ -1,49 +1,5 @@
 #!/usr/bin/env node
-// linkedin-pdf-shape.mjs: read one LinkedIn "Save to PDF" file and print only
-// its layout shape, so the design in docs/design/linkedin-import.md ("Facts
-// to confirm before the build") can be confirmed before the import parser is
-// built. docs/adr/0023-linkedin-import.md records why the
-// parser reads this file with pdf.js in the browser; this script reads it the
-// same way, locally, so the owner can run it on his own file and send back
-// the printed shape instead of the file itself.
-//
 // Usage: node apps/web/scripts/linkedin-pdf-shape.mjs <file.pdf>
-//        node apps/web/scripts/linkedin-pdf-shape.mjs --self-check
-//
-// Privacy rule: this script never prints a value from the profile. It only
-// prints structure: counts, positions, sizes, and a masked shape of each
-// line's text. Masking replaces every letter with "a" (or "A" if the source
-// letter is uppercase), every decimal digit with "9", and keeps punctuation
-// and whitespace unchanged; any other character (a symbol, mark, or control
-// character) becomes "#". Digits always mask to "9", with no exception, so a
-// real date, phone number, or count is never printed, only its shape.
-//
-// The one exception covers words the design already names as safe, structural
-// vocabulary rather than profile content: the known section headings, the
-// date and duration words ("Present", month names, "year(s)", "month(s)",
-// "less than a year"), the footer words ("Page", "of"), and the contact
-// labels ("LinkedIn", "Mobile", "Home", "Work", printed inside parentheses in
-// the file). Matching runs token by token over the whole line, not only when
-// the line is nothing but one of these words, so a heading printed on its own
-// line and a date word inside a longer line are both kept as themselves while
-// the rest of that same line still masks; see ALLOWLIST_PHRASES below for the
-// exact list, drawn from the design's "Lines" section and its mapping table.
-//
-// Two facts are inferred, not read directly, because reading a PDF's text
-// content (no rendering, per the design) does not expose them:
-// - "font names" are pdf.js's internal per-resource identifiers (for example
-//   "g_d0_f1"), not the embedded font's real name. The real name lives on the
-//   font object pdf.js builds only for rendering, which this script, like the
-//   import page, never triggers.
-// - "bold/normal" compares each line's font resource identifier to the most
-//   common one in the file and calls the rest "bold". Text rendering mode,
-//   the actual signal for bold, is graphics state that only rendering
-//   exposes. When the file embeds one font resource throughout, every line
-//   reports "normal"; that itself is a fact worth sending back.
-//
-// Line building, the column split, and heading detection follow the design's
-// "Lines" section as closely as a read-only fact-finder can; they are a
-// best-effort approximation for this pre-build check, not the parser itself.
 
 import { readFileSync } from 'node:fs';
 
@@ -150,10 +106,6 @@ const DURATION_RE = new RegExp(
   'iu',
 );
 
-// Producer/Creator tool names safe to print verbatim (design and ADR 0023
-// expect Apache FOP and possibly a LinkedIn value); anything else prints as
-// "other" so an unexpected tool string, which could carry more than a name,
-// never reaches the output.
 const TOOL_ALLOWLIST_RE = [/^Apache\s+FOP\b/iu, /^FOP\b/iu, /^LinkedIn\b/iu];
 
 function maskChar(ch) {

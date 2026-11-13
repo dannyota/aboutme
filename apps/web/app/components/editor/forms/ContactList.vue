@@ -285,7 +285,6 @@ const typeOptions = computed(
         {{ copy.contactDetail }} {{ index + 1 }}
       </h3>
       <div class="grid gap-4">
-        <!-- prettier-ignore -->
         <div
           class="grid grid-cols-[auto_minmax(0,1fr)_auto]
             items-end gap-2"

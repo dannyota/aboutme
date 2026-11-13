@@ -1,5 +1,3 @@
-// Privacy Policy and Terms of Service in both site languages. Every statement
-// here must describe shipped behavior or an owner decision; do not add claims.
 import { legalEn } from './legal-en';
 import { legalVi } from './legal-vi';
 import type { Locale } from './locale';

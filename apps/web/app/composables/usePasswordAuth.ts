@@ -1,28 +1,3 @@
-/**
- * `usePasswordAuth` — the password flows behind login, registration, email
- * verification, and password recovery.
- *
- * Each method wraps exactly one generated password operation. It maps only
- * exact status/code pairs from the API to a closed `PasswordAuthError` union
- * and falls back to `"unavailable"` for anything else, so a hostile or
- * drift-prone server body can never leak raw text or a prototype property
- * into the UI.
- *
- * It never stores a password or token in Nuxt state, route query,
- * local/session storage, an error object, a logger, or analytics. All
- * requests send `credentials: 'include'` so the `__Host-session` cookie (and
- * its exact same-origin pair) travel with the call.
- *
- * `login` distinguishes the existing unenrolled `204` from the `202`
- * `{data:{secondFactorRequired:true}}` an enrolled account now receives (see
- * docs/design/passkey-second-factor-contract.md): only the pending cookie is
- * set, and the caller must navigate to the fixed `/login/second-factor`
- * path, never a computed or server-echoed one. Its optional `next` is
- * validated server-side the same way as provider login's return path; the
- * enrolled case carries it on the pending row instead of an immediate
- * client-side navigation.
- */
-
 export type PasswordIssue = 'length' | 'common' | 'breached';
 
 export type PasswordAuthError

@@ -106,8 +106,6 @@ export function replaceConflictedAfterCompleteRead(
     return false;
   }
   const active = record.attempt?.queueItem.id === conflicted.id;
-  // A conflict found before sending leaves its command at the head of
-  // the queue, where a later edit of the same field may have merged in.
   if (!active && !unchangedHead(record, conflicted)) return false;
   record.accepted = cloneAccepted(accepted);
   record.completeReadRequired = false;

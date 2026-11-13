@@ -145,7 +145,6 @@ function unsupportedDocumentVersion(value: unknown): boolean {
 const PUBLIC_READ_CREDENTIALS: RequestCredentials = 'same-origin';
 
 const diagnostic = (reason: string): void => {
-  // Public diagnostics exclude URLs, response bodies, and resume data.
   console.debug(`public resume hydration skipped: ${reason}`);
 };
 

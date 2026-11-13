@@ -93,7 +93,6 @@ interface VerifyResult {
   retryAfterSeconds?: number;
 }
 
-// registerEndpoint hangs $fetch when an async handler awaits and fails.
 function registerVerify(
   path: string,
   result: VerifyResult,
