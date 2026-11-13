@@ -15,7 +15,10 @@ existing changes alone. Stay inside the brief's owned paths. Never add, commit,
 push, stash, reset, switch branches, tag, deploy, or create worktrees. Never
 read or print secret values or personal data. Use plain words and active voice,
 no em dashes, no plan, task, or phase IDs in code, comments, tests, or living
-docs. Keep Markdown at or under 400 lines, non-test Go under apps/server at or
+docs. Write no code comments except tool directives and one line on an
+external tool's behaviour that no design doc owns
+(docs/standards/engineering.md "Code comments"); delete other comments in code
+you touch. Keep Markdown at or under 400 lines, non-test Go under apps/server at or
 under 400, and other non-test code at or under 700; a file with a generated
 header is exempt. Put temporary files in $TMPDIR; the sandbox cannot write the
 primary's scratchpad. The launcher saves your final message as the report, so

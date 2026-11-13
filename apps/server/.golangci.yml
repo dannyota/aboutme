@@ -43,7 +43,6 @@ linters:
 
     # Style, tuned toward Google Go style below (settings.revive).
     - revive
-    - godot
     - misspell
     - unconvert
     - wastedassign
@@ -88,13 +87,15 @@ linters:
       severity: warning
       enable-default-rules: false
       rules:
-        # Exported identifiers need a doc comment starting with their own
-        # name: google.github.io/styleguide/go/decisions#comments.
         - name: exported
           arguments:
             - checkPrivateReceivers
             - sayRepetitiveInsteadOfStutters
-        - name: package-comments
+            - disableChecksOnConstants
+            - disableChecksOnFunctions
+            - disableChecksOnMethods
+            - disableChecksOnTypes
+            - disableChecksOnVariables
         # Error values/strings: lower-case, no trailing punctuation,
         # `Err`-prefixed sentinels, error returned last and named `err`:
         # google.github.io/styleguide/go/decisions#errors.
@@ -118,11 +119,6 @@ linters:
         - name: time-naming
         - name: range
 
-    godot:
-      # Exported/top-level doc comments are complete sentences ending in a
-      # period; inline and mid-block comments are left alone.
-      scope: declarations
-      period: true
 
     misspell:
       locale: US
