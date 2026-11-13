@@ -16,7 +16,7 @@ These hold for every version and are not reopened by this plan.
 
 ## Facts that shape the order
 
-- A live resume has no separate published snapshot. Public reads select the same row that saves write (`apps/server/internal/store/queries.sql.go:2895-2898`), and open pages refresh in place (`docs/design/realtime.md:24-25`). An MCP write to a published resume is public on the next request, with no owner review; an already open page follows within its refresh interval (`docs/design/realtime.md:18-25`).
+- A live resume has no separate published snapshot. Public reads select the same row that saves write (`GetPublicRealtimeResume` in `apps/server/sql/queries.sql`), and open pages refresh in place (`docs/design/realtime.md:24-25`). An MCP write to a published resume is public on the next request, with no owner review; an already open page follows within its refresh interval (`docs/design/realtime.md:18-25`).
 - No accept or reject of agent edits and no restorable history exist: none of the 15 MCP tools proposes or restores (`docs/design/mcp-owner-workflow.md:16-20`), and `revision` is only a compare-and-swap counter.
 - A project is a print-sized entry: title, subtitle, link, dates, description (`packages/schema/resume.schema.json:230-247`). No project page exists.
 - GitHub sign-in is built but off in production, with scope `user:email`; its client reads only the profile and email, with no repository or evidence client, and provider tokens are discarded after sign-in (`githubScopes` in `apps/server/internal/auth/github.go`, [sign-in security](../design/security-sign-in.md#oauth-transaction), [product](../design/product.md)).
