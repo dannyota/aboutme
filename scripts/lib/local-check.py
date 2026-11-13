@@ -1,5 +1,3 @@
-"""Hold the shared advisory lock in a parent, never in the checked process."""
-
 import fcntl
 import os
 import signal
@@ -12,12 +10,6 @@ PRE_MOVE_LOCK = os.path.join(".git", "aboutme-local-check.lock")
 
 
 def lock_paths(path):
-    """Return the locks to take, in order.
-
-    Branches older than the move to .dev/locks lock <main>/.git/aboutme-local-check.lock.
-    Until none remain, the shared lock is taken after that one, so old and new
-    callers exclude each other and every caller takes the two in the same order.
-    """
     path = os.path.abspath(path)
     if not path.endswith(os.sep + SHARED_LOCK):
         return [path]

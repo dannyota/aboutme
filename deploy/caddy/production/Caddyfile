@@ -1,6 +1,5 @@
 {
 	admin off
-	# Podman's default stop timeout is 10s (podman-stop(1)).
 	grace_period 5s
 	auto_https disable_redirects
 	import /run/caddy/edges.global

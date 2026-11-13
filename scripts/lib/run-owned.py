@@ -1,5 +1,3 @@
-"""Portable process owner used by run-owned.sh. No command output is captured."""
-
 import os
 import signal
 import subprocess
