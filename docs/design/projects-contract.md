@@ -36,9 +36,10 @@ Product scope is in [projects](projects.md); the decision is
 
 One read builds a resume's public snapshot: the resume row and, for each visible
 linked entry, the project's slug, page URL and, for a project page, its resolved
-text and fields. The snapshot is taken in a single statement, so it is
-consistent with the resume revision it carries. It never contains a project
-`id`.
+text and fields. The project list and a project page also read every linked
+project's fields and text without its description, to decide which have a name
+to show. The snapshot is taken in a single statement, so it is consistent with
+the resume revision it carries. It never contains a project `id`.
 
 - The frozen public render request carries the snapshot for all three HTML pages
   of a resume.
@@ -241,23 +242,27 @@ adds the renderer replaces it with the renderer's exact output.
   the entry hides its own. The resume entry decides only availability and order,
   with one exception: `entryLink`, the entry's own `https` link, sent only when
   it differs from both the repository and the demo address. The comparison
-  lowercases the scheme and host, drops a default port, and reads an empty path
-  as `/`; the rest must match byte for byte. The link is sent as stored.
+  lowercases the scheme and host as JavaScript does, drops a default or empty
+  port, and reads an empty path as `/`; the rest must match byte for byte. The
+  link is sent as stored.
 - Go chooses one language per project, as [Language](projects.md#language) says,
   falling back to the default language when the chosen text's name is blank. It
   sends only that text, with `lang` set when it is not the resume language's
-  primary subtag, including for an `und` resume.
+  primary subtag, including for an `und` resume. A role, summary, outcome or
+  description that is blank by the renderer's trim rule is left out, as if
+  absent.
 - `uiLng` is `vi` when the resume language's primary subtag is `vi`, otherwise
   `en`, as for the gate. Dates go as stored; the renderer formats them with
   `dateFormat`, as on the resume page.
 - A list row carries at most its first six technologies and counts the rest in
   `moreTechnologies`, omitted when none; a project page carries all of them.
-- The list page has no description. A project page's is its summary, else its
-  outcome cut at the last grapheme boundary within 160 characters, else none; an
-  empty `preview.description` omits both description elements. Nothing else is
-  cut: the renderer and the validator admit a preview description of up to 300
-  code points and 1,200 bytes, and a preview title of up to 683 code points and
-  2,727 bytes, the longest a stored project and resume can produce.
+- The list page has no description. A project page's is its summary, else the
+  first 160 code points of its outcome, else none; a summary blank by the
+  renderer's trim rule counts as absent, and an empty `preview.description`
+  omits both description elements. Nothing else is cut: the renderer and the
+  validator admit a preview description of up to 300 code points and 1,200
+  bytes, and a preview title of up to 683 code points and 2,727 bytes, the
+  longest a stored project and resume can produce.
 
 Go serves 503 for rendered HTML that breaks any of these rules:
 
