@@ -212,6 +212,58 @@ preview a third party has already fetched cannot be recalled
 No project page view is counted and nothing about a viewer is stored
 ([ADR 0022](../adr/0022-viewer-privacy-and-counting.md)).
 
+## Render envelope
+
+Go renders both pages through the direct render boundary in two closed modes,
+`project-list` and `project`, beside the resume's `continuous` and the `gate`.
+The request types are `ProjectListRenderRequest` and `ProjectRenderRequest` in
+`apps/server/internal/directrender/project_types.go` and their mirror in
+`apps/web/server/utils/public-render/project-envelope.ts`.
+`apps/server/internal/publicapi/testdata/project-render.json` is the shared
+corpus: each envelope decodes into its Go type with no unknown field and encodes
+back unchanged, and each HTML is what the renderer writes and the validator
+accepts. Until the renderer exists that HTML is a reference; the change that
+adds the renderer replaces it with the renderer's exact output.
+
+- Go builds both requests from one admitted snapshot. They carry no project id,
+  entry id, account data, contact detail, photo or other resume content.
+- Every shown project field is the library project's, including its dates when
+  the entry hides its own. The resume entry decides only availability and order,
+  with one exception: `entryLink`, the entry's own `https` link, sent only when
+  it differs from both the repository and the demo address once scheme and host
+  are lowercased and a default port and one trailing `/` are removed.
+- Go chooses one language per project, as [Language](projects.md#language) says,
+  falling back to the default language when the chosen text's name is blank. It
+  sends only that text, with `lang` set when it is not the resume language's
+  primary subtag, including for an `und` resume.
+- `uiLng` is `vi` when the resume language's primary subtag is `vi`, otherwise
+  `en`, as for the gate. Dates go as stored; the renderer formats them with
+  `dateFormat`, as on the resume page.
+- The list page has no description. A project page's is its summary, else the
+  first 160 characters of its outcome, else none; an empty `preview.description`
+  omits both description elements.
+
+Go serves 503 for rendered HTML that breaks any of these rules:
+
+- A doctype, at most 2 MiB, and `html` with `lang` equal to the resume's `lng`
+  and at most a `data-scheme` equal to `colorScheme`.
+- The head: charset and viewport, the exact title, `canonical` equal to
+  `pageUrl`, the favicon only when `faviconHref` is set, and the resume page's
+  preview elements with `og:type` `website`, `og:url` equal to `pageUrl`, and
+  the description pair only when set. One inline `style` that passes the inline
+  style check, and no stylesheet but the versioned `print-fonts.css`.
+- No `script`, `form`, `iframe`, `img`, media or embedding element, and no event
+  or resource attribute.
+- One `main#public-project`, one `h1`, and one skip link to the main region.
+- Anchors: the credit once, as on the resume page; `a.public-back` once, to the
+  resume `url`, with the accessible name in the
+  [page design](ui/project-pages.md#shared-frame); internal links only to the
+  resume, the list and the requested projects, with only `href` and `class`, and
+  on the list each project once; `a.project-external` only for the request's
+  repository, demo and entry links, each at most once, with
+  `rel="noopener noreferrer nofollow"`; and, only inside `.project-description`,
+  the sanitizer's tags and `https`, `mailto` or `tel` links.
+
 ## Print
 
 The print snapshot envelope gains, in a new envelope version, a map from entry
