@@ -307,16 +307,11 @@ type ResumeShareSignalDay struct {
 }
 
 type ResumeShowcase struct {
-	ResumeID      uuid.UUID
-	RequestedAt   time.Time
-	Role          *string
-	ReviewKey     string
-	CardVersion   string
-	TemplateID    *string
-	ReviewedKey   *string
-	ReviewOutcome *string
-	ReviewedAt    *time.Time
-	FirstListedAt *time.Time
+	ResumeID    uuid.UUID
+	RequestedAt time.Time
+	Role        *string
+	CardVersion string
+	TemplateID  *string
 }
 
 type ResumeViewDay struct {

@@ -64,22 +64,14 @@ SELECT resume_id, requested_at, role, card_version, template_id FROM resume_show
 WHERE resume_id = $1
 `
 
-type GetResumeShowcaseRow struct {
-	ResumeID    uuid.UUID
-	RequestedAt time.Time
-	Role        *string
-	CardVersion string
-	TemplateID  *string
-}
-
 // Community showcase queries (docs/design/showcase.md, ADR 0028). The
 // resume_showcase row exists only while the opt-in does. Statements name their
 // columns, never * or s.*: sqlc expands a star into every column when it
 // generates, so a released binary fails once a migration drops one
 // (docs/design/release-floors.md "Schema floor").
-func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseRow, error) {
+func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcase, resumeID)
-	var i GetResumeShowcaseRow
+	var i ResumeShowcase
 	err := row.Scan(
 		&i.ResumeID,
 		&i.RequestedAt,
@@ -96,18 +88,10 @@ WHERE resume_id = $1
 FOR UPDATE
 `
 
-type GetResumeShowcaseForUpdateRow struct {
-	ResumeID    uuid.UUID
-	RequestedAt time.Time
-	Role        *string
-	CardVersion string
-	TemplateID  *string
-}
-
 // Locks the opt-in row so concurrent derived-value writes serialize.
-func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseForUpdateRow, error) {
+func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcaseForUpdate, resumeID)
-	var i GetResumeShowcaseForUpdateRow
+	var i ResumeShowcase
 	err := row.Scan(
 		&i.ResumeID,
 		&i.RequestedAt,
@@ -134,8 +118,6 @@ type InsertResumeShowcaseParams struct {
 	TemplateID  *string
 }
 
-// review_key and the other review columns are unused; the insert leaves them
-// to their defaults (docs/design/showcase.md "Data and contract").
 func (q *Queries) InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error {
 	_, err := q.db.Exec(ctx, insertResumeShowcase,
 		arg.ResumeID,
@@ -179,23 +161,15 @@ JOIN resumes r ON r.id = s.resume_id
 WHERE r.user_id = $1
 `
 
-type ListResumeShowcasesForUserRow struct {
-	ResumeID    uuid.UUID
-	RequestedAt time.Time
-	Role        *string
-	CardVersion string
-	TemplateID  *string
-}
-
-func (q *Queries) ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ListResumeShowcasesForUserRow, error) {
+func (q *Queries) ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error) {
 	rows, err := q.db.Query(ctx, listResumeShowcasesForUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListResumeShowcasesForUserRow
+	var items []ResumeShowcase
 	for rows.Next() {
-		var i ListResumeShowcasesForUserRow
+		var i ResumeShowcase
 		if err := rows.Scan(
 			&i.ResumeID,
 			&i.RequestedAt,

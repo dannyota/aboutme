@@ -2,32 +2,24 @@ package showcase
 
 import "testing"
 
-// dropShowcaseReviewColumns removes the unused review columns, their checks,
-// and the approval index, as the drop migration will.
-const dropShowcaseReviewColumns = `
-DROP INDEX resume_showcase_listing_idx;
-ALTER TABLE resume_showcase
-    DROP CONSTRAINT resume_showcase_review_key_check,
-    DROP CONSTRAINT resume_showcase_reviewed_key_check,
-    DROP CONSTRAINT resume_showcase_review_outcome_check,
-    DROP CONSTRAINT resume_showcase_review_columns_check,
-    DROP CONSTRAINT resume_showcase_first_listed_check,
-    DROP COLUMN review_key,
-    DROP COLUMN reviewed_key,
-    DROP COLUMN review_outcome,
-    DROP COLUMN reviewed_at,
-    DROP COLUMN first_listed_at;
-`
-
-// After the review columns are dropped, every showcase query this release
-// runs still works: the opt-in insert, the locked role and derived-value
-// updates, the owner's read and list, the public listing, the recompute, the
-// account export, and the opt-out delete (docs/design/release-floors.md
-// "Schema floor").
+// On the migrated head schema, which has no review columns, every showcase
+// query runs: the opt-in insert, the locked role and derived-value updates,
+// the owner's read and list, the public listing, the recompute, the account
+// export, and the opt-out delete (docs/design/release-floors.md "Schema
+// floor").
 func TestServiceRunsWithoutShowcaseReviewColumns(t *testing.T) {
 	e := newFreshEnv(t)
-	if _, err := e.pool.Exec(e.ctx, dropShowcaseReviewColumns); err != nil {
-		t.Fatalf("drop review columns: %v", err)
+	// Migration 00018 drops these; the test fails if it stops doing so.
+	reviewColumns := []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
+	var present int
+	if err := e.pool.QueryRow(e.ctx, `
+		SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'resume_showcase' AND column_name = ANY($1::text[])`,
+		reviewColumns).Scan(&present); err != nil {
+		t.Fatalf("count review columns: %v", err)
+	}
+	if present != 0 {
+		t.Fatalf("review columns at head = %d, want 0", present)
 	}
 	f := e.addResume(t, defaultSpec())
 

@@ -324,11 +324,11 @@ func (e *env) listed(t *testing.T, spec rowSpec, role *string) fixture {
 	return f
 }
 
-func (e *env) showcaseRow(t *testing.T, id uuid.UUID) (store.GetResumeShowcaseRow, bool) {
+func (e *env) showcaseRow(t *testing.T, id uuid.UUID) (store.ResumeShowcase, bool) {
 	t.Helper()
 	row, err := e.queries.GetResumeShowcase(e.ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return store.GetResumeShowcaseRow{}, false
+		return store.ResumeShowcase{}, false
 	}
 	if err != nil {
 		t.Fatalf("read showcase row: %v", err)

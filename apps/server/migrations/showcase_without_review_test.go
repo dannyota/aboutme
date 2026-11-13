@@ -109,10 +109,11 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 }
 
 // AC-SHOW-005, AC-SHOW-015: an insert without review_key takes the default, and
-// the listing index serves the opt-in order.
+// the listing index serves the opt-in order. The test reads review_key, so it
+// runs at the last version that has it.
 func TestShowcaseWithoutReviewMigrationDefaultAndIndex(t *testing.T) {
 	t.Parallel()
-	tx, ctx := newResumeSchemaTx(t)
+	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
 	resumeID := insertLiveCardResume(ctx, t, tx, createTestUser(ctx, t, tx), uniqueCardSlug())
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO resume_showcase (resume_id, requested_at, card_version) VALUES ($1, now(), $2)`,
