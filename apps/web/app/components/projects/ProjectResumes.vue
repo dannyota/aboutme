@@ -9,7 +9,7 @@ import { projectPageLanguage } from '@/editor/projectLinks';
 import type { ResumeSummary } from '@/editor/resumeApi';
 import type { ProjectsCopy } from '@/i18n/projects';
 import type { Project } from './projectDocument';
-import type { ProjectResumesController } from './projectResumes';
+import type { ProjectResumesController } from './projectResumesState';
 
 // The project editor's Resumes section (docs/design/ui/projects.md "In the
 // project screens"): every resume of the account, Shown or Add to this

@@ -167,7 +167,7 @@ apps/web/app/components/projects/projectDocument.ts
 apps/web/app/components/projects/projectFromEntry.ts
 apps/web/app/components/projects/projectIssues.ts
 apps/web/app/components/projects/projectLinks.ts
-apps/web/app/components/projects/projectResumes.ts
+apps/web/app/components/projects/projectResumesState.ts
 apps/web/app/components/public/JoinInvite.vue
 apps/web/app/components/public/ProjectChips.vue
 apps/web/app/components/public/ProjectDescription.ts
