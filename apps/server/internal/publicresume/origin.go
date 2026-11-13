@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +30,9 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 	scheme := strings.ToLower(u.Scheme)
 	hostname := strings.ToLower(u.Hostname())
 	port := u.Port()
+	if !canonicalPort(port) {
+		return PublicOrigin{}, errors.New("public origin port must be canonical")
+	}
 	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
 		port = ""
 	}
@@ -55,6 +59,14 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 		}
 	}
 	return PublicOrigin{value: scheme + "://" + host}, nil
+}
+
+func canonicalPort(port string) bool {
+	if port == "" {
+		return true
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n >= 0 && n <= 65535 && strconv.Itoa(n) == port
 }
 
 func canonicalHost(hostname string) bool {

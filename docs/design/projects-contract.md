@@ -1,9 +1,10 @@
 # Projects contract
 
 Status: Accepted by the owner (2026-11-11). Implemented: the library, linking,
-deletion, replace advancement, the public link context with `projectLinks`, and
-the project pages with their dispatch. The entry points are not yet implemented.
-Product scope is in [projects](projects.md); the decision is
+deletion, replace advancement, the public link context with `projectLinks`, the
+project pages with their dispatch, and the resume page's
+[entry points](project-entry-points.md). Product scope is in
+[projects](projects.md); the decision is
 [ADR 0029](../adr/0029-account-project-library.md).
 
 ## Routes and dispatch

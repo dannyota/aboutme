@@ -1,6 +1,6 @@
 # Project entry points
 
-Status: Accepted (2026-11-13); not yet implemented. Owns the resume page's
+Status: Accepted (2026-11-13); implemented for v0.9.7. Owns the resume page's
 render request fields, renderer rules, validator rules and hydration for the
 links to project pages. The [projects contract](projects-contract.md) owns the
 link context, the project pages and print; the

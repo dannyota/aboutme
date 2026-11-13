@@ -32,6 +32,11 @@ func TestPublicOriginEnvironmentRules(t *testing.T) {
 		{"leading-zero IPv4", "https://010.0.0.1", "production", "", false},
 		{"numeric last label", "https://example.123", "production", "", false},
 		{"canonical IPv4", "https://192.0.2.1", "production", "https://192.0.2.1", true},
+		{"leading-zero default port", "https://resume.example:0443", "production", "", false},
+		{"leading-zero port", "https://resume.example:08443", "production", "", false},
+		{"port out of range", "https://resume.example:65536", "production", "", false},
+		{"port zero", "https://resume.example:0", "production", "https://resume.example:0", true},
+		{"highest port", "https://resume.example:65535", "production", "https://resume.example:65535", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			origin, err := ParsePublicOrigin(test.raw, test.environment)
