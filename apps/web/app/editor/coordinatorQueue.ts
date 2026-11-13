@@ -19,7 +19,7 @@ import {
   retryDelay,
   stopForSessionLoss,
 } from './coordinatorGuards';
-import { dropChangedRefresh } from './coordinatorProject';
+import { dropConflictingProject } from './coordinatorProject';
 import { reconcileHeld } from './coordinatorReconcile';
 import {
   heldNext,
@@ -68,7 +68,9 @@ function retryWait(ctx: CoordinatorContext, resumeId: string): number {
 /** A link or refresh is one chosen action, not typing, so it goes at once. */
 function deliberateAction(ctx: CoordinatorContext, resumeId: string): boolean {
   const last = ctx.deps.store.recordFor(resumeId)?.pending.at(-1);
-  return last?.kind === 'projectLink' || last?.kind === 'projectRefresh';
+  return last?.kind === 'projectLink'
+    || last?.kind === 'projectLinkEntry'
+    || last?.kind === 'projectRefresh';
 }
 
 export function flush(
@@ -199,8 +201,9 @@ function queuedConflict(record: ResumeRecord): boolean {
 /**
  * Settles the queue's head against what the editor last accepted, before it
  * is sent: one the resume already holds leaves the queue, a conflict stops
- * the queue for the person, and a refresh over changed text is dropped. A
- * recorded conflict is reconciled again, so it follows later typing.
+ * the queue for the person, and a refresh over changed text or a link of an
+ * entry that changed is dropped. A recorded conflict is reconciled again, so
+ * it follows later typing.
  */
 function reconcileHead(
   ctx: OperationContext,
@@ -247,7 +250,7 @@ function reconcileHead(
     return 'again';
   }
   if (decision.kind === 'conflict') {
-    if (dropChangedRefresh(ctx, resumeId, queueItem, record.accepted)) {
+    if (dropConflictingProject(ctx, resumeId, queueItem, record.accepted)) {
       return 'again';
     }
     ctx.deps.store.markConflict(resumeId, decision.conflict);

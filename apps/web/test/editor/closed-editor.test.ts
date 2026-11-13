@@ -1,3 +1,4 @@
+import { TEMPLATES } from '@aboutme/schema/templates';
 import { createPinia, setActivePinia } from 'pinia';
 import { computed, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createResumeEditorActions } from '../../app/composables/useResumeEditor';
 import { createMutationCoordinator } from '../../app/editor/coordinator';
 import type { AtomicCommandIntent } from '../../app/editor/commands';
+import {
+  captureTemplateGroup,
+  projectTemplateTarget,
+} from '../../app/editor/templateGroup';
 import { useResumeStore } from '../../app/stores/resumes';
 import {
   fakeServer,
@@ -192,4 +197,91 @@ describe('work in flight when the editor closes', () => {
         .toMatchObject({ headline: 'Lead engineer', fullName: 'Ada Lovelace' });
     },
   );
+});
+
+/** A template that changes the resume the reopened editor read. */
+function changingTemplate(context: Session) {
+  const current = context.server.stored;
+  for (const preset of TEMPLATES) {
+    const group = captureTemplateGroup({
+      resumeId: ID,
+      ownerId: 'owner-1',
+      sequence: 1,
+      current,
+      preset,
+      dependencyIds: [],
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => crypto.randomUUID(),
+        delay: async () => {},
+      },
+    });
+    if (group !== null) return { preset, group, current };
+  }
+  throw new Error('no template changes the starting resume');
+}
+
+describe('template actions of an editor that closed', () => {
+  const stopped = { kind: 'blocked', reason: 'stopped' };
+
+  it('apply nothing to the reopened resume', () => {
+    const context = session();
+    const first = openEditor(context);
+    first.actions.stop();
+    const second = reopen(context);
+    const { preset } = changingTemplate(context);
+
+    expect(first.actions.applyTemplate(preset)).toEqual(stopped);
+    expectFreshRecord(context);
+    expect(second.actions.applyTemplate(preset).kind).toBe('enqueued');
+  });
+
+  it('undo nothing the reopened editor applied', () => {
+    const context = session();
+    const first = openEditor(context);
+    first.actions.stop();
+    const second = reopen(context);
+    const { group, current } = changingTemplate(context);
+    const complete = {
+      kind: 'complete' as const,
+      finalRevision: current.revision,
+      undo: {
+        groupId: group.id,
+        finalRevision: current.revision,
+        preApplyTarget: group.intended,
+        finalTarget: projectTemplateTarget(current),
+        contentContext: group.contentContext,
+      },
+    };
+    context.store.setTemplateState(ID, complete);
+
+    expect(first.actions.undoTemplate()).toEqual(stopped);
+    expect(context.store.recordFor(ID)).toMatchObject({
+      pending: [], templateState: complete,
+    });
+    expect(second.actions.undoTemplate().kind).toBe('enqueue');
+  });
+
+  it('recover nothing of a template the reopened editor left partial', () => {
+    const context = session();
+    const first = openEditor(context);
+    first.actions.stop();
+    const second = reopen(context);
+    const { group, current } = changingTemplate(context);
+    context.store.enqueue(ID, group);
+    const partial = {
+      kind: 'partial' as const,
+      accepted: current,
+      nextChild: 0 as const,
+      reason: 'child-failed' as const,
+    };
+    context.store.setTemplateState(ID, partial);
+
+    expect(first.actions.recoverTemplate('keep-partial')).toEqual(stopped);
+    expect(context.store.recordFor(ID)!.pending.map(({ id }) => id))
+      .toEqual([group.id]);
+    expect(context.store.recordFor(ID)!.templateState).toEqual(partial);
+    expect(second.actions.recoverTemplate('keep-partial'))
+      .toEqual({ kind: 'keep-partial' });
+  });
 });

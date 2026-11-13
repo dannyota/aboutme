@@ -84,6 +84,7 @@ function controlFor(conflict: ConflictRecord): ConflictControl | undefined {
     case 'photoUpload':
       return { kind: 'review-photo' };
     case 'projectLink':
+    case 'projectLinkEntry':
     case 'projectRefresh':
       return undefined;
     default:

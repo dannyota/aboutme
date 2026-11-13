@@ -55,6 +55,7 @@ export type AttemptFailureCode
   = | 'bad_request'
     | 'body_too_large'
     | 'customization_path_denied'
+    | 'entry_not_found'
     | 'idempotency_key_invalid'
     | 'idempotency_key_required'
     | 'invalid_client_ip'

@@ -5,6 +5,7 @@ import { computed, nextTick, ref, toRaw, watch } from 'vue';
 import LocaleToggle from '@/components/app/LocaleToggle.vue';
 import { editorShellCopy } from '@/i18n/editor-shell';
 import { editorFieldsCopy } from '@/i18n/editor-fields';
+import { projectsCopy } from '@/i18n/projects';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type { EntryFieldPath } from '../../../editor/commands';
@@ -14,6 +15,7 @@ import CustomEntryFields from './entries/CustomEntryFields.vue';
 import EducationEntryFields from './entries/EducationEntryFields.vue';
 import LanguageEntryFields from './entries/LanguageEntryFields.vue';
 import ProfileEntryFields from './entries/ProfileEntryFields.vue';
+import ProjectEntryActions from './entries/ProjectEntryActions.vue';
 import ProjectEntryFields from './entries/ProjectEntryFields.vue';
 import ProjectLinkNote from './entries/ProjectLinkNote.vue';
 import SkillEntryFields from './entries/SkillEntryFields.vue';
@@ -31,8 +33,18 @@ import {
   projectPageLanguage,
   type EntryLocation,
 } from '../../../editor/projectLinks';
-import { projectName } from '../../projects/projectDocument';
+import {
+  PROJECT_LIMIT,
+  projectName,
+  TEXT_LIMITS,
+} from '../../projects/projectDocument';
+import { projectLanguage } from '../../projects/projectFromEntry';
+import ProjectDuplicateDialog from './ProjectDuplicateDialog.vue';
 import ProjectEntryMenu from './ProjectEntryMenu.vue';
+import {
+  useProjectEntryLinking,
+  type EntryActionStatus,
+} from './projectEntryLinking';
 import { createProjectLibrary } from './projectLibrary';
 import { useProjectLinking } from './projectLinking';
 
@@ -112,6 +124,46 @@ const linkStatus = computed(() => {
     default: return '';
   }
 });
+
+const entryLinking = useProjectEntryLinking({
+  actions: props.actions,
+  sectionKey: () => props.sectionKey,
+  library,
+  linking,
+  language: () => projectLanguage(current.value?.metadata.lng, locale.value),
+  onLinked: (location) => emit('selectEntry', location),
+});
+const anyBusy = computed(() => linking.busy.value || entryLinking.busy.value);
+const limitLine = computed(() =>
+  projectsCopy[locale.value].limitReached(PROJECT_LIMIT));
+
+function entryStatusText(status: EntryActionStatus): string {
+  const text = linkCopy.value;
+  switch (status) {
+    case 'linking': return text.linkingEntry;
+    case 'not-linked': return text.entryNotLinked;
+    case 'saving': return text.saving;
+    case 'saved': return text.saved;
+    case 'saved-not-linked': return text.savedNotLinked;
+    case 'save-failed': return text.saveFailed;
+    case 'save-invalid': return text.saveNeedsTitle(TEXT_LIMITS.name);
+    case 'limit': return limitLine.value;
+  }
+}
+
+/** The latest Link to a project or Save to my projects on this entry. */
+function entryAction(entryId: string) {
+  const action = entryLinking.action.value;
+  if (action?.entryId !== entryId) {
+    return { status: '', savedProjectId: null };
+  }
+  return {
+    status: entryStatusText(action.status),
+    savedProjectId: action.status === 'saved-not-linked'
+      ? action.projectId ?? null
+      : null,
+  };
+}
 
 watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
   linking.reset();
@@ -368,7 +420,7 @@ function assertNever(value: never): never {
         v-if="isProject"
         :library="library.view.value"
         :linked="linkedProjects"
-        :busy="linking.busy.value"
+        :busy="anyBusy"
         :add-label="copy.addEntry"
         :copy="linkCopy"
         @blank="add"
@@ -446,6 +498,21 @@ function assertNever(value: never): never {
         :entry="entry"
         @field="edit(entry.id, $event.path, $event.intent)"
       />
+      <ProjectEntryActions
+        v-if="isProject"
+        :linked="entryLinks.has(entry.id)"
+        :library="library.view.value"
+        :shown="linkedProjects"
+        :busy="anyBusy"
+        :at-limit="entryLinking.atLimit.value"
+        :limit-line="limitLine"
+        :status="entryAction(entry.id).status"
+        :saved-project-id="entryAction(entry.id).savedProjectId"
+        :copy="linkCopy"
+        @link="entryLinking.link(entry.id, $event)"
+        @save="entryLinking.save(entry.id)"
+        @retry="library.load()"
+      />
     </EntryCard>
     <ConfirmDialog
       v-if="deleteTarget !== undefined"
@@ -486,6 +553,18 @@ function assertNever(value: never): never {
       cancel-action="cancel-project-privacy"
       @confirm="linking.addAnyway()"
       @cancel="linking.cancelAsk()"
+    />
+    <ProjectDuplicateDialog
+      v-if="linking.duplicate.value !== null"
+      :open="true"
+      :title="linkCopy.fromProjects"
+      :question="linkCopy.duplicateQuestion(linking.duplicate.value.title)"
+      :link-label="linkCopy.linkThatEntry"
+      :add-label="linkCopy.addNewEntry"
+      :cancel-label="copy.cancel"
+      @link="linking.linkThatEntry()"
+      @add="linking.addNewEntry()"
+      @cancel="linking.cancelDuplicate()"
     />
   </InspectorPanel>
 </template>

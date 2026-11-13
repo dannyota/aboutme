@@ -146,6 +146,12 @@ export type AtomicCommandIntent
     | { kind: 'photoDelete' }
     | { kind: 'resumeDelete'; confirmedTitle: string }
     | { kind: 'projectLink'; projectId: string }
+    | {
+      kind: 'projectLinkEntry';
+      sectionKey: string;
+      entryId: string;
+      projectId: string;
+    }
     | { kind: 'projectRefresh'; sectionKey: string; entryId: string };
 
 export type AtomicEditorCommand = CommandEnvelope & AtomicCommandIntent;
@@ -246,6 +252,8 @@ function targetKey(
       return `resume:${resumeId ?? sequence}`;
     case 'projectLink':
       return `project-link:${intent.projectId}`;
+    case 'projectLinkEntry':
+      return `entry:${intent.sectionKey}:${intent.entryId}:project-link`;
     case 'projectRefresh':
       return `entry:${intent.sectionKey}:${intent.entryId}:project-refresh`;
     default:
@@ -256,9 +264,10 @@ function targetKey(
 /**
  * What the server state looks like once the command lands. A link changes
  * nothing locally, because the server chooses the new entry's id and text,
- * so its intent is only that the resume links the project. A refresh's
- * text comes from the library at send time, so it has no predicted result
- * and is never treated as already applied.
+ * so its intent is only that the resume links the project. A link of an
+ * existing entry adds only the reference, so it is predicted like an edit.
+ * A refresh's text comes from the library at send time, so it has no
+ * predicted result and is never treated as already applied.
  */
 function intendedOf(
   before: Projection,
