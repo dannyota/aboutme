@@ -81,6 +81,9 @@ const RETRYABLE: ReadonlySet<string> = new Set([
   'rate-limited', 'unavailable', 'csrf-rejected',
 ]);
 
+/** A create the action no longer sends: its editor closed or changed. */
+const NOT_SENT = { kind: 'failed', failure: 'session-lost' } as const;
+
 /**
  * An unlinked project entry's Link to a project and Save to my projects
  * (docs/design/ui/projects.md "In the resume editor"). Either one links
@@ -258,8 +261,11 @@ export function useProjectEntryLinking(options: {
     // The body is taken when the person acts, from the text they see.
     const body = projectFromEntry(entry, options.language());
     const key = keys.keyFor({ ownerId: run.ownerId, body });
+    // Checked before every attempt, including the one after a token refresh.
     const result = await sendWithCsrf(auth, run.ownerId, (csrfToken) =>
-      api.create(body, key, csrfToken));
+      run.current()
+        ? api.create(body, key, csrfToken)
+        : Promise.resolve(NOT_SENT));
     const failure = result.kind === 'failed' ? result.failure : null;
     if (failure === null || !RETRYABLE.has(failure)) keys.settle();
     if (!run.current()) {

@@ -1,11 +1,11 @@
 # Projects workspace
 
-Status: Accepted (2026-11-11). The list, the editor and showing a project on
-resumes (accepted 2026-11-12) are implemented. The
-[projects design](../projects.md) owns the product and its limits, and the
-[projects contract](../projects-contract.md#owner-api) owns the API this screen
-calls. This document owns the two workspace screens and the controls that show a
-project on a resume.
+Status: Accepted (2026-11-11). The list, the editor, showing a project on
+resumes and linking an existing entry (both accepted 2026-11-12) are
+implemented. The [projects design](../projects.md) owns the product and its
+limits, and the [projects contract](../projects-contract.md#owner-api) owns the
+API this screen calls. This document owns the two workspace screens and the
+controls that show a project on a resume.
 
 ## Navigation
 
@@ -158,8 +158,7 @@ does. Editing, hiding, ordering and undo are unchanged. An entry whose project
 was deleted elsewhere arrives without its link after the editor reconciles; the
 note disappears and the text stays.
 
-An unlinked project entry's form shows two quiet actions under its fields
-(accepted 2026-11-12; not yet implemented):
+An unlinked project entry's form shows two quiet actions under its fields:
 
 - Link to a project (“Gắn với dự án”), which lists library projects not yet on
   this resume; choosing one links the entry and keeps its text. The linked note

@@ -75,6 +75,10 @@ type TemplateActionResult
     | { readonly kind: 'no-change' }
     | Extract<EditorActionResult, { kind: 'blocked' }>;
 
+type TemplateRecoveryResult
+  = | TemplateRecovery
+    | { readonly kind: 'blocked'; readonly reason: 'stopped' };
+
 export interface ResumeEditorActions {
   readonly record: ComputedRef<ResumeRecord | undefined>;
   createEntityId(): string;
@@ -82,10 +86,10 @@ export interface ResumeEditorActions {
   /** Binds an action starting now to this editor; null when it cannot act. */
   continuation(): EditorContinuation | null;
   applyTemplate(preset: Readonly<TemplatePreset>): TemplateActionResult;
-  undoTemplate(): TemplateRecovery;
+  undoTemplate(): TemplateRecoveryResult;
   recoverTemplate(
     action: 'retry-remaining' | 'restore-pre-apply' | 'keep-partial',
-  ): TemplateRecovery;
+  ): TemplateRecoveryResult;
   resolveOpaquePhoto(
     commandId: string,
     decision: OpaquePhotoDecision,
@@ -170,8 +174,9 @@ export function createResumeEditorActions(
     if (pendingOwner !== undefined && pendingOwner !== ownerId) return null;
     return { state, ownerId };
   };
-  // A closed editor queues nothing: work a late callback queued would stay
-  // in the shared store and be sent by the next editor on the resume.
+  // A closed editor queues or changes nothing: work a late callback queued
+  // would stay in the shared store and be sent by the next editor on the
+  // resume.
   let stopped = false;
   const edit = (intent: AtomicCommandIntent): EditorActionResult => {
     if (stopped) return blocked('stopped');
@@ -218,6 +223,7 @@ export function createResumeEditorActions(
   const applyTemplate = (
     preset: Readonly<TemplatePreset>,
   ): TemplateActionResult => {
+    if (stopped) return blocked('stopped');
     const current = editable();
     if (current === null) {
       const state = record.value;
@@ -244,7 +250,8 @@ export function createResumeEditorActions(
   };
   const recoverTemplate = (
     action: 'retry-remaining' | 'restore-pre-apply' | 'keep-partial',
-  ): TemplateRecovery => {
+  ): TemplateRecoveryResult => {
+    if (stopped) return { kind: 'blocked', reason: 'stopped' };
     const state = record.value;
     const group = activeTemplateGroup(state);
     if (state?.templateState?.kind !== 'partial' || group === undefined) {
@@ -278,7 +285,8 @@ export function createResumeEditorActions(
     }
     return result;
   };
-  const undoTemplate = (): TemplateRecovery => {
+  const undoTemplate = (): TemplateRecoveryResult => {
+    if (stopped) return { kind: 'blocked', reason: 'stopped' };
     const state = record.value;
     if (state?.templateState?.kind !== 'complete') {
       return { kind: 'unavailable', reason: 'state-changed' };

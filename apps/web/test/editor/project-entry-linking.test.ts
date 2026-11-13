@@ -569,6 +569,33 @@ describe('Save to my projects', () => {
       expect(resumeList).not.toHaveBeenCalled();
     });
 
+  it.each([
+    ['the editor closes', false],
+    ['the resume is opened again', true],
+  ] as const)('sends no second create when %s during a session token '
+    + 'refresh, and queues nothing', async (_case, reopen) => {
+    api.list.mockResolvedValue(ok([]));
+    api.create.mockResolvedValueOnce(failed('csrf-rejected'))
+      .mockResolvedValueOnce(ok(created()));
+    api.read.mockResolvedValue(ok(created()));
+    const refreshing = deferred<undefined>();
+    authControls.auth.refresh.mockImplementation(() => refreshing.promise);
+    const { context } = await mountEditor(resume([written()]));
+
+    inDocument(`${card()} [data-action="save-entry-project"]`).click();
+    await settle();
+    expect(authControls.auth.refresh).toHaveBeenCalledOnce();
+    context.actions.stop();
+    if (reopen) context.store.initialize(context.server.stored);
+    refreshing.resolve(undefined);
+    await settle();
+
+    expect(api.create).toHaveBeenCalledOnce();
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+    expect(links(context)).toEqual([]);
+    expect(resumeList).not.toHaveBeenCalled();
+  });
+
   it('links the entry it was saved from after the inspector moved to '
     + 'another section, and keeps that entry\'s status', async () => {
     api.list.mockResolvedValue(ok([]));
