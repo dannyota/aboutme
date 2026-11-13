@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/rivo/uniseg"
+
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
 	"danny.vn/aboutme/apps/server/internal/directrender"
@@ -20,6 +22,12 @@ import (
 
 // maxListTechnologies is the number of technologies one list row shows.
 const maxListTechnologies = 6
+
+// maxPreviewTitleBytes bounds a preview title: as many bytes as the longest
+// public page title can hold, publicpage.MaxTitleRunes code points of four
+// bytes. A project title adds the project name to the owner's name, so it
+// can be longer.
+const maxPreviewTitleBytes = publicpage.MaxTitleRunes * utf8.UTFMax
 
 // maxOutcomeDescriptionRunes bounds a project page description taken from
 // its outcome.
@@ -120,10 +128,33 @@ func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 }
 
 // projectPreview is this page's title and description with the resume's
-// locale, card image and alt text.
+// locale, card image and alt text. Each text is cut, on a grapheme boundary,
+// to the size the renderer accepts: a title as long as the longest public
+// page title, and a description as long as a resume page's.
 func projectPreview(input projectPageInput, title, description string) previewmeta.Meta {
 	resume := previewmeta.For(input.snapshot.Public, input.snapshot.PublicTitle)
-	return previewmeta.Meta{Title: title, Description: description, Locale: resume.Locale, ImageAlt: resume.ImageAlt, ImageURL: input.imageURL}
+	return previewmeta.Meta{
+		Title: cutToBytes(title, maxPreviewTitleBytes), Description: cutToBytes(description, previewmeta.MaxDescriptionBytes),
+		Locale: resume.Locale, ImageAlt: resume.ImageAlt, ImageURL: input.imageURL,
+	}
+}
+
+// cutToBytes returns the longest prefix of text, ending on a grapheme
+// boundary, of at most maxBytes bytes.
+func cutToBytes(text string, maxBytes int) string {
+	if len(text) <= maxBytes {
+		return text
+	}
+	end := 0
+	graphemes := uniseg.NewGraphemes(text)
+	for graphemes.Next() {
+		_, to := graphemes.Positions()
+		if to > maxBytes {
+			break
+		}
+		end = to
+	}
+	return text[:end]
 }
 
 // projectFaviconHref is the resume's favicon, or "" when it has none.

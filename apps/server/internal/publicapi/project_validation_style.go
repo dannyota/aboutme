@@ -4,35 +4,58 @@ package publicapi
 // checks: SVG only as static icons, and no CSS-generated text.
 
 import (
-	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
 )
 
-// cssContentDeclaration finds each content declaration and its value in
-// CSS with comments outside strings removed. A name such as justify-content
-// does not match.
-var cssContentDeclaration = regexp.MustCompile(`(?i)(?:^|[{;\s])content\s*:([^;}]*)`)
-
-// unsafeStyleContent reports whether css sets content to anything but an
-// empty string or none, which would put text on the page outside the
-// validated tree, or cannot be scanned.
-func unsafeStyleContent(css string) bool {
+// declaresStyleContent reports whether css may declare the content
+// property, whatever its value, or cannot be scanned. The project pages'
+// stylesheet declares no content, and any declaration could put text on the
+// page outside the validated tree. With comments outside strings removed and
+// strings kept, it matches the name content wherever the character before it
+// cannot continue a name or selector (not a letter, digit, "_", "-", "." or
+// "#") and the next character that is not whitespace is ":". That holds after
+// any brace, nested rule or semicolon, and it errs toward rejection, such as
+// for an element selector named content with a pseudo-class.
+func declaresStyleContent(css string) bool {
 	scanned, ok := cssWithoutComments(css)
 	if !ok {
 		return true
 	}
-	for _, match := range cssContentDeclaration.FindAllStringSubmatch(scanned, -1) {
-		value := strings.TrimSpace(match[1])
-		if len(value) >= len("!important") && strings.EqualFold(value[len(value)-len("!important"):], "!important") {
-			value = strings.TrimSpace(value[:len(value)-len("!important")])
+	lower := strings.ToLower(scanned)
+	const name = "content"
+	for offset := 0; ; {
+		found := strings.Index(lower[offset:], name)
+		if found < 0 {
+			return false
 		}
-		if value != `""` && value != `''` && !strings.EqualFold(value, "none") {
+		at := offset + found
+		if (at == 0 || !cssNameOrSelectorByte(lower[at-1])) && nextNonSpaceByte(lower[at+len(name):]) == ':' {
 			return true
 		}
+		offset = at + 1
 	}
-	return false
+}
+
+// cssNameOrSelectorByte reports a byte that continues a CSS name, class or
+// id before it, so the word after it is not a property of its own.
+func cssNameOrSelectorByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_' || b == '-' || b == '.' || b == '#'
+}
+
+// nextNonSpaceByte returns the first byte of value that is not CSS
+// whitespace, or 0 when there is none.
+func nextNonSpaceByte(value string) byte {
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case ' ', '\t', '\n', '\r', '\f':
+			continue
+		default:
+			return value[i]
+		}
+	}
+	return 0
 }
 
 // staticIconRule returns "" for an SVG element of a static icon, or the rule

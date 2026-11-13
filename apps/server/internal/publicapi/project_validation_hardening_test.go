@@ -79,43 +79,103 @@ func TestProjectValidators_SVGIsStaticIconsOnly(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_StyleContentIsEmptyOrNone proves the page style may
-// set content only to an empty string or none, so no text can enter the page
-// through CSS.
-func TestProjectValidators_StyleContentIsEmptyOrNone(t *testing.T) {
+// TestProjectValidators_StyleDeclaresNoContent proves project page CSS may
+// not declare content at all, whatever its value or where the declaration
+// sits, in both modes, in the style element and in style attributes, while
+// names that only contain the word still pass.
+func TestProjectValidators_StyleDeclaresNoContent(t *testing.T) {
 	origin := mustPublicOrigin(t)
-	tc := readProjectCorpus(t)["project-en-every-field"]
-	request := projectCorpusPage(t, tc)
-	for css, want := range map[string]string{
-		`.a::before{content:""}`:                                           "",
-		`.a::before{content:''}`:                                           "",
-		`.a::before{content: none}`:                                        "",
-		`.a::before{content:'' !important}`:                                "",
-		`.a{justify-content:center;align-content:start;place-content:end}`: "",
-		`.a::before{content:"private@example.test"}`:                       "style_content",
-		`.a::after{content:'x'}`:                                           "style_content",
-		`.a::before{content:attr(data-x)}`:                                 "style_content",
-		`.a::before{ CONTENT : counter(x) }`:                               "style_content",
-		`.a::before{content:/**/"x"}`:                                      "style_content",
-		`.a::before{color:red;content:"x"}`:                                "style_content",
-		`.a::before{content:none "x"}`:                                     "style_content",
-	} {
-		source := replaceOnce(tc.HTML, "<style>/* project page style */</style>", "<style>"+css+"</style>")
-		if got := projectHTMLRejection([]byte(source), request, origin); got != want {
-			t.Errorf("style %s: rejection = %q, want %q", css, got, want)
+	corpus := readProjectCorpus(t)
+	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
+	modes := map[string]struct {
+		source   string
+		validate func(string) string
+	}{
+		"project": {page.HTML, func(source string) string {
+			return projectHTMLRejection([]byte(source), projectCorpusPage(t, page), origin)
+		}},
+		"project-list": {list.HTML, func(source string) string {
+			return projectListHTMLRejection([]byte(source), projectCorpusList(t, list), origin)
+		}},
+	}
+	styles := map[string]string{
+		"after a nested rule":         `h1::before{@media all{}content:"unbound text"}`,
+		"after a closing brace":       `h1::before{h2{}content:"x"}`,
+		"after a semicolon":           `h1::before{color:red;content:none}`,
+		"after an opening brace":      `h1::before{content :""}`,
+		"uppercase":                   `h1::before{CONTENT:none}`,
+		"empty string":                `h1::before{content:""}`,
+		"none":                        `h1::before{content:none}`,
+		"after a comment":             `h1::before{/**/content:''}`,
+		"value inside a string":       `h1::before{--a:"x";content:"y"}`,
+		"start of the style":          `content:none`,
+		"before whitespace and colon": "h1::before{content\n:none}",
+		"text in another declaration": `h1::before{--a:"}content:x"}`,
+	}
+	attributes := map[string]string{
+		"start of the attribute": `content:none`,
+		"empty string":           `content:""`,
+		"after a semicolon":      `color:red;content:none`,
+		"uppercase":              `CONTENT : none`,
+	}
+	allowed := map[string]string{
+		"justify-content": `.a{justify-content:center;align-content:start;place-content:end}`,
+		"class name":      `.content:hover{color:red}`,
+		"id":              `#content{color:red}`,
+		"underscore":      `.a{--my_content:1}`,
+	}
+	for mode, m := range modes {
+		for name, css := range styles {
+			if got := m.validate(replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+css+"</style>")); got != "style_content" {
+				t.Errorf("%s style %s: rejection = %q, want style_content", mode, name, got)
+			}
+		}
+		for name, declarations := range attributes {
+			if got := m.validate(replaceOnce(m.source, "<h1>", `<h1 style='`+declarations+`'>`)); got != "style_content" {
+				t.Errorf("%s style attribute %s: rejection = %q, want style_content", mode, name, got)
+			}
+		}
+		for name, css := range allowed {
+			if got := m.validate(replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+css+"</style>")); got != "" {
+				t.Errorf("%s style %s: rejection = %q, want accepted", mode, name, got)
+			}
 		}
 	}
-	source := replaceOnce(tc.HTML, "<h1>", `<h1 style="content:'x'">`)
-	if got := projectHTMLRejection([]byte(source), request, origin); got != "style_content" {
-		t.Errorf("style attribute content: rejection = %q, want style_content", got)
+	if strings.Contains(page.HTML, "content:") || strings.Contains(list.HTML, "content:") {
+		t.Fatal("the corpus reference style already declares content")
 	}
-	list := readProjectCorpus(t)["list-vi-two-projects"]
-	listSource := replaceOnce(list.HTML, "<style>/* project page style */</style>", `<style>.a::before{content:"x"}</style>`)
-	if got := projectListHTMLRejection([]byte(listSource), projectCorpusList(t, list), origin); got != "style_content" {
-		t.Errorf("list style content: rejection = %q, want style_content", got)
+}
+
+// TestProjectValidators_AcceptTheFormatDetectionMeta proves both modes accept
+// the resume page's format-detection element exactly, at most once.
+func TestProjectValidators_AcceptTheFormatDetectionMeta(t *testing.T) {
+	const element = `<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">`
+	for _, addition := range []struct {
+		name, head, want string
+	}{
+		{"once", element, ""},
+		{"twice", element + element, "meta_format_detection"},
+		{"other content", `<meta name="format-detection" content="telephone=no">`, "meta_format_detection"},
+	} {
+		for mode, rule := range projectHeadRules(t, addition.head) {
+			if rule != addition.want {
+				t.Errorf("%s format-detection in %s: rejection = %q, want %q", addition.name, mode, rule, addition.want)
+			}
+		}
 	}
-	if strings.Contains(tc.HTML, "content:") {
-		t.Fatal("the corpus reference style already sets content")
+}
+
+// projectHeadRules adds head elements after the viewport meta of both corpus
+// modes and returns each mode's rejection.
+func projectHeadRules(t *testing.T, head string) map[string]string {
+	t.Helper()
+	origin := mustPublicOrigin(t)
+	corpus := readProjectCorpus(t)
+	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
+	viewport := `<meta name="viewport" content="width=device-width, initial-scale=1">`
+	return map[string]string{
+		"project":      projectHTMLRejection([]byte(replaceOnce(page.HTML, viewport, viewport+head)), projectCorpusPage(t, page), origin),
+		"project-list": projectListHTMLRejection([]byte(replaceOnce(list.HTML, viewport, viewport+head)), projectCorpusList(t, list), origin),
 	}
 }
 

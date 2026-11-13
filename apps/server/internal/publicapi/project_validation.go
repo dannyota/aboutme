@@ -147,7 +147,7 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		v.reject(name)
 		return
 	}
-	if attributeCount(node, "style") != 0 && unsafeStyleContent(attribute(node, "style")) {
+	if attributeCount(node, "style") != 0 && declaresStyleContent(attribute(node, "style")) {
 		v.reject("style_content")
 		return
 	}
@@ -173,7 +173,7 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		v.styles++
 		if v.styles > 1 || unsafeInlineStyle(textNode(node)) {
 			v.reject("style_element")
-		} else if unsafeStyleContent(textNode(node)) {
+		} else if declaresStyleContent(textNode(node)) {
 			v.reject("style_content")
 		}
 	case "main":
