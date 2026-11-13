@@ -94,8 +94,9 @@ resume content.
 
 Title: “{project name} · {owner's name}”; list: “Dự án · {name}” or “Projects ·
 {name}”. Description: the summary, else the first 160 characters of the outcome,
-else none. Canonical is the page's own address. The preview card is the resume's
-stored card. `noindex` unless the resume has SEO and GEO on.
+else none; the preview text is cut to the renderer's byte limits in the rare
+case it exceeds them. Canonical is the page's own address. The preview card is
+the resume's stored card. `noindex` unless the resume has SEO and GEO on.
 
 Decided 2026-11-13: the owner's name is the resume's full name, or its effective
 page title when the name is blank. `og:title`, `og:description` and `og:url` are

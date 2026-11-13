@@ -254,7 +254,9 @@ adds the renderer replaces it with the renderer's exact output.
   `moreTechnologies`, omitted when none; a project page carries all of them.
 - The list page has no description. A project page's is its summary, else the
   first 160 characters of its outcome, else none; an empty `preview.description`
-  omits both description elements.
+  omits both description elements. The preview description is cut at a grapheme
+  boundary to 1024 bytes and the preview title to 2240 bytes, the limits the
+  renderer accepts; `pageTitle` is never cut.
 
 Go serves 503 for rendered HTML that breaks any of these rules:
 
@@ -263,10 +265,14 @@ Go serves 503 for rendered HTML that breaks any of these rules:
 - The head: charset and viewport, the exact title, `canonical` equal to
   `pageUrl`, the favicon only when `faviconHref` is set, and the resume page's
   preview elements with `og:type` `website`, `og:url` equal to `pageUrl`, and
-  the description pair only when set. One inline `style` that passes the inline
-  style check, and no stylesheet but the versioned `print-fonts.css`.
+  the description pair only when set, and at most the resume page's one
+  `format-detection` element. One inline `style` that passes the inline style
+  check and has no `content` declaration, and no stylesheet but the versioned
+  `print-fonts.css`.
 - No `script`, `form`, `iframe`, `img`, media or embedding element, and no event
-  or resource attribute.
+  or resource attribute. SVG only as static icons: `svg`, `g`, `path`, `circle`,
+  `rect`, `line`, `polyline`, `polygon` and `title`, with presentation
+  attributes and no reference, `url()` paint, animation or embedded image.
 - One `main#public-project`, one `h1`, and one skip link to the main region.
 - Anchors: the credit once, as on the resume page; `a.public-back` once, to the
   resume `url`, with the accessible name in the
