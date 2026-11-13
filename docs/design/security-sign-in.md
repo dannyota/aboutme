@@ -71,7 +71,8 @@ session while revoking every old session. Reset revokes every session and never
 logs in. Password removal and account-email change are out of scope.
 Registration, reset, and password add or change hash with Argon2id and run the
 HIBP range lookup before their transaction opens, so no transaction or user-row
-lock waits on hashing or the network.
+lock waits on hashing or the network. The web client keeps no password or token
+in its state, a URL, browser storage, error text, logs, or analytics.
 
 `PASSWORD_REGISTRATION_ENABLED=false` turns off email-and-password sign-up: the
 register route is not registered and returns the uniform not-found response.

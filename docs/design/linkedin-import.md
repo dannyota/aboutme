@@ -102,6 +102,10 @@ everything; the review is not saved.
 
 - The file never leaves the browser. No request carries its bytes, and pdf.js
   gets no URL to fetch.
+- `apps/web/scripts/linkedin-pdf-shape.mjs`, the pre-build fact finder, never
+  prints a profile value: it prints masked structure (letters as `a` or `A`,
+  digits as `9`, other symbols as `#`), the structural words on its allowlist,
+  and a PDF's Producer or Creator only when the value is on that allowlist.
 - aboutme stores only the resume the person creates, like any new resume.
   Nothing records that it came from LinkedIn.
 - The privacy notice adds one item (**Owner approval** I6):
