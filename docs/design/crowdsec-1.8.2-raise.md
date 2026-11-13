@@ -11,23 +11,23 @@ few minutes of outage are accepted. [Release 1.8.2] includes the fix and
 
 Baseline references below `host/`, `tests/`, and `edge/` start at `deploy/vn/`.
 
-| Location                                                                                                                    | Change                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `host/install.sh:27`, `:469`                                                                                                | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
-| `host/crowdsec-db.sh:17`, `:225`, `:227`, `:264`                                                                            | Sole catalog path, exact comparison, and epoch digest.                           |
-| `host/crowdsec-provision.sh:78`, `host/crowdsec-vacuum.sh:20`                                                               | Package assertion and catalog path.                                              |
-| `host/crowdsec-schema-v1.8.1.tsv:1`                                                                                         | Replace with generated `crowdsec-schema-v1.8.2.tsv`.                             |
-| `tests/crowdsec-db-test.sh:30`, `:113`, `:332`, `:468`, `:592`                                                              | Catalog fixtures, binary assertion, tamper cases, derivation delimiters.         |
-| `tests/crowdsec-offline-test.sh:27`, `:30`, `:33`, `:97`, `:231`                                                            | Package/archive pins, reviewed 1.8.2 digest, version and suppression assertions. |
-| `tests/crowdsec-retention-fixture.sh:65`, `:343`                                                                            | Proof module and catalog fixture.                                                |
-| `tests/install-packages-test.sh:259`, `:263`, `:284`, `:294`                                                                | Held/exact package cases, commands, diagnostics.                                 |
-| `tests/install-admission-test.sh:92`, `:290`, `tests/crowdsec-vacuum-test.sh:18`, `tests/crowdsec-integration-test.sh:1017` | Catalog fixtures and success label.                                              |
-| `.github/workflows/vn-infra.yml:157`                                                                                        | Derivation delimiters and artifact filename.                                     |
-| `edge/crowdsec/scenarios/aboutme-http-rate.yaml:12`, `edge/crowdsec/scenarios/aboutme-http-status.yaml:14`                  | Version-neutral comments after re-proving six-sample bounds; keep values.        |
-| `deploy/vn/README.md:311`, `docs/design/crowdsec-http-privacy.md:42`, `:83`                                                 | Current package/catalog and verified engine behavior.                            |
-| `docs/design/crowdsec-retention-batching.md:190`, `:230`, `:246`                                                            | Current proof targets; preserve labelled historical findings and citations.      |
-| `docs/runbooks/crowdsec-postgresql.md:68`                                                                                   | Own the operator procedure below; no incidental hub refresh.                     |
-| `docs/plans/traceability/ac-inf.md:19`, `docs/plans/backlog.md:36`                                                          | Append acceptance evidence; close only the CrowdSec upgrade portion.             |
+| Location                                                                                                                   | Change                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `host/install.sh:17`, `:435`                                                                                               | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
+| `host/crowdsec-db.sh:15`, `:223`, `:225`, `:262`                                                                           | Sole catalog path, exact comparison, and epoch digest.                           |
+| `host/crowdsec-provision.sh:75`, `host/crowdsec-vacuum.sh:18`                                                              | Package assertion and catalog path.                                              |
+| `host/crowdsec-schema-v1.8.1.tsv:1`                                                                                        | Replace with generated `crowdsec-schema-v1.8.2.tsv`.                             |
+| `tests/crowdsec-db-test.sh:29`, `:110`, `:326`, `:462`, `:584`                                                             | Catalog fixtures, binary assertion, tamper cases, derivation delimiters.         |
+| `tests/crowdsec-offline-test.sh:24`, `:27`, `:30`, `:91`, `:221`                                                           | Package/archive pins, reviewed 1.8.2 digest, version and suppression assertions. |
+| `tests/crowdsec-retention-fixture.sh:62`, `:340`                                                                           | Proof module and catalog fixture.                                                |
+| `tests/install-packages-test.sh:253`, `:257`, `:278`, `:288`                                                               | Held/exact package cases, commands, diagnostics.                                 |
+| `tests/install-admission-test.sh:90`, `:287`, `tests/crowdsec-vacuum-test.sh:18`, `tests/crowdsec-integration-test.sh:975` | Catalog fixtures and success label.                                              |
+| `.github/workflows/vn-infra.yml:154`                                                                                       | Derivation delimiters and artifact filename.                                     |
+| `edge/crowdsec/scenarios/aboutme-http-rate.yaml:12`, `edge/crowdsec/scenarios/aboutme-http-status.yaml:14`                 | Version-neutral comments after re-proving six-sample bounds; keep values.        |
+| `deploy/vn/README.md:311`, `docs/design/crowdsec-http-privacy.md:42`, `:83`                                                | Current package/catalog and verified engine behavior.                            |
+| `docs/design/crowdsec-retention-batching.md:190`, `:230`, `:246`                                                           | Current proof targets; preserve labelled historical findings and citations.      |
+| `docs/runbooks/crowdsec-postgresql.md:68`                                                                                  | Own the operator procedure below; no incidental hub refresh.                     |
+| `docs/plans/traceability/ac-inf.md:19`, `docs/plans/backlog.md:36`                                                         | Append acceptance evidence; close only the CrowdSec upgrade portion.             |
 
 Keep `docs/design/crowdsec-retention-reload.md:60`, `:104` as historical 1.8.1
 findings. Keep firewall bouncer 0.0.36, pgBackRest 2.59.3-1.pgdg24.04+1, and
@@ -57,10 +57,10 @@ access.
 ## Installation and recovery
 
 Use the existing operator reset, with no installer reset flag or automatic loss.
-`install.sh:415` suppresses package startup and registration; `:466` installs
-helpers and catalog before the ordinary migration at `:577`. On an occupied
+`install.sh:387` suppresses package startup and registration; `:432` installs
+helpers and catalog before the ordinary migration at `:541`. On an occupied
 1.8.1 database that call fails target preflight, stops consumers, and refuses
-`fresh-admission` (`crowdsec-migrate.sh:177`, `:185`, `:186`). It cannot
+`fresh-admission` (`crowdsec-migrate.sh:173`, `:181`, `:182`). It cannot
 complete without reset. No new controller, admission exception, or marker
 protocol.
 
@@ -68,7 +68,7 @@ protocol.
    successful release-image publication under `instructions/releases.md:16`.
    Before host installation, take the encrypted incremental pgBackRest backup
    through the workload lock and release annotation in
-   `deploy/vn/scripts/deploy-host.sh:277`. Require completion and healthy WAL
+   `deploy/vn/scripts/deploy-host.sh:235`. Require completion and healthy WAL
    archiving; the later deploy backup is too late. Keep keys on the host.
 2. Record the intended active edge and keep the reviewed old bundle/package
    available. Copy `deploy/vn` from clean reviewed main; run
@@ -81,7 +81,7 @@ protocol.
    root-only helper locks the bundle, checks idle/notice admission, stops and
    joins consumers, and drops only `crowdsec` without `FORCE`. Fresh
    provisioning gates the catalog before registration, startup retention,
-   timers, engine, and bouncers (`crowdsec-migrate.sh:187`). Protected files
+   timers, engine, and bouncers (`crowdsec-migrate.sh:183`). Protected files
    replace all credentials; old credentials fail. Startup clears feeds/caches
    and rebuilds firewall state.
 4. Reset sees no active edge after the failed installer. Restore only the
@@ -93,11 +93,11 @@ protocol.
    `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>`.
 
 A failed reset revokes its lease, retains failure denial, and stops consumers
-(`crowdsec-migrate.sh:213`). Diagnose the fixed step, repair the cause, rerun
+(`crowdsec-migrate.sh:206`). Diagnose the fixed step, repair the cause, rerun
 explicit `--reset`, restore the recorded edge, and finish the installer. Do not
 clear fences/markers manually. For downgrade, use the reviewed 1.8.1 bundle's
 installer to install its authenticated package with startup suppressed and its
-matching helpers/catalog (`install.sh:154`). At occupied-catalog refusal, reset
+matching helpers/catalog (`install.sh:136`). At occupied-catalog refusal, reset
 under that old bundle, restore the edge, and finish its installer. CrowdSec
 state is lost again. Preserve notice/fence fixes; never restore the application
 cluster for CrowdSec. Image rollback alone retains the working host bundle.

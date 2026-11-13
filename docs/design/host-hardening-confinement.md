@@ -8,14 +8,15 @@ and owner questions.
 ## Container confinement and Chromium
 
 S:279-282 shows non-root images, writable roots except observer, and a server
-SYS_ADMIN setting. `Q/aboutme-server.container.in:34-39` explains that the
-capability selects default seccomp namespace allowances; the snapshot does not
-establish effective process capabilities. `Q/aboutme-observer.container.in:17`
+SYS_ADMIN setting. `Q/aboutme-server.container.in:32` grants it so the default
+seccomp profile allows the user namespaces Chromium's sandbox needs; the image
+runs as a non-root user, so the process should gain no effective capability,
+which the snapshot does not yet establish. `Q/aboutme-observer.container.in:16`
 already has read-only root, dropped capabilities, NNP, and bounded tmpfs.
 
 **Ordinary containers.** Propose `DropCapability=all`, `NoNewPrivileges=true`,
 and `ReadOnly=true` first for web, Caddy, maintenance, migrate, db-setup, and
-jobs. Home: their `Q/*.container.in` files and `H/job-run.sh:41`, which launches
+jobs. Home: their `Q/*.container.in` files and `H/job-run.sh:32`, which launches
 jobs without Quadlet. Keep the Podman default seccomp policy. The read-only root
 needs explicit writable mounts and bounded temporary storage discovered from the
 pinned image, not unrestricted tmpfs. Caddy needs `/data`, its log mount, and
@@ -26,8 +27,8 @@ sets, NNP, failed root writes, job completion, migration, Caddy ACME/storage
 sharing, and maintenance overlap. This limits persistence and privilege gain
 after a container exploit. [Quadlet]
 
-**Server-only namespace exception.** `E/sysctl.d/90-aboutme.conf:7-11` globally
-relaxes Ubuntu user namespaces; `V/probe/probe.sh:163-200` currently requires
+**Server-only namespace exception.** `E/sysctl.d/90-aboutme.conf:3-4` globally
+relaxes Ubuntu user namespaces; `V/probe/probe.sh:139-173` currently requires
 that relaxation and only tests Alpine unshare. Replace it only after a pinned
 Chromium proof. Target: AppArmor enforcing, global
 `kernel.apparmor_restrict_unprivileged_userns=1`, namespace permission granted
@@ -54,8 +55,8 @@ retains existing policy and records residual risk. [Podman run]
 
 ## Host services and timers
 
-`E/systemd/system/aboutme-alert@.service:7`, `aboutme-backup@.service:9`,
-`aboutme-watch.service:6`, and retention/vacuum/job/operation services mostly
+`E/systemd/system/aboutme-alert@.service:4`, `aboutme-backup@.service:7`,
+`aboutme-watch.service:5`, and retention/vacuum/job/operation services mostly
 omit sandboxing. Alert/backup have no address-family restrictions. The reporter
 sets NNP and resource/core limits at
 `aboutme-deployment-document.service:10-15`. Inspect effective units/drop-ins;

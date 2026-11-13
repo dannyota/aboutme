@@ -15,7 +15,7 @@ entry. Keep the [memory budget](vietnam-host-memory.md),
 
 Evidence: private `host-snapshot.txt`, 2026-11-08 (`S:line`), and public bundle.
 `V/` = `deploy/vn/`; `H/` = `V/host/`; `E/` = `H/etc/`; `Q/` = `H/quadlet/`.
-Repository lines cite the audited revision, not live state.
+Line numbers cite the tree at the commit that last changed this file.
 
 S:2,3,276 reports Ubuntu 24.04.5, kernel 6.8, Podman 4.9.3; S:277 reports
 seccomp enabled and Podman AppArmor disabled; S:331 lists the AppArmor LSM.
@@ -57,8 +57,8 @@ Access and confinement proposals have their own pages:
 
 ### Kernel and network
 
-Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:565`. Bundled
-hardening at lines 22-25 is limited. Fail required checks on absent knobs; probe
+Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:530`. Bundled
+hardening at lines 11-14 is limited. Fail required checks on absent knobs; probe
 after boot and Podman network creation. Target: compromised containers unless
 named otherwise.
 
@@ -99,9 +99,9 @@ named otherwise.
 
 ### Database, logs, and cores
 
-**PostgreSQL.** S:313-321 agrees with `E/postgresql/18/main/pg_hba.conf:4-7`:
+**PostgreSQL.** S:313-321 agrees with `E/postgresql/18/main/pg_hba.conf:1-4`:
 peer for postgres and mapped CrowdSec, SCRAM for explicit app roles.
-`conf.d/90-aboutme.conf:7-9` disables TCP. Retain these and the 0777 socket
+`conf.d/90-aboutme.conf:1-3` disables TCP. Retain these and the 0777 socket
 mode: authentication is in HBA; restricting socket mode without shared UID/GID
 design breaks containers and pgBackRest. Mount the socket directory read-only in
 clients only after proving connection still works. Check `pg_hba_file_rules` for
@@ -111,12 +111,12 @@ mounts. This limits a database writer or compromised container's lateral access,
 not the application role's legitimate authority. [PostgreSQL HBA] [PG sockets]
 
 **Audit.** Propose `LogLevel VERBOSE` for SSH, preserving the narrow journal
-feed at `V/edge/crowdsec/acquis.d/sshd.yaml:3-7`. Verify accepted-key and failed
+feed at `V/edge/crowdsec/acquis.d/sshd.yaml:1-5`. Verify accepted-key and failed
 login attribution and CrowdSec parsing/banning with synthetic events. S:32 is
 INFO; S:227-241 does not prove effective sudo logging. Confirm sudo command
 events reach the persistent journal without stdin, environment, or I/O capture.
 Secret imports remain stdin-only. Preserve the journal's existing 30-day/2 GB
-caps at `E/systemd/journald.conf.d/90-aboutme.conf:6-9`. A visitor attack or
+caps at `E/systemd/journald.conf.d/90-aboutme.conf:2-5`. A visitor attack or
 stolen operator key becomes easier to investigate; root can still erase logs.
 Home: SSH policy and a minimal `E/sudoers.d/` policy only if needed. [OpenSSH]
 [CrowdSec journal] [Sudo]
@@ -142,7 +142,7 @@ leaked backup, at the cost of crash diagnostics. [Core dumps] [Quadlet]
 
 ### Mounts, updates, time, and provider custody
 
-**Mounts.** S:244-255 and `H/data-volume.sh:87,131` show permissive fstab
+**Mounts.** S:244-255 and `H/data-volume.sh:84,124` show permissive fstab
 entries, not verified effective flags. Propose `nodev,nosuid` for the data
 filesystem and each bind target. Defer `noexec` until executable mappings,
 plugins, helpers, and restore paths are inventoried. No root remount. Keep
@@ -155,8 +155,8 @@ mount with `findmnt` and after reboot; bind flags need explicit handling.
 Preserve missing-data-volume refusal. [Mount]
 
 **Updates.** Retain daily Ubuntu security updates and manual reboots at
-`E/apt/apt.conf.d/52aboutme-unattended-upgrades:3-15`. Keep reviewed third-party
-pins at `H/install.sh:24-28,146-153`; do not silently unhold PostgreSQL,
+`E/apt/apt.conf.d/52aboutme-unattended-upgrades:1-11`. Keep reviewed third-party
+pins at `H/install.sh:14-18,128-135`; do not silently unhold PostgreSQL,
 pgBackRest, or CrowdSec. Propose weekly advisory review and expedited reviewed
 security-pin updates when applicable. Home: installer, watcher alerts for
 update/reboot backlog, and production runbook. Verify versions, update logs,
@@ -180,7 +180,7 @@ not authenticate time. Authenticated time needs a separate provider/source
 decision. [Time sync]
 
 **Cloud-init and control plane.** S:266-267 says cloud-init is done and enabled;
-`H/cloud-init.yaml.tftpl:27-60` writes boot diagnostics, and
+`H/cloud-init.yaml.tftpl:25-54` writes boot diagnostics, and
 `V/prod/main.tf:89-94` ignores later user-data changes. Keep first-boot support;
 stop publishing raw sshd/listener diagnostics to serial logs. Do not disable
 cloud-init or delete its state until network/metadata/console recovery has a
@@ -188,7 +188,7 @@ reboot proof. Home: cloud-init template and installer; disabling is deferred
 because boot stages can configure networking. [Cloud-init boot]
 
 ADR 0026 and `V/README.md:50-64` place administrative API/state keys on the
-laptop; `H/cloud-init.yaml.tftpl:8` gives the SSH admin passwordless sudo. Treat
+laptop; `H/cloud-init.yaml.tftpl:6` gives the SSH admin passwordless sudo. Treat
 the SSH key as root authority. Propose a separate operator SSH key from commit
 signing, encrypted local custody, pinned host keys, no agent forwarding, and
 console MFA with offline recovery if the account supports it. Add/test the new

@@ -8,10 +8,10 @@ and owner questions.
 **Access.** S:8-40 has key-only login, root login denied, PAM enabled, X11 and
 user environment disabled, six authentication tries, a 120-second grace period,
 no client-alive probes, forwarding enabled, and INFO logging.
-`H/cloud-init.yaml.tftpl:33-52` owns the initial config; `H/install.sh:419` does
-not yet install an SSH policy. Add a managed drop-in under
-`E/ssh/sshd_config.d/` and explicit installer validation/reload. Keep
-`AllowUsers aboutme-admin`, `PermitRootLogin no`, `PasswordAuthentication no`,
+`H/cloud-init.yaml.tftpl:30-49` owns the initial config; `H/install.sh` does not
+yet install an SSH policy. Add a managed drop-in under `E/ssh/sshd_config.d/`
+and explicit installer validation/reload. Keep `AllowUsers aboutme-admin`,
+`PermitRootLogin no`, `PasswordAuthentication no`,
 `KbdInteractiveAuthentication no`, `UsePAM yes`, `X11Forwarding no`, and
 `PermitUserEnvironment no`. Propose `MaxAuthTries 3`, `LoginGraceTime 30`,
 `ClientAliveInterval 300`, `ClientAliveCountMax 2`, and
@@ -23,7 +23,7 @@ transport, not automatic cancellation of durable host operations. [Noble SSH]
 **Forwarding.** Propose `AllowTcpForwarding local`, `PermitOpen none`,
 `AllowStreamLocalForwarding no`, and `PermitTunnel no`. A privately rendered,
 attended drill exception may replace `PermitOpen` with only the drill host and
-SSH port, then restore `none`. `V/scripts/restore-drill.sh:503` uses `ssh -W`;
+SSH port, then restore `none`. `V/scripts/restore-drill.sh:486` uses `ssh -W`;
 blanket forwarding denial breaks that recovery path. Validate exception removal
 after success and failure. This limits convenient pivots by a stolen operator
 key; an administrator with a shell and sudo can bypass it. The workflow's
@@ -81,10 +81,10 @@ Literal/default search found these locations; values are intentionally omitted:
 - `V/prod/variables.tf:68,76,82,83,86,87`; `V/prod/main.tf:52,135,136`;
   `V/prod/prod.tfvars.example:4,5`;
   `V/prod/tests/drill-network.tftest.hcl:64,74`.
-- `V/README.md:68,73,74`; `V/scripts/ssh-lib.sh:3`; `V/probe/probe.sh:7,8,22`;
+- `V/README.md:68,73,74`; `V/scripts/ssh-lib.sh:2`; `V/probe/probe.sh:8`;
   `V/probe/README.md:14,15,46`.
 - `V/tests/cutover-ssh-failure-test.sh:42`;
-  `V/tests/deploy-failure-test.sh:168`; `V/tests/host-operations-test.sh:124`.
+  `V/tests/deploy-failure-test.sh:168`; `V/tests/host-operations-test.sh:117`.
 - `docs/design/vietnam-production.md:49,153`;
   `docs/design/restore-drill-networking.md:33`;
   `docs/runbooks/production.md:11,16`; `docs/runbooks/account-delete.md:21`;
