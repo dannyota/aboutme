@@ -1,19 +1,4 @@
 @media screen {
-  /*
-   * Screen margins for continuous reading surfaces (docs/design/web.md,
-   * "Pagination and print"). The text gets its measure first: the inline
-   * padding is (container width - measure) / 2, never under 16 px and never
-   * over the template's print margin. A phone gets 16 px, a tablet a growing
-   * margin, and a desktop the full margin. The block padding scales the same
-   * way, up to --page-margin-y.
-   *
-   * The container is the page root or live preview sheet, so cqw is the
-   * available width without the scrollbar. The em is the body size: the
-   * variables are substituted where they are used, on the article and on the
-   * page bar's inner row, and both set font-size to --fs-body. PDF images,
-   * print, and the paged preview never match these selectors and keep the
-   * template's margin.
-   */
   .public-resume-page,
   .preview-sheet[data-web-columns],
   .template-paper[data-web-columns] {

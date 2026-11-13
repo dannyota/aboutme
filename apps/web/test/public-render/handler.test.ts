@@ -155,7 +155,6 @@ describe('internal public render handler', () => {
           document: { ...document, nope: true },
         },
       }),
-      // The page head values are closed too (ADR 0014).
       JSON.stringify({ ...request, pageTitle: undefined }),
       JSON.stringify({ ...request, pageTitle: '' }),
       JSON.stringify({ ...request, pageTitle: 7 }),
@@ -169,7 +168,6 @@ describe('internal public render handler', () => {
         faviconHref: 'data:image/svg+xml,<svg onload=alert(1)>',
       }),
       JSON.stringify({ ...request, faviconHref: 'data:image/svg+xml,%3C"' }),
-      // So is the preview text (docs/design/link-previews.md).
       JSON.stringify({ ...request, preview: { title: 'Ada' } }),
       JSON.stringify({ ...request, preview: null }),
     ];

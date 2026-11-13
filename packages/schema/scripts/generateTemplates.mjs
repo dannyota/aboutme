@@ -1,7 +1,3 @@
-// Reads and validates the committed template presets (packages/schema/templates
-// or $ABOUTME_TEMPLATE_DIR), then emits the frozen TypeScript template
-// registry consumed by apps/web.
-
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";

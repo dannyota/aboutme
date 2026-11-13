@@ -5,10 +5,6 @@ import { describe, expect, it } from 'vitest';
 import TemplateDetailPage from '../../app/pages/templates/[id].vue';
 import { setSiteLocale } from '../support/locale';
 
-// The "What an ATS reads" panel is a white sheet in both themes, like the
-// page view next to it (DESIGN.md, template gallery). It needs the paper
-// scope so its text stays dark ink instead of the dark-theme foreground,
-// which would read as near-white text on the white sheet.
 mockNuxtImport(
   'useRoute',
   () => () => ({ params: { id: 'engineer-compact' } }),
@@ -58,7 +54,6 @@ describe('template detail page: tabs', () => {
       await flushPromises();
 
       const triggers = wrapper.findAll('[role="tab"]');
-      // reka-ui's TabsTrigger switches on mousedown, not click.
       await triggers[1]!.trigger('mousedown', { button: 0 });
       await flushPromises();
 

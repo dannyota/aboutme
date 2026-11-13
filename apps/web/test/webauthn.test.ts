@@ -260,8 +260,6 @@ describe('assertionToJSON', () => {
       expect(json.response.userHandle).not.toBeNull();
       expect(Array.from(decodeBase64Url(json.response.userHandle as string)))
         .toEqual([10, 11]);
-      // Fixed {} regardless of what the browser attaches — the server
-      // accepts no extension output for this ceremony.
       expect(json.clientExtensionResults).toEqual({});
     });
 

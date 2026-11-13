@@ -87,7 +87,6 @@ async function confirmRevoke(): Promise<void> {
       await refreshAfterAction();
       return;
     }
-    // Keep the fetched list intact and require a fresh confirmation attempt.
     unavailable.value = true;
     closeAfterAction();
   } finally {

@@ -4,8 +4,6 @@ import type { useAuth } from '../composables/useAuth';
 import type { ResumeRecord } from '../stores/resumes';
 
 export const MAX_PDF_DOWNLOAD_BYTES = 16_777_216;
-// A tab navigates to the object URL after this function returns, so the URL
-// outlives the call. A minute covers the tab's load of the in-memory bytes.
 const TAB_URL_LIFETIME_MS = 60_000;
 const FALLBACK_PDF_FILENAME = 'Resume.pdf';
 const MAX_CONTENT_DISPOSITION_LENGTH = 1024;
@@ -31,7 +29,6 @@ type PdfDownloadError
 export interface PdfDownloadController {
   readonly state: Readonly<Ref<PdfDownloadState>>;
   download(): Promise<PdfDownloadState>;
-  /** Shows the saved revision's PDF in a new browser tab. */
   openInTab(): Promise<PdfDownloadState>;
   dispose(): void;
 }
@@ -45,7 +42,6 @@ export interface PdfDownloadControllerDeps {
   readonly createObjectURL?: (blob: Blob) => string;
   readonly revokeObjectURL?: (url: string) => void;
   readonly download?: (url: string, filename: string) => void;
-  /** Opens the tab synchronously inside the click, before any await. */
   readonly openTab?: () => PdfTab | null;
 }
 
@@ -90,8 +86,7 @@ export function createPdfDownloadController(
     }
     if (beforeFlush.kind !== 'ready') return blocked();
 
-    // A popup opened after an await has lost the click's user activation and
-    // the browser blocks it, so the tab opens here and the PDF fills it later.
+    // HTML transient activation: a popup opened after an await is blocked.
     const tab = inTab ? openTab() : null;
     if (inTab && tab === null) {
       return setState({ kind: 'error', code: 'popup-blocked' });

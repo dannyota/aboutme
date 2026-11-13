@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * The components card (docs/design/deployment-transparency/visual.md,
- * "Component rows"): one row per serving component, plus `maintenance`
- * while it runs, each with its running images, versions, replicas, and
- * signature/SBOM marks.
- */
 import { Check, Minus, X } from '@lucide/vue';
 import { computed } from 'vue';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,7 +13,6 @@ import { cn } from '@/lib/utils';
 import VerifyDigestChip from './VerifyDigestChip.vue';
 
 const props = defineProps<{
-  /** Null while loading; the card still renders, with skeleton rows. */
   readonly document: DeploymentDocument | null;
   readonly stale: boolean;
   readonly locale: Locale;
@@ -31,7 +24,6 @@ const rows = computed(() => (
 ));
 const anyRolling = computed(() => rows.value.some((row) => row.rolling));
 
-/** Stale values are shown but never rechecked (visual.md, component rows). */
 function statusOf(status: CheckStatus): CheckStatus {
   return props.stale ? 'unchecked' : status;
 }
@@ -209,9 +201,6 @@ function statusClass(status: CheckStatus): string {
 </template>
 
 <style scoped>
-/* A 3 px rail on the card's left edge beside a component in rollout or in
-   failure (visual.md, component rows). Decorative: the tag and mark text
-   carry the state. */
 .verify-rail::before {
   content: "";
   position: absolute;

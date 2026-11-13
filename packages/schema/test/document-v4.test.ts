@@ -4,11 +4,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-// Document v4 adds customization.header.photoPosition and a project entry
-// subtitle (docs/adr/0013-resume-header-and-contacts.md).
-// Both are optional: absent keeps the photo on top and the project without a
-// subtitle.
-
 const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));

@@ -213,7 +213,6 @@ function linkUnderlines(paint: PdfPaint, page: PdfTextPage): PdfFill[] {
       if (!bounds) return false;
       const size = item.height;
       if (pdfIsStroke(fill)) return false;
-      // A link may cover only part of an extracted text item, after a label.
       const baseline = page.height - item.y;
       return fill.bottom - fill.top <= 1
         && fill.left >= bounds.left - 1 && fill.right <= bounds.right + 1
@@ -254,7 +253,6 @@ export function pdfSurfacePaint(
   }
   if (!decorations.every((fill) => pdfShapePaintMatches(paint, fill, color,
     ink.get(fill)!, decorations))) return false;
-  // Partition native bounds so DOM edge tolerance cannot move gap probes.
   const exclusions = [...page.items.flatMap(({ bounds }) =>
     bounds ? [bounds] : []), ...foreground, ...decorations];
   let exposed: PdfBox[] = [surface];
@@ -273,7 +271,6 @@ export function pdfSurfacePaint(
       ].filter((part) => part.right > part.left && part.bottom > part.top);
     });
   }
-  // Probe unknown paint bounds even when a patch misses a large area's grid.
   return exposed.length > 0 && exposed.every((area) => {
     const probes = [area, ...paint.fills.map((fill) => ({
       left: Math.max(area.left, fill.left),
@@ -296,7 +293,6 @@ export function pdfSidebarPaint(
     icons?: readonly PdfDecoration[];
   })[]; },
 ): boolean {
-  // Overflow fixtures use full-width level-five bars and heading rules.
   const fullWidth = paint.fills.filter((fill) =>
     Math.abs(fill.left - sidebar.left) <= 1
     && Math.abs(fill.right - sidebar.right) <= 1);
@@ -348,7 +344,6 @@ export function pdfSidebarPaint(
     && new Set(foreground).size === titles.length + expected.headings.length;
   const icons = expected.headings.flatMap((heading) => heading.icons ?? []);
   if (column.length === 0 && !firstPage) {
-    // A short sidebar still paints alongside the continuing main flow.
     return paint.fills.some((fill) =>
       pdfSurfacePaint(paint, page, fill, color, foreground, icons)
       && Math.abs(fill.left - sidebar.left) <= 1
@@ -621,7 +616,7 @@ export function pdfWidgetMatches(
     if (!track || Math.abs(track.bottom - track.top - 3) > 1
       || Math.abs(track.left - measured.title.left) > 1
       || Math.abs(track.right - measured.entry.right) > 1) return false;
-    // A full solid bar hides its track; Chromium can omit the covered paint.
+    // Chromium can omit the track paint a full solid bar covers.
     const expected = { ...track,
       right: track.left + (track.right - track.left) * level / 5 };
     if (level < 5 && !pdfHasFill(paint, track, colors.track,

@@ -35,20 +35,9 @@ import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
-/**
- * A single `flushPromises()` drains one microtask queue. A second-factor
- * mutation chains several: the mock HTTP round trip, `useFetch`'s own
- * resolution, the emitted `changed` event, then the parent's own `/me` and
- * `/sessions` refetches — the same reason
- * `sessions-privileged-start-adversarial.test.ts`'s `settleClick` awaits it
- * more than once. Every call site in this file goes through here so every
- * wait is uniformly generous rather than tuned per call site.
- */
 async function flushPromises(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await flushPromisesOnce();
 }
-
-// --- Pure helper unit tests -------------------------------------------------
 
 describe('recoveryCodesDownloadText', () => {
   const codes = Array.from({ length: 10 }, (_, i) => `amr_code-${i}`);
@@ -207,7 +196,7 @@ describe('createPasskeyCredential', () => {
     const create = vi.fn(async (options: CredentialCreationOptions) => {
       captured = options;
       return new FakePublicKeyCredential(
-        'AQIDBA', // base64url("\x01\x02\x03\x04")
+        'AQIDBA',
         bytes(1, 2, 3, 4).buffer,
         new FakeAttestationResponse(
           bytes(5, 6).buffer,
@@ -219,7 +208,6 @@ describe('createPasskeyCredential', () => {
     vi.stubGlobal('navigator', { ...navigator, credentials: { create } });
 
     const publicKey: RegistrationPublicKeyInput = {
-      // base64url("\x00\x00\x00\x00") with 32 bytes trimmed for the test
       challenge: 'AAAAAA',
       rp: { name: 'aboutme', id: 'aboutme.vn' },
       user: { id: 'AQIDBA', name: 'ada@example.com', displayName: 'Ada' },
@@ -330,8 +318,6 @@ describe('error mapping', () => {
   });
 });
 
-// --- TOTP: pure-function unit tests -----------------------------------------
-
 describe('mapTotpEnrollmentStartError', () => {
   it.each([
     [403, 'reauth_required', 'reauth-required'],
@@ -352,9 +338,7 @@ describe('mapTotpEnrollmentCompleteError', () => {
   it.each([
     [403, 'reauth_required', 'reauth-required'],
     [404, 'not_found', 'closed'],
-    // Expired, foreign, or superseded enrollment: setup can't continue.
     [400, 'enrollment_invalid', 'expired'],
-    // Wrong or replayed proof: the same QR/secret stays usable.
     [401, 'verification_failed', 'invalid-code'],
     [429, 'rate_limited', 'rate-limited'],
     [503, 'authentication_unavailable', 'unavailable'],
@@ -397,9 +381,7 @@ describe('renderTotpQr', () => {
     const qr = renderTotpQr(uri);
     expect(Number.isInteger(qr.size)).toBe(true);
     expect(qr.size).toBeGreaterThan(0);
-    // `uqr`'s default one-module border is already folded into `size`
-    // (renderTotpQr's own doc comment); the component's `viewBox` is
-    // `0 0 ${qr.size} ${qr.size}`, so this covers the rendered size too.
+    // uqr folds its default one-module border into size.
     const path = qr.path;
     const xs = [...path.matchAll(/M(\d+) \d+/g)].map((m) => Number(m[1]!));
     expect(Math.max(...xs)).toBeLessThan(qr.size);
@@ -407,9 +389,6 @@ describe('renderTotpQr', () => {
 
   it('never embeds markup or the URI text in the path', () => {
     const qr = renderTotpQr(uri);
-    // The QR encoder only ever emits numeric module coordinates
-    // (docs/design/totp-second-factor-contract.md "Provisioning data"):
-    // no HTML, and never the literal URI or secret text.
     expect(qr.path).toMatch(/^(M\d+ \d+h1v1h-1z)*$/);
     expect(qr.path).not.toContain('<');
     expect(qr.path).not.toContain('>');
@@ -417,8 +396,6 @@ describe('renderTotpQr', () => {
     expect(qr.path).not.toContain('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
   });
 });
-
-// --- Integrated settings-page tests -----------------------------------------
 
 interface PasskeyFixture {
   id: string;
@@ -447,12 +424,7 @@ let enabled: boolean;
 let totpEnabled: boolean;
 let passwordReauthResponse: () => unknown;
 
-// Reassigned, never re-registered: `registerEndpoint` replaces this file's
-// only handler for the URL for the rest of the run, not just the current
-// test, so a test that needs a one-off state-read behavior (like a later
-// call failing) must reassign `stateHandler` and let `beforeEach` put the
-// default back, the same pattern `optionsResponse`/`completionResponse`/
-// `regenerateResponse` already use below.
+// registerEndpoint replaces the URL's handler for the rest of the file.
 let stateHandler: (event: H3Event) => unknown;
 
 function defaultStateHandler(_event: H3Event): unknown {
@@ -513,10 +485,6 @@ registerEndpoint('/api/v1/auth/google/start', {
   handler: () => ({ data: { authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' } }),
 });
 
-/** Sets the status, then returns the closed `{error:{code,message}}` shape
- * every other test file in this suite uses to simulate a server rejection:
- * a plain success return leaves h3's default 200, so an error case must set
- * its own status before returning. */
 function errorBody(
   event: H3Event,
   statusCode: number,
@@ -555,8 +523,6 @@ function registerRemoval(
   });
 }
 
-// --- TOTP endpoint fixtures ------------------------------------------------
-
 const totpProvisioningUri = 'otpauth://totp/aboutme.vn:demo%40example.com'
   + '?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn'
   + '&algorithm=SHA1&digits=6&period=30';
@@ -577,9 +543,6 @@ function defaultTotpStartResponse(): unknown {
 }
 
 function defaultTotpCompleteResponse(): unknown {
-  // Mirrors `registerRemoval` mutating `passkeys`: a completion actually
-  // installs the credential, so a later state refetch in the same test
-  // sees it as enabled too.
   totpEnabled = true;
   return { data: { totpEnabled: true } };
 }
@@ -599,16 +562,11 @@ registerEndpoint('/api/v1/me/second-factor/totp', {
 
 function stubWebAuthnSupport(): void {
   vi.stubGlobal('PublicKeyCredential', FakePublicKeyCredential);
-  // createPasskeyCredential checks `response instanceof
-  // AuthenticatorAttestationResponse`; without this stub that global is
-  // undefined under happy-dom, so the check throws and every completed
-  // ceremony in a test using this helper looks like a failed one.
+  // happy-dom has no AuthenticatorAttestationResponse global.
   vi.stubGlobal('AuthenticatorAttestationResponse', FakeAttestationResponse);
   vi.stubGlobal('navigator', {
     ...navigator,
     credentials: {
-      // `isWebAuthnSupported` (utils/webauthn.ts) checks `.get`, the
-      // assertion method it uses; only `.create` runs a registration here.
       get: vi.fn(),
       create: vi.fn(async () =>
         new FakePublicKeyCredential(
@@ -626,13 +584,7 @@ function stubWebAuthnSupport(): void {
 
 let currentWrapper: Awaited<ReturnType<typeof mountSuspended>> | null = null;
 
-/**
- * Mounts attached to `document.body`, the pattern `connected-agents.test.ts`
- * and `privacy-settings.test.ts` use, because `ConfirmDialog` and the
- * recovery-reveal `Dialog` both teleport to `document.body`: their content
- * is unreachable through `wrapper.get`/`wrapper.find`/`wrapper.text()`, and
- * `document.activeElement` only tracks a connected element's real focus.
- */
+// @vue/test-utils' wrapper cannot reach teleported dialog content.
 async function mountSettings(
   capabilities: {
     passkeyEnrollment?: boolean;
@@ -667,12 +619,6 @@ function clickInDialog(selector: string): void {
   button!.click();
 }
 
-/**
- * `wrapper.get`/`find` cannot reach teleported dialog content (see
- * `mountSettings`'s doc comment); this is their `document.body` equivalent
- * for the TOTP setup dialog, which needs `.setValue()`/`.trigger()`, not
- * just a click.
- */
 function dialogGet(selector: string): DOMWrapper<Element> {
   const element = document.body.querySelector(selector);
   expect(element, `missing ${selector} in document.body`).not.toBeNull();
@@ -686,10 +632,7 @@ function dialogExists(selector: string): boolean {
 describe('second-factor settings', () => {
   beforeEach(() => {
     setSiteLocale('en');
-    // Every mount in this file re-fetches capabilities and factor state
-    // with fixtures that change per test; without clearing it, Nuxt's
-    // useFetch/useAsyncData payload cache would keep serving the first
-    // mount's response to every later mount in this file.
+    // Nuxt's useFetch payload cache would replay the first mount's response.
     clearNuxtData();
     resetFixtures();
     optionsResponse = () => ({
@@ -753,8 +696,6 @@ describe('second-factor settings', () => {
     vi.unstubAllGlobals();
   });
 
-  // --- capability ------------------------------------------------------
-
   it('hides add-passkey when enrollment is closed', async () => {
     const wrapper = await mountSettings({ passkeyEnrollment: false });
     expect(wrapper.find('[data-testid="passkey-add"]').exists()).toBe(false);
@@ -802,8 +743,6 @@ describe('second-factor settings', () => {
       wrapper.find('[data-testid="second-factor-unsupported"]').exists(),
     ).toBe(true);
   });
-
-  // --- state -------------------------------------------------------------
 
   it('lists passkeys in order with safe created/last-used times', async () => {
     passkeys = [
@@ -867,8 +806,6 @@ describe('second-factor settings', () => {
       wrapper.find('[data-testid="recovery-codes-section"]').exists(),
     ).toBe(false);
   });
-
-  // --- enrollment ----------------------------------------------------
 
   it('reveals ten codes on first enrollment, clears on close', async () => {
     passkeys = [];
@@ -948,8 +885,6 @@ describe('second-factor settings', () => {
       .toBe('Adding a new passkey is turned off right now.');
   });
 
-  // --- removal -------------------------------------------------------
-
   it('asks a non-final confirmation and preserves recovery codes', async () => {
     passkeys = [
       { id: 'pk-1', createdAt: '2026-09-01T00:00:00Z', lastUsedAt: null },
@@ -1000,8 +935,6 @@ describe('second-factor settings', () => {
     expect(wrapper.get('[data-testid="passkey-remove-error"]').text())
       .toBe('That passkey could not be found.');
   });
-
-  // --- recent reauthentication ----------------------------------------
 
   it('switches to password reauth, then lets the user retry', async () => {
     registerRemoval(
@@ -1094,8 +1027,6 @@ describe('second-factor settings', () => {
     );
   });
 
-  // --- recovery --------------------------------------------------------
-
   it('shows the remaining recovery-code count', async () => {
     recoveryCodesRemaining = 3;
     const wrapper = await mountSettings();
@@ -1126,9 +1057,6 @@ describe('second-factor settings', () => {
   });
 
   it('maps regeneration on an unenrolled account to not-found', async () => {
-    // Reachable only if the section briefly renders while enabled; a
-    // concurrent disable races the button, so the handler must still map
-    // the response instead of assuming success.
     regenerateResponse = (event) => errorBody(event, 404, 'factor_not_found');
     const wrapper = await mountSettings();
     await wrapper.get('[data-testid="recovery-regenerate"]').trigger('click');
@@ -1138,8 +1066,6 @@ describe('second-factor settings', () => {
     expect(wrapper.get('[data-testid="recovery-regenerate-error"]').text())
       .toBe('That passkey could not be found.');
   });
-
-  // --- cleanup -----------------------------------------------------------
 
   it('clears revealed codes on unmount', async () => {
     const wrapper = await mountSettings();
@@ -1152,17 +1078,12 @@ describe('second-factor settings', () => {
 
     wrapper.unmount();
     currentWrapper = null;
-    // Unmounting tears down the teleported dialog along with the component;
-    // nothing is left in `document.body` to hold the plaintext codes.
     expect(document.body.querySelector('[data-testid="recovery-reveal"]'))
       .toBeNull();
   });
 
   it('keeps a revealed set intact when the refresh fails', async () => {
     let stateCalls = 0;
-    // Reassigns the shared handler rather than re-registering the route:
-    // `registerEndpoint` replaces the file's only handler for this URL for
-    // every later test too, not just this one.
     stateHandler = (event) => {
       stateCalls += 1;
       if (stateCalls > 1) return errorBody(event, 500, 'internal');
@@ -1180,8 +1101,6 @@ describe('second-factor settings', () => {
         ?.querySelectorAll('li'),
     ).toHaveLength(10);
   });
-
-  // --- locale ------------------------------------------------------------
 
   it('preserves an open reveal dialog across a locale change', async () => {
     const wrapper = await mountSettings();
@@ -1229,11 +1148,7 @@ describe('second-factor settings', () => {
     expect(wrapper.get('h2#second-factor-title').text()).toBe('Passkey');
   });
 
-  // --- accessibility -------------------------------------------------
-
   it('focuses the error banner when adding a passkey fails', async () => {
-    // Adding has no confirmation step, so nothing else competes for focus
-    // the way a closing `ConfirmDialog` restores focus to its opener.
     optionsResponse = (event) => errorBody(event, 500, 'internal');
     stubWebAuthnSupport();
     const wrapper = await mountSettings({ passkeyEnrollment: true });
@@ -1244,8 +1159,6 @@ describe('second-factor settings', () => {
     expect(banner.attributes('role')).toBe('alert');
     expect(banner.element).toBe(document.activeElement);
   });
-
-  // --- session rotation ------------------------------------------------
 
   it('refetches account and device list after a mutation', async () => {
     const wrapper = await mountSettings();
@@ -1271,8 +1184,6 @@ describe('second-factor settings', () => {
       + 'connected agent. This device stays signed in.',
     );
   });
-
-  // --- TOTP: capability --------------------------------------------------
 
   it('hides TOTP setup when its enrollment capability is closed', async () => {
     const wrapper = await mountSettings({ totpEnrollment: false });
@@ -1347,8 +1258,6 @@ describe('second-factor settings', () => {
         .toBe(false);
     },
   );
-
-  // --- TOTP: setup and local-QR --------------------------------------------
 
   it(
     'opens setup with a locally rendered QR and the grouped secret',
@@ -1439,7 +1348,6 @@ describe('second-factor settings', () => {
     expect(completeCalls).toBe(0);
     expect(dialogGet('[data-testid="totp-code-form"]').text())
       .toContain('Enter all 6 digits.');
-    // The QR and secret stay put for a corrected retry.
     expect(dialogExists('[data-testid="totp-qr"]')).toBe(true);
   });
 
@@ -1472,8 +1380,6 @@ describe('second-factor settings', () => {
     expect(wrapper.get('[data-testid="totp-start-error"]').text())
       .toBe('Setting up an authenticator app is turned off right now.');
   });
-
-  // --- TOTP: invalid code, replay, rate limit, and expiry -----------------
 
   it(
     'keeps the QR and secret for a retry after an invalid or replayed code',
@@ -1550,8 +1456,6 @@ describe('second-factor settings', () => {
     },
   );
 
-  // --- TOTP: replacement ---------------------------------------------------
-
   it(
     'replacing shows the current credential stays active, then replaces it',
     async () => {
@@ -1578,8 +1482,6 @@ describe('second-factor settings', () => {
         .toBeNull();
     },
   );
-
-  // --- TOTP: removal and mixed passkey state -------------------------------
 
   it(
     'asks a non-final confirmation when a passkey remains active',
@@ -1632,8 +1534,6 @@ describe('second-factor settings', () => {
       .toBe('No authenticator app was found.');
   });
 
-  // --- TOTP: recent reauthentication (forwarded to the shared flow) -------
-
   it(
     'forwards a reauth-required start failure to the shared flow',
     async () => {
@@ -1672,8 +1572,6 @@ describe('second-factor settings', () => {
     },
   );
 
-  // --- TOTP: cleanup ---------------------------------------------------
-
   it('clears the QR, secret, and code on unmount', async () => {
     const wrapper = await mountSettings({ totpEnrollment: true });
     await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
@@ -1688,8 +1586,6 @@ describe('second-factor settings', () => {
     expect(document.body.querySelector('[data-testid="totp-qr"]'))
       .toBeNull();
   });
-
-  // --- TOTP: locale --------------------------------------------------------
 
   it('clears an open setup dialog on a locale change', async () => {
     const wrapper = await mountSettings({ totpEnrollment: true });
@@ -1717,8 +1613,6 @@ describe('second-factor settings', () => {
     expect(wrapper.get('[data-testid="totp-setup-start"]').text())
       .toBe('Thiết lập ứng dụng xác thực');
   });
-
-  // --- TOTP: accessibility -------------------------------------------------
 
   it('focuses the setup error banner when the code is rejected', async () => {
     totpCompleteResponse = (event) =>

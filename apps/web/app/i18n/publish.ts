@@ -53,7 +53,6 @@ type PublishPreviewCopy = {
   readonly caption: string;
 };
 
-/** The community showcase block (docs/design/showcase.md, Copy). */
 type PublishShowcaseCopy = {
   readonly label: string;
   readonly help: string;
@@ -62,7 +61,6 @@ type PublishShowcaseCopy = {
   readonly roleLabel: string;
   readonly roleHint: string;
   readonly noRole: string;
-  /** Role labels; the same as the showcase page's chips. */
   readonly roles: Readonly<Record<ShowcaseRole, string>>;
   readonly listed: string;
   readonly listedLink: string;

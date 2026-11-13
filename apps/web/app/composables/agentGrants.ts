@@ -39,7 +39,6 @@ function codeOf(error: unknown): unknown {
   return value.data?.error?.code ?? value.error?.code;
 }
 
-/** Map only the exact session and stale-grant pairs to public failures. */
 function mapAgentGrantsError(error: unknown): AgentGrantsFailure {
   const status = statusOf(error);
   const code = codeOf(error);
@@ -149,8 +148,6 @@ export function useAgentGrants(): UseAgentGrants {
 
   async function refresh(): Promise<void> {
     try {
-      // The registry bridge is test-only. Browser production calls retain the
-      // generated client's normal same-origin credential behavior.
       const api = import.meta.env.MODE === 'test'
         ? createApiClient({
             baseUrl: 'http://localhost/api/v1',

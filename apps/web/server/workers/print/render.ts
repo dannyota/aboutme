@@ -22,11 +22,6 @@ const HTML_ESCAPES: Record<string, string> = {
   '"': '&quot;',
 };
 
-/**
- * The print page title, which Chromium copies into the PDF Title. Control and
- * format characters become spaces, white space collapses, and a blank name
- * leaves "Resume" (docs/adr/0011-print-capability-and-pdf-output.md).
- */
 export function printTitle(fullName: string): string {
   const name = fullName
     .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
@@ -77,13 +72,6 @@ export async function renderPrintResume(
   }
 }
 
-/**
- * The link-preview card page Go captures at 1200 by 630
- * (docs/design/link-previews.md, "Preview card"). It carries only the card
- * envelope's fields, no script, and the same fonts and stylesheet as the
- * print document; the decoder already bounded the language and slug, so
- * both are safe in attributes and text.
- */
 export async function renderPrintCard(
   envelope: PrintCardEnvelope,
 ): Promise<string> {

@@ -9,12 +9,7 @@ import { setSiteLocale } from './support/locale';
 registerCapabilities();
 beforeEach(() => setSiteLocale('en'));
 
-// Deliberately its own file with a single test, mirroring
-// `useAuth-csrf-rotation.test.ts`: the assertion depends on the FIRST `/me`
-// resolution returning a password user (`hasPassword: true`), and `useFetch`
-// caches by URL within a shared Nuxt app instance. In a file that mounts
-// `/me` more than once (or alongside `sessions.test.ts`), whether THIS
-// mount actually invokes its own handler is not reliably predictable.
+// Own file: Nuxt reuses a URL's cached useFetch result within a test file.
 
 interface MockEvent {
   node?: { req?: { headers?: Record<string, string> } };
@@ -75,8 +70,6 @@ describe('sessions.vue password reauth', () => {
       const wrapper = await mountSuspended(SessionsPage);
       await flushPromises();
 
-      // A password user is offered "Change password", then reauth with the
-      // current password only.
       expect(wrapper.get('[data-testid="password-status"]').text()).toBe(
         'You have a password.',
       );

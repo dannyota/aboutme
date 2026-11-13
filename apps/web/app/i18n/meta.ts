@@ -1,15 +1,8 @@
-// Page titles and search metadata for the site pages. Only the homepage, the
-// Privacy Policy, the Terms, the Verify page, the template gallery, and the
-// MCP guide are indexable; every other route is noindex.
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
 
 export const siteName = 'aboutme.vn';
 export const siteOrigin = 'https://aboutme.vn';
-/**
- * The site's Open Graph image in each language (docs/brand/README.md). A
- * crawler without the locale cookie gets Vietnamese, the site default.
- */
 export const ogImageUrl: Record<Locale, string> = {
   vi: `${siteOrigin}/og-image-v7.jpg`,
   en: `${siteOrigin}/og-image-v6-en.jpg`,
@@ -25,14 +18,10 @@ const indexablePaths: ReadonlySet<string> = new Set([
 
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;
 
-/** Whether search engines may index a route path. */
 export function isIndexablePath(path: string): boolean {
   return indexablePaths.has(path) || GALLERY_PATH.test(path);
 }
 
-/**
- * "<page> · aboutme.vn", the title pattern for every page but the homepage.
- */
 export function pageTitle(name: string): string {
   return `${name} · ${siteName}`;
 }

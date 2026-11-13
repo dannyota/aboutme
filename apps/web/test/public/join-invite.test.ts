@@ -14,9 +14,6 @@ import {
   startJoinInviteTiming,
 } from '../../app/public/joinInvite';
 
-// Timing and placement (docs/design/viewer-analytics/sign-in-to-view.md
-// #join-invite; docs/design/public-page-theme.md, "Join invite").
-
 class FakeDoc extends EventTarget {
   visibilityState: 'visible' | 'hidden' = 'visible';
   documentElement = { scrollHeight: 10_000 };
@@ -40,7 +37,7 @@ describe('startJoinInviteTiming', () => {
   it('never shows before the 5 s floor, even at full scroll', async () => {
     const doc = new FakeDoc();
     const win = new FakeWindow();
-    win.scrollY = 9_200; // scrollable = 10000 - 800 = 9200, fraction 1
+    win.scrollY = 9_200;
     const onShow = vi.fn();
     startJoinInviteTiming(onShow, {
       window: win as unknown as Window,
@@ -160,8 +157,6 @@ describe('joinInvitePlacement', () => {
 });
 
 describe('joinInvitePlacement measures the resume box', () => {
-  // The public page root spans the viewport, so its right edge leaves no
-  // margin; the resume's own box (.public-measure) is what sits inside it.
   function page(measureRight: number, viewport: number): Element {
     const measure = {
       getBoundingClientRect: () => ({ right: measureRight }),
@@ -194,7 +189,6 @@ describe('joinInvitePlacement measures the resume box', () => {
 });
 
 describe('joinInviteContainerStyle', () => {
-  // DESIGN.md, "Join invite": light column of the page bar's tokens.
   it('draws the card 320 px wide, 16 px from the bottom right', () => {
     const style = joinInviteContainerStyle('card');
     expect(style).toMatchObject({
@@ -248,8 +242,6 @@ describe('joinInviteContainerStyle', () => {
 });
 
 describe('join invite color scheme', () => {
-  // docs/design/public-page-theme.md, "Page bar > Tokens": the invite takes
-  // the bar's dark column on a dark page.
   it('takes the dark column of the bar tokens', () => {
     expect(joinInvitePalette(true)).toEqual({
       surface: '#141A2E',

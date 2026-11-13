@@ -17,12 +17,9 @@ const root = new URL("..", import.meta.url).pathname;
 const fixture = (...parts: string[]) =>
   JSON.parse(readFileSync(join(root, "fixtures", ...parts), "utf8"));
 
-// Issues by rule id, for readable assertions below.
 const rules = (issues: { rule: string }[]) => issues.map((i) => i.rule);
 
 describe("store-layer validator: clean documents produce zero issues", () => {
-  // Aggregate rules must preserve schema-valid partial drafts. See
-  // docs/design/data.md#draft-and-publish-validation.
   const cleanFixtures = [
     "minimal.json",
     "full.json",
@@ -42,8 +39,8 @@ describe("store-layer validator: hole 1 — rich-text byte length (chars vs. byt
   it("rejects 9,000 'é' characters (9,000 code points, 18,000 UTF-8 bytes) — the reviewer's exact proof-of-concept", () => {
     const doc = fixture("store", "invalid-oversize-richtext-bytes.json");
     const text = doc.content.profile.entries[0].text;
-    expect([...text].length).toBe(9000); // passes resume.schema.json's maxLength: 16384 (code points)
-    expect(utf8ByteLength(text)).toBe(18000); // exceeds the real 16 KB byte limit
+    expect([...text].length).toBe(9000);
+    expect(utf8ByteLength(text)).toBe(18000);
 
     const issues = validateDocument(doc);
     expect(rules(issues)).toContain("rich-text-byte-length");
@@ -95,8 +92,6 @@ describe("store-layer validator: hole 2 — layout aggregate invariant", () => {
     ).toEqual([]);
   });
 
-  // Go and TypeScript must sort issues by path, rule, then message so the same
-  // document yields the same ordered result.
   it("emits layout issues in a canonical (path, rule, message) order, not Map placement order", () => {
     const doc = {
       content: {
@@ -120,8 +115,6 @@ describe("store-layer validator: hole 2 — layout aggregate invariant", () => {
       "layout-missing-content-key",
       "layout-orphan-content-key",
     ]);
-    // The two missing-content-key issues (same path, same rule) are
-    // tie-broken by message text — "missingOne" < "missingTwo".
     expect(issues[1].message).toContain("missingOne");
     expect(issues[2].message).toContain("missingTwo");
   });
@@ -165,9 +158,6 @@ describe("store-layer validator: reversed date range (start > end)", () => {
 });
 
 describe("store-layer validator: contact detail id uniqueness", () => {
-  // Old-client writes restore each detail's display by id
-  // (docs/adr/0013-resume-header-and-contacts.md), so ids must be
-  // unique.
   it("reports every occurrence of a repeated detail id", () => {
     const issues = validateDocument(
       fixture("store", "invalid-duplicate-detail-id.json"),
@@ -203,14 +193,9 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
       fixture("store", "invalid-duplicate-entry-id.json"),
     );
     expect(rules(issues)).toContain("duplicate-entry-id");
-    // One issue per occurrence, sorted by path — "content.skill..." < "content.work...".
     const duplicateIssues = issues.filter(
       (i) => i.rule === "duplicate-entry-id",
     );
-    // Exact message text (not just a substring): the two halves' message
-    // text is part of the store layer's cross-language parity contract —
-    // gen/go/store_validate_test.go's TestValidateDocument_DuplicateEntryID
-    // asserts these same two strings.
     expect(duplicateIssues).toEqual([
       {
         rule: "duplicate-entry-id",
@@ -264,8 +249,6 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
     ]);
   });
 
-  // JSON Schema uniqueItems cannot enforce ID uniqueness within otherwise
-  // distinct entry objects. The Go suite mirrors this case.
   it("rejects the same id used twice within a single section's own entries array", () => {
     const doc = {
       content: {
@@ -289,8 +272,6 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
     ]);
   });
 
-  // Error text must remain bounded when an ID occurs many times. Fifty
-  // sections exercise truncation without reaching the full aggregate limit.
   it("caps the interpolated 'also used at' list and summarizes the rest as 'and N more'", () => {
     const sectionCount = 50;
     const content: Record<
@@ -317,8 +298,6 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
       'content.s49.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.s00.entries[0].id, content.s01.entries[0].id, content.s02.entries[0].id, and 46 more',
     );
 
-    // The whole point: message length must not scale with the number of
-    // occurrences (49 others here) — every message stays short and bounded.
     for (const issue of issues) {
       expect(issue.message.length).toBeLessThan(220);
     }
@@ -330,8 +309,6 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
   });
 });
 
-// Hostile fixtures are deliberately schema-invalid. The aggregate validator
-// must tolerate them because it is also a safety boundary and must not throw.
 describe("store-layer validator: hostile inputs are handled without throwing (I1)", () => {
   it.each([
     "invalid-hostile-sectiontype-constructor.json",
@@ -342,8 +319,6 @@ describe("store-layer validator: hostile inputs are handled without throwing (I1
     (name) => {
       const doc = fixture("store", name);
       expect(() => validateDocument(doc)).not.toThrow();
-      // Same tolerance as any other unrecognized sectionType: no rich-text
-      // field table entry, so nothing to check — zero issues, not a crash.
       expect(validateDocument(doc)).toEqual([]);
     },
   );
@@ -351,8 +326,6 @@ describe("store-layer validator: hostile inputs are handled without throwing (I1
   it("invalid-missing-dates-start.json: a dates object missing start does not crash date-range ordering", () => {
     const doc = fixture("store", "invalid-missing-dates-start.json");
     expect(() => validateDocument(doc)).not.toThrow();
-    // Mirrors Go's tolerance: Start is a zero-value {y:0} there (ordinal 1),
-    // which is never > a real end date, so no date-range-order issue either.
     expect(rules(validateDocument(doc))).not.toContain("date-range-order");
   });
 
@@ -371,7 +344,6 @@ describe("store-layer validator: hostile inputs are handled without throwing (I1
     ).toEqual([]);
   });
 
-  // Apply the no-throw invariant to every shared store fixture.
   const storeFixtureNames = readdirSync(join(root, "fixtures", "store"));
   it.each(storeFixtureNames)(
     "%s is handled by validateDocument without throwing",
@@ -382,20 +354,12 @@ describe("store-layer validator: hostile inputs are handled without throwing (I1
   );
 });
 
-// Shared fixtures must decode through Go's typed loader, so they cannot carry
-// non-array values in array-shaped fields. These inline TypeScript cases cover
-// that malformed shape and prove toArray() fails closed without throwing.
 describe("store-layer validator: structurally malformed documents do not throw (NEW-I1)", () => {
   it("a section's entries carrying a non-array object does not crash rich-text-length or date-range checks", () => {
     const doc = {
       content: { w: { sectionType: "work", entries: { a: 1 } } },
     };
     expect(() => validateDocument(doc as never)).not.toThrow();
-    // Not a crash, but also nothing to iterate: the malformed entries value
-    // contributes zero rich-text-length / date-range-order issues (the
-    // unrelated layout-orphan-content-key issue below is expected — "w" is
-    // a real content key this minimal doc never places in a layout — and
-    // proves the rest of validateDocument still runs to completion).
     const issues = validateDocument(doc as never);
     expect(rules(issues)).not.toContain("rich-text-byte-length");
     expect(rules(issues)).not.toContain("date-range-order");
@@ -433,15 +397,13 @@ describe("store-layer validator: structurally malformed documents do not throw (
   );
 });
 
-// Go does not execute JSON Schema patterns. Repeat the https-only contact-chip
-// rule at the aggregate boundary so a hostile href cannot reach rendering.
 describe("store-layer validator: personal detail URL-scheme hardening (C1 follow-up — Go has no ajv equivalent)", () => {
   it("rejects a hostile scheme on a website/linkedin/github/twitter chip", () => {
     const issues = validateDocument(
       fixture("store", "invalid-personal-detail-url-scheme.json"),
     );
     expect(rules(issues)).toContain("personal-detail-url-scheme");
-    expect(issues).toHaveLength(1); // only the hostile detail (index 0), not the clean linkedin one (index 1)
+    expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("personalDetails.details[0].value");
   });
 
@@ -452,10 +414,10 @@ describe("store-layer validator: personal detail URL-scheme hardening (C1 follow
     ["linkedin", "javascript:alert(1)", false],
     ["github", "vbscript:msgbox(1)", false],
     ["twitter", "JavaScript:alert(1)", false],
-    ["website", "mailto:ada@example.com", false], // type-appropriate subset: https-only, not mailto/tel
+    ["website", "mailto:ada@example.com", false],
     ["website", "https://ada.example.com", true],
-    ["linkedin", "", true], // draft-permissive: explicitly cleared
-    ["email", "javascript:alert(1)", true], // non-URL value remains unconstrained
+    ["linkedin", "", true],
+    ["email", "javascript:alert(1)", true],
   ])("type=%s value=%s -> valid=%s", (type, value, expectValid) => {
     const issues = validatePersonalDetailUrlSchemes({
       details: [{ type, value }],
@@ -463,13 +425,11 @@ describe("store-layer validator: personal detail URL-scheme hardening (C1 follow
     expect(issues.length === 0).toBe(expectValid);
   });
 
-  // Only known non-URL types are exempt. Unknown, perturbed, or missing types
-  // fail closed under the https-or-empty rule.
   it.each([
-    ["WEBSITE", "javascript:alert(1)"], // wrong case
-    ["url", "javascript:alert(1)"], // out of enum entirely
-    ["", "javascript:alert(1)"], // empty string
-    [undefined, "javascript:alert(1)"], // missing type key
+    ["WEBSITE", "javascript:alert(1)"],
+    ["url", "javascript:alert(1)"],
+    ["", "javascript:alert(1)"],
+    [undefined, "javascript:alert(1)"],
   ])(
     "type=%s no longer bypasses the https requirement (was accepted before NEW-M1)",
     (type, value) => {
@@ -480,8 +440,6 @@ describe("store-layer validator: personal detail URL-scheme hardening (C1 follow
     },
   );
 
-  // The four exempt types must stay genuinely unconstrained — the
-  // fail-closed default above must not accidentally widen to cover them.
   it.each(["email", "phone", "location", "custom"])(
     "type=%s stays unconstrained (design spec defines no value format for it)",
     (type) => {
@@ -493,8 +451,6 @@ describe("store-layer validator: personal detail URL-scheme hardening (C1 follow
   );
 });
 
-// The portable schema pattern checks key shape. The aggregate boundary rejects
-// ".." without relying on RE2-incompatible lookahead.
 describe("store-layer validator: photo.key path-traversal guard (NEW-M3)", () => {
   it.each([
     "../../other-user/secret.jpg",
@@ -531,9 +487,6 @@ describe("store-layer validator: photo.key path-traversal guard (NEW-M3)", () =>
   });
 });
 
-// A present contact with value "" is distinct from an absent contact. Prove
-// the cleared value survives decoding as well as aggregate validation. See
-// docs/design/data.md#draft-and-publish-validation.
 describe("store-layer validator: a present personal-detail entry with an explicitly cleared value (AC-DOC-009)", () => {
   it('draft-cleared-contact-value.json preserves the entry with value === "", not absent or fabricated', () => {
     const doc = fixture("draft-cleared-contact-value.json");

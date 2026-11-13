@@ -6,9 +6,6 @@ import { computed } from 'vue';
 import { ResumeLngKey } from '../../app/components/resume/formatDate';
 import ContactChip from '../../app/components/resume/primitives/ContactChip.vue'; // eslint-disable-line max-len
 
-// Link display modes, custom https links, and brand marks
-// (docs/adr/0013-resume-header-and-contacts.md).
-
 type Display = NonNullable<PersonalDetail['display']>;
 
 const detail = (
@@ -139,7 +136,6 @@ describe('link display modes', () => {
 
   it('ignores display on email, phone, and text values', () => {
     for (const display of ['full', 'label'] as const) {
-      // An email links as mailto: with its value as the text (ADR 0013).
       const email = chip(
         detail('email', 'ada@example.com', { display }),
         'none',
@@ -167,7 +163,6 @@ describe('brand marks', () => {
     expect(svg.classes())
       .toEqual(expect.arrayContaining(['resume-icon', name]));
     expect(svg.attributes('fill')).toBe('currentColor');
-    // Every mark fills a square box at the Lucide icon size.
     expect(svg.attributes('viewBox')).toBe(box);
     expect(svg.attributes('width')).toBe('16');
     expect(svg.attributes('height')).toBe('16');

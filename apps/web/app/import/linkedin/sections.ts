@@ -1,8 +1,3 @@
-// Maps a LinkedIn Save to PDF layout's sections into plain drafts for the
-// resume's mapped parts. See docs/design/linkedin-import.md, "Mapping",
-// "Dates", and "What is dropped". build.ts turns these drafts into the
-// resume document and applies the schema's field limits; this module keeps
-// text as extracted.
 import type { ColumnLine, Layout } from './layout';
 import type { DateRange } from './dates';
 import {
@@ -61,11 +56,6 @@ export interface ParsedProfile {
   dropped: { heading: string; count: number }[];
 }
 
-/**
- * Intro: headline is every intro line up to the location, joined with
- * spaces; the last of two or more intro lines is the location. One intro
- * line is headline only; no intro lines gives an empty headline.
- */
 export function parseIntro(
   name: ColumnLine,
   intro: readonly ColumnLine[],
@@ -73,7 +63,6 @@ export function parseIntro(
   const fullName = name.text;
   if (intro.length === 0) return { fullName, headline: '' };
   if (intro.length === 1) return { fullName, headline: intro[0]!.text };
-  // intro.length is at least 2 here, so the last index is in range.
   const location = intro[intro.length - 1]!.text;
   const headline = intro
     .slice(0, -1)
@@ -82,10 +71,6 @@ export function parseIntro(
   return { fullName, headline, location };
 }
 
-/**
- * Splits at the last comma: the right part is the country, the left is the
- * city.
- */
 export function splitLocation(
   text: string,
 ): { city?: string; country?: string } {
@@ -102,7 +87,6 @@ export function splitLocation(
   return result;
 }
 
-/** A line ending with, or consisting only of, a trailing "(Label)". */
 function trailingLabel(
   text: string,
 ): { prefix: string; label: string } | undefined {
@@ -117,12 +101,6 @@ function trailingLabel(
 
 const PHONE_RE = /^[\d\s+()-]+$/;
 
-/**
- * Prepends https:// (upgrading http://), lowercases the host through URL
- * parsing, and applies the link rule: an https URL with a dotted host, no
- * user name or password, and no whitespace. Returns undefined when the
- * value fails the rule.
- */
 function buildContactUrl(value: string): string | undefined {
   if (/\s/.test(value)) return undefined;
   const normalized = /^https:\/\//i.test(value)
@@ -154,7 +132,6 @@ function classifyContact(
   if (value !== '' && PHONE_RE.test(value)) {
     return { type: 'phone', value, label };
   }
-  // A labeled email is still an email, never a link with a user name.
   if (value.includes('@')) return { type: 'email', value };
   const url = buildContactUrl(value);
   if (url === undefined) return undefined;
@@ -163,12 +140,6 @@ function classifyContact(
     : { type: 'website', value: url, label };
 }
 
-/**
- * Contact entries: an @ line with no label is an email on its own; other
- * lines join without spaces until a line ends with (Label) or is only
- * (Label). Gaps never separate entries; leftover text with no label at the
- * end of the section is dropped.
- */
 export function parseContact(lines: readonly ColumnLine[]): ContactDraft[] {
   const contacts: ContactDraft[] = [];
   let buffer: string[] = [];
@@ -194,10 +165,6 @@ export function parseContact(lines: readonly ColumnLine[]): ContactDraft[] {
 
 const SIDEBAR_WRAP_GAP_FACTOR = 1.4;
 
-/**
- * Other sidebar lists (Top Skills, Certifications, and dropped lists): a gap
- * over 1.4 times the line's size, or a null gap, starts a new entry.
- */
 export function sidebarEntries(lines: readonly ColumnLine[]): string[] {
   const entries: string[] = [];
   let current: string[] = [];
@@ -227,15 +194,12 @@ function proficiencyLevel(text: string): number | undefined {
   return PROFICIENCY_LEVELS[normalized];
 }
 
-/** "Name (Proficiency)"; the last parenthesized group is the proficiency. */
 function parseLanguageEntry(text: string): LanguageDraft {
   const match = /^(.*)\(([^()]*)\)\s*$/.exec(text.trim());
   if (match === null) return { name: text.trim(), level: undefined };
-  // Both groups above are mandatory, so they exist on a match.
   return { name: match[1]!.trim(), level: proficiencyLevel(match[2]!) };
 }
 
-/** Languages: lines join with spaces until the parentheses close. */
 export function parseLanguages(lines: readonly ColumnLine[]): LanguageDraft[] {
   const languages: LanguageDraft[] = [];
   let buffer: string[] = [];
@@ -261,14 +225,6 @@ interface ExperienceEntry {
   dateIndex: number;
 }
 
-/**
- * Experience entries, per docs/design/linkedin-import.md "Experience": the
- * job title is the run of lines before a date line sharing the size of the
- * line right before it; the employer line (largest size in the section) or
- * a group's duration line and employer precede it; a role without its own
- * employer takes the group's; the location follows the date when its size
- * matches and its gap allows it; the description runs to the next entry.
- */
 export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   if (lines.length === 0) return [];
   const maxSize = Math.max(...lines.map((line) => line.size));
@@ -283,7 +239,6 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   for (const dateIndex of dateIndices) {
     const titleSize = lines[dateIndex - 1]?.size;
     let titleStart = dateIndex - 1;
-    // titleStart > 0 was just checked, so titleStart - 1 is in range.
     while (titleStart > 0 && lines[titleStart - 1]!.size === titleSize) {
       titleStart--;
     }
@@ -296,7 +251,6 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
     let employer = groupEmployer;
     let entryStart = titleStart;
     if (beforeTitleIndex >= 0) {
-      // beforeTitleIndex >= 0 and < titleStart <= lines.length here.
       const candidate = lines[beforeTitleIndex]!;
       if (candidate.size === maxSize) {
         employer = candidate.text;
@@ -319,8 +273,6 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
     let location: string | undefined;
     let descStart = afterDateIndex;
     if (afterDateIndex < lines.length) {
-      // afterDateIndex is in range by the check above; dateIndex came from
-      // dateIndices, always a valid index into lines.
       const candidate = lines[afterDateIndex]!;
       const isLocation
         = candidate.size === lines[dateIndex]!.size
@@ -346,7 +298,6 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   const work: WorkDraft[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
-    // i + 1 < entries.length was just checked, so it is in range too.
     const descEnd
       = i + 1 < entries.length ? entries[i + 1]!.entryStart : lines.length;
     const descriptionLines = lines
@@ -354,7 +305,6 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
       .map((line) => ({ text: line.text, gap: line.gap }));
     const richText = linesToRichText(descriptionLines);
 
-    // entry.dateIndex came from dateIndices, always a valid index.
     const dateLine = matchDateLine(lines[entry.dateIndex]!.text);
     const parsedDate = parseDateRange(dateLine?.datesText ?? '');
     const { dates, notice } = workDates(parsedDate);
@@ -375,19 +325,12 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   return work;
 }
 
-/**
- * Education entries: a school line has the section's largest size;
- * consecutive school-size lines join as one school. The following lines
- * join with spaces; text after the last · is the date, stripped of its
- * parentheses; text before it, trimmed, is the degree as written.
- */
 export function parseEducation(lines: readonly ColumnLine[]): EducationDraft[] {
   if (lines.length === 0) return [];
   const maxSize = Math.max(...lines.map((line) => line.size));
   const educations: EducationDraft[] = [];
   let i = 0;
   while (i < lines.length) {
-    // i is in range by the enclosing while condition in each loop below.
     if (lines[i]!.size !== maxSize) {
       i++;
       continue;
@@ -429,11 +372,6 @@ function mainEntryCount(lines: readonly ColumnLine[]): number {
   return dateLineCount > 0 ? dateLineCount : 1;
 }
 
-/**
- * Maps a whole layout to plain drafts. Sections not mapped to a resume part
- * (known or unknown) are listed in `dropped` with their entry count, per
- * "What is dropped". Repeated sections with the same heading append.
- */
 export function parseProfile(layout: Layout): ParsedProfile {
   const contacts: ContactDraft[] = [];
   const skills: string[] = [];

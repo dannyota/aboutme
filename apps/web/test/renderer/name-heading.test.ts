@@ -11,11 +11,6 @@ import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import { resolveRenderModel } from
   '../../app/components/resume/resolveRenderModel';
 
-// The renderer always emits exactly one heading for the resume name: an h1
-// by default (the sole h1 on a public resume page or the print path) or a
-// p when a caller embeds the resume inside a page that owns its own h1
-// (the homepage sample and template thumbnails).
-
 const minimal = JSON.parse(
   readFileSync('../../packages/schema/fixtures/minimal.json', 'utf8'),
 ) as Resume;

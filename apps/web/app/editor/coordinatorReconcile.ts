@@ -103,20 +103,12 @@ function adoptAndReconcile(
   const latest
     = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
   const active = ctx.deps.store.recordFor(resumeId)?.attempt;
-  // A held write the read shows landed, or a read barrier the read
-  // completed, no longer holds the queue back.
   const released = reconcileHeld(ctx, resumeId, latest)
     || (barrier && !ctx.deps.store.recordFor(resumeId)?.completeReadRequired);
   if (released && active?.kind !== 'dispatching') void flush(ctx, resumeId);
   return latest;
 }
 
-/**
- * Reconciles the write the queue holds against `latest`, a complete read:
- * one the resume already holds leaves the queue and a conflict waits for the
- * person. A template child is settled here only past its retry window.
- * Returns whether the write left the queue.
- */
 export function reconcileHeld(
   ctx: CoordinatorContext,
   resumeId: string,
@@ -196,11 +188,6 @@ export async function refreshConditionalAndReconcile(
       };
 }
 
-/**
- * Adopts a complete read of the resume. Any complete read at the held
- * revision or newer completes the read barrier; without the barrier only a
- * newer revision replaces what the editor holds.
- */
 export function adoptRead(
   ctx: CoordinatorContext,
   resumeId: string,

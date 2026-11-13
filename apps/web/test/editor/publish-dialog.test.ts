@@ -1189,7 +1189,6 @@ describe('PublishDialog', () => {
       const vietnamese = wrapper.get('button[aria-label="Tiếng Việt"]');
       (vietnamese.element as HTMLButtonElement).focus();
       await vietnamese.trigger('keydown', { key: 'Tab', shiftKey: true });
-      // The primary action is the last control (DESIGN.md dialog rhythm).
       expect(document.activeElement).toBe(
         wrapper.get('[data-action="publish-submit"]').element,
       );

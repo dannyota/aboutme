@@ -18,10 +18,6 @@ import { PaginationMeasureKey } from '../../app/components/resume/measure';
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import { syntheticMeasure } from './synthetic-measure';
 
-// Gallery samples render with the real renderer, and a sample's layout is
-// exactly what applying its own template produces, so "use this sample" and
-// "use this template" agree.
-
 const render = (
   document: Resume,
   lng: string,
@@ -52,8 +48,6 @@ describe('gallery samples', () => {
       const { dateFormat: _sampleDateFormat, ...sampleRest }
         = sample.customization;
       expect(appliedRest).toEqual(sampleRest);
-      // A template switch sets the language's date format, not the
-      // preset's (docs/design/templates/contract.md §3).
       expect(appliedDateFormat).toBe(dateFormatForLanguage(lng));
     },
   );

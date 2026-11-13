@@ -51,10 +51,6 @@ registerEndpoint('/api/v1/me', () => ({
   },
 }));
 registerEndpoint('/api/v1/sessions', () => ({ data: sessions }));
-// Second-factor state is read regardless of the enrollment capability, so
-// every mount of this page needs a registered response; this file's own
-// cases stay focused on the existing sections, and
-// `test/second-factor-settings.test.ts` covers the new section's behavior.
 registerEndpoint('/api/v1/me/second-factor', () => ({
   data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
 }));
@@ -165,9 +161,6 @@ describe('settings sessions page', () => {
       const wrapper = await mountSuspended(SessionsPage, { props: { now } });
       await flushPromises();
 
-      // Neither field is in this file's fixture response above, matching a
-      // pre-authenticator-app server (totp-second-factor-contract.md
-      // "Migration, mixed versions, and loss").
       expect(wrapper.get('[data-testid="totp-status"]').text())
         .toBe('Not set up.');
       expect(wrapper.find('[data-testid="totp-setup-start"]').exists())

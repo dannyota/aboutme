@@ -18,8 +18,7 @@ function setInnerWidth(width: number): void {
   });
 }
 
-// This environment's WheelEvent constructor ignores the MouseEvent-derived
-// ctrlKey/clientX/clientY init fields, so they are set directly afterward.
+// The test DOM's WheelEvent ignores ctrlKey/clientX/clientY init fields.
 function ctrlWheelEvent(
   deltaY: number,
   point: { x: number; y: number },
@@ -555,8 +554,6 @@ describe('EditorPreview zoom controls', () => {
     async () => {
       const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
 
-      // Fit's live 84% sits well inside 50-200%, so neither direction is
-      // disabled: only landing exactly on 50% or 200% disables a button.
       expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
         .toBeUndefined();
       expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
@@ -607,8 +604,6 @@ describe('EditorPreview zoom controls', () => {
     const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
     await wrapper.get('[data-testid="zoom-in"]').trigger('click');
 
-    // Zooming in from the wide 84% Fit lands on the next fixed step above
-    // it, 90%, not the smallest fixed step.
     expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
     const sheet = wrapper.get('[data-testid="preview-sheet"]');
     expect(sheet.attributes('data-sheet-zoom')).toBe('0.9000');
@@ -727,9 +722,6 @@ describe('EditorPreview zoom controls', () => {
       await nextTick();
       expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
 
-      // Without a reset, 40px zooming in plus 40px zooming out would total
-      // 80px and step immediately; a reversal must bank only the 40px this
-      // event carries.
       scroll.dispatchEvent(ctrlWheelEvent(40, { x: 20, y: 20 }));
       await nextTick();
       expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
@@ -747,8 +739,6 @@ describe('EditorPreview zoom controls', () => {
       expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
 
       vi.advanceTimersByTime(301);
-      // Without the idle reset, this 40px would combine with the 40px
-      // already banked and step immediately.
       scroll.dispatchEvent(ctrlWheelEvent(-40, { x: 20, y: 20 }));
       await nextTick();
       expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
@@ -775,8 +765,6 @@ describe('EditorPreview zoom controls', () => {
 
       expect(wheelEvent.defaultPrevented).toBe(false);
 
-      // Switching back to PDF proves the attempts above were true no-ops,
-      // not just an unmounted control: the zoom is still exactly at Fit.
       await wrapper.get('[data-mode="pdf"]').trigger('click');
       expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
       wrapper.unmount();
@@ -898,7 +886,6 @@ describe('EditorPreview zoom controls', () => {
   it('does not announce a zoom action that does not change the value',
     async () => {
       const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
-      // Already at Fit: resetting to Fit again changes nothing.
       await wrapper.get('[data-testid="zoom-fit"]').trigger('click');
 
       expect(wrapper.get('[data-testid="zoom-announcement"]').text())
@@ -908,8 +895,6 @@ describe('EditorPreview zoom controls', () => {
 });
 
 describe('EditorPreview Web margins', () => {
-  // docs/design/web.md, "Pagination and print": the Web sheet carries its
-  // column count so the margin rule can pick the 52em or 70em measure.
   async function mountMode(mode: 'pdf' | 'web', columns: 1 | 2) {
     window.localStorage.setItem('aboutme.editorPreviewMode', mode);
     const accepted = acceptedFixture();

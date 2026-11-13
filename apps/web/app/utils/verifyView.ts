@@ -1,7 +1,3 @@
-// View rules for the verify page (docs/design/deployment-transparency/
-// visual.md): chain step chips and connectors, component rows, the command
-// selector, and the verify commands. Pure functions of the page state, so the
-// components only render.
 import {
   chainRelease,
   type ChainRelease,
@@ -20,7 +16,6 @@ export type ChipKind
 export type ConnectorKind = 'agree' | 'updating' | 'unknown' | 'disagree';
 export type ReportingPlatform = 'aws-ecs' | 'kubernetes' | 'host' | 'unknown';
 
-/** The platform fields identify the reporter without an extra schema field. */
 export function reportingPlatform(
   document: DeploymentDocument | null,
 ): ReportingPlatform {
@@ -33,16 +28,11 @@ export function reportingPlatform(
 }
 
 export interface ChainView {
-  /** Source, Build, Image, Running. */
   readonly chips: readonly [ChipKind, ChipKind, ChipKind, ChipKind];
-  /** Source→Build, Build→Image, Image→Running. */
   readonly connectors: readonly [ConnectorKind, ConnectorKind, ConnectorKind];
-  /** The failure a `failed` chip names. */
   readonly failure: Failure | null;
   readonly release: ChainRelease | null;
-  /** Replicas across the serving components. */
   readonly replicas: number;
-  /** When the shown version started running everywhere it runs. */
   readonly runningSince: string | null;
 }
 
@@ -115,7 +105,6 @@ function servingImages(document: DeploymentDocument): RunningImage[] {
     .flatMap(({ runningImages }) => runningImages);
 }
 
-/** The chain for a state that has a document; null for the others. */
 export function chainView(state: PageState): ChainView | null {
   if (!('document' in state)) return null;
   const { document } = state;
@@ -136,14 +125,12 @@ export function chainView(state: PageState): ChainView | null {
   };
 }
 
-/** The GitHub Actions run id in a build link. */
 export function buildRunId(link: string | null): string | null {
   return link?.match(/\/actions\/runs\/(\d+)\//u)?.[1] ?? null;
 }
 
 interface ImageLine {
   readonly image: RunningImage;
-  /** Set during a rollout of this component. */
   readonly age: 'older' | 'newest' | null;
   readonly failing: boolean;
 }
@@ -155,11 +142,6 @@ export interface ComponentRow {
   readonly failing: boolean;
 }
 
-/**
- * One row per serving component, present or not, then `maintenance` while it
- * runs. A serving component with no running image keeps its row so the
- * failure has a place to show.
- */
 export function componentRows(document: DeploymentDocument): ComponentRow[] {
   const byName = new Map<ComponentName, DeploymentComponent>(
     document.components.map((entry) => [entry.name, entry]));
@@ -185,7 +167,6 @@ export function componentRows(document: DeploymentDocument): ComponentRow[] {
 export interface CommandTarget {
   readonly key: string;
   readonly component: ComponentName;
-  /** The version tag the selector shows when a component runs two images. */
   readonly label: string;
   readonly image: RunningImage;
 }
@@ -202,10 +183,6 @@ export function commandTargets(
     })));
 }
 
-/**
- * The selector starts on `server`, or on the failing component in the
- * mismatch state; a component in rollout starts on its newest image.
- */
 export function defaultTarget(
   state: PageState,
   targets: readonly CommandTarget[],
@@ -221,7 +198,6 @@ export function defaultTarget(
   return server[server.length - 1] ?? targets[0] ?? null;
 }
 
-/** One piece of a command; `live` pieces take the highlight. */
 export interface CommandPart {
   readonly text: string;
   readonly kind: 'plain' | 'live' | 'placeholder';
@@ -229,7 +205,6 @@ export interface CommandPart {
 
 export interface Command {
   readonly lines: readonly (readonly CommandPart[])[];
-  /** What the copy button writes: the lines, without prompts. */
   readonly copy: string;
 }
 
@@ -242,19 +217,16 @@ function command(lines: readonly (readonly CommandPart[])[]): Command {
 
 const plain = (text: string): CommandPart => ({ text, kind: 'plain' });
 
-/** Step 1 (verification.md, "Verify it yourself"); it has no live values. */
 export const readDigestsCommand = command([
   [plain('curl -fsS https://aboutme.vn/.well-known/deployment.json \\')],
   [plain('  | jq -r \'.components[] | .name as $n | .running_images[] '
     + '| "\\($n) \\(.digest) \\(.version)"\'')],
 ]);
 
-/** Step 2 for one image, or with placeholders when there is none. */
 export function verifyImageCommand(target: CommandTarget | null): Command {
   const repository = target === null
     ? plain('server')
     : {
-        // Maintenance runs the Caddy image (document.md, component mapping).
         text: target.component === 'maintenance' ? 'caddy' : target.component,
         kind: 'live' as const,
       };
@@ -276,7 +248,6 @@ export function verifyImageCommand(target: CommandTarget | null): Command {
   ]);
 }
 
-/** "sha256:" plus the first 8 and last 4 hex characters (page.md). */
 export function shortDigest(digest: string): string {
   const hex = digest.slice('sha256:'.length);
   return `sha256:${hex.slice(0, 8)}…${hex.slice(-4)}`;

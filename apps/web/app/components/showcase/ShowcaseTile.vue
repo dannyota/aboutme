@@ -17,12 +17,6 @@ import {
 } from '@/lib/showcaseContract';
 import { galleryTemplate } from '@/templates/catalog';
 
-// One listing: the stored preview card, a meta block (optional role chip and
-// language, then the template), and a footer row outside the tile link with
-// the slug as plain text (S14) and the Report icon link. It shows only the
-// closed item fields, always as text, and never a contact detail, a date, or
-// a per-listing count (docs/design/showcase.md, What a listing shows;
-// docs/design/ui/showcase.md, Tile).
 const props = defineProps<{
   readonly item: ShowcaseItem;
   readonly locale: Locale;
@@ -39,8 +33,6 @@ const roleLabel = computed(() => (
 const reportHref = computed(() =>
   `mailto:danny@aboutme.vn?subject=${
     encodeURIComponent(copy.value.reportSubject(props.item.slug))}`);
-// A card can go missing in an open tab after a color change; the muted box
-// stays and the alt text still names the tile.
 const imageFailed = ref(false);
 </script>
 

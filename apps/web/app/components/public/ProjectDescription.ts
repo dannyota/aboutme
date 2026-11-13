@@ -1,14 +1,6 @@
 import { defineComponent, h, type PropType } from 'vue';
 
-/**
- * The project's description: the library's stored rich text, which Go
- * sanitized on write. Go's validator requires this element's content to be
- * exactly that text (docs/design/projects-contract.md "Render envelope"), so
- * it is written as given and never parsed into new elements here. This is the
- * project pages' only raw HTML. A render function keeps the template free of
- * lint directives, which the development compiler would write into the page
- * and so break its parity with the production worker.
- */
+// h(), not a template: Vue dev builds render a template's lint comments.
 export default defineComponent({
   name: 'ProjectDescription',
   props: {

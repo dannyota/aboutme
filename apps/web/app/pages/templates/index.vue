@@ -36,8 +36,7 @@ import { galleryStructuredData } from '@/templates/structuredData';
 const NoScriptFallback = defineComponent({
   name: 'NoScriptFallback',
   setup(_props, { slots }) {
-    // With scripts enabled, noscript holds raw text, not child elements.
-    // Adopt the server node without hydrating its fallback children.
+    // With scripting on, the HTML parser keeps noscript content as raw text.
     return () => import.meta.server
       ? h('noscript', null, slots.default?.())
       : createStaticVNode('<noscript></noscript>', 1);
@@ -157,7 +156,7 @@ function focusFilters(): void {
 }
 watch(wide, async (isWide) => {
   const current = document.activeElement;
-  // CSS can hide and blur a control before the media-query event arrives.
+  // The browser hides and blurs via CSS before matchMedia's change event.
   const active = current === document.body
     && focused?.isConnected
     && focused.getClientRects().length === 0

@@ -120,7 +120,6 @@ function queued(accepted: AcceptedResume, intent: AtomicCommandIntent) {
 
 const OTHER = '0190f000-0000-7000-8000-0000000000e9';
 
-/** Queues each intent on the replayed state, as the editor's actions do. */
 function queuedAll(
   accepted: AcceptedResume,
   intents: readonly AtomicCommandIntent[],

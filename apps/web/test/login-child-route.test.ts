@@ -7,18 +7,8 @@ import { NuxtPage } from '#components';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
-/**
- * `app/pages/login/second-factor.vue` makes `/login` the parent route of
- * `/login/second-factor`, so the pending page renders only if `login.vue`
- * renders a child outlet. Mounting either page component directly cannot see
- * that: these cases go through the router, exactly as a browser does.
- */
-
 registerCapabilities();
 
-// The pending row belongs to a real sign-in, which no test holds. The closed
-// expired branch is the deterministic answer, and it proves the child page
-// rendered its own content rather than an empty shell.
 registerEndpoint('/api/v1/auth/second-factor', (event) => {
   setResponseStatus(event, 401);
   return { error: { code: 'authentication_required', message: 'x' } };
@@ -42,7 +32,6 @@ describe('the login route tree', () => {
       .toBe(true);
     expect(wrapper.find('[data-testid="second-factor-expired"]').exists())
       .toBe(true);
-    // The parent must step aside: a pending sign-in is not a sign-in form.
     expect(wrapper.find('[data-testid="login-form"]').exists()).toBe(false);
   });
 

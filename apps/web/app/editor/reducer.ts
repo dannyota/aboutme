@@ -89,7 +89,6 @@ function updateEntryField(
   }));
 }
 
-/** Adds the reference to an unlinked project entry; its text stays. */
 function linkEntry(
   snapshot: ResumeSnapshot,
   intent: Extract<AtomicCommandIntent, { kind: 'projectLinkEntry' }>,

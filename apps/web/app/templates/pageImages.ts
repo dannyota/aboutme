@@ -22,11 +22,6 @@ export interface SampleNumberedPageImage extends SamplePageImage {
   readonly number: number;
 }
 
-/**
- * Every stored page of a gallery sample, in order, from the images
- * `sample-pages.spec` produces (DESIGN.md, Library). Empty when the
- * template has no sample in that language.
- */
 export function samplePageImages(
   templateId: string,
   lng: Locale,
@@ -42,10 +37,6 @@ export function samplePageImages(
   }));
 }
 
-/**
- * Page one of a gallery sample. Undefined when the template has no sample
- * in that language, so the card falls back to the live filler render.
- */
 export function samplePageImage(
   templateId: string,
   lng: Locale,

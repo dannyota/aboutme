@@ -36,12 +36,6 @@ import {
   settleStaleProject,
 } from './coordinatorProject';
 
-/**
- * Sends `attempt` and settles its answer; only the drain calls it. An answer
- * that comes back after the queue stopped holding that attempt is ignored.
- * Settling never sends: it leaves the write held, scheduled or gone, and the
- * drain decides what goes next.
- */
 export async function send(
   ctx: OperationContext,
   resumeId: string,
@@ -214,11 +208,6 @@ function markTemplateChildFailed(
   return true;
 }
 
-/**
- * A rate limit or busy media. A write whose outcome was already unknown
- * keeps recovering, unchanged, after the server's Retry-After; a write
- * refused before it ran waits there until the person retries it.
- */
 function holdForLater(
   ctx: CoordinatorContext,
   resumeId: string,
@@ -250,10 +239,6 @@ function holdForLater(
   waitForServer(ctx, resumeId, queueItem.id, retryAfterMs ?? 0);
 }
 
-/**
- * Refreshes the CSRF token once per attempt; the drain then sends the same
- * attempt again with the new token. A second rejection holds it.
- */
 async function refreshForSameAttempt(
   ctx: OperationContext,
   resumeId: string,
@@ -275,15 +260,9 @@ async function refreshForSameAttempt(
   }
   ctx.csrfRetries.add(key);
   await ctx.deps.auth.refresh();
-  // A write the person asked to send stays asked for.
   if (owns(ctx, resumeId, attempt)) askAgain(ctx, resumeId, queueItem.id);
 }
 
-/**
- * Holds a write whose outcome is unknown. Inside its retry window it is
- * replayed once after UNKNOWN_REPLAY_DELAY_MS, then backed off; past the
- * window the resume is read and the write reconciled against it.
- */
 export async function resolveUnknown(
   ctx: OperationContext,
   resumeId: string,
@@ -324,13 +303,6 @@ export async function resolveUnknown(
   await refreshAndReconcile(ctx, resumeId);
 }
 
-/**
- * Settles a 412 against the newer revision: a change it already holds
- * leaves the queue, a conflict waits for the person, and an unchanged base
- * is rebased with a new key, sent by the drain after 1, 2 and 4 s. Every
- * winner is reconciled; only a further rebase counts against the limit,
- * after which the rebased write waits for Try again.
- */
 async function settleStale(
   ctx: OperationContext,
   resumeId: string,
@@ -353,8 +325,6 @@ async function settleStale(
       return;
     }
     if (complete.kind !== 'complete') {
-      // The write is held as unknown and sent again on the retry schedule;
-      // its next 412 reads the resume again.
       ctx.deps.store.holdAttempt(resumeId, {
         kind: 'unknown',
         queueItem,
@@ -428,8 +398,6 @@ async function settleStale(
     attempt: rebased,
     reason: 'server',
   });
-  // Rebases wait 1, 2 and 4 s, so revisions bumped in quick succession
-  // settle before the write is sent over them again.
   waitBriefly(
     ctx,
     resumeId,

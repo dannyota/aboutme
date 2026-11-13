@@ -1,14 +1,6 @@
 import { validateReturnPath } from './returnPath';
 
-/**
- * Carries a validated `?next=` return path across email verification.
- *
- * The verification link opens in a new browser tab, so sessionStorage would
- * not be visible there; localStorage is shared across tabs on the same
- * origin. A stored value is untrusted once read back, so `take` re-runs
- * `validateReturnPath` before returning it and clears the key on every read,
- * whether the entry is used, expired, or rejected.
- */
+// The link opens a new tab, and sessionStorage is per tab (HTML Web Storage).
 
 const STORAGE_KEY = 'aboutme.pendingReturnPath';
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -56,10 +48,6 @@ function resolveStorage(
   }
 }
 
-/**
- * Remembers `path` for pickup by `take`, or clears a previously remembered
- * one when `path` is null so it never carries into a later registration.
- */
 export function remember(
   path: string | null,
   deps: PendingReturnPathDeps = {},
@@ -83,10 +71,6 @@ export function remember(
   }
 }
 
-/**
- * The remembered path, re-validated, or null. Always clears the key: a used,
- * expired, malformed, or rejected entry must never be read twice.
- */
 export function take(deps: PendingReturnPathDeps = {}): string | null {
   const storage = resolveStorage(deps.storage);
   if (storage === null) return null;

@@ -6,24 +6,13 @@ import type {
   PublicGateProvider,
 } from '../../../server/utils/public-render/envelope';
 
-// Server-rendered only: the gate carries no script and is never hydrated
-// (docs/design/viewer-analytics/sign-in-to-view.md#gate). Its text is fixed
-// bilingual copy, kept local to this component so the public-render bundle
-// never imports an application i18n catalog (docs/design/localization.md).
 const props = defineProps<{
   readonly pageTitle: string;
   readonly slug: string;
   readonly lng: 'vi' | 'en';
   readonly providers: readonly PublicGateProvider[];
   readonly message: PublicGateMessage;
-  /** `{origin}/`, the home link's href. */
   readonly homeHref: string;
-  /**
-   * 'projects' or 'projects/{project-slug}' when the gate stands in for a
-   * project page; sign-in then returns to it
-   * (docs/design/projects-contract.md "Render envelope"). The envelope
-   * decoder admits only that word and a project slug.
-   */
   readonly page?: string;
 }>();
 
@@ -43,8 +32,6 @@ const providerLabel = (provider: PublicGateProvider): string => {
   return vietnamese.value ? `Tiếp tục với ${name}` : `Continue with ${name}`;
 };
 
-// docs/design/viewer-analytics/legal.md#sign-in-gate-text: both texts name
-// only the providers the envelope actually offers.
 const providerList = computed(() => (
   props.providers.map((provider) => PROVIDER_NAME[provider])
     .join(vietnamese.value ? ' hoặc ' : ' or ')
@@ -64,8 +51,6 @@ const gateIntro = computed(() => (
       + 'copying.'
 ));
 
-// Omitted entirely when no provider is offered; there is then nothing to
-// continue with.
 const gateProviderSentence = computed(() => {
   if (props.providers.length === 0) return '';
   return vietnamese.value

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/** The "you agree to the Terms and the Privacy Policy" line; no checkbox. */
 import { legalCopy } from '@/i18n/legal';
 import type { Locale } from '@/i18n/locale';
 

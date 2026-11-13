@@ -59,9 +59,7 @@ describe('public style version', () => {
     expect(publicStyleVersion('a{}', 'b{}', 'c{}')).toBe(base);
     expect(publicStyleVersion('a{color:red}', 'b{}', 'c{}')).not.toBe(base);
     expect(publicStyleVersion('a{}', 'b{color:red}', 'c{}')).not.toBe(base);
-    // The project pages' stylesheet versions every public page's links.
     expect(publicStyleVersion('a{}', 'b{}', 'c{color:red}')).not.toBe(base);
-    // The separator keeps a byte moved across the boundary distinct.
     expect(publicStyleVersion('a{}b', '{}', 'c{}')).not.toBe(base);
     expect(publicStyleVersion('a{}', 'b{}c', '{}')).not.toBe(base);
   });

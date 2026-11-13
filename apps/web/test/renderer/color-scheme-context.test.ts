@@ -6,7 +6,6 @@ import {
   resolveRenderModel,
 } from '../../app/components/resume/resolveRenderModel';
 
-// docs/design/public-page-theme.md, "How it reaches the page".
 const full = (): Resume =>
   JSON.parse(
     readFileSync('../../packages/schema/fixtures/full.json', 'utf8'),
@@ -38,7 +37,6 @@ describe('render context color scheme', () => {
         colorScheme,
       });
       expect(darkKeys(model.styles.root).length).toBeGreaterThan(0);
-      // full.json tints its sidebar.
       expect(darkKeys(model.styles.sidebar).length).toBeGreaterThan(0);
     },
   );

@@ -1,9 +1,5 @@
 // @vitest-environment node
 
-// A long entry breaks between its body blocks, as the PDF does
-// (docs/design/templates/print.md §3), instead of moving whole to the next
-// page and leaving the previous one half empty.
-
 import type { Section } from '@aboutme/schema';
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
@@ -128,11 +124,9 @@ describe('paginating a long entry', () => {
   });
 
   it('fills page one before breaking between body blocks', () => {
-    // Page content 1000px; the 100px header and 20px gap leave 880px.
     const blocks = [
       block('heading', 30, 20),
       block('entry', 100, 8, 0),
-      // The long entry: its header with the first block, then 8 blocks.
       block('entry', 150, 8, 1, 0),
       ...Array.from({ length: 8 }, (_, index) =>
         block('entry', 100, 0, 1, index + 1)),
@@ -140,7 +134,6 @@ describe('paginating a long entry', () => {
     const pages = paginate(blocks, 1, 1000, 100, 20);
     expect(pages).toHaveLength(2);
     const first = pages[0]!.main.filter((placed) => placed.entryIndex === 1);
-    // 30 + 8 + 100 + 8 + 150 = 296px used, so five 100px blocks still fit.
     expect(first.map((placed) => placed.part)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(pages[1]!.main.map((placed) => placed.part)).toEqual([6, 7, 8]);
     expect(pages.every((page) => !page.overflow)).toBe(true);

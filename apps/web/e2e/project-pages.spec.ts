@@ -19,13 +19,6 @@ import {
   screenMutationTests,
 } from './style-mutation';
 
-// The public project list and project page, drawn by the renderer harness
-// from the public render worker's own components and the built project
-// stylesheet, under style-src 'self' (docs/design/ui/project-pages.md).
-// Both pages run at 320, 768 and 1280 px in the owner's light and dark
-// schemes; the language rotates so each page, scheme and width sees both.
-// Match device runs under both viewer preferences.
-
 const KINDS: readonly ProjectPageKind[] = ['project-list', 'project'];
 const SCHEMES: readonly Scheme[] = ['light', 'dark'];
 const WIDTHS = [320, 768, 1280] as const;

@@ -668,7 +668,6 @@ function recordWithEveryCustomizationLeaf(): ResumeRecord {
   record.current.document.customization.colorScheme = 'light';
   record.current.document.customization.colors.accent = '#abcdef';
   record.current.document.customization.colors.surface = '#fedcba';
-  // Unequal margins match no preset, so the per-axis fields show.
   record.current.document.customization.spacing.pageMargin = {
     x: 17,
     y: 13,

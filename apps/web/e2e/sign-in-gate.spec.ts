@@ -23,12 +23,6 @@ import {
   waitForImages,
 } from './support';
 
-// The sign-in gate page and the join invite, drawn by the renderer harness
-// (docs/design/viewer-analytics/sign-in-to-view.md#gate and #join-invite;
-// DESIGN.md, "Sign-in gate and join invite"). The gate is the public render
-// worker's own component and inline style. The invite mounts client-side on
-// the public page root, as public-resume.client.ts does.
-
 async function assertTextContained(text: Locator): Promise<void> {
   await expect.poll(() => measureTextContainment(text),
     'Gate text containment.')
@@ -199,8 +193,6 @@ async function assertGate(page: Page, cell: GateCell): Promise<void> {
   await expect(page.locator('.gate-message')).toHaveCount(
     cell.message === 'none' ? 0 : 1,
   );
-  // Both languages fit the phone layout with no horizontal scroll, and
-  // the card never exceeds the viewport (DESIGN.md, "Gate page").
   const fit = await page.evaluate(() => ({
     card: document.querySelector('.gate-card')!
       .getBoundingClientRect().right,
@@ -327,8 +319,6 @@ async function openAndAssertInvite(
   page: Page, cell: InviteCell, viewer: 'light' | 'dark' = 'light',
 ): Promise<void> {
   await page.emulateMedia({ colorScheme: viewer });
-  // Fake timers before the page loads: the 20 s dwell floor then runs
-  // from the clock, not from the wall.
   await pauseInviteClock(page);
   await page.setViewportSize({ width: cell.width, height: 900 });
   const external = await denyExternalRequests(page);
@@ -359,26 +349,19 @@ async function openAndAssertInvite(
     '/register',
   );
 
-  // The entrance is a Web Animations API slide, which the screenshot's
-  // animation-off option does not cover and which page.clock does not
-  // drive. finish() jumps every running animation on the region to its
-  // end state, so the geometry and the capture are the settled ones.
+  // Playwright's clock and screenshot animation-off skip this WAAPI slide.
   await region.evaluate((element) => {
     for (const animation of element.getAnimations()) animation.finish();
   });
 
   const box = await region.boundingBox();
   if (cell.placement === 'card') {
-    // 320 px wide, 16 px from the right and bottom edges
-    // (DESIGN.md, "Join invite").
     expect(box!.width).toBe(320);
     expect(cell.width - (box!.x + box!.width)).toBe(16);
     expect(900 - (box!.y + box!.height)).toBe(16);
   } else {
     expect(box!.x).toBe(0);
     expect(box!.width).toBe(cell.width);
-    // A 56 px band; the test browser has no bottom safe area. The page
-    // gains the same bottom padding while the bar shows.
     expect(box!.height).toBe(56);
     expect(
       await page.evaluate(

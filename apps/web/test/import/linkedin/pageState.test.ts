@@ -1,6 +1,4 @@
 // @vitest-environment node
-// Tests for the review screen's pure state and derived values
-// (docs/design/linkedin-import-ui.md, "Review state" and "Action panel").
 import { describe, expect, it } from 'vitest';
 
 import type {

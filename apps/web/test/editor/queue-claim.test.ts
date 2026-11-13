@@ -4,17 +4,12 @@ import type { AtomicCommandIntent } from '../../app/editor/commands';
 import { fullName, headline } from './fake-resume-server';
 import { openEditor, type OpenEditor } from './held-write-editor';
 
-// The write the queue chooses to send is the write it claims. An edit that
-// lands while the queue waits for its CSRF token, or between any two of its
-// steps, is never consumed by an older reference to the same command.
-
 const clearHeadline: AtomicCommandIntent = {
   kind: 'personalField',
   path: 'headline',
   value: { present: false },
 };
 
-/** The headlines the server was sent, in order. */
 function sentHeadlines(context: OpenEditor): unknown[] {
   return context.server.sent
     .filter(({ attempt }) =>
@@ -24,7 +19,6 @@ function sentHeadlines(context: OpenEditor): unknown[] {
       : undefined);
 }
 
-/** A CSRF refresh that finishes only when the returned function is called. */
 function slowRefresh(context: OpenEditor): () => void {
   let finish = (): void => {};
   context.token.value = null;
@@ -39,7 +33,6 @@ function slowRefresh(context: OpenEditor): () => void {
   return () => finish();
 }
 
-/** Lets the editor's timers run out, then checks nothing is left unsaved. */
 async function expectAllSaved(context: OpenEditor): Promise<void> {
   await context.idle();
   expect(context.record()).toMatchObject({ attempt: null, pending: [] });
@@ -110,7 +103,6 @@ describe('text typed while the queue chooses what to send', () => {
   });
 });
 
-/** Mulberry32, seeded, so every case is the same on every run. */
 function seeded(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -123,8 +115,6 @@ function seeded(seed: number): () => number {
 
 describe('a field typed into at any step of the queue', () => {
   const values = ['S', 'St', 'Sta', 'Staf', 'Staff'];
-  // Each keystroke waits its own number of microtask turns, 0 to 23, and
-  // finds the token cached or missing on its own.
   const cases = Array.from({ length: 36 }, (_, seed) => {
     const next = seeded(seed + 1);
     return [

@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * One command block (docs/design/deployment-transparency/visual.md, "Verify
- * it yourself"): a horizontally scrolling `pre` with live values
- * highlighted, a `$` prompt that is never copied, and a copy button that
- * confirms through the page's shared announcer.
- */
 import { Check, Copy } from '@lucide/vue';
 import type { CommandPart } from '@/utils/verifyView';
 import { useClipboardCopy } from './useClipboardCopy';

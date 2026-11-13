@@ -29,12 +29,6 @@ import ScaledSheet from '../resume/ScaledSheet.vue';
 import { previewProjection } from './previewProjection';
 import { editorShellCopy } from '../../i18n/editor-shell';
 
-/**
- * The preview's own display choice: PDF keeps today's paged A4 sheet, Web
- * shows the continuous document at the pane's own width. It is a per-viewer
- * convenience, not part of the resume, so a blocked or missing store just
- * falls back to PDF instead of failing the preview.
- */
 type PreviewMode = 'pdf' | 'web';
 const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
 
@@ -63,7 +57,6 @@ const props = withDefaults(defineProps<{
   readonly photoUrl?: string;
   readonly photoRead?: PhotoReadState;
   readonly active?: boolean;
-  /** Adds the new-tab PDF button to PDF mode when given. */
   readonly pdfController?: PdfDownloadController;
 }>(), { zoom: 'fit', active: true });
 const emit = defineEmits<{
@@ -81,24 +74,16 @@ const windowWidth = ref<number | null>(null);
 const projected = computed(() =>
   previewProjection(props.document, props.photoUrl),
 );
-// Web mode shows the owner's scheme, and Match device follows the editing
-// device's own preference through the CSS media query, never the editor's
-// theme. PDF mode shows the PDF, so it is always light
-// (docs/design/public-page-theme.md, "Editor preview").
 const colorScheme = computed<'dark' | 'system' | undefined>(() => {
   if (previewMode.value !== 'web') return undefined;
   const scheme = props.document.customization.colorScheme;
   return scheme === 'dark' || scheme === 'system' ? scheme : undefined;
 });
-// A scheme page paints its own ground to the rounded corners, so a white sheet
-// base would fringe them (docs/design/public-page-theme.md, "Editor preview").
 const context = computed(() => ({
   lng: props.lng,
   mode: previewMode.value === 'web'
     ? 'continuous' as const
     : 'paged' as const,
-  // The editor topbar owns the page's h1 (the resume title); the preview's
-  // resume name is visual only, so the workspace keeps a single h1.
   nameHeading: 'p' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
   ...(colorScheme.value === undefined
@@ -112,16 +97,10 @@ const A4_WIDTH_PX = 210 / 25.4 * 96;
 const PHONE_BREAKPOINT_PX = 42 * 16;
 const NARROW_BREAKPOINT_PX = 72 * 16;
 
-// The owner's manual zoom choice for the paged preview. The `zoom` prop only
-// seeds the first render (today's fixed Fit/Full split); afterward this
-// state, and its per-browser storage below, own the value.
 const currentZoom = ref<PreviewZoomStep>(props.zoom === 'full' ? 100 : 'fit');
 const isPhoneLayout = computed(() => (
   windowWidth.value !== null && windowWidth.value <= PHONE_BREAKPOINT_PX
 ));
-// DESIGN.md's editor "Responsive behavior": narrow layouts fit at 0.72,
-// wide layouts at 0.84. Fit keeps exactly that split; the percent is only
-// how the zoom controls display and step around it.
 const fitPercent = computed(() => (
   windowWidth.value !== null && windowWidth.value <= NARROW_BREAKPOINT_PX
     ? 72
@@ -131,8 +110,6 @@ const zoomPercent = computed(() => (
   previewZoomPercent(currentZoom.value, fitPercent.value)
 ));
 const isFit = computed(() => currentZoom.value === 'fit');
-// The zoom card and its shortcuts are a paged-preview affordance: Web mode
-// has no fixed page to zoom, so it keeps the browser's own zoom and scroll.
 const showZoomControls = computed(() => (
   previewMode.value === 'pdf' && !isPhoneLayout.value
 ));
@@ -165,12 +142,6 @@ const updateWindowWidth = (): void => {
   windowWidth.value = window.innerWidth;
 };
 
-/**
- * Sets the zoom level, keeping the point under `pivotClient` (or the
- * viewport center, when zooming from a keyboard or button) in view. The
- * ratio is measured against the scrollable content's size before the
- * change and re-applied after Vue updates the scaled sheet's width.
- */
 function applyZoom(
   next: PreviewZoomStep,
   pivotClient?: { x: number; y: number },
@@ -203,18 +174,12 @@ function applyZoom(
   });
 }
 
-/** Feeds the zoom card's polite live region, only for a value a user
- * action actually set (never the initial mount or a same-value no-op),
- * so a screen reader hears the new level without watching the control. */
 function announceZoom(step: PreviewZoomStep): void {
   zoomAnnouncement.value = copy.value.zoomAnnounce(
     previewZoomPercent(step, fitPercent.value),
   );
 }
 
-// Ctrl/Cmd zooms the paged preview only while focus is inside this region
-// and only in PDF mode, so the same keys keep their usual meaning in form
-// fields and in the unpaged Web mode.
 function onPreviewKeydown(event: KeyboardEvent): void {
   if (
     previewMode.value !== 'pdf'
@@ -233,11 +198,7 @@ function onPreviewKeydown(event: KeyboardEvent): void {
   }
 }
 
-// A pinch gesture reaches here as a stream of small Ctrl/Cmd + wheel
-// events; stepping on every one would race far past the fingers' actual
-// travel, so their deltaY accumulates and one step fires per 50px banked
-// in a single direction. A direction reversal or a 300ms pause without a
-// wheel event starts the bank over instead of carrying it across.
+// Chromium and Firefox report a trackpad pinch as Ctrl + wheel events.
 const WHEEL_ZOOM_STEP_PX = 50;
 const WHEEL_ZOOM_IDLE_MS = 300;
 let wheelAccumulatedPx = 0;
@@ -249,8 +210,6 @@ function resetWheelAccumulator(): void {
   wheelDirection = null;
 }
 
-// A plain wheel keeps scrolling the pane; only Ctrl/Cmd + wheel zooms, and
-// then around the pointer so the page under the cursor stays in view.
 function onPreviewWheel(event: WheelEvent): void {
   if (
     previewMode.value !== 'pdf'
@@ -267,8 +226,6 @@ function onPreviewWheel(event: WheelEvent): void {
   wheelIdleTimer = setTimeout(resetWheelAccumulator, WHEEL_ZOOM_IDLE_MS);
   wheelAccumulatedPx += Math.abs(event.deltaY);
 
-  // At most one step per event: a mouse notch reports 100px or more at once
-  // and must move one step, not skip over one.
   if (wheelAccumulatedPx < WHEEL_ZOOM_STEP_PX) return;
   wheelAccumulatedPx = 0;
   const next = stepPreviewZoom(currentZoom.value, direction, fitPercent.value);
@@ -288,8 +245,6 @@ function startPageCountObservation(): void {
   );
 }
 
-// A continuous document has no discrete pages: drop a stale paged count
-// instead of showing a number that no longer describes what is on screen.
 watch(previewMode, (mode) => {
   writeStoredPreviewMode(mode);
   if (mode === 'web') estimatedPages.value = null;
@@ -487,11 +442,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-/* A paged preview shows each A4 page as its own sheet. Without this, the
-   pages share one white card and a page break reads as unexplained blank
-   space inside the resume. The paged resume sits inside ScaledSheet's own
-   wrapper elements now, so these rules reach through them by descendant
-   combinator instead of a direct child combinator. */
 .preview-sheet:has(.paged-resume) {
   background: transparent;
   box-shadow: none;

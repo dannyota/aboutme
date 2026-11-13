@@ -1,22 +1,4 @@
 <script setup lang="ts">
-/**
- * Login page: email/password form + optional static OAuth provider links.
- *
- * Provider buttons render only for the providers the capabilities read
- * enables (`ProviderButtons` explains why they are plain links).
- *
- * `?error=` is a closed vocabulary produced by the callback landing
- * redirect: `auth_failed`, `email_not_verified`, `cancelled`, and
- * `email_already_registered`. Copy for both languages lives in
- * `app/i18n/auth.ts`. `email_already_registered` also carries `?provider=`,
- * the provider just used; only a value from the closed provider allowlist
- * names it, and it is never rendered raw.
- *
- * The password form sends closed copy for every failure and never retains
- * the password after a successful login. An account enrolled in a second
- * factor gets no session from this form: it navigates to the fixed
- * `/login/second-factor` path instead, which finishes the sign-in.
- */
 import FormField from '@/components/app/FormField.vue';
 import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
@@ -40,9 +22,7 @@ import {
 } from '@/utils/returnPath';
 
 const route = useRoute();
-// `app/pages/login/second-factor.vue` makes this page the parent route of
-// `/login/second-factor`, so the child has nowhere to render unless this page
-// renders it. The sign-in form and its head title belong to `/login` alone.
+// Nuxt nests login/second-factor.vue under this page (file-based routing).
 const onChildRoute = computed(() => route.matched.length > 1);
 const { loginProviders, resolved } = useCapabilities();
 const { locale } = useLocale();
@@ -72,9 +52,6 @@ const errorCode = computed(() => {
 
 const providerDisplayName = computed(() => {
   const value = route.query.provider;
-  // Only a value from the closed allowlist names a provider; anything else,
-  // including a prototype property name, gets the copy's neutral wording and
-  // is never rendered (docs/design/linkedin-sign-in.md "Web").
   return typeof value === 'string' && Object.hasOwn(providerNames, value)
     ? providerNames[value as keyof typeof providerNames]
     : null;
@@ -85,10 +62,6 @@ const errorMessage = computed(() => {
   if (errorCode.value === 'email_already_registered') {
     return copy.value.providerEmailRegistered(providerDisplayName.value);
   }
-  // `errorMessages[code]` alone would resolve inherited properties too
-  // (`?error=constructor` renders `Object`'s constructor function,
-  // `?error=__proto__` renders `{}`) rather than falling back — restrict
-  // the lookup to the map's own keys, the actual closed vocabulary.
   const key = Object.hasOwn(errorMessages, errorCode.value)
     ? errorMessages[errorCode.value] as AuthMessage
     : 'providerFailed';
@@ -113,10 +86,6 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
   }
 }
 
-// A destination outside this app's own pages (for example
-// `/oauth/authorize`, served by the Go backend for a connected-agent
-// consent link) needs a real browser navigation: the client router has no
-// route for it and would otherwise strand the user on a dead page.
 async function goTo(path: string): Promise<void> {
   if (isAppRoute(path)) {
     await navigateTo(path);
@@ -139,8 +108,6 @@ async function onSubmit() {
       next: explicitNext.value ?? undefined,
     });
     password.value = '';
-    // An enrolled account gets no session yet: the fixed pending path, never
-    // a computed one, since the server carries the return path instead.
     await goTo(
       result.secondFactorRequired
         ? '/login/second-factor'
@@ -220,8 +187,6 @@ async function onSubmit() {
         {{ pending ? copy.login.pending : copy.signIn }}
       </Button>
     </form>
-    <!-- The capabilities read is client-only, so hold the space one provider
-         button takes until it resolves; no link renders before then. -->
     <div
       v-if="!resolved"
       aria-hidden="true"
@@ -255,7 +220,6 @@ async function onSubmit() {
         :next="explicitNext"
         :providers="loginProviders"
       />
-      <!-- A first provider sign-in creates the account. -->
       <LegalAgreement
         class="mt-3"
         :locale="locale"

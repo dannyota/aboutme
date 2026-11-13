@@ -8,12 +8,6 @@ import type { ResumeRecord } from '../../stores/resumes';
 import StatusBanner from '../app/StatusBanner.vue';
 import { editorShellCopy } from '../../i18n/editor-shell';
 
-// A write the queue still holds after its automatic retries have had their
-// time: one whose outcome has stayed unknown for a minute, or one that met
-// a newer revision on every rebase (docs/design/realtime.md, Writes). A
-// conflict on the write waits for the person in the conflict panel instead,
-// and the button waits while the write is on its way.
-
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;

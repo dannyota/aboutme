@@ -4,11 +4,6 @@ import { describe, expect, it } from 'vitest';
 import AppLogo from '../../app/components/app/AppLogo.vue';
 import { MARK_OUTER_RING, MARK_TILT } from '../../app/components/app/sealMark';
 
-/**
- * Reads the accessible name a role="img" svg exposes, however the mark
- * supplies it (an `aria-label`, an `aria-labelledby` reference, or a nested
- * `<title>`), per the AppLogo contract in ADR 0020.
- */
 function accessibleName(svg: Element): string | null {
   const label = svg.getAttribute('aria-label');
   if (label !== null) return label;
@@ -22,7 +17,6 @@ function accessibleName(svg: Element): string | null {
 }
 
 function svgOf(wrapper: ReturnType<typeof mount>): Element {
-  // The component root is the svg itself; querySelector never matches it.
   const root = wrapper.element as Element;
   const svg = root.tagName.toLowerCase() === 'svg'
     ? root
@@ -62,8 +56,6 @@ describe('AppLogo', () => {
 
   it('uses no ids or gradients, so any number of logos can share a page',
     () => {
-      // ADR 0020 retired the gradient mark; the seal and the dot take seal
-      // red through currentColor, and nothing is referenced by id.
       const svg = svgOf(mount(AppLogo));
 
       expect(svg.querySelectorAll('[id]')).toHaveLength(0);
@@ -89,9 +81,6 @@ describe('AppLogo', () => {
   });
 
   it('draws the outer ring from the shared seal mark geometry', () => {
-    // AppLogo and the public page bar's mark (PublicMark) both import
-    // sealMark.ts, so a logo change reaches both
-    // (docs/design/ui/identity-and-seal.md, "Logo").
     const svg = svgOf(mount(AppLogo));
     const outer = svg.querySelector('[data-logo-ring="outer"]');
     expect(outer?.getAttribute('cx')).toBe(String(MARK_OUTER_RING.cx));

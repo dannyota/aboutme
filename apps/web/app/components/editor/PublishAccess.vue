@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import SwitchField from '@/components/app/SwitchField.vue';
 
-// Holds only the "Require sign-in to view" switch, shown in PublishDialog
-// when the capability is open or the resume already has it on
-// (docs/design/viewer-analytics/sign-in-to-view.md#setting).
 defineProps<{
   readonly modelValue: boolean;
   readonly disabled: boolean;

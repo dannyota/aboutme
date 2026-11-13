@@ -25,11 +25,6 @@ import {
   showcaseRouteQuery,
 } from '@/lib/showcaseQuery';
 
-// The community showcase (docs/design/showcase.md; layout in
-// docs/design/ui/showcase.md). The server renders the heading, lead, filter
-// bar, rail, and the loading state; the browser then reads the listing. Both
-// filter layouts render on the server and switch by CSS media query alone.
-// The page stores nothing and sends no cookie.
 const route = useRoute();
 const router = useRouter();
 const { locale } = useLocale();
@@ -37,8 +32,6 @@ const { authState } = useAuth();
 const { passwordRegistration } = useCapabilities();
 const copy = computed(() => showcaseCopy[locale.value]);
 const query = computed(() => parseShowcaseQuery(route.query));
-// A change shows at once, before the router settles, so a second change made
-// in that gap builds on the first instead of on the old URL.
 const pending = shallowRef<Filters | null>(null);
 const filters = computed<Filters>(() => pending.value ?? {
   role: query.value.role,
@@ -70,8 +63,6 @@ const showPager = computed(() => (
   && (view.value === 'list' || view.value === 'no-match')
 ));
 
-// The count line keeps the last total through a reload and a failure; only
-// the first load, before any total, shows a skeleton.
 const lastTotal = shallowRef<number | null>(null);
 watch(listing, (next) => {
   if (next !== null) lastTotal.value = next.total;
@@ -83,32 +74,22 @@ const countText = computed(() => {
 const countHead = computed(() => (
   lastTotal.value === null ? '' : copy.value.countHead(lastTotal.value)
 ));
-// A filter change that keeps the total leaves the count text as it was, so a
-// screen reader would hear nothing. `announceKey` keys the text node in each
-// live region; it goes up when a filter change's load settles, which replaces
-// the node and announces the same text again. A pager move never marks it
-// (docs/design/ui/showcase.md, Count line and Sheet status).
 const announceKey = ref(0);
 const announcePending = ref(false);
 let lastLoadedFilters: Filters = query.value;
 watch(settled, () => {
-  // A failed load keeps the last text and the mark, so the Retry that
-  // succeeds announces the count for the new filters.
   if (view.value === 'failed') return;
   lastLoadedFilters = query.value;
   if (!announcePending.value) return;
   announcePending.value = false;
   announceKey.value += 1;
 });
-// The sheet's Show results label: the live total once loaded.
 const sheetTotal = computed(() => (
   view.value === 'loading' || listing.value === null
     ? null
     : listing.value.total
 ));
 
-// The sheet closes when the viewport reaches 1024 px, where the Filters
-// button is hidden. This watcher only closes; CSS decides what renders.
 const sheetOpen = ref(false);
 const wide = useMediaQuery(WIDE);
 watch(wide, (isWide) => {
@@ -119,8 +100,6 @@ function isWide(): boolean {
   return window.matchMedia(WIDE).matches;
 }
 
-// The rail's pressed Role option, or the Filters button below 1024 px: where
-// focus lands when the control that held it is gone.
 function focusFilterControl(): void {
   if (!isWide()) {
     bar.value?.focusFilters();
@@ -133,18 +112,13 @@ function focusFilterControl(): void {
     ?.focus();
 }
 
-// Closing the sheet returns focus to the Filters button, unless the viewport
-// grew past 1024 px and hid it.
 function onSheetCloseAutoFocus(event: Event): void {
   if (!isWide()) return;
   event.preventDefault();
   focusFilterControl();
 }
 
-// A filter change replaces the URL query, drops `page`, and keeps focus on
-// the control.
 async function onFilters(next: Filters): Promise<void> {
-  // Reverting an unfinished change keeps the last announced count node.
   announcePending.value = next.role !== lastLoadedFilters.role
     || next.lang !== lastLoadedFilters.lang
     || next.template !== lastLoadedFilters.template;
@@ -155,7 +129,6 @@ async function onFilters(next: Filters): Promise<void> {
       query: showcaseRouteQuery({ ...next, page: 1 }),
     });
   } finally {
-    // A newer change owns `pending`; only the latest one releases it.
     if (pending.value === next) pending.value = null;
   }
 }
@@ -175,8 +148,6 @@ function onClearAll(): void {
   void nextTick(focusFilterControl);
 }
 
-// After Previous or Next: scroll the results to the top, then focus the first
-// tile link once the page loads, or Retry when it fails.
 const focusAfterLoad = ref(false);
 function onNavigate(): void {
   focusAfterLoad.value = true;
@@ -205,8 +176,6 @@ useHead(computed(() => ({
     { name: 'description', content: copy.value.description },
     { name: 'robots', content: 'noindex, nofollow' },
   ],
-  // Below 1024 px the root scroller keeps the sticky bar clear of focus and
-  // of the pager's scroll; FilterBar owns the shared global rule.
   htmlAttrs: { class: 'filter-bar-scroll-padding' },
 })));
 </script>
@@ -451,8 +420,6 @@ useHead(computed(() => ({
 
   .showcase-wrap {
     display: grid;
-    /* The count column keeps a fixed minimum, so the count line's box does
-       not move when its text replaces the first-load skeleton. */
     grid-template-columns: 256px minmax(0, 1fr) minmax(18rem, auto);
     grid-template-areas:
       "header header count"

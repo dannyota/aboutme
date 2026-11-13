@@ -10,10 +10,6 @@ import {
   type OpenEditor,
 } from './held-write-editor';
 
-// A write the queue holds because its outcome is unknown or because it keeps
-// meeting newer revisions: how it is retried, when the person is told, and
-// that the edits queued behind it still reach the server, in order.
-
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
@@ -64,8 +60,6 @@ describe('a write that meets a newer revision twice', () => {
     const context = editor();
     const mine = context.edit(headline('Staff engineer'));
     const later = context.edit(fullName('Ada King'));
-    // The server bumps the revision without a document change each time a
-    // linked library project is edited; two edits land around this write.
     context.server.beforeNextWrite(() => {
       context.server.otherWriter((document) => document);
     });
@@ -135,7 +129,6 @@ describe('the retry of a write whose outcome is unknown', () => {
       const context = editor();
       context.server.loseEveryResponse({ applied: false });
       context.edit(headline('Staff engineer'));
-      // The first send goes after the one-second debounce and fails at once.
       await vi.advanceTimersByTimeAsync(1_000);
       expect(context.store.saveStateFor(context.id)).toBe('retrying');
 
@@ -289,7 +282,6 @@ describe('the rebases of a write that meets newer revisions', () => {
     });
 });
 
-/** Another tab renames the second job, a change no test edit touches. */
 function renameSecondJob(document: Resume): Resume {
   const work = document.content.work!;
   return {
@@ -306,13 +298,11 @@ function renameSecondJob(document: Resume): Resume {
   };
 }
 
-/** Another tab sets the headline. */
 const setHeadline = (value: string) => (document: Resume): Resume => ({
   ...document,
   personalDetails: { ...document.personalDetails, headline: value },
 });
 
-/** The requests sent for one command: key, If-Match and body bytes. */
 function requestsFor(context: OpenEditor, commandId: string): string[] {
   return context.server.sent
     .filter(({ attempt }) => attempt.id === commandId)
@@ -325,8 +315,6 @@ describe('a held write and the read barrier', () => {
     const context = editor();
     context.edit(headline('Staff engineer'));
     context.edit(fullName('Ada King'));
-    // The first write meets a revision another tab made; the rebased write
-    // lands, but its response and the replay's are lost.
     context.server.beforeNextWrite(() => {
       context.server.otherWriter(renameSecondJob);
     });
@@ -362,7 +350,6 @@ describe('a held write that meets a conflicting change', () => {
       context.server.loseNextResponse({ applied: false });
       context.server.loseNextResponse({ applied: false });
       await vi.advanceTimersByTimeAsync(1_250);
-      // Another tab sets the headline, and a realtime read brings it here.
       context.server.otherWriter(setHeadline('Principal engineer'));
       await context.actions.refresh();
 
@@ -462,8 +449,7 @@ describe('the request a held write sends again', () => {
 
   it('carries the same photo bytes on every replay', async () => {
     const context = editor();
-    // Node's File keeps its bytes through the store's structured clone, as
-    // a browser File does; the test DOM's File would not.
+    // Node's File survives structuredClone; the test DOM's File does not.
     const file = new NodeFile(
       [new Uint8Array([137, 80, 78, 71, 1, 2, 3])],
       'photo.png',

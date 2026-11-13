@@ -6,20 +6,6 @@ import { mapReauthError, mapReauthStartError } from './passwordSettings';
 import { validateAuthorizeUrl } from './providerAuthorization';
 import type { components } from '../api/generated/openapi';
 
-/**
- * `totpSettings` — the closed contract behind the account-settings
- * authenticator-app (TOTP) controls
- * (`docs/design/totp-second-factor-contract.md`, ADR 0017).
- *
- * `TotpSettings` is presentational: it reads `totpEnabled` and
- * `hasOtherActiveFactor` as props, reads the `totpEnrollment` capability
- * itself, and performs every side effect through `useTotpSettingsActions`.
- * Every rejection is a `TotpSettingsFailure` so the component maps to fixed
- * copy without reading a raw server body. A `reauth-required` failure is
- * always forwarded to the parent, which owns the one shared reauthentication
- * flow for the whole second-factor section.
- */
-
 export type TotpEnrollmentStart
   = components['schemas']['TOTPEnrollmentStartResponse']['data'];
 
@@ -35,7 +21,6 @@ export type TotpSettingsErrorKind
     | 'rate-limited'
     | 'unavailable';
 
-/** Rejection value for every TOTP-settings action. */
 export class TotpSettingsFailure extends Error {
   readonly kind: TotpSettingsErrorKind;
 
@@ -60,7 +45,6 @@ function failureCode(error: unknown): unknown {
     ?.error?.code;
 }
 
-/** Map a `POST .../totp/enrollment` (start) rejection. */
 export function mapTotpEnrollmentStartError(
   error: unknown,
 ): TotpSettingsFailure {
@@ -76,13 +60,6 @@ export function mapTotpEnrollmentStartError(
   return new TotpSettingsFailure('unavailable');
 }
 
-/**
- * Map a `PUT .../totp/enrollment` (complete) rejection. `enrollment_invalid`
- * (unknown, expired, foreign, or superseded enrollment) and `closed` both
- * end setup, since the proposed secret can no longer be proven; only
- * `invalid-code` (a wrong or replayed proof) keeps the same QR and secret
- * available for another attempt.
- */
 export function mapTotpEnrollmentCompleteError(
   error: unknown,
 ): TotpSettingsFailure {
@@ -104,7 +81,6 @@ export function mapTotpEnrollmentCompleteError(
   return new TotpSettingsFailure('unavailable');
 }
 
-/** Map a `DELETE .../totp` rejection. */
 export function mapTotpRemovalError(error: unknown): TotpSettingsFailure {
   const status = failureStatus(error);
   const code = failureCode(error);
@@ -118,23 +94,11 @@ export function mapTotpRemovalError(error: unknown): TotpSettingsFailure {
   return new TotpSettingsFailure('unavailable');
 }
 
-/** A QR module grid as one SVG path, one unit per module. */
 export interface TotpQr {
-  /** The path's square viewBox size (module grid width, quiet zone
-   * included: `uqr`'s default one-module `border`). */
   readonly size: number;
-  /** `M{x} {y}h1v1h-1z` for every dark module; empty modules add nothing. */
   readonly path: string;
 }
 
-/**
- * Encodes the provisioning URI into a QR module grid with the pinned `uqr`
- * encoder and reduces it to one SVG path string — no raw HTML, so the
- * component renders it with plain template bindings (`:d`, `:viewBox`)
- * instead of `v-html`. No network request; the path holds only numeric
- * module coordinates, never the URI as text
- * (docs/design/totp-second-factor-contract.md "Provisioning data").
- */
 export function renderTotpQr(provisioningUri: string): TotpQr {
   const grid = encode(provisioningUri, { ecc: 'M' });
   const segments: string[] = [];
@@ -148,18 +112,13 @@ export function renderTotpQr(provisioningUri: string): TotpQr {
 }
 
 export interface TotpSettingsActions {
-  /** Refresh the current session's recent-reauthentication time. */
   reauthenticate(password: string): Promise<void>;
-  /** Begin the provider OAuth reauthentication round trip. */
   startProviderReauth(provider: AuthProvider): Promise<void>;
-  /** Start TOTP enrollment or replacement; returns the one-time secret. */
   startEnrollment(): Promise<TotpEnrollmentStart>;
-  /** Prove the proposed secret and install or replace the credential. */
   completeEnrollment(
     enrollmentId: string,
     code: string,
   ): Promise<TotpEnrollmentComplete>;
-  /** Remove the active TOTP credential. */
   removeTotp(): Promise<void>;
 }
 
@@ -167,12 +126,6 @@ interface PasswordReauthEnvelope {
   data?: { secondFactorRequired?: boolean };
 }
 
-/**
- * Every action here calls `useAuth().mutate` directly rather than through an
- * injected actions object, so `TotpSettings` needs no wiring from the
- * settings page: it owns its own network calls the same way
- * `ConnectedAgents`/`useAgentGrants` do.
- */
 export function useTotpSettingsActions(): TotpSettingsActions {
   const auth = useAuth();
 
@@ -186,9 +139,6 @@ export function useTotpSettingsActions(): TotpSettingsActions {
     } catch (error) {
       throw mapReauthError(error);
     }
-    // An account with another active factor answers with a pending row
-    // instead of completing reauth outright; the pending second-factor page
-    // returns here since this purpose's return path is fixed to settings.
     if (response?.data?.secondFactorRequired === true) {
       await navigateTo('/login/second-factor');
     }

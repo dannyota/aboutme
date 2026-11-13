@@ -2,12 +2,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-/**
- * Continuous reading surfaces give the text its measure before the template's
- * print margin (docs/design/web.md, "Pagination and print"). The rule is
- * screen only, so PDF images, print, the paged preview, and preview cards keep
- * the template margin.
- */
 const dir = resolve(import.meta.dirname, '../../app/components/resume');
 const source = readFileSync(resolve(dir, 'ResumeDocument.vue'), 'utf8');
 const margins = readFileSync(resolve(dir, 'resumeScreenMargins.css'), 'utf8');

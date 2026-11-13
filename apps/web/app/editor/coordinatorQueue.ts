@@ -53,7 +53,6 @@ export function schedule(
   );
 }
 
-/** Time left before a failed completing read may run again. */
 function retryWait(ctx: CoordinatorContext, resumeId: string): number {
   const retry = ctx.readRetries.get(resumeId);
   if (
@@ -65,7 +64,6 @@ function retryWait(ctx: CoordinatorContext, resumeId: string): number {
   return Math.max(0, retry.at - Date.now());
 }
 
-/** A link or refresh is one chosen action, not typing, so it goes at once. */
 function deliberateAction(ctx: CoordinatorContext, resumeId: string): boolean {
   const last = ctx.deps.store.recordFor(resumeId)?.pending.at(-1);
   return last?.kind === 'projectLink'
@@ -86,21 +84,6 @@ export function flush(
   return drain;
 }
 
-/**
- * The resume's only sender. Each pass decides in one place, in this order:
- * 1. the epoch: a closed editor or a resume opened again ends the drain;
- * 2. the head waits for the person: a conflict, or a held write only the
- *    person may send again;
- * 3. the read barrier: nothing is sent over an unread revision, so the read
- *    completes first, and a held write is reconciled against it before it
- *    is sent again; only a rebase built from a 412 winner skips it;
- * 4. the held write's retry deadline, Retry-After included;
- * 5. the send: the held write unchanged, or the head of the queue.
- * Settlement, timers and buttons only change state and wake the drain.
- * Every await ends the pass, so the next pass chooses again: nothing is
- * awaited between choosing a write and claiming it. The CSRF token is
- * therefore had before the choice, refreshed at most once until a send.
- */
 async function drainResume(
   ctx: OperationContext,
   resumeId: string,
@@ -170,8 +153,6 @@ async function drainResume(
     const ownerId = held?.queueItem.ownerId ?? record.pending[0]!.ownerId;
     const csrfToken = dispatchToken(ctx, resumeId, ownerId);
     if (csrfToken === null) {
-      // Only a signed-in session missing its token refreshes here; while the
-      // session itself is in doubt the page's session check runs instead.
       if (
         refreshed
         || record.sessionLost
@@ -191,20 +172,12 @@ async function drainResume(
   }
 }
 
-/** The queue's head, not sent yet, has a conflict recorded. */
 function queuedConflict(record: ResumeRecord): boolean {
   const head = record.pending[0];
   return head !== undefined
     && record.conflicts.some(({ id }) => id === head.id);
 }
 
-/**
- * Settles the queue's head against what the editor last accepted, before it
- * is sent: one the resume already holds leaves the queue, a conflict stops
- * the queue for the person, and a refresh over changed text or a link of an
- * entry that changed is dropped. A recorded conflict is reconciled again, so
- * it follows later typing.
- */
 function reconcileHead(
   ctx: OperationContext,
   resumeId: string,
@@ -259,11 +232,6 @@ function reconcileHead(
   return 'send';
 }
 
-/**
- * Step 5 for the queue's head: chooses it, freezes its attempt and claims it
- * from the queue, with nothing awaited between, then sends it. Returns
- * whether it was sent, the drain looks again, or the drain stops.
- */
 async function sendHead(
   ctx: OperationContext,
   resumeId: string,
@@ -284,13 +252,11 @@ async function sendHead(
   if (command === null) return 'stop';
   const attempt = freezeAttempt(command, record.accepted, ctx.deps.runtime);
   ctx.deps.store.startAttempt(resumeId, queueItem, command, attempt);
-  // Not claimed: the head is no longer this object, so choose again.
   if (!owns(ctx, resumeId, attempt)) return 'again';
   await send(ctx, resumeId, queueItem, command, attempt, csrfToken);
   return 'sent';
 }
 
-/** Refreshes the session's CSRF token; whether the refresh completed. */
 async function refreshCsrf(ctx: OperationContext): Promise<boolean> {
   try {
     await ctx.deps.auth.refresh();
@@ -300,11 +266,6 @@ async function refreshCsrf(ctx: OperationContext): Promise<boolean> {
   }
 }
 
-/**
- * Step 5 for the held write: sends it again unchanged, marked as on its way
- * so its retry button waits. It is the write this pass chose, with nothing
- * awaited since.
- */
 async function resend(
   ctx: OperationContext,
   resumeId: string,
@@ -332,10 +293,6 @@ async function resend(
   return 'sent';
 }
 
-/**
- * Asks for the held write `commandId` to go out again: Retry now, Try
- * again, or a photo retry. It only changes the schedule; the drain sends.
- */
 export function retry(
   ctx: OperationContext,
   resumeId: string,
@@ -349,7 +306,6 @@ export function retry(
   return flush(ctx, resumeId);
 }
 
-/** Checks the session again, then goes on as `wake` does after recovery. */
 export async function resumeAfterAuth(
   ctx: OperationContext,
   resumeId: string,
@@ -359,14 +315,6 @@ export async function resumeAfterAuth(
   await wake(ctx, resumeId, true);
 }
 
-/**
- * Goes on with the queue once the session is known to be its owner's: every
- * drain that stopped for authentication runs again. After the session was in
- * doubt or lost (`recovered`), the queue first reads the resume in full,
- * through the read barrier, so the read is retried on the schedule and the
- * queue goes on when it completes; a held write is then sent at once. Work
- * owned by someone else than the signed-in person is left alone.
- */
 export function wake(
   ctx: OperationContext,
   resumeId: string,
@@ -394,15 +342,6 @@ export function wake(
   return flush(ctx, resumeId);
 }
 
-/**
- * Reads the complete resume to clear the read barrier, which marks a resume
- * the editor has not read in full: a 412 winner, a bodyless 204, or a
- * dropped project command. A read that leaves it set is retried on the
- * queue's own timer, 1 s after the first failure and doubling to 30 s, or
- * after a longer Retry-After; no schedule or flush runs it sooner. A lost
- * session waits for sign-in, whose read completes it; a missing resume ends
- * the retries.
- */
 export async function completeReadBarrier(
   ctx: OperationContext,
   resumeId: string,
@@ -446,12 +385,6 @@ export async function completeReadBarrier(
   return false;
 }
 
-/**
- * Ends this coordinator's work on a resume whose editor closed: no timer,
- * read or write starts for it again, though a request already sent
- * completes. Unsent edits stay behind until the resume is opened again,
- * which reads it afresh and drops them; leaving with them warns first.
- */
 export function stop(ctx: CoordinatorContext, resumeId: string): void {
   ctx.stopped.add(resumeId);
   ctx.readRetries.delete(resumeId);

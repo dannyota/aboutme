@@ -1,7 +1,3 @@
-// The showcase page's URL query: role, lang, template, and page. A value the
-// page does not know counts as All and is never sent to the API; a page
-// outside 1 to 100 counts as 1 (docs/design/showcase.md, Order and filters;
-// docs/design/ui/showcase.md, Active filters).
 import type { LocationQuery, LocationQueryRaw } from 'vue-router';
 
 import { GALLERY } from '../templates/catalog';
@@ -17,7 +13,6 @@ import {
 export interface ShowcaseQuery {
   readonly role?: ShowcaseRole;
   readonly lang?: ShowcaseFilterLanguage;
-  /** A preset ID or `custom`. */
   readonly template?: string;
   readonly page: number;
 }
@@ -29,7 +24,6 @@ const TEMPLATE_IDS: ReadonlySet<string> = new Set([
   SHOWCASE_CUSTOM_TEMPLATE,
 ]);
 
-/** The single string of a query value; a repeated key counts as unknown. */
 function single(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -64,11 +58,9 @@ export type ShowcaseFilterKind = 'role' | 'lang' | 'template';
 
 export interface ActiveFilter {
   readonly kind: ShowcaseFilterKind;
-  /** The role, the language filter value, or the template ID. */
   readonly value: string;
 }
 
-/** The filters that are on, in chip order: role, language, template. */
 export function activeFilterList(query: ShowcaseFilters): ActiveFilter[] {
   return [
     ...(query.role === undefined
@@ -83,12 +75,10 @@ export function activeFilterList(query: ShowcaseFilters): ActiveFilter[] {
   ];
 }
 
-/** How many filters are on, 0 to 3; the Filters button badge shows it. */
 export function activeFilterCount(query: ShowcaseFilters): number {
   return activeFilterList(query).length;
 }
 
-/** The route query for a link: known filters, and `page` above 1. */
 export function showcaseRouteQuery(query: ShowcaseQuery): LocationQueryRaw {
   return {
     ...(query.role === undefined ? {} : { role: query.role }),
@@ -98,7 +88,6 @@ export function showcaseRouteQuery(query: ShowcaseQuery): LocationQueryRaw {
   };
 }
 
-/** The listing request's search string: only known values, page above 1. */
 export function showcaseSearch(query: ShowcaseQuery): string {
   return new URLSearchParams(
     showcaseRouteQuery(query) as Record<string, string>,

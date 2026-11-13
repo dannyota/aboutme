@@ -13,11 +13,6 @@ const tabs = computed(() => [
 </script>
 
 <template>
-  <!--
-    Up to 72 rem the preview spans the editor area instead of holding its own
-    column (DESIGN.md, Responsive behavior), so the bottom Edit/Preview tabs
-    switch regions at every width below the desktop layout.
-  -->
   <div
     :aria-label="copy.editorView"
     class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t

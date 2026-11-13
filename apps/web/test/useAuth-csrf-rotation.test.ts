@@ -8,16 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 
-// Deliberately its own file, not a case inside `useAuth.test.ts`: this
-// test needs to control PRECISELY which csrfToken value `/me` returns on
-// its very first resolution versus a later one, and `useFetch`'s
-// automatic initial fetch is keyed by URL — in a file shared with other
-// tests that also resolve `/api/v1/me` successfully, whether THIS test's
-// own mount actually invokes its own handler (versus reusing an
-// already-cached "success" result from an earlier test) is not
-// reliably predictable. A fresh, empty Nuxt app instance (one per test
-// file) makes the first real call to the registered handler
-// deterministic.
+// Own file: Nuxt reuses a URL's cached useFetch result within a test file.
 mockNuxtImport('navigateTo', () => vi.fn());
 
 interface MockEvent {
@@ -69,9 +60,6 @@ describe('useAuth mutate() CSRF x rotation self-heal', () => {
                 name: 'Demo User',
                 avatarKey: null,
               },
-              // First resolution (the mount) hands out the token that
-              // will go stale; the refetch mid-retry hands out the one
-              // a real session rotation would mint.
               csrfToken:
                 meGetCalls === 1 ? 'test-csrf-token' : 'rotated-csrf-token',
               identities: [{ provider: 'google' }],
@@ -98,9 +86,6 @@ describe('useAuth mutate() CSRF x rotation self-heal', () => {
 
       const wrapper = await mountSuspended(Probe);
       await flushPromises();
-      // The automatic initial fetch is this test's very first (and only
-      // prior) chance to resolve /me in this fresh app instance, so it
-      // is guaranteed to have actually invoked the handler above once.
       expect(meGetCalls).toBe(1);
 
       await wrapper.get('[data-testid="logout-button"]').trigger('click');
@@ -109,11 +94,6 @@ describe('useAuth mutate() CSRF x rotation self-heal', () => {
 
       expect(logoutCalls).toBe(2);
       expect(meGetCalls).toBe(2);
-      // Load-bearing: the retry must carry the REFRESHED token, not the
-      // stale one captured once and reused for both attempts — that's
-      // the exact defect this feature exists to prevent (hoisting
-      // `csrfHeaders(csrfToken.value)` out of the retry closure would
-      // pass a "did it retry" test while still shipping this bug).
       expect(receivedHeaders[0]).toBe('test-csrf-token');
       expect(receivedHeaders[1]).toBe('rotated-csrf-token');
       expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');

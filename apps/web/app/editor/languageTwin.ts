@@ -5,10 +5,8 @@ import type {
   Section,
 } from '@aboutme/schema';
 
-/** Resume languages the Vietnam tech guide pairs. */
 export type TwinLanguage = 'vi' | 'en';
 
-/** Structural changes the editor checklist explains. */
 export type TwinNote
   = | 'photo-removed'
     | 'birth-removed'
@@ -36,7 +34,6 @@ interface StoredLanguageTwin {
 }
 
 const TITLE_LIMIT = 160;
-/** In-tab handoff from create → editor; never browser storage. */
 let rememberedTwin: StoredLanguageTwin | null = null;
 const TITLE_SUFFIX: Readonly<Record<TwinLanguage, string>> = {
   vi: ' · Tiếng Việt',
@@ -115,17 +112,12 @@ const BIRTH_LABELS = new Set([
   'birthday',
 ]);
 
-/** The other Vietnam-guide language, or null when this resume is not vi/en. */
 export function twinTarget(lng: string): TwinLanguage | null {
   if (lng === 'vi') return 'en';
   if (lng === 'en') return 'vi';
   return null;
 }
 
-/**
- * Copy a resume into the other language. Prose stays for a person to review.
- * The photo is dropped because its storage key belongs to the source resume.
- */
 export function languageTwin(input: LanguageTwinInput): LanguageTwin | null {
   const target = twinTarget(input.lng);
   if (target === null) return null;
@@ -156,7 +148,6 @@ export function languageTwin(input: LanguageTwinInput): LanguageTwin | null {
   };
 }
 
-/** Remember a twin so the editor can show its review checklist once. */
 export function rememberLanguageTwin(
   id: string,
   twin: LanguageTwin,
@@ -168,18 +159,15 @@ export function rememberLanguageTwin(
   };
 }
 
-/** The checklist for this resume, when it was just created as a twin. */
 export function readLanguageTwin(id: string): StoredLanguageTwin | null {
   if (rememberedTwin === null || rememberedTwin.id !== id) return null;
   return rememberedTwin;
 }
 
-/** Drop the checklist after the person finishes reviewing. */
 export function dismissLanguageTwin(id: string): void {
   if (rememberedTwin?.id === id) rememberedTwin = null;
 }
 
-/** Clear any pending checklist (tests). */
 export function forgetLanguageTwin(): void {
   rememberedTwin = null;
 }

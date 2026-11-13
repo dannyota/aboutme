@@ -1,37 +1,19 @@
-// The MCP guide page (/guide/mcp) in both site languages. Copy follows
-// docs/design/mcp-guide.md and docs/design/mcp-guide-copy.md, in page order.
-// Claude's own UI names (button and menu labels) stay in English on both
-// languages, matching what Claude shows (mcp-guide-copy.md, "Connect
-// Claude").
 import { siteOrigin } from './meta';
 import type { WorkspaceCopy } from './workspace';
 
-/** The one MCP server URL the page teaches, built from the site origin. */
 export const mcpServerUrl = `${siteOrigin}/mcp`;
 
-/**
- * The shell prompt marker a command block shows but never copies
- * (docs/design/mcp-guide.md, "Layout": the URL block carries no prompt).
- * Kept as data, not a template literal, like every other display string.
- */
 export const shellPrompt = '$ ';
 
-/** Claude Code command text, identical in both languages. */
 export const addServerCommand
   = `claude mcp add --transport http --scope user aboutme ${mcpServerUrl}`;
 export const loginCommand = 'claude mcp login aboutme';
 
-/** Anthropic's own help page for adding a custom connector. */
 const claudeConnectorsHelpUrl = 'https://support.claude.com/en/'
   + 'articles/11175166-get-started-with-custom-connectors-using-remote-mcp';
 
 const settingsSessionsPath = '/app/settings/sessions';
 
-/**
- * One run of inline text. A line mixing plain text with a UI name, inline
- * code, or a link is an array of these, rendered by GuideRichText.vue so no
- * display text sits in a template literal (docs/standards/engineering.md).
- */
 export type GuideInline
   = { readonly kind: 'text'; readonly text: string }
     | { readonly kind: 'strong'; readonly text: string }
@@ -57,7 +39,6 @@ function c(text: string): GuideInline {
 function a(text: string, href: string, external = false): GuideInline {
   return { kind: 'link', text, href, external };
 }
-/** Wraps a plain string as a one-part line, for a uniform line type. */
 function plain(text: string): GuideLine {
   return [t(text)];
 }
@@ -65,7 +46,6 @@ function plain(text: string): GuideLine {
 interface GuideCommandStep {
   readonly line: GuideLine;
   readonly command: string;
-  /** Accessible name for the scrolling command block. */
   readonly scrollLabel: string;
 }
 

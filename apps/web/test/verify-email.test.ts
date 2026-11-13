@@ -9,7 +9,6 @@ import { readRawBody, setResponseStatus } from 'h3';
 import VerifyEmailPage from '../app/pages/verify-email.vue';
 import { setSiteLocale } from './support/locale';
 
-// These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 
 mockNuxtImport('useHead', () => vi.fn());
@@ -167,7 +166,6 @@ describe('verify-email.vue (fragment handling)', () => {
       await mountSuspended(VerifyEmailPage);
       await flushPromises();
       expect(calls).toBe(1);
-      // A fresh load with the hash already gone must not fire again.
       await mountSuspended(VerifyEmailPage);
       await flushPromises();
       expect(calls).toBe(1);

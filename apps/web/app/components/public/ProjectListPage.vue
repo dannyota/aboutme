@@ -10,20 +10,14 @@ import { formatDateRange } from '../resume/formatDate';
 import ProjectChips from './ProjectChips.vue';
 import ProjectPageBar from './ProjectPageBar.vue';
 
-// The project list, /{slug}/projects (docs/design/ui/project-pages.md,
-// "Project list"). Server-rendered only, with no script. Each row's project
-// text carries the project's lang when it is not in the resume's language;
-// dates follow the resume's format and language.
 const props = defineProps<{
   readonly resume: ProjectPageResume;
   readonly projects: readonly ProjectSummary[];
-  /** `{origin}/`, the credit's href. */
   readonly homeHref: string;
 }>();
 
 const copy = computed(() => PROJECT_PAGE_COPY[props.resume.uiLng]);
 
-/** Role and dates on one muted line: the part after the role. */
 const metaTail = (row: ProjectSummary): string => {
   if (row.dates === undefined) return '';
   const dates = formatDateRange(

@@ -78,8 +78,6 @@ const render = async (): Promise<{ html: string; exit: number }> =>
 function build(harness: boolean): void {
   const env = { ...process.env };
   env.NUXT_BUILD_TEST = '1';
-  // These two builds run back-to-back and write to distinct build directories.
-  // Neither build may inherit a caller's harness selection.
   env.NUXT_IGNORE_LOCK = '1';
   if (harness) env.NUXT_HARNESS = '1';
   else delete env.NUXT_HARNESS;

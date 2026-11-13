@@ -22,13 +22,9 @@ import {
   type JoinInvitePlacement,
 } from '../../public/joinInvite';
 
-// docs/design/viewer-analytics/sign-in-to-view.md#join-invite and
-// docs/design/public-page-theme.md (bar token values, "Join invite").
 const props = defineProps<{
   readonly lng: 'vi' | 'en';
-  /** The `data-join-invite` marker value: `/register` or `/login`. */
   readonly href: string;
-  /** The public resume's root element, measured for placement. */
   readonly root: HTMLElement;
 }>();
 
@@ -63,21 +59,15 @@ function updatePlacement(): void {
   dark.value = joinInviteIsDark(props.root);
 }
 
-// A Match device page follows the viewer's preference as it changes.
 let schemeQuery: MediaQueryList | undefined;
 function updateScheme(): void {
   dark.value = joinInviteIsDark(props.root);
 }
 
-// Below 360 px the bar keeps only the button and the close button. This is
-// script, not a media query: the public page loads no stylesheet for the
-// invite.
 const showBarText = computed(
   () => viewportWidth.value >= JOIN_INVITE_BAR_TEXT_MIN_WIDTH,
 );
 
-// A 200 ms fade and 8 px slide from the bottom edge, skipped entirely under
-// `prefers-reduced-motion: reduce`.
 function animateEntrance(): void {
   const element = container.value;
   if (element === undefined || typeof element.animate !== 'function') return;
@@ -88,8 +78,6 @@ function animateEntrance(): void {
   );
 }
 
-// The bar never covers resume text: while it shows, the page gains bottom
-// padding equal to the bar's total height.
 let restorePadding: (() => void) | null = null;
 
 function syncPagePadding(): void {

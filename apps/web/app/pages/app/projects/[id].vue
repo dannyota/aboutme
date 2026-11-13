@@ -76,7 +76,6 @@ function confirmLeave(): Promise<boolean> {
   });
 }
 
-// Held rich text and an unfinished date range count as unsaved work.
 useLeaveGuard(() => !leaving && (drafts.flushAll()
   || editor.dirty.value || editor.saving.value), confirmLeave);
 
@@ -95,11 +94,9 @@ const languages = computed(() => Object.keys(draft.value?.text ?? {}));
 const errors = computed<Record<string, string>>(() => Object.fromEntries(
   editor.issues.value.map((issue) =>
     [issue.path, issueMessage(issue, copy.value)])));
-// A held draft, such as a start year without an end, is unsaved work too.
 const changed = computed(() =>
   editor.dirty.value || drafts.count.value > 0);
 const resumes = useProjectResumes(editor.loaded, changed, { api, auth });
-// Resumes a project created a moment ago could not join.
 const notLinked = takeUnlinked(id);
 const saveMark = computed(() => {
   if (editor.saving.value) return 'saving';
@@ -189,7 +186,6 @@ function removeLanguage(): void {
 }
 
 async function save(): Promise<void> {
-  // Hands held rich text to the draft; an unfinished range stays held.
   const held = drafts.flushAll();
   await editor.save(held ? [{ path: 'dates', code: 'date-range-order' }] : []);
 }

@@ -355,12 +355,6 @@ export function recoverTemplateGroup(
     : { kind: 'enqueue', group: reverse };
 }
 
-/**
- * Whether a recovery action can still succeed on `latest`. Recovery is exact
- * (AC-EDITOR-012): it resumes or reverses the recorded children only while the
- * resume still holds the state those children left, so the dialog offers an
- * action only when this holds.
- */
 export function templateRecoveryAvailable(
   group: TemplateGroupCommand,
   state: Extract<TemplateGroupState, { kind: 'partial' }>,
@@ -374,7 +368,6 @@ export function templateRecoveryAvailable(
     .some((child) => !templateChildApplied(child, latest));
 }
 
-/** Whether `snapshot` holds the values `child` set, whatever else changed. */
 export function templateChildApplied(
   child: TemplateChildCommand,
   snapshot: ResumeSnapshot,
@@ -413,13 +406,6 @@ export function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
   };
 }
 
-/**
- * The sections a template group is bound to. `content` is an unordered map
- * and `layout.sections` alone orders sections (ADR 0004,
- * docs/design/data.md#resume-aggregate), and the server re-encodes content
- * keys in its own order. So the identity lists keys in UTF-16 code-unit
- * order: only an added, removed, or retyped section changes it.
- */
 function contentContext(snapshot: ResumeSnapshot): Projection['context'] {
   return {
     resumeId: { present: true, value: snapshot.metadata.id },

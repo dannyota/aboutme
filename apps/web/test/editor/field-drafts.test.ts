@@ -67,7 +67,6 @@ describe('an unfinished date range', () => {
       expect(first.emitted('field')).toBeUndefined();
       expect(drafts.count.value).toBe(1);
 
-      // Switching sections or collapsing the card remounts the form.
       first.unmount();
       const second = mount(component, {
         props: { entry },

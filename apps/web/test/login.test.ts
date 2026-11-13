@@ -11,13 +11,10 @@ import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
-// These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 
 registerCapabilities();
 
-// login() navigates to /app/resumes on success — stub it so tests can assert
-// the target without a real page transition tearing the mounted wrapper down.
 mockNuxtImport('navigateTo', () => vi.fn());
 
 describe('login.vue', () => {
@@ -31,8 +28,6 @@ describe('login.vue', () => {
       '[href="/api/v1/auth/linkedin/start"]',
     );
 
-    // Plain <a> tags, never JS-driven navigation: the start endpoint sets
-    // a cookie and redirects, which needs a real top-level navigation.
     expect(google.element.tagName).toBe('A');
     expect(github.element.tagName).toBe('A');
     expect(linkedin.element.tagName).toBe('A');
@@ -187,9 +182,6 @@ describe('login.vue', () => {
 
   it('does not resolve a prototype property as a valid error code',
     async () => {
-      // A plain `errorMessages[code]` lookup resolves inherited
-      // properties too — `?error=constructor` would otherwise render
-      // `Object`'s constructor function instead of falling back.
       const wrapper = await mountSuspended(LoginPage, {
         route: '/login?error=constructor',
       });
@@ -210,7 +202,6 @@ describe('login.vue password form', () => {
       expect(wrapper.get('[autocomplete="email"]').exists()).toBe(true);
       expect(wrapper.get('[autocomplete="current-password"]').exists())
         .toBe(true);
-      // Provider anchors remain real top-level navigation links.
       expect(wrapper.get('[href="/api/v1/auth/google/start"]').exists())
         .toBe(true);
       expect(wrapper.get('[href="/api/v1/auth/github/start"]').exists())
@@ -487,7 +478,6 @@ describe('login.vue provider gating', () => {
       expect(
         wrapper.find('[data-testid="login-divider"]').exists(),
       ).toBe(false);
-      // The password form is unconditional.
       expect(wrapper.find('[data-testid="login-form"]').exists()).toBe(true);
     });
 

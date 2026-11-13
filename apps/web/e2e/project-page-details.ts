@@ -4,10 +4,6 @@ import type { ScreenContract } from './display-assertions';
 import type { StyleRule } from './screen-expectations';
 import { denyExternalRequests } from './support';
 
-// Expected values for the public project pages, written from
-// docs/design/ui/project-pages.md and the application tokens in
-// docs/design/ui/typography-and-tokens.md, independently of the page style.
-
 export type ProjectPageKind = 'project-list' | 'project';
 export type Lng = 'vi' | 'en';
 export type Scheme = 'light' | 'dark';
@@ -44,10 +40,6 @@ export const projectPageURL = (
   kind: ProjectPageKind, lng: Lng, scheme: Scheme | 'system',
 ): string => `/_harness/render?mode=${kind}&lng=${lng}&scheme=${scheme}`;
 
-// The harness keeps 'unsafe-inline' for Nuxt's own <style> elements. The
-// project pages run under style-src 'self', so the harness page is served
-// with that policy too: an inline style on a project page would not apply,
-// and the display checks below would see it.
 const INLINE_STYLES = 'style-src \'self\' \'unsafe-inline\'';
 
 async function serveWithoutInlineStyles(page: Page): Promise<void> {
@@ -63,10 +55,6 @@ async function serveWithoutInlineStyles(page: Page): Promise<void> {
     });
 }
 
-/**
- * Opens a harness page under the project pages' style policy and waits for
- * its fonts, with no outside request.
- */
 export async function openProjectPage(
   page: Page, kind: ProjectPageKind, lng: Lng, scheme: Scheme | 'system',
 ): Promise<string[]> {
@@ -145,7 +133,6 @@ export function projectContract(
   };
 }
 
-/** The page's landmarks, named regions, lists and link order. */
 export async function expectProjectStructure(
   page: Page, kind: ProjectPageKind, lng: Lng,
 ): Promise<void> {
@@ -176,10 +163,6 @@ export async function expectProjectStructure(
   );
 }
 
-/**
- * The column and the bar's inner row share one measure: 44 rem for the
- * list and 59 rem for a project page, inside a 16, 24 or 32 px gutter.
- */
 export async function expectProjectMeasure(
   page: Page, kind: ProjectPageKind,
 ): Promise<void> {
@@ -208,10 +191,6 @@ export async function expectProjectMeasure(
   }, measure), 'Project measure.').toBe(true);
 }
 
-/**
- * From 56 rem the facts column, 17.5 rem wide, sits beside the text on its
- * right; below that it comes first at the full width.
- */
 export async function expectProjectColumns(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => {
     const box = (selector: string) =>
@@ -234,7 +213,6 @@ export async function expectProjectColumns(page: Page): Promise<void> {
   }), 'Project columns.').toBe(true);
 }
 
-/** Below 40 rem a row's role and dates move under its name. */
 export async function expectRowMeta(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => {
     const row = document.querySelectorAll('.project-rows > li')[1]!;
@@ -249,10 +227,6 @@ export async function expectRowMeta(page: Page): Promise<void> {
   }), 'Project row meta.').toBe(true);
 }
 
-/**
- * The page takes its rules from the linked project stylesheet alone: the
- * sheet loaded, and nothing on the page carries a style attribute.
- */
 export async function expectProjectStylesheet(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => {
     const sheet = [...document.styleSheets].find((candidate) =>
@@ -266,7 +240,6 @@ export async function expectProjectStylesheet(page: Page): Promise<void> {
   }), 'Project stylesheet.').toBe(true);
 }
 
-/** Every role the page paints takes its scheme's token. */
 export async function expectProjectColors(
   page: Page, kind: ProjectPageKind, scheme: Scheme,
 ): Promise<void> {

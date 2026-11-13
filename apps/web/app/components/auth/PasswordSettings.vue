@@ -1,18 +1,4 @@
 <script setup lang="ts">
-/**
- * `PasswordSettings`: add or change a password from account settings.
- *
- * Presentational: it receives the current `hasPassword` status and the
- * linked providers as props, and it performs exactly three side effects
- * through `PasswordSettingsActionsKey` (see `composables/passwordSettings`).
- * It never reads ambient auth state, and it never renders a provider email.
- *
- * Provider-only users add a password optimistically and fall back to a
- * provider reauth round trip only when the server answers `reauth_required`.
- * Password users reauthenticate with their current password before entering
- * a new one. The confirmation field is component-local (via `PasswordField`)
- * and is never submitted; `setPassword` receives exactly one password.
- */
 import PasswordField from './PasswordField.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import ReauthPrompt from '../settings/ReauthPrompt.vue';

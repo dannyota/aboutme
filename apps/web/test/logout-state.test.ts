@@ -39,13 +39,7 @@ registerEndpoint('/api/v1/auth/logout', {
   method: 'POST',
   handler: (event) => {
     setResponseStatus(event, 204);
-    // The real logout response sends `Clear-Site-Data: "cookies",
-    // "storage"`, and the browser wipes every cookie for this origin,
-    // including `aboutme-locale`, before the client's response handler runs
-    // (docs/design/security.md, session lifecycle). Chromium never shows the
-    // header to page scripts, so this endpoint omits it and clears the cookie
-    // on the browser's behalf. The reload assertion below is then a real
-    // regression check: without useAuth's restore hook, it would fail.
+    // Chromium hides Clear-Site-Data from scripts, so this clears the cookie.
     document.cookie = `${localeCookie}=; Max-Age=0; Path=/`;
     return null;
   },
@@ -113,20 +107,11 @@ describe('logout state transition', () => {
     expect(wrapper.get('[data-testid="identities"]').text()).toBe('[]');
     expect(wrapper.get('[data-testid="auth-state"]').text()).toBe('anonymous');
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
-    // /app/resumes is an authRequiredPath (AppShell.vue), and the real
-    // navigateTo('/login') asserted below would already have left it: the
-    // header shows neither the account menu nor the signed-out links while
-    // this now-anonymous state is still rendered here.
     expect(wrapper.find('[href="/login"]').exists()).toBe(false);
     expect(wrapper.find('[href="/register"]').exists()).toBe(false);
     expect(meReads).toBe(readsBeforeLogout);
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
 
-    // A reload after logout starts a fresh app instance that reads only
-    // the cookie the restore hook just rewrote, not the in-memory locale
-    // state Clear-Site-Data cannot touch (docs/design/localization.md,
-    // "Two language domains"). Without the hook, the handler above leaves
-    // the cookie cleared and this would render Vietnamese by default.
     clearNuxtState(localeCookie);
     const reloaded = await mountSuspended(LocaleToggle, {
       props: { label: 'Language' },

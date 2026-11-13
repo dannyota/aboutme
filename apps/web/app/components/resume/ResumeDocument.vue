@@ -54,26 +54,10 @@ const rootStyle = computed<CSSProperties>(() => ({
 </template>
 
 <style>
-/*
- * The owner's color scheme rules live in a sibling file. The print worker
- * loads only this block (PrintResumeApp imports index 0), so the file is
- * inlined here rather than linked as a second `<style src>` block. These
- * rules are !important or more specific than the light ones, so their place
- * in the cascade does not matter.
- */
 @import './resumeColorScheme.css';
 
-/*
- * The screen margins of the public page and the editor's Web preview, in a
- * second sibling file for the same reason. It is wrapped in `@media screen`.
- */
 @import './resumeScreenMargins.css';
 
-/*
- * The public page shell's skip link, rendered outside the resume by the public
- * render worker. The public page loads this stylesheet with the resume CSS.
- * The link stays out of view until keyboard focus reaches it.
- */
 a[href="#public-resume"]:not(:focus) {
   position: absolute;
   width: 1px;
@@ -99,16 +83,6 @@ a[href="#public-resume"]:focus {
   outline: 2px solid #10202a;
 }
 
-/*
- * The public page only (PublicResumeApp): the resume sits at a readable
- * measure, centred on its page background. The measure is in em of the body
- * size, so body lines hold about 90-110 characters in every template: 52em
- * of text for one column, 70em for two, where the main column keeps about
- * 45em.
- * Below the measure plus both page margins the box takes the full width and
- * the article's padding shrinks toward 16 px (resumeScreenMargins.css). The
- * editor preview and print never render this wrapper.
- */
 body:has(> #public-resume) {
   margin: 0;
 }
@@ -130,15 +104,6 @@ body:has(> #public-resume) {
   max-width: calc(70em + 2 * var(--page-margin-x));
 }
 
-/*
- * The page bar (docs/design/public-page-theme.md, "Page bar"): aboutme
- * chrome above the resume, not part of it, so it takes the application
- * tokens and typeface rather than the resume's own. It is the first child of
- * .public-resume-page, full width, with an inner row matching the resume
- * measure. The tokens below are the light column of the design's Tokens
- * table, taken from theme.css's :root (ADR 0020); the dark column is in
- * resumeColorScheme.css.
- */
 .public-toolbar {
   --toolbar-ground: #f9f8f5;
   --toolbar-border: #e5e1d6;
@@ -152,9 +117,6 @@ body:has(> #public-resume) {
   --toolbar-focus-ring: #26409c;
   --toolbar-button-shadow: 0 1px 2px rgba(16, 27, 63, 0.06);
   box-sizing: border-box;
-  /* The bottom rule is part of the bar's total height (48 px, 56 px on a
-     touch screen), so the bottom padding is 1 px less than the top
-     (docs/design/public-page-theme.md, "Size and placement"). */
   padding-block: 8px 7px;
   background: var(--toolbar-ground);
   border-bottom: 1px solid var(--toolbar-border);
@@ -168,9 +130,6 @@ body:has(> #public-resume) {
   justify-content: space-between;
   column-gap: 16px;
   row-gap: 8px;
-  /* Keeps the bar at the same height with the download button off, when the
-     row holds only the 20 px brand (docs/design/public-page-theme.md,
-     "Behavior"). */
   min-height: 32px;
   max-width: calc(52em + 2 * var(--page-margin-x));
   margin-inline: auto;
@@ -226,10 +185,6 @@ body:has(> #public-resume) {
 }
 
 @media (pointer: coarse) {
-  /* Grows the credit's tap target to match the button's touch height
-     without moving the row's layout: the negative block margin cancels the
-     added padding, so the anchor's own box grows but its neighbors do not
-     shift (docs/design/public-page-theme.md, "Size and placement"). */
   .public-credit {
     display: inline-block;
     padding-block: 10px;
@@ -320,8 +275,6 @@ body:has(> #public-resume) {
 .resume-document {
   box-sizing: border-box;
   min-height: 100%;
-  /* A ligature reaches a PDF text layer as one character (ff as U+FB00), so
-     a keyword search for "offensive" would miss it. */
   font-variant-ligatures: no-common-ligatures;
   padding: var(--page-margin-y) var(--page-margin-x);
   color: var(--color-body);
@@ -332,13 +285,6 @@ body:has(> #public-resume) {
   overflow-wrap: anywhere;
 }
 
-/*
- * A continuous document's narrow-layout rules below query this element's own
- * width, so a narrow editor pane matches what a phone reader sees regardless
- * of the window's width. A page in `PagedResume` keeps an inline pixel width
- * from its layout request, so containment never resizes it; paged output is
- * excluded here anyway, matching those rules' own scope.
- */
 .resume-document:not(.resume-page) {
   container-type: inline-size;
 }
@@ -371,12 +317,6 @@ body:has(> #public-resume) {
   border-radius: var(--photo-radius);
 }
 
-/*
- * A side photo sits beside the name, headline, and details, vertically
- * centered, with header.align applying inside the text column (ADR 0013).
- * Only a continuous document narrower than 36em stacks the photo on top
- * again; pages and print always keep the side layout.
- */
 .resume-document .resume-header-text {
   min-width: 0;
 }
@@ -427,8 +367,6 @@ body:has(> #public-resume) {
   margin: 0;
   color: var(--color-heading);
   font-size: var(--fs-name);
-  /* h1's browser default; stated so a p-tagged name (an embed that owns
-     its own page h1) renders identically to the h1 it replaces there. */
   font-weight: 700;
   line-height: var(--lh-heading);
 }
@@ -450,20 +388,16 @@ body:has(> #public-resume) {
   justify-content: var(--header-align);
 }
 
-/* A grid, because align-items has no left or right keyword. */
 .resume-document .details-stacked {
   display: grid;
   justify-items: var(--header-align);
 }
 
-/* Inline text, not flex: a labelled value then wraps after its label as one
-   run instead of both squeezing into columns and breaking letter by letter. */
 .resume-document .contact-chip {
   display: inline-block;
   color: var(--color-body);
 }
 
-/* Wrapped lines hang past the icon, so they align with the text. */
 .resume-document .contact-chip:has(> .resume-icon) {
   padding-inline-start: calc(var(--icon-size) + var(--chip-icon-gap));
   text-indent: calc(-1 * (var(--icon-size) + var(--chip-icon-gap)));
@@ -474,8 +408,6 @@ body:has(> #public-resume) {
   vertical-align: -0.15em;
 }
 
-/* The trailing space is the line-break opportunity between a label and its
-   value; nowrap keeps the label itself on one line. */
 .resume-document .contact-label {
   white-space: nowrap;
 }
@@ -508,8 +440,6 @@ body:has(> #public-resume) {
   background: var(--color-surface);
 }
 
-/* A narrow continuous document has no room for a sidebar: it stacks main then
-   sidebar. Paged output and print keep the template's columns. */
 @container (width < 36em) {
   .resume-document:not(.resume-page) .layout-two-columns {
     grid-template-columns: minmax(0, 1fr);
@@ -549,20 +479,10 @@ body:has(> #public-resume) {
   break-inside: avoid;
 }
 
-/*
- * The header keeps its body with it, so the rule applies only when a body
- * follows. On a header-only entry (a skill, language, or certificate) the
- * last child's break-after propagates to the entry, which would make every
- * break between such entries an avoided one; a column of them then has no
- * clean break, and Chromium pushes the whole column grid to the next page
- * (docs/design/templates/print.md §3 and §5).
- */
 .resume-document .entry-header:not(:last-child) {
   break-after: avoid;
 }
 
-/* Avoid the break between the resume header and the columns, so page one
-   does not hold the header alone (print.md §5). */
 .resume-document .layout-two-columns {
   break-before: avoid;
 }
@@ -582,9 +502,6 @@ body:has(> #public-resume) {
   font-size: var(--fs-meta);
 }
 
-/* Rich text sets its own rhythm instead of browser defaults: a list reads as
-   one block with its items close together, and paragraphs part by half a
-   line. The entry header to body gap is the entry's slot gap. */
 .resume-document .entry-header + .entry-body {
   margin-block-start: var(--gap-block);
 }

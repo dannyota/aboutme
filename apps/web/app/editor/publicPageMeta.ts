@@ -1,10 +1,3 @@
-/**
- * The public page's optional tab title and tab icon. Empty means the default:
- * "<Full name> — Resume" and the site icon. The server trims, stores the
- * trimmed form, and is authoritative; these checks mirror its rules so the
- * dialog can explain a problem before sending.
- */
-
 export const PUBLIC_TITLE_MAX = 70;
 
 export type PublicTitleIssue = 'too_long' | 'invalid_characters';
@@ -12,10 +5,6 @@ export type FaviconEmojiIssue = 'invalid_emoji';
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-// Control characters and the invisible format characters the server
-// rejects: bidi embeddings, overrides and isolates, zero-width space and
-// non-joiner, LRM and RLM, soft hyphen, and BOM. The zero-width joiner stays
-// allowed because emoji sequences need it.
 const HIDDEN_CHARACTERS
   = /[\p{Cc}\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/u;
 
@@ -31,7 +20,6 @@ export function publicTitleIssue(value: string): PublicTitleIssue | null {
   return graphemeCount(trimmed) > PUBLIC_TITLE_MAX ? 'too_long' : null;
 }
 
-/** Exactly one emoji: a pictographic grapheme or a two-letter flag. */
 export function isSingleEmoji(value: string): boolean {
   const segments = [...graphemes.segment(value.trim())];
   if (segments.length !== 1) return false;
@@ -54,10 +42,6 @@ export interface PublicPageFields {
   readonly faviconEmoji: string;
 }
 
-/**
- * The fields to send: only those changed from the stored value, trimmed. An
- * empty string clears a field back to its default.
- */
 export function changedPublicPageFields(
   stored: {
     readonly publicTitle: string | null;
@@ -73,7 +57,6 @@ export function changedPublicPageFields(
   };
 }
 
-/** The field a server issue belongs to, from its path's last segment. */
 export function publicPageIssueField(
   path: string,
 ): keyof PublicPageFields | null {

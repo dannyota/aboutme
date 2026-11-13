@@ -51,9 +51,6 @@ describe('editor persistence boundary', () => {
         expect(
           document.body.querySelector('[data-action="resume-after-auth"]'),
         ).not.toBeNull();
-        // The one allowed call is reading the inspector width, a per-browser
-        // layout preference (DESIGN.md, editor workspace). Retained resume
-        // work never reaches browser storage, history, or the network.
         expect(
           storage.flatMap((probe) =>
             probe.mock.calls.map((args) => [probe.getMockName(), ...args]),
@@ -81,8 +78,6 @@ function currentURL() {
   };
 }
 
-// Each probe carries its object's name, so a call on the wrong store or API
-// shows up in the recorded call list.
 function persistenceProbes() {
   const methods = ['getItem', 'setItem', 'removeItem', 'clear'] as const;
   const local = methods.map((name) =>

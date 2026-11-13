@@ -7,15 +7,12 @@ import { parseAcceptedResponse } from './resumeApi';
 import { parseCurrentDocument } from './documentValidation';
 import { compareRevision, parentETag, parseRevision } from './revision';
 
-/** The showcase fields are sent only when the owner changes them. */
 export interface PublishCommand extends PublishShowcaseFields {
   readonly slug?: string;
   readonly live: boolean;
   readonly downloadEnabled: boolean;
   readonly seoGeoEnabled: boolean;
-  /** Sent only when changed; "" clears it to the default. */
   readonly publicTitle?: string;
-  /** Sent only when changed; "" removes the tab icon. */
   readonly faviconEmoji?: string;
 }
 

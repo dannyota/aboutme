@@ -57,7 +57,6 @@ let linker: {
   resumes: ReturnType<typeof vi.fn<() => Promise<ResumeListResult>>>;
   link: ReturnType<typeof vi.fn<Link>>;
 };
-/** The links the fake linker sent. */
 let sent: string[][];
 const mounted: { unmount: () => void }[] = [];
 

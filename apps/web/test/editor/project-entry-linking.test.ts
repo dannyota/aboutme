@@ -22,11 +22,6 @@ import { setSiteLocale } from '../support/locale';
 import { acceptedFixture } from './fixture';
 import { openEditor } from './held-write-editor';
 
-// An unlinked project entry's Link to a project and Save to my projects, and
-// the question From your projects asks when the resume already has the
-// project as an entry (docs/design/ui/projects.md "In the resume editor"),
-// through the real store, write queue and coordinator; only HTTP is faked.
-
 const fake = vi.hoisted(() => ({
   api: null as unknown,
   resumes: null as unknown,
@@ -106,7 +101,6 @@ function resume(
   });
 }
 
-/** This resume and another, with whether each one is published. */
 function accountResumes(thisLive: boolean, otherLive = true) {
   return {
     kind: 'ready',
@@ -126,7 +120,6 @@ let authControls: ReturnType<typeof fakeAuth>;
 let resumeList: ReturnType<typeof vi.fn>;
 const mounted: { unmount: () => void }[] = [];
 
-/** Lets the queue's zero-delay timer, the fake server and Vue settle. */
 async function settle(): Promise<void> {
   for (let round = 0; round < 6; round += 1) {
     await flushPromises();
@@ -142,7 +135,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-/** The inspector shows the section `sectionKey` holds, as the shell does. */
 async function mountEditor(
   initial: AcceptedResume,
   sectionKey: Ref<string> = ref('projects'),

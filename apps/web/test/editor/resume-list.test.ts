@@ -102,8 +102,6 @@ describe('useResumeList', () => {
 
   it('leaves a first-visit anonymous state to the shared route guard',
     async () => {
-      // middleware/signed-in.global.ts owns the signed-out redirect for a
-      // visit that never saw an authenticated state on this page.
       const authState = ref<'loading' | 'anonymous'>('loading');
       useResumeList({
         api: { list: vi.fn() } as never,
@@ -657,10 +655,6 @@ describe('useResumeList', () => {
     'keeps the row and the record when the delete request never reaches '
     + 'the server',
     async () => {
-      // The real store, coordinator, and edit action (not stubs), so a
-      // failed dispatch exercises the same drain path production code runs:
-      // the row must survive a delete that never got a durable server
-      // acknowledgement (204), not just one a test tells it to keep.
       setActivePinia(createPinia());
       const accepted = acceptedFixture();
       const id = accepted.metadata.id;
@@ -871,7 +865,6 @@ describe('useResumeList', () => {
     expect(wrapper.text()).toContain(
       'Use Create resume to start one. You can keep up to three.',
     );
-    // The header button is the only create control.
     expect(wrapper.findAll('[data-testid^="resume-slot-"] button')).toEqual(
       [],
     );
@@ -1365,7 +1358,6 @@ describe('useResumeList', () => {
 
     other.value = 'not a tag';
     other.dispatchEvent(new Event('input'));
-    // The input's v-model reaches the dialog on the next tick.
     await nextTick();
     submitDialog(form);
     await nextTick();

@@ -1,19 +1,14 @@
-// Homepage copy in both site languages (see app/i18n/locale.ts).
 import type { Locale } from '@/i18n/locale';
 
 type Point = {
   readonly title: string;
   readonly text: string;
-  /** A trailing text link, used only by the "bring your own AI" card
-   * (docs/design/mcp-guide.md Navigation). */
   readonly link?: { readonly label: string; readonly to: string };
 };
 
 export type LandingCopy = {
   readonly description: string;
-  /** The headline, rendered as two lines. */
   readonly title: readonly [string, string];
-  /** A trailing suffix of title[1], set apart with the brand gradient. */
   readonly titleEmphasis: string;
   readonly lead: string;
   readonly createResume: string;

@@ -8,13 +8,7 @@ import { setSiteLocale } from './support/locale';
 registerCapabilities();
 beforeEach(() => setSiteLocale('en'));
 
-// Deliberately its own file, not a case inside sessions.test.ts: see
-// `sessions-csrf-gating.test.ts`'s own doc comment for why —
-// `useFetch('/api/v1/sessions')`'s automatic initial fetch is keyed by
-// URL and, once resolved "success" in a given test file's shared Nuxt app
-// instance, a later mount in the SAME file reuses that cached result
-// rather than re-hitting a newly-registered handler, regardless of
-// ordering. Isolating this in its own file sidesteps the whole problem.
+// Own file: Nuxt reuses a URL's cached useFetch result within a test file.
 registerEndpoint('/api/v1/me', () => ({
   data: {
     user: {
@@ -28,9 +22,6 @@ registerEndpoint('/api/v1/me', () => ({
   },
 }));
 
-// Go: `UA *string` / `IP *string`; OpenAPI: `type: [string, "null"]` — a
-// request that legitimately carried neither header nullifies both, they
-// are not always-present strings.
 registerEndpoint('/api/v1/sessions', () => ({
   data: [
     {

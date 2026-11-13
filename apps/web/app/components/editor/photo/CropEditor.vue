@@ -1,14 +1,4 @@
 <script setup lang="ts">
-/**
- * `CropEditor` — choose the square of the photo the resume shows.
- *
- * The stage draws the whole photo with the crop square over it: drag the
- * square (or click where it should go) to move it, use the slider to zoom,
- * or focus the stage and use the arrow keys and + / −. A small preview draws
- * the crop the way the renderer does. Exact 0–1 values stay available for
- * keyboard and precise entry. A photo with no crop starts on the default
- * square; a photo uploaded in this session saves that default at once.
- */
 import type { PhotoCrop } from '@aboutme/schema';
 import { computed, reactive, ref, useId, watch } from 'vue';
 import { editorControlsCopy } from '../../../i18n/editor-controls';
@@ -36,7 +26,6 @@ const props = defineProps<{
   readonly crop?: PhotoCrop;
   readonly photoKey: string;
   readonly photoUrl: string;
-  /** Save the default crop once this photo's size is known. */
   readonly saveDefault?: boolean;
 }>();
 const { locale } = useLocale();
@@ -126,8 +115,6 @@ function setZoom(value: number[] | undefined): void {
   draft.value = withZoom(image.value, draft.value, next);
 }
 
-// Dragging moves the square with the pointer; pressing outside it first
-// centres it on the pointer, so a click also places it.
 let drag: { x: number; y: number; crop: PhotoCrop } | null = null;
 
 function stagePoint(event: PointerEvent): { x: number; y: number } | null {

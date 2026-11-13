@@ -34,7 +34,6 @@ function editor(initial = startingResume()) {
   return openEditor(initial.metadata.id, server, store);
 }
 
-/** An editor on a resume the store already holds, as the page builds it. */
 function openEditor(
   id: string,
   server: FakeResumeServer,
@@ -74,13 +73,11 @@ function openEditor(
   };
   const record = () => store.recordFor(id)!;
   const conflictId = (): string => record().conflicts[0]!.id;
-  /** Lets the editor's own timers run, with no flush from the test. */
   const idle = async (): Promise<void> => {
     for (let second = 0; second < 30; second += 1) {
       await vi.advanceTimersByTimeAsync(1_000);
     }
   };
-  /** The person signs in again and resumes, as the session dialog offers. */
   const reauthenticate = async (): Promise<void> => {
     expect(store.saveStateFor(id)).toBe('session-lost');
     await actions.resumeAfterAuth();
@@ -103,10 +100,8 @@ function openEditor(
 
 type Editor = ReturnType<typeof editor>;
 
-/** IDs stay unique across the editors one test opens on a resume. */
 let ids = 0;
 
-/** The later edit reached the server once, on a current revision. */
 async function expectLaterEditSent(context: Editor): Promise<void> {
   const later = context.edit(fullName('Ada Byron'));
   expect(hasUnsafeWork(context.record())).toBe(true);
@@ -126,7 +121,6 @@ async function expectLaterEditSent(context: Editor): Promise<void> {
   expect(hasUnsafeWork(context.record())).toBe(false);
 }
 
-/** Recovers from a failed read: the editor's timers, or signing in again. */
 async function recover(context: Editor, failure: ReadFailure): Promise<void> {
   if (failure.kind === 'session-lost') await context.reauthenticate();
   await context.idle();
@@ -459,10 +453,6 @@ const DELETES = [
   ['a photo', { kind: 'photoDelete' }],
 ] as const satisfies readonly (readonly [string, AtomicCommandIntent])[];
 
-/**
- * The headline write meets a winner that already holds that headline and a
- * different name, so the queued name conflicts before it is sent.
- */
 function queuedConflict(
   queueLater = true,
 ): Editor & { readonly later: string | undefined } {

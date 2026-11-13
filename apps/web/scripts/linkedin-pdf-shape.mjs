@@ -47,12 +47,6 @@
 
 import { readFileSync } from 'node:fs';
 
-// Known section headings (design, "Lines"), plus the footer, date, duration,
-// and contact-label vocabulary the design and its mapping table name. Every
-// entry may appear as a whole line or as a token inside a longer line; both
-// print unchanged, case as extracted. Matching is case-insensitive (English
-// month names are read "any case" per the design), which only widens which
-// safe words survive masking, never what data survives it.
 const ALLOWLIST_PHRASES = [
   'Contact',
   'Top Skills',
@@ -104,9 +98,6 @@ const ALLOWLIST_PHRASES = [
   'Dec',
 ];
 
-// The same list, split into single words, for the self-check's leak scan:
-// every word inside an allowlisted phrase is safe on its own too, since the
-// phrase-matching regex below keeps the whole phrase together.
 const ALLOWLIST_WORDS = new Set();
 for (const phrase of ALLOWLIST_PHRASES) {
   for (const word of phrase.match(/\p{L}+/gu) ?? []) {
@@ -118,7 +109,6 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-// Longest phrase first, so "years" is not cut short by a "year" match.
 const ALLOWLIST_RE = new RegExp(
   `\\b(?:${[...ALLOWLIST_PHRASES]
     .sort((a, b) => b.length - a.length)
@@ -181,11 +171,6 @@ function maskSegment(segment) {
   return out;
 }
 
-// Masks a line's text, keeping any run that matches ALLOWLIST_RE as printed.
-// A line whose whole text is one allowlisted phrase (a heading on its own
-// line, a contact label, "Present") comes back unchanged, since there is
-// nothing left over to mask; a line that mixes allowlisted and other words
-// keeps only the allowlisted ones.
 function maskLine(text) {
   let result = '';
   let lastIndex = 0;
@@ -214,9 +199,6 @@ function roundToHalf(value) {
   return Math.round(value * 2) / 2;
 }
 
-// The column split (design, "Columns"): left of the boundary is the
-// sidebar, at or right of it is the main column. `boundary === null` means
-// no page-1 line was found to derive it from.
 function columnFor(x, boundary) {
   if (boundary === null) return 'n/a';
   return x < boundary ? 'left' : 'right';
@@ -250,10 +232,6 @@ function extractItems(rawItems, pageNumber) {
   return items;
 }
 
-// Groups items into lines (design, "Lines"): items whose baselines lie
-// within 40% of the line's font size join it, then each line's items are
-// read left to right, with one joining space where a gap exceeds a quarter
-// of the font size.
 function buildLines(items) {
   const clusters = [];
   let current = null;
@@ -332,7 +310,6 @@ async function readShape(filePath) {
     disableFontFace: true,
     stopAtErrors: true,
   });
-  // pdf.js 6.3.289 reads onPassword from the loading task, not the options.
   loadingTask.onPassword = (updatePassword) => {
     updatePassword(new Error('this PDF requires a password'));
   };
@@ -413,10 +390,6 @@ function matchesColumn(line, column) {
   return column === 'left' ? line.column === 'left' : line.column !== 'left';
 }
 
-// Orders lines per page, sidebar (left) before main (right), each top to
-// bottom (design: "Reading order puts the whole left column before the right
-// one"), and sets each line's gap to the previous line in the same page and
-// column.
 function orderAndGap(lines) {
   const pages = [...new Set(lines.map((line) => line.page))].sort(
     (a, b) => a - b,
@@ -543,9 +516,6 @@ function runSelfCheck() {
     for (const word of sample.match(/\p{L}+/gu) ?? []) {
       if (word.length < 2) continue;
       if (ALLOWLIST_WORDS.has(word.toLowerCase())) continue;
-      // Word-boundary match, not substring: a masked, allowlisted token such
-      // as "linkedin" may coincidentally contain a shorter real word ("in")
-      // as a substring without that word being separately present.
       const leaked = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'u').test(
         masked,
       );

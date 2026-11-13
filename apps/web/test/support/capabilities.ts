@@ -5,17 +5,12 @@ export interface CapabilityFlags {
   providerLogin: boolean;
   agentAccess: boolean;
   providers?: readonly string[];
-  /** Defaults to true, the server's value while sign-up is open. */
   passwordRegistration?: boolean;
-  /** Defaults to false, the server's value while enrollment is closed. */
   passkeyEnrollment?: boolean;
-  /** Defaults to false, the server's value while TOTP enrollment is closed. */
   totpEnrollment?: boolean;
-  /** Defaults to false, the server's value while sign in to view is off. */
   signInToView?: boolean;
 }
 
-/** Registers GET /api/v1/capabilities; null makes it fail with 500. */
 export function registerCapabilities(
   flags: CapabilityFlags | null = { providerLogin: true, agentAccess: true },
 ): void {
@@ -24,8 +19,6 @@ export function registerCapabilities(
       setResponseStatus(event, 500);
       return { error: { code: 'internal', message: 'unavailable' } };
     }
-    // Like the server, `providerLogin` is true exactly when `providers` is
-    // non-empty; tests that omit the list get all three or none.
     const providers = flags.providers
       ?? (flags.providerLogin ? ['google', 'github', 'linkedin'] : []);
     return {

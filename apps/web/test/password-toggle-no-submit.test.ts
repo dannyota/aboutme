@@ -16,9 +16,6 @@ import RegisterPage from '../app/pages/register.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
-// An icon button inside a form must never submit it: the password
-// show/hide toggle once signed people in and sent registrations.
-
 beforeEach(() => setSiteLocale('en'));
 registerCapabilities();
 mockNuxtImport('navigateTo', () => vi.fn());
@@ -65,7 +62,6 @@ describe('IconButton type', () => {
     expect(plain.submit).not.toHaveBeenCalled();
     plain.wrapper.unmount();
 
-    // Positive control: the same click on a submit button does submit.
     const explicit = formWith(() =>
       h(IconButton, { label: 'Send', type: 'submit' }));
     await explicit.wrapper.get('button').trigger('click');
@@ -120,8 +116,6 @@ describe('password visibility toggle', () => {
     expect(endpoint).not.toHaveBeenCalled();
     expect(wrapper.find('[aria-label="Hide password"]').exists()).toBe(true);
 
-    // Positive control: the real submit still posts, so the page would
-    // have caught a toggle submission.
     await wrapper.get(submitSelector).trigger('submit');
     await settle();
     expect(endpoint).toHaveBeenCalledTimes(1);
@@ -134,7 +128,7 @@ describe('password visibility toggle', () => {
       method: 'POST',
       handler: login,
     });
-    // Attached: jsdom only submits a form connected to the document.
+    // The HTML spec submits only a form connected to the document.
     const wrapper = await mountSuspended(LoginPage, {
       attachTo: document.body,
     });
@@ -150,7 +144,6 @@ describe('password visibility toggle', () => {
       method: 'POST',
       handler: register,
     });
-    // Attached: jsdom only submits a form connected to the document.
     const wrapper = await mountSuspended(RegisterPage, {
       attachTo: document.body,
     });

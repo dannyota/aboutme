@@ -14,10 +14,6 @@ import {
   type FakeResumeServer,
 } from './fake-resume-server';
 
-// The editor page over the real editor, coordinator and store, with only
-// the owner API faked: what leaving with unsent work does, and what the
-// page shows when the resume is opened again.
-
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   auth: undefined as unknown,
@@ -60,7 +56,6 @@ vi.mock('../../app/realtime/controller', () => ({
 
 const ID = 'resume-1';
 
-/** Opens the editor page and waits until its complete read is adopted. */
 async function openPage(server: FakeResumeServer) {
   const reads = server.reads;
   const wrapper = await mountSuspended(ResumeEditorPage, {
@@ -100,7 +95,6 @@ function start(): FakeResumeServer {
   return server;
 }
 
-/** Whether closing or reloading the tab would ask first. */
 function leaveWarns(): boolean {
   const event = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(event);

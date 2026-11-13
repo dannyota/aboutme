@@ -17,9 +17,6 @@ import {
   type ResumeRecord,
 } from './resumeRecord';
 
-// What the server says about a resume, taken into the editor's record: write
-// responses, complete reads, stale winners and bodyless acknowledgements.
-
 export function adoptComplete(
   record: ResumeRecord | undefined,
   accepted: AcceptedResume,

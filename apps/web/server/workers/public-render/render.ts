@@ -1,7 +1,6 @@
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 
-// These are the explicit worker-relative component boundaries.
 // eslint-disable-next-line max-len
 import PublicResumeApp from '../../../app/components/public/PublicResumeApp.vue';
 import PublicGate from '../../../app/components/public/PublicGate.vue';
@@ -55,8 +54,6 @@ const jsonLd = (request: PublicRenderResumeRequest): string => {
   if (!request.discoveryEnabled) return '';
   const person = request.publicResume.document.personalDetails;
   const details = person.details ?? [];
-  // Must pick exactly what Go's publicformat.JSONLD picks: the public HTML
-  // validator requires this script to byte-equal Go's (ADR 0013).
   const sameAs = [...new Set(details.flatMap((detail) => (
     SAME_AS_TYPES.has(detail.type)
     && detail.value.startsWith('https://')
@@ -109,8 +106,6 @@ export async function renderPublicResume(
       }),
     );
     const discoveryScript = jsonLd(request);
-    // The stored card's versioned URL when the server names one, else the
-    // og.png alias (docs/design/link-previews.md, "Page head").
     const imageURL = request.preview?.imageUrl ?? [
       request.canonicalOrigin,
       '/api/v1/public/resumes/',
@@ -120,13 +115,9 @@ export async function renderPublicResume(
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      // Safari auto-links digit runs such as date ranges into tel: links;
-      // this opts the page out without touching the explicit tel:/mailto:
-      // anchors the contact details render.
+      // Safari auto-links digit runs such as date ranges as tel: links.
       '<meta name="format-detection" '
       + 'content="telephone=no, date=no, address=no, email=no">',
-      // The server computes the title and favicon href from the owner's
-      // settings, and its validator accepts exactly these (ADR 0014).
       `<title>${escapeText(request.pageTitle)}</title>`,
       request.faviconHref === ''
         ? ''
@@ -138,9 +129,6 @@ export async function renderPublicResume(
         request.preview,
         imageURL,
       ),
-      // Template CSS and fonts, self-hosted and shared with the print document.
-      // The version query fetches fresh copies of these fixed-name, immutable
-      // files after each release that changes them.
       '<link rel="stylesheet" ',
       `href="/_nuxt/assets/print-fonts.css?v=${styleVersion}">`,
       '<link rel="stylesheet" ',

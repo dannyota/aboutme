@@ -22,12 +22,6 @@ import { cardType, expectCardDetails, expectCardLogo } from './card-details';
 import { styleProofs } from './screen-style-proofs';
 import { denyExternalRequests } from './support';
 
-// The harness Nitro output directory (apps/web/nuxt.config.ts sets
-// nitro.output.dir to '.output/harness' when NUXT_HARNESS=1) holds the print
-// worker at server/utils/print/worker-build.ts's
-// printWorkerOutput('.output/harness'), which joins 'server/workers/print.mjs'
-// onto it. This spec runs only in the harness Playwright surface, so that
-// build always exists by the time it starts.
 const PRINT_WORKER_PATH = resolve(
   import.meta.dirname,
   '../.output/harness/server/workers/print.mjs',
@@ -37,18 +31,10 @@ const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 630;
 const CARD_MAX_BYTES = 524_288;
 const RESUME_ID = 'c0000000-0000-4000-8000-000000000003';
-// PRINT_PHOTO_MAX_BYTES in server/utils/print/envelope.ts. That module
-// imports the build-time document validator alias, which only the Nuxt and
-// Vite builds resolve, so this spec imports its types alone.
 const PRINT_PHOTO_MAX_BYTES = 2_097_152;
 
-// The safe square every identifying box must stay inside
-// (docs/design/link-previews.md, "Preview card").
 const SAFE_SQUARE = { xMax: 885, xMin: 315, yMax: 615, yMin: 15 };
 
-// Copied verbatim from apps/server/internal/printrender/browser.go's
-// pageReadinessExpression, so this spec waits exactly as Go's capture step
-// does before it screenshots the card.
 /* eslint-disable max-len -- verbatim copy of Go's pageReadinessExpression. */
 const PAGE_READINESS_EXPRESSION = `(async () => {
   const roots = document.querySelectorAll('[data-print-document="true"]');
@@ -64,17 +50,12 @@ const PAGE_READINESS_EXPRESSION = `(async () => {
 })()`;
 /* eslint-enable max-len -- end of the verbatim copy above. */
 
-// Contact-shaped strings that must never reach the card page, since the card
-// envelope carries no contact field (docs/design/link-previews.md, "Preview
-// card").
 const CONTACT_SENTINELS = [
   'sentinel-contact@example.test',
   '+84 987 654 321',
   'https://sentinel-contact.example.test',
 ] as const;
 
-// The envelope Go sends; the worker renders it as the print route would
-// after decoding (test/print/card-envelope.test.ts covers the decoder).
 function buildEnvelope(card: PreviewCardContent): PrintCardEnvelope {
   return { card, kind: 'card', resumeId: RESUME_ID, version: 1 };
 }
@@ -98,10 +79,6 @@ async function renderCardHTML(envelope: PrintCardEnvelope): Promise<string> {
   });
 }
 
-// Serves html at a same-origin harness path with the print CSP and
-// content-type, so the card's own stylesheets and fonts still load from the
-// real harness server while every other request stays denied
-// (apps/web/e2e/support.ts's denyExternalRequests).
 async function openCard(page: Page, html: string): Promise<void> {
   await page.route('**/_e2e-card-fixture.html', async (route) => {
     await route.fulfill({
@@ -132,11 +109,6 @@ function expectRectInSafeSquare(rect: Rect): void {
   expect(rect.y + rect.height).toBeLessThanOrEqual(SAFE_SQUARE.yMax);
 }
 
-// Checks one identifying box, when present, and every line rect of its text
-// against the safe square (docs/design/link-previews.md, "Preview card").
-// The photo has no text, so it skips the line-rect pass; the name and
-// headline are also capped at two lines each
-// (docs/design/link-preview-card.md, "Fitting the text").
 async function expectBoxInSafeSquare(
   page: Page,
   selector: string,
@@ -152,8 +124,6 @@ async function expectBoxInSafeSquare(
   if (!hasText) {
     return;
   }
-  // The rects of the text itself, one or more per line box; element boxes
-  // are left out so a two-line link counts as two lines, not four rects.
   const lines = await locator.evaluate((element) => {
     const rects: { height: number; width: number; x: number; y: number }[]
       = [];
@@ -199,11 +169,6 @@ async function expectGeometry(page: Page): Promise<void> {
   await expectBoxInSafeSquare(page, '.preview-card-footer', true);
 }
 
-// The page's visible text, normalized to single spaces between the runs a
-// block boundary would separate: block-level lines collapse to one space in
-// innerText the same way here as they do in the browser, so this stays an
-// exact comparison of the meaningful text rather than of incidental
-// whitespace.
 function normalizeVisibleText(text: string): string {
   return text.replace(/\s+/gu, ' ').trim();
 }
@@ -240,9 +205,6 @@ async function expectPageContent(
   await expect(page.locator('script')).toHaveCount(0);
 }
 
-// Builds a Vietnamese name-shaped string of exactly `length` grapheme
-// clusters, with stacked diacritics on capitals (Ẩ, Ỗ) and never ending in a
-// space, so validCardText (server/utils/print/envelope.ts) accepts it.
 function longVietnameseText(length: number): string {
   const unit = 'Nguyễn Ẩn Ỗn Thị Bích Ngọc Vũ Phương ';
   const repeated = unit.repeat(Math.ceil(length / [...unit].length) + 2);
@@ -253,8 +215,6 @@ function longVietnameseText(length: number): string {
   return clusters.join('');
 }
 
-// A public slug of exactly `length` characters (publicroots.ValidSlug):
-// lowercase letters and digits in hyphen-separated runs.
 function slugOfLength(length: number): string {
   const sizes: number[] = [];
   let remaining = length;
@@ -332,8 +292,6 @@ const CASES: readonly CardCase[] = [
   },
   {
     card: {
-      // Already at least 3:1 against white (docs/design/link-previews.md,
-      // "Preview card").
       accent: '#2f855a',
       headline: 'Physicist',
       layoutVersion: CARD_LAYOUT_VERSION,
@@ -568,10 +526,6 @@ for (const [name, selector, styles, pseudo] of [
   });
 }
 
-// Generates a JPEG data URL of random pixels, backing off the encoder
-// quality until it fits PRINT_PHOTO_MAX_BYTES: random pixels are the
-// hardest case for JPEG's DCT coder, so this always finds a quality that
-// fits rather than assuming one.
 function noisyPhotoDataURL(): string {
   const size = 512;
   const canvas = createCanvas(size, size);

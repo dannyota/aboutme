@@ -78,8 +78,6 @@ describe('index.vue', () => {
         'shadow-[var(--shadow-paper)]',
       ]),
     );
-    // The page's only h1 is the hero title; the embedded sample resume's
-    // name is a p, so the document keeps a single h1.
     expect(wrapper.findAll('h1')).toHaveLength(1);
   });
 
@@ -348,8 +346,7 @@ describe('index.vue language', () => {
     expect(en.attributes('aria-pressed')).toBe('true');
     expect(document.cookie).toContain('aboutme-locale=en');
     wrapper.unmount();
-    // Browsers sync same-name cookie refs through cookieStore or
-    // BroadcastChannel; the test DOM has neither, so read the cookie afresh.
+    // Nuxt syncs useCookie via cookieStore or BroadcastChannel; none here.
     const page = await mountSuspended(LandingPage);
     expect(page.get('[data-testid="landing-title"]').text()).toBe(
       'Your resume. Your link. Your control.',

@@ -2,11 +2,6 @@ import type { Resume, Section } from '@aboutme/schema';
 
 import { formatDateRange } from '../components/resume/formatDate';
 
-/**
- * A resume as plain text, in the order an applicant tracking system reads the
- * document: the header, then the main column, then the sidebar. Hidden
- * entries and details are left out, as the renderer leaves them out.
- */
 export function atsText(document: Resume, lng: string): string {
   const lines: string[] = [];
   const { personalDetails, customization, content } = document;
@@ -103,7 +98,6 @@ const ENTITIES: Readonly<Record<string, string>> = {
   '&nbsp;': ' ',
 };
 
-/** Sanitized rich text as plain lines: list items become "- " lines. */
 export function richText(html: string | undefined): string | undefined {
   if (html === undefined) return undefined;
   return html

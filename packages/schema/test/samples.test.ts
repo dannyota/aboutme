@@ -15,12 +15,6 @@ import {
 import { TEMPLATES } from "../gen/ts/templates";
 import { validateDocument } from "../validation/store";
 
-// Sample resumes for the template gallery and "create from a sample"
-// (samples/<templateId>.<vi|en>.json), and the generic filler shown for a
-// template without its own sample (samples/_filler.<vi|en>.json). The server's
-// create path re-validates every sample and must store it unchanged; that
-// check lives in apps/server/internal/resumeapi.
-
 const root = new URL("..", import.meta.url).pathname;
 const directory = join(root, "samples");
 const schema = JSON.parse(
@@ -87,10 +81,6 @@ describe("sample files", () => {
     },
   );
 
-  // Vietnamese and English resumes read dates differently (docs/design/
-  // vietnam-tech-resumes.md, Dates), so a sample may override its template's
-  // date format for this reason alone; the test above already keeps every
-  // other setting exact.
   it.each(
     documents
       .filter(({ filler }) => !filler)
@@ -114,7 +104,6 @@ describe("sample files", () => {
           expect(detail.value).toMatch(/^\+84 90 000 \d{4}$/u);
         }
       }
-      // Every link, in details or entries, points at a reserved example host.
       const hosts = [
         ...JSON.stringify(document).matchAll(/https?:\/\/([^/"\s<>]+)/gu),
       ].map((match) => match[1]!);

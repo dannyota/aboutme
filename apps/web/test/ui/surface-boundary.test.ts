@@ -12,7 +12,7 @@ const ROOTS = [
 ];
 const EXEMPT = new Set([
   'app/pages/_harness/render.vue',
-  'app/components/editor/richtext/RichTextEditor.vue', // ProseMirror root
+  'app/components/editor/richtext/RichTextEditor.vue',
 ]);
 const RAW = /<(button|input|select|textarea)\b/g;
 const DIALOG = /role=(["'])(?:dialog|alertdialog)\1/g;

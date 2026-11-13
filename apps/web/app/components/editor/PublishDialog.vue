@@ -96,8 +96,6 @@ const slugDescribedBy = computed(() => [
 const defaultTitle = computed(() => defaultPublicTitle(
   props.record.current.document.personalDetails.fullName,
 ));
-// Shown when the deployment allows turning the switch on, or the resume
-// already has it on, so an owner can always turn it back off (AC-VIEW-001).
 const showSignInToView = computed(
   () => signInToViewCapability.value || storedSignInToView.value,
 );
@@ -412,7 +410,6 @@ function focusIssue(path: string): void {
     </div>
 
     <template #footer>
-      <!-- Primary last: the footer stacks in reverse on phones (DESIGN.md). -->
       <Button
         type="button"
         variant="outline"

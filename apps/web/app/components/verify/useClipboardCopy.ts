@@ -1,7 +1,3 @@
-// Copy-to-clipboard for the verify page's digest chips and command blocks
-// (docs/design/deployment-transparency/visual.md, "Digest chip and copy"):
-// on success the icon swaps for 2 seconds and the page announces "Đã sao
-// chép" / "Copied"; on failure it announces the fallback sentence instead.
 import { inject, onBeforeUnmount, ref } from 'vue';
 import { verifyAnnounceKey } from './verifyAnnounce';
 

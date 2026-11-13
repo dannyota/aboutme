@@ -43,7 +43,6 @@ const editorAttributes = computed(() => ({
   'role': 'textbox',
 }));
 
-/** Typing pauses this long before the text goes to the store. */
 const RICH_TEXT_COMMIT_DELAY_MS = 400;
 
 const editorRoot = ref<HTMLElement>();
@@ -52,8 +51,6 @@ let lastInput = props.modelValue;
 let pendingOutput: string | undefined;
 let commitTimer: ReturnType<typeof setTimeout> | undefined;
 
-// Held text counts as unsaved in the editor's save status until it is
-// emitted; the navigation guard flushes it through the same registry.
 const drafts = useFieldDrafts();
 const draftKey = `richtext:${useId()}`;
 

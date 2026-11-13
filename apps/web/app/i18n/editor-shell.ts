@@ -69,7 +69,6 @@ export type EditorShellCopy = {
   readonly previewModePdf: string;
   readonly previewModeWeb: string;
   readonly issueFor: (code: string) => string;
-  // Labels for PreviewZoomControls.vue.
   readonly zoomOut: string;
   readonly zoomIn: string;
   readonly zoomFit: string;
@@ -168,7 +167,6 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
       }
       return 'Giá trị này cần được kiểm tra.';
     },
-    // Labels for PreviewZoomControls.vue.
     zoomOut: 'Thu nhỏ',
     zoomIn: 'Phóng to',
     zoomFit: 'Cỡ mặc định',
@@ -262,7 +260,6 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
       }
       return 'This value needs attention.';
     },
-    // Labels for PreviewZoomControls.vue.
     zoomOut: 'Zoom out',
     zoomIn: 'Zoom in',
     zoomFit: 'Default size',

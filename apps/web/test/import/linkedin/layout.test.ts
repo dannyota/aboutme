@@ -8,9 +8,6 @@ import {
 import type { Line } from '../../../app/import/linkedin/lines';
 import { line } from './helpers/lineFixtures';
 
-// A LinkedIn Save to PDF export has the sidebar at x 21.6 and the main
-// column at x 223.6 (docs/design/linkedin-import.md, "Save to PDF
-// structure"), so the boundary B = 223.6 - 12 = 211.6.
 const SIDEBAR_X = 21.6;
 const MAIN_X = 223.6;
 
@@ -18,7 +15,6 @@ function footer(page: number, numPages: number): Line {
   return line(page, 264, 40, 9, `Page ${page} of ${numPages}`);
 }
 
-/** A three-page profile shaped like the shape report, with synthetic words. */
 function buildValidPages(): Line[][] {
   const page1: Line[] = [
     line(1, SIDEBAR_X, 737.6, 13, 'Contact'),
@@ -113,7 +109,6 @@ describe('analyzeLayout on a three-page profile', () => {
     const firstOnPage2 = topSkills?.lines.find((l) => l.page === 2);
     expect(firstOnPage2?.text).toBe('Sample Skill Three');
     expect(firstOnPage2?.gap).toBeNull();
-    // the second page-2 line does have a gap, to the previous page-2 line
     const secondOnPage2 = topSkills?.lines.find(
       (l) => l.text === 'Sample Skill Four',
     );
@@ -230,7 +225,6 @@ describe('analyzeLayout heading edge cases', () => {
         line(1, MAIN_X, 652.3, 16, 'Summary'),
         line(1, MAIN_X, 626.8, 12, 'A summary line.'),
         line(1, MAIN_X, 500.0, 16, 'Experience'),
-        // an employer named "Experience", at the employer size
         line(1, MAIN_X, 470.0, 12, 'Experience'),
         line(1, MAIN_X, 450.0, 11.5, 'Sample Title'),
         footer(1, 1),
@@ -260,7 +254,6 @@ describe('analyzeLayout heading edge cases', () => {
         line(1, MAIN_X, 726.5, 26, 'Sample Person'),
         line(1, MAIN_X, 652.3, 16, 'Summary'),
         line(1, MAIN_X, 626.8, 12, 'A summary line.'),
-        // unknown main heading, at the same size as the known headings
         line(1, MAIN_X, 500.0, 16, 'Recommendations'),
         line(1, MAIN_X, 470.0, 12, 'A recommendation line.'),
         footer(1, 1),
@@ -292,7 +285,6 @@ describe('analyzeLayout heading edge cases', () => {
         line(1, SIDEBAR_X, 705.6, 10.5, 'sample.person@example.com'),
         line(1, MAIN_X, 726.5, 26, 'Sample Person'),
         line(1, MAIN_X, 652.3, 16, 'Summary'),
-        // "Contact" is a sidebar heading, not a main one
         line(1, MAIN_X, 626.8, 12, 'Contact'),
         line(1, MAIN_X, 608.8, 16, 'Experience'),
         line(1, MAIN_X, 590.0, 12, 'Example Co.'),

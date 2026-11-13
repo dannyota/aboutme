@@ -6,7 +6,6 @@ export type CreateProjectRequest
   = components['schemas']['CreateProjectRequest'];
 export type ProjectDates = components['schemas']['PublicDateRange'];
 
-/** The limits in docs/design/projects.md, enforced again by the server. */
 export const PROJECT_LIMIT = 30;
 export const LANGUAGE_LIMIT = 4;
 export const TECHNOLOGY_LIMIT = 20;
@@ -18,7 +17,6 @@ export const TEXT_LIMITS = {
   summary: 300,
   outcome: 600,
 } as const;
-/** A counter shows once a field is this close to its limit. */
 export const COUNTER_WINDOW = 20;
 
 export type PlainTextField = keyof typeof TEXT_LIMITS;
@@ -34,7 +32,6 @@ export interface ProjectTextDraft {
   description: string;
 }
 
-/** The editable project document: every optional field as an empty value. */
 export interface ProjectDraft {
   slug: string;
   dates: ProjectDates | null;
@@ -64,7 +61,6 @@ export function isProjectSlug(value: string): boolean {
   return value.length >= 2 && value.length <= 40 && SLUG.test(value);
 }
 
-/** Counts Unicode code points, as the server's limits do. */
 export function characterCount(value: string): number {
   return [...value].length;
 }
@@ -97,8 +93,7 @@ export function draftFromProject(project: Project): ProjectDraft {
 
 type YearMonth = ProjectDates['start'];
 
-// A loaded project is a reactive proxy, which structuredClone rejects, so
-// the dates are copied field by field.
+// structuredClone throws DataCloneError on a Vue reactive proxy.
 function yearMonthOf(value: YearMonth): YearMonth {
   return value.m === undefined ? { y: value.y } : { y: value.y, m: value.m };
 }
@@ -116,7 +111,6 @@ function linkOf(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** The complete document a PUT sends; an empty optional field is omitted. */
 export function requestFromDraft(draft: ProjectDraft): ProjectRequest {
   const text: ProjectRequest['text'] = {};
   for (const [key, value] of Object.entries(draft.text)) {
@@ -141,7 +135,6 @@ export function requestFromDraft(draft: ProjectDraft): ProjectRequest {
   };
 }
 
-/** The stored document with another slug, for a change of address. */
 export function requestFromProject(
   project: Project,
   slug = project.slug,
@@ -149,7 +142,6 @@ export function requestFromProject(
   return requestFromDraft({ ...draftFromProject(project), slug });
 }
 
-/** Key order never makes two documents differ. */
 export function canonicalJSON(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJSON).join(',')}]`;
@@ -183,7 +175,6 @@ function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-/** The field rules of docs/design/projects.md, in form order. */
 export function validateDraft(draft: ProjectDraft): ProjectIssue[] {
   const issues: ProjectIssue[] = [];
   for (const [key, value] of Object.entries(draft.text)) {
@@ -218,7 +209,6 @@ export function validateDraft(draft: ProjectDraft): ProjectIssue[] {
   return issues;
 }
 
-/** The name a list row or heading shows: the default language's name. */
 export function projectName(project: Project): string {
   return project.text[project.defaultLanguage]?.name ?? '';
 }

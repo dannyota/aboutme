@@ -15,23 +15,12 @@ import ThemeToggle from './ThemeToggle.vue';
 const { authState } = useAuth();
 const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
-// `/app/**` and `/authorize` redirect an anonymous visitor away
-// (middleware/signed-in.global.ts), so a signed-out header is never this
-// route's real state: it is either authenticated, waiting on `/me`, or
-// already on its way out. Showing the signed-out links there at all, even
-// for the one render after `/me` settles and before that redirect lands,
-// would widen the header past the viewport at phone width, so this hides
-// them unconditionally rather than only while loading.
 const authRequiredPath = computed(() => requiresSession(route.path));
 const showSignedOutLinks = computed(() => (
   authState.value !== 'authenticated' && !authRequiredPath.value
 ));
-// Localized routes show the language control (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
 const hidePhoneAccountLinks = localized;
-// On the account pages themselves, carry a validated next along so a click
-// on the header's other link does not drop it (login.vue and register.vue
-// carry it the same way on their own cross-link).
 const explicitNext = computed(() => (
   route.path === '/login' || route.path === '/register'
     ? validateReturnPath(route.query.next)
@@ -45,12 +34,8 @@ const createAccountLink = computed(() => (explicitNext.value
   : '/register'));
 const shellLocale = useRouteLocale();
 const copy = computed(() => shellCopy[shellLocale.value]);
-// The gallery is public, so its link renders for signed-out and signed-in
-// visitors alike, unlike the account-only links below.
 const onTemplatesPath = computed(() =>
   route.path === '/templates' || route.path.startsWith('/templates/'));
-// The MCP guide is public like the gallery (docs/design/mcp-guide.md
-// Navigation), so it renders for signed-out and signed-in visitors alike.
 const onGuidePath = computed(() => route.path === '/guide/mcp');
 const onShowcasePath = computed(() => route.path === '/showcase');
 const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
@@ -61,9 +46,6 @@ const onViewsPath = computed(() => route.path.startsWith('/app/views'));
 const onSettingsPath = computed(
   () => route.path.startsWith('/app/settings/sessions'),
 );
-// The gradient CTA reads "Create your resume" on the pages that sell the
-// product; every other route (account flows, settings, authorize) keeps the
-// generic "Create account" label (DESIGN.md; ADR 0020).
 const TEMPLATE_PAGE_PATH = /^\/templates\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const onMarketingPath = computed(() => (
   route.path === '/'
@@ -83,35 +65,20 @@ const linkClass = cn(
   'transition-colors hover:bg-accent hover:text-accent-foreground',
   'aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground',
 );
-// On a signed-in phone the header cannot fit every link beside the locale
-// toggle and account menu, so Templates and Community drop there; the home
-// page still links the gallery. Signed out, they are the header's links.
 const templatesLinkClass = computed(() => cn(
   linkClass,
   signedIn.value ? 'max-sm:hidden' : 'max-lg:px-2',
 ));
-// Below 64rem the logo is the mark alone in both states, and it never
-// shrinks. Signed out, the header is also compact so every link and both
-// account buttons fit: header gaps are 8px, nav link sides are 8px, the
-// locale toggle shows VI and EN, and the theme button is an icon
-// (docs/design/ui/landing-and-library.md, Navigation).
 const compactLogo = computed(() => !signedIn.value);
 const headerClass = computed(() => cn(
   'flex min-h-14 items-center gap-4 border-b border-border bg-card',
   'px-[max(1rem,calc((100vw-76rem)/2))]',
   compactLogo.value && 'max-lg:gap-2',
 ));
-// Signed out, the guide link shows from 44rem, the width where the account
-// buttons appear. Signed in, the signed-in bar also carries Resumes, Views,
-// and Settings, so it shows only from 64rem (docs/design/mcp-guide.md
-// Navigation).
 const guideLinkClass = computed(() => cn(
   linkClass,
   signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden max-lg:px-2',
 ));
-// Projects, Settings and Views are also one tap away from the account menu,
-// so they are the other links to drop on phones when signed in. The English
-// bar fits Projects only from 768 px.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
 const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
 const projectsLinkClass = cn(linkClass, 'max-md:hidden');
@@ -161,8 +128,6 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
           :class="linkClass"
           to="/app/resumes"
         >{{ copy.resumes }}</NuxtLink>
-        <!-- The account menu also opens Projects, Views and Settings, so they
-             stay reachable on phones with these links hidden. -->
         <NuxtLink
           :aria-current="onProjectsPath ? 'page' : undefined"
           :class="projectsLinkClass"
@@ -201,7 +166,6 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
         :locale="shellLocale"
       />
       <template v-if="showSignedOutLinks">
-        <!-- Settings and consent have no in-page account links on phones. -->
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),

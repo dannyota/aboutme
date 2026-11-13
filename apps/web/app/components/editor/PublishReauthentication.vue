@@ -10,8 +10,6 @@ type ReauthenticationCopyKey
     | 'secondFactorIntro' | 'secondFactorLink' | 'secondFactorContinue'
     | 'secondFactorIncomplete';
 
-// Projects reuse this step for address changes and deletion, so it reads
-// only the state fields and copy it shows.
 withDefaults(defineProps<{
   readonly state: {
     readonly kind: string;
@@ -106,8 +104,6 @@ const emit = defineEmits<{
     </Button>
   </div>
 
-  <!-- The factor page always returns to settings, never here, so it opens
-       in a new tab while this page keeps unsaved text and the action. -->
   <div
     v-else-if="state.kind === 'reauth-second-factor'"
     class="grid gap-3"

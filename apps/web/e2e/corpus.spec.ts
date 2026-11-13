@@ -5,8 +5,7 @@ import { HTML_CSP } from '../app/utils/csp';
 import { NEUTRALIZATION_POLICY } from '../test/sanitizer/neutralization';
 import { denyExternalRequests } from './support';
 
-// DOMParser checks CSP when it parses a handler, before DOMPurify removes it.
-// https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-content-attributes
+// HTML spec: DOMParser checks CSP on handlers before DOMPurify runs: https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-content-attributes
 const inlineHandlerCases = new Set([
   'event-handler-img-onerror',
   'event-handler-svg-onload',
@@ -18,8 +17,7 @@ const inlineHandlerViolation = {
   effectiveDirective: 'script-src-attr',
   violatedDirective: 'script-src-attr',
 };
-// Chromium reports a placeholder hash for a blocked handler.
-// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/csp/csp_directive_list.cc
+// Chromium reports a placeholder hash for a blocked handler: https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/csp/csp_directive_list.cc
 const inlineHandlerError
   = 'Executing inline event handler violates the following Content Security '
     + 'Policy directive \'script-src \'self\'\'.'

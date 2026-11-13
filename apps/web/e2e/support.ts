@@ -16,14 +16,7 @@ export interface CspProbe {
   readonly pageErrors: readonly string[];
 }
 
-/**
- * Installs listeners a CSP regression would trip: a real
- * `securitypolicyviolation` event, a console error, or an uncaught page
- * error. Violations reach Node through a page binding, so the probe keeps
- * those of every document the page loads, including one it has since
- * navigated away from. Call before the first `page.goto`, since
- * `addInitScript` only applies to documents created after it runs.
- */
+// Call before page.goto: Playwright's addInitScript skips loaded documents.
 export async function trackCsp(page: Page): Promise<CspProbe> {
   const violations: CspViolation[] = [];
   const consoleErrors: string[] = [];
@@ -55,8 +48,7 @@ export async function trackCsp(page: Page): Promise<CspProbe> {
   });
   return {
     violations: async () => {
-      // Lets a binding call from a violation raised just before this check
-      // reach Node first.
+      // An evaluate round trip lets earlier Playwright binding calls arrive.
       await page.evaluate(() => undefined).catch(() => undefined);
       return [...violations];
     },
@@ -65,15 +57,6 @@ export async function trackCsp(page: Page): Promise<CspProbe> {
   };
 }
 
-/**
- * Asserts a tracked page raised no CSP violation, uncaught error, or
- * unexpected console error. `allowedConsoleSubstrings` excuses console
- * errors this app produces on purpose and unrelated to CSP, matched by
- * substring; a real production visit while signed out already logs the
- * browser's own "Failed to load resource" message for the expected 401 from
- * `GET /api/v1/me` (app/composables/useAuth.ts), so a signed-out page test
- * allows that one.
- */
 export async function expectCspClean(
   probe: CspProbe,
   allowedConsoleSubstrings: readonly string[] = [],
@@ -86,13 +69,6 @@ export async function expectCspClean(
   expect(probe.pageErrors).toEqual([]);
 }
 
-/**
- * Fakes a signed-in `GET /api/v1/me` and `GET /api/v1/capabilities` for an
- * `/app/**` page in this build's live-backend-free "normal" e2e surface.
- * Every optional capability defaults closed, matching how a real deployment
- * degrades on a missing or malformed field
- * (app/composables/useCapabilities.ts).
- */
 export async function mockSignedInSession(
   page: Page,
   capabilities: Record<string, unknown> = {},
@@ -126,13 +102,6 @@ export async function mockSignedInSession(
   });
 }
 
-/**
- * Fakes a signed-out `GET /api/v1/me` (401, so `useAuth` resolves to
- * `anonymous` instead of retrying against a nonexistent backend) and
- * `GET /api/v1/capabilities` for a public page in this build's
- * live-backend-free "normal" e2e surface. Every page reads both once on
- * hydration regardless of its own auth requirement.
- */
 export async function mockSignedOutSession(
   page: Page,
   capabilities: Record<string, unknown> = {},
@@ -173,11 +142,7 @@ export async function denyExternalRequests(page: Page): Promise<string[]> {
   return attempted;
 }
 
-// A loaded image is not yet a painted one: `complete` turns true when the
-// bytes arrive, and an image marked `decoding="async"` (the library cards)
-// may still be left out of the next frames until its decode finishes.
-// decode() resolves only once the image is ready to paint, so every image
-// waits for it, loaded or not.
+// HTML: a decoding="async" image can be complete before it paints.
 export async function waitForImages(page: Page): Promise<void> {
   await page.locator('img').evaluateAll(async (images) => {
     await Promise.all(images.map(async (image) => {
@@ -198,9 +163,6 @@ export interface PhotoCropGeometry {
   readonly objectFit: string;
 }
 
-// The photo image's box relative to its frame, in frame units. The fixtures'
-// crop {x: 0.1, y: 0.05, width: 0.8, height: 0.8} must scale the image by 1.25
-// and shift it by -x/width and -y/height so the crop fills the frame.
 export async function photoCropGeometry(
   page: Page,
 ): Promise<PhotoCropGeometry> {
@@ -233,7 +195,6 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
 
 export { assertGalleryDetail, assertLibrary } from './gallery-display';
 
-/** Count live renders while each thumbnail is mounted in the viewport. */
 export async function expectThumbnailRenders(
   page: Page, count: number,
 ): Promise<void> {
@@ -256,7 +217,6 @@ export async function expectThumbnailRenders(
   }
 }
 
-/** Load lazy content without changing the captured viewport. */
 export async function prepareScreen(page: Page): Promise<void> {
   const position = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
   const frames = page.locator('[data-sheet-thumbnail]:visible');

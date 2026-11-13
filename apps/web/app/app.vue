@@ -10,10 +10,6 @@
 import AppShell from './components/app/AppShell.vue';
 import type { Theme } from './composables/useTheme';
 import { isIndexablePath } from './i18n/meta';
-// The chrome typeface (ADR 0020, docs/design/web.md): body text on every
-// application page sets it first in --font-sans, so it downloads on first
-// paint with no preload today. `?url` resolves Vite's hashed build path,
-// the same file `fonts.css` emits, so this adds no second copy.
 import beVietnamProUrl from './assets/fonts/be-vietnam-pro-var.woff2?url';
 
 const route = useRoute();
@@ -34,19 +30,12 @@ const theme = computed(() => {
 
 const locale = useRouteLocale();
 
-// Only the homepage, Privacy Policy, Terms, Verify, gallery, and MCP guide
-// are for search engines.
 const indexable = computed(() => isIndexablePath(route.path));
 
 useHead(
   computed(() => ({
     title: 'aboutme.vn',
     meta: indexable.value ? [] : [{ name: 'robots', content: 'noindex' }],
-    // Application pages only: isAppSurface already excludes the render
-    // harness (/_harness/**); the renderer mounts inside these pages but
-    // does not own the document head; the print worker and public resume
-    // pages render their own HTML through separate server-side paths that
-    // never mount this component.
     link: isAppSurface.value
       ? [{
           rel: 'preload',

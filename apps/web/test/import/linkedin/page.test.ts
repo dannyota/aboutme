@@ -1,7 +1,3 @@
-// The Pick, Reading, Stop, Cap, and Old browser states of
-// /app/import/linkedin (docs/design/linkedin-import-ui.md, "States" and
-// "Messages"). useResumeList and the pdf.js loader are stubbed, as the brief
-// allows for these states; the importer's outcome is stubbed per test.
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { ref } from 'vue';
@@ -180,9 +176,6 @@ describe('/app/import/linkedin', () => {
       .toBe('status');
     expect(wrapper.find('[data-import-stopped]').text()).toContain('Stopped');
     expect(wrapper.find('[data-import-error]').exists()).toBe(false);
-    // The stopped banner shares the error banner's slot above the drop
-    // zone, not a slot above the whole Pick state (docs/design/
-    // linkedin-import-ui.md, "Messages": only one banner shows at a time).
     const banner = wrapper.get('[data-import-stopped]').element;
     const zone = wrapper.get('[aria-labelledby="import-pick-heading"]')
       .element;
@@ -235,9 +228,7 @@ describe('/app/import/linkedin', () => {
     const [title, lng, document] = createMock.mock.calls[0]!;
     expect([title, lng]).toEqual(['LinkedIn resume', 'en']);
     expect(document.personalDetails.fullName).toBe('Sample Person');
-    // Email starts unselected (docs/design/linkedin-import.md, I5).
     expect(document.personalDetails.details).toEqual([]);
-    // One worker, started when the page opened; none after the pick.
     expect(startWorker).toHaveBeenCalledTimes(1);
   });
 
@@ -282,9 +273,6 @@ describe('/app/import/linkedin', () => {
       let n = 0;
       const review = buildReview({
         profile: { fullName: 'Sample Person', headline: 'Product Manager' },
-        // A dangerous URL scheme fails the schema check on the detail
-        // itself (packages/schema/fixtures/
-        // invalid-dangerous-detail-url-scheme.json).
         contacts: [
           { type: 'website', value: 'javascript:alert(1)', label: 'Site' },
         ],
@@ -304,9 +292,6 @@ describe('/app/import/linkedin', () => {
         n += 1;
         return `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
       });
-      // The work entry also fails its own check (end before start), so a
-      // detail and an entry are marked at once (docs/design/
-      // linkedin-import-ui.md, "Action panel": details before sections).
       const work = review.sections.find((s) => s.key === 'work')!.entries[0]!;
       work.entry.dates = {
         start: { y: 2022, m: 1 }, end: { y: 2020, m: 1 }, present: false,
@@ -375,9 +360,6 @@ describe('/app/import/linkedin', () => {
       await input.trigger('change');
       await flushPromises();
 
-      // A user edit past the schema's 160-character maxLength fails the
-      // check at /personalDetails/fullName, a path outside any entry or
-      // detail.
       const fullNameInput = wrapper
         .get<HTMLInputElement>('[data-field="fullName"] input');
       await fullNameInput.setValue('x'.repeat(200));

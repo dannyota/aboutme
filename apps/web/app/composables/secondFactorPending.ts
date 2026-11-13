@@ -1,23 +1,4 @@
-/**
- * `secondFactorPending` — the API surface behind `/login/second-factor`:
- * reading pending status and completing it with a passkey assertion, an
- * authenticator (TOTP) code, or a recovery code.
- *
- * Every call sends only the `__Host-auth-pending` cookie (`credentials:
- * 'include'`, set by the browser automatically) and the pending row's own
- * CSRF token from `GET /auth/second-factor`'s `csrfToken` field. It never
- * reuses the session synchronizer token from `GET /me`, and never calls
- * `/me` at all — the pending cookie is not a session and this module treats
- * it as strictly less than one. See
- * docs/design/passkey-second-factor-contract.md and
- * docs/design/totp-second-factor-contract.md.
- *
- * Every call disables `$fetch`'s automatic retry (`retry: false`): ofetch
- * otherwise retries a `GET` once on 429/500/502/503/504 without the page's
- * knowledge, which would silently spend part of the account's bounded
- * attempt and rate-limit budget the design gives the user, not the network
- * layer. A page-level retry is always the user clicking again.
- */
+// ofetch retries a GET once on 429/500/502/503/504 unless retry: false.
 import type { components } from '../api/generated/openapi';
 import type { AssertionCredentialJSON } from '../utils/webauthn';
 
@@ -34,7 +15,6 @@ const KNOWN_METHODS: readonly SecondFactorPendingMethod[] = [
   'recovery',
 ];
 
-/** True for a method value this page knows how to complete. */
 export function isKnownPendingMethod(
   value: unknown,
 ): value is SecondFactorPendingMethod {
@@ -52,7 +32,6 @@ export type SecondFactorPendingError
     | 'csrf-rejected'
     | 'unavailable';
 
-/** Rejection value for every pending second-factor operation. */
 export class SecondFactorPendingFailure extends Error {
   readonly kind: SecondFactorPendingError;
   readonly retryAfterSeconds?: number;
@@ -89,12 +68,6 @@ function retryAfterSeconds(error: unknown): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-/**
- * Maps an unknown thrown value to the closed pending-failure union. Only the
- * exact status/code pairs the contract defines match; everything else
- * degrades to `unavailable`, matching the password composable's rule that a
- * drifting or hostile server body cannot leak into the UI.
- */
 function mapSecondFactorPendingError(
   error: unknown,
 ): SecondFactorPendingFailure {
@@ -167,24 +140,14 @@ function pendingHeaders(csrfToken: string): HeadersInit {
 }
 
 export interface UseSecondFactorPending {
-  /** `GET /api/v1/auth/second-factor`: the pending row's own status. */
   status(): Promise<SecondFactorPendingStatus>;
-  /** `POST /api/v1/auth/second-factor/passkey/options`. */
   passkeyOptions(csrfToken: string): Promise<SecondFactorAssertionOptions>;
-  /** `POST /api/v1/auth/second-factor/passkey/verify`. */
   verifyPasskey(
     csrfToken: string,
     ceremonyId: string,
     credential: AssertionCredentialJSON,
   ): Promise<void>;
-  /**
-   * `POST /api/v1/auth/second-factor/totp/verify`. `code` must already be
-   * exactly six ASCII digits (docs/design/totp-second-factor-contract.md
-   * "TOTP profile and code verification"); the caller validates shape
-   * before calling so a malformed value never reaches the network.
-   */
   verifyTotp(csrfToken: string, code: string): Promise<void>;
-  /** `POST /api/v1/auth/second-factor/recovery/verify`. */
   verifyRecovery(csrfToken: string, code: string): Promise<void>;
 }
 

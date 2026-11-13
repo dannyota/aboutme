@@ -1,5 +1,3 @@
-/* Application chrome tokens (DESIGN.md, ADR 0020). Resume documents keep their
-   own renderer tokens; nothing here may reach the renderer. */
 :root {
   --radius: 10px;
   --radius-sheet: 2px;
@@ -19,21 +17,14 @@
   --muted-foreground: #5c6178;
   --accent: #eceef6;
   --accent-foreground: #101b3f;
-  /* Burnt orange, kept apart from seal red so Delete never reads as Publish
-     (ADR 0020). */
   --destructive: #b54708;
   --border: #e5e1d6;
   --input: #7d8398;
   --ring: #26409c;
   --seal: #cc2649;
   --seal-foreground: #ffffff;
-  /* Seal red for text and thin strokes: the stamp's words and ring and the
-     logo mark (ADR 0020). Equal to --seal in light theme. */
   --seal-text: #cc2649;
-  /* Text-safe blue for links and blue text on tinted surfaces. */
   --link: #23399a;
-  /* Two blues only (ADR 0020): brand-blue is the primary fill and
-     brand-deep-blue the text-safe link blue. */
   --brand-blue: var(--primary);
   --brand-deep-blue: var(--link);
   --brand-indigo: #4a4dbf;
@@ -42,12 +33,8 @@
   --surface-blue: #eceef7;
   --surface-indigo: #efeef8;
   --surface-sand: #f6eedf;
-  /* Mismatch tint on the verify page (docs/design/deployment-transparency/
-     visual.md); never used by the renderer. */
   --surface-destructive: color-mix(in srgb, var(--destructive) 7%, var(--card));
   --editor-canvas: #f1efe9;
-  /* Chrome spacing (DESIGN.md): the 8 px module and the named rhythms that
-     were only written down before (ADR 0020). */
   --space-module: 8px;
   --space-dialog-title: 6px;
   --space-field: 16px;
@@ -57,8 +44,6 @@
   --primary-hover: #1e3483;
   --shadow-primary:
     0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(38 64 156 / 0.2);
-  /* Chrome for a resume sheet (DESIGN.md): white paper and neutral ink in
-     both themes. Defined on :root only, never inside the dark block. */
   --paper: #ffffff;
   --paper-ink: #171a18;
   --paper-muted: #5f6763;
@@ -68,8 +53,6 @@
     var(--brand-blue),
     var(--brand-indigo)
   );
-  /* The canvas glows sit at fixed offsets from the top of the document, so a
-     long page does not stretch them. */
   --gradient-aurora:
     radial-gradient(
       44rem 30rem at 8% -4rem,
@@ -93,11 +76,8 @@
     );
   --shadow-product:
     0 1px 2px rgba(16, 27, 63, 0.06), 0 12px 40px rgba(40, 44, 80, 0.09);
-  /* Neutral on purpose: the sheet reads as paper, never as a blue card. */
   --shadow-paper:
     0 1px 2px rgba(23, 26, 24, 0.06), 0 12px 32px rgba(23, 26, 24, 0.1);
-  /* Homepage hero: the gradient CTA's hover state, its resting shadow, and
-     the glow behind the sample sheet (DESIGN.md; ADR 0020). */
   --gradient-brand-strong: linear-gradient(90deg, #1e3483, #3d40ad);
   --gradient-hero-glow:
     radial-gradient(
@@ -143,7 +123,6 @@ html[data-theme="dark"] {
   --ring: #8fa6f0;
   --seal: #cc2649;
   --seal-foreground: #ffffff;
-  /* Lifted so seal-red words and strokes stay 4.5:1 on the ink ground. */
   --seal-text: #ff6b8a;
   --link: #a3b6f5;
   --brand-blue: var(--primary);
@@ -208,8 +187,6 @@ html[data-theme="dark"] {
   --shadow-cta: 0 8px 24px rgb(143 166 240 / 0.18);
 }
 
-/* Chrome that stands for a resume sheet (DESIGN.md): white paper and
-   neutral ink in both themes. Never applied inside the renderer. */
 .paper-surface {
   --foreground: var(--paper-ink);
   --muted-foreground: var(--paper-muted);
@@ -278,8 +255,6 @@ html[data-theme="dark"] {
   --text-xl--line-height: 1.3;
   --text-2xl: 2rem;
   --text-2xl--line-height: 1.3;
-  /* The scale grows steadily and leaves room for stacked Vietnamese
-     diacritics (ệ, ở, Ử) above a heading line (ADR 0020). */
   --text-3xl: 2.5rem;
   --text-3xl--line-height: 1.25;
   --text-4xl: 3rem;

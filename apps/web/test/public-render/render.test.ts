@@ -100,9 +100,7 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<link rel="canonical" href="https://resume.example/ada1">',
     );
-    // Stops Safari and other browsers from auto-linking digit runs such as
-    // date ranges into tel: links, without touching the explicit tel:/
-    // mailto: anchors the contact details render.
+    // Safari links digit runs such as dates as phone numbers by default.
     expect(html).toContain(
       '<meta name="format-detection" '
       + 'content="telephone=no, date=no, address=no, email=no">',
@@ -126,16 +124,10 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '</head><body><a href="#public-resume">Skip to content</a><main ',
     );
-    // The hydration script is versioned the same way, so a returning browser
-    // never runs a previous release's cached script against new HTML.
     expect(html).toContain(
       '<script type="module" '
       + `src="/_nuxt/assets/public-resume.mjs?v=${SCRIPT_VERSION}"></script>`,
     );
-    // The template's CSS and fonts come from the same self-hosted stylesheets
-    // the print document uses; without them the page renders unstyled.
-    // The stylesheets keep fixed names but are cached for a year, so each
-    // link carries the build's style version to fetch fresh CSS per release.
     expect(html).toContain(
       '<link rel="stylesheet" '
       + `href="/_nuxt/assets/print-fonts.css?v=${STYLE_VERSION}">`
@@ -222,9 +214,6 @@ describe('owner page title and emoji favicon', () => {
 });
 
 describe('public page measure and PDF download', () => {
-  // The download anchor wraps a Lucide download icon and a label span
-  // (docs/design/public-page-theme.md, "Structure"), so its href and visible
-  // label are read from separate captures rather than one text child.
   const downloadLink = (html: string) => {
     const anchor = /<a class="public-download" href="([^"]*)">(.*?)<\/a>/su
       .exec(html);
@@ -272,16 +261,12 @@ describe('public page measure and PDF download', () => {
       expect(html).toContain('<div class="public-toolbar">');
       expect(html).toContain('<div class="public-toolbar-inner">');
       expect(html).toContain('<span class="public-brand">');
-      // Vue SSR emits static attributes in source order, and PublicMark.vue
-      // declares aria-hidden before class, so the match must not assume
-      // class is the svg's first attribute.
+      // Vue SSR emits static attributes in source order.
       const markElement = /<svg\b[^>]*\bclass="public-mark"[^>]*>.*?<\/svg>/su
         .exec(html)?.[0];
       expect(markElement).not.toBeUndefined();
       expect(markElement).toContain('aria-hidden="true"');
       expect(markElement).toContain('focusable="false"');
-      // Plain SVG only: no gradient, no id, and no style element, matching
-      // the logo's own mark (identity-and-seal.md, "Logo").
       expect(markElement).not.toMatch(/\bid="/u);
       expect(markElement).not.toMatch(
         /<(?:linearGradient|radialGradient|mask|style)\b/u,
@@ -303,9 +288,6 @@ describe('public page measure and PDF download', () => {
 });
 
 describe('owner color scheme', () => {
-  // docs/design/public-page-theme.md, "How it reaches the page": dark and
-  // Match device pages carry the attribute and the dark roles; light pages,
-  // whether absent or stored, carry neither.
   const withScheme = (scheme: unknown) => {
     const value = request();
     (value.publicResume.document.customization as Record<string, unknown>)
@@ -371,8 +353,6 @@ describe('owner color scheme', () => {
 });
 
 describe('JSON-LD sameAs parity with the Go validator', () => {
-  // The public HTML validator requires this script to byte-equal Go's
-  // publicformat.JSONLD output. Both suites read the same corpus.
   it('picks exactly the sameAs values Go picks', async () => {
     const corpusPath = resolve(
       process.cwd(),
@@ -412,8 +392,6 @@ describe('public style version', () => {
 });
 
 describe('link-preview head', () => {
-  // The head between the canonical link and the stylesheets, where the
-  // preview tags sit (docs/design/link-previews.md, "Page head").
   const previewHead = (html: string) => html.slice(
     html.indexOf('<link rel="canonical"'),
     html.indexOf('<link rel="stylesheet"'),
@@ -641,8 +619,6 @@ describe('public sign-in gate', () => {
 
   it('shows the closed message only when not none', async () => {
     const none = await renderPublicGate(gateRequest(), VERSIONS);
-    // The `<style>` block always defines the .gate-message rule; only the
-    // element itself is conditional (v-if="message !== 'none'").
     expect(none).not.toMatch(/<p class="gate-message"/u);
 
     const cancelled = await renderPublicGate(
@@ -731,8 +707,6 @@ describe('public sign-in gate', () => {
     })).rejects.toThrow();
   });
 
-  // legal.md "Sign-in gate text": both texts name only the providers the
-  // envelope actually offers.
   describe('gate text names only the offered providers', () => {
     it.each([
       ['en', ['google'], 'If you continue, Google confirms your account '
@@ -780,10 +754,6 @@ describe('public sign-in gate', () => {
 });
 
 describe('gate HTML parity with the Go gate validator', () => {
-  // Go's gate test feeds the same corpus to gateHTMLRejection, so a change
-  // on either side that makes real renderer output fail Go's closed rules
-  // fails one of the two suites (docs/design/viewer-analytics/
-  // sign-in-to-view.md "Gate"; AC-VIEW-002).
   const corpus = JSON.parse(readFileSync(
     resolve(
       process.cwd(),

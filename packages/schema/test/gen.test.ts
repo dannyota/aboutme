@@ -38,10 +38,6 @@ const files = [
 
 describe("generated code", () => {
   // Codegen can exceed Vitest's five-second default under concurrent load.
-  // Other test files compile and read these files while this one regenerates
-  // them in place, so the test also reads every file throughout the run: a
-  // reader must never see bytes other than the committed ones, such as a
-  // partial write or quicktype's raw output.
   it("is byte-identical to a fresh generation, and at every moment of it", async () => {
     const before = files.map((f) => readFileSync(f, "utf8"));
     const generator = spawn("node", ["scripts/generate.mjs"], {
@@ -77,8 +73,7 @@ describe("generated code", () => {
     }
   });
 
-  // json-schema-to-typescript suffixes an alias when it fails to recognize an
-  // existing $def. Reject the whole class of misleading duplicate aliases.
+  // json-schema-to-typescript suffixes an alias for a $def it misses.
   it.each(["gen/ts/resume.ts", ...released.map((entry) => entry.tsTypes)])(
     "%s declares no counter-suffixed duplicate of another generated TS type",
     (path) => {

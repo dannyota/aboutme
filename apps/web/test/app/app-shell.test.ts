@@ -62,9 +62,6 @@ describe('AppShell', () => {
 
   it('shows sign-in and registration while signed out', async () => {
     meStatus = 401;
-    // Not an authRequiredPath: /app/resumes (mountShell's default) redirects
-    // an anonymous visitor away, so it never keeps a settled signed-out
-    // header the way this generic route does.
     const wrapper = await mountShell('/forgot-password');
     await flushPromises();
     const found = links(wrapper);
@@ -78,8 +75,7 @@ describe('AppShell', () => {
   it('shows the signed-out shell when /me returns a server error', async () => {
     meStatus = 500;
     const wrapper = await mountShell('/forgot-password');
-    // A 500 retries once (ofetch's default for GET), so settling takes an
-    // extra round trip past a single flushPromises().
+    // ofetch retries a failed GET once by default.
     await vi.waitFor(() => expect(links(wrapper)['Sign in']).toBe('/login'));
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
@@ -96,11 +92,6 @@ describe('AppShell', () => {
   ])(
     'shows no signed-out account links while /me is still loading on %s',
     async (route) => {
-      // These routes redirect an anonymous visitor to /login, so a
-      // signed-out header is never their real state, only a transient one
-      // while /me is in flight (useAuth.ts's 'loading' authState). A
-      // never-resolving handler holds that transient state still so the
-      // assertion below cannot race the mocked fetch.
       const unregisterMe = registerEndpoint(
         '/api/v1/me',
         () => new Promise(() => {}),
@@ -116,8 +107,6 @@ describe('AppShell', () => {
         );
         wrapper.unmount();
       } finally {
-        // A failed assertion above must not leave this handler active: every
-        // later test's own /me read would hang against it too.
         unregisterMe();
       }
     },
@@ -130,11 +119,6 @@ describe('AppShell', () => {
   ])(
     'never shows signed-out account links on %s once /me settles to a 401',
     async (route) => {
-      // These routes redirect an anonymous visitor to /login, so a header
-      // that shows the signed-out links only once /me has settled (rather
-      // than just while it is loading) still renders them for the moment
-      // between that settling and the redirect landing — the production
-      // regression this guards.
       meStatus = 401;
       const wrapper = await mountShell(route);
       expect(links(wrapper)['Sign in']).toBeUndefined();
@@ -160,19 +144,12 @@ describe('AppShell', () => {
       await flushPromises();
       const found = links(wrapper);
       expect(found['Sign in']).toBe('/login');
-      // '/' is a marketing path (AppShell.vue's onMarketingPath), so the CTA
-      // reads "Create your resume" there, not "Create account".
       expect(found['Create your resume']).toBe('/register');
       wrapper.unmount();
     } finally {
       unregisterMe();
     }
   });
-  // /app/settings/sessions and /authorize once kept the signed-out links
-  // unhidden on phones (hidePhoneAccountLinks), for a signed-out visitor who
-  // had no other in-page account affordance there. Both are authRequiredPath
-  // routes, so showSignedOutLinks now hides those links outright, and that
-  // exception never renders.
   it.each(['/', '/login', '/privacy'])(
     'keeps signed-out account links compact on phones at %s',
     async (route) => {
@@ -221,7 +198,6 @@ describe('AppShell', () => {
     const projects = wrapper.findAll('a')
       .find((a) => a.attributes('href') === '/app/projects');
     expect(projects?.attributes('aria-current')).toBe('page');
-    // The signed-in English bar fits Projects only from 768 px.
     expect(projects?.classes()).toContain('max-md:hidden');
     expect(projects?.classes()).not.toContain('max-sm:hidden');
     wrapper.unmount();
@@ -241,7 +217,6 @@ describe('AppShell', () => {
       expect(resumes?.classes()).not.toContain('max-sm:hidden');
       expect(views?.classes()).toContain('max-sm:hidden');
       expect(settings?.classes()).toContain('max-sm:hidden');
-      // The account menu (tested below) keeps both one tap away on phones.
       expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(
         true,
       );
@@ -374,9 +349,6 @@ describe('AppShell', () => {
       setSiteLocale('vi');
       const wrapper = await mountShell('/app/resumes');
       await flushPromises();
-      // /app/resumes is an authRequiredPath, so its header keeps no
-      // signed-out links once /me settles; Library is the localized text
-      // this signed-out shell still shows there.
       expect(links(wrapper)['Thư viện']).toBe('/templates');
       expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(
         true,
@@ -595,8 +567,6 @@ describe('AppShell', () => {
     ['/guide/mcp', 'Create your resume'],
     ['/login', 'Create account'],
     ['/register', 'Create account'],
-    // /authorize is excluded: it is an authRequiredPath, so its header never
-    // renders this CTA at all while signed out, settled or not.
   ])('labels the header CTA %s as %s', async (route, label) => {
     meStatus = 401;
     setSiteLocale('en');

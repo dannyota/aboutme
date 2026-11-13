@@ -11,19 +11,6 @@ import type { components } from '../api/generated/openapi';
 import type { Locale } from '@/i18n/locale';
 import { decodeBase64Url, encodeBase64Url } from '../utils/webauthn';
 
-/**
- * `secondFactorSettings` — the closed contract behind the account-settings
- * passkey and recovery-code controls
- * (`docs/design/passkey-second-factor-contract.md`).
- *
- * `SecondFactorSettings` is presentational: it receives `enrollmentOpen`,
- * `hasPassword`, and `providers` as props, reads factor state through
- * `useSecondFactorState`, and performs every side effect through
- * `SecondFactorSettingsActionsKey`. Every rejection is a
- * `SecondFactorSettingsFailure` so the component maps to fixed copy without
- * reading a raw server body.
- */
-
 export type SecondFactorPasskey = components['schemas']['SecondFactorPasskey'];
 
 export type SecondFactorSettingsErrorKind
@@ -36,7 +23,6 @@ export type SecondFactorSettingsErrorKind
     | 'rate-limited'
     | 'unavailable';
 
-/** Rejection value for every second-factor management action. */
 export class SecondFactorSettingsFailure extends Error {
   readonly kind: SecondFactorSettingsErrorKind;
 
@@ -47,12 +33,6 @@ export class SecondFactorSettingsFailure extends Error {
   }
 }
 
-// Aliased from the generated client (not hand-written) so a wire-shape
-// change fails typecheck here instead of silently drifting: the request
-// body sent to `navigator.credentials.create` and to
-// `POST /me/second-factor/passkeys` must stay exactly what the server
-// accepts, the same reason `utils/webauthn.ts` aliases its own assertion
-// credential type from `PasskeyAssertionCompletionRequest`.
 export type RegistrationPublicKeyInput
   = components['schemas']['WebAuthnRegistrationPublicKey'];
 
@@ -66,28 +46,20 @@ export type RegistrationCompletionResult
   = components['schemas']['SecondFactorRegistrationResponse']['data'];
 
 export interface SecondFactorSettingsActions {
-  /** Refresh the current session's recent-reauthentication time. */
   reauthenticate(password: string): Promise<void>;
-  /** Begin the provider OAuth reauthentication round trip. */
   startProviderReauth(provider: AuthProvider): Promise<void>;
-  /** Start a passkey registration ceremony. */
   registrationOptions(): Promise<RegistrationOptionsResult>;
-  /** Verify and store the completed passkey ceremony. */
   completeRegistration(
     ceremonyId: string,
     credential: PasskeyRegistrationCredential,
   ): Promise<RegistrationCompletionResult>;
-  /** Remove one owned passkey by its internal id. */
   removePasskey(id: string): Promise<void>;
-  /** Replace every recovery code and return the new set once. */
   regenerateRecoveryCodes(): Promise<readonly string[]>;
 }
 
 export const SecondFactorSettingsActionsKey: InjectionKey<
   SecondFactorSettingsActions
 > = Symbol('aboutme-second-factor-settings-actions');
-
-// --- Factor state read -------------------------------------------------
 
 interface SecondFactorStateEnvelope {
   data?: unknown;
@@ -121,13 +93,6 @@ export interface UseSecondFactorStateReturn {
   refresh: () => Promise<void>;
 }
 
-/**
- * `useSecondFactorState` — account factor state from
- * `GET /api/v1/me/second-factor`, read regardless of the passkey-enrollment
- * capability (enrollment can be closed while verification, removal,
- * recovery, and state stay available). Anything but an exact well-formed
- * response degrades to the unenrolled shape, matching `useCapabilities`.
- */
 export function useSecondFactorState(): UseSecondFactorStateReturn {
   const { data, status, error, refresh: refreshState }
     = useFetch<SecondFactorStateEnvelope>('/api/v1/me/second-factor', {
@@ -152,10 +117,6 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
     const list = envelope.value?.passkeys;
     return Array.isArray(list) ? list.filter(isPasskey) : [];
   });
-  // Read regardless of `totpEnrollment` (enrollment can be closed while
-  // verification, removal, and state stay available); absent or malformed
-  // is false, matching mixed-version compatibility (totp-second-factor
-  // -contract.md "Migration, mixed versions, and loss").
   const totpEnabled = computed(() => envelope.value?.totpEnabled === true);
   const recoveryCodesRemaining = computed(() => {
     const value = envelope.value?.recoveryCodesRemaining;
@@ -200,8 +161,6 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
   };
 }
 
-// --- Error mapping -------------------------------------------------------
-
 function failureStatus(error: unknown): number | null {
   const candidate = error as { statusCode?: unknown; status?: unknown } | null;
   for (const key of ['statusCode', 'status'] as const) {
@@ -216,11 +175,6 @@ function failureCode(error: unknown): unknown {
     ?.error?.code;
 }
 
-/**
- * Map a `POST .../passkeys/options` rejection. `404` covers enrollment being
- * turned off (the uniform not-found response, matching an unregistered
- * route) and never reaches this function for any other reason.
- */
 export function mapPasskeyOptionsError(
   error: unknown,
 ): SecondFactorSettingsFailure {
@@ -241,12 +195,6 @@ export function mapPasskeyOptionsError(
   return new SecondFactorSettingsFailure('unavailable');
 }
 
-/**
- * Map a `POST .../passkeys` (registration completion) rejection. Adds
- * `challenge-invalid` (an expired or foreign ceremony) and
- * `verification-failed` (a failed WebAuthn verification or duplicate
- * credential) to the options vocabulary.
- */
 export function mapPasskeyCompletionError(
   error: unknown,
 ): SecondFactorSettingsFailure {
@@ -273,7 +221,6 @@ export function mapPasskeyCompletionError(
   return new SecondFactorSettingsFailure('unavailable');
 }
 
-/** Map a `DELETE .../passkeys/{id}` rejection. */
 export function mapPasskeyRemovalError(
   error: unknown,
 ): SecondFactorSettingsFailure {
@@ -289,7 +236,6 @@ export function mapPasskeyRemovalError(
   return new SecondFactorSettingsFailure('unavailable');
 }
 
-/** Map a `POST .../recovery-codes` (regeneration) rejection. */
 export function mapRecoveryRegenerationError(
   error: unknown,
 ): SecondFactorSettingsFailure {
@@ -305,23 +251,6 @@ export function mapRecoveryRegenerationError(
   return new SecondFactorSettingsFailure('unavailable');
 }
 
-// --- Browser WebAuthn ceremony -------------------------------------------
-//
-// `isWebAuthnSupported`, `isWebAuthnCancellation`, and the base64url codec
-// are shared with `utils/webauthn.ts` (the pending-login page's assertion
-// helpers) and live there; import them from that module rather than from
-// here, so Nuxt's auto-import has exactly one binding per name. This module
-// keeps only what genuinely differs: `createPasskeyCredential` runs
-// `navigator.credentials.create` with `PublicKeyCredentialCreationOptions`,
-// the registration ceremony `utils/webauthn.ts` explicitly never handles.
-
-/**
- * Run the browser registration ceremony from accepted canonical options and
- * serialize the result back to the canonical wire shape
- * (`docs/design/passkey-second-factor-contract.md#webauthn-json`). Throws
- * the raw browser error (see `isWebAuthnCancellation`) on cancellation or an
- * unsupported browser; never falls back to a differently-shaped credential.
- */
 export async function createPasskeyCredential(
   publicKey: RegistrationPublicKeyInput,
 ): Promise<PasskeyRegistrationCredential> {
@@ -377,16 +306,8 @@ export async function createPasskeyCredential(
   };
 }
 
-// --- Recovery-code download -----------------------------------------------
-
 const RECOVERY_CODES_FILENAME = 'aboutme-recovery-codes.txt';
 
-/**
- * The exact downloaded byte contract: UTF-8, no byte-order mark, LF line
- * endings, one trailing LF, and a locale-selected heading. See
- * "Management responses and recovery download" in
- * `docs/design/passkey-second-factor-contract.md`.
- */
 export function recoveryCodesDownloadText(
   codes: readonly string[],
   locale: Locale,
@@ -402,7 +323,6 @@ export interface DownloadRecoveryCodesDeps {
   readonly revokeObjectURL?: (url: string) => void;
 }
 
-/** Downloads the codes as a local file; never issues a second request. */
 export function downloadRecoveryCodes(
   codes: readonly string[],
   locale: Locale,

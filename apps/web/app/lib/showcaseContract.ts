@@ -1,14 +1,7 @@
-// The community showcase's wire shapes come from the generated client; this
-// module adds the runtime constants and strict parsers around them
-// (docs/design/showcase.md, Delivery and Data and contract).
 import type { components } from '../api/generated/openapi';
 
 type Schemas = components['schemas'];
 
-/**
- * The ten roles: the nine Library role chips in chip order, then Other. A
- * test keeps this list equal to the Library's.
- */
 export const SHOWCASE_ROLES = [
   'backend',
   'frontend',
@@ -23,14 +16,12 @@ export const SHOWCASE_ROLES = [
 ] as const satisfies readonly ShowcaseRole[];
 export type ShowcaseRole = Schemas['ShowcaseRole'];
 
-/** The listing's language filter; an item may also be `other`. */
 export const SHOWCASE_FILTER_LANGUAGES = ['vi', 'en'] as const;
 export type ShowcaseFilterLanguage = (typeof SHOWCASE_FILTER_LANGUAGES)[number];
 export type ShowcaseItemLanguage = ShowcaseFilterLanguage | 'other';
 
 const SHOWCASE_PAGE_SIZE = 12;
 export const SHOWCASE_MAX_PAGE = 100;
-/** The template filter value for resumes that match no preset. */
 export const SHOWCASE_CUSTOM_TEMPLATE = 'custom';
 
 export const SHOWCASE_LISTING_PATH = '/api/v1/public/showcase';
@@ -41,10 +32,8 @@ export type ShowcaseListing = Readonly<
   & { items: readonly ShowcaseItem[] }
 >;
 
-/** The owner resume resource's `showcase` field: null when off. */
 export type OwnerShowcase = Readonly<Schemas['ResumeShowcase']>;
 
-/** The publish request's optional showcase fields; omitted keeps them. */
 export type PublishShowcaseFields = Pick<
   Schemas['PublishResumeRequest'],
   'showcaseEnabled' | 'showcaseRole'
@@ -54,7 +43,6 @@ export function isShowcaseRole(value: unknown): value is ShowcaseRole {
   return SHOWCASE_ROLES.some((role) => role === value);
 }
 
-/** The versioned card image of a listing, always on the page's own origin. */
 export function showcaseCardUrl(item: ShowcaseItem): string {
   return `/api/v1/public/resumes/${encodeURIComponent(item.slug)}/og/`
     + `${encodeURIComponent(item.cardVersion)}.png`;
@@ -77,8 +65,6 @@ function parseItem(value: unknown): ShowcaseItem {
   ) {
     throw new Error('invalid showcase item');
   }
-  // A role this build does not know shows no chip.
-  // Only the closed fields survive, so nothing else reaches the DOM.
   return Object.freeze({
     slug: value.slug,
     cardVersion: value.cardVersion,
@@ -89,7 +75,6 @@ function parseItem(value: unknown): ShowcaseItem {
   });
 }
 
-/** Validates a listing response; throws on any shape violation. */
 export function parseShowcaseListing(value: unknown): ShowcaseListing {
   if (
     !isRecord(value)
@@ -109,7 +94,6 @@ export function parseShowcaseListing(value: unknown): ShowcaseListing {
   });
 }
 
-/** The owner resource's `showcase` field, or null when absent or unknown. */
 export function parseOwnerShowcase(value: unknown): OwnerShowcase | null {
   if (
     !isRecord(value)

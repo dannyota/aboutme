@@ -7,7 +7,6 @@ export interface BlockRef {
   sectionKey: string;
   kind: 'heading' | 'entry';
   entryIndex?: number;
-  // Present when an entry splits between body blocks; 0 carries the header.
   part?: number;
   column: 'main' | 'sidebar';
 }

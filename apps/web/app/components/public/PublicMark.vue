@@ -9,12 +9,6 @@ import {
   MARK_WIDTH,
 } from '../app/sealMark';
 
-// The public page bar's brand mark (docs/design/public-page-theme.md, "Page
-// bar"): the seal mark alone, without the hairline inner ring the logo drops
-// at 24 px and below (docs/design/ui/identity-and-seal.md, "Logo"). The
-// public page loads no Tailwind, so the stroke takes its color from the
-// --toolbar-mark custom property the public page's own style block declares,
-// through currentColor, rather than a utility class.
 const HEIGHT = 20;
 const WIDTH = Math.round((HEIGHT * MARK_WIDTH) / MARK_HEIGHT);
 </script>

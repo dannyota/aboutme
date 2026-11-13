@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startViewBeacon } from '../../app/public/viewBeacon';
 
-// Layer 4 (visible time and interaction) and Layers 5-6 (token and proof of
-// work) from docs/design/viewer-analytics/counting.md.
-
 class FakeDoc extends EventTarget {
   visibilityState: 'visible' | 'hidden' = 'visible';
 }
@@ -42,9 +39,6 @@ function notFoundResponse(): Response {
   } as unknown as Response;
 }
 
-// Flushes the promise chain (fetch, json, then the listener setup) without
-// touching fake timers, since Promise microtasks resolve independently of
-// them.
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
@@ -190,8 +184,6 @@ describe('startViewBeacon', () => {
   it('stops after 29 minutes without collecting', async () => {
     const { fetchImpl } = setup();
     await flushMicrotasks();
-    // No interaction and no visible-time threshold reached: collect never
-    // qualifies, and the beacon must give up rather than wait forever.
     await vi.advanceTimersByTimeAsync(29 * 60_000);
     expect(collectCalls(fetchImpl)).toHaveLength(0);
   });
@@ -241,10 +233,6 @@ describe('view start owner and signedIn callback', () => {
     });
 });
 
-// One challenge the Go server issues and the solution its verifier accepts:
-// the fixed vector in apps/server/internal/viewcount/challenge_test.go. The
-// beacon solves it with the real altcha-lib solver, so a change in either
-// library or in how the beacon calls the solver fails one of the two tests.
 const SERVER_CHALLENGE = {
   parameters: {
     algorithm: 'PBKDF2/SHA-256',
@@ -267,8 +255,7 @@ const SERVER_SOLUTION = {
 
 describe('proof of work with the real solver', () => {
   it('sends the solution the server verifier accepts', async () => {
-    // The solver yields to the event loop through real timers; the
-    // visible-time wait runs on the injected clock instead.
+    // altcha-lib's solver yields through real timers, not the injected clock.
     vi.useRealTimers();
     let clock = 0;
     const target = new EventTarget();

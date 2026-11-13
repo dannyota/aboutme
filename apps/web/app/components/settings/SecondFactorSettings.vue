@@ -1,19 +1,4 @@
 <script setup lang="ts">
-/**
- * `SecondFactorSettings`: passkey, authenticator-app (`TotpSettings`), and
- * recovery-code controls for `/app/settings/sessions`
- * (`docs/design/second-factor-authentication.md#enrollment-and-management`).
- *
- * Presentational: it receives `enrollmentOpen`, `hasPassword`, and
- * `providers` as props, reads factor state through `useSecondFactorState`,
- * and performs every side effect through
- * `SecondFactorSettingsActionsKey` (see `composables/secondFactorSettings`).
- * Factor state (passkeys, recovery-code count) is read regardless of
- * `enrollmentOpen`; only starting a new registration is gated by it. Recovery
- * codes live in `revealedCodes` only between a successful enrollment or
- * regeneration and the reveal closing, navigating away, or this component
- * unmounting — never in browser storage.
- */
 import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import EmptyState from '../app/EmptyState.vue';
@@ -58,7 +43,6 @@ const props = defineProps<{
   enrollmentOpen: boolean;
   hasPassword: boolean;
   providers: AuthProvider[];
-  /** Page-level copy: factor changes end other sessions and agent access. */
   sessionsNotice: string;
 }>();
 
@@ -95,8 +79,6 @@ const removeTarget = ref<SecondFactorPasskey | null>(null);
 const removePending = ref(false);
 const removeError = ref<SecondFactorSettingsMessage | null>(null);
 const removedNotice = ref(false);
-// Matches the server's shared active-factor count (totp-second-factor
-// -contract.md "Removal, recovery, and races"): passkeys plus TOTP.
 const removeIsFinal = computed(
   () => removeTarget.value !== null && passkeys.value.length <= 1
     && !totpEnabled.value,
@@ -121,13 +103,6 @@ function clearReveal(): void {
 
 onBeforeUnmount(clearReveal);
 
-/**
- * `reauth_required` interrupts the in-progress action: close any open
- * confirmation and switch to the shared reauth block. Every other kind maps
- * straight to fixed copy. Mirrors `PasswordSettings`/`PrivacySettings`: after
- * reauth the person retries the original action rather than an automatic
- * replay.
- */
 function handleFailure(
   failure: SecondFactorSettingsFailure,
 ): SecondFactorSettingsMessage | null {
@@ -142,8 +117,6 @@ function handleFailure(
   return failure.kind;
 }
 
-/** Best effort: the mutation already succeeded, so a stale refresh here must
- * never undo the completed change or block the one-time reveal. */
 async function afterMutationSuccess(): Promise<void> {
   try {
     await refresh();

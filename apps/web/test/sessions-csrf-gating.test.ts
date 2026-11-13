@@ -8,16 +8,7 @@ import { setSiteLocale } from './support/locale';
 registerCapabilities();
 beforeEach(() => setSiteLocale('en'));
 
-// Deliberately its own file, not a case inside sessions.test.ts:
-// `useFetch('/api/v1/me')`'s automatic initial fetch is keyed by URL and,
-// once resolved "success" in a given test file's shared Nuxt app instance
-// (even with a malformed body — the HTTP call itself still succeeded), a
-// later mount in the SAME file reuses that cached status rather than
-// re-hitting a newly-registered handler, regardless of ordering.
-// sessions.vue has no on-page trigger to force a fresh /me fetch the way
-// `useAuth.test.ts`'s probe component does — but each Vitest test *file*
-// gets its own fresh Nuxt app instance, so isolating this case in its own
-// file sidesteps the whole problem instead of fighting it.
+// Own file: Nuxt reuses a URL's cached useFetch result within a test file.
 let meResponse: unknown = {};
 
 registerEndpoint('/api/v1/me', {
@@ -44,9 +35,6 @@ registerEndpoint('/api/v1/sessions', () => ({
     },
   ],
 }));
-// Second-factor state is read regardless of the enrollment capability, so
-// every mount of this page needs a registered response; the second-factor
-// section's own controls are covered in test/second-factor-settings.test.ts.
 registerEndpoint('/api/v1/me/second-factor', () => ({
   data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
 }));
@@ -85,8 +73,6 @@ describe('sessions.vue CSRF gating', () => {
   );
 
   it('disables mutating controls until csrfToken is available', async () => {
-    // Contract drift / a proxy error page — /me resolves with no usable
-    // csrfToken, so nothing that would send X-CSRF-Token is clickable.
     const wrapper = await mountSuspended(SessionsPage);
     await flushPromises();
 
@@ -108,10 +94,6 @@ describe('sessions.vue CSRF gating', () => {
   it(
     'mounts the authenticator-app section with no usable csrfToken',
     async () => {
-      // `TotpSettings` reads its own `useAuth()` instance (see
-      // `composables/totpSettings.ts`); this proves it shares the same
-      // cached, csrfToken-less `/me` state as the rest of the page instead
-      // of hanging or throwing on a second independent fetch.
       const wrapper = await mountSuspended(SessionsPage);
       await flushPromises();
 

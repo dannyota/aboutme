@@ -3,11 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import Photo from '../../app/components/resume/primitives/Photo.vue';
 
-// The frame shows exactly the crop rectangle, scaled to fill it. The image box
-// maps the whole image onto frame coordinates and object-fit: cover keeps the
-// image aspect, so a pixel-square crop is exact and any other crop is never
-// stretched or letterboxed.
-
 const mountPhoto = (crop?: {
   x: number;
   y: number;
@@ -50,7 +45,6 @@ describe('authorized resume photo', () => {
   });
 
   it('scales and offsets the image so the crop fills the frame', () => {
-    // A 1024x1280 photo cropped to its 614.4px square at (204.8, 76.8).
     const crop = { x: 0.2, y: 0.06, width: 0.6, height: 0.48 };
     const style = styleOf(mountPhoto(crop).get('img').attributes('style'));
     expect(style).toEqual({

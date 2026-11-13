@@ -13,11 +13,6 @@ import { richTextSchema } from './schema';
 
 const item = richTextSchema.nodes.list_item;
 
-/**
- * List keys: Enter starts a new item and, in an empty item, leaves the list;
- * Tab nests the item and Shift-Tab lifts it. Outside a list each command
- * declines, so Tab still moves focus.
- */
 export const listKeymap: Record<string, Command> = {
   'Enter': chainCommands(splitListItem(item), liftListItem(item)),
   'Tab': sinkListItem(item),
@@ -30,10 +25,6 @@ function markerList(text: string): NodeType | undefined {
   return undefined;
 }
 
-/**
- * Typing a space after "-", "*", or "1." at the start of a top-level
- * paragraph replaces the marker with a bullet or ordered list.
- */
 export function startListFromMarker(
   state: EditorState,
   dispatch?: (tr: Transaction) => void,
@@ -55,7 +46,7 @@ export function startListFromMarker(
   return true;
 }
 
-/** The same rule for input that arrives without a key event (mobile IMEs). */
+// Mobile IMEs type without key events; ProseMirror calls handleTextInput.
 export function handleListMarkerInput(
   view: EditorView,
   from: number,

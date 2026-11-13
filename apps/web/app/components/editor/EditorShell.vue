@@ -83,7 +83,6 @@ const props = defineProps<{
 const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
 
-// The rail shows the selected tool by shape as well as by color (DESIGN.md).
 const railButtonClass
   = 'aria-pressed:bg-surface-blue aria-pressed:text-link '
     + 'aria-pressed:shadow-[inset_3px_0_0_var(--primary)] '
@@ -149,14 +148,12 @@ const photoUrl = computed(() => {
     : undefined;
 });
 const issues = computed(() => Object.values(props.record.issues).flat());
-// Held field edits (rich text mid-debounce, an unfinished date) count too.
 const drafts = useFieldDrafts();
 const saveState = computed<SaveState>(() => {
   const recorded = recordSaveState(props.record);
   const state = recorded === 'saved' && (drafts?.count.value ?? 0) > 0
     ? 'dirty'
     : recorded;
-  // Work waiting on a failed session check is being retried, not lost.
   const waiting = state === 'dirty' || state === 'saving';
   return waiting && props.sessionCheck?.failing.value ? 'retrying' : state;
 });
@@ -174,7 +171,6 @@ function selectEntry(location: EntryLocation): void {
   selectedEntry.value = location.entryId;
 }
 
-// Open in editor on a project's screen names it; its entry opens selected.
 const openedProject = useRoute().query.project;
 const opened = typeof openedProject === 'string'
   ? linkedEntry(document.value, openedProject)
@@ -598,7 +594,6 @@ async function discardAndSignIn(): Promise<void> {
         :conflicts="record.conflicts"
         @open-inspector="openInspector"
       />
-      <!-- The queue waits for the session check, and so does Retry now. -->
       <SessionCheckBanner
         v-if="sessionCheck?.failing.value"
         :session-check="sessionCheck"

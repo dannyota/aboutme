@@ -2,9 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { SHOWCASE } from '../app/landing/showcase';
 import { galleryTemplate, matchesFilter } from '../app/templates/catalog';
 
-// The homepage template showcase pins four templates, one per filter chip
-// (DESIGN.md; ADR 0020). Each must exist, carry a sample in both site
-// languages, and actually belong to the filter it advertises.
 describe('landing showcase', () => {
   it('names templates that exist in the gallery catalog', () => {
     for (const entry of SHOWCASE) {

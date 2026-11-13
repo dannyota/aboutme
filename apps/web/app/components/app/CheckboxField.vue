@@ -20,10 +20,6 @@ const generated = useId();
 const fieldId = computed(() => props.id ?? `field-${generated}`);
 const descriptionId = computed(() => `${fieldId.value}-description`);
 
-// The description gets an id (docs/design/linkedin-import-ui.md
-// Accessibility) so the checkbox's name and description both read; a
-// caller's own aria-describedby (an error id, say) still applies, joined
-// with the description id when there is one.
 const describedBy = computed(() => {
   const own = attrs['aria-describedby'];
   const parts = [

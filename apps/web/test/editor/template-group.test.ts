@@ -367,8 +367,6 @@ describe('template groups', () => {
     });
   });
 
-  // docs/design/data.md#resume-aggregate: content is an unordered map, and
-  // the server re-encodes its keys in byte order.
   it('completes when the accepted resume lists content keys in another order',
     () => {
       const fixture = acceptedFixture();

@@ -21,7 +21,6 @@ const props = withDefaults(
     readonly disabled?: boolean;
     readonly class?: string;
     readonly tooltipSide?: TooltipContentProps['side'];
-    /** An icon button never submits a form unless asked to. */
     readonly type?: 'button' | 'submit' | 'reset';
   }>(),
   {

@@ -8,8 +8,7 @@ import { failed, fakeAuth, ok, project } from './fixtures';
 
 const BASE = 'http://localhost/api/v1';
 
-// The test environment's Request drops headers passed as a Headers object,
-// which is how the generated client hands them over; browsers keep them.
+// The test environment's Request drops headers given as a Headers object.
 class PlainHeadersRequest extends Request {
   constructor(input: RequestInfo | URL, init?: RequestInit) {
     const headers = Object.fromEntries(new Headers(init?.headers).entries());

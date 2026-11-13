@@ -45,7 +45,6 @@ async function editorSetup(loaded = project()) {
   return { api, auth, user, navigate, editor };
 }
 
-/** Another tab signs in as a different account while a write is out. */
 function switchAccountOnRefresh(
   auth: ReturnType<typeof fakeAuth>['auth'],
   user: ReturnType<typeof fakeAuth>['user'],
@@ -431,7 +430,6 @@ describe('address change and deletion with a second factor', () => {
     data: { secondFactorRequired: true },
   });
 
-  /** An enrolled account answers the password with a pending factor. */
   async function factorPending(kind: 'address' | 'delete' = 'address') {
     const context = releaseSetup();
     const send = kind === 'delete' ? context.api.remove : context.api.replace;

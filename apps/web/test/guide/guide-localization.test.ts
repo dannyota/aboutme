@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { guideCopy } from '../../app/i18n/guide';
 import { literalGuard, parityViolations } from '../support/localizationSource';
 
-// docs/design/mcp-guide-copy.md: every visible string on /guide/mcp comes
-// from guideCopy, in both languages, with no display text left in a
-// template or component script.
-
 const { sourceViolations } = literalGuard({});
 
 const guideSources = [

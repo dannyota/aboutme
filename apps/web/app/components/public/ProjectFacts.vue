@@ -8,17 +8,10 @@ import type { ProjectPageCopy } from '../../i18n/project-pages';
 import ProjectChips from './ProjectChips.vue';
 import ProjectLinkIcon from './ProjectLinkIcon.vue';
 
-// The project page's facts column, one bordered panel
-// (docs/design/ui/project-pages.md, "Project page"): the link buttons, role
-// and dates as a definition list, and every technology. It shows no
-// placeholder for parts that have not shipped. The page leaves the panel out
-// when it has nothing to show.
 const props = defineProps<{
   readonly project: ProjectDetail;
   readonly copy: ProjectPageCopy;
-  /** The resume entry's own link, sent only when it differs from both. */
   readonly entryLink?: string;
-  /** The project's dates, formatted for the resume. */
   readonly dates?: string;
 }>();
 
@@ -29,8 +22,6 @@ interface ExternalLink {
   readonly primary: boolean;
 }
 
-// Repository is the filled button; Demo is filled only when it is the one
-// project link. The entry's own link is always outlined.
 const links = computed<ExternalLink[]>(() => {
   const { repositoryUrl, demoUrl } = props.project;
   return [

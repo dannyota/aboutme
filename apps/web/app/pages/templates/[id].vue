@@ -52,13 +52,10 @@ const isSample = computed(() => shown.value?.isSample === true);
 const context = computed(() => ({
   lng: sampleLanguage.value,
   mode: 'continuous' as const,
-  // The info column's h1 names the template; the embedded sample's own
-  // name is visual only, so the page keeps a single h1.
   nameHeading: 'p' as const,
 }));
 const pdfPages = computed(() =>
   samplePageImages(template.id, sampleLanguage.value));
-// "{name}, {role}", the role named in the sample's tag.
 const persona = computed(() => [
   shown.value?.document.personalDetails.fullName,
   sampleRole(template, sampleLanguage.value, locale.value),
@@ -203,7 +200,6 @@ useHead(computed(() => ({
         >
           {{ detail.fillerNote }}
         </p>
-        <!-- On phones this block is a bar holding the primary action only. -->
         <div class="template-detail__actions grid gap-3">
           <NuxtLink
             :class="buttonVariants({ variant: 'default', size: 'lg' })"
@@ -334,8 +330,6 @@ useHead(computed(() => ({
   box-shadow: var(--shadow-paper);
 }
 
-/* Phones: the info column first, then the sheet; the primary action stays
-   in a bar at the bottom of the screen. */
 @media (width < 900px) {
   .template-detail__actions {
     position: fixed;

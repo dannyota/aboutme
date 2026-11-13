@@ -1,14 +1,5 @@
 import type { AuthProvider } from './useAuth';
 
-/**
- * `identitySettings` — the closed contract behind the Unlink control for a
- * linked provider identity (`DELETE /me/identities/{identityId}`).
- *
- * `LinkedIdentities` is presentational: it receives the actions as a prop, and
- * each action rejects with an `UnlinkFailure` so the component maps a closed
- * kind to fixed copy without reading a raw server body.
- */
-
 export type UnlinkFailureKind
   = | 'reauth-required'
     | 'reauth-failed'
@@ -28,11 +19,8 @@ export class UnlinkFailure extends Error {
 }
 
 export interface LinkedIdentityActions {
-  /** Unlink one identity by its id. */
   unlink(id: string): Promise<void>;
-  /** Refresh the recent-reauthentication time with the current password. */
   reauthenticate(password: string): Promise<void>;
-  /** Begin the provider OAuth reauthentication round trip. */
   startProviderReauth(provider: AuthProvider): Promise<void>;
 }
 
@@ -49,12 +37,6 @@ function failureStatus(error: unknown): number | null {
   return null;
 }
 
-/**
- * Map a `DELETE /me/identities/{identityId}` rejection. `403 reauth_required`
- * asks for a fresh reauthentication, `404` means the identity is already gone,
- * and `409 last_sign_in_method` refuses to remove the only sign-in method. A
- * surfaced `csrf_rejected` and every server error degrade to `unavailable`.
- */
 export function mapUnlinkError(error: unknown): UnlinkFailure {
   const status = failureStatus(error);
   const code = (error as { data?: ErrorEnvelope } | null)?.data?.error?.code;

@@ -1,7 +1,3 @@
-// The Pick/Reading drop zone: the banner-to-zone gap, the progress track's
-// unfilled color on the blue zone, and the zone keeping the same height in
-// both states (docs/design/linkedin-import-ui.md, "Pick state" and "Reading
-// state").
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { describe, expect, it } from 'vitest';
 

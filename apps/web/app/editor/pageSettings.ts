@@ -4,13 +4,6 @@ import { editorControlsCopy } from '../i18n/editor-controls';
 
 import type { CustomizationDelta } from './commands';
 
-/**
- * Page size and margin choices for the PDF and print. The schema stores
- * margins in millimetres, 0–40 per axis, and an absent margin renders as
- * 15 mm (docs/design/templates/print.md). Letter pages show inches; the
- * stored value stays in millimetres.
- */
-
 export type PageFormat = Customization['pageFormat'];
 export type PageMargin = NonNullable<Customization['spacing']['pageMargin']>;
 export type MarginChoice = 'narrow' | 'normal' | 'wide' | 'custom';
@@ -18,7 +11,6 @@ export type MarginAxis = 'x' | 'y';
 
 const DEFAULT_MARGIN_MM = 15;
 export const MAX_MARGIN_MM = 40;
-/** Consumer printers cannot print closer than this to the paper edge. */
 export const PRINTABLE_EDGE_MM = 5;
 const MM_PER_INCH = 25.4;
 
@@ -47,23 +39,16 @@ export function unitFor(format: PageFormat): 'mm' | 'in' {
   return format === 'letter' ? 'in' : 'mm';
 }
 
-/** The margins the renderer uses: the stored pair, else 15 mm each. */
 export function effectiveMargin(margin: PageMargin | undefined): PageMargin {
   return margin ?? { x: DEFAULT_MARGIN_MM, y: DEFAULT_MARGIN_MM };
 }
 
-/** The preset whose value both axes equal, else custom. */
 export function marginChoice(margin: PageMargin | undefined): MarginChoice {
   const { x, y } = effectiveMargin(margin);
   if (x !== y) return 'custom';
   return MARGIN_PRESETS.find(({ mm }) => mm === x)?.choice ?? 'custom';
 }
 
-/**
- * The deltas that select a preset. Normal clears the stored pair, because
- * absence already renders as 15 mm. Custom changes nothing by itself; it
- * reveals the per-axis fields.
- */
 export function presetDeltas(
   choice: MarginChoice,
   margin: PageMargin | undefined,
@@ -82,10 +67,6 @@ export function presetDeltas(
   ];
 }
 
-/**
- * The deltas for one custom axis. A document with no stored pair gets both
- * axes, because the schema requires x and y together.
- */
 export function axisDeltas(
   axis: MarginAxis,
   mm: number,
@@ -107,15 +88,10 @@ function round(value: number, places: number): number {
   return Math.round(value * factor) / factor;
 }
 
-/** A stored millimetre value in the page's unit, for display and input. */
 export function toDisplay(mm: number, format: PageFormat): number {
   return format === 'letter' ? round(mm / MM_PER_INCH, 2) : round(mm, 2);
 }
 
-/**
- * A typed value in the page's unit, back in millimetres; undefined when it is
- * not a number within 0–40 mm.
- */
 export function fromDisplay(
   value: number,
   format: PageFormat,
@@ -125,7 +101,6 @@ export function fromDisplay(
   return mm >= 0 && mm <= MAX_MARGIN_MM ? mm : undefined;
 }
 
-/** A millimetre length written in the page's unit, e.g. "15 mm", "0.6 in". */
 export function formatLength(mm: number, format: PageFormat): string {
   return format === 'letter'
     ? `${round(mm / MM_PER_INCH, 1)} in`

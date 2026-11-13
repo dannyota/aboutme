@@ -1,6 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** Keep probes from changing a sheet or a retained screenshot's position. */
 export async function preserveScreenScroll(
   page: Page, assertion: () => Promise<void>,
 ): Promise<void> {
@@ -49,7 +48,6 @@ interface TextMeasurement {
   failures: TextFailure[];
 }
 
-/** Inspect clips before scrolling can reveal a hidden descendant. */
 export async function rejectAncestorClipping(
   text: Locator, scrolling: readonly string[],
 ): Promise<void> {
@@ -61,7 +59,6 @@ export async function rejectAncestorClipping(
   }
 }
 
-/** Keep the shared screen and print callers' result shape stable. */
 export async function measureTextContainment(
   container: Locator,
   verticalContainer?: string,
@@ -73,7 +70,6 @@ export async function measureTextContainment(
   };
 }
 
-/** Inspect Range boxes without trying to reconstruct painted glyph bounds. */
 export async function measureScreenText(
   container: Locator, verticalContainer?: string,
   scrolling: readonly string[] = [],
@@ -170,7 +166,6 @@ export async function measureScreenText(
         if (!checked.has(element)) {
           checked.add(element);
           const delta = element.scrollWidth - element.clientWidth;
-          // Decoration may overflow a non-clipping ancestor and stay visible.
           const bounds = element === parent
             || /^(hidden|clip|auto|scroll)$/u.test(css.overflowX);
           if (bounds && !allowedX && delta > 1) {
@@ -218,8 +213,6 @@ export async function measureScreenText(
             fail('clip', path(ancestor.node), rect, clip, 'y', dy, allowance);
           }
         }
-        // A shared font's Range bottom has a constant offset from its baseline.
-        // Wrapped fragments and explicit breaks are distinct logical lines.
         const baseline = rect.bottom - (rect.height - fontSize) / 2;
         for (const previous of lines) {
           const gap = Math.abs(previous.baseline - baseline);

@@ -1,7 +1,3 @@
-// The gate's one inline <style>, in literal token values
-// (docs/design/viewer-analytics/sign-in-to-view.md, "Gate page"). It holds
-// no url(, @import, or expression(, so it passes the same unsafe-inline-style
-// rule Go applies to style attributes.
 export const GATE_STYLE = [
   'body{margin:0;background:#F5F8FF;',
   'font-family:"Be Vietnam Pro",Inter,system-ui,sans-serif;}',

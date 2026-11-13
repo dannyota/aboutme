@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-// render-brand.mjs: render the brand art in docs/brand/src/*.html to the
-// JPEGs and PNGs the README, GitHub, the site icons, and the site's Open
-// Graph tags use.
-//
-// Each source names its own size and output in a meta tag:
-//   <meta name="brand-render" content="width=1200;height=630;out=../x.jpg">
-// `out` is relative to docs/brand/src. A `.jpg` renders opaque; a `.png`
-// keeps a transparent background unless the source adds `opaque=1`. The art
-// is plain HTML and CSS set in the vendored Be Vietnam Pro, so the tokens and
-// the fonts match the product (docs/brand/README.md, ADR 0020).
-//
-// Usage, from apps/web:  node scripts/render-brand.mjs [name ...]
-// With names (e.g. banner-dark og-image-vi), only those sources render.
-// It uses the Playwright Chromium the e2e suite installs; set
-// BRAND_CHROMIUM to a Chromium binary to use another one.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -70,7 +55,6 @@ try {
     });
     await page.goto(pathToFileURL(path).href);
     if (html.includes('Be Vietnam Pro')) {
-      // A missing font would silently fall back to Inter or system-ui.
       const loaded = await page.evaluate(async () => {
         await document.fonts.load('800 20px "Be Vietnam Pro"');
         return document.fonts.check('800 20px "Be Vietnam Pro"');

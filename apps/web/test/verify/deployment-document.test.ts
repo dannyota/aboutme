@@ -24,13 +24,9 @@ import {
   verifyImageCommand,
 } from '../../app/utils/verifyView';
 
-// Fixture edits below reach into nested JSON by path; typing each shape
-// would add nothing a failing decode does not already show.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
 
-// Documents for every page state (docs/design/deployment-transparency/
-// page.md#states), shared with the browser specs.
 const fixtureRoot = resolve(
   import.meta.dirname,
   '../../e2e/fixtures/deployment',
@@ -46,7 +42,6 @@ function decoded(value: unknown): DeploymentDocument {
   return result.document;
 }
 
-/** The server clock 30 seconds after the fixture was observed. */
 function freshNow(value: Record<string, unknown>): number {
   return Date.parse(value.observed_at as string) + 30_000;
 }
@@ -286,7 +281,6 @@ describe('staleness from the response clock', () => {
   });
 
   it('makes a cached copy stale by its Age, whatever the browser clock', () => {
-    // The visitor's clock may say anything; only Date plus Age counts.
     const now = responseTime('Fri, 02 Oct 2026 03:14:35 GMT', '600');
     expect(pageState(
       { kind: 'decoded', result: { kind: 'document', document } },

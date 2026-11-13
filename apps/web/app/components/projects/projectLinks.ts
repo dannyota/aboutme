@@ -10,10 +10,6 @@ import {
 } from '../../editor/resumeApi';
 import { canonicalJSON } from './projectDocument';
 
-// Linking a library project to a resume from the project screens
-// (docs/design/ui/projects.md "Showing a project on resumes"). A link is a
-// resume write, so it carries the resume revision, not the project's.
-
 export type LinkFailure
   = | 'session-lost'
     | 'csrf-rejected'
@@ -73,7 +69,6 @@ function failureOf(status: number, code: unknown): LinkResult {
   return failed('unavailable');
 }
 
-/** The link route through the generated client. */
 export function createProjectLinksApi(
   options: ApiClientOptions = {},
 ): ProjectLinksApi {
@@ -101,7 +96,6 @@ export function createProjectLinksApi(
 }
 
 export interface ProjectLinker {
-  /** The account's resumes, with the revision each one has now. */
   resumes(): Promise<ResumeListResult>;
   link(
     ownerId: string,
@@ -117,17 +111,10 @@ export interface ProjectLinkerDeps {
   readonly uuid: () => string;
 }
 
-// Nothing was written, or the outcome is unknown, so the same request may be
-// sent again with its key and the server answers it at most once.
 const RETRYABLE = new Set<string>([
   'session-lost', 'csrf-rejected', 'busy', 'rate-limited', 'unavailable',
 ]);
 
-/**
- * Links a project to one resume of `ownerId`. The resume's current revision
- * is read when the action starts; a revision mismatch reads it again and
- * repeats the link once. A key is kept only to retry the identical request.
- */
 export function createProjectLinker(
   deps: Partial<ProjectLinkerDeps> & Pick<ProjectLinkerDeps, 'auth'>,
 ): ProjectLinker {
@@ -188,8 +175,6 @@ export function createProjectLinker(
   };
 }
 
-// The titles of resumes a new project could not join, kept in memory until
-// its editor opens and shows them once.
 const unlinked = new Map<string, readonly string[]>();
 
 export function rememberUnlinked(

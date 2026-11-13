@@ -1,6 +1,3 @@
-// One entry row: the label covers the whole text column, at least 44 px
-// high, so the whole row is the hit area (docs/design/
-// linkedin-import-ui.md, "Review state").
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { describe, expect, it } from 'vitest';
 

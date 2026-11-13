@@ -1,32 +1,15 @@
-// Sign-in-to-view join invite: timing, placement, and 90-day close
-// persistence (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
-// Runs only on a `sign_in` resume's page and never touches viewer data.
-
-/** The invite never appears before this, however fast the reader scrolls. */
 const JOIN_INVITE_MIN_DELAY_MS = 5_000;
-/** Or after this much visible time, whichever comes first. */
 const JOIN_INVITE_VISIBLE_MS = 20_000;
-/** Or once the reader has scrolled this far down the page. */
 const JOIN_INVITE_SCROLL_FRACTION = 0.6;
 
 export const JOIN_INVITE_STORAGE_KEY = 'aboutme.joinInvite.closedAt';
 const JOIN_INVITE_CLOSED_MS = 90 * 24 * 60 * 60 * 1000;
 
-/** Wide enough, with enough right margin, for the fixed card placement. */
 const CARD_MIN_VIEWPORT_WIDTH = 1_024;
 const CARD_MIN_RIGHT_MARGIN = 360;
 
-/**
- * The element that holds the resume's box: it caps the measure and centers
- * itself (ResumeDocument.vue). The page root spans the viewport, so its own
- * right edge never leaves a margin.
- */
 const JOIN_INVITE_MEASURE_SELECTOR = '.public-measure';
 
-/**
- * The bar's 56 px content band plus the bottom safe area; the page adds
- * bottom padding of this same total while the bar shows.
- */
 const JOIN_INVITE_BAR_BAND = '56px';
 export const JOIN_INVITE_BAR_HEIGHT
   = `calc(${JOIN_INVITE_BAR_BAND} + env(safe-area-inset-bottom))`;
@@ -41,11 +24,6 @@ export interface JoinInviteTimingOptions {
   readonly clearTimeout?: typeof clearTimeout;
 }
 
-/**
- * Calls `onShow` once, the first time the timing condition is met, never
- * before the 5 s floor. Returns a function that stops watching; calling it
- * after `onShow` has already fired is a no-op.
- */
 export function startJoinInviteTiming(
   onShow: () => void,
   options: JoinInviteTimingOptions = {},
@@ -152,12 +130,6 @@ export function startJoinInviteTiming(
   return stop;
 }
 
-/**
- * The card placement needs a wide viewport and at least 360 px of right
- * margin beside the resume; every other viewport gets the bottom bar. The
- * margin is measured from the resume's own box inside `root`, and from
- * `root` itself when it holds none.
- */
 export function joinInvitePlacement(
   root: Element,
   window_: Window = window,
@@ -169,7 +141,6 @@ export function joinInvitePlacement(
   return rightMargin >= CARD_MIN_RIGHT_MARGIN ? 'card' : 'bar';
 }
 
-/** Whether a close in this browser is still within its 90-day window. */
 export function isJoinInviteClosed(
   storage: Pick<Storage, 'getItem'> = localStorage,
   now: () => number = Date.now,
@@ -185,7 +156,6 @@ export function isJoinInviteClosed(
   }
 }
 
-/** Records a close (or following the link) for 90 days in this browser. */
 export function recordJoinInviteClosed(
   storage: Pick<Storage, 'setItem'> = localStorage,
   now: () => number = Date.now,
@@ -197,7 +167,6 @@ export function recordJoinInviteClosed(
   }
 }
 
-/** Below this viewport width the bar drops its body text. */
 export const JOIN_INVITE_BAR_TEXT_MIN_WIDTH = 360;
 
 export const JOIN_INVITE_ENTRANCE = {
@@ -208,11 +177,6 @@ export const JOIN_INVITE_ENTRANCE = {
   options: { duration: 200, easing: 'ease-out' },
 } as const;
 
-// The public page bar's Button fill, Button border, Credit text, and Button
-// shadow (docs/design/public-page-theme.md#tokens), plus the application
-// primary action fill and its label (DESIGN.md, "Join invite"). The invite
-// follows the page's scheme with these, so a light card never sits on a dark
-// page.
 interface JoinInvitePalette {
   readonly surface: string;
   readonly border: string;
@@ -243,11 +207,6 @@ const DARK_PALETTE: JoinInvitePalette = {
 export const joinInvitePalette = (dark: boolean): JoinInvitePalette =>
   dark ? DARK_PALETTE : LIGHT_PALETTE;
 
-/**
- * Whether the public page the invite sits on shows its dark roles: the
- * page's `data-color-scheme` is `dark`, or `system` while the viewer prefers
- * dark. Reads the viewer's preference in the browser only; nothing leaves it.
- */
 export function joinInviteIsDark(
   root: Element,
   window_: Window = window,
@@ -259,7 +218,6 @@ export function joinInviteIsDark(
     && window_.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
 }
 
-/** Inline geometry: the public page loads no stylesheet for the invite. */
 export function joinInviteContainerStyle(
   placement: JoinInvitePlacement,
   dark = false,

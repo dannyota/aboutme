@@ -44,9 +44,6 @@ const copy = computed(() => editorControlsCopy[locale.value].controls);
 const notice = ref(false);
 const moved = ref({ main: [] as string[], sidebar: [] as string[] });
 
-// The panel's search box: filters the preset list by name, style, sample
-// tag, role, and filter chip, in either site language (DESIGN.md, editor
-// Templates panel).
 const search = ref('');
 const searchInput = ref<{ $el?: HTMLElement } | null>(null);
 const visibleTemplates = computed(() => TEMPLATES.filter((preset) => {
@@ -63,9 +60,6 @@ function onSearchKeydown(event: KeyboardEvent): void {
   }
 }
 
-// The visible message updates immediately and may quote the query; the
-// role="status" line is announced to screen readers only once typing
-// pauses, with stable wording that never repeats the query back.
 const SEARCH_ANNOUNCE_DELAY_MS = 500;
 const announcedCount = ref<number | null>(null);
 let announceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -95,15 +89,11 @@ const searchMessage = computed(() => {
   }
   return copy.value.templateSearchNoMatch(search.value);
 });
-// Visible and immediate: tracks the filtered list with no delay. The
-// no-match case is covered by searchMessage above instead.
 const searchCount = computed(() => {
   const count = visibleTemplates.value.length;
   if (search.value.trim() === '' || count === 0) return '';
   return copy.value.templateSearchCount(count);
 });
-// Screen-reader only and debounced, so a live region does not announce
-// every keystroke.
 const searchStatus = computed(() => {
   if (search.value.trim() === '' || announcedCount.value === null) return '';
   return announcedCount.value === 0
@@ -152,7 +142,6 @@ function apply(preset: Readonly<TemplatePreset>): void {
   }
 }
 
-/** Names the sections a template moved to the other column. */
 function movedSections(before: ResumeSnapshot, after: ResumeSnapshot): {
   main: string[];
   sidebar: string[];
@@ -191,8 +180,6 @@ function status(): string {
   }
 }
 
-// A switch keeps the owner's page format and sets the date format from the
-// resume language, so only the date format can change.
 function hasFormatWarning(): boolean {
   const current = record.value?.current;
   if (current === undefined) return false;
@@ -270,8 +257,6 @@ function assertNever(value: never): never {
     >
       {{ searchMessage }}
     </p>
-    <!-- Screen readers get the count from the status line below, after the
-      typing pause; hiding this copy stops browse mode reading it twice. -->
     <p
       v-if="searchCount !== ''"
       aria-hidden="true"

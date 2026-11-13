@@ -59,14 +59,8 @@ type EditorActionResult
         | 'stopped';
     };
 
-/** An action the person started in an editor, carried across its awaits. */
 export interface EditorContinuation {
-  /** The editor's verified owner when the action started. */
   readonly ownerId: string;
-  /**
-   * Whether the action may still act: the editor is open on the same
-   * record and its owner is the one signed in.
-   */
   current(): boolean;
 }
 
@@ -83,7 +77,6 @@ export interface ResumeEditorActions {
   readonly record: ComputedRef<ResumeRecord | undefined>;
   createEntityId(): string;
   edit(intent: AtomicCommandIntent): EditorActionResult;
-  /** Binds an action starting now to this editor; null when it cannot act. */
   continuation(): EditorContinuation | null;
   applyTemplate(preset: Readonly<TemplatePreset>): TemplateActionResult;
   undoTemplate(): TemplateRecoveryResult;
@@ -101,17 +94,12 @@ export interface ResumeEditorActions {
     confirmation: ConflictConfirmation,
   ): Promise<void>;
   resumeAfterAuth(): Promise<void>;
-  /** Goes on with the queue once the session is the owner's again. */
   wake(recovered: boolean): Promise<void>;
   refresh(): Promise<ResumeReadResult>;
   refreshConditional?: (
     etag?: ParentETag,
   ) => Promise<ResumeConditionalReadResult>;
   discard(): void;
-  /**
-   * Ends background reads and writes when the editor closes, and drops the
-   * work it has not saved: the resume opens afresh next time.
-   */
   stop(): void;
   readonly downloadPdf: PdfDownloadController;
   readonly publish: PublishController;
@@ -124,12 +112,7 @@ export interface ResumeEditorActionDeps {
   auth: ReturnType<typeof useAuth>;
   runtime: EditorRuntime;
   providerLogin?: ComputedRef<boolean>;
-  /**
-   * The verified owner of the editor's work, captured when it opened. Left
-   * out, the first signed-in user the actions see is kept.
-   */
   ownerId?: string;
-  /** Checks the session again for Resume after sign-in, if the page does. */
   recheckSession?: () => Promise<void>;
 }
 
@@ -158,9 +141,6 @@ export function createResumeEditorActions(
     kind: 'blocked',
     reason,
   });
-  // Local edits are captured for the editor's own owner for its whole life,
-  // so typing while the session cannot be checked is queued, not refused.
-  // Sending still waits for that owner to be the one signed in.
   let retainedOwner = deps.ownerId;
   const owner = (): string | undefined =>
     (retainedOwner ??= deps.auth.user.value?.id);
@@ -174,9 +154,6 @@ export function createResumeEditorActions(
     if (pendingOwner !== undefined && pendingOwner !== ownerId) return null;
     return { state, ownerId };
   };
-  // A closed editor queues or changes nothing: work a late callback queued
-  // would stay in the shared store and be sent by the next editor on the
-  // resume.
   let stopped = false;
   const edit = (intent: AtomicCommandIntent): EditorActionResult => {
     if (stopped) return blocked('stopped');

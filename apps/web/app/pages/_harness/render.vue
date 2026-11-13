@@ -52,9 +52,7 @@ type RenderMode = 'continuous' | 'paged' | 'public';
 type FixtureId = 'full' | 'vn-full' | PrintFixtureId
   | `print-probe-${PrintProbe}`;
 
-// Bound from script: vue-tsc misreads `//` in a static component attribute
-// as a comment, which breaks type checking of this template
-// (vuejs/language-tools#6322).
+// vue-tsc misreads `//` in a static attribute (vuejs/language-tools#6322).
 const HOME_HREF = 'https://aboutme.vn/';
 
 const route = useRoute();
@@ -83,8 +81,6 @@ function requireAllowedKeys(allowed: ReadonlySet<string>): void {
 }
 
 const isCorpus = queryKeys.includes('payload');
-// The sign-in gate as the public render worker draws it
-// (docs/design/viewer-analytics/sign-in-to-view.md#gate).
 const isGate = !isCorpus && route.query.mode === 'gate';
 const GATE_PROVIDER_SETS: ReadonlyMap<string, readonly PublicGateProvider[]>
   = new Map<string, readonly PublicGateProvider[]>([
@@ -98,13 +94,10 @@ const GATE_MESSAGES: ReadonlySet<string> = new Set([
 let gateLng: 'en' | 'vi' = 'en';
 let gateProviders: readonly PublicGateProvider[] = [];
 let gateMessage: PublicGateMessage = 'none';
-// The public project pages as the public render worker draws them
-// (docs/design/ui/project-pages.md), in the owner's color scheme.
 const isProject = !isCorpus
   && (route.query.mode === 'project-list' || route.query.mode === 'project');
 let projectList: ProjectListFixture | undefined;
 let projectDetail: ProjectFixture | undefined;
-// The join invite the real client mounts on a sign_in resume's page.
 let inviteHref: '/register' | '/login' | undefined;
 const corpusHtml = ref('');
 const corpusReady = ref<'raw' | 'sanitized'>();
@@ -141,7 +134,6 @@ if (isCorpus) {
   const message = singleton('message', true) ?? '';
   if (!GATE_MESSAGES.has(message)) badQuery();
   gateMessage = message as PublicGateMessage;
-  // The gate wears Be Vietnam Pro from the print-fonts sheet.
   selectedFontId = 'be-vietnam-pro';
   useHead({
     htmlAttrs: { class: 'harness-gate', lang: gateLng },
@@ -162,8 +154,6 @@ if (isCorpus) {
   } else {
     projectDetail = projectFixture(pageLng, pageScheme);
   }
-  // The pages link the fonts and their own stylesheet, as the worker's
-  // pages do, so they need no inline CSS.
   selectedFontId = 'be-vietnam-pro';
   useHead({
     htmlAttrs: {
@@ -195,15 +185,10 @@ if (isCorpus) {
           ? 'public'
           : badQuery();
   mode = resolvedMode;
-  // A non-golden fixture asks for the same print CSS the golden print
-  // fixtures always carry, so a real PDF can be produced from it too.
   const requestedPrint = singleton('print');
   if (requestedPrint !== undefined) {
     if (requestedPrint !== '1' || resolvedMode !== 'continuous') badQuery();
   }
-  // The harness scales its paper with the same ScaledSheet component
-  // EditorPreview.vue uses for the paged preview, so a `zoom` query behaves
-  // like the editor's own display scale rather than CSS `zoom`.
   const requestedZoom = singleton('zoom');
   if (requestedZoom !== undefined) {
     if (resolvedMode !== 'paged' || !/^\d+(\.\d+)?$/u.test(requestedZoom)) {
@@ -261,7 +246,6 @@ if (isCorpus) {
   } else if (fixture === 'vn-full') {
     resumeDocument = structuredClone(vnFullSource) as Resume;
   } else {
-    // Gallery samples and filler: sample-<templateId>-<vi|en>, filler-<vi|en>.
     const sample = await loadSampleFixture(fixture) ?? badQuery();
     resumeDocument = sample.document;
     sampleLanguage = sample.lng;
@@ -278,8 +262,6 @@ if (isCorpus) {
       badQuery();
     }
     const times = Number(requestedRepeat);
-    // Repeats every section's entries to build multi-page content for the
-    // print check.
     const content = resumeDocument.content as unknown as Record<
       string, { entries: Array<{ id: string }> }>;
     for (const section of Object.values(content)) {
@@ -297,14 +279,7 @@ if (isCorpus) {
   const resolvedDocument = resumeDocument ?? badQuery();
   const renderLanguage: 'vi' | 'en'
     = sampleLanguage ?? (fixture === 'full' ? 'en' : 'vi');
-  // A gallery sample already wears its own template, settings and all
-  // (documents.ts `galleryDocument`); applying the template again here would
-  // reset the one setting a sample may override, its date format
-  // (docs/design/vietnam-tech-resumes.md, Dates). Filler and the full/vn-full
-  // fixtures have no settings of their own, so they still take the preset.
   if (!fixture.startsWith('sample-') && selectedProbe === undefined) {
-    // The fixture owner already prints on the preset's paper; a template
-    // switch keeps the owner's page format.
     resolvedDocument.customization = applyTemplate(
       {
         ...resolvedDocument.customization,
@@ -315,25 +290,18 @@ if (isCorpus) {
       renderLanguage,
     );
   }
-  // Every preset prints on A4 (colors.md §4), so a screenshot cell that
-  // needs Letter coverage asks for it explicitly, after the template applies.
   const requestedPaper = singleton('paper');
   if (requestedPaper !== undefined) {
     if (requestedPaper !== 'a4' && requestedPaper !== 'letter') badQuery();
     resolvedDocument.customization.pageFormat
       = requestedPaper as Resume['customization']['pageFormat'];
   }
-  // Presets never set text alignment (ADR 0013), so a justify cell asks
-  // for it after the template applies, with body text that wraps.
   const requestedAlign = singleton('align');
   if (requestedAlign !== undefined) {
     if (requestedAlign !== 'justify') badQuery();
     resolvedDocument.customization.font.textAlign = 'justify';
     withWrappingBody(resolvedDocument);
   }
-  // A dark or Match device public page, as the owner's color scheme sets it
-  // (docs/design/public-page-theme.md). Presets never set it, so a cell asks
-  // for it after the template applies; only the public page shows it.
   const requestedScheme = singleton('scheme');
   if (requestedScheme !== undefined) {
     if (
@@ -345,8 +313,6 @@ if (isCorpus) {
     resolvedDocument.customization.colorScheme
       = requestedScheme as Resume['customization']['colorScheme'];
   }
-  // The public page measure is about line length, so its cells need body
-  // text that wraps.
   if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
   const requestedLinks = singleton('links');
   if (requestedLinks !== undefined) {
@@ -374,7 +340,6 @@ if (isCorpus) {
   };
 }
 
-// The public page as the public render worker draws it, with its PDF link.
 const publicResume = computed(() => {
   if (mode !== 'public' || resumeDocument === undefined) return undefined;
   const source = resumeDocument;
@@ -452,14 +417,12 @@ if (printMode && resumeDocument !== undefined) {
 
 if (selectedProbe !== undefined
   && ['heading', 'orphan', 'widow'].includes(selectedProbe)) {
-  // Leave one body line before the A4 content boundary.
   useHead({ style: [{ textContent: '.harness-paper::before {'
     + ' content: "BOUNDARY-ANCHOR"; display: block;'
     + ' height: calc(267mm - 24px); font: 16px/24px "Be Vietnam Pro"; }' }] });
 }
 
 if (selectedProbe === 'breakable-entry') {
-  // Leave room for several lines of the twelve-line entry on page one.
   useHead({ style: [{ textContent: '.harness-paper::before {'
     + ' content: "BOUNDARY-ANCHOR"; display: block;'
     + ' height: calc(267mm - 144px); font: 16px/24px "Be Vietnam Pro"; }' }] });
@@ -469,8 +432,6 @@ const fontsSettled = ref(false);
 const harnessRoot = ref<HTMLElement>();
 const inviteMounted = ref(false);
 
-// The real client mounts the invite from the page root, outside the page's
-// own app, with the document language (public-resume.client.ts).
 function mountJoinInvite(href: '/register' | '/login'): void {
   const root = harnessRoot.value;
   if (root === undefined) return;
@@ -515,7 +476,6 @@ onMounted(async () => {
     >
       Harness-only raw CSP probe
     </p>
-    <!-- The raw branch is a closed harness-only CSP probe. -->
     <!-- eslint-disable vue/no-v-html -->
     <div
       class="rich-text"
@@ -615,8 +575,6 @@ onMounted(async () => {
 </template>
 
 <style>
-/* :where() keeps the original (0,0,1) specificity per selector, so print
-   and template rules that override this background still win. */
 html:where(:not(.harness-gate)),
 :where(html:not(.harness-gate)) body {
   margin: 0;
@@ -632,14 +590,11 @@ html:where(:not(.harness-gate)),
   background: #fff;
 }
 
-/* A print fixture's paper spans the page. The resume is a size container,
-   so a shrink-to-fit paper would collapse to zero width around it. */
 body.resume-print .harness-render,
 body.resume-print .harness-paper {
   width: auto;
 }
 
-/* The public page spans the viewport, like the real public <main>. */
 .harness-render[data-render-mode="public"] {
   width: auto;
 }

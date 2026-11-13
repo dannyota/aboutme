@@ -79,13 +79,9 @@ const sessionCheck = createSessionCheck({
   authState: auth.authState,
   retryAfterMs: () => auth.retryAfterMs.value,
 });
-/** The verified owner of the editor's work, kept for the page's lifetime. */
 let owner: string | undefined;
-/** Since its owner's last answer the session was in doubt or not theirs. */
 let recovering = false;
-/** The page closed: a read it started no longer touches the store. */
 let disposed = false;
-/** Counts the session's answers; a newer one supersedes an older one. */
 let answers = 0;
 
 function stopRealtime(): void {
@@ -97,16 +93,9 @@ async function load(): Promise<void> {
   if (loadingStarted.value || id === '') return;
   loadingStarted.value = true;
   const result = await api.read(id);
-  // A page that closed meanwhile leaves the store to the one now open.
   if (disposed) return;
   switch (result.kind) {
     case 'complete':
-      // Nothing re-initializes a record that holds unsent or in-flight work:
-      // the store refuses, and the page adopts the read into that record
-      // instead. This page's first complete read is its only initialize;
-      // once the editor is open, a failed session check keeps the record
-      // and checks again instead of reading it afresh. Closing the editor
-      // drops its unsent work, so a resume opened again starts afresh.
       if (!store.initialize(result.accepted)) {
         store.adoptCompleteRead(id, result.accepted);
       }
@@ -206,33 +195,20 @@ function startRealtime(): void {
   realtime.start();
 }
 
-/** Opens the editor's actions for its verified owner, once. */
 function openActions(ownerId: string): void {
   if (actions.value !== undefined) return;
   actions.value = useResumeEditor(id, undefined, {
     ownerId,
-    // Resume after sign-in asks for an answer; settleSession acts on it.
     recheckSession: () => auth.refresh(),
   });
 }
 
-/**
- * The one place an answer about the session acts, whether or not an earlier
- * check failed; nothing else starts or stops the session check or starts
- * realtime. The owner's session opens or wakes the editor; an error keeps
- * the open editor and checks again; any other answer, signed out or another
- * person, holds the editor's work for its owner and sends none of it. Its
- * one await is the first load: if a newer answer came meanwhile, the opened
- * editor settles against the session as it is now instead.
- */
 async function settleSession(state: AuthState): Promise<void> {
   const answer = ++answers;
-  // A check in flight passes through `loading`; only an answer acts.
   if (state === 'loading') return;
   if (state === 'error') {
     stopRealtime();
     recovering = true;
-    // Only a first load shows Editor unavailable.
     if (loadState.value === 'ready') sessionCheck.start();
     else loadState.value = 'failed';
     return;
@@ -243,8 +219,6 @@ async function settleSession(state: AuthState): Promise<void> {
     owner = userId;
     openActions(userId);
     if (loadState.value === 'ready') {
-      // Every drain that stopped for authentication goes on; after doubt or
-      // a lost session the queue reads the resume first.
       const recovered = recovering || record.value?.sessionLost === true;
       void actions.value?.wake(recovered);
     } else {
@@ -266,16 +240,9 @@ async function settleSession(state: AuthState): Promise<void> {
     loadState.value = 'ready';
     return;
   }
-  // A first-visit anonymous state is the shared route guard's job
-  // (middleware/signed-in.global.ts); only a session that changed after
-  // this page opened is this page's own to send on.
   if (owner !== undefined) await navigateTo('/login');
 }
 
-/**
- * Try again under Editor unavailable: the session is checked again, and its
- * answer opens the editor's actions and loads the resume.
- */
 function retryFirstLoad(): void {
   loadingStarted.value = false;
   loadState.value = 'loading';
@@ -283,9 +250,6 @@ function retryFirstLoad(): void {
 }
 
 onMounted(() => {
-  // While this page lives, a page leaving the resume behind, such as the
-  // resume list, leaves the record and its queued work to this editor,
-  // whose queue then sends what it holds at once, on its own schedule after.
   store.markEditorOpen(id, true);
   watch(() => store.handoversFor(id), () => void actions.value?.wake(false));
   watch(auth.authState, (state) => void settleSession(state), {

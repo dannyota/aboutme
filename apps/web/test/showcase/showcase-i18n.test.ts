@@ -5,9 +5,6 @@ import { shellCopy } from '../../app/i18n/shell';
 import { showcaseCopy } from '../../app/i18n/showcase';
 import { parityViolations } from '../support/localizationSource';
 
-// Every string quotes the Copy tables of docs/design/showcase.md, in both
-// languages, with the same shape (AC-SHOW-002, 007).
-
 describe('showcase catalog', () => {
   it('keeps both languages in the same shape and nonempty', () => {
     expect(parityViolations(showcaseCopy.vi, showcaseCopy.en, 'showcase', {
@@ -244,7 +241,6 @@ describe('showcase catalog', () => {
     expect(vi.countHead(1)).toBe('1 CV');
     expect(vi.countHead(1234567)).toBe('1.234.567 CV');
     expect(vi.countLine(0)).toBe('0 CV · sớm nhất trước');
-    // The line is the head, a middle dot, and the tail: one source.
     for (const copy of [en, vi]) {
       expect(copy.countLine(42))
         .toBe(`${copy.countHead(42)} · ${copy.countTail}`);

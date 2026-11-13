@@ -9,10 +9,6 @@ import {
 } from '../../app/composables/useShowcase';
 import type { ShowcaseQuery } from '../../app/lib/showcaseQuery';
 
-// The listing loader: a request that outlasts its timeout fails, a newer
-// request wins over an older answer, and leaving the page cancels the read
-// (docs/design/showcase.md, Delivery, caching, and revocation).
-
 const listing = (slug: string) => ({
   items: [{
     slug,

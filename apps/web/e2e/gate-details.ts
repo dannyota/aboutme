@@ -28,7 +28,6 @@ export const GATE_TYPE: readonly StyleRule[] = [
 ];
 
 export async function expectGateProviders(page: Page): Promise<void> {
-  // The gate offers text links, with no provider artwork.
   await expect(page.locator('.gate-provider svg'), 'Gate provider artwork.')
     .toHaveCount(0);
 }
@@ -86,7 +85,6 @@ export async function expectInviteText(
   );
 }
 
-/** Freeze before navigation so the invite mounts at this exact timer origin. */
 export async function pauseInviteClock(page: Page): Promise<void> {
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));

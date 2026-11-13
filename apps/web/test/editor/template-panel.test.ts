@@ -165,8 +165,6 @@ describe('TemplatePanel', () => {
       props: { actions: actionsFor(applyTemplate), record },
     });
 
-    // The fixture is an English resume on `MM/YYYY`, so every template
-    // would change its date format to `Mon YYYY`.
     expect(record.current.metadata.lng).toBe('en');
     expect(record.current.document.customization.dateFormat).toBe('MM/YYYY');
     const preset = TEMPLATES[0]!;
@@ -373,15 +371,12 @@ describe('TemplatePanel search', () => {
       .setValue('BrSE');
     await nextTick();
 
-    // The visible count tracks the list with no delay.
     expect(wrapper.get('[data-testid="template-search-count"]').text())
       .toBe('1 template');
-    // Screen readers read the count once, from the status line, not twice.
     expect(
       wrapper.get('[data-testid="template-search-count"]')
         .attributes('aria-hidden'),
     ).toBe('true');
-    // The screen-reader-only live region waits for typing to pause.
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('');
     expect(wrapper.get('[data-testid="template-search-status"]').classes())

@@ -36,11 +36,6 @@ export interface PrintEnvelopeV2 extends PrintEnvelopeFields {
 
 export type PrintEnvelope = PrintEnvelopeV1 | PrintEnvelopeV2;
 
-/**
- * A link-preview card job: the closed envelope of
- * docs/design/link-previews.md, "Preview card". It has no document, so no
- * contact detail can reach the card.
- */
 export interface PrintCardEnvelope {
   version: 1;
   kind: 'card';
@@ -48,7 +43,6 @@ export interface PrintCardEnvelope {
   card: PreviewCardContent;
 }
 
-/** What the print route renders: a resume document or a preview card. */
 export type PrintJobEnvelope = PrintEnvelope | PrintCardEnvelope;
 
 export const isCardEnvelope = (
@@ -213,13 +207,10 @@ const plainObject = (value: unknown): value is Record<string, unknown> =>
 const exactKeys = (value: Record<string, unknown>, keys: string): boolean =>
   Object.keys(value).sort().join(',') === keys;
 
-// Go's unicode.IsSpace: the Unicode White_Space characters.
 const WHITE_SPACE = '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a'
   + '\\u2028\\u2029\\u202f\\u205f\\u3000]';
 const EDGE_SPACE = new RegExp(`^${WHITE_SPACE}|${WHITE_SPACE}$`, 'u');
 
-// Card text is normalized by the server: 1 to 160 code points, well formed,
-// no control character, and no space at either end.
 const validCardText = (value: unknown): value is string | null =>
   value === null
   || (
@@ -231,7 +222,6 @@ const validCardText = (value: unknown): value is string | null =>
     && !EDGE_SPACE.test(value)
   );
 
-// Public slugs: 4 to 30 of a-z, 0-9, and single inner hyphens.
 const validSlug = (value: unknown): value is string =>
   typeof value === 'string'
   && value.length >= 4
@@ -260,8 +250,6 @@ const validCardPhoto = (value: unknown): boolean => {
     && unitFraction(crop.height, false);
 };
 
-// The card envelope is closed at both levels: an unknown key anywhere, such
-// as a contact or document field, rejects it.
 const decodeCardEnvelope = (
   envelope: Record<string, unknown>,
 ): PrintCardEnvelope => {

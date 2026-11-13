@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * The "verify it yourself" card (docs/design/deployment-transparency/
- * visual.md, "Verify it yourself"): a component selector and two commands
- * with live values, plus links to the JSON document, the transparency log,
- * the build run, and the GitHub CLI manual.
- */
 import { ExternalLink, File } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';

@@ -18,8 +18,6 @@ const allowlist = JSON.parse(
 const fixture = (name: string) =>
   JSON.parse(readFileSync(join(root, "fixtures", name), "utf8"));
 
-// Store fixtures cover aggregate rules that JSON Schema cannot express, so this
-// top-level scan skips their directory.
 const names = readdirSync(join(root, "fixtures"), { withFileTypes: true })
   .filter((entry) => entry.isFile())
   .map((entry) => entry.name);
@@ -128,7 +126,6 @@ describe("resume schema", () => {
     ).toBe(true);
   });
 
-  // Structured links admit only the schemes in the sanitizer allowlist.
   describe("link scheme allowlist (hole 3: dangerous URL schemes)", () => {
     const withEmployerLink = (employerLink: string) => ({
       ...fixture("minimal.json"),
@@ -150,22 +147,20 @@ describe("resume schema", () => {
       ["https://example.com", true],
       ["mailto:ada@example.com", true],
       ["tel:+84900000000", true],
-      ["", true], // explicitly cleared — still draft-permissive
-      ["javascript:alert(1)", false], // direct hostile scheme
-      ["JavaScript:alert(1)", false], // mixed-case scheme obfuscation
-      ["JAVASCRIPT:alert(1)", false], // upper-case scheme obfuscation
-      ["   javascript:alert(1)", false], // leading-whitespace obfuscation
-      ["data:text/html,<script>alert(1)</script>", false], // data: scheme
-      ["//evil.example.com/phish", false], // protocol-relative
-      ["HTTPS://example.com", false], // only exact lowercase "https://" is accepted
-      ["vbscript:msgbox(1)", false], // another non-allowlisted scheme
+      ["", true],
+      ["javascript:alert(1)", false],
+      ["JavaScript:alert(1)", false],
+      ["JAVASCRIPT:alert(1)", false],
+      ["   javascript:alert(1)", false],
+      ["data:text/html,<script>alert(1)</script>", false],
+      ["//evil.example.com/phish", false],
+      ["HTTPS://example.com", false],
+      ["vbscript:msgbox(1)", false],
     ])("%s -> valid=%s", (value, expected) => {
       expect(validate(withEmployerLink(value))).toBe(expected);
     });
   });
 
-  // URL-valued contact chips admit https only. Email, phone, location, and
-  // custom values remain draft-permissive and unconstrained here.
   describe("personalDetail.value URL-scheme allowlist (finding C1: dangerous URL schemes in contact chips)", () => {
     const withDetail = (type: string, value: string) => ({
       ...fixture("minimal.json"),
@@ -183,16 +178,16 @@ describe("resume schema", () => {
     });
 
     it.each([
-      ["website", "javascript:alert(document.cookie)", false], // direct hostile scheme
+      ["website", "javascript:alert(document.cookie)", false],
       ["website", "data:text/html,<script>alert(1)</script>", false],
-      ["website", "//evil.example.com", false], // protocol-relative
+      ["website", "//evil.example.com", false],
       ["linkedin", "javascript:alert(1)", false],
       ["github", "vbscript:msgbox(1)", false],
-      ["twitter", "JavaScript:alert(1)", false], // mixed-case scheme obfuscation
-      ["website", "mailto:ada@example.com", false], // type-appropriate subset: https-only here, unlike $defs/link
+      ["twitter", "JavaScript:alert(1)", false],
+      ["website", "mailto:ada@example.com", false],
       ["website", "https://ada.example.com", true],
-      ["linkedin", "", true], // explicitly cleared — still draft-permissive
-      ["email", "javascript:alert(1)", true], // out-of-scope type (item 1): value format intentionally left unconstrained
+      ["linkedin", "", true],
+      ["email", "javascript:alert(1)", true],
     ])("type=%s value=%s -> valid=%s", (type, value, expected) => {
       expect(validate(withDetail(type, value))).toBe(expected);
     });
@@ -206,8 +201,6 @@ describe("resume schema", () => {
         `link pattern missing allowlisted scheme "${scheme}"`,
       ).toContain(`${scheme}:`);
     }
-    // And nothing extra: every scheme literal in the pattern must be one the
-    // allowlist actually names.
     const schemesInPattern = [...linkPattern.matchAll(/([a-z]+):/g)].map(
       (m) => m[1],
     );
@@ -219,12 +212,11 @@ describe("resume schema", () => {
     }
   });
 
-  // Bound layout arrays so distinct padding cannot evade uniqueItems.
   it("rejects a layout.sections array padded past maxItems (DoS guard)", () => {
     const doc = fixture("minimal.json");
     const tooMany = Array.from({ length: 25 }, (_, i) =>
       String.fromCharCode(97 + i),
-    ); // "a".."y", 25 distinct lowercase-letter keys
+    );
     expect(tooMany).toHaveLength(25);
     expect(
       validate({
@@ -237,8 +229,6 @@ describe("resume schema", () => {
     ).toBe(false);
   });
 
-  // Drafts keep personal details and section metadata optional or clearable.
-  // See docs/design/data.md#draft-and-publish-validation.
   describe("draft permissiveness is not weakened by the new rules", () => {
     it('accepts a cleared fullName ("") and an absent details array', () => {
       expect(
@@ -277,8 +267,6 @@ describe("resume schema", () => {
     });
   });
 
-  // JSON Schema patterns must compile under Go's RE2 engine. The portable
-  // pattern checks shape; the store validators reject ".." traversal.
   describe("photo.key pattern (finding NEW-M3: RE2 portability)", () => {
     const withPhotoKey = (key: string) => ({
       ...fixture("minimal.json"),
@@ -295,29 +283,22 @@ describe("resume schema", () => {
     it.each([
       ["resumes/ada/photo-original.jpg", true],
       ["resumes/018f0000-0000-7000-8000-000000000001/photo-original.jpg", true],
-      ["https://evil.example.com/x.jpg", false], // ":" not in the allowed character set
+      ["https://evil.example.com/x.jpg", false],
       ["a\nb.jpg", false],
-      [".hidden.jpg", false], // first character must be alphanumeric
-      ["_x.jpg", false], // first character must be alphanumeric
+      [".hidden.jpg", false],
+      ["_x.jpg", false],
     ])("%s -> valid=%s", (key, expected) => {
       expect(validate(withPhotoKey(key))).toBe(expected);
     });
 
-    // "a/../b.jpg" isolates the store-only traversal rule because it passes
-    // the schema's first-character and safe-character checks.
     it('no longer rejects a mid-string ".." at the schema layer (moved to the store layer)', () => {
       expect(validate(withPhotoKey("a/../b.jpg"))).toBe(true);
     });
   });
 
-  // New fields begin optional so an addition does not invalidate stored
-  // documents. These assertions pin the required-key sets. See
-  // docs/design/data.md#draft-and-publish-validation.
   describe("customization additions: pageMargin, surface, header", () => {
     const customization = () => fixture("minimal.json").customization;
 
-    // Merge one nested customization level for spacing, colors, layout, and
-    // the top-level header object.
     const withCustomization = (
       patch: Record<string, unknown>,
     ): Record<string, unknown> => {
@@ -382,14 +363,10 @@ describe("resume schema", () => {
       });
     });
 
-    // spacing.pageMargin uses bounded millimetres; both axes are present or
-    // the whole object is absent.
     describe("spacing.pageMargin", () => {
       const margin = (value: unknown) =>
         withCustomization({ spacing: { pageMargin: value } });
 
-      // Build the case matrix from schema bounds. The shape assertion below
-      // reports a missing declaration directly.
       const axis = custProps().spacing.properties?.pageMargin?.properties?.x;
       const min: number = axis?.minimum ?? 0;
       const max: number = axis?.maximum ?? 40;
@@ -414,24 +391,23 @@ describe("resume schema", () => {
       });
 
       it.each([
-        [{ x: 15, y: 15 }, true], // the renderer's current fixed value, stated
-        [{ x: min, y: min }, true], // explicit zero is legal, like spacing.* at 0
-        [{ x: max, y: max }, true], // at limit
-        [{ x: 12.5, y: 20 }, true], // fractional millimetres
-        [{ x: max + 1, y: 15 }, false], // over the limit on x
-        [{ x: 15, y: max + 1 }, false], // over the limit on y
-        [{ x: min - 1, y: 15 }, false], // negative margin
-        [{ x: 15 }, false], // both axes required once the object is present
+        [{ x: 15, y: 15 }, true],
+        [{ x: min, y: min }, true],
+        [{ x: max, y: max }, true],
+        [{ x: 12.5, y: 20 }, true],
+        [{ x: max + 1, y: 15 }, false],
+        [{ x: 15, y: max + 1 }, false],
+        [{ x: min - 1, y: 15 }, false],
+        [{ x: 15 }, false],
         [{ y: 15 }, false],
-        [{ x: 15, y: 15, z: 15 }, false], // additionalProperties: false
-        [{ x: "15", y: "15" }, false], // millimetres are numbers, not strings
-        ["15mm", false], // not a scalar with a unit suffix
+        [{ x: 15, y: 15, z: 15 }, false],
+        [{ x: "15", y: "15" }, false],
+        ["15mm", false],
       ])("%o -> valid=%s", (value, expected) => {
         expect(validate(margin(value))).toBe(expected);
       });
     });
 
-    // colors.surface and layout.surfaceTarget define a fillable region.
     describe("colors.surface and layout.surfaceTarget", () => {
       it("colors.surface reuses the hexColor $def", () => {
         expect(custProps().colors.properties.surface).toEqual({
@@ -442,8 +418,8 @@ describe("resume schema", () => {
 
       it.each([
         ["#f4f4f5", true],
-        ["#FFF", false], // hexColor is six digits
-        ["", false], // colors have no cleared form
+        ["#FFF", false],
+        ["", false],
         ["rebeccapurple", false],
       ])("colors.surface %s -> valid=%s", (value, expected) => {
         expect(
@@ -472,9 +448,6 @@ describe("resume schema", () => {
         ).toBe(expected);
       });
 
-      // The degradation rule is a RENDER rule, so the schema must accept
-      // every combination the renderer has to degrade — a document the user
-      // can reach by toggling columns must never become unsaveable.
       it('accepts surfaceTarget "sidebar" with columns: 1 (degrades to "none" at render time, never an error)', () => {
         expect(
           validate(
@@ -510,7 +483,6 @@ describe("resume schema", () => {
       });
     });
 
-    // customization.header controls the resume top block, not section headings.
     describe("customization.header", () => {
       const header = (value: unknown) => withCustomization({ header: value });
       const complete = {
@@ -531,7 +503,6 @@ describe("resume schema", () => {
           "inline",
           "stacked",
         ]);
-        // Lucide has no filled icon family.
         expect(def.properties.iconStyle.enum).toEqual(["none", "outline"]);
       });
 
@@ -540,12 +511,12 @@ describe("resume schema", () => {
         [{ ...complete, align: "center" }, true],
         [{ ...complete, detailsLayout: "stacked" }, true],
         [{ ...complete, iconStyle: "none" }, true],
-        [{ ...complete, iconStyle: "solid" }, false], // unsupported icon family
-        [{ align: "left", detailsLayout: "inline" }, false], // missing iconStyle
-        [{ align: "left", iconStyle: "outline" }, false], // missing detailsLayout
-        [{ detailsLayout: "inline", iconStyle: "outline" }, false], // missing align
+        [{ ...complete, iconStyle: "solid" }, false],
+        [{ align: "left", detailsLayout: "inline" }, false],
+        [{ align: "left", iconStyle: "outline" }, false],
+        [{ detailsLayout: "inline", iconStyle: "outline" }, false],
         [{}, false],
-        [{ ...complete, style: "uppercase" }, false], // heading's field, not header's
+        [{ ...complete, style: "uppercase" }, false],
         [{ ...complete, align: "right" }, false],
         [{ ...complete, align: "justify" }, false],
         [{ ...complete, detailsLayout: "grid" }, false],
@@ -555,7 +526,6 @@ describe("resume schema", () => {
       });
     });
 
-    // The similar names govern distinct regions; both descriptions must say so.
     describe("heading vs header: both descriptions state the distinction", () => {
       it("heading's description scopes it to section headings and points at header", () => {
         const description: string = custProps().heading.description;

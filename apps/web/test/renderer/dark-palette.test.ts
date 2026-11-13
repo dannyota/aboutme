@@ -13,9 +13,6 @@ import {
   useResumeStyles,
 } from '../../app/components/resume/useResumeStyles';
 
-// docs/design/public-page-theme.md, "Template mapping": the ground, body,
-// heading, and link on the ground for each preset's own colors, plus the
-// tinted region's dark surface and where it sits.
 const MAPPING: Record<
   string,
   readonly [string, string, string, string, string?, string?]
@@ -146,7 +143,6 @@ describe('dark palette rule', () => {
             at('meta', 4.5);
             at('link', 4.5);
             at('accent-text', 4.5);
-            // The name uses the heading role at the 3:1 large-text floor.
             at('heading', 3);
             at('accent-solid', 3);
             expect(
@@ -158,12 +154,8 @@ describe('dark palette rule', () => {
               `${id} ${label} tag label`,
             ).toBeGreaterThanOrEqual(4.5);
             at('rule', 1.5);
-            // The measured minimums across all twenty presets on every
-            // surface (docs/design/public-page-theme.md, "Template mapping").
             at('body', 10.1);
             at('meta', 6.4);
-            // Level and tag fills are the accent-solid role, measured against
-            // the surface they sit on, not the empty track.
             at('accent-solid', 3.5);
           }
         },
@@ -219,7 +211,6 @@ describe('dark palette rule', () => {
     );
     expect(styles.header!['--dark-color-heading']).not.toBe('#ffffff');
     expect(styles.header!['--dark-color-heading']).toBe('#b4c9e6');
-    // The light scheme keeps its shortcut: failing ink on a dark band is white.
     expect(styles.header!['--color-heading']).toBe('#ffffff');
   });
 });
@@ -242,7 +233,6 @@ describe('dark source colors', () => {
     const tinted = darkColors({ ...colors, background: '#fbf3e6' });
     expect(neutral.background).toMatch(HEX);
     expect(tinted.background).not.toBe(neutral.background);
-    // A tinted paper carries a trace of its warm hue.
     const [red, , blue] = [1, 3, 5].map((index) =>
       Number.parseInt(tinted.background.slice(index, index + 2), 16));
     expect(red!).toBeGreaterThan(blue!);

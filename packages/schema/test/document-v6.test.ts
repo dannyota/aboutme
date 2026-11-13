@@ -4,9 +4,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-// Document v6 adds the optional projectId on project entries only. It names a
-// private library project of the same account (docs/design/projects.md).
-
 const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));

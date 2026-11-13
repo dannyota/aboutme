@@ -34,7 +34,6 @@ export type PasswordAuthError
     | 'not-found'
     | 'unavailable';
 
-/** Rejection value for every password operation. */
 export class PasswordAuthFailure extends Error {
   readonly kind: PasswordAuthError;
   readonly issue?: PasswordIssue;
@@ -47,13 +46,7 @@ export class PasswordAuthFailure extends Error {
   }
 }
 
-/** `login`'s result: which of the two closed success outcomes occurred. */
 interface PasswordLoginResult {
-  /**
-   * True when the account is enrolled in a second factor: no session was
-   * issued, only the pending cookie. False is the existing unenrolled `204`
-   * with a session.
-   */
   secondFactorRequired: boolean;
 }
 
@@ -105,11 +98,6 @@ function failureIssue(error: unknown): unknown {
     ?.issue;
 }
 
-/**
- * Map an unknown thrown value to the closed failure union. Only the exact
- * status/code pairs declared by the password endpoints match; everything else
- * degrades to `unavailable`.
- */
 function mapPasswordAuthError(error: unknown): PasswordAuthFailure {
   const status = failureStatus(error);
   const code = failureCode(error);
@@ -138,8 +126,6 @@ function mapPasswordAuthError(error: unknown): PasswordAuthFailure {
   if (exact(429, 'rate_limited', 'rate-limited')) {
     return new PasswordAuthFailure('rate-limited');
   }
-  // A switched-off route (password sign-up while it is closed) answers the
-  // uniform not-found response.
   if (status === 404) return new PasswordAuthFailure('not-found');
   if (exact(503, 'authentication_unavailable', 'unavailable')) {
     return new PasswordAuthFailure('unavailable');
@@ -166,12 +152,6 @@ interface SecondFactorRequiredBody {
   data?: { secondFactorRequired?: unknown };
 }
 
-/**
- * `POST /auth/password/login`. Reads the status code rather than trusting
- * body shape alone: only an exact `202` with `secondFactorRequired: true`
- * counts as the pending outcome, so a `204` (or anything unexpected) never
- * accidentally routes an unenrolled login into the pending flow.
- */
 async function login(
   input: { email: string; password: string; next?: string },
 ): Promise<PasswordLoginResult> {

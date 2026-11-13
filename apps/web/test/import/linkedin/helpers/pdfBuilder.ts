@@ -1,13 +1,7 @@
-/**
- * Builds small PDF files in test code, for the hostile inputs the design
- * lists (docs/design/linkedin-import.md, "Tests"). Nothing here is committed
- * as a binary.
- */
 import { deflateSync } from 'node:zlib';
 
 const encoder = new TextEncoder();
 
-/** A PDF object body: text, or text around a binary stream. */
 export type PdfObject = string | { dict: string; stream: Uint8Array };
 
 function concat(parts: readonly Uint8Array[]): Uint8Array {
@@ -21,10 +15,6 @@ function concat(parts: readonly Uint8Array[]): Uint8Array {
   return out;
 }
 
-/**
- * Objects are numbered from 1 in order; object 1 must be the catalog unless
- * `trailer` names another root.
- */
 export function buildPdf(
   objects: readonly PdfObject[],
   trailer = '/Root 1 0 R',
@@ -71,7 +61,6 @@ export function stream(content: string, compress = false):
     : { dict: '', stream: bytes };
 }
 
-/** Escapes text for a PDF literal string. */
 function pdfString(text: string): string {
   return `(${text.replace(/[\\()]/g, (c) => `\\${c}`)})`;
 }
@@ -89,17 +78,12 @@ export interface TextPdfOptions {
   mediaBox?: string;
 }
 
-/**
- * A document of `pages` pages, each drawing `lines` with Helvetica (a
- * standard font pdf.js maps to Unicode without loading anything).
- * `extraCatalog` adds entries such as an OpenAction or AcroForm.
- */
+// pdf.js maps the standard Helvetica font to Unicode without loading it.
 export function textPdf(
   pages: readonly (readonly TextLineSpec[])[],
   options: TextPdfOptions = {},
 ): Uint8Array {
   const pageCount = pages.length;
-  // 1 catalog, 2 pages, 3 font, then per page: page, content; then extras.
   const firstPage = 4;
   const kids = pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(' ');
   const objects: PdfObject[] = [
@@ -125,7 +109,6 @@ export function textPdf(
   return buildPdf(objects);
 }
 
-/** A Blob over the bytes, as a picked file would be. */
 export function pdfBlob(bytes: Uint8Array): Blob {
   return new Blob([bytes], { type: 'application/pdf' });
 }

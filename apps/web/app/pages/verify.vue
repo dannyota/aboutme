@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * /verify: "Kiểm chứng phiên bản đang chạy" / "Verify what's running"
- * (docs/design/deployment-transparency/page.md and visual.md). Server-
- * rendered with the title, lead, and limits; the browser fills the status,
- * chain, and components after mount.
- */
 import { computed, nextTick, provide, ref } from 'vue';
 import { useDeploymentDocument } from '@/composables/useDeploymentDocument';
 import type {
@@ -33,7 +27,7 @@ useSiteSeo(() => ({
 }));
 
 const announcement = ref('');
-// Clearing first lets a second identical message announce again.
+// Clear first: a live region announces only changes (WAI-ARIA).
 provide(verifyAnnounceKey, (message: string) => {
   announcement.value = '';
   void nextTick(() => {

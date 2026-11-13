@@ -134,7 +134,6 @@ describe('PDF sidebar backgrounds', () => {
     'accepts tint behind a level bar on first page %s',
     async (firstPage) => {
       const background = { ...layout.sidebar, top: firstPage ? 50 : 10 };
-      // A three-point full-width level bar crosses the first probe row.
       const bar = { ...background,
         top: firstPage ? 85 : 55, bottom: firstPage ? 88 : 58 };
       const text = page([item('SIDEBAR-ENTRY-12', 140,

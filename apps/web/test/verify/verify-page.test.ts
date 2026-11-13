@@ -49,12 +49,10 @@ function fixture(name: string): Fixture {
   ) as Fixture;
 }
 
-/** 30 seconds after `observed_at`: fresh under the 3-minute staleness rule. */
 function freshDate(document: Fixture): string {
   return new Date(Date.parse(document.observed_at) + 30_000).toUTCString();
 }
 
-/** A minute after `stale_after`, so the staleness rule fires. */
 function pastStaleDate(document: Fixture): string {
   return new Date(Date.parse(document.stale_after) + 60_000).toUTCString();
 }
@@ -71,7 +69,6 @@ registerEndpoint('/.well-known/deployment.json', (event) => {
   return mockResponse.body;
 });
 
-/** Serves a named fixture, fresh unless `date` or `status` overrides it. */
 function serveFixture(
   name: string,
   overrides: { readonly status?: number; readonly date?: string } = {},
@@ -603,7 +600,6 @@ describe('verify page commands', () => {
     const command1 = wrapper.get('[data-testid="verify-command-1"]');
     await command1.get('[aria-label="Sao chép lệnh 1"]').trigger('click');
     const copied = writeText.mock.calls[0]?.[0] as string;
-    // The jq filter's `$n` stays; only the `$ ` prompt is left out.
     expect(copied.startsWith('curl -fsS https://aboutme.vn/')).toBe(true);
     expect(copied).not.toContain('$ ');
   });

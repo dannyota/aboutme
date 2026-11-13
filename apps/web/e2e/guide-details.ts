@@ -4,7 +4,6 @@ import { expectStyleRules, type StyleRule } from './screen-expectations';
 import { expectSvg, lucideExpectation, visiblePaint } from './screen-paint';
 import { expectGuideProse } from './guide-prose';
 
-// Approved instruction copy: docs/design/mcp-guide-copy.md.
 export const GUIDE_DETAILS = {
   vi: {
     web: [

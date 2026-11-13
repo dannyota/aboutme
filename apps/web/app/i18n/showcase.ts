@@ -1,7 +1,3 @@
-// The community showcase page (/showcase) in both site languages. Every
-// string quotes the Copy tables of docs/design/showcase.md. Counts format
-// through Intl.NumberFormat in the interface language (1.234 in Vietnamese,
-// 1,234 in English; docs/design/ui/showcase.md, Count line).
 import type {
   ShowcaseItemLanguage,
   ShowcaseRole,
@@ -60,13 +56,11 @@ const NUMBER_FORMAT: Record<Locale, Intl.NumberFormat> = {
   en: new Intl.NumberFormat('en-US'),
 };
 
-/** "1 resume", "1,234 resumes". */
 function englishCount(total: number): string {
   const noun = total === 1 ? 'resume' : 'resumes';
   return `${NUMBER_FORMAT.en.format(total)} ${noun}`;
 }
 
-/** "1.234 CV". */
 function viCountHead(total: number): string {
   return `${NUMBER_FORMAT.vi.format(total)} CV`;
 }

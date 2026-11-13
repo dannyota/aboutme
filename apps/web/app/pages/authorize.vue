@@ -34,18 +34,8 @@ function queryString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-// The loopback hosts a native client redirects to on this computer
-// (docs/design/mcp-client-compatibility.md, rule 6).
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
-/**
- * The line naming where approval returns, from the validated request's
- * `redirect_uri`, the same value the decision submits. Shown only once the
- * consent view has loaded. An `https` redirect names its host; a loopback
- * `http` redirect says it returns to an app on this computer
- * (docs/design/mcp-client-compatibility.md, rule 6). Anything else, or a
- * value `new URL` cannot parse, shows no line.
- */
 const returnToLine = computed(() => {
   if (view.value === null || authorizeQuery === null) return null;
   const redirectURI = authorizeQuery.redirect_uri;
