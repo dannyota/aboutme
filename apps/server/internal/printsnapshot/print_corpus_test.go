@@ -9,18 +9,8 @@ import (
 	"testing"
 )
 
-// printCorpusPath holds the print snapshot envelopes of the entry point
-// corpus: the exact Marshal bytes for the linked resume (version 2) and for
-// the resume with no available project (version 1). The publicapi test
-// TestResumeLinksRenderCorpusIsCurrent writes it, with -update, from the same
-// snapshots as the resume page corpus, so the two always describe the same
-// resumes.
 const printCorpusPath = "testdata/print-envelopes.json"
 
-// TestPrintEnvelopeCorpusMatchesEnvelopeType proves each corpus envelope
-// decodes into Envelope's fields with no unknown field and encodes back to
-// the same bytes, and keeps the version rule Marshal enforces. The document
-// is held raw: the public resume types encode but have no decoder.
 func TestPrintEnvelopeCorpusMatchesEnvelopeType(t *testing.T) {
 	raw, err := os.ReadFile(printCorpusPath)
 	if err != nil {
@@ -87,8 +77,6 @@ func TestPrintEnvelopeCorpusMatchesEnvelopeType(t *testing.T) {
 	}
 }
 
-// rawDocumentShape is a new value of a struct with Envelope's fields and
-// tags, except that Document holds its JSON undecoded.
 func rawDocumentShape() reflect.Value {
 	typ := reflect.TypeFor[Envelope]()
 	fields := make([]reflect.StructField, typ.NumField())
@@ -102,8 +90,6 @@ func rawDocumentShape() reflect.Value {
 	return reflect.New(reflect.StructOf(fields)).Elem()
 }
 
-// visibleEntriesOf lists the entry ids of the project sections a raw
-// document's layout shows.
 func visibleEntriesOf(t *testing.T, document []byte) []string {
 	t.Helper()
 	var shown struct {

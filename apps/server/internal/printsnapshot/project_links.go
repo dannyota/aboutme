@@ -11,7 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
-// WithProjectLinks is the only builder of version 2.
 func WithProjectLinks(envelope Envelope, origin publicresume.PublicOrigin, slug string, links []publicresume.ProjectLink) (Envelope, error) {
 	if envelope.Version != 1 || len(envelope.ProjectLinks) != 0 {
 		return Envelope{}, errInvalid

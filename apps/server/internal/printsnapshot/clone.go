@@ -123,9 +123,6 @@ func cloneHeader(source *schema.HeaderClass) *schema.HeaderClass {
 	return out
 }
 
-// cloneCustomization copies the customization for the frozen print document.
-// It drops colorScheme: the print worker renders the light page and never
-// sees a scheme (docs/design/public-page-theme.md).
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
 	out.ColorScheme = nil

@@ -39,7 +39,6 @@ type PublicRenderRequest struct {
 	ProjectsURL  string             `json:"projectsUrl,omitempty"`
 }
 
-// EntryProjectLink binds the title anchor with data-project-entry="{EntryID}" to URL.
 type EntryProjectLink struct {
 	EntryID string `json:"entryId"`
 	URL     string `json:"url"`

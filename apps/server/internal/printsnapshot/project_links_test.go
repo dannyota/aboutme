@@ -17,9 +17,6 @@ const (
 	linkedSecondURL = "https://aboutme.example/ada-lovelace/projects/beacon"
 )
 
-// linkedOwnerEnvelope is a version-1 envelope of a resume with a profile
-// section and a laid-out project section holding two visible entries and a
-// hidden one, plus a project section the layout leaves out.
 func linkedOwnerEnvelope(t *testing.T) Envelope {
 	t.Helper()
 	name, lng, hidden := "Ada", "en", true
@@ -51,8 +48,6 @@ func withLinks(envelope Envelope, version int, links map[string]string) Envelope
 	return envelope
 }
 
-// Version 2 adds projectLinks after the version-1 fields and nothing else,
-// and version 1 stays byte for byte what it was.
 func TestMarshalVersionTwoAddsOnlyProjectLinks(t *testing.T) {
 	plain := linkedOwnerEnvelope(t)
 	v1, err := Marshal(plain)
@@ -136,7 +131,6 @@ func TestMarshalRefusesProjectLinksThatBreakTheVersionRule(t *testing.T) {
 	}
 }
 
-// A sidebar project section's entries are visible too.
 func TestMarshalAcceptsSidebarProjectEntries(t *testing.T) {
 	envelope := linkedOwnerEnvelope(t)
 	envelope.Document.Customization.Layout.Sections.Sidebar = []string{"unlisted"}
@@ -145,8 +139,6 @@ func TestMarshalAcceptsSidebarProjectEntries(t *testing.T) {
 	}
 }
 
-// FromOwner and FromPublic still freeze version 1 with no map; only a later
-// caller sets version 2.
 func TestSnapshotsStillFreezeVersionOne(t *testing.T) {
 	envelope := linkedOwnerEnvelope(t)
 	if envelope.Version != 1 || envelope.ProjectLinks != nil {

@@ -25,9 +25,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// updateGolden rewrites the entry point corpora from the current code, for
-// an intentional contract change. It keeps each resume case's html and the
-// corpus styleVersion, which the renderer side writes.
 var updateGolden = flag.Bool("update", false, "rewrite testdata/resume-links-render.json and ../printsnapshot/testdata/print-envelopes.json from the current code")
 
 const (
@@ -35,8 +32,6 @@ const (
 	printCorpusPath       = "../printsnapshot/testdata/print-envelopes.json"
 )
 
-// resumeLinksCorpus is the shared resume page corpus for the project entry
-// points (docs/design/projects-contract.md "Entry points on the resume page").
 type resumeLinksCorpus struct {
 	StyleVersion string            `json:"styleVersion,omitempty"`
 	Cases        []resumeLinksCase `json:"cases"`
@@ -48,36 +43,26 @@ type resumeLinksCase struct {
 	HTML     string          `json:"html,omitempty"`
 }
 
-// resumeLinksSource is one corpus case before it is stored: a schema sample,
-// the row's settings, which sample project entries link which library
-// project, and a change to the entries.
 type resumeLinksSource struct {
 	name, sample, lng string
 	revision          int64
 	discoverable      bool
 	download          bool
-	// linked holds the project slug each sample project entry links, by
-	// entry index; "" leaves an entry unlinked.
-	linked  []string
-	prepare func(entries []schema.ProjectEntry)
-	// print adds the case's print snapshot envelope to the print corpus.
-	print bool
+	linked            []string
+	prepare           func(entries []schema.ProjectEntry)
+	print             bool
 }
 
 func resumeLinksSources() []resumeLinksSource {
 	hidden := true
 	return []resumeLinksSource{
 		{
-			// The first entry keeps its own link; the second has none, so the
-			// project link is the only link its title gets.
 			name: "en-two-linked-entries", sample: "engineer-compact.en.json", lng: "en", revision: 7, discoverable: true, download: true,
 			linked:  []string{"vn-address-kit", "nextjs-perf-checklist"},
 			prepare: func(entries []schema.ProjectEntry) { entries[1].Link = nil },
 			print:   true,
 		},
 		{
-			// The second entry links a project but is hidden, so the map
-			// holds only the first.
 			name: "en-hidden-linked-entry", sample: "engineer-compact.en.json", lng: "en", revision: 8, discoverable: true, download: true,
 			linked:  []string{"vn-address-kit", "nextjs-perf-checklist"},
 			prepare: func(entries []schema.ProjectEntry) { entries[1].IsHidden = &hidden },
@@ -93,8 +78,6 @@ func resumeLinksSources() []resumeLinksSource {
 	}
 }
 
-// resumeLinksSourceDocument reads the source's sample, links its project
-// entries to library projects, and applies the source's change.
 func resumeLinksSourceDocument(t *testing.T, source resumeLinksSource) schema.Resume {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "packages", "schema", "samples", source.sample))
@@ -122,9 +105,6 @@ func resumeLinksSourceDocument(t *testing.T, source resumeLinksSource) schema.Re
 	return document
 }
 
-// statementLinkContext is the link context the snapshot statement returns
-// for document: each project entry that is not hidden and names a library
-// project, with that project's slug.
 func statementLinkContext(t *testing.T, document schema.Resume, source resumeLinksSource) json.RawMessage {
 	t.Helper()
 	type storedLink struct {
@@ -144,8 +124,6 @@ func statementLinkContext(t *testing.T, document schema.Resume, source resumeLin
 	return raw
 }
 
-// readResumeLinksSnapshot stores the source and reads it through the public
-// reader, as every public representation does.
 func readResumeLinksSnapshot(t *testing.T, source resumeLinksSource) publicresume.Snapshot {
 	t.Helper()
 	document := resumeLinksSourceDocument(t, source)
@@ -179,8 +157,6 @@ func readResumeLinksSnapshot(t *testing.T, source resumeLinksSource) publicresum
 	return snapshot
 }
 
-// resumeLinksRequest builds the resume page render request as the HTML route
-// does, with a stored card, and adds the entry points.
 func resumeLinksRequest(t *testing.T, snapshot publicresume.Snapshot) directrender.PublicRenderRequest {
 	t.Helper()
 	origin := mustPublicOrigin(t)
@@ -197,10 +173,6 @@ func withEntryPoints(request directrender.PublicRenderRequest, links []publicres
 	return request
 }
 
-// printEnvelope freezes the snapshot as the public PDF does, and adds its
-// project links through printsnapshot.WithProjectLinks: version 2 when a
-// project is available, version 1 otherwise. The PDF route does not add the
-// links yet.
 func printEnvelope(t *testing.T, snapshot publicresume.Snapshot) []byte {
 	t.Helper()
 	envelope, err := printsnapshot.FromPublic(snapshot, nil, "")
@@ -218,9 +190,6 @@ func printEnvelope(t *testing.T, snapshot publicresume.Snapshot) []byte {
 	return encoded
 }
 
-// encodeCorpusJSON writes value as the corpus files are written: no HTML
-// escaping, two-space indent and a final newline, or compact when indent is
-// "".
 func encodeCorpusJSON(t *testing.T, value any, indent string) []byte {
 	t.Helper()
 	var out bytes.Buffer
@@ -238,8 +207,6 @@ func encodeCorpusJSON(t *testing.T, value any, indent string) []byte {
 	return out.Bytes()
 }
 
-// encodePrintCorpus keeps each envelope as the exact bytes Marshal returned,
-// so the corpus holds what the render queue digests and stores.
 func encodePrintCorpus(t *testing.T, names []string, envelopes [][]byte) []byte {
 	t.Helper()
 	var out bytes.Buffer
@@ -259,8 +226,6 @@ func encodePrintCorpus(t *testing.T, names []string, envelopes [][]byte) []byte 
 	return out.Bytes()
 }
 
-// readCorpusFile returns path's bytes, or nil when it is missing and the run
-// rewrites it.
 func readCorpusFile(t *testing.T, path string) []byte {
 	t.Helper()
 	current, err := os.ReadFile(path)
@@ -270,11 +235,6 @@ func readCorpusFile(t *testing.T, path string) []byte {
 	return current
 }
 
-// TestResumeLinksRenderCorpusIsCurrent proves both entry point corpora are
-// what the current code builds from the schema samples: the resume page
-// render requests, and the print snapshot envelopes of the linked and the
-// unlinked case. Regenerate both with
-// go test ./internal/publicapi -run '^TestResumeLinksRenderCorpusIsCurrent$' -update.
 func TestResumeLinksRenderCorpusIsCurrent(t *testing.T) {
 	currentResume := readCorpusFile(t, resumeLinksCorpusPath)
 	var existing resumeLinksCorpus
@@ -312,7 +272,7 @@ func TestResumeLinksRenderCorpusIsCurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else if !bytes.Equal(file[0], file[1]) {
-			t.Errorf("%s is stale; rerun with -update after reviewing the change", path)
+			t.Errorf("%s is stale; after reviewing the change run: go test ./internal/publicapi -run '^TestResumeLinksRenderCorpusIsCurrent$' -update", path)
 		}
 	}
 }
