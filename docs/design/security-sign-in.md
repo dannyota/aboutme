@@ -69,6 +69,9 @@ the same opaque session as a provider login. Password add or change requires
 recent reauthentication and atomically creates one fresh non-lineage current
 session while revoking every old session. Reset revokes every session and never
 logs in. Password removal and account-email change are out of scope.
+Registration, reset, and password add or change hash with Argon2id and run the
+HIBP range lookup before their transaction opens, so no transaction or user-row
+lock waits on hashing or the network.
 
 `PASSWORD_REGISTRATION_ENABLED=false` turns off email-and-password sign-up: the
 register route is not registered and returns the uniform not-found response.
@@ -107,7 +110,8 @@ apply the same rule to `next`:
 
 The browser holds only the 256-bit opaque `__Host-oauth-tx` handle. The database
 stores its SHA-256 hash. A transaction is consumed atomically once and expires
-after ten minutes.
+after ten minutes. The handle, `state`, PKCE verifier, and OIDC nonce are
+separate random draws, so no value sent to the provider reveals the handle.
 
 A privileged transaction binds the user who started it, not one concrete session
 ID. Its callback must authenticate a live session for that same user; a session
@@ -117,7 +121,10 @@ the concrete session that completes the callback.
 The transaction cookie is `Secure; HttpOnly; SameSite=Lax; Path=/` with no
 `Domain`. Every callback clears it on success or failure. Provider access and ID
 tokens exist only for the code exchange and profile fetch, then are discarded;
-no provider refresh token is stored.
+no provider refresh token is stored. Every provider request (OIDC discovery,
+JWKS, token exchange, and profile and email reads) goes through one bounded HTTP
+client whose timeout [budgets](budgets.md) sets, passed through the context to
+every stage.
 
 OAuth start methods are purpose-specific:
 
