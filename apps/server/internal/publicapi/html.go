@@ -77,7 +77,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		observeHTMLView(dependencies.Views, request, snapshot.ResumeID)
 
 		// The pass check runs after admission and before any public cache

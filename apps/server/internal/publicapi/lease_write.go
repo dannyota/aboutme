@@ -55,6 +55,23 @@ func writeWhileLeased(w http.ResponseWriter, lease cancelHooks, write func()) er
 	return nil
 }
 
+// releaseAfterFlush flushes w under lease's cancel hook and then releases
+// the lease. Every leased handler defers it in place of lease.Release, so
+// whatever the handler wrote, an error response included, leaves Go before
+// the lease is released; Go's server would otherwise send a short buffered
+// response only after the handler returns. A revocation during a flush
+// blocked on a slow reader sets the write deadline, so the flush returns;
+// a lease already revoked sets it at once, so its connection closes rather
+// than delivering after release. A panicking handler is not flushed, which
+// would commit a 200 header for a response it never wrote.
+func releaseAfterFlush(w http.ResponseWriter, lease *publicstate.Lease) {
+	defer lease.Release()
+	if recovered := recover(); recovered != nil {
+		panic(recovered)
+	}
+	_ = writeWhileLeased(w, lease, func() {}) //nolint:errcheck // A lease rejects only a nil hook, never passed here; the lease is released either way.
+}
+
 // serveLeasedResponse writes an HTML route's response while lease stays
 // live, so a revocation ends a write blocked on a slow reader. When the
 // cancel hook cannot be registered it fails closed with a 503 before writing

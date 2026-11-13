@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -55,55 +56,69 @@ func TestWriteWhileLeased_HookTouchesTheWriterOnlyDuringTheWrite(t *testing.T) {
 	}
 }
 
-// TestWriteWhileLeased_RevocationEndsABlockedFinalFlush proves the final
-// flush runs while the lease is held, and that a revocation ends a flush
-// blocked on a reader that stopped reading, so the lease still drains
-// before the transition's deadline.
-func TestWriteWhileLeased_RevocationEndsABlockedFinalFlush(t *testing.T) {
-	coordinator, lease, resumeID := newLeaseWriteTestLease(t)
-	writer := flushBlockedWriter{newDeadlineBlockedWriter()}
-	t.Cleanup(writer.release)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		defer lease.Release()
-		write := func() {
-			if _, err := writer.Write([]byte("buffered body")); err != nil {
-				t.Error(err)
+// TestLeasedFlush_RevocationEndsABlockedFlush proves both leased flushes,
+// writeWhileLeased's after its write and releaseAfterFlush's before the
+// release, run while the lease is held, and that a revocation ends a flush
+// blocked on a reader that stopped reading, so the lease drains in time.
+func TestLeasedFlush_RevocationEndsABlockedFlush(t *testing.T) {
+	tests := []struct {
+		name  string
+		serve func(http.ResponseWriter, *publicstate.Lease, func())
+	}{
+		{name: "write_while_leased", serve: func(w http.ResponseWriter, lease *publicstate.Lease, write func()) {
+			defer lease.Release()
+			if err := writeWhileLeased(w, lease, write); err != nil {
+				t.Errorf("writeWhileLeased() = %v", err)
 			}
-		}
-		if err := writeWhileLeased(writer, lease, write); err != nil {
-			t.Errorf("writeWhileLeased() = %v", err)
-		}
-	}()
-	select {
-	case <-writer.writing:
-	case <-done:
-		t.Fatal("the leased write returned without flushing")
-	case <-time.After(5 * time.Second):
-		t.Fatal("the leased write never flushed")
+		}},
+		{name: "release_after_flush", serve: func(w http.ResponseWriter, lease *publicstate.Lease, write func()) {
+			defer releaseAfterFlush(w, lease)
+			write()
+		}},
 	}
-	transition, err := coordinator.Begin(context.Background(), publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: 1, Class: publicstate.Revoking}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	closeErr := transition.Close(context.Background(), time.Now().Add(time.Second))
-	writer.release()
-	<-done
-	if closeErr != nil {
-		t.Fatalf("revocation did not end the blocked flush and drain the lease: %v", closeErr)
-	}
-	if !writer.deadlineSet() {
-		t.Fatal("revocation did not set the write deadline")
-	}
-	if err := transition.Rollback(); err != nil {
-		t.Fatal(err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			coordinator, lease, resumeID := newLeaseWriteTestLease(t)
+			writer := flushBlockedWriter{newDeadlineBlockedWriter()}
+			t.Cleanup(writer.release)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				test.serve(writer, lease, func() {
+					if _, err := writer.Write([]byte("buffered response")); err != nil {
+						t.Error(err)
+					}
+				})
+			}()
+			select {
+			case <-writer.writing:
+			case <-done:
+				t.Fatal("the lease was released without a flush")
+			case <-time.After(5 * time.Second):
+				t.Fatal("the response was never flushed")
+			}
+			transition, err := coordinator.Begin(context.Background(), publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: 1, Class: publicstate.Revoking}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			closeErr := transition.Close(context.Background(), time.Now().Add(time.Second))
+			writer.release()
+			<-done
+			if closeErr != nil {
+				t.Fatalf("revocation did not end the blocked flush and drain the lease: %v", closeErr)
+			}
+			if !writer.deadlineSet() {
+				t.Fatal("revocation did not set the write deadline")
+			}
+			if err := transition.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 // TestWriteWhileLeased_AFailedFlushIsNotAnError proves a failed final flush
-// is not returned: the response is committed by then, so the caller must
-// not write an error over it.
+// is not returned, so the caller never writes an error over a committed one.
 func TestWriteWhileLeased_AFailedFlushIsNotAnError(t *testing.T) {
 	writer := flushBlockedWriter{newDeadlineBlockedWriter()}
 	if err := writer.SetWriteDeadline(time.Now()); err != nil {
@@ -174,10 +189,7 @@ func assertLeasedResponseLeavesGoWhileLeased(t *testing.T, serve func(http.Respo
 				t.Fatalf("the response did not leave Go while the lease was held: %v", err)
 			}
 			body, readErr := io.ReadAll(response.Body)
-			if closeErr := response.Body.Close(); readErr == nil {
-				readErr = closeErr
-			}
-			if readErr != nil {
+			if readErr = errors.Join(readErr, response.Body.Close()); readErr != nil {
 				t.Fatalf("the body did not leave Go while the lease was held: %v", readErr)
 			}
 			if response.StatusCode != test.wantStatus || !bytes.Equal(body, test.wantBody) {
@@ -187,6 +199,120 @@ func assertLeasedResponseLeavesGoWhileLeased(t *testing.T, serve func(http.Respo
 		})
 	}
 }
+
+// TestReleaseAfterFlush_ErrorLeavesGoWhileLeased proves over a real
+// connection that a short error a leased handler writes leaves Go before
+// releaseAfterFlush releases the lease.
+func TestReleaseAfterFlush_ErrorLeavesGoWhileLeased(t *testing.T) {
+	_, lease, _ := newLeaseWriteTestLease(t)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		defer releaseAfterFlush(w, lease)
+		serveConditionalError(w, request)
+	})
+	assertResponseLeavesGoInsideAFlush(t, handler, http.MethodGet, "/", nil, http.StatusBadRequest,
+		"{\"error\":{\"code\":\"request_invalid\",\"message\":\"request is invalid\"}}\n")
+}
+
+// TestReleaseAfterFlush_APanickingHandlerIsNotFlushed proves a handler that
+// panics before writing gets no flush, which would send a 200 header for a
+// response it never wrote, and still releases its lease.
+func TestReleaseAfterFlush_APanickingHandlerIsNotFlushed(t *testing.T) {
+	_, lease, _ := newLeaseWriteTestLease(t)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		defer releaseAfterFlush(w, lease)
+		panic("handler failed")
+	}))
+	server.Config.ErrorLog = log.New(io.Discard, "", 0)
+	server.Start()
+	t.Cleanup(server.Close)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Client().Do(request)
+	if err == nil {
+		closeErr := response.Body.Close()
+		t.Fatalf("a panicking handler sent status %d (close: %v), want no response", response.StatusCode, closeErr)
+	}
+	// The release runs as the panic unwinds, before the server closes the
+	// connection the viewer saw end; releasing cancels the lease's context.
+	if lease.Context().Err() == nil {
+		t.Fatal("the panicking handler kept its lease")
+	}
+}
+
+// assertResponseLeavesGoInsideAFlush serves one request through handler on
+// a real server whose writer parks inside every flush until the viewer has
+// read the response. The viewer must read the whole response while the
+// handler is parked in a flush, that is before the handler can release its
+// lease; a response Go sends only when the handler returns fails the test.
+func assertResponseLeavesGoInsideAFlush(t *testing.T, handler http.Handler, method, path string, header http.Header, wantStatus int, wantBody string) {
+	t.Helper()
+	parked, letGo := make(chan struct{}), make(chan struct{})
+	var parkOnce, letGoOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		handler.ServeHTTP(&flushParkingWriter{ResponseWriter: w, park: func() {
+			parkOnce.Do(func() { close(parked) })
+			<-letGo
+		}}, request)
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { letGoOnce.Do(func() { close(letGo) }) })
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, method, server.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, values := range header {
+		request.Header[name] = values
+	}
+	type result struct {
+		status int
+		body   []byte
+		err    error
+	}
+	results := make(chan result, 1)
+	go func() {
+		response, doErr := server.Client().Do(request)
+		if doErr != nil {
+			results <- result{err: doErr}
+			return
+		}
+		body, readErr := io.ReadAll(response.Body)
+		results <- result{status: response.StatusCode, body: body, err: errors.Join(readErr, response.Body.Close())}
+	}()
+	got := <-results
+	if got.err != nil {
+		t.Fatalf("the response did not reach the viewer: %v", got.err)
+	}
+	select {
+	case <-parked:
+	case <-time.After(time.Second):
+		t.Fatalf("the %d response left Go without a flush, so only after the handler released its lease", got.status)
+	}
+	if got.status != wantStatus || string(got.body) != wantBody {
+		t.Fatalf("response = %d %q, want %d %q", got.status, got.body, wantStatus, wantBody)
+	}
+}
+
+// flushParkingWriter flushes the real connection's writer and then parks
+// in park, so the handler stays inside its flush while the test reads.
+type flushParkingWriter struct {
+	http.ResponseWriter
+	park func()
+}
+
+// FlushError is what http.ResponseController calls.
+func (w *flushParkingWriter) FlushError() error {
+	err := http.NewResponseController(w.ResponseWriter).Flush()
+	w.park()
+	return err
+}
+
+// Unwrap lets http.ResponseController reach the connection's deadline.
+func (w *flushParkingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func leaseWriteTestResponse(t *testing.T, body []byte) SelectedResponse {
 	t.Helper()

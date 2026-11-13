@@ -146,7 +146,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			servePublicJSONError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		// The pass check runs after admission and before any public cache
 		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
 		// routes"; AC-VIEW-003).
@@ -186,7 +186,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			servePublicJSONError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		if snapshot.SignInToView && !hasValidPass(request, viewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, clock) {
 			servePublicJSONError(w, request, http.StatusNotFound)
 			return

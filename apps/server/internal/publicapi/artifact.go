@@ -146,7 +146,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			serveArtifactReadError(w, request, err)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		// The pass check runs after admission and before any public cache
 		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
 		// routes"; AC-VIEW-003). The PDF and the fallback og.png are gated;

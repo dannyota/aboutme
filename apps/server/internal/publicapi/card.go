@@ -92,7 +92,7 @@ func (s *artifactService) cardHandler(cards PreviewCards, alias bool) http.Handl
 			serveArtifactReadError(w, request, err)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		if _, _, valid := parseIfNoneMatch(request.Header); !valid {
 			serveConditionalError(w, request)
 			return

@@ -69,12 +69,11 @@ func NewMarkdownHandler(dependencies MarkdownDependencies) (http.Handler, error)
 			serveTextError(w, request, http.StatusServiceUnavailable)
 			return
 		}
+		defer releaseAfterFlush(w, lease)
 		if !snapshot.DiscoveryEnabled {
-			lease.Release()
 			serveTextError(w, request, http.StatusNotFound)
 			return
 		}
-		defer lease.Release()
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationMarkdown, Variant: "discoverable", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: publicformat.MarkdownFormatVersion, AppDigest: dependencies.AppDigest}
 		if cached, ok := dependencies.Cache.Get(key); ok {
 			serveLeasedSelected(w, request, lease, SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, serveTextError)
