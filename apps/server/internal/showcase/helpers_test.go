@@ -162,6 +162,12 @@ func (unusedReadStore) GetPublicState(context.Context) (store.PublicState, error
 func (unusedReadStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	return store.GetPublicResumeBySlugRow{}, errors.New("unused")
 }
+func (unusedReadStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	return store.GetPublicResumeProjectListRow{}, errors.New("unused")
+}
+func (unusedReadStore) GetPublicResumeProject(context.Context, store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	return store.GetPublicResumeProjectRow{}, errors.New("unused")
+}
 
 func (unusedReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")

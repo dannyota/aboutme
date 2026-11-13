@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
@@ -24,6 +25,8 @@ const (
 	publicRouteLLMS
 	publicRouteLive
 	publicRouteShowcase
+	publicRouteProjectList
+	publicRouteProject
 )
 
 // Recognizes reports whether escapedPath belongs to a public route.
@@ -59,6 +62,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		s.card.ServeHTTP(w, request)
 	case publicRouteHTML:
 		s.html.ServeHTTP(w, request)
+	case publicRouteProjectList:
+		s.projectList.ServeHTTP(w, request)
+	case publicRouteProject:
+		s.project.ServeHTTP(w, request)
 	case publicRouteMarkdown:
 		s.markdown.ServeHTTP(w, request)
 	case publicRouteSitemap:
@@ -121,6 +128,9 @@ func classifyPublicRoute(path string) publicRoute {
 		}
 		return publicRouteNone
 	}
+	if route := classifyProjectRoute(path); route != publicRouteNone {
+		return route
+	}
 	if !strings.HasPrefix(path, "/") || strings.Count(path, "/") != 1 {
 		return publicRouteNone
 	}
@@ -132,6 +142,31 @@ func classifyPublicRoute(path string) publicRoute {
 		return publicRouteHTML
 	}
 	return publicRouteNone
+}
+
+// classifyProjectRoute recognizes exactly /{slug}/projects and
+// /{slug}/projects/{project-slug}, with a valid resume slug and a valid
+// project slug (docs/design/projects-contract.md "Routes and dispatch").
+// The caller has already rejected any percent sign.
+func classifyProjectRoute(path string) publicRoute {
+	slug, rest, found := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	if !strings.HasPrefix(path, "/") || !found || !validPublicSlug(slug) {
+		return publicRouteNone
+	}
+	if rest == "projects" {
+		return publicRouteProjectList
+	}
+	if projectSlug, ok := strings.CutPrefix(rest, "projects/"); ok && project.ValidSlug(projectSlug) {
+		return publicRouteProject
+	}
+	return publicRouteNone
+}
+
+// projectRouteSlugs splits a path classifyProjectRoute recognized into the
+// resume slug and the project slug, which is "" for the list.
+func projectRouteSlugs(path string) (slug, projectSlug string) {
+	slug, rest, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	return slug, strings.TrimPrefix(strings.TrimPrefix(rest, "projects"), "/")
 }
 
 func publicSlug(path string) string {

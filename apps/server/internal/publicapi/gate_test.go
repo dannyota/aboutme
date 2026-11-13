@@ -43,8 +43,12 @@ func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.
 		favicon = `<link rel="icon" href="` + envelope.FaviconHref + `">`
 	}
 	anchors := ""
+	page := ""
+	if envelope.Page != "" {
+		page = "&amp;page=" + envelope.Page
+	}
 	for _, provider := range envelope.Providers {
-		anchors += `<a class="gate-provider" href="/api/v1/auth/` + provider + `/start?purpose=view&amp;slug=` + envelope.Slug + `">Continue</a>`
+		anchors += `<a class="gate-provider" href="/api/v1/auth/` + provider + `/start?purpose=view&amp;slug=` + envelope.Slug + page + `">Continue</a>`
 	}
 	anchors += `<a class="gate-home" href="` + origin.Resolve("/") + `">Home</a>`
 	return "<!doctype html><html lang=\"" + envelope.Lng + "\"><head>" +

@@ -10,6 +10,8 @@ import (
 type PublicReadQueries interface {
 	GetPublicState(context.Context) (PublicState, error)
 	GetPublicResumeBySlug(context.Context, string) (GetPublicResumeBySlugRow, error)
+	GetPublicResumeProjectList(context.Context, string) (GetPublicResumeProjectListRow, error)
+	GetPublicResumeProject(context.Context, GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error)
 	GetPublicResumeByOwner(context.Context, GetPublicResumeByOwnerParams) (Resume, error)
 	ListEligiblePublicSlugs(context.Context) ([]string, error)
 }

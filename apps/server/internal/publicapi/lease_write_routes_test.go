@@ -55,7 +55,7 @@ func TestServeGate_FailsClosedWhenTheHookCannotRegister(t *testing.T) {
 	want := httptest.NewRecorder()
 	serveHTMLError(want, newLeaseTestRequest("/ada"), http.StatusServiceUnavailable)
 	got := httptest.NewRecorder()
-	serveGate(lease.Context(), got, newLeaseTestRequest("/ada"), dependencies, snapshot, &recordingHooks{err: errors.New("cannot register")})
+	serveGate(lease.Context(), got, newLeaseTestRequest("/ada"), dependencies, snapshot, "", &recordingHooks{err: errors.New("cannot register")})
 	assertOnlyResponse(t, got, want)
 	if !strings.Contains(logs.String(), "reason=lease_hook_failed") {
 		t.Fatalf("log = %q, want the lease_hook_failed reason", logs.String())

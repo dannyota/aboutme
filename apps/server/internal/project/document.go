@@ -67,7 +67,7 @@ func Prepare(d Document) (Document, error) {
 		return Document{}, ErrInvalid
 	}
 	text, ok := d.Text[d.DefaultLanguage]
-	if !ok || strings.TrimSpace(text.Name) == "" {
+	if !ok || Blank(text.Name) {
 		return Document{}, ErrInvalid
 	}
 	repository, repositoryOK := NormalizeLink(d.RepositoryURL)

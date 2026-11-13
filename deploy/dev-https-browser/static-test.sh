@@ -85,14 +85,17 @@ for (const [path, route] of [
   [`/api/v1/public/resumes/${slug}`, 'public-read'],
   [`/api/v1/public/resumes/${slug}/og/0123456789abcdef.png`, 'public-card'],
   [`/api/v1/live/${slug}`, 'public-stream'],
+  [`/${slug}/projects`, 'project-page'],
+  [`/${slug}/projects/private-project`, 'project-page'],
+  ['/api/v1/projects', 'owner-project'],
+  ['/api/v1/projects/private-project-id', 'owner-project'],
 ]) {
   assert.equal(classify(message(failed, `${ALLOWED_ORIGIN}${path}?token=secret`), id, slug), `console-404-${route}`);
 }
 assert.equal(classify(message('secret content', 'https://other.invalid/api/v1/events'), id, slug), 'console-non-http-other');
 assert.equal(classify(message(failed, 'invalid secret'), id, slug), 'console-404-other');
 assert.match(spec, /countedConsoleFailure \?\?= `\$\{classifyConsoleFailure\(message, resumeID, slug\)\}-at-\$\{currentStage\}`/);
-// Each of the three tests names its first counted console error.
-assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 3);
+assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 4);
 assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?countedConsoleFailure/s);
 NODE
 # The publish proof's revocation rules: a revoked, deleted, or protected
@@ -198,9 +201,10 @@ assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/api/v1/public/resum
 assert.equal(aborted(message(failed(404), `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
 assert.equal(aborted(message('Failed to load resource: net::ERR_FAILED', `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
 
-// Statuses: only the owner read of a deleted resume is an exact 404, and no
-// public status check accepts 200 after a revocation.
-assert.deepEqual(spec.match(/expect\([^\n]*\)\.toBe\(40\d\)/g), ['expect(await ownerReadStatus(page, id)).toBe(404)']);
+assert.deepEqual(spec.match(/expect\([^\n]*\)\.toBe\(40\d\)/g), [
+  'expect(uniformNotFound.status).toBe(404)',
+  'expect(await ownerReadStatus(page, id)).toBe(404)',
+]);
 assert.doesNotMatch(spec, /=== 40\d\b/);
 assert.match(spec, /pathname === `\/\$\{slug\}` &&\s*REVOKED_PUBLIC_STATUSES\.includes\(response\.status\(\)\),\s*\{ timeout: REVOCATION_BOUND_MS \},/);
 assert.match(spec, /expect\(REVOKED_PUBLIC_STATUSES\)\.toContain\(statuses\.revoked\);\s*expect\(elapsed\)\.toBeLessThanOrEqual\(REVOCATION_BOUND_MS\);/);
@@ -257,27 +261,55 @@ assert.doesNotMatch(cleanup, /\bcounters\b|hooks|pageDiagnosticsAttacher/);
 assert.equal(count(spec, /deleteRecordedResume\(/g), 1);
 // Record each created resume before waiting for the rest of creation.
 for (const title of [
+  'PROJECT_PAGES_TEST_TITLE',
   '"proves native HTTPS publish, discovery, and revocation"',
   '"proves the showcase opt-in, its revocations, and delivery rules"',
   'DELETION_TEST_TITLE',
 ]) {
   assert.match(testBody(title), /createdID = resumeID = (?:accepted\.metadata\.id|created\.id)/, title);
 }
-assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID\)/);
-assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID\);/);
+assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID, createdProjectID\)/);
+assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID, createdProjectID\);/);
 // The cleanup hook ends where the next hook starts; inside it, deletion comes
 // before the cleanup step and the evidence write.
 const cleanupHook = spec.slice(
   spec.indexOf('test.afterEach(async ({ browser }'),
   spec.indexOf('test.afterEach(async ({}, info)'),
 );
-const deletionAt = cleanupHook.indexOf('await deleteOutsideCounters(browser, createdID);');
+const deletionAt = cleanupHook.indexOf('await deleteOutsideCounters(browser, createdID, createdProjectID);');
 const cleanupStepAt = cleanupHook.indexOf('steps.cleanup = true;');
 const evidenceAt = cleanupHook.indexOf('await writePublishEvidence();');
 assert.ok(deletionAt > 0 && deletionAt < cleanupStepAt && cleanupStepAt < evidenceAt);
 assert.equal(count(spec, /await writePublishEvidence\(\);/g), 1);
 assert.ok(spec.indexOf('test.afterEach(async ({ browser }') < spec.indexOf('test.afterEach(async ({}, info)'));
 assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 1);
+
+assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);\n\s*if \(projectID !== undefined\) \{\n\s*await deleteRecordedProject\(cleanupPage, projectID\);/);
+const projects = testBody('PROJECT_PAGES_TEST_TITLE');
+assert.match(projects, /createdProjectID = project\.id;\n\s*expect\(project\.status\)\.toBe\(201\);/);
+assert.match(projects, /notFoundPaths\.add\(path\);\n\s*expect\(await readNotFoundShape\(target, path\)\)\.toEqual\(uniformNotFound\);/);
+assert.equal(count(projects, /await expectUniformNotFound\(viewer, /g), 6);
+assert.match(projects, /!isExpectedNotFoundConsole\(message, notFoundPaths\)/);
+assert.ok(spec.indexOf('test(PROJECT_PAGES_TEST_TITLE') < spec.indexOf('test("proves native HTTPS publish, discovery, and revocation"'));
+const pages = readFileSync(`${source}/project-pages.ts`, 'utf8');
+const notFoundStart = pages.indexOf('function isExpectedNotFoundConsole(');
+assert.notEqual(notFoundStart, -1, 'missing isExpectedNotFoundConsole');
+const pagesSandbox = { URL, ORIGIN: ALLOWED_ORIGIN, httpFailureStatus };
+runInNewContext(
+  stripTypeScriptTypes(pages.slice(notFoundStart, pages.indexOf('\n}\n', notFoundStart) + 3)),
+  pagesSandbox,
+);
+const notFound = pagesSandbox.isExpectedNotFoundConsole;
+const asked = new Set([`/${slug}/projects`, '/missing-0a1b2c3d']);
+assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/${slug}/projects`), asked), true);
+assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/missing-0a1b2c3d`), asked), true);
+for (const status of [200, 401, 403, 410, 500, 503]) {
+  assert.equal(notFound(message(failed(status), `${ALLOWED_ORIGIN}/${slug}/projects`), asked), false);
+}
+assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/${slug}/projects/other`), asked), false);
+assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/${slug}/projects?x=1`), asked), false);
+assert.equal(notFound(message(failed(404), `https://other.invalid/${slug}/projects`), asked), false);
+assert.equal(notFound(message('Failed to load resource: net::ERR_FAILED', `${ALLOWED_ORIGIN}/${slug}/projects`), asked), false);
 NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
   fail 'published base has the wrong Playwright base'
@@ -996,6 +1028,14 @@ const valid = JSON.stringify({
     'publishSchema', 'unpublishContentType', 'unpublishCSRF', 'unpublishIfMatch',
     'unpublishIdempotency', 'unpublishSchema',
   ].map((name) => [name, true])),
+  projects: {
+    errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+    steps: Object.fromEntries([
+      'linked', 'served', 'unknownUniform', 'hiddenUniform', 'gate', 'pass',
+      'unpublishedUniform', 'renamed', 'cleanup',
+    ].map((name) => [name, true])),
+    counts: { stylesheets: 4, styleAttributes: 0, uniformNotFound: 6, gatedAddresses: 3 },
+  },
 });
 const accepted = (change) => {
   const evidence = JSON.parse(valid);
@@ -1018,6 +1058,20 @@ try {
     [1.5, false], ['1', false],
   ]) {
     assert.equal(accepted((evidence) => { evidence.elapsedMs.revocation = elapsed; }), ok, `revocation ${elapsed}`);
+  }
+  assert.equal(accepted((evidence) => { delete evidence.projects; }), false, 'projects missing');
+  for (const name of Object.keys(JSON.parse(valid).projects.steps)) {
+    assert.equal(accepted((evidence) => { evidence.projects.steps[name] = false; }), false, `project step ${name}`);
+  }
+  for (const name of ['certificate', 'console', 'externalRequest', 'page']) {
+    for (const value of [-1, 1]) {
+      assert.equal(accepted((evidence) => { evidence.projects.errors[name] = value; }), false, `project ${name} ${value}`);
+    }
+  }
+  for (const [name, value] of [
+    ['stylesheets', 2], ['styleAttributes', 1], ['uniformNotFound', 5], ['gatedAddresses', 2],
+  ]) {
+    assert.equal(accepted((evidence) => { evidence.projects.counts[name] = value; }), false, `project ${name} ${value}`);
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });
@@ -1272,6 +1326,7 @@ fi
 readonly PUBLISH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=publish \
   "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
 for listed in \
+  'proves the public project pages, their gate, and their revocations' \
   'proves native HTTPS publish, discovery, and revocation' \
   'proves the showcase opt-in, its revocations, and delivery rules' \
   'proves deleting a published resume ends its owner and public reads'; do
@@ -1765,7 +1820,8 @@ JSON
   "steps": {"auth": true, "complete": true, "published": true, "saveFirst": true, "headers": true, "noindex": true, "discovery": true, "unpublish": true, "revocation": true, "cleanup": true, "signOut": true, "accessibility": true, "keyboard": true, "longInvalidLayout": true, "publicRealtime": true, "ownerRealtime": true, "scroll": true},
   "statuses": {"publish": 200, "publicPrivate": 200, "publicDiscoverable": 200, "unpublish": 200, "revoked": 404},
   "elapsedMs": {"revocation": 1},
-  "headers": {"publishContentType": true, "publishCSRF": true, "publishIfMatch": true, "publishIdempotency": true, "publishSchema": true, "unpublishContentType": true, "unpublishCSRF": true, "unpublishIfMatch": true, "unpublishIdempotency": true, "unpublishSchema": true}
+  "headers": {"publishContentType": true, "publishCSRF": true, "publishIfMatch": true, "publishIdempotency": true, "publishSchema": true, "unpublishContentType": true, "unpublishCSRF": true, "unpublishIfMatch": true, "unpublishIdempotency": true, "unpublishSchema": true},
+  "projects": {"errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0}, "steps": {"linked": true, "served": true, "unknownUniform": true, "hiddenUniform": true, "gate": true, "pass": true, "unpublishedUniform": true, "renamed": true, "cleanup": true}, "counts": {"stylesheets": 4, "styleAttributes": 0, "uniformNotFound": 6, "gatedAddresses": 3}}
 }
 JSON
     ;;

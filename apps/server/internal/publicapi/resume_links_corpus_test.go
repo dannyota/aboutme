@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -24,8 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
-
-var updateGolden = flag.Bool("update", false, "rewrite testdata/resume-links-render.json and ../printsnapshot/testdata/print-envelopes.json from the current code")
 
 const (
 	resumeLinksCorpusPath = "testdata/resume-links-render.json"

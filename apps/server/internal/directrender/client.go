@@ -50,7 +50,19 @@ func (c *Client) RenderGate(ctx context.Context, request GateRenderRequest) (Res
 	return c.render(ctx, request)
 }
 
-// render encodes and posts either request shape to the internal render
+// RenderProjectList returns a bounded, validated HTML representation of a
+// resume's project list (docs/design/projects-contract.md "Render envelope").
+func (c *Client) RenderProjectList(ctx context.Context, request ProjectListRenderRequest) (Result, error) {
+	return c.render(ctx, request)
+}
+
+// RenderProject returns a bounded, validated HTML representation of one
+// project page (docs/design/projects-contract.md "Render envelope").
+func (c *Client) RenderProject(ctx context.Context, request ProjectRenderRequest) (Result, error) {
+	return c.render(ctx, request)
+}
+
+// render encodes and posts any request shape to the internal render
 // endpoint and validates the response.
 func (c *Client) render(ctx context.Context, request any) (Result, error) {
 	if c == nil || c.http == nil || c.origin.value == "" {

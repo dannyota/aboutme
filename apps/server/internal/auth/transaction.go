@@ -191,11 +191,12 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 }
 
 // beginView stores an unauthenticated purpose-view transaction bound to
-// resumeID instead of a login return path (docs/design/viewer-analytics/
-// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004). ReturnPath is filled with
-// the same closed default as every other transaction only to satisfy the
-// column's NOT NULL constraint; the view callback never reads it.
-func (s *TransactionStore) beginView(ctx context.Context, provider Provider, resumeID uuid.UUID, redirectURI string) (string, Transaction, error) {
+// resumeID (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow";
+// AC-VIEW-004). ReturnPath holds the project page suffix viewPage validated,
+// "/projects" or "/projects/{project-slug}"; the resume page keeps the same
+// closed default as every other transaction, which the view callback reads
+// as no suffix.
+func (s *TransactionStore) beginView(ctx context.Context, provider Provider, resumeID uuid.UUID, redirectURI, pageSuffix string) (string, Transaction, error) {
 	handle, err := randomToken()
 	if err != nil {
 		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: generate handle: %w", err)
@@ -209,6 +210,10 @@ func (s *TransactionStore) beginView(ctx context.Context, provider Provider, res
 	if err != nil {
 		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: generate nonce: %w", err)
 	}
+	returnPath := defaultLoginReturnPath
+	if pageSuffix != "" {
+		returnPath = pageSuffix
+	}
 
 	row, err := s.q.CreateOAuthTransaction(ctx, store.CreateOAuthTransactionParams{
 		HandleHash:   hashHandle(handle),
@@ -218,7 +223,7 @@ func (s *TransactionStore) beginView(ctx context.Context, provider Provider, res
 		PKCEVerifier: verifier,
 		Nonce:        &nonce,
 		RedirectURI:  redirectURI,
-		ReturnPath:   defaultLoginReturnPath,
+		ReturnPath:   returnPath,
 		ExpiresAt:    s.now().Add(oauthTxTTL),
 		ResumeID:     &resumeID,
 	})

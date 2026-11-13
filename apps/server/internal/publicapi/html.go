@@ -86,25 +86,14 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		// AC-VIEW-003).
 		if snapshot.SignInToView && !hasValidPass(request, dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, dependencies.Clock) {
 			//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
-			serveGate(lease.Context(), w, request, dependencies, snapshot, lease)
+			serveGate(lease.Context(), w, request, dependencies, snapshot, "", lease)
 			return
 		}
 
-		variant := publiccache.Variant("nondiscoverable")
-		switch {
-		case snapshot.SignInToView:
-			// A distinct variant, never shared with an ordinary
-			// nondiscoverable resume's cache entry, since this body carries
-			// the join-invite marker (docs/design/viewer-analytics/
-			// sign-in-to-view.md "Join invite").
-			variant = "sign-in"
-		case snapshot.DiscoveryEnabled:
-			variant = "discoverable"
-		}
 		key := publiccache.Key{
 			RouteClass:     "resume",
 			Representation: publicstate.RepresentationHTML,
-			Variant:        variant,
+			Variant:        publicHTMLVariant(snapshot),
 			ResumeID:       snapshot.ResumeID,
 			Generation:     snapshot.Revision,
 			FormatVersion:  htmlFormatVersion,

@@ -31,6 +31,9 @@ const (
 var (
 	feedBufferPool = buffer.NewPool()
 	publicSlugPath = regexp.MustCompile(`^/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.md)?$`)
+	// projectSlugComponent is the project slug grammar; its length is
+	// checked separately.
+	projectSlugComponent = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
 func init() {
@@ -279,14 +282,44 @@ func feedRootClass(root string, leaf bool) string {
 	}
 }
 
+// feedComponentLimit is the longest component a protected route can match: a
+// project slug of 40 characters. A longer component is kept as a value that
+// matches nothing, so it can never borrow a protected class.
+const feedComponentLimit = 40
+
+// feedComponents holds the first three components of one view and its depth.
+// Only these matter for protected routes: a root, and the two literal-led
+// segments of the project page shapes.
+type feedComponents struct {
+	first [3]string
+	depth int
+}
+
+func (c *feedComponents) push(value string) {
+	if c.depth < len(c.first) {
+		c.first[c.depth] = value
+	}
+	c.depth++
+}
+
+func (c *feedComponents) pop() {
+	if c.depth == 0 {
+		return
+	}
+	c.depth--
+	if c.depth < len(c.first) {
+		c.first[c.depth] = ""
+	}
+}
+
 // feedPathClass examines one decoded view without allocating a copy of a
-// visitor-sized path. Only the first component and normalized depth matter
-// for protected routes; a long component cannot match a protected root.
+// visitor-sized path. Only the first three components and the depth matter
+// for protected routes; a long component cannot match a protected route.
 func feedPathClass(path string, decode bool) (string, bool) {
 	reader := bufio.NewReaderSize(&feedPathReader{path: path, decode: decode}, feedTargetLimit)
-	var component [34]byte
-	length, depth, rawDepth := 0, 0, 0
-	root, rawRoot := "", ""
+	var component [feedComponentLimit]byte
+	length := 0
+	var raw, normalized feedComponents
 	valid := true
 	finish := func() {
 		if length == 0 {
@@ -296,24 +329,13 @@ func feedPathClass(path string, decode bool) (string, bool) {
 		if length <= len(component) {
 			value = string(component[:length])
 		}
-		if rawDepth == 0 {
-			rawRoot = value
-		}
-		rawDepth++
+		raw.push(value)
 		switch value {
 		case ".":
 		case "..":
-			if depth > 0 {
-				depth--
-			}
-			if depth == 0 {
-				root = ""
-			}
+			normalized.pop()
 		default:
-			if depth == 0 {
-				root = value
-			}
-			depth++
+			normalized.push(value)
 		}
 		length = 0
 	}
@@ -342,7 +364,35 @@ func feedPathClass(path string, decode bool) (string, bool) {
 		length++
 	}
 	finish()
-	return feedPriority(feedRootClass(rawRoot, valid && rawDepth <= 1), feedRootClass(root, valid && depth <= 1)), valid
+	return feedPriority(feedViewClass(raw, valid), feedViewClass(normalized, valid)), valid
+}
+
+// feedViewClass classifies one view by its root, then by the project page
+// shapes /{slug}/projects and /{slug}/projects/{project-slug}. A fixed root
+// keeps its own class, so /app/projects stays auth.
+func feedViewClass(view feedComponents, valid bool) string {
+	class := feedRootClass(view.first[0], valid && view.depth <= 1)
+	if class == "unknown" && valid && feedProjectShape(view) {
+		return "public"
+	}
+	return class
+}
+
+// feedProjectShape reports a valid, unreserved resume slug, the literal
+// projects, and, at depth three, a valid project slug of 2 to 40 characters.
+func feedProjectShape(view feedComponents) bool {
+	if view.depth != 2 && view.depth != 3 || view.first[1] != "projects" {
+		return false
+	}
+	root := "/" + view.first[0]
+	if strings.HasSuffix(root, ".md") || !validPublicSlugPath(root) || reservedPublicSlugPath(root) {
+		return false
+	}
+	if view.depth == 2 {
+		return true
+	}
+	slug := view.first[2]
+	return len(slug) >= 2 && len(slug) <= feedComponentLimit && projectSlugComponent.MatchString(slug)
 }
 
 type feedPathReader struct {

@@ -30,6 +30,9 @@ type Key struct {
 	FormatVersion  int
 	AppDigest      string
 	RendererDigest string
+	// Subject separates responses below one resume: the project slug of a
+	// project page, and "" for every other response.
+	Subject string
 }
 
 // Value holds a cached response's immutable response data.

@@ -32,6 +32,26 @@ type storedLink struct {
 // projection shows get a link, so the links can never name an entry the
 // public document omits.
 func projectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin) ([]ProjectLink, error) {
+	entries, err := linkedEntries(raw, public, origin)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ProjectLink, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, entry.link)
+	}
+	return out, nil
+}
+
+// linkedEntry is one project link with the linking entry's own link in the
+// public projection, or "" when the entry has none.
+type linkedEntry struct {
+	link      ProjectLink
+	entryLink string
+}
+
+// linkedEntries is projectLinks with each linking entry's own link.
+func linkedEntries(raw json.RawMessage, public PublicResume, origin PublicOrigin) ([]linkedEntry, error) {
 	var stored []storedLink
 	if err := json.Unmarshal(raw, &stored); err != nil || stored == nil {
 		return nil, errLinkContext
@@ -43,7 +63,7 @@ func projectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin)
 		}
 		slugs[link.EntryID] = link.ProjectSlug
 	}
-	out := []ProjectLink{}
+	out := []linkedEntry{}
 	sections := public.Document.Customization.Layout.Sections
 	for _, keys := range [][]string{sections.Main, sections.Sidebar} {
 		for _, key := range keys {
@@ -56,7 +76,11 @@ func projectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin)
 				if url == "" {
 					return nil, errLinkContext
 				}
-				out = append(out, ProjectLink{EntryID: entry.ID, ProjectSlug: slug, URL: url})
+				own := ""
+				if entry.Link != nil {
+					own = *entry.Link
+				}
+				out = append(out, linkedEntry{link: ProjectLink{EntryID: entry.ID, ProjectSlug: slug, URL: url}, entryLink: own})
 			}
 		}
 	}
