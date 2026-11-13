@@ -959,7 +959,6 @@ func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOA
 }
 
 const createOAuthClient = `-- name: CreateOAuthClient :one
-
 INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
 VALUES (
     $1,
@@ -976,18 +975,6 @@ type CreateOAuthClientParams struct {
 	CreatedAt    time.Time
 }
 
-// ---------------------------------------------------------------------------
-// OAuth agent access: clients, authorization codes, grants, and
-// tokens. Storage is digest-only: no query here reads, writes, or returns raw
-// code or token material, and PKCE verifiers are never stored.
-//
-// Lock order is oauth_clients -> users -> oauth_grants ->
-// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
-// family first locks its grant row (GetOAuthGrantForUpdate), and every path
-// that mutates a client's rows first locks the client row
-// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
-// skip a client another transaction is consenting to.
-// ---------------------------------------------------------------------------
 func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error) {
 	row := q.db.QueryRow(ctx, createOAuthClient, arg.ClientName, arg.RedirectURIs, arg.CreatedAt)
 	var i OAuthClient

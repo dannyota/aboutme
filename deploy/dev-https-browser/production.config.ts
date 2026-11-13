@@ -1,10 +1,5 @@
 import { defineConfig } from '@playwright/test';
 
-// Keep failure-page ARIA snapshots (`error-context.md`) suppressed for the
-// pinned Playwright 1.64.0 runner. A page-content snapshot could hold a
-// secret; see docs/runbooks/totp-keys.md "Production proofs".
-// This runner-internal environment switch requires verification whenever
-// the pinned Playwright package changes.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
 
 const baseURL = 'https://aboutme.vn';

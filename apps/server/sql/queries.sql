@@ -1178,18 +1178,6 @@ WHERE id IN (
     LIMIT sqlc.arg(limit_rows)::int
 );
 
--- ---------------------------------------------------------------------------
--- OAuth agent access: clients, authorization codes, grants, and
--- tokens. Storage is digest-only: no query here reads, writes, or returns raw
--- code or token material, and PKCE verifiers are never stored.
---
--- Lock order is oauth_clients -> users -> oauth_grants ->
--- oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
--- family first locks its grant row (GetOAuthGrantForUpdate), and every path
--- that mutates a client's rows first locks the client row
--- (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
--- skip a client another transaction is consenting to.
--- ---------------------------------------------------------------------------
 
 -- name: CreateOAuthClient :one
 INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)

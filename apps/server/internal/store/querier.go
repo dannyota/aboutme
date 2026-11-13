@@ -66,18 +66,6 @@ type Querier interface {
 	CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) (CreateIdempotencyRecordRow, error)
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
 	CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
-	// ---------------------------------------------------------------------------
-	// OAuth agent access: clients, authorization codes, grants, and
-	// tokens. Storage is digest-only: no query here reads, writes, or returns raw
-	// code or token material, and PKCE verifiers are never stored.
-	//
-	// Lock order is oauth_clients -> users -> oauth_grants ->
-	// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
-	// family first locks its grant row (GetOAuthGrantForUpdate), and every path
-	// that mutates a client's rows first locks the client row
-	// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
-	// skip a client another transaction is consenting to.
-	// ---------------------------------------------------------------------------
 	CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error)
 	CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
@@ -119,24 +107,6 @@ type Querier interface {
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
 	DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg DeleteExpiredProjectSlugHoldsPageParams) (int64, error)
-	// Deletes session rows, revoked or not, whose absolute expiry is at or before
-	// the cutoff, which the caller sets seven days before now. Rotation and reissue
-	// copy absolute_expires_at unchanged, so every token in a rotation chain is
-	// already dead by then.
-	//
-	// The statement never waits for a row lock. It first locks, with SKIP LOCKED,
-	// every row its delete reaches: the sessions, their expired pending
-	// authentications, WebAuthn ceremonies (also those bound to such a pending
-	// authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
-	// the successors whose rotated_from ON DELETE SET NULL clears. A session whose
-	// successor or referencing row it could not lock stays for a later page. So it
-	// takes no user lock, cannot deadlock with sign-in, rotation, revocation or
-	// account deletion, and never removes a live row.
-	//
-	// This relies on no new row referencing a dead session: every path that
-	// creates a pending authentication, ceremony or enrollment first locks its
-	// session and requires it live (lockLiveSession). A reference committed after
-	// this statement's snapshot would still be cascaded, and could make it wait.
 	DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error)
 	DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error)
 	DeleteExpiredWebAuthnCeremonies(ctx context.Context, limitRows int32) (int64, error)

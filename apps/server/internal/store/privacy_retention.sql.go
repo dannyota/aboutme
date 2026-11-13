@@ -150,24 +150,6 @@ type DeleteExpiredSessionsPageParams struct {
 	Now       time.Time
 }
 
-// Deletes session rows, revoked or not, whose absolute expiry is at or before
-// the cutoff, which the caller sets seven days before now. Rotation and reissue
-// copy absolute_expires_at unchanged, so every token in a rotation chain is
-// already dead by then.
-//
-// The statement never waits for a row lock. It first locks, with SKIP LOCKED,
-// every row its delete reaches: the sessions, their expired pending
-// authentications, WebAuthn ceremonies (also those bound to such a pending
-// authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
-// the successors whose rotated_from ON DELETE SET NULL clears. A session whose
-// successor or referencing row it could not lock stays for a later page. So it
-// takes no user lock, cannot deadlock with sign-in, rotation, revocation or
-// account deletion, and never removes a live row.
-//
-// This relies on no new row referencing a dead session: every path that
-// creates a pending authentication, ceremony or enrollment first locks its
-// session and requires it live (lockLiveSession). A reference committed after
-// this statement's snapshot would still be cascaded, and could make it wait.
 func (q *Queries) DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredSessionsPage, arg.Cutoff, arg.LimitRows, arg.Now)
 	if err != nil {
