@@ -9,6 +9,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,8 +37,9 @@ var droppedShowcaseObjects = []string{
 // type, nullability, and default; each constraint's definition; and each
 // index's definition. Names, not column positions, identify the objects, so a
 // column that Down re-adds at the end compares equal. PostgreSQL 18 also lists
-// each NOT NULL as a named constraint; nullability is read from the column, so
-// those are left out and the snapshot is the same on every server version.
+// each NOT NULL as a constraint with a generated name; those are keyed by their
+// column instead, with their definition and validity, so a NOT VALID restore
+// fails while the snapshot needs no name that only some server versions make.
 const showcaseCatalogQuery = `
 SELECT 'column ' || a.attname,
        format_type(a.atttypid, a.atttypmod)
@@ -50,6 +52,12 @@ UNION ALL
 SELECT 'constraint ' || c.conname, pg_get_constraintdef(c.oid)
 FROM pg_constraint c
 WHERE c.conrelid = 'public.resume_showcase'::regclass AND c.contype <> 'n'
+UNION ALL
+SELECT 'not null ' || a.attname,
+       pg_get_constraintdef(c.oid) || CASE WHEN c.convalidated THEN ' valid' ELSE ' not valid' END
+FROM pg_constraint c
+JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+WHERE c.conrelid = 'public.resume_showcase'::regclass AND c.contype = 'n'
 UNION ALL
 SELECT 'index ' || ic.relname, pg_get_indexdef(i.indexrelid)
 FROM pg_index i
@@ -193,6 +201,11 @@ func requireShowcaseReviewObjectsDropped(ctx context.Context, t *testing.T, conn
 	want := maps.Clone(version17)
 	for _, key := range droppedShowcaseObjects {
 		delete(want, key)
+		if column, ok := strings.CutPrefix(key, "column "); ok {
+			// A NOT NULL constraint goes with its column, on server versions
+			// that list one.
+			delete(want, "not null "+column)
+		}
 	}
 	requireCatalog(t, stage, showcaseCatalog(ctx, t, conn), want)
 	err := conn.QueryRow(ctx, releasedShowcaseRead, uuid.New()).Scan()
