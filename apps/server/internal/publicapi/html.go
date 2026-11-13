@@ -77,7 +77,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		observeHTMLView(dependencies.Views, request, snapshot.ResumeID)
 
 		// The pass check runs after admission and before any public cache
@@ -86,7 +86,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		// AC-VIEW-003).
 		if snapshot.SignInToView && !hasValidPass(request, dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, dependencies.Clock) {
 			//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
-			serveGate(lease.Context(), w, request, dependencies, snapshot)
+			serveGate(lease.Context(), w, request, dependencies, snapshot, lease)
 			return
 		}
 
@@ -112,7 +112,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			RendererDigest: dependencies.RendererDigest,
 		}
 		if cached, ok := dependencies.Cache.Get(key); ok {
-			withPrivateCacheControl(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.SignInToView).ServeHTTP(w, request)
+			serveLeasedResponse(w, request, lease, dependencies.Logger, withPrivateCacheControl(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.SignInToView))
 			return
 		}
 
@@ -159,7 +159,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			return
 		}
 		dependencies.Cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withPrivateCacheControl(response, snapshot.SignInToView).ServeHTTP(w, request)
+		serveLeasedResponse(w, request, lease, dependencies.Logger, withPrivateCacheControl(response, snapshot.SignInToView))
 	}), nil
 }
 

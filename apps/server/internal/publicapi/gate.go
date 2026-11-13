@@ -68,8 +68,10 @@ func gateLng(resumeLng string) string {
 // serveGate renders and serves the sign-in-to-view gate for a resume with no
 // valid pass: status 200, Cache-Control: no-store, X-Robots-Tag: noindex,
 // noarchive, and the resume page's CSP, never cached (design "Gate";
-// AC-VIEW-002).
-func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot) {
+// AC-VIEW-002). It writes the gate while lease stays live, so a revocation
+// ends a write blocked on a slow reader; when the cancel hook cannot be
+// registered it fails closed with the HTML 503 and writes no gate header.
+func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot, lease cancelHooks) {
 	page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 	if dependencies.Cards != nil {
 		version, err := dependencies.Cards.Version(snapshot)
@@ -102,14 +104,22 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 		serveHTMLError(w, request, http.StatusServiceUnavailable)
 		return
 	}
+	if err := writeWhileLeased(w, lease, func() { writeGate(w, request, result.HTML) }); err != nil {
+		logHTMLUnavailable(dependencies.Logger, request, "lease_hook_failed", "")
+		serveHTMLError(w, request, http.StatusServiceUnavailable)
+	}
+}
+
+// writeGate writes the validated gate page with its fixed headers.
+func writeGate(w http.ResponseWriter, request *http.Request, page []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex, noarchive")
 	w.Header().Set("Content-Security-Policy", publicformat.BaseCSP)
-	w.Header().Set("Content-Length", strconv.Itoa(len(result.HTML)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(page)))
 	w.WriteHeader(http.StatusOK)
 	if request.Method != http.MethodHead {
-		if _, writeErr := w.Write(result.HTML); writeErr != nil {
+		if _, writeErr := w.Write(page); writeErr != nil {
 			return
 		}
 	}
