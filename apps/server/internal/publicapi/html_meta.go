@@ -23,6 +23,8 @@ func publicRenderRequest(resume publicresume.PublicResume, discoverable bool, pa
 		FaviconHref:      page.FaviconHref,
 		Preview:          page.Preview,
 		JoinInvite:       page.JoinInvite,
+		ProjectLinks:     page.ProjectLinks,
+		ProjectsURL:      page.ProjectsURL,
 	}
 }
 

@@ -96,7 +96,7 @@ func TestPublicRepresentationsFollowDiscoveryForNoindex(t *testing.T) {
 		}
 		return renderjob.Result{Bytes: body, Digest: sha256.Sum256(body), Revision: snapshot.Revision}, nil
 	})
-	artifacts, err := newArtifactHandlers(ArtifactDependencies{
+	artifacts, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: now,
 	})
 	if err != nil {

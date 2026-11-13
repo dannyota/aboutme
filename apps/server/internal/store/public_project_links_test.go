@@ -70,16 +70,17 @@ func TestGetPublicResumeBySlug_ReadsTheVisibleOwnedProjectLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPublicResumeBySlug() error: %v", err)
 	}
-	var links []map[string]string
+	var links []map[string]json.RawMessage
 	if err = json.Unmarshal(row.ProjectLinks, &links); err != nil {
 		t.Fatalf("decode project links %s: %v", row.ProjectLinks, err)
 	}
 	got := map[string]string{}
 	for _, link := range links {
-		if len(link) != 2 {
-			t.Fatalf("link %v, want exactly entryId and projectSlug", link)
+		var entryID, projectSlug string
+		if len(link) != 3 || link["document"] == nil || json.Unmarshal(link["entryId"], &entryID) != nil || json.Unmarshal(link["projectSlug"], &projectSlug) != nil {
+			t.Fatalf("link %s, want exactly entryId, projectSlug and document", link)
 		}
-		got[link["entryId"]] = link["projectSlug"]
+		got[entryID] = projectSlug
 	}
 	want := map[string]string{entries["linked"]: "atlas", entries["upper"]: "orbit", entries["unhidden"]: "shown"}
 	if !reflect.DeepEqual(got, want) {

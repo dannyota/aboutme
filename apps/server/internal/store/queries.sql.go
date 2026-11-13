@@ -3076,7 +3076,14 @@ func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResum
 
 const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
 SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
-    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug))
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
     FROM jsonb_each(r.content) AS s(key, section)
     CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
     JOIN projects AS p
@@ -3093,16 +3100,6 @@ type GetPublicResumeBySlugRow struct {
 	ProjectLinks json.RawMessage
 }
 
-// Missing, never-published, private, renamed, and deleted rows all surface as
-// pgx.ErrNoRows. Representation-specific flags are checked after this live
-// gate without exposing a different lookup result.
-//
-// project_links is the project link context: for each entry that is not
-// hidden and names a project of the same owner, the entry id and the project
-// slug. One statement reads both, so the links always belong to the returned
-// revision (docs/design/projects-contract.md "Project link context"). The
-// project id never leaves the statement. The id is compared as text, so a
-// malformed stored value matches nothing instead of failing the read.
 func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getPublicResumeBySlug, slug)
 	var i GetPublicResumeBySlugRow
@@ -3346,6 +3343,65 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+	)
+	return i, err
+}
+
+const getResumeForUserWithProjectLinks = `-- name: GetResumeForUserWithProjectLinks :one
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS project_links
+FROM resumes AS r
+WHERE r.id = $1::uuid AND r.user_id = $2::uuid
+`
+
+type GetResumeForUserWithProjectLinksParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type GetResumeForUserWithProjectLinksRow struct {
+	Resume       Resume
+	ProjectLinks json.RawMessage
+}
+
+func (q *Queries) GetResumeForUserWithProjectLinks(ctx context.Context, arg GetResumeForUserWithProjectLinksParams) (GetResumeForUserWithProjectLinksRow, error) {
+	row := q.db.QueryRow(ctx, getResumeForUserWithProjectLinks, arg.ID, arg.UserID)
+	var i GetResumeForUserWithProjectLinksRow
+	err := row.Scan(
+		&i.Resume.ID,
+		&i.Resume.UserID,
+		&i.Resume.Title,
+		&i.Resume.Slug,
+		&i.Resume.Live,
+		&i.Resume.DownloadEnabled,
+		&i.Resume.SEOGeoEnabled,
+		&i.Resume.SchemaVersion,
+		&i.Resume.Revision,
+		&i.Resume.Lng,
+		&i.Resume.PersonalDetails,
+		&i.Resume.Content,
+		&i.Resume.Customization,
+		&i.Resume.CreatedAt,
+		&i.Resume.UpdatedAt,
+		&i.Resume.PublicTitle,
+		&i.Resume.FaviconEmoji,
+		&i.Resume.SignInToView,
+		&i.Resume.ViewPassEpoch,
+		&i.ProjectLinks,
 	)
 	return i, err
 }

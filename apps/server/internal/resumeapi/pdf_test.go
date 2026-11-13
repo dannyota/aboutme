@@ -47,11 +47,16 @@ func (f pdfQueueFunc) Render(ctx context.Context, request renderjob.Request) (re
 
 type pdfResumeReader struct {
 	resumeBoundary
-	get func(context.Context, uuid.UUID, uuid.UUID) (resume.Resume, error)
+	get   func(context.Context, uuid.UUID, uuid.UUID) (resume.Resume, error)
+	links json.RawMessage
 }
 
-func (s pdfResumeReader) Get(ctx context.Context, userID, resumeID uuid.UUID) (resume.Resume, error) {
-	return s.get(ctx, userID, resumeID)
+func (s pdfResumeReader) GetWithProjectLinks(ctx context.Context, userID, resumeID uuid.UUID) (resume.Resume, json.RawMessage, error) {
+	row, err := s.get(ctx, userID, resumeID)
+	if s.links == nil {
+		return row, json.RawMessage(`[]`), err
+	}
+	return row, s.links, err
 }
 
 type pdfBackend struct {

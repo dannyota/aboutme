@@ -14,7 +14,8 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 }
 
 func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
-	return publicHTMLRejectionForPage(source, resume, expectedPublicPage(resume, nil, nil), origin, jsonLD, discoverable)
+	page := withEntryPoints(expectedPublicPage(resume, nil, nil), resume.Slug, nil, origin)
+	return publicHTMLRejectionForPage(source, resume, page, origin, jsonLD, discoverable)
 }
 
 func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume, page publicPage, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
@@ -30,6 +31,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	meta := newHeadMeta(resume, page.Preview, origin)
 	stylesheets := map[string]bool{}
 	contactLinks := derivedContactLinks(resume)
+	entryPoints := newEntryPointCheck(resume, page)
 	rule := ""
 	reject := func(name string) {
 		if rule == "" {
@@ -65,7 +67,12 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					reject("anchor_href")
 					return
 				}
-				if relHasToken(attribute(node, "class"), creditClass) {
+				if entryPoint, name := entryPoints.anchor(node); entryPoint {
+					if name != "" {
+						reject(name)
+						return
+					}
+				} else if relHasToken(attribute(node, "class"), creditClass) {
 					if creditLinks != 0 || !isPublicCredit(node, origin.Resolve("/"), creditText(resume.Lng)) {
 						reject("credit_link")
 						return
@@ -137,10 +144,12 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 			case "main":
 				mainCount++
 				if attribute(node, "id") == "public-resume" {
-					wantAttrs := 2
-					if page.JoinInvite != "" {
-						wantAttrs = 3
+					marker, name := entryPoints.root(node)
+					if name != "" {
+						reject(name)
+						return
 					}
+					wantAttrs := 2 + marker + boolToInt(page.JoinInvite != "")
 					if main != nil || len(node.Attr) != wantAttrs || attributeCount(node, "id") != 1 ||
 						attributeCount(node, "data-revision") != 1 || attribute(node, "data-revision") != resume.Revision {
 						reject("main")
@@ -186,6 +195,9 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	}
 	if creditLinks != 1 {
 		return "credit_link"
+	}
+	if name := entryPoints.finish(); name != "" {
+		return name
 	}
 	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || externalScripts != 1 {
 		return "required_elements"

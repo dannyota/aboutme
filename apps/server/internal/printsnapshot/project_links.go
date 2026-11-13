@@ -1,6 +1,7 @@
 package printsnapshot
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -54,6 +55,53 @@ func validVersionLinks(source Envelope) bool {
 	default:
 		return false
 	}
+}
+
+func ProjectLinksMatch(document, links json.RawMessage) bool {
+	var pages map[string]string
+	if json.Unmarshal(links, &pages) != nil || len(pages) == 0 {
+		return false
+	}
+	var shape struct {
+		Content map[string]struct {
+			SectionType string `json:"sectionType"`
+			Entries     []struct {
+				ID string `json:"id"`
+			} `json:"entries"`
+		} `json:"content"`
+		Customization struct {
+			Layout struct {
+				Sections struct {
+					Main    []string `json:"main"`
+					Sidebar []string `json:"sidebar"`
+				} `json:"sections"`
+			} `json:"layout"`
+		} `json:"customization"`
+	}
+	if json.Unmarshal(document, &shape) != nil {
+		return false
+	}
+	visible := map[string]bool{}
+	sections := shape.Customization.Layout.Sections
+	for _, keys := range [][]string{sections.Main, sections.Sidebar} {
+		for _, key := range keys {
+			section, ok := shape.Content[key]
+			if !ok || section.SectionType != string(schema.Project) {
+				continue
+			}
+			for _, entry := range section.Entries {
+				if entry.ID != "" {
+					visible[entry.ID] = true
+				}
+			}
+		}
+	}
+	for entryID, pageURL := range pages {
+		if !visible[entryID] || !pageAddress(pageURL) {
+			return false
+		}
+	}
+	return true
 }
 
 func visibleProjectEntries(document publicresume.PublicResumeDocument) map[string]bool {

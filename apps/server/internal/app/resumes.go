@@ -7,6 +7,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
 	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -26,6 +27,7 @@ type ResumeDependencies struct {
 	Coordinator *publicstate.Coordinator
 	PrintQueue  *renderjob.Queue
 	Showcase    *showcase.Service
+	Origin      publicresume.PublicOrigin
 }
 
 func NewResumes(deps ResumeDependencies) *resumeapi.Service {
@@ -39,6 +41,7 @@ func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 			Logger:              deps.Logger,
 			SessionManager:      deps.Sessions,
 			PublicOrigin:        cfg.PublicOrigin,
+			CanonicalOrigin:     deps.Origin,
 			TrustedProxies:      api.TrustedProxies(cfg.TrustedProxyCIDRs),
 			PhotoAdmission:      media.NewPhotoAdmission(),
 			PhotoNormalizer:     media.NewPhotoNormalizer(),

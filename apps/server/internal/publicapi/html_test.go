@@ -498,5 +498,5 @@ func validHTMLIn(lng, name, canonical, revision, dataScript string) string {
 	resume := publicresume.PublicResume{Slug: slug, Lng: lng, Document: publicresume.PublicResumeDocument{
 		PersonalDetails: publicresume.PublicPersonalDetails{FullName: stdhtml.UnescapeString(name)}}}
 	head := previewHead(resume, previewmeta.For(resume, nil), root)
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + head + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">" + credit + "body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
+	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + head + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-project-links=\"\" data-revision=\"" + revision + "\">" + credit + "body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
 }

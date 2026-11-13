@@ -158,13 +158,14 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	}
 
 	service := New(resumeStore, idempotency, projector, blobs, Options{
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		SessionManager: manager,
-		PublicOrigin:   resumeAPITestOrigin,
-		Coordinator:    coordinator,
-		RecoveryPool:   pool,
-		PrintQueue:     printQueue,
-		Showcase:       showcaseService,
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		SessionManager:  manager,
+		PublicOrigin:    resumeAPITestOrigin,
+		CanonicalOrigin: origin,
+		Coordinator:     coordinator,
+		RecoveryPool:    pool,
+		PrintQueue:      printQueue,
+		Showcase:        showcaseService,
 	})
 	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, nil, service.RegisterRoutes)
 	server := httptest.NewServer(handler)

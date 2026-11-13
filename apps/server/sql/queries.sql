@@ -530,18 +530,15 @@ WHERE singleton = true
 RETURNING discovery_generation;
 
 -- name: GetPublicResumeBySlug :one
--- Missing, never-published, private, renamed, and deleted rows all surface as
--- pgx.ErrNoRows. Representation-specific flags are checked after this live
--- gate without exposing a different lookup result.
---
--- project_links is the project link context: for each entry that is not
--- hidden and names a project of the same owner, the entry id and the project
--- slug. One statement reads both, so the links always belong to the returned
--- revision (docs/design/projects-contract.md "Project link context"). The
--- project id never leaves the statement. The id is compared as text, so a
--- malformed stored value matches nothing instead of failing the read.
 SELECT sqlc.embed(r), COALESCE((
-    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug))
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
     FROM jsonb_each(r.content) AS s(key, section)
     CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
     JOIN projects AS p
@@ -613,6 +610,26 @@ SELECT sqlc.embed(r), COALESCE((
 ), '[]'::jsonb)::jsonb AS projects
 FROM resumes AS r
 WHERE r.slug = sqlc.arg(slug)::text AND r.live = true;
+
+-- name: GetResumeForUserWithProjectLinks :one
+SELECT sqlc.embed(r), COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS project_links
+FROM resumes AS r
+WHERE r.id = sqlc.arg(id)::uuid AND r.user_id = sqlc.arg(user_id)::uuid;
 
 -- name: GetPublicRealtimeResume :one
 SELECT id, revision, sign_in_to_view, view_pass_epoch FROM resumes

@@ -19,6 +19,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -32,6 +33,7 @@ type Options struct {
 	Logger                     *slog.Logger
 	SessionManager             *auth.SessionManager
 	PublicOrigin               string
+	CanonicalOrigin            publicresume.PublicOrigin
 	TrustedProxies             api.TrustedProxies
 	Clock                      func() time.Time
 	AcceptedVersions           []int32
@@ -55,6 +57,7 @@ type Service struct {
 	logger                     *slog.Logger
 	sessions                   *auth.SessionManager
 	publicOrigin               string
+	canonicalOrigin            publicresume.PublicOrigin
 	trustedProxies             api.TrustedProxies
 	clock                      func() time.Time
 	acceptedVersions           []int32
@@ -132,7 +135,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 	return &Service{
 		resumes: store, idempotency: idem, projector: proj, blobs: blobs,
 		logger: opts.Logger, sessions: opts.SessionManager,
-		publicOrigin: opts.PublicOrigin, trustedProxies: opts.TrustedProxies,
+		publicOrigin: opts.PublicOrigin, canonicalOrigin: opts.CanonicalOrigin, trustedProxies: opts.TrustedProxies,
 		clock: opts.Clock, acceptedVersions: append([]int32(nil), opts.AcceptedVersions...),
 		writeResponse: writeStoredResponse, sanitizeDocument: sanitizeDocument,
 		photoKeyInvariant:          opts.PhotoKeyInvariant,

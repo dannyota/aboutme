@@ -2,6 +2,7 @@ package resumeapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 	"danny.vn/aboutme/apps/server/internal/pdfname"
 	"danny.vn/aboutme/apps/server/internal/printsnapshot"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
@@ -28,7 +30,7 @@ const (
 var errOwnerPDFPreparation = errors.New("resumeapi: owner PDF preparation failed")
 
 type ownerResumeReader interface {
-	Get(context.Context, uuid.UUID, uuid.UUID) (resume.Resume, error)
+	GetWithProjectLinks(context.Context, uuid.UUID, uuid.UUID) (resume.Resume, json.RawMessage, error)
 }
 
 type ownerPDFPreparationFailure uint32
@@ -99,7 +101,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 	result, renderErr := s.printQueue.Render(r.Context(), renderjob.Request{
 		Format: renderjob.PDF,
 		Prepare: func(ctx context.Context) (renderjob.Snapshot, error) {
-			row, err := reader.Get(ctx, userID, resumeID)
+			row, linkContext, err := reader.GetWithProjectLinks(ctx, userID, resumeID)
 			if err != nil {
 				if errors.Is(err, resume.ErrNotFound) {
 					preparation.Store(uint32(ownerPDFPreparationNotFound))
@@ -114,6 +116,9 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
 			}
 			envelope, err := printsnapshot.FromOwner(row, photo, contentType)
+			if err == nil {
+				envelope, err = s.withOwnerProjectLinks(envelope, row, linkContext)
+			}
 			if err != nil {
 				preparation.Store(uint32(ownerPDFPreparationUnavailable))
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
@@ -156,6 +161,21 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 		return
 	}
 	_, _ = w.Write(result.Bytes) //nolint:errcheck // The response is committed; retrying can duplicate bytes, and this owner boundary must not log details.
+}
+
+func (s *Service) withOwnerProjectLinks(envelope printsnapshot.Envelope, row resume.Resume, linkContext json.RawMessage) (printsnapshot.Envelope, error) {
+	if !row.Live || row.Slug == nil {
+		return envelope, nil
+	}
+	public, err := publicresume.Project(row, s.canonicalOrigin)
+	if err != nil {
+		return printsnapshot.Envelope{}, err
+	}
+	links, err := publicresume.ProjectLinks(linkContext, public, s.canonicalOrigin)
+	if err != nil {
+		return printsnapshot.Envelope{}, err
+	}
+	return printsnapshot.WithProjectLinks(envelope, s.canonicalOrigin, *row.Slug, links)
 }
 
 func validateOwnerPDFRequest(r *http.Request) error {

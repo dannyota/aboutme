@@ -2,6 +2,7 @@ package resume
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -67,6 +68,21 @@ func (s *Store) Create(ctx context.Context, userID uuid.UUID, title string, doc 
 
 func (s *Store) Get(ctx context.Context, userID, id uuid.UUID) (Resume, error) {
 	return s.GetTx(ctx, s.q, userID, id)
+}
+
+func (s *Store) GetWithProjectLinks(ctx context.Context, userID, id uuid.UUID) (Resume, json.RawMessage, error) {
+	row, err := s.q.GetResumeForUserWithProjectLinks(ctx, store.GetResumeForUserWithProjectLinksParams{ID: id, UserID: userID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Resume{}, nil, ErrNotFound
+		}
+		return Resume{}, nil, fmt.Errorf("resume: get with project links: %w", err)
+	}
+	got, err := s.projectRow(row.Resume)
+	if err != nil {
+		return Resume{}, nil, err
+	}
+	return got, row.ProjectLinks, nil
 }
 
 func (s *Store) List(ctx context.Context, userID uuid.UUID) ([]Resume, error) {

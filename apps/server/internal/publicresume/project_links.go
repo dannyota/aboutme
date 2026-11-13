@@ -20,14 +20,24 @@ type storedLink struct {
 	ProjectSlug string `json:"projectSlug"`
 }
 
-func projectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin) ([]ProjectLink, error) {
+func ProjectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin) ([]ProjectLink, error) {
 	entries, err := linkedEntries(raw, public, origin)
+	if err != nil {
+		return nil, err
+	}
+	documents, err := storedDocuments(raw, "")
 	if err != nil {
 		return nil, err
 	}
 	out := make([]ProjectLink, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, entry.link)
+		available, err := renderableProject(documents[entry.link.EntryID], public.Lng)
+		if err != nil {
+			return nil, errLinkContext
+		}
+		if available {
+			out = append(out, entry.link)
+		}
 	}
 	return out, nil
 }
