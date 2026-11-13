@@ -421,16 +421,6 @@ type Querier interface {
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
 	GetPublicRealtimeResume(ctx context.Context, slug string) (GetPublicRealtimeResumeRow, error)
 	GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error)
-	// Missing, never-published, private, renamed, and deleted rows all surface as
-	// pgx.ErrNoRows. Representation-specific flags are checked after this live
-	// gate without exposing a different lookup result.
-	//
-	// project_links is the project link context: for each entry that is not
-	// hidden and names a project of the same owner, the entry id and the project
-	// slug. One statement reads both, so the links always belong to the returned
-	// revision (docs/design/projects-contract.md "Project link context"). The
-	// project id never leaves the statement. The id is compared as text, so a
-	// malformed stored value matches nothing instead of failing the read.
 	GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error)
 	// One project page's snapshot: the live resume; its project link context as
 	// the list reads it, each linked document without its descriptions; and the
@@ -452,6 +442,7 @@ type Querier interface {
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
+	GetResumeForUserWithProjectLinks(ctx context.Context, arg GetResumeForUserWithProjectLinksParams) (GetResumeForUserWithProjectLinksRow, error)
 	// Resolves the account that holds a current resume slug, for the operator
 	// deletion command (docs/design/showcase.md "Report and account deletion").
 	// A tombstoned slug has no resume row and so has no owner.

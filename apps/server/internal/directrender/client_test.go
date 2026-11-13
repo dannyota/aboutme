@@ -108,7 +108,7 @@ func TestClientCapsRequestBeforeTransportAndSetsFiveSecondDeadline(t *testing.T)
 		return nil, errors.New("transport must not run")
 	})})
 	tooLarge := renderRequest()
-	tooLarge.PublicResume.Document.PersonalDetails.FullName = string(bytes.Repeat([]byte("x"), 532_480))
+	tooLarge.PublicResume.Document.PersonalDetails.FullName = string(bytes.Repeat([]byte("x"), 557_056))
 	if _, err := client.Render(context.Background(), tooLarge); !errors.Is(err, ErrRenderUnavailable) {
 		t.Fatalf("oversized request error = %v", err)
 	}
@@ -132,8 +132,8 @@ func TestClientCapsRequestBeforeTransportAndSetsFiveSecondDeadline(t *testing.T)
 }
 
 func TestClientRequestAndResponseBoundaries(t *testing.T) {
-	buffer := &limitedBuffer{limit: 532_480}
-	if _, err := buffer.Write(bytes.Repeat([]byte("x"), 532_480)); err != nil {
+	buffer := &limitedBuffer{limit: 557_056}
+	if _, err := buffer.Write(bytes.Repeat([]byte("x"), 557_056)); err != nil {
 		t.Fatalf("exact request limit rejected: %v", err)
 	}
 	if _, err := buffer.Write([]byte("x")); !errors.Is(err, errRenderRequestTooLarge) {

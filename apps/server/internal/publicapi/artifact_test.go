@@ -55,7 +55,7 @@ func newArtifactHarnessWithCache(t *testing.T, queue RenderQueue, cacheEntries i
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: now,
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func newArtifactHarnessWithCoordinatorClock(
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: cacheNow,
 	})
 	if err != nil {
@@ -342,7 +342,7 @@ func TestPublicArtifactPrepareReadsNormalizedPhotoUnderLease(t *testing.T) {
 		}
 		return renderjob.Result{Bytes: []byte("png"), Revision: snapshot.Revision}, nil
 	})
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: time.Now,
 	})
 	if err != nil {
@@ -1135,7 +1135,7 @@ func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: now, ViewPassKey: key,
 	})
@@ -1221,7 +1221,7 @@ func TestFallbackOgPNGStaysPublicForPublicResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: now, ViewPassKey: bytes.Repeat([]byte{0x22}, 32),
 	})

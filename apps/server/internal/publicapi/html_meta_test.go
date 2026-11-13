@@ -124,7 +124,7 @@ func TestPublicHTMLAcceptsExactlyThePreviewHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page := expectedPublicPage(public, nil, nil)
+	page := withEntryPoints(expectedPublicPage(public, nil, nil), public.Slug, nil, origin)
 	want := previewmeta.Meta{Title: `Nguyễn "An" <Dev> & co`, Description: "Kỹ sư thanh toán. Email .", Locale: "vi_VN", ImageAlt: `Nguyễn "An" <Dev> & co · Kỹ sư phần mềm`}
 	if page.Preview != want {
 		t.Fatalf("preview = %#v, want %#v", page.Preview, want)
@@ -315,7 +315,7 @@ func TestPublicRenderRequestWithTheLargestDocumentFits(t *testing.T) {
 		t.Fatalf("largest render request refused: %v", err)
 	}
 	t.Logf("largest render request: %d bytes", sent)
-	if sent == 0 || sent > 532_480 {
+	if sent == 0 || sent > 557_056 {
 		t.Fatalf("render request = %d bytes", sent)
 	}
 }

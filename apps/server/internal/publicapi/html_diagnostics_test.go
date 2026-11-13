@@ -175,7 +175,7 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	}
 	title := "Ada & <friends>"
 	emoji := "\U0001F680"
-	page := expectedPublicPage(resume, &title, &emoji)
+	page := withEntryPoints(expectedPublicPage(resume, &title, &emoji), resume.Slug, nil, origin)
 	icon := `<link rel="icon" href="` + publicpage.FaviconHref(emoji) + `">`
 	ogTitle := `<meta property="og:title" content="Ada">`
 	customOGTitle := `<meta property="og:title" content="Ada &amp; &lt;friends&gt;">`
@@ -211,7 +211,7 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 		})
 	}
 
-	noIcon := expectedPublicPage(resume, nil, nil)
+	noIcon := withEntryPoints(expectedPublicPage(resume, nil, nil), resume.Slug, nil, origin)
 	if rule := publicHTMLRejectionForPage([]byte(valid), resume, noIcon, origin, jsonLD, false); rule != "title" {
 		t.Fatalf("page without settings: rule = %q, want title", rule)
 	}

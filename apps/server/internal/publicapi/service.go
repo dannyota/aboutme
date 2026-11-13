@@ -109,7 +109,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
 	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
 	artifacts, artifactErr := newArtifactHandlers(ArtifactDependencies{
-		Reader: dependencies.Reader, Cache: dependencies.Cache, Queue: dependencies.PrintQueue,
+		Reader: dependencies.Reader, Cache: dependencies.Cache, Queue: dependencies.PrintQueue, PublicOrigin: dependencies.PublicOrigin,
 		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest,
 		TrustedProxies: dependencies.TrustedProxies, Clock: dependencies.Clock, Cards: dependencies.Cards,
 		ViewPassKey: dependencies.ViewPassKey,

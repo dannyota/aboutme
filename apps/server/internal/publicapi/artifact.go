@@ -19,7 +19,7 @@ import (
 const (
 	publicArtifactRequestsPerMinute = 300
 	publicRenderRequestsPerMinute   = 20
-	publicPDFFormatVersion          = 1
+	publicPDFFormatVersion          = 2
 	publicPNGFormatVersion          = 1
 )
 
@@ -31,6 +31,7 @@ type ArtifactDependencies struct {
 	Reader         *publicresume.Reader
 	Cache          *publiccache.Cache
 	Queue          RenderQueue
+	PublicOrigin   publicresume.PublicOrigin
 	AppDigest      string
 	RendererDigest string
 	TrustedProxies api.TrustedProxies
@@ -61,10 +62,11 @@ type artifactContract struct {
 	namedDownload  bool
 	maxBytes       int
 	gated          bool
+	projectLinks   bool
 }
 
 func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, error) {
-	if dependencies.Reader == nil || dependencies.Cache == nil ||
+	if dependencies.Reader == nil || dependencies.Cache == nil || dependencies.PublicOrigin.String() == "" ||
 		dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
@@ -85,7 +87,7 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 			format: renderjob.PDF, representation: publicstate.RepresentationPDF,
 			suffix: "/pdf", variant: "default", formatVersion: publicPDFFormatVersion,
 			contentType: "application/pdf", namedDownload: true,
-			maxBytes: renderjob.PDFMaxBytes, gated: true,
+			maxBytes: renderjob.PDFMaxBytes, gated: true, projectLinks: true,
 		}),
 		png: service.handler(artifactContract{
 			format: renderjob.PNG, representation: publicstate.RepresentationPNG,
@@ -176,6 +178,9 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 					}
 				}
 				envelope, snapshotErr := printsnapshot.FromPublic(snapshot, photo, contentType)
+				if snapshotErr == nil && contract.projectLinks {
+					envelope, snapshotErr = printsnapshot.WithProjectLinks(envelope, s.dependencies.PublicOrigin, snapshot.Public.Slug, snapshot.ProjectLinks)
+				}
 				if snapshotErr != nil {
 					return renderjob.Snapshot{}, snapshotErr
 				}

@@ -48,6 +48,7 @@ type resumeLinksSource struct {
 	linked            []string
 	prepare           func(entries []schema.ProjectEntry)
 	print             bool
+	blankName         string
 }
 
 func resumeLinksSources() []resumeLinksSource {
@@ -105,13 +106,20 @@ func resumeLinksSourceDocument(t *testing.T, source resumeLinksSource) schema.Re
 func statementLinkContext(t *testing.T, document schema.Resume, source resumeLinksSource) json.RawMessage {
 	t.Helper()
 	type storedLink struct {
-		EntryID     string `json:"entryId"`
-		ProjectSlug string `json:"projectSlug"`
+		EntryID     string         `json:"entryId"`
+		ProjectSlug string         `json:"projectSlug"`
+		Document    map[string]any `json:"document"`
 	}
 	links := []storedLink{}
 	for index, entry := range document.Content["project"].ProjectEntries {
 		if index < len(source.linked) && source.linked[index] != "" && entry.ProjectID != nil && (entry.IsHidden == nil || !*entry.IsHidden) {
-			links = append(links, storedLink{EntryID: entry.ID, ProjectSlug: source.linked[index]})
+			name := source.linked[index]
+			if source.blankName == name {
+				name = " "
+			}
+			links = append(links, storedLink{EntryID: entry.ID, ProjectSlug: source.linked[index], Document: map[string]any{
+				"defaultLanguage": "en", "text": map[string]any{"en": map[string]string{"name": name}},
+			}})
 		}
 	}
 	raw, err := json.Marshal(links)
@@ -154,20 +162,17 @@ func readResumeLinksSnapshot(t *testing.T, source resumeLinksSource) publicresum
 	return snapshot
 }
 
-func resumeLinksRequest(t *testing.T, snapshot publicresume.Snapshot) directrender.PublicRenderRequest {
+func resumeLinksPage(t *testing.T, snapshot publicresume.Snapshot) publicPage {
 	t.Helper()
 	origin := mustPublicOrigin(t)
 	page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 	page.Preview.ImageURL = origin.Resolve(previewcard.Path(snapshot.Public.Slug, "0123456789abcdef"))
-	return withEntryPoints(publicRenderRequest(snapshot.Public, snapshot.DiscoveryEnabled, page, origin), snapshot.ProjectLinks, origin)
+	return withEntryPoints(page, snapshot.Public.Slug, snapshot.ProjectLinks, origin)
 }
 
-func withEntryPoints(request directrender.PublicRenderRequest, links []publicresume.ProjectLink, origin publicresume.PublicOrigin) directrender.PublicRenderRequest {
-	for _, link := range links {
-		request.ProjectLinks = append(request.ProjectLinks, directrender.EntryProjectLink{EntryID: link.EntryID, URL: link.URL})
-	}
-	request.ProjectsURL = origin.Resolve("/" + request.PublicResume.Slug + "/projects")
-	return request
+func resumeLinksRequest(t *testing.T, snapshot publicresume.Snapshot) directrender.PublicRenderRequest {
+	t.Helper()
+	return publicRenderRequest(snapshot.Public, snapshot.DiscoveryEnabled, resumeLinksPage(t, snapshot), mustPublicOrigin(t))
 }
 
 func printEnvelope(t *testing.T, snapshot publicresume.Snapshot) []byte {

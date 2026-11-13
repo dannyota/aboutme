@@ -18,7 +18,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-const htmlFormatVersion = 3
+const htmlFormatVersion = 4
 
 type HTMLDependencies struct {
 	Reader           *publicresume.Reader
@@ -88,7 +88,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
+		page := withEntryPoints(expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji), snapshot.Public.Slug, snapshot.ProjectLinks, dependencies.PublicOrigin)
 		if snapshot.SignInToView {
 			page.JoinInvite = dependencies.JoinInviteTarget
 		}
@@ -172,10 +172,12 @@ func serveHTMLError(w http.ResponseWriter, request *http.Request, status int) {
 }
 
 type publicPage struct {
-	Title       string
-	FaviconHref string
-	Preview     previewmeta.Meta
-	JoinInvite  string
+	Title        string
+	FaviconHref  string
+	Preview      previewmeta.Meta
+	JoinInvite   string
+	ProjectsURL  string
+	ProjectLinks []directrender.EntryProjectLink
 }
 
 func expectedPublicPage(resume publicresume.PublicResume, publicTitle, faviconEmoji *string) publicPage {

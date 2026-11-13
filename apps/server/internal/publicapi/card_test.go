@@ -69,7 +69,7 @@ func newCardHarness(t *testing.T, cards *fakeCards) (*artifactHandlers, *publicS
 		t.Fatal("the share-image render queue ran while stored cards are on")
 		return renderjob.Result{}, nil
 	})
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: time.Now, Cards: cards,
 	})

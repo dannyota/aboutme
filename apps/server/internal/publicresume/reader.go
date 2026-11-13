@@ -87,7 +87,7 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 		}
 		snapshot, err := r.snapshot(row)
 		if err == nil {
-			snapshot.ProjectLinks, err = projectLinks(read.ProjectLinks, snapshot.Public, r.origin)
+			snapshot.ProjectLinks, err = ProjectLinks(read.ProjectLinks, snapshot.Public, r.origin)
 		}
 		if err != nil {
 			lease.Release()
