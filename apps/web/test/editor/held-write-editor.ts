@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { createResumeEditorActions } from '../../app/composables/useResumeEditor';
 import { createMutationCoordinator } from '../../app/editor/coordinator';
 import type { AtomicCommandIntent } from '../../app/editor/commands';
+import type { AcceptedResume } from '../../app/editor/types';
 import { useResumeStore } from '../../app/stores/resumes';
 import { fakeServer, startingResume } from './fake-resume-server';
 
@@ -13,9 +14,8 @@ import { fakeServer, startingResume } from './fake-resume-server';
  * One open editor on the fake server: the real store, coordinator and
  * actions, driven by fake timers the caller installs.
  */
-export function openEditor() {
+export function openEditor(initial: AcceptedResume = startingResume()) {
   setActivePinia(createPinia());
-  const initial = startingResume();
   const server = fakeServer(initial);
   const store = useResumeStore();
   store.initialize(initial);

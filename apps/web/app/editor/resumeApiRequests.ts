@@ -243,6 +243,16 @@ function wireForCommand(
           projectId: command.projectId,
         } as JsonBody<'linkResumeProject'>,
       };
+    case 'projectLinkEntry':
+      return {
+        operation: 'linkResumeProject',
+        url: `${base}/project-links`,
+        method: 'POST',
+        body: {
+          projectId: command.projectId,
+          entryId: command.entryId,
+        } as JsonBody<'linkResumeProject'>,
+      };
     case 'projectRefresh':
       return {
         operation: 'refreshResumeProjectEntry',

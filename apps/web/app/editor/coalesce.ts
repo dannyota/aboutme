@@ -50,6 +50,7 @@ function isValueCommand(command: AtomicEditorCommand): boolean {
     case 'photoDelete':
     case 'resumeDelete':
     case 'projectLink':
+    case 'projectLinkEntry':
     case 'projectRefresh':
       return false;
     default:

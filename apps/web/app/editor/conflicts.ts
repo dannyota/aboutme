@@ -124,6 +124,7 @@ function replacementIntent(
     case 'photoUpload':
     case 'photoDelete':
     case 'projectLink':
+    case 'projectLinkEntry':
     case 'projectRefresh':
       return null;
     case 'resumeDelete':

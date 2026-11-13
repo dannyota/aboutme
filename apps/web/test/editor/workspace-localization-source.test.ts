@@ -67,6 +67,7 @@ const vueSources = [
   'components/editor/forms/ContactList.vue',
   'components/editor/forms/DateRangeField.vue',
   'components/editor/forms/PersonalDetailsPanel.vue',
+  'components/editor/forms/ProjectDuplicateDialog.vue',
   'components/editor/forms/ProjectEntryMenu.vue',
   'components/editor/forms/ResumeLanguageField.vue',
   'components/editor/forms/SectionPanel.vue',
@@ -77,6 +78,7 @@ const vueSources = [
   'components/editor/forms/entries/EntryLinkField.vue',
   'components/editor/forms/entries/LanguageEntryFields.vue',
   'components/editor/forms/entries/ProfileEntryFields.vue',
+  'components/editor/forms/entries/ProjectEntryActions.vue',
   'components/editor/forms/entries/ProjectEntryFields.vue',
   'components/editor/forms/entries/ProjectLinkNote.vue',
   'components/editor/forms/entries/SkillEntryFields.vue',
@@ -100,6 +102,7 @@ const vueSources = [
 ];
 const helperSources = [
   'components/editor/customization/labels.ts',
+  'components/editor/forms/projectEntryLinking.ts',
   'components/editor/forms/projectLibrary.ts',
   'components/editor/forms/projectLinking.ts',
   'editor/projectLinks.ts',
@@ -155,6 +158,8 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'editor-fields.projectLinks.note': ['Shop site'],
   'editor-fields.projectLinks.pageUses': ['English'],
   'editor-fields.projectLinks.languageName': ['ja'],
+  'editor-fields.projectLinks.duplicateQuestion': ['Shop site'],
+  'editor-fields.projectLinks.saveNeedsTitle': [120],
   'editor-sections.entry': [1],
   'editor-shell.conflictControl': ['apply-field'],
   'editor-shell.pageCount': [1],
