@@ -70,9 +70,9 @@ from the code and mislead agents (owner, 2026-11-13).
   and generated-code markers, sqlc query annotations) and one line on why for a
   behaviour of an external tool or service that no design doc owns, naming its
   source.
-- No doc comments that only repeat a name, and no comments that restate the
-  code or a design doc. A rule the code must keep belongs in the design doc
-  that owns it, or in a test that fails when it breaks.
+- No doc comments that only repeat a name, and no comments that restate the code
+  or a design doc. A rule the code must keep belongs in the design doc that owns
+  it, or in a test that fails when it breaks.
 - Delete such comments in code you touch.
 
 Do not leave these in code, tests, or living docs:
