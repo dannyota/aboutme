@@ -67,8 +67,6 @@ func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.
 	return s.current, s.saveErr
 }
 
-// skewedSaveStore returns a saved row whose revision is not the expected
-// revision plus one.
 type skewedSaveStore struct{ documentAwareOperationStore }
 
 func (s skewedSaveStore) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID,
@@ -272,10 +270,6 @@ func TestBeforeSaveCannotMutateTheValidatedStoredDocument(t *testing.T) {
 	}
 }
 
-// TestDocumentSaveOperationsRespondWithTheSavedRow proves the aggregate and
-// personal-details saves answer with the row the write returned, without a
-// reread, and fail when that row's revision is not the expected revision plus
-// one.
 func TestDocumentSaveOperationsRespondWithTheSavedRow(t *testing.T) {
 	t.Parallel()
 

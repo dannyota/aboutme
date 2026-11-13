@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// insertLegacyProject stores a project row the way a save before the link
-// rule could have, bypassing today's library validation.
 func insertLegacyProject(t *testing.T, h *resumeAPITestHarness, slug, repositoryURL string) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -85,8 +83,6 @@ func TestProjectLinks_LegacyLibraryLinksRefreshWithinTheEntryContract(t *testing
 	requireEntryLink(t, h, created.ID, stringPointer("https://Example.COM/renamed"))
 }
 
-// A saved library link keeps its host bytes, and the entry link contract
-// accepts an uppercase or internationalised host, so linking copies both.
 func TestProjectLinks_SavedHostKeepsItsBytesAndLinks(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	for _, tc := range []struct {

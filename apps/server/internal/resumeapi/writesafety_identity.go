@@ -1,9 +1,5 @@
 package resumeapi
 
-// Mutation request identity: parsing the Idempotency-Key and If-Match
-// headers, and hashing a request's canonical operation and body into the
-// domain-separated digests that key idempotency records.
-
 import (
 	"bytes"
 	"crypto/sha256"

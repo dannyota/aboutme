@@ -16,15 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// requireMigrateTestDatabaseURL returns TEST_DATABASE_URL, skipping the
-// calling test (not failing it) when unset — exactly like
-// migrations/testdb_test.go's newTestDatabase and internal/store's
-// integration test, so `go test ./...` stays fully hermetic by default.
-// This package keeps its own small copy of this live-DB test
-// infrastructure rather than importing another test package's (unexported,
-// and Go test helpers aren't shared across packages without a common
-// importable dependency) — see migrations/testdb_test.go's package doc
-// comment for the same established convention.
 func requireMigrateTestDatabaseURL(t *testing.T) string {
 	t.Helper()
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -36,11 +27,6 @@ func requireMigrateTestDatabaseURL(t *testing.T) string {
 
 var migrateTestDatabaseCounter atomic.Uint64
 
-// newMigrateTestDatabase creates a fresh, uniquely named database on the
-// server pointed to by base, ensures the fixed aboutme_migrator/
-// aboutme_app roles and this new database's grants (database ACLs are
-// per-database, so this must run against the new database, not base), and
-// returns a connection URL for it, dropped in t.Cleanup.
 func newMigrateTestDatabase(t *testing.T, base string) string {
 	t.Helper()
 

@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// IsCanonicalOrigin reports whether raw is a canonical HTTP(S) origin for
-// OAuth and MCP configuration. It validates without normalizing the input.
 func IsCanonicalOrigin(raw string) bool {
 	if raw == "" || len(raw) > 512 {
 		return false

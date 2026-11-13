@@ -9,21 +9,16 @@ import (
 	"strings"
 )
 
-// ProviderLogin names the provider logins the server registers. The zero value
-// is password-only.
 type ProviderLogin struct {
 	Google   bool
 	GitHub   bool
 	LinkedIn bool
 }
 
-// Any reports whether at least one provider login is enabled.
 func (p ProviderLogin) Any() bool {
 	return p.Google || p.GitHub || p.LinkedIn
 }
 
-// Names returns the enabled provider path names in the fixed order google,
-// github, linkedin. It is never nil, so it encodes as a JSON array.
 func (p ProviderLogin) Names() []string {
 	names := []string{}
 	for _, provider := range []struct {
@@ -37,9 +32,6 @@ func (p ProviderLogin) Names() []string {
 	return names
 }
 
-// loadProviderLoginFlag parses PROVIDER_LOGIN_ENABLED: blank or "false" enables
-// no provider, "true" enables all three, and a comma list of google, github,
-// and linkedin enables exactly those. Errors never echo the raw value.
 func loadProviderLoginFlag(raw string) (ProviderLogin, error) {
 	raw = strings.TrimSpace(raw)
 	switch raw {
@@ -185,10 +177,6 @@ func validateLoopbackProviderURL(name, raw, wantPath string, requireHTTPS bool) 
 	return nil
 }
 
-// loadProviderCredentials reads <PREFIX>_CLIENT_ID and <PREFIX>_CLIENT_SECRET
-// only for an enabled provider; a disabled provider's values are never read.
-// Both are required in prod and staging when the provider is enabled, so a
-// server that offers the login cannot boot without real credentials.
 func loadProviderCredentials(prefix, provider string, getenv func(string) string, env string, enabled bool) (clientID, clientSecret string, err error) {
 	if !enabled {
 		return "", "", nil

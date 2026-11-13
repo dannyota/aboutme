@@ -6,11 +6,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Abort is a reviewed production operation, not a routine command. The host
-// must stop workers and changed ingestion and durably revoke both receipts.
 func (s *Service) Abort(ctx context.Context) error {
-	// The latch commits separately so an invalid cancellation batch cannot
-	// reopen sending or erase an interrupted abort.
 	if latchErr := s.reviewed(ctx, func(q *store.Queries, campaign store.PrivacyNoticeCampaign) error {
 		if campaign.State == "aborted" {
 			return nil

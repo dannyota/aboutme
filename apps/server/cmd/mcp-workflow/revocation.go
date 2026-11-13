@@ -17,17 +17,11 @@ const (
 	formContentType       = "application/x-www-form-urlencoded"
 )
 
-// httpRevocation sends the design's narrow RFC 7009 exception, the bearer
-// probe, and the refresh-authority test through the restricted client. Tokens
-// never enter errors or logs.
 type httpRevocation struct {
 	client *http.Client
 	origin string
 }
 
-// Revoke posts exactly token=<refresh>&token_type_hint=refresh_token with no
-// cookie or bearer header. A transport error or 5xx permits one
-// byte-equivalent retry.
 func (h httpRevocation) Revoke(ctx context.Context, refreshToken string) error {
 	if !validBearerValue(refreshToken) {
 		return errRevocation
@@ -45,8 +39,6 @@ func (h httpRevocation) Revoke(ctx context.Context, refreshToken string) error {
 	return errRevocation
 }
 
-// Probe sends one authenticated GET to /mcp and returns the status and the
-// response's server Date.
 func (h httpRevocation) Probe(ctx context.Context, accessToken string) (int, time.Time, error) {
 	if !validBearerValue(accessToken) {
 		return 0, time.Time{}, errRevocation
@@ -73,8 +65,6 @@ func (h httpRevocation) Probe(ctx context.Context, accessToken string) (int, tim
 	return response.StatusCode, date, nil
 }
 
-// Refresh submits the exact current refresh token. invalid_grant proves dead
-// authority; a well-formed rotation returns the successor tokens.
 func (h httpRevocation) Refresh(ctx context.Context, refreshToken string) (refreshOutcome, error) {
 	if !validBearerValue(refreshToken) {
 		return refreshOutcome{}, errRevocation
@@ -134,7 +124,6 @@ func (h httpRevocation) postWithDate(ctx context.Context, path string, form []by
 	return response.StatusCode, body, date, nil
 }
 
-// responseDate returns the response's same-origin server Date.
 func responseDate(response *http.Response) (time.Time, bool) {
 	values := response.Header.Values("Date")
 	if len(values) != 1 {

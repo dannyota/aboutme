@@ -1,6 +1,3 @@
-// Package store_test exercises the pgx/v5 pool constructor: pool-size
-// capping, context-aware close, and Ping against an unreachable database
-// (no live Postgres instance is required or used by these tests).
 package store_test
 
 import (
@@ -11,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// unreachableDSN points at a closed local port so connection attempts fail
-// fast (connection refused) without needing a real Postgres instance.
 const unreachableDSN = "postgres://user:pass@127.0.0.1:1/aboutme?connect_timeout=1"
 
 func TestNewPool_ClampsOversizedPoolToBudget(t *testing.T) {

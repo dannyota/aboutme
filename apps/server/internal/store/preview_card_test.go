@@ -31,8 +31,6 @@ type previewCardEnv struct {
 	version  string
 }
 
-// newPreviewCardEnv commits one live resume with a real document, so the
-// card store's own transactions see it, and removes its owner afterwards.
 func newPreviewCardEnv(t *testing.T) previewCardEnv {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -168,8 +166,6 @@ func TestPreviewCardSaveStoresOnlyALiveCurrentCard(t *testing.T) {
 	}
 }
 
-// A store that starts while an unpublish holds the resume row waits for it,
-// then sees the committed unpublish and writes nothing.
 func TestPreviewCardSaveWaitsForAnUnpublishAndIsRefused(t *testing.T) {
 	env := newPreviewCardEnv(t)
 	unpublish, err := env.pool.Begin(env.ctx)
@@ -199,8 +195,6 @@ func TestPreviewCardSaveWaitsForAnUnpublishAndIsRefused(t *testing.T) {
 	}
 }
 
-// A store that commits while an unpublish waits on the resume row leaves no
-// card: the unpublish trigger removes the row the store just committed.
 func TestPreviewCardCommittedBeforeAWaitingUnpublishIsRemoved(t *testing.T) {
 	env := newPreviewCardEnv(t)
 	storeTx, err := env.pool.Begin(env.ctx)
@@ -259,7 +253,6 @@ func waitForBlockedUpdate(ctx context.Context, t *testing.T, pool *pgxpool.Pool)
 	}
 }
 
-// A committed card is removed by a rename and by a delete.
 func TestPreviewCardIsRemovedByRenameAndDelete(t *testing.T) {
 	for _, mutation := range []string{
 		`UPDATE resumes SET slug = slug || '-x' WHERE id = $1`,

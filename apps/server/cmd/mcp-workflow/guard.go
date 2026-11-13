@@ -23,37 +23,26 @@ const (
 	maxListResultBytes     = 64 << 10
 	maxDocumentResultBytes = 2 << 20
 	maxPhotoResultBytes    = 3 << 20
-	// maxToolCalls bounds every run, including recovery reads and local proofs.
-	maxToolCalls = 96
-	// createSendWindow is the design's one-minute bound between the recorded
-	// server time and the create request deadline.
-	createSendWindow = time.Minute
-	toolCallTimeout  = 2 * time.Minute
+	maxToolCalls           = 96
+	createSendWindow       = time.Minute
+	toolCallTimeout        = 2 * time.Minute
 )
 
-// closedToolErrors is the complete set of fixed tool error codes the server
-// returns. Any other error shape is an unknown outcome.
 var closedToolErrors = map[string]bool{
 	"not_found": true, "revision_conflict": true, "validation_failed": true, "payload_too_large": true,
 	"rate_limited": true, "agent_access_unavailable": true, "scope_denied": true,
 }
 
-// readTools and mutationTools are the only tools the runner may call. Every
-// other registered tool, including delete_resume, is refused before sending.
 var (
 	readTools     = map[string]bool{"list_resumes": true, "get_resume": true, "get_photo": true}
 	mutationTools = map[string]bool{"create_resume": true, "upload_photo": true, "update_photo_crop": true}
 )
 
-// resumeRef is any readable resume handle. Mutation methods accept only
-// targetHandle, so a source identifier cannot reach a write call.
 type resumeRef interface{ resumeID() string }
 
 func (h sourceHandle) resumeID() string { return string(h) }
 func (h targetHandle) resumeID() string { return string(h) }
 
-// toolGuard is the only path from workflow code to the SDK session. It
-// enforces the design's mutation caps outside model control.
 type toolGuard struct {
 	client sdkToolClient
 	local  bool
@@ -84,8 +73,6 @@ func (g *toolGuard) setSource(source sourceHandle) error {
 	return nil
 }
 
-// bindIntent fixes the only create payload and key this process may send.
-// fresh is true only for an intent this process persisted and never sent.
 func (g *toolGuard) bindIntent(intent createIntent, fresh bool) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -99,8 +86,6 @@ func (g *toolGuard) bindIntent(intent createIntent, fresh bool) error {
 	return nil
 }
 
-// bindTarget records the created or reconciled target. It never accepts the
-// source or a second target.
 func (g *toolGuard) bindTarget(id string) (targetHandle, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -130,10 +115,6 @@ func (g *toolGuard) call(ctx context.Context, name string, arguments map[string]
 	return g.client.CallTool(callContext, &mcp.CallToolParams{Name: name, Arguments: arguments})
 }
 
-// mutationBound admits a mutation only in the exact shape the bound paths
-// send: create carries the bound intent's key and payload and names no
-// resume; a photo write names the bound target, never the source. The caller
-// holds g.mu.
 func (g *toolGuard) mutationBound(name string, arguments map[string]any) bool {
 	if name == "create_resume" {
 		key, keyOK := arguments["idempotency_key"].(string)
@@ -201,8 +182,6 @@ func (g *toolGuard) getPhoto(ctx context.Context, ref resumeRef) (photoBytes, er
 	return photo, nil
 }
 
-// createOutcome classifies a create response. Only a closed validation error
-// on the first send of an intent proves that the server accepted nothing.
 type createOutcome int
 
 const (
@@ -211,8 +190,6 @@ const (
 	createUnknown
 )
 
-// create sends the bound intent. The caller supplies the deadline that keeps
-// the request inside the replay window.
 func (g *toolGuard) create(ctx context.Context, deadline time.Time) (resumeState, createOutcome, error) {
 	g.mu.Lock()
 	if !g.createAllowed() {
@@ -245,9 +222,6 @@ func (g *toolGuard) create(ctx context.Context, deadline time.Time) (resumeState
 	return output.State, createCreated, nil
 }
 
-// createAllowed permits one send of the bound intent per process. Local
-// synthetic proof mode alone adds one exact same-key replay after the target
-// is known. The caller holds g.mu.
 func (g *toolGuard) createAllowed() bool {
 	if g.intent == nil {
 		return false
@@ -258,8 +232,6 @@ func (g *toolGuard) createAllowed() bool {
 	return g.createSends == 0 && g.target == ""
 }
 
-// uploadPhoto and cropPhoto accept only the bound target and one send each.
-// A conflict or unknown result is reconciled by reads, never by rebasing.
 func (g *toolGuard) uploadPhoto(ctx context.Context, target targetHandle, revision string, key string, data []byte) (mutationResult, string, error) {
 	if err := g.reserveTargetWrite(target, &g.uploads); err != nil {
 		return mutationResult{}, "", err
@@ -285,8 +257,6 @@ func (g *toolGuard) cropPhoto(ctx context.Context, target targetHandle, revision
 	})
 }
 
-// staleCropProbe is a local synthetic proof only: it sends one crop with a
-// revision that is not current and must observe revision_conflict.
 func (g *toolGuard) staleCropProbe(ctx context.Context, target targetHandle, staleRevision, key string, crop *photoCrop) (string, error) {
 	g.mu.Lock()
 	if !g.local || g.conflictProbe || g.target == "" || target != g.target || target.resumeID() == g.source.resumeID() {
@@ -335,9 +305,6 @@ func (g *toolGuard) targetMutation(ctx context.Context, name string, arguments m
 	return output, "", nil
 }
 
-// decodeToolOutput decodes the SDK result shape the server sends: structured
-// content plus at most one text fallback. Unknown fields, error results, and
-// oversized payloads fail closed.
 func decodeToolOutput[T any](result *mcp.CallToolResult, limit int) (T, error) {
 	var decoded T
 	if result == nil || result.IsError || result.StructuredContent == nil || len(result.Content) > 1 {
@@ -363,7 +330,6 @@ func decodeToolOutput[T any](result *mcp.CallToolResult, limit int) (T, error) {
 	return decoded, nil
 }
 
-// toolErrorCode returns the closed error code of a tool error result.
 func toolErrorCode(result *mcp.CallToolResult) (string, bool) {
 	if result == nil || !result.IsError || len(result.Content) != 1 {
 		return "", false

@@ -16,11 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// ---- totpReencryptBatchLimit: pure logic, no database ----------------------
-
-// TestTOTPReencryptBatchLimit proves the per-batch row limit is always at
-// most 200 and never exceeds the run's remaining 10,000-row budget
-// (docs/design/budgets.md "TOTP re-encryption").
 func TestTOTPReencryptBatchLimit(t *testing.T) {
 	t.Parallel()
 
@@ -40,8 +35,6 @@ func TestTOTPReencryptBatchLimit(t *testing.T) {
 		}
 	}
 }
-
-// ---- fixtures: a real pool against the migrated test database -------------
 
 func newTOTPRotationPool(t *testing.T) *store.Pool {
 	t.Helper()
@@ -84,13 +77,6 @@ func newTOTPRotationSession(ctx context.Context, t *testing.T, q *store.Queries,
 	return sess.ID
 }
 
-// totpRotationNow anchors a rotation test's own rows and its runner's clock
-// at the real wall clock rather than a fixed past instant. The runner's
-// off-active-key scan has no per-test scoping and can pick up rows earlier
-// runs left in the shared test database under the same previous key text; a
-// fixed instant older than one of those rows would make the runner rewrite
-// updated_at to a time before that row's own created_at, violating
-// totp_credentials_updated_order_check and totp_enrollments' equivalent.
 func totpRotationNow() time.Time {
 	return time.Now().UTC()
 }
@@ -104,18 +90,8 @@ func totpRotationRandomBytes(t *testing.T, n int) []byte {
 	return b
 }
 
-// totpRotationBogusKeyID is a well-shaped key ID (26 bytes, the
-// totp_credentials_key_id_check/totp_enrollments_key_id_check pattern) that
-// deliberately matches neither test key ring below, simulating a row left
-// over from a key this process's ring no longer holds
-// (docs/design/totp-key-management.md "Key failures").
 const totpRotationBogusKeyID = "tk1_qqqqqqqqqqqqqqqqqqqqqq"
 
-// newTOTPRotationRings returns oldRing, sealing exactly like a row written
-// before rotation, and ring, the runner's ring with oldRing's key as
-// previous: rows oldRing seals are off ring's active key and decryptable
-// under ring's previous key, the exact "before a re-encryption run" shape
-// ("Rotation").
 func newTOTPRotationRings(t *testing.T) (oldRing, ring *TOTPKeyRing) {
 	t.Helper()
 	oldRing, err := NewTOTPKeyRing(testTOTPKeySeqText, "", rand.Reader)
@@ -148,16 +124,6 @@ func containsTOTPReencryptFailure(failures []TOTPReencryptFailure, kind TOTPReco
 	return false
 }
 
-// ---- Run: live-database behavior -------------------------------------------
-
-// TestTOTPRotationRunner_ReencryptsCredentialUnderFreshNonceSameID seeds one
-// credential sealed under the previous key and proves Run moves it onto the
-// active key with a fresh nonce, the same row ID, and the same secret
-// (docs/design/totp-key-management.md "Sealing", "Rotation"). Verification
-// reads the row back scoped by its own user, which stays correct regardless
-// of whatever else the shared test database holds
-// (ListTOTPCredentialsOffActiveKey and the off-active-key counts scan every
-// account's rows with no per-test scoping).
 func TestTOTPRotationRunner_ReencryptsCredentialUnderFreshNonceSameID(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
@@ -213,9 +179,6 @@ func TestTOTPRotationRunner_ReencryptsCredentialUnderFreshNonceSameID(t *testing
 	}
 }
 
-// TestTOTPRotationRunner_ReencryptsUnexpiredEnrollment proves an unexpired
-// enrollment off the active key is resealed the same way a credential is,
-// under the enrollment binding ("Rotation").
 func TestTOTPRotationRunner_ReencryptsUnexpiredEnrollment(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
@@ -277,18 +240,12 @@ func TestTOTPRotationRunner_ReencryptsUnexpiredEnrollment(t *testing.T) {
 	}
 }
 
-// TestTOTPRotationRunner_DeletesExpiredEnrollmentWithoutDecrypting seeds an
-// already-expired enrollment off the active key with ciphertext that would
-// fail authentication if opened, and proves Run deletes it without ever
-// attempting to decrypt it: no decrypt failure is recorded for this row
-// ("Rotation": "It rewrites unexpired enrollments and deletes expired ones
-// without decrypting").
 func TestTOTPRotationRunner_DeletesExpiredEnrollmentWithoutDecrypting(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
 	now := totpRotationNow()
-	created := now.Add(-11 * time.Minute) // expires_at must equal created_at + 10m and already be <= now.
+	created := now.Add(-11 * time.Minute)
 
 	_, ring := newTOTPRotationRings(t)
 	userID := newTOTPRotationUser(ctx, t, q)
@@ -318,17 +275,6 @@ func TestTOTPRotationRunner_DeletesExpiredEnrollmentWithoutDecrypting(t *testing
 	}
 }
 
-// TestTOTPRotationRunner_DecryptFailureIsCountedRunContinuesButFails seeds
-// two credentials off the active key in the same run: one this ring can
-// decrypt and one it cannot (a key ID from before some earlier rollback,
-// say). It proves the per-row decrypt failure is counted and left
-// unchanged while the run keeps processing the other row ("a row that
-// fails to decrypt is counted and skipped, and the run continues"), and
-// that the run as a whole still reports failure
-// (docs/design/totp-key-management.md "Rotation": "A decrypt failure ...
-// fails the run, so rotation stops at step 4"). Design wins over a plan
-// per AGENTS.md, so both statements hold together: per row the run keeps
-// going, but Run still returns ErrTOTPReencryptFailed once anything failed.
 func TestTOTPRotationRunner_DecryptFailureIsCountedRunContinuesButFails(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
@@ -393,16 +339,6 @@ func TestTOTPRotationRunner_DecryptFailureIsCountedRunContinuesButFails(t *testi
 	}
 }
 
-// TestTOTPRotationRunner_PagesPastDecryptFailuresWithoutRepeats seeds three
-// undecryptable credentials and two decryptable ones off the active key,
-// forces a batch size small enough that the run needs several batches to
-// see them all, and proves the afterID cursor pages past a row that stays
-// off the active key after a decrypt failure instead of reselecting it: the
-// undecryptable rows must not be reselected, and the decryptable ones must
-// still all land on the active key (docs/design/totp-key-management.md
-// "Rotation"). The shared test database has no per-test scoping for this
-// query, so it may hold unrelated rows too; a per-ID duplicate check plus
-// exact membership of this fixture's own IDs is the reliable proof.
 func TestTOTPRotationRunner_PagesPastDecryptFailuresWithoutRepeats(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
@@ -447,7 +383,7 @@ func TestTOTPRotationRunner_PagesPastDecryptFailuresWithoutRepeats(t *testing.T)
 	}
 
 	runner := newTOTPRotationRunner(t, pool, ring, func() time.Time { return now })
-	runner.batchRows = 2 // smaller than the 5 seeded rows, forcing several batches.
+	runner.batchRows = 2
 
 	result, err := runner.Run(ctx)
 	if !errors.Is(err, ErrTOTPReencryptFailed) {
@@ -480,9 +416,6 @@ func TestTOTPRotationRunner_PagesPastDecryptFailuresWithoutRepeats(t *testing.T)
 	}
 }
 
-// totpRotationStepClock returns start on the first call and advances by
-// step before every later call, letting a test force Run's injected-clock
-// deadline check to trip deterministically without a real 30-minute wait.
 type totpRotationStepClock struct {
 	mu   sync.Mutex
 	next time.Time
@@ -497,13 +430,6 @@ func (c *totpRotationStepClock) Now() time.Time {
 	return now
 }
 
-// TestTOTPRotationRunner_TimeBudgetStopsEarlyAndReportsLimitReached seeds
-// one row this ring could otherwise reencrypt, but forces the injected
-// clock's second reading past the 30-minute deadline before any batch
-// runs. It proves Run stops without touching the row, reports
-// LimitReached, and does not treat the exhausted budget as a failure
-// (docs/design/totp-key-management.md "Rotation": "One run processes at
-// most 10,000 rows in 30 minutes").
 func TestTOTPRotationRunner_TimeBudgetStopsEarlyAndReportsLimitReached(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
@@ -553,9 +479,6 @@ func TestTOTPRotationRunner_TimeBudgetStopsEarlyAndReportsLimitReached(t *testin
 	}
 }
 
-// requireOwnTOTPRowRotated accepts a run that failed only on rows other
-// suites left in the shared test database under keys this ring cannot open,
-// and fails when this test's own row failed to decrypt.
 func requireOwnTOTPRowRotated(t *testing.T, result TOTPReencryptResult, err error, kind TOTPRecordKind, rowID uuid.UUID) {
 	t.Helper()
 	if err != nil && !errors.Is(err, ErrTOTPReencryptFailed) {

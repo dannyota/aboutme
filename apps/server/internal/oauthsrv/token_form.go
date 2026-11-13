@@ -72,9 +72,6 @@ func exactFormKeys(form url.Values, keys ...string) bool {
 	return true
 }
 
-// exactRefreshForm allows grant_type and refresh_token, plus at most one
-// non-empty client_id and a resource that canonicalResource checks. See rule 4
-// of docs/design/mcp-client-compatibility.md.
 func exactRefreshForm(form url.Values) bool {
 	count := len(form)
 	if _, ok := form[rawResourceFormKey]; ok {

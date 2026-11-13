@@ -1,11 +1,5 @@
 package auth
 
-// Session-authenticated password operations: reauthentication (confirming
-// the current password without changing it) and password change (replacing
-// the credential and forcing a fresh session). Both lock the user, then the
-// caller's session, then the factor policy, as
-// docs/design/second-factor-authentication.md orders.
-
 import (
 	"bytes"
 	"context"
@@ -21,22 +15,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ---- reauth ----
-
-// reauth confirms the password for sess. For an enrolled account it creates a
-// pending reauthentication and drops its token; the HTTP handler uses
-// reauthWithSecondFactor to deliver the pending cookie.
 func (s *PasswordService) reauth(ctx context.Context, sess store.Session, rawPassword, clientIP string) error {
 	_, err := s.reauthWithSecondFactor(ctx, sess, rawPassword, clientIP, "")
 	return err
 }
 
-// reauthWithSecondFactor confirms the password for the concrete session sess.
-// For an unenrolled account it refreshes that session's primary proof and
-// returns "". For an enrolled account it changes no session and returns a
-// pending reauthentication token bound to sess, which only factor completion
-// can turn into fresh proofs. previousPending is the browser's pending cookie,
-// if any.
 func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store.Session, rawPassword, clientIP, previousPending string) (string, error) {
 	now := s.clock()
 
@@ -95,7 +78,6 @@ func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store
 			return errPasswordReauthFailed
 		}
 		if policy != nil {
-			// Primary proof alone refreshes nothing for an enrolled account.
 			enrolled = true
 			return nil
 		}
@@ -130,8 +112,6 @@ func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store
 	return pending.RawToken, nil
 }
 
-// ---- add/change (PUT /me/password) ----
-
 func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPassword, clientIP string) (string, error) {
 	now := s.clock()
 
@@ -164,9 +144,6 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if s.userLockProbe != nil {
 			s.userLockProbe()
 		}
-		// Add or change is a sensitive action: the concrete session, its
-		// epoch, and both recent proofs of an enrolled account are rechecked
-		// under the user lock before any write.
 		live, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now)
 		if gateErr != nil {
 			return gateErr
@@ -211,13 +188,6 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 	return newRaw, nil
 }
 
-// createFreshSessionTx mints the forced-replacement session after a credential
-// change: fresh token and CSRF material with rotated_from NULL, preserving the
-// old current session's absolute expiry, user agent, IP, and factor-proof time,
-// copying the locked user's authentication epoch, and setting a new
-// reauthenticated_at. It is not an ADR 0015 rotation lineage. A password change
-// does not change the epoch, so the factor proof stays valid; see
-// docs/design/second-factor-authentication.md.
 func (s *PasswordService) createFreshSessionTx(ctx context.Context, qtx *store.Queries, user store.User, old store.Session, now time.Time) (string, error) {
 	raw, err := randomSessionToken()
 	if err != nil {

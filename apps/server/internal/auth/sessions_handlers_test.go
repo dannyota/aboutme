@@ -1,5 +1,3 @@
-// Package auth_test exercises logout, device listing, per-session revocation,
-// and logout-everywhere against live Postgres.
 package auth_test
 
 import (
@@ -24,7 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// sessionsListEnvelope decodes GET /sessions' success envelope.
 type sessionsListEnvelope struct {
 	Data []struct {
 		ID         string    `json:"id"`
@@ -36,7 +33,6 @@ type sessionsListEnvelope struct {
 	} `json:"data"`
 }
 
-// assertNoBody fails the test unless a 204 response body is empty.
 func assertNoBody(t *testing.T, resp *http.Response) {
 	t.Helper()
 
@@ -49,11 +45,6 @@ func assertNoBody(t *testing.T, resp *http.Response) {
 	}
 }
 
-// rowRevokedAt queries sessions.revoked_at directly for id, so a test can
-// prove a row was (or, crucially, was NOT) touched independently of
-// whatever the handler's own response claims -- the same direct-table
-// convention session_test.go/session_adversarial_test.go already use via
-// newRowInspectorPool.
 func rowRevokedAt(t *testing.T, id uuid.UUID) *time.Time {
 	t.Helper()
 
@@ -65,11 +56,6 @@ func rowRevokedAt(t *testing.T, id uuid.UUID) *time.Time {
 	return revokedAt
 }
 
-// forceReauthenticatedAtStale directly SQL-updates sessionID's
-// reauthenticated_at to a value older than session.go's reauthWindow
-// (15m), so RequireRecentReauth rejects it -- without needing a fake
-// clock wired into the Service under test (newSessionAPITestService uses
-// a real *SessionManager, exactly like production).
 func forceReauthenticatedAtStale(t *testing.T, sessionID uuid.UUID) {
 	t.Helper()
 
@@ -80,14 +66,6 @@ func forceReauthenticatedAtStale(t *testing.T, sessionID uuid.UUID) {
 	}
 }
 
-// forceRotationGraceDead directly SQL-updates sessionID's
-// rotation_grace_until to a past instant while leaving revoked_at NULL --
-// simulating a grace-dead rotation predecessor whose
-// successor already exists and whose grace window has since elapsed)
-// without driving the real >24h rotation algorithm end to end, which
-// would require reconciling a fake clock against the real
-// time.Now()-based *SessionManager newSessionAPITestService's Service
-// uses internally.
 func forceRotationGraceDead(t *testing.T, sessionID uuid.UUID) {
 	t.Helper()
 
@@ -98,11 +76,6 @@ func forceRotationGraceDead(t *testing.T, sessionID uuid.UUID) {
 	}
 }
 
-// forceSessionIdleExpired directly SQL-updates sessionID's last_seen_at
-// to older than idleTimeout (30d, session_adversarial_test.go's mirrored
-// constant), while leaving revoked_at NULL.
-// ListLiveSessionsForUser/RevokeSessionForUser must both treat this
-// exactly like a grace-dead predecessor, not as a still-live session.
 func forceSessionIdleExpired(t *testing.T, sessionID uuid.UUID) {
 	t.Helper()
 
@@ -113,9 +86,6 @@ func forceSessionIdleExpired(t *testing.T, sessionID uuid.UUID) {
 	}
 }
 
-// forceSessionAbsoluteExpired directly SQL-updates sessionID's
-// absolute_expires_at to one hour in the past, while leaving revoked_at
-// and last_seen_at untouched.
 func forceSessionAbsoluteExpired(t *testing.T, sessionID uuid.UUID) {
 	t.Helper()
 
@@ -126,11 +96,6 @@ func forceSessionAbsoluteExpired(t *testing.T, sessionID uuid.UUID) {
 	}
 }
 
-// ---- POST /api/v1/auth/logout ---------------------------------------------
-
-// TestLogout_RevokesCurrentSessionAndClearsCookie is the happy path:
-// logout revokes the caller's own session (row-level proof, not just the
-// response) and clears its cookie in the same response.
 func TestLogout_RevokesCurrentSessionAndClearsCookie(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -157,11 +122,6 @@ func TestLogout_RevokesCurrentSessionAndClearsCookie(t *testing.T) {
 	}
 }
 
-// TestLogout_LeavesOtherLiveSessionsUntouched proves logout and its
-// rotation-lineage sweep never revoke a session outside the caller's current
-// lineage -- insurance against a future relaxation of
-// revokeLineagePartners' own queries accidentally broadening their scope
-// beyond the exact predecessor/successor pair.
 func TestLogout_LeavesOtherLiveSessionsUntouched(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -181,7 +141,6 @@ func TestLogout_LeavesOtherLiveSessionsUntouched(t *testing.T) {
 	}
 }
 
-// TestLogout_ResponseCarriesClearSiteDataHeader pins the wire value.
 func TestLogout_ResponseCarriesClearSiteDataHeader(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -197,9 +156,6 @@ func TestLogout_ResponseCarriesClearSiteDataHeader(t *testing.T) {
 	}
 }
 
-// TestLogout_WithoutCSRFToken_Returns403AndSessionStillValid proves
-// RequireCSRF gates logout: no X-CSRF-Token means the session is never
-// revoked at all.
 func TestLogout_WithoutCSRFToken_Returns403AndSessionStillValid(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -218,7 +174,6 @@ func TestLogout_WithoutCSRFToken_Returns403AndSessionStillValid(t *testing.T) {
 	}
 }
 
-// TestLogout_WrongMethod_Returns405 proves the route enforces POST only.
 func TestLogout_WrongMethod_Returns405(t *testing.T) {
 	handler, _ := newSessionAPITestService(t)
 
@@ -228,13 +183,6 @@ func TestLogout_WrongMethod_Returns405(t *testing.T) {
 	}
 }
 
-// newRotationCapableTestService is TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie's
-// (me_test.go) setup, factored out for reuse here: a bare Service whose
-// internal *SessionManager is swapped (SetSessionManagerForTest,
-// export_test.go) for one driven by a fake, advanceable clock, so a test
-// can push a session's age past rotationAge (24h) deterministically and
-// drive the resulting rotation through the REAL HTTP handler chain
-// instead of racing the real wall clock.
 func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, *testutil.Clock, *auth.SessionManager) {
 	t.Helper()
 
@@ -251,13 +199,6 @@ func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, 
 	return handler, q, clk, sm
 }
 
-// TestLogout_RotatedRequest_RevokesPredecessorToo proves logout kills the
-// whole credential lineage, not just the successor row the logout request was
-// itself authenticated with. Issues a session, ages it past rotationAge
-// via a fake clock, drives a request that rotates it (GET /me), then logs
-// out using the SUCCESSOR's own cookie -- the OLD (predecessor) raw token
-// must stop authenticating immediately, not merely remain valid for the
-// rotation grace interval.
 func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -267,7 +208,7 @@ func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 		t.Fatalf("Issue() error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
 	rotateResp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if rotateResp.StatusCode != http.StatusOK {
@@ -287,21 +228,17 @@ func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 		t.Fatalf("logout with the successor's own cookie status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
 	}
 
-	// Logout must kill the predecessor immediately, not after grace.
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the PREDECESSOR's raw token after logout (via the successor) status = %d, want %d (logout must kill the whole lineage)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 
-	// The presented successor must also be dead.
 	afterSuccessor := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if afterSuccessor.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the successor's own raw token after its own logout status = %d, want %d", auth.MePath, afterSuccessor.StatusCode, http.StatusUnauthorized)
 	}
 }
 
-// TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo proves
-// targeted revocation kills the presented successor and its predecessor.
 func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -311,7 +248,7 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 		t.Fatalf("Issue() error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
 	rotateResp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if rotateResp.StatusCode != http.StatusOK {
@@ -337,13 +274,6 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 	}
 }
 
-// TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie
-// authenticates via rotation successor B and names predecessor A, a
-// DIFFERENT id, not their own current session -- in DELETE
-// /sessions/{id}. The lineage sweep on A finds and revokes its own live
-// successor, which is B: the caller's own current session dies as an
-// INDIRECT side effect of a request that named a different id entirely.
-// This response must still clear B's cookie and set Clear-Site-Data.
 func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -353,7 +283,7 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 		t.Fatalf("Issue() (A) error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
 	_, rawB, err := sm.Authenticate(context.Background(), rawA)
 	if err != nil {
@@ -392,9 +322,6 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 	}
 }
 
-// TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor models a race
-// loser logging out with a predecessor still inside grace. Direct rotation
-// setup makes the race deterministic; logout must revoke its live successor.
 func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -404,9 +331,8 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 		t.Fatalf("Issue() error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
-	// Rotate before the HTTP request so it presents the losing predecessor.
 	successorB, rawB, err := sm.Authenticate(context.Background(), rawA)
 	if err != nil {
 		t.Fatalf("Authenticate() (forcing the rotation) error = %v", err)
@@ -425,30 +351,17 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 		t.Fatal("Authenticate() returned A itself as the successor -- test setup broken")
 	}
 
-	// rawA is still within its own grace window: log out with it
-	// directly (the race-loser path), using A's own, legitimately-known
-	// CSRF token -- this request must NOT itself trigger another
-	// rotation (RotationGraceUntil is already set) and must authenticate
-	// as A.
 	logoutResp := doJSON(t, handler, http.MethodPost, auth.LogoutPath, testPublicOrigin, csrfTokenFor(sessA), "", sessionRequestCookie(rawA)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if logoutResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("logout with the race-loser predecessor token status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
 	}
 
-	// B, the live successor, must no
-	// longer authenticate either, not just A.
 	afterB := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if afterB.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the SUCCESSOR's raw token after logging out via the predecessor status = %d, want %d", auth.MePath, afterB.StatusCode, http.StatusUnauthorized)
 	}
 }
 
-// TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth proves
-// the same lineage sweep applies to any target DELETE /sessions/{id} names,
-// not just the caller's current session. A caller who sees both halves
-// of a still-open rotation pair in their own device list (a within-grace
-// predecessor and its live successor) and picks the OLDER (predecessor)
-// row to revoke must not be able to leave the successor live.
 func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -458,7 +371,7 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 		t.Fatalf("Issue() (A) error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
 	_, rawB, err := sm.Authenticate(context.Background(), rawA)
 	if err != nil {
@@ -476,10 +389,6 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 		t.Fatalf("look up B's row: %v", err)
 	}
 
-	// A separate, unrelated CURRENT session, issued fresh (at the SAME,
-	// already-advanced fake-clock instant): the caller is browsing via this
-	// session and revokes A (neither their current session, nor this one) by
-	// id.
 	rawCurrent, currentSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.96")
 	if err != nil {
 		t.Fatalf("Issue() (current) error = %v", err)
@@ -501,9 +410,6 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 	}
 }
 
-// TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched proves lineage
-// selection uses rotated_from, not timestamps. Three unrelated rows share one
-// instant; revoking one must leave the others live.
 func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T) {
 	handler, q, _, sm := newRotationCapableTestService(t)
 
@@ -521,7 +427,6 @@ func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T
 		t.Fatalf("Issue() (current) error = %v", err)
 	}
 
-	// Equal timestamps remove time ordering from the target-selection proof.
 	if !targetSess.CreatedAt.Equal(otherSess.CreatedAt) || !otherSess.CreatedAt.Equal(currentSess.CreatedAt) {
 		t.Fatalf("test setup broken: created_at values are not byte-identical (target=%v other=%v current=%v), want a frozen clock to make them exactly equal",
 			targetSess.CreatedAt, otherSess.CreatedAt, currentSess.CreatedAt)
@@ -546,11 +451,6 @@ func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T
 	}
 }
 
-// ---- GET /api/v1/sessions (device list) ------------------------------------
-
-// TestListSessions_ReturnsCallersDevicesWithCurrentFlag issues two
-// sessions for one user, authenticates with one of them, and confirms
-// both appear with exactly the authenticating one flagged current: true.
 func TestListSessions_ReturnsCallersDevicesWithCurrentFlag(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -591,8 +491,6 @@ func TestListSessions_ReturnsCallersDevicesWithCurrentFlag(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesRevokedSessions proves an explicitly revoked
-// session never appears in the caller's own device list.
 func TestListSessions_ExcludesRevokedSessions(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -623,11 +521,6 @@ func TestListSessions_ExcludesRevokedSessions(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesGraceDeadRotationPredecessors proves a session
-// whose rotation_grace_until has passed but whose revoked_at is still NULL
-// (a rotation predecessor
-// whose successor already exists) must never appear in the caller's own
-// device list, even though revoked_at alone wouldn't reject it.
 func TestListSessions_ExcludesGraceDeadRotationPredecessors(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -654,8 +547,6 @@ func TestListSessions_ExcludesGraceDeadRotationPredecessors(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesIdleExpiredSessions proves a session with
-// last_seen_at older than idleTimeout is absent from the device list.
 func TestListSessions_ExcludesIdleExpiredSessions(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -682,8 +573,6 @@ func TestListSessions_ExcludesIdleExpiredSessions(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesAbsoluteExpiredSessions proves absolute expiry hides
-// a session from the device list.
 func TestListSessions_ExcludesAbsoluteExpiredSessions(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -710,11 +599,6 @@ func TestListSessions_ExcludesAbsoluteExpiredSessions(t *testing.T) {
 	}
 }
 
-// TestListSessions_OnlyReturnsCallersOwnRows proves user-scoping directly:
-// two users, each with their own sessions; user A's device list must
-// never include user B's session id, even though both users have the
-// same NUMBER of sessions (a row-count-only check would miss a scoping
-// bug that swapped which rows are returned).
 func TestListSessions_OnlyReturnsCallersOwnRows(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userA := createTestUser(t, q)
@@ -741,8 +625,6 @@ func TestListSessions_OnlyReturnsCallersOwnRows(t *testing.T) {
 	}
 }
 
-// TestSessionsCollection_UnsupportedMethod_Returns405 proves the shared
-// /sessions dispatcher rejects any method beyond GET/DELETE.
 func TestSessionsCollection_UnsupportedMethod_Returns405(t *testing.T) {
 	handler, _ := newSessionAPITestService(t)
 
@@ -752,15 +634,10 @@ func TestSessionsCollection_UnsupportedMethod_Returns405(t *testing.T) {
 	}
 }
 
-// ---- DELETE /api/v1/sessions/{id} (per-session revoke) ---------------------
-
 func sessionIDPath(id uuid.UUID) string {
 	return auth.SessionsPath + "/" + id.String()
 }
 
-// TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie: revoking
-// the session the request is itself authenticated with clears its cookie
-// in the same response.
 func TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -781,9 +658,6 @@ func TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie(t *testing.T) 
 	}
 }
 
-// TestDeleteSession_OwnOtherSessionID_RevokesWithoutClearingCurrentCookie
-// is the negative case: revoking a DIFFERENT session the caller owns must
-// not clear the cookie of the session the request is authenticated with.
 func TestDeleteSession_OwnOtherSessionID_RevokesWithoutClearingCurrentCookie(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -806,9 +680,6 @@ func TestDeleteSession_OwnOtherSessionID_RevokesWithoutClearingCurrentCookie(t *
 	}
 }
 
-// TestDeleteSession_AnotherUsersSessionID_Returns404AndLeavesItLive is
-// the no-oracle case: revoking another user's session id returns 404, and the
-// target session is never actually touched.
 func TestDeleteSession_AnotherUsersSessionID_Returns404AndLeavesItLive(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userA := createTestUser(t, q)
@@ -833,9 +704,6 @@ func TestDeleteSession_AnotherUsersSessionID_Returns404AndLeavesItLive(t *testin
 	}
 }
 
-// TestDeleteSession_UnknownSessionID_Returns404 covers an id that parses
-// as a UUID but names no row at all -- the same 404 as "belongs to
-// someone else" (no oracle).
 func TestDeleteSession_UnknownSessionID_Returns404(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -850,9 +718,6 @@ func TestDeleteSession_UnknownSessionID_Returns404(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_MalformedSessionID_Returns404 covers a path segment
-// that isn't even a valid UUID -- still the same uniform 404, never a
-// distinct 400 that would leak which case applied.
 func TestDeleteSession_MalformedSessionID_Returns404(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -867,9 +732,6 @@ func TestDeleteSession_MalformedSessionID_Returns404(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_StaleReauth_Succeeds proves per-session revoke needs no
-// recent reauthentication: ending a session only reduces access, so a stale
-// reauthenticated_at still lets RevokeForUser run and clears the cookie.
 func TestDeleteSession_StaleReauth_Succeeds(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -890,13 +752,6 @@ func TestDeleteSession_StaleReauth_Succeeds(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_OwnDeadSessionID_Returns404 proves revoking one's own
-// dead session id returns 404,
-// not succeed, when that session is already dead by ANY of sessionDead's
-// predicates -- grace-dead, idle-expired, or absolute-expired -- exactly
-// mirroring what GET /sessions already excludes from the device list. A
-// caller must never be able to "revoke" a row the list itself says
-// doesn't exist.
 func TestDeleteSession_OwnDeadSessionID_Returns404(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -930,12 +785,6 @@ func TestDeleteSession_OwnDeadSessionID_Returns404(t *testing.T) {
 	}
 }
 
-// ---- DELETE /api/v1/sessions (logout-everywhere) ---------------------------
-
-// TestDeleteAllSessions_RevokesEveryLiveSessionForCaller is the happy
-// path: every one of the caller's sessions is revoked (row-level proof),
-// the current cookie is cleared, Clear-Site-Data is set, and a different
-// user's session is left untouched.
 func TestDeleteAllSessions_RevokesEveryLiveSessionForCaller(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -975,10 +824,6 @@ func TestDeleteAllSessions_RevokesEveryLiveSessionForCaller(t *testing.T) {
 	}
 }
 
-// TestDeleteAllSessions_StaleReauth_Succeeds is a row-level proof that
-// logout-everywhere needs no recent reauthentication: a stale
-// reauthenticated_at still revokes every one of the caller's sessions and
-// clears the cookie, because ending sessions only reduces access.
 func TestDeleteAllSessions_StaleReauth_Succeeds(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -1012,9 +857,6 @@ func TestDeleteAllSessions_StaleReauth_Succeeds(t *testing.T) {
 	}
 }
 
-// TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing proves
-// RequireCSRF gates logout-everywhere: with no X-CSRF-Token, nothing is
-// revoked.
 func TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -1033,20 +875,8 @@ func TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing(t *testi
 	}
 }
 
-// ---- lock-order races -------------------------------------------------------
-//
-// Logout everywhere and single-session revocation lock the user, then lock and
-// recheck the caller's session and epoch before writing, per
-// docs/design/second-factor-authentication.md. Every session issuer, rotation
-// successor, and epoch-change replacement takes the same user lock, so none
-// can commit a session a revocation misses.
-
-// raceWait bounds every wait in the lock-order races below.
 const raceWait = 15 * time.Second
 
-// beginUserLockHolder opens a transaction that holds userID's row lock and
-// returns it with its backend process ID. Cleanup rolls it back if the test
-// did not commit it.
 func beginUserLockHolder(t *testing.T, pool *store.Pool, userID uuid.UUID) (pgx.Tx, *store.Queries, int32) {
 	t.Helper()
 	tx, err := pool.Begin(t.Context())
@@ -1069,8 +899,6 @@ func beginUserLockHolder(t *testing.T, pool *store.Pool, userID uuid.UUID) (pgx.
 	return tx, qtx, pid
 }
 
-// waitBlockedBy returns once another backend waits on a lock held by
-// holderPID, which proves the request under test reached its lock.
 func waitBlockedBy(t *testing.T, holderPID int32) {
 	t.Helper()
 	pool := newRowInspectorPool(t)
@@ -1088,8 +916,6 @@ func waitBlockedBy(t *testing.T, holderPID int32) {
 	t.Fatalf("no request blocked on holder %d within %s", holderPID, raceWait)
 }
 
-// serveAsync serves one mutating session request on its own goroutine and
-// delivers the recorder when the handler returns.
 func serveAsync(ctx context.Context, handler http.Handler, method, path, csrfToken, rawSession string) <-chan *httptest.ResponseRecorder {
 	done := make(chan *httptest.ResponseRecorder, 1)
 	req := httptest.NewRequestWithContext(ctx, method, path, nil)
@@ -1104,7 +930,6 @@ func serveAsync(ctx context.Context, handler http.Handler, method, path, csrfTok
 	return done
 }
 
-// awaitRecorder waits a bounded time for serveAsync.
 func awaitRecorder(t *testing.T, done <-chan *httptest.ResponseRecorder) *httptest.ResponseRecorder {
 	t.Helper()
 	select {
@@ -1116,8 +941,6 @@ func awaitRecorder(t *testing.T, done <-chan *httptest.ResponseRecorder) *httpte
 	}
 }
 
-// newRevocationRaceService builds the production session routes over one pool
-// and returns that pool for holder transactions.
 func newRevocationRaceService(t *testing.T) (http.Handler, *store.Pool, *store.Queries) {
 	t.Helper()
 	pool := newTestPool(t)
@@ -1128,11 +951,6 @@ func newRevocationRaceService(t *testing.T) (http.Handler, *store.Pool, *store.Q
 	return api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes), pool, store.New(pool)
 }
 
-// TestRevokeAll_EpochReplacementCommittedFirst proves an epoch-change
-// replacement cannot survive a successful logout everywhere. The replacement
-// holds the user lock when logout everywhere arrives; after it commits, the
-// caller's session is revoked at the old epoch, so logout everywhere fails
-// closed instead of reporting success while the replacement lives.
 func TestRevokeAll_EpochReplacementCommittedFirst(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1172,11 +990,6 @@ func TestRevokeAll_EpochReplacementCommittedFirst(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_EpochAdvanceCommittedFirst proves logout everywhere's locked
-// recheck compares the caller session's own epoch against the user's current
-// epoch, not merely revoked_at: a holder that only advances the user's epoch
-// (no session row is touched) still makes the caller's recheck fail closed,
-// so logout everywhere reports failure instead of revoking every session.
 func TestRevokeAll_EpochAdvanceCommittedFirst(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1209,9 +1022,6 @@ func TestRevokeAll_EpochAdvanceCommittedFirst(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_LogoutFirstThenReplacementFails proves the other order: once
-// logout everywhere commits, an epoch-change replacement of a revoked session
-// mints nothing.
 func TestRevokeAll_LogoutFirstThenReplacementFails(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1239,10 +1049,6 @@ func TestRevokeAll_LogoutFirstThenReplacementFails(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_RotationSuccessorCommittedFirst proves a rotation successor
-// inserted under the user lock before logout everywhere commits is revoked by
-// it. The holder performs the successor insert that SessionManager rotation
-// performs under the same lock.
 func TestRevokeAll_RotationSuccessorCommittedFirst(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1286,10 +1092,6 @@ func TestRevokeAll_RotationSuccessorCommittedFirst(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_LogoutFirstRotationMintsNoSuccessor drives real rotation: the
-// rotation probe runs logout everywhere to completion after rotation admission
-// and before the successor transaction, which then finds its predecessor
-// revoked under the user lock and inserts nothing.
 func TestRevokeAll_LogoutFirstRotationMintsNoSuccessor(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1328,10 +1130,6 @@ func TestRevokeAll_LogoutFirstRotationMintsNoSuccessor(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_CallerSessionRevokedFirst proves single-session revoke's
-// locked recheck of the caller's own session: a concurrent revoke of the
-// caller session that commits first, while the request waits on the same user
-// lock, makes the request fail closed instead of revoking the named target.
 func TestDeleteSession_CallerSessionRevokedFirst(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1359,11 +1157,6 @@ func TestDeleteSession_CallerSessionRevokedFirst(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_EpochAdvanceCommittedFirst proves single-session revoke's
-// locked recheck compares the caller session's own epoch against the user's
-// current epoch, not merely revoked_at: a holder that only advances the
-// user's epoch (no session row is touched) still makes the caller's recheck
-// fail closed, so the request fails instead of revoking the named target.
 func TestDeleteSession_EpochAdvanceCommittedFirst(t *testing.T) {
 	handler, pool, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
@@ -1393,10 +1186,6 @@ func TestDeleteSession_EpochAdvanceCommittedFirst(t *testing.T) {
 	}
 }
 
-// TestRevocation_EnrolledAccountStaleFactorProofSucceeds proves logout
-// everywhere and single-session revocation are not sensitive mutations: an
-// enrolled account with a stale primary and factor proof still revokes,
-// because ending sessions only reduces access.
 func TestRevocation_EnrolledAccountStaleFactorProofSucceeds(t *testing.T) {
 	handler, _, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)

@@ -4,7 +4,6 @@ package main
 
 import "errors"
 
-// Budget measurements require Linux cgroup evidence and fail closed on local non-Linux hosts.
 func readCgroupEvidence() (cgroupEvidence, error) {
 	return cgroupEvidence{}, errors.New("cgroup_unavailable")
 }

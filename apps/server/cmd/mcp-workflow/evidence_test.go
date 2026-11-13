@@ -31,7 +31,6 @@ func TestEvidenceUsesTheClosedAllowlist(t *testing.T) {
 	if !reflect.DeepEqual(keys, want) || len(data) > maxEvidenceBytes {
 		t.Fatalf("evidence keys = %v size = %d", keys, len(data))
 	}
-	// "streamable-http" is the fixed transport label; URLs are still refused.
 	for _, forbidden := range []string{"token", "http://", "https://", "aboutme.vn", "localhost", "@", fakeSourceID, "resume_id", "digest"} {
 		if strings.Contains(string(data), forbidden) {
 			t.Fatalf("evidence contains %q", forbidden)

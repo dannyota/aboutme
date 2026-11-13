@@ -11,15 +11,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// Photo keys are resumes/{canonical lowercase resume UUID}/photo-{32
-// lowercase hex from crypto/rand}.{jpg|png}. One constructor and one parser
-// own this grammar; these tests pin it.
-
 var testResumeID = uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f")
 
 func TestNewPhotoKey_Canonical(t *testing.T) {
 	t.Parallel()
-	// Deterministic randomness: 16 bytes 0x00..0x0f.
 	randSource := bytes.NewReader([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f})
 	key, err := media.NewPhotoKey(randSource, testResumeID, "jpg")
 	if err != nil {
@@ -29,7 +24,6 @@ func TestNewPhotoKey_Canonical(t *testing.T) {
 	if key != want {
 		t.Errorf("key = %q, want %q", key, want)
 	}
-	// The constructor's output must satisfy the parser (grammar closure).
 	ext, err := media.ParsePhotoKey(testResumeID, key)
 	if err != nil {
 		t.Errorf("ParsePhotoKey(constructed key): %v", err)
@@ -54,7 +48,6 @@ func TestNewPhotoKey_PNG(t *testing.T) {
 func TestNewPhotoKey_Rejections(t *testing.T) {
 	t.Parallel()
 	sixteen := bytes.Repeat([]byte{0x01}, 16)
-	// A WebP input is never stored as WebP; only normalized jpg/png.
 	for _, ext := range []string{"", "webp", "gif", "JPG", "jpeg", "PNG", "jpg ", ".jpg"} {
 		if _, err := media.NewPhotoKey(bytes.NewReader(sixteen), testResumeID, ext); err == nil {
 			t.Errorf("NewPhotoKey(ext %q) err = nil, want error", ext)
@@ -63,7 +56,6 @@ func TestNewPhotoKey_Rejections(t *testing.T) {
 	if _, err := media.NewPhotoKey(bytes.NewReader(sixteen), uuid.Nil, "jpg"); err == nil {
 		t.Errorf("NewPhotoKey(uuid.Nil) err = nil, want error")
 	}
-	// Exhausted randomness must fail, never truncate the suffix.
 	if _, err := media.NewPhotoKey(bytes.NewReader([]byte{0x01}), testResumeID, "jpg"); err == nil {
 		t.Errorf("NewPhotoKey(short randomness) err = nil, want error")
 	}
@@ -112,8 +104,6 @@ func TestParsePhotoKey_AcceptsOnlyCanonicalOwnedKeys(t *testing.T) {
 			t.Errorf("%s: ParsePhotoKey(%q) err = nil, want error", tc.name, tc.key)
 		}
 	}
-	// The expected-resume binding also rejects the valid key under a
-	// different owner (cross-resume keys never reach a backend).
 	if _, err := media.ParsePhotoKey(otherResume, valid); err == nil {
 		t.Errorf("ParsePhotoKey(other owner, valid key) err = nil, want error")
 	}
@@ -126,8 +116,6 @@ func TestParsePhotoKey_ErrorsAreErrInvalidKey(t *testing.T) {
 	}
 }
 
-// TestPutOutcomeValues pins the contract's wire-adjacent numeric order:
-// the zero value is the safe "created nothing" state.
 func TestPutOutcomeValues(t *testing.T) {
 	t.Parallel()
 	if media.PutNotCreated != 0 || media.PutCreated != 1 || media.PutUnknown != 2 {

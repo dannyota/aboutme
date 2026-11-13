@@ -23,8 +23,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Every fake in this package is bounded: a fixed call budget, fixed-size
-// account, and tiny images. A fake never loops on its own.
 const fakeCallBudget = 80
 
 var (
@@ -52,8 +50,6 @@ type fakeIdempotent struct {
 	response      mutationResult
 }
 
-// fakeMCP is an in-memory account behind the sdkToolClient surface, plus the
-// server observations and revocation transport the runtime would provide.
 type fakeMCP struct {
 	t *testing.T
 
@@ -78,7 +74,6 @@ type fakeMCP struct {
 	deniedDate    time.Time
 	refusedSeq    uint64
 
-	// Hooks for adversarial cases.
 	dropCreate      bool
 	loseCreate      bool
 	rejectCreate    string
@@ -269,7 +264,6 @@ func (f *fakeMCP) crop(arguments map[string]any) (*mcp.CallToolResult, error) {
 	return fakeResult(mutationResult{Revision: item.summary.Revision, State: resumeState{resumeSummary: item.summary, Document: item.document}}), nil
 }
 
-// serverObservations for the fake.
 func (f *fakeMCP) mark() uint64 { f.mu.Lock(); defer f.mu.Unlock(); return f.seq }
 
 func (f *fakeMCP) authenticatedDateSince(mark uint64) (time.Time, bool) {
@@ -299,7 +293,6 @@ func (f *fakeMCP) reauthorizationRefusedSince(mark uint64) bool {
 	return f.refusedSeq > mark
 }
 
-// revocationTransport for the fake.
 func (f *fakeMCP) Revoke(_ context.Context, refreshToken string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -358,8 +351,6 @@ func (f *fakeMCP) targets() []*fakeResume {
 	return found
 }
 
-// fakeDocumentBytes and fakePhotoBytes report malformed tool input as a
-// closed validation result, as the server does, rather than a Go error.
 func fakeDocumentBytes(value any) ([]byte, bool) {
 	payload, err := json.Marshal(value)
 	return payload, err == nil
@@ -386,7 +377,6 @@ func bumpRevision(value string) string {
 	return strconv.FormatUint(parsed+1, 10)
 }
 
-// fixtureDocument loads the schema's store-valid full fixture.
 func fixtureDocument(t *testing.T, withPhoto bool) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "packages", "schema", "fixtures", "full.json"))

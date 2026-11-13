@@ -1,55 +1,3 @@
-// Package routetable closes AC-OPS-005 (docs/design/system.md, "Route
-// ownership"; docs/plans/traceability/ac-ops.md) with an automated test of
-// the Caddy route table.
-//
-// # Design decision
-//
-// Two approaches were viable: (a) exercise deploy/caddy/Caddyfile through a
-// real Caddy process and assert routing over live HTTP, or (b) run
-// `caddy adapt`/`caddy validate` and assert against the adapted JSON
-// without a live process. (b) was rejected: it proves the config parses
-// and can describe its own matchers, but it cannot prove that a request
-// for a given path is actually dispatched to a given upstream — that is a
-// routing *decision* Caddy makes at request time, not a static property of
-// the adapted JSON tree. A test that only re-parses the Caddyfile (or its
-// JSON form) is one Caddyfile-syntax refactor away from asserting nothing
-// real, which is exactly the "greps the Caddyfile text" failure mode to
-// avoid. This file takes (a): a real `caddy` binary, fronting two tiny stub
-// HTTP backends that each identify themselves in a response header, with
-// every path class AC-OPS-005 names driven over real HTTP and the actual
-// backend reached (or Caddy's own denial) observed directly.
-//
-// # Why the real Caddyfile, not a duplicated fixture
-//
-// Rather than maintaining a second, hand-written "trimmed" Caddyfile that
-// could silently drift from deploy/caddy/Caddyfile (the file that actually
-// ships), this test reads the real file and substitutes only its three
-// environment-specific tokens — the listen port and the two upstream
-// addresses — leaving every matcher, handle block, and directive
-// byte-for-byte what production and dev actually run. Each substitution
-// target must occur in the file exactly once; if it doesn't (because the
-// Caddyfile's shape changed), the test fails loudly with the count it
-// found, rather than silently matching zero occurrences and testing a
-// config that no longer resembles the real one. That per-substitution
-// count check is a second, independent line of drift protection beyond
-// "the test reads the real file at all".
-//
-// # Gating
-//
-// This test drives a real subprocess and two real HTTP servers, so it is
-// gated like apps/server/internal/store's live-database integration test:
-// skipped unless an environment variable — here CADDY_BIN, naming a caddy
-// binary (a bare name is resolved via PATH; see os/exec.Command) — is set.
-// `go test ./...` and `make server-test` therefore stay fully hermetic;
-// nothing here runs unless a caller opts in by setting CADDY_BIN.
-//
-// # What this does not (yet) cover
-//
-// The client-IP trust boundary (X-Real-IP stripping and reassertion) is
-// AC-OPS-008/009's concern, with its own dedicated tests in
-// apps/server/internal/api/ratelimit_test.go and config_test.go; this file
-// only asserts *which backend* a path reaches, not the headers Caddy
-// attaches on the way there.
 package routetable
 
 import (
@@ -69,25 +17,12 @@ import (
 	"time"
 )
 
-// caddyBinEnv names the environment variable that gates this test and
-// supplies the caddy executable to run. Unset means "skip" — mirroring
-// TEST_DATABASE_URL in apps/server/internal/store/integration_test.go, the
-// value itself is the resource locator, not a bare on/off flag.
 const caddyBinEnv = "CADDY_BIN"
 
-// stubHeader is the response header each stub backend sets to identify
-// itself. It is the "Go's fingerprint" / "web's header set" signal the
-// task describes, made unambiguous: rather than approximating the real
-// server's or Nuxt's actual header set (which would drift as those
-// services evolve, and would leave open the question of whether a test
-// failure meant "misrouted" or "the real service's headers changed"),
-// each stub asserts its identity directly and only that.
 const stubHeader = "X-Stub-Backend"
 
 const bodyDigestETag = `"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"`
 
-// caddyBinary returns the caddy executable to run, or skips the test if
-// CADDY_BIN is unset.
 func caddyBinary(t *testing.T) string {
 	t.Helper()
 	bin := os.Getenv(caddyBinEnv)
@@ -97,14 +32,6 @@ func caddyBinary(t *testing.T) string {
 	return bin
 }
 
-// findUpward walks from startDir toward the filesystem root looking for a
-// directory containing rel, returning the joined path at the first match.
-// Same technique as apps/server/internal/api/health_contract_test.go's
-// helper of the same name (unexported there, so duplicated here rather
-// than shared across packages for one 15-line helper): this makes the
-// lookup resilient to this package moving relative to the repo root — it
-// only needs deploy/caddy/Caddyfile to exist somewhere above wherever the
-// test runs from.
 func findUpward(t *testing.T, startDir, rel string) string {
 	t.Helper()
 
@@ -122,14 +49,6 @@ func findUpward(t *testing.T, startDir, rel string) string {
 	}
 }
 
-// findFreePort asks the OS for an unused TCP port on 127.0.0.1 by binding
-// a listener and immediately closing it. There is an inherent, small
-// TOCTOU window between the close and Caddy's own bind — the standard
-// trade-off for handing a subprocess a port number in advance — but it is
-// the same technique httptest.NewServer uses internally to pick its own
-// port, and is not a source of sleep-based flakiness: readiness is still
-// established by polling (waitForCaddyReady),
-// never assumed from this call succeeding.
 func findFreePort(t *testing.T) int {
 	t.Helper()
 
@@ -147,11 +66,6 @@ func findFreePort(t *testing.T) int {
 	return tcpPort(t, l.Addr())
 }
 
-// tcpPort extracts the port number from addr, failing the test if addr is
-// not a *net.TCPAddr (the errcheck linter's check-type-assertions setting
-// requires the ",ok" form rather than a bare assertion at every call
-// site, so every caller in this file goes through here instead of
-// repeating the check-and-fail inline).
 func tcpPort(t *testing.T, addr net.Addr) int {
 	t.Helper()
 
@@ -162,9 +76,6 @@ func tcpPort(t *testing.T, addr net.Addr) int {
 	return tcpAddr.Port
 }
 
-// newStubBackend starts an httptest.Server that answers every request with
-// 200 and a stubHeader identifying it as name ("go" or "web"), and
-// registers its shutdown with t.Cleanup.
 func newStubBackend(t *testing.T, name string) *httptest.Server {
 	t.Helper()
 
@@ -184,11 +95,6 @@ func newStubBackend(t *testing.T, name string) *httptest.Server {
 		}
 		w.WriteHeader(http.StatusOK)
 		if _, err := fmt.Fprintf(w, "%s-backend %s", name, r.URL.Path); err != nil {
-			// The client already has the response headers/status by the
-			// time a body write could fail; there is nothing left to
-			// signal to it. Logging (rather than a swallowed error) keeps
-			// this from being silent while not treating a client-side
-			// disconnect mid-body as a fatal server bug.
 			t.Logf("stub backend %s: writing response body: %v", name, err)
 		}
 	}))
@@ -196,24 +102,12 @@ func newStubBackend(t *testing.T, name string) *httptest.Server {
 	return srv
 }
 
-// caddyfileReplacement is one required, exact substitution applied to the
-// real Caddyfile before it is handed to a test Caddy process.
 type caddyfileReplacement struct {
 	old   string
 	new   string
 	count int
 }
 
-// adaptedCaddyfile reads the real deploy/caddy/Caddyfile and returns its
-// content with exactly three tokens substituted: the site's listen port
-// (production/dev use :80, which this test cannot bind without root — see
-// the repo's "rootless podman cannot bind port 80" gotcha, which applies
-// to any process, not just podman) and the two upstream addresses (Docker
-// Compose service names, unresolvable outside the compose network) for
-// the stub backends' loopback addresses. Every matcher, handle block, and
-// directive besides those three tokens is whatever deploy/caddy/Caddyfile
-// actually contains — this is the real route table, not a paraphrase of
-// it.
 func adaptedCaddyfile(t *testing.T, sitePort, goPort, webPort int) string {
 	t.Helper()
 
@@ -255,24 +149,10 @@ func adaptedCaddyfile(t *testing.T, sitePort, goPort, webPort int) string {
 	return content
 }
 
-// startCaddy launches bin as `caddy run --config configPath --adapter
-// caddyfile`, captures its combined output for failure diagnostics, and
-// registers its termination with t.Cleanup. It points Caddy's XDG config
-// and data directories (instance UUID, TLS storage, admin autosave) at
-// fresh subdirectories of t.TempDir() rather than the real user's
-// ~/.config/caddy and ~/.local/share/caddy — verified by manual run that,
-// left unset, a native `caddy run` writes there even with "admin off" and
-// no TLS in the site block, which would leak test-process state into the
-// developer's/CI runner's real home directory across every run.
 func startCaddy(t *testing.T, bin, configPath string) {
 	t.Helper()
 
 	stateDir := t.TempDir()
-	// context.Background(): this helper owns the process's whole lifecycle
-	// itself via t.Cleanup's explicit Kill+Wait below, the same pattern
-	// cmd/migrate/gen/main.go uses for its own exec.CommandContext call
-	// (invoking `atlas`) — there is no shorter-lived request context to
-	// thread through a test helper.
 	cmd := exec.CommandContext(context.Background(), bin, "run", "--config", configPath, "--adapter", "caddyfile")
 	cmd.Env = append(os.Environ(),
 		"XDG_CONFIG_HOME="+filepath.Join(stateDir, "config"),
@@ -290,11 +170,6 @@ func startCaddy(t *testing.T, bin, configPath string) {
 				t.Logf("killing caddy process: %v", err)
 			}
 		}
-		// Wait() reporting "signal: killed" here is the expected result of
-		// the Kill() above, not a failure — it is still called (and its
-		// error inspected via Logf, never blank-discarded) to reap the
-		// process and to have the output buffer fully populated before the
-		// t.Failed() check below reads it.
 		if err := cmd.Wait(); err != nil {
 			t.Logf("caddy process exited: %v", err)
 		}
@@ -304,11 +179,6 @@ func startCaddy(t *testing.T, bin, configPath string) {
 	})
 }
 
-// waitForCaddyReady polls baseURL until it gets any HTTP response (success
-// or not — a 404 still proves the listener is up and Caddy is routing) or
-// timeout elapses. This is a bounded poll, not a fixed sleep-then-hope: it
-// returns the instant the server responds, and fails the test with the
-// last dial error if it never does.
 func waitForCaddyReady(t *testing.T, baseURL string, timeout time.Duration) {
 	t.Helper()
 
@@ -333,7 +203,6 @@ func waitForCaddyReady(t *testing.T, baseURL string, timeout time.Duration) {
 	t.Fatalf("caddy at %s did not become ready within %s: %v", baseURL, timeout, lastErr)
 }
 
-// wantBackend names which backend (or denial) a route class must reach.
 type wantBackend int
 
 const (
@@ -342,10 +211,6 @@ const (
 	wantDenied
 )
 
-// TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend drives every
-// route class AC-OPS-005 describes through a real Caddy
-// process fronting two stub backends, and asserts each one reaches the
-// correct backend (or, for /print and /print/*, reaches neither).
 func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 	bin := caddyBinary(t)
 
@@ -370,10 +235,6 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 	waitForCaddyReady(t, baseURL, 10*time.Second)
 
 	cases := []routeCase{
-		// go-proxied: `/api/v1/nope`, `/sitemap.xml`,
-		// `/robots.txt`, `/llms.txt`, plus the root-level `/*.md` class
-		// and the unversioned health endpoints, all under the @go
-		// matcher in deploy/caddy/Caddyfile.
 		{name: "api", method: http.MethodGet, path: "/api", want: wantGo},
 		{name: "api_v1_wildcard", method: http.MethodGet, path: "/api/v1/nope", want: wantGo},
 		{name: "projects_list", method: http.MethodGet, path: "/api/v1/projects", want: wantGo},
@@ -389,10 +250,6 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "readyz", method: http.MethodGet, path: "/readyz", want: wantGo},
 		{name: "healthz_subpath", method: http.MethodGet, path: "/healthz/nope", want: wantGo},
 		{name: "healthz_markdown", method: http.MethodGet, path: "/healthz.md", want: wantGo},
-		// v6 agent-access roots. `/oauth` and `/oauth.md` also satisfy the
-		// public-slug grammar, so their fixed-root precedence is not
-		// observable from the backend alone; `/authorize` below is the case
-		// that distinguishes a fixed Nuxt root from a Go-served slug.
 		{name: "well_known_exact", method: http.MethodGet, path: "/.well-known", want: wantGo},
 		{name: "well_known_authorization_server", method: http.MethodGet, path: "/.well-known/oauth-authorization-server", want: wantGo},
 		{name: "well_known_protected_resource", method: http.MethodGet, path: "/.well-known/oauth-protected-resource", want: wantGo},
@@ -410,53 +267,33 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "minimum_markdown_slug", method: http.MethodGet, path: "/a1-b.md", want: wantGo},
 		{name: "maximum_markdown_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md", want: wantGo},
 
-		// web-proxied: `/`, plus an arbitrary unmatched path
-		// and a *nested* .md path — the Caddyfile's own comment says its
-		// wildcard "does not cross a '/'", so a nested .md must fall
-		// through to the catch-all, not the @go matcher. This is the
-		// negative case that actually distinguishes "root-level slug
-		// page" from "any file ending in .md".
 		{name: "root", method: http.MethodGet, path: "/", want: wantWeb},
 		{name: "app", method: http.MethodGet, path: "/app", want: wantWeb},
 		{name: "app_subpath", method: http.MethodGet, path: "/app/resumes/x", want: wantWeb},
 		{name: "nuxt_assets", method: http.MethodGet, path: "/_nuxt/app.js", want: wantWeb},
 		{name: "login", method: http.MethodGet, path: "/login", want: wantWeb},
 		{name: "login_markdown", method: http.MethodGet, path: "/login.md", want: wantWeb},
-		// The consent page is a fixed Nuxt root whose name also satisfies
-		// the public-slug grammar; without its registry row it would be
-		// proxied to Go as a resume slug instead.
 		{name: "authorize_consent_page", method: http.MethodGet, path: "/authorize", want: wantWeb},
 		{name: "authorize_query", method: http.MethodGet, path: "/authorize?client_id=x", want: wantWeb},
 		{name: "authorize_markdown", method: http.MethodGet, path: "/authorize.md", want: wantWeb},
-		// The legal pages are fixed Nuxt roots whose names also satisfy the
-		// public-slug grammar; without their registry rows they would reach Go
-		// as resume slugs.
 		{name: "privacy_page", method: http.MethodGet, path: "/privacy", want: wantWeb},
 		{name: "privacy_markdown", method: http.MethodGet, path: "/privacy.md", want: wantWeb},
 		{name: "terms_page", method: http.MethodGet, path: "/terms", want: wantWeb},
 		{name: "terms_markdown", method: http.MethodGet, path: "/terms.md", want: wantWeb},
 		{name: "privacy_prefixed_slug", method: http.MethodGet, path: "/privacy-policy", want: wantGo},
-		// The template gallery is a fixed Nuxt root whose name also satisfies
-		// the public-slug grammar.
 		{name: "templates_gallery", method: http.MethodGet, path: "/templates", want: wantWeb},
 		{name: "templates_page", method: http.MethodGet, path: "/templates/ats-plain", want: wantWeb},
 		{name: "templates_markdown", method: http.MethodGet, path: "/templates.md", want: wantWeb},
 		{name: "templates_prefixed_slug", method: http.MethodGet, path: "/templates-by-ada", want: wantGo},
-		// The deployment verify page is a fixed Nuxt root; verify-email stays
-		// its own root and a longer slug still reaches Go.
 		{name: "verify_page", method: http.MethodGet, path: "/verify", want: wantWeb},
 		{name: "verify_markdown", method: http.MethodGet, path: "/verify.md", want: wantWeb},
 		{name: "verify_prefixed_slug", method: http.MethodGet, path: "/verify-me", want: wantGo},
-		// The MCP guide is a fixed Nuxt root; /mcp itself keeps dispatching to
-		// Go, so the guide can never shadow the MCP endpoint.
 		{name: "guide_mcp_page", method: http.MethodGet, path: "/guide/mcp", want: wantWeb},
 		{name: "guide_mcp_markdown", method: http.MethodGet, path: "/guide/mcp.md", want: wantWeb},
 		{name: "guide_root_page", method: http.MethodGet, path: "/guide", want: wantWeb},
 		{name: "guide_prefixed_slug", method: http.MethodGet, path: "/guide-me", want: wantGo},
 		{name: "guides_slug", method: http.MethodGet, path: "/guides", want: wantGo},
 		{name: "mcp_endpoint_still_go", method: http.MethodGet, path: "/mcp", want: wantGo},
-		// The community showcase is a fixed Nuxt root; only the exact root is
-		// reserved, so longer slugs still reach Go.
 		{name: "showcase_page", method: http.MethodGet, path: "/showcase", want: wantWeb},
 		{name: "showcase_markdown", method: http.MethodGet, path: "/showcase.md", want: wantWeb},
 		{name: "showcase_prefixed_slug", method: http.MethodGet, path: "/showcase-me", want: wantGo},
@@ -472,8 +309,6 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "underscore_slug", method: http.MethodGet, path: "/ab_cd", want: wantWeb},
 		{name: "unregistered_extension", method: http.MethodGet, path: "/someone.txt", want: wantWeb},
 
-		// denied: `/print`, `/print/x`. Caddy answers directly (respond
-		// 404), never proxying to either backend.
 		{name: "print_denied", method: http.MethodGet, path: "/print", want: wantDenied},
 		{name: "print_subpath_denied", method: http.MethodGet, path: "/print/x", want: wantDenied},
 		{name: "print_markdown_denied", method: http.MethodGet, path: "/print.md", want: wantDenied},

@@ -15,27 +15,13 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// The operator account deletion answers a reported showcase listing: it
-// deletes the account that owns the reported slug through the same deletion
-// path as a self-delete (docs/design/showcase.md "Report and account
-// deletion", ADR 0003).
 var (
-	// ErrSlugNotFound means no resume holds the slug now. A tombstoned or
-	// unknown slug has no owner.
 	ErrSlugNotFound = errors.New("accountapi: no resume holds the slug")
-	// ErrSlugMismatch means the slug is held by an account other than the one
-	// named. Nothing is deleted.
 	ErrSlugMismatch = errors.New("accountapi: slug is not owned by the named account")
 )
 
-// ErrOutcomeUnknown means the commit outcome is unknown and a follow-up read
-// could not prove the account gone. The account may or may not be deleted.
 var ErrOutcomeUnknown = errors.New("accountapi: deletion outcome unknown")
 
-// OperatorDependencies are the dependencies of the one-shot deletion command.
-// The command runs outside the server process, so it has no sessions, public
-// state coordinator, or media backend; queued media deletions run in the
-// media sweep.
 type OperatorDependencies struct {
 	Pool      *store.Pool
 	Projector *docmigrate.Projector
@@ -43,14 +29,11 @@ type OperatorDependencies struct {
 	Now       func() time.Time
 }
 
-// Account names an account by its ID and the current slugs of its resumes,
-// sorted. It carries no email, name, or headline.
 type Account struct {
 	UserID uuid.UUID
 	Slugs  []string
 }
 
-// NewOperator constructs a Service for the operator deletion command only.
 func NewOperator(deps OperatorDependencies) (*Service, error) {
 	switch {
 	case deps.Pool == nil:
@@ -69,7 +52,6 @@ func NewOperator(deps OperatorDependencies) (*Service, error) {
 	return s, nil
 }
 
-// AccountBySlug reads the account that holds slug. It writes nothing.
 func (s *Service) AccountBySlug(ctx context.Context, slug string) (Account, error) {
 	q := store.New(s.pool)
 	owner, err := q.GetResumeOwnerBySlug(ctx, slug)
@@ -93,10 +75,6 @@ func (s *Service) AccountBySlug(ctx context.Context, slug string) (Account, erro
 	return account, nil
 }
 
-// DeleteAccountBySlug deletes userID's account after checking, under the slug
-// lock inside the deletion transaction, that userID still holds slug. It
-// returns ErrSlugNotFound or ErrSlugMismatch and deletes nothing when the
-// check fails.
 func (s *Service) DeleteAccountBySlug(ctx context.Context, slug string, userID uuid.UUID) (Account, error) {
 	plan, err := s.deleteAccountForUser(ctx, deletionRequest{userID: userID, reportedSlug: slug})
 	if err != nil {
@@ -112,10 +90,6 @@ func (s *Service) DeleteAccountBySlug(ctx context.Context, slug string, userID u
 	return account, nil
 }
 
-// deleteAccountAsOperator runs the deletion without a session and without the
-// in-process coordinator: the server's fences cannot be reached from this
-// process. Sessions, OAuth grants, showcase rows, and resumes go with the user
-// row exactly as in a self-delete.
 func (s *Service) deleteAccountAsOperator(ctx context.Context, req deletionRequest) (accountDeletionPlan, error) {
 	for attempt := 0; attempt < deletePlanAttempts; attempt++ {
 		if err := requireSlugOwner(ctx, store.New(s.pool), req.reportedSlug, req.userID); err != nil {
@@ -141,9 +115,6 @@ func (s *Service) deleteAccountAsOperator(ctx context.Context, req deletionReque
 			}
 			return accountDeletionPlan{}, err
 		case deleteCommitUnknown:
-			// The user row goes in the same transaction as everything else, so
-			// its absence proves the commit. A failed read or a user still
-			// present proves nothing: the commit may land later.
 			proofCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteDrainTimeout)
 			_, readErr := store.New(s.pool).GetUserByID(proofCtx, plan.user.ID)
 			cancel()
@@ -158,7 +129,6 @@ func (s *Service) deleteAccountAsOperator(ctx context.Context, req deletionReque
 	return accountDeletionPlan{}, errAccountChanged
 }
 
-// requireSlugOwner re-resolves slug and checks its owner is userID.
 func requireSlugOwner(ctx context.Context, q *store.Queries, slug string, userID uuid.UUID) error {
 	owner, err := q.GetResumeOwnerBySlug(ctx, slug)
 	if err != nil {

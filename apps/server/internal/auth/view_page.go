@@ -1,12 +1,5 @@
 package auth
 
-// The page a sign-in-to-view start returns to below its resume: the resume
-// page itself, its project list, or one project page
-// (docs/design/projects-contract.md "Render envelope"). The page is stored in
-// the view transaction's return_path and validated again when read, so a
-// callback can only ever redirect to /{current slug} plus one of the two
-// project shapes.
-
 import (
 	"net/http"
 	"strings"
@@ -14,11 +7,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// viewPage reads the optional page parameter of a view start. It accepts
-// exactly "projects" or "projects/{project-slug}", spelled without any
-// escape, and returns the return-path suffix "/projects" or
-// "/projects/{project-slug}"; an absent page returns "". Anything else,
-// including an empty, repeated, or escaped page, is not ok.
 func viewPage(r *http.Request) (string, bool) {
 	decoded, present := r.URL.Query()["page"]
 	var raw []string
@@ -36,9 +24,6 @@ func viewPage(r *http.Request) (string, bool) {
 	return viewPageSuffix(decoded[0])
 }
 
-// viewReturnSuffix re-validates a stored view return path. It returns the
-// path only when it is one of the two project page suffixes; the resume
-// page's closed default and every other value give "".
 func viewReturnSuffix(returnPath string) string {
 	page, found := strings.CutPrefix(returnPath, "/")
 	if !found {
@@ -51,8 +36,6 @@ func viewReturnSuffix(returnPath string) string {
 	return suffix
 }
 
-// viewPageSuffix maps a page in the closed grammar to its return-path
-// suffix.
 func viewPageSuffix(page string) (string, bool) {
 	if page == "projects" {
 		return "/projects", true

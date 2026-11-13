@@ -7,11 +7,8 @@ import (
 	"strings"
 )
 
-// PublicOrigin is the single canonical viewer-facing origin.
 type PublicOrigin struct{ value string }
 
-// ParsePublicOrigin accepts the configured canonical origin only. The source
-// value is never derived from a viewer request.
 func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 	if raw == "" || len(raw) > 512 {
 		return PublicOrigin{}, errors.New("public origin is empty or too long")
@@ -62,7 +59,6 @@ func isDevelopment(environment string) bool {
 
 func (o PublicOrigin) String() string { return o.value }
 
-// Resolve returns path at the canonical public origin.
 func (o PublicOrigin) Resolve(path string) string {
 	if !strings.HasPrefix(path, "/") {
 		return ""

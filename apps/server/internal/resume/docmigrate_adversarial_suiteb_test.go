@@ -1,18 +1,3 @@
-// This live-database suite covers TestGet_NeverWrites,
-// TestBackfill_LosesToConcurrentAutosave, TestAutosave_AfterBackfill_NoSpurious412,
-// TestBackfill_ConcurrentWithItself_AppliesOnce,
-// TestBackfill_NeverPersistsInvalidProjection,
-// TestProjection_UnknownStoredVersionFailsClosed and
-// TestList_OneBadProjectionFailsAtomically, the title-only-write lost-race
-// case, and the accept -> persist -> emit chain over the
-// declared production versions. The pure converter matrix lives in
-// docmigrate/suiteb_wire_adversarial_test.go.
-//
-// SYNTHETIC FUTURE VERSION. This suite puts stale rows one version above the
-// production current version. That isolates the concurrency tests from
-// production converters: the stale row is walked DOWN by the suite's converter,
-// and a required personalDetails.headline marker makes a skipped projection
-// visible rather than merely relabeling the version.
 package resume_test
 
 import (
@@ -36,15 +21,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// suiteBOldVersion is the synthetic stale schema_version stored rows carry.
-// It sits above CurrentVersion because the CHECK constraint forbids 0.
 const suiteBOldVersion int32 = docmigrate.CurrentVersion + 1
 
-// suiteBHeadlineMarker is what the synthetic future version requires.
 const suiteBHeadlineMarker = "synthetic-future-headline"
 
-// suiteBMinimalDoc is the shape of packages/schema/fixtures/minimal.json: the
-// smallest document the store's own validation pipeline accepts.
 const suiteBMinimalDoc = `{
   "schemaVersion": 2,
   "personalDetails": { "fullName": "PLACEHOLDER", "details": [] },
@@ -61,9 +41,6 @@ const suiteBMinimalDoc = `{
   }
 }`
 
-// suiteBRequireBackfillContract pins the three declared BackfillResult values
-// to their declared order so a later renumbering
-// cannot silently turn "applied" into "skipped" in every assertion below.
 func suiteBRequireBackfillContract(t *testing.T) {
 	t.Helper()
 	for _, tc := range []struct {
@@ -82,15 +59,11 @@ func suiteBRequireBackfillContract(t *testing.T) {
 	}
 }
 
-// suiteBEnv is one test's live-database fixture: its own pool, its own user,
-// and a store wired to a projector under test.
 type suiteBEnv struct {
 	pool   *store.Pool
 	userID uuid.UUID
 }
 
-// suiteBSetup opens a pool against the migrated test database and creates a
-// user of its own, so tests never share rows.
 func suiteBSetup(t *testing.T) *suiteBEnv {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -113,8 +86,6 @@ func suiteBSetup(t *testing.T) *suiteBEnv {
 	return &suiteBEnv{pool: pool, userID: userID}
 }
 
-// suiteBDoc builds a store-valid current-version document whose fullName marks
-// which document a row is carrying.
 func suiteBDoc(t *testing.T, fullName string) schema.Resume {
 	t.Helper()
 	var doc schema.Resume
@@ -129,8 +100,6 @@ func suiteBDoc(t *testing.T, fullName string) schema.Resume {
 	return doc
 }
 
-// suiteBParts decomposes a document into the three stored jsonb parts. None
-// carries schemaVersion.
 func suiteBParts(t *testing.T, doc schema.Resume) (pd, c, cu string) {
 	t.Helper()
 	canonical, err := resume.AssembleCanonical(doc)
@@ -144,7 +113,6 @@ func suiteBParts(t *testing.T, doc schema.Resume) (pd, c, cu string) {
 	return string(m["personalDetails"]), string(m["content"]), string(m["customization"])
 }
 
-// suiteBAddHeadline stamps the synthetic marker onto a personalDetails part.
 func suiteBAddHeadline(t *testing.T, personalDetails string) string {
 	t.Helper()
 	var m map[string]json.RawMessage
@@ -163,9 +131,6 @@ func suiteBAddHeadline(t *testing.T, personalDetails string) string {
 	return string(raw)
 }
 
-// suiteBInsertRow seeds one resumes row directly, at whatever schema_version
-// the test needs. Store.Create can only ever write CurrentVersion, so a stale
-// row has to be planted.
 func (e *suiteBEnv) suiteBInsertRow(t *testing.T, title string, version int32, pd, c, cu string) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -179,17 +144,12 @@ func (e *suiteBEnv) suiteBInsertRow(t *testing.T, title string, version int32, p
 	return id
 }
 
-// suiteBSeedStaleRow plants a row at the synthetic old version carrying doc's
-// content plus the synthetic headline marker.
 func (e *suiteBEnv) suiteBSeedStaleRow(t *testing.T, title string, doc schema.Resume) uuid.UUID {
 	t.Helper()
 	pd, c, cu := suiteBParts(t, doc)
 	return e.suiteBInsertRow(t, title, suiteBOldVersion, suiteBAddHeadline(t, pd), c, cu)
 }
 
-// suiteBRow is a complete tamper-evident snapshot of one resumes row. xmin is
-// the inserting/updating transaction id: any UPDATE at all changes it, even one
-// that writes back identical values.
 type suiteBRow struct {
 	SchemaVersion   int32
 	Revision        int64
@@ -216,7 +176,6 @@ func (e *suiteBEnv) suiteBSnapshot(t *testing.T, id uuid.UUID) suiteBRow {
 	return row
 }
 
-// suiteBRequireUntouched fails when anything about the row moved.
 func suiteBRequireUntouched(t *testing.T, what string, before, after suiteBRow) {
 	t.Helper()
 	moved := before.SchemaVersion != after.SchemaVersion ||
@@ -233,8 +192,6 @@ func suiteBRequireUntouched(t *testing.T, what string, before, after suiteBRow) 
 	}
 }
 
-// suiteBHasHeadline reports whether the stored personalDetails still carries
-// the synthetic future-version marker key.
 func (e *suiteBEnv) suiteBHasHeadline(t *testing.T, id uuid.UUID) bool {
 	t.Helper()
 	var present bool
@@ -246,9 +203,6 @@ func (e *suiteBEnv) suiteBHasHeadline(t *testing.T, id uuid.UUID) bool {
 	return present
 }
 
-// suiteBSyntheticProjector is the projector the live cases run against:
-// current stays at docmigrate.CurrentVersion, and synthetic future-version rows
-// walk down to it. down, when non-nil, replaces the well-behaved Down converter.
 func suiteBSyntheticProjector(t *testing.T, down docmigrate.ConvertFunc) *docmigrate.Projector {
 	t.Helper()
 	current := docmigrate.CurrentVersion
@@ -338,17 +292,6 @@ func suiteBSyntheticProjector(t *testing.T, down docmigrate.ConvertFunc) *docmig
 	return p
 }
 
-// suiteBWaitForBlockedBy waits until want backends are queued behind gatePID.
-//
-// The queue is walked TRANSITIVELY on purpose. A second writer waiting for a
-// row already contended by a first one is reported by pg_blocking_pids as
-// blocked by that first WAITER (it holds the tuple lock), not by the gate --
-// so a direct `gatePID = ANY (pg_blocking_pids(...))` test never sees past the
-// first waiter, and the arrival order this test depends on could not be
-// established at all.
-//
-// It is a bounded poll whose deadline is checked before every query; no sleep
-// is ever used as the synchronization itself.
 func (e *suiteBEnv) suiteBWaitForBlockedBy(t *testing.T, gatePID int32, want int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -385,14 +328,12 @@ SELECT count(*) FROM queue WHERE pid <> $1::int`
 	}
 }
 
-// suiteBGate holds a row lock so a test can order two writers deterministically.
 type suiteBGate struct {
 	pid     int32
 	release func()
 	commit  func(t *testing.T)
 }
 
-// suiteBLockRow opens a transaction that holds id's row lock until commit.
 func (e *suiteBEnv) suiteBLockRow(t *testing.T, id uuid.UUID) *suiteBGate {
 	t.Helper()
 	ctx := t.Context()
@@ -436,9 +377,6 @@ func (e *suiteBEnv) suiteBLockRow(t *testing.T, id uuid.UUID) *suiteBGate {
 	return gate
 }
 
-// TestSuiteB_Get_NeverWrites is the matrix's `TestGet_NeverWrites`: reads
-// project but never write under concurrency, which avoids revision bumps
-// racing autosave.
 func TestSuiteB_Get_NeverWrites(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, suiteBSyntheticProjector(t, nil))
@@ -505,9 +443,6 @@ func TestSuiteB_Get_NeverWrites(t *testing.T) {
 	suiteBRequireUntouched(t, "concurrent Get/List", before, env.suiteBSnapshot(t, id))
 }
 
-// TestSuiteB_Backfill_LosesToConcurrentAutosave proves the backfill observes
-// (vOld, rev R), an autosave
-// commits rev R+1 first, and the backfill's CAS then matches zero rows.
 func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 	env := suiteBSetup(t)
@@ -516,8 +451,6 @@ func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 	id := env.suiteBSeedStaleRow(t, "race", suiteBDoc(t, "Original"))
 	before := env.suiteBSnapshot(t, id)
 
-	// The gate holds the row lock so both writers queue behind it in arrival
-	// order: the autosave enters the queue first and therefore commits first.
 	gate := env.suiteBLockRow(t, id)
 
 	autosaveDoc := suiteBDoc(t, "Autosave Winner")
@@ -581,10 +514,6 @@ func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Autosave_AfterBackfill_NoSpurious412 proves a successful
-// backfill changes neither
-// revision nor updated_at, so an autosave holding the pre-backfill revision
-// still succeeds instead of returning a spurious 412.
 func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 	env := suiteBSetup(t)
@@ -642,7 +571,6 @@ func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 		t.Errorf("Get reports revision %d after backfill, want %d", getAfter.Revision, getBefore.Revision)
 	}
 
-	// The autosave still holds the revision it read BEFORE the backfill.
 	newRevision, err := st.SaveDocument(t.Context(), env.userID, id, suiteBDoc(t, "After Backfill"), before.Revision)
 	if err != nil {
 		var mismatch *resume.RevisionMismatchError
@@ -657,9 +585,6 @@ func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Backfill_ConcurrentWithItself_AppliesOnce hammers one row with N
-// concurrent backfills: at most one may apply, and the losers must be skips or
-// retryable races -- never a second write, never an error.
 func TestSuiteB_Backfill_ConcurrentWithItself_AppliesOnce(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 	env := suiteBSetup(t)
@@ -720,11 +645,6 @@ func TestSuiteB_Backfill_ConcurrentWithItself_AppliesOnce(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Backfill_NeverPersistsInvalidProjection covers the whole
-// fail-closed arm of "a corrupt doc must surface, not silently persist": a
-// converter that errors, one that emits invalid JSON, one whose output fails
-// its own target schema, and one whose output passes the projector but violates
-// the store's aggregate rules.
 func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 
@@ -747,8 +667,6 @@ func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 		{
 			name: "converter output fails its own target schema",
 			down: func(doc json.RawMessage) (json.RawMessage, error) {
-				// Relabels as current but keeps v2's headline, which the
-				// current synthetic schema forbids.
 				var m map[string]json.RawMessage
 				if err := json.Unmarshal(doc, &m); err != nil {
 					return nil, err
@@ -775,9 +693,6 @@ func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 				}
 				m["personalDetails"] = encoded
 				m["schemaVersion"] = json.RawMessage(fmt.Sprintf("%d", docmigrate.CurrentVersion))
-				// layout.sections.main now names a section content does not
-				// have: valid JSON, valid per the synthetic schema, and
-				// rejected by the store's aggregate invariant.
 				var cu map[string]json.RawMessage
 				if decodeErr := json.Unmarshal(m["customization"], &cu); decodeErr != nil {
 					return nil, decodeErr
@@ -792,10 +707,6 @@ func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 			},
 		},
 		{
-			// Distinguishes the JSON-Schema layer from the aggregate layer:
-			// a bad hex color is caught only by the embedded schema, so a
-			// backfill that skipped that layer would persist a document no
-			// user write could ever produce.
 			name: "converter output violates the embedded JSON Schema",
 			down: func(doc json.RawMessage) (json.RawMessage, error) {
 				var m map[string]json.RawMessage
@@ -844,9 +755,6 @@ func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Projection_UnknownStoredVersionFailsClosed: a stored version with
-// no converter path must surface as an error from Get, never as a silently
-// un-projected document, and the failing read must still not write.
 func TestSuiteB_Projection_UnknownStoredVersionFailsClosed(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -888,9 +796,6 @@ func TestSuiteB_Projection_UnknownStoredVersionFailsClosed(t *testing.T) {
 	}
 }
 
-// TestSuiteB_List_OneBadProjectionFailsAtomically: one unprojectable row makes
-// the whole List fail. A silent omission or a partial result would make
-// corruption look like user deletion.
 func TestSuiteB_List_OneBadProjectionFailsAtomically(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, docmigrate.NewIdentityProjector())
@@ -918,7 +823,6 @@ func TestSuiteB_List_OneBadProjectionFailsAtomically(t *testing.T) {
 	}
 	suiteBRequireUntouched(t, "a failing List", before, env.suiteBSnapshot(t, badID))
 
-	// The failure is scoped to the owner of the bad row, not global.
 	other := suiteBSetup(t)
 	otherStore := resume.NewStore(other.pool, docmigrate.NewIdentityProjector())
 	if _, err := otherStore.Create(ctx, other.userID, "healthy", suiteBDoc(t, "healthy")); err != nil {
@@ -929,10 +833,6 @@ func TestSuiteB_List_OneBadProjectionFailsAtomically(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace proves a title-only
-// write bumps revision without touching schema_version, so the
-// backfill loses the race while the row is still stale. The result must
-// therefore be a retry signal, not "already done" -- a second attempt applies.
 func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 	env := suiteBSetup(t)
@@ -991,8 +891,6 @@ func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 		t.Errorf("title = %q, want %q", stale.Title, "after title")
 	}
 
-	// The lost race is a retry signal: a second attempt, with a fresh
-	// observation, must apply.
 	result, err := st.BackfillOne(t.Context(), id)
 	if err != nil {
 		t.Fatalf("second BackfillOne: %v", err)
@@ -1012,9 +910,6 @@ func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Backfill_AlreadyCurrentSkipsWithoutWriting: the third result the
-// contract declares. An already-current row must be skipped with zero writes,
-// not rewritten "harmlessly".
 func TestSuiteB_Backfill_AlreadyCurrentSkipsWithoutWriting(t *testing.T) {
 	suiteBRequireBackfillContract(t)
 	env := suiteBSetup(t)
@@ -1039,11 +934,6 @@ func TestSuiteB_Backfill_AlreadyCurrentSkipsWithoutWriting(t *testing.T) {
 	suiteBRequireUntouched(t, "a skipped backfill", before, env.suiteBSnapshot(t, created.ID))
 }
 
-// TestSuiteB_WireAcceptPersistEmit_ProductionVersions walks the declared
-// production versions end to end: accept a wire document, persist the complete
-// document through the store at the current version, read it back, and emit it
-// in a declared supported version. Synthetic v2 stays outside the store because
-// there is no fake v2 store codec.
 func TestSuiteB_WireAcceptPersistEmit_ProductionVersions(t *testing.T) {
 	env := suiteBSetup(t)
 	proj := docmigrate.NewIdentityProjector()
@@ -1095,10 +985,6 @@ func TestSuiteB_WireAcceptPersistEmit_ProductionVersions(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Get_UnknownStoredFieldFailsClosed guards the strict decode on the
-// read path: a stored part carrying a field the current Go type does not
-// declare must fail the read, not be silently dropped and then written back
-// lossily by the next save.
 func TestSuiteB_Get_UnknownStoredFieldFailsClosed(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, docmigrate.NewIdentityProjector())

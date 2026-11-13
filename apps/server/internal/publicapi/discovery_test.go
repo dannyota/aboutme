@@ -16,7 +16,6 @@ import (
 )
 
 func TestDiscoveryHandlerRetriesOneGenerationMismatch(t *testing.T) {
-	// This fails if the aggregate handler selects a stale cache generation rather than retrying.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +35,6 @@ func TestDiscoveryHandlerRetriesOneGenerationMismatch(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/sitemap.xml", nil))
-	// The second generation's slugs, never the stale first ones.
 	want, err := publicformat.Sitemap(origin, []string{"zeta", "ada"})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +48,6 @@ func TestDiscoveryHandlerRetriesOneGenerationMismatch(t *testing.T) {
 }
 
 func TestDiscoveryHandlerFailsClosedAfterSecondGenerationMismatch(t *testing.T) {
-	// This fails if a second mismatched snapshot is retried or used without admission.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -79,8 +76,6 @@ func TestDiscoveryHandlerFailsClosedAfterSecondGenerationMismatch(t *testing.T) 
 }
 
 func TestDiscoveryHandlerClosedAdmissionServesNoDiscoveryBytes(t *testing.T) {
-	// This fails if a discovery response is served while the global fence is
-	// closed.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -111,9 +106,6 @@ func TestDiscoveryHandlerClosedAdmissionServesNoDiscoveryBytes(t *testing.T) {
 }
 
 func TestDiscoveryHandlerServesTheSnapshotItRead(t *testing.T) {
-	// Operator account deletion removes eligible slugs without a new discovery
-	// generation. This fails if a request that read the slugs before the
-	// deletion leaves its bytes for later requests.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +131,6 @@ func TestDiscoveryHandlerServesTheSnapshotItRead(t *testing.T) {
 			}
 			before, after := []string{"ada", "deleted"}, []string{"ada"}
 			discovery := &changingDiscoveryStore{generation: 1, slugs: before}
-			// The deletion commits after the first request read its slugs but
-			// before it finished.
 			discovery.afterRead = func() { discovery.slugs = after }
 			handler, err := test.handler(DiscoveryDependencies{Store: discovery, Coordinator: coordinator, Cache: cache, PublicOrigin: origin, AppDigest: "sha256:app"})
 			if err != nil {
@@ -161,8 +151,6 @@ func TestDiscoveryHandlerServesTheSnapshotItRead(t *testing.T) {
 	}
 }
 
-// changingDiscoveryStore returns its current slugs and runs afterRead once,
-// after the first read is taken and before the handler sees it.
 type changingDiscoveryStore struct {
 	generation int64
 	slugs      []string

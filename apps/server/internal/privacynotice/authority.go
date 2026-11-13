@@ -339,7 +339,6 @@ func (s *Service) validateHost(report Report, needSend bool) bool {
 	return true
 }
 
-// AuthorizeSend reads current host files and checks the sealed campaign.
 func (s *Service) AuthorizeSend(ctx context.Context, q *store.Queries) bool {
 	report, err := readReport(ctx, q)
 	if err != nil || report.Campaign.State != "sealed" || report.Code == 1 || report.Totals.Actual != report.Campaign.ExpectedCount {

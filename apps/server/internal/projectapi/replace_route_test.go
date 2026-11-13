@@ -17,7 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// routeLinks records the library mutation a request reaches.
 type routeLinks struct {
 	replacement *resumeapi.ProjectReplacement
 }
@@ -35,7 +34,6 @@ func (l *routeLinks) RemoveProject(context.Context, resumeapi.ProjectRemoval) (r
 	return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("unexpected removal")
 }
 
-// routeIdempotency finds no stored replay and refuses a direct transaction.
 type routeIdempotency struct {
 	executes int
 }

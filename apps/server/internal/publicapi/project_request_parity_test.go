@@ -10,12 +10,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// combiningAccent is U+0301, which joins the letter before it.
 var combiningAccent = string(rune(0x301))
 
-// TestProjectDescription_OutcomeCutsAtCodePoints proves the outcome fallback
-// is its first 160 code points, exactly as the renderer's decoder computes
-// it, even when that parts a letter from its accent.
 func TestProjectDescription_OutcomeCutsAtCodePoints(t *testing.T) {
 	for name, test := range map[string]struct{ outcome, want string }{
 		"accent across the cut": {strings.Repeat("a", 159) + "e" + combiningAccent + "bbbb", strings.Repeat("a", 159) + "e"},
@@ -30,10 +26,6 @@ func TestProjectDescription_OutcomeCutsAtCodePoints(t *testing.T) {
 	}
 }
 
-// TestProjectRequests_LeaveOutBlankOptionalText proves an optional text that
-// is blank by the renderer's trim is left out of both requests, so the
-// renderer's presence tests and summary-else-outcome fallback read it as
-// absent, as Go does.
 func TestProjectRequests_LeaveOutBlankOptionalText(t *testing.T) {
 	blank := " \u00a0" + string(rune(0xfeff))
 	text := project.Text{Name: "Engine", Role: blank, Summary: blank, Outcome: "Outcome.", Description: blank}
@@ -67,12 +59,6 @@ func TestProjectRequests_LeaveOutBlankOptionalText(t *testing.T) {
 	}
 }
 
-// TestProjectDecoderRules_FollowTheRendererAt7ed24b18 proves the Go copy of
-// the decoder catches what the renderer's decoder refuses: a description
-// other than the summary, else the outcome's first 160 code points; a list
-// with a description; a NUL; an entry link equal to a button under the
-// link comparison; dates that end before they start; and a link Go's URL
-// parser refuses.
 func TestProjectDecoderRules_FollowTheRendererAt7ed24b18(t *testing.T) {
 	outcome := strings.Repeat("a", 159) + "e" + combiningAccent + "bbbb"
 	stored := limitProject("parity", 2, nil)

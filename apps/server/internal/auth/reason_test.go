@@ -1,8 +1,5 @@
 package auth_test
 
-// reason_test.go proves rejection logs use a closed token vocabulary while
-// clients receive one opaque error.
-
 import (
 	"net/http"
 	"regexp"
@@ -13,14 +10,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth/oidctest"
 )
 
-// reasonTokenPattern permits stable snake_case log grouping keys only.
 var reasonTokenPattern = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
 
-// TestRejectReason_VocabularyIsClosedAndStable proves the vocabulary is
-// exhaustive and machine-usable: every value in the declared range has a
-// token, every token is unique, and every token is a stable grouping key.
-// A new constant added without a token would surface here rather than as
-// an unlabeled log line in production.
 func TestRejectReason_VocabularyIsClosedAndStable(t *testing.T) {
 	t.Parallel()
 
@@ -45,10 +36,6 @@ func TestRejectReason_VocabularyIsClosedAndStable(t *testing.T) {
 	}
 }
 
-// TestRejectReason_UnnamedValueIsNeverSilentlyEmpty proves a rejectReason
-// outside the declared range (the zero value, or a hand-cast integer)
-// still renders as something an operator can see and alert on, rather than
-// an empty attribute that looks like a missing field.
 func TestRejectReason_UnnamedValueIsNeverSilentlyEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -63,18 +50,13 @@ func TestRejectReason_UnnamedValueIsNeverSilentlyEmpty(t *testing.T) {
 	}
 }
 
-// TestCallbackRejection_LogsTypedReasonToken proves distinct internal failures
-// retain stable operator signals behind one client-facing error.
 func TestCallbackRejection_LogsTypedReasonToken(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name      string
 		wantToken string
-		// cookies returns the cookies to send with the callback, given a
-		// handler that can begin a real transaction; state is the query
-		// value to send.
-		exercise func(t *testing.T, handler http.Handler)
+		exercise  func(t *testing.T, handler http.Handler)
 	}{
 		{
 			name:      "no transaction cookie at all",
@@ -118,9 +100,6 @@ func TestCallbackRejection_LogsTypedReasonToken(t *testing.T) {
 	}
 }
 
-// assertLoggedReason asserts logged carries exactly the reason attribute
-// wanted, and that whatever reason it carries is a token rather than
-// prose.
 func assertLoggedReason(t *testing.T, logged, want string) {
 	t.Helper()
 
@@ -128,8 +107,6 @@ func assertLoggedReason(t *testing.T, logged, want string) {
 		t.Errorf("log record = %q, want a %q reason attribute (typed, closed-vocabulary token)", logged, want)
 	}
 
-	// Check the reason attribute itself for prose rather than scanning the
-	// whole record: the message field legitimately contains spaces.
 	const marker = `"reason":"`
 	i := strings.Index(logged, marker)
 	if i < 0 {

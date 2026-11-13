@@ -12,8 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// frozenDSN is the exact loopback-only, fixture-scoped DSN the command
-// accepts. The capture script and static test assert the same literal.
 const frozenDSN = "postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_p5a_fixture?sslmode=disable"
 
 func TestParseConfigAcceptsSeed(t *testing.T) {
@@ -241,10 +239,6 @@ func TestInjectPhotoAddsOnlyTheKey(t *testing.T) {
 	}
 }
 
-// TestPhotoNormalizesToPNG pins the photo container to the ".png" key. The
-// media layer re-encodes opaque sources as JPEG, so the fixture photo carries
-// one semi-transparent pixel to stay a PNG; this test fails loudly if the
-// source is replaced with an opaque image and the key/content type drift.
 func TestPhotoNormalizesToPNG(t *testing.T) {
 	normalized, err := media.NewPhotoNormalizer().NormalizePhoto(photoPNG)
 	if err != nil {

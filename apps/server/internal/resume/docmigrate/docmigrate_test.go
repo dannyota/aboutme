@@ -1,23 +1,3 @@
-// docmigrate_test.go covers adjacent conversion, projection, synthetic
-// old-client preparation, and supported-version emission.
-//
-// Most tests here use SYNTHETIC released versions to exercise arbitrary
-// adjacent paths without coupling them to the production font conversion. The
-// synthetic v2/v3 schemas are derived from the real immutable
-// resume.v1.schema.json -- only `$id` and `$defs/schemaVersion/const` change --
-// so:
-//
-//   - version 1 always validates against the REAL immutable contract, which
-//     is what "EmitWire ... validates immutable v1" has to mean to be worth
-//     anything; and
-//   - a converted document keeps v1's shape, so the same synthetic pair also
-//     drives the live store-level projection test in
-//     ../projection_test.go, where the projected parts must still strict-
-//     decode into the current Go types.
-//
-// The synthetic converters move real data (they prefix
-// personalDetails.headline) and are exactly invertible, so a v1 -> v2 -> v1
-// round trip is provably lossless field by field rather than trivially so.
 package docmigrate_test
 
 import (
@@ -38,10 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-// --- fixtures and synthetic schema/converter construction ---
-
-// readFixture reads packages/schema/fixtures/<name> relative to this
-// package (apps/server/internal/resume/docmigrate -> five levels up).
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	path, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "..", "packages", "schema", "fixtures", name))
@@ -55,8 +31,6 @@ func readFixture(t *testing.T, name string) []byte {
 	return data
 }
 
-// decodeDoc decodes a whole document into a generic map with UseNumber, so
-// re-marshaling never reformats a number the converter did not touch.
 func decodeDoc(doc json.RawMessage) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewReader(doc))
 	dec.UseNumber()
@@ -67,9 +41,6 @@ func decodeDoc(doc json.RawMessage) (map[string]any, error) {
 	return m, nil
 }
 
-// normalize renders doc through the same generic decode/encode both sides of
-// a round-trip comparison go through, so the comparison is about CONTENT and
-// never about object key order or whitespace.
 func normalize(t *testing.T, doc json.RawMessage) []byte {
 	t.Helper()
 	m, err := decodeDoc(doc)
@@ -83,7 +54,6 @@ func normalize(t *testing.T, doc json.RawMessage) []byte {
 	return out
 }
 
-// v1RawSchema is the real immutable released v1 schema.
 func v1RawSchema(t *testing.T) []byte {
 	t.Helper()
 	released, err := schema.ReleasedSchemaFor(1)
@@ -93,10 +63,6 @@ func v1RawSchema(t *testing.T) []byte {
 	return released.RawSchema
 }
 
-// derivedSchema returns the immutable v1 schema retargeted to version: a new
-// `$id` (so the two compile as distinct resources) and
-// `$defs/schemaVersion/const`. Nothing else changes, which is exactly what
-// keeps a converted document decodable by the current Go types.
 func derivedSchema(t *testing.T, version int) []byte {
 	t.Helper()
 	dec := json.NewDecoder(bytes.NewReader(v1RawSchema(t)))
@@ -122,9 +88,6 @@ func derivedSchema(t *testing.T, version int) []byte {
 	return out
 }
 
-// compileValidator compiles raw into a docmigrate.ValidateFunc using the
-// same posture internal/resume uses: format assertion on, no
-// URL loader at all.
 func compileValidator(t *testing.T, raw []byte) docmigrate.ValidateFunc {
 	t.Helper()
 	var head struct {
@@ -156,8 +119,6 @@ func compileValidator(t *testing.T, raw []byte) docmigrate.ValidateFunc {
 	}
 }
 
-// counted wraps v and increments *n on every call, so a chain test can prove
-// EVERY intermediate version was validated, not just the endpoints.
 func counted(v docmigrate.ValidateFunc, n *int) docmigrate.ValidateFunc {
 	return func(d json.RawMessage) error {
 		*n++
@@ -170,10 +131,6 @@ const (
 	v3Prefix = "v3! "
 )
 
-// upHeadline is a synthetic N -> N+1 converter: it prefixes
-// personalDetails.headline and sets schemaVersion to target. An absent
-// headline stays absent (the field is optional in v1), which keeps the
-// converter total.
 func upHeadline(target int32, prefix string) docmigrate.ConvertFunc {
 	return func(doc json.RawMessage) (json.RawMessage, error) {
 		m, err := decodeDoc(doc)
@@ -192,9 +149,6 @@ func upHeadline(target int32, prefix string) docmigrate.ConvertFunc {
 	}
 }
 
-// downHeadline inverts upHeadline exactly. A headline that does not carry
-// the prefix is an error, not a silent passthrough: the document is then not
-// what the source version claims it is.
 func downHeadline(target int32, prefix string) docmigrate.ConvertFunc {
 	return func(doc json.RawMessage) (json.RawMessage, error) {
 		m, err := decodeDoc(doc)
@@ -216,8 +170,6 @@ func downHeadline(target int32, prefix string) docmigrate.ConvertFunc {
 	}
 }
 
-// syntheticV2 builds a two-version projector from immutable v1, derived v2,
-// one adjacent pair, and current = 2.
 func syntheticV2(t *testing.T) *docmigrate.Projector {
 	t.Helper()
 	p, err := docmigrate.NewProjector(
@@ -236,8 +188,6 @@ func syntheticV2(t *testing.T) *docmigrate.Projector {
 	return p
 }
 
-// fullV1Doc is the repository's full v1 fixture, used as the "old client"
-// document throughout.
 func fullV1Doc(t *testing.T) json.RawMessage {
 	t.Helper()
 	return json.RawMessage(readFixture(t, filepath.Join("v1", "full.json")))
@@ -272,8 +222,6 @@ func schemaVersionOf(t *testing.T, doc json.RawMessage) int32 {
 	return shape.SchemaVersion
 }
 
-// splitDoc splits a full document into the three stored jsonb parts, the way
-// a resumes row holds them.
 func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization json.RawMessage) {
 	t.Helper()
 	var parts struct {
@@ -286,8 +234,6 @@ func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization jso
 	}
 	return parts.PersonalDetails, parts.Content, parts.Customization
 }
-
-// --- Production declarations ---
 
 func TestDeclarations_ProductionSetsAreV1ToV6(t *testing.T) {
 	t.Parallel()
@@ -308,9 +254,6 @@ func TestDeclarations_ProductionSetsAreV1ToV6(t *testing.T) {
 	}
 }
 
-// TestDeclarations_EveryDeclaredVersionIsReleased is the fail-closed link
-// between the two registries: the server must never declare it accepts or
-// emits a version packages/schema has no immutable schema for.
 func TestDeclarations_EveryDeclaredVersionIsReleased(t *testing.T) {
 	t.Parallel()
 
@@ -328,9 +271,6 @@ func TestDeclarations_EveryDeclaredVersionIsReleased(t *testing.T) {
 	}
 }
 
-// TestDeclarations_ReturnedSlicesCannotMutateInternalState proves callers
-// receive copies: scribbling on a returned slice must not change what the
-// next caller is told the server accepts or emits.
 func TestDeclarations_ReturnedSlicesCannotMutateInternalState(t *testing.T) {
 	t.Parallel()
 
@@ -346,8 +286,6 @@ func TestDeclarations_ReturnedSlicesCannotMutateInternalState(t *testing.T) {
 		t.Errorf("EmittedVersions() = %v after mutating a returned copy, want [1 2 3 4 5 6]", got)
 	}
 }
-
-// --- Identity conversion and projection are byte-stable ---
 
 func TestIdentityProjector_ConvertIsByteStable(t *testing.T) {
 	t.Parallel()
@@ -408,9 +346,6 @@ func TestIdentityProjector_CurrentVersion(t *testing.T) {
 	}
 }
 
-// TestIdentityProjector_UnknownStoredVersion_FailsClosed: a row claiming a
-// version this build has no schema for must fail, never pass through
-// unconverted.
 func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	t.Parallel()
 	p := docmigrate.NewIdentityProjector()
@@ -422,8 +357,6 @@ func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 		}
 	}
 }
-
-// --- Adjacent conversion, both directions ---
 
 func TestConvert_AdjacentUpAndDown(t *testing.T) {
 	t.Parallel()
@@ -454,9 +387,6 @@ func TestConvert_AdjacentUpAndDown(t *testing.T) {
 	}
 }
 
-// TestConvert_MultiStepChain walks 1->2->3 and 3->2->1 and proves EVERY
-// version's validator ran on the way: the source once and each intermediate
-// and final target once.
 func TestConvert_MultiStepChain(t *testing.T) {
 	t.Parallel()
 
@@ -507,10 +437,6 @@ func TestConvert_MultiStepChain(t *testing.T) {
 	}
 }
 
-// TestConvert_IdentityValidatesSourceAndPreservesBytes pins Convert's public
-// contract: even an identity conversion validates its source, while a valid
-// document still returns byte-for-byte unchanged. Project owns the separate
-// current-version read short circuit.
 func TestConvert_IdentityValidatesSourceAndPreservesBytes(t *testing.T) {
 	t.Parallel()
 
@@ -537,9 +463,6 @@ func TestConvert_IdentityValidatesSourceAndPreservesBytes(t *testing.T) {
 	}
 }
 
-// TestProject_CurrentVersionBypassesValidation protects the read-path
-// behavior independently from Convert: an already-current row is returned
-// byte-for-byte and is not turned into a schema validation pass.
 func TestProject_CurrentVersionBypassesValidation(t *testing.T) {
 	t.Parallel()
 
@@ -565,7 +488,6 @@ func TestProject_CurrentVersionBypassesValidation(t *testing.T) {
 	}
 }
 
-// TestConvert_FailsClosed covers every conversion failure mode.
 func TestConvert_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -606,8 +528,6 @@ func TestConvert_FailsClosed(t *testing.T) {
 
 	t.Run("missing adjacent pair in the walk", func(t *testing.T) {
 		t.Parallel()
-		// Versions 1, 2 and 3 all have schemas, but only the 1<->2 pair is
-		// registered: a 2->3 step has no converter in either direction.
 		p, err := docmigrate.NewProjector(
 			map[int32]docmigrate.AdjacentConverters{
 				1: {Up: upHeadline(2, v2Prefix), Down: downHeadline(1, v2Prefix)},
@@ -625,10 +545,6 @@ func TestConvert_FailsClosed(t *testing.T) {
 		if _, err := p.Convert(v1, 1, 3); !errors.Is(err, docmigrate.ErrNoConverter) {
 			t.Errorf("Convert(1, 3) error = %v, want ErrNoConverter", err)
 		}
-		// The same hole in the DOWN direction: a genuine v3 document (v3
-		// shares v1's shape, so retagging the fixture produces one that
-		// really does validate at 3) still cannot walk back past the
-		// missing 2<->3 pair.
 		if _, err := p.Convert(withSchemaVersion(t, v1, 3), 3, 1); !errors.Is(err, docmigrate.ErrNoConverter) {
 			t.Errorf("Convert(3, 1) error = %v, want ErrNoConverter", err)
 		}
@@ -640,7 +556,7 @@ func TestConvert_FailsClosed(t *testing.T) {
 		if err := json.Unmarshal(v1, &m); err != nil {
 			t.Fatalf("unmarshal fixture: %v", err)
 		}
-		delete(m, "content") // required by v1
+		delete(m, "content")
 		invalid, err := json.Marshal(m)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
@@ -671,8 +587,6 @@ func TestConvert_FailsClosed(t *testing.T) {
 
 	t.Run("converter output invalid for the target schema", func(t *testing.T) {
 		t.Parallel()
-		// Prefixes the headline but never bumps schemaVersion, so the
-		// output fails v2's `const: 2`.
 		p := broken(t, func(doc json.RawMessage) (json.RawMessage, error) {
 			m, err := decodeDoc(doc)
 			if err != nil {
@@ -694,8 +608,6 @@ func TestConvert_FailsClosed(t *testing.T) {
 		}
 	})
 }
-
-// --- Constructor fails closed ---
 
 func TestNewProjector_FailsClosed(t *testing.T) {
 	t.Parallel()
@@ -833,9 +745,6 @@ func TestNewProjector_FailsClosed(t *testing.T) {
 	}
 }
 
-// TestNewProjector_CopiesItsInputs proves a caller cannot reach into a
-// constructed projector by mutating the maps and slices it handed over --
-// production wiring must not be re-configurable after startup.
 func TestNewProjector_CopiesItsInputs(t *testing.T) {
 	t.Parallel()
 
@@ -871,9 +780,6 @@ func TestNewProjector_CopiesItsInputs(t *testing.T) {
 	}
 }
 
-// withSchemaVersion retags doc as version n. The synthetic v2/v3 schemas
-// share v1's shape, so this alone produces a document that genuinely
-// validates at n.
 func withSchemaVersion(t *testing.T, doc json.RawMessage, n int32) json.RawMessage {
 	t.Helper()
 	m, err := decodeDoc(doc)
@@ -897,8 +803,6 @@ func mustConvert(t *testing.T, p *docmigrate.Projector, doc json.RawMessage, fro
 	return out
 }
 
-// --- Projection over the three stored parts ---
-
 func TestProject_ConvertsAndResplits(t *testing.T) {
 	t.Parallel()
 	p := syntheticV2(t)
@@ -920,15 +824,12 @@ func TestProject_ConvertsAndResplits(t *testing.T) {
 	if projected.Headline != v2Prefix+wantHeadline {
 		t.Errorf("projected headline = %q, want %q", projected.Headline, v2Prefix+wantHeadline)
 	}
-	// The untouched parts survive the assemble/convert/re-split round trip
-	// with their content intact.
 	if !bytes.Equal(normalize(t, gotContent), normalize(t, content)) {
 		t.Errorf("projection changed content:\n got %s\nwant %s", gotContent, content)
 	}
 	if !bytes.Equal(normalize(t, gotCustomization), normalize(t, customization)) {
 		t.Errorf("projection changed customization:\n got %s\nwant %s", gotCustomization, customization)
 	}
-	// No stored part may ever carry schemaVersion.
 	for name, part := range map[string]json.RawMessage{
 		"personalDetails": gotPD, "content": gotContent, "customization": gotCustomization,
 	} {
@@ -981,8 +882,6 @@ func TestProject_FailsClosed(t *testing.T) {
 			},
 			map[int32]docmigrate.ValidateFunc{
 				1: compileValidator(t, v1RawSchema(t)),
-				// A permissive v2 schema, so the missing key reaches the
-				// re-split rather than being caught by validation first.
 				2: func(json.RawMessage) error { return nil },
 			},
 			[]int32{1, 2}, []int32{1, 2}, 2,
@@ -1005,7 +904,7 @@ func TestProject_FailsClosed(t *testing.T) {
 						if err != nil {
 							return nil, err
 						}
-						return json.Marshal(m) // schemaVersion still 1
+						return json.Marshal(m)
 					},
 					Down: downHeadline(1, v2Prefix),
 				},
@@ -1025,13 +924,6 @@ func TestProject_FailsClosed(t *testing.T) {
 	})
 }
 
-// --- Old-client preparation and supported-version emission ---
-
-// TestWire_OldClientDocumentAcceptedThenEmitted is the transport-agnostic
-// boundary an HTTP layer uses: a v1 ("old client") document is prepared into
-// the current canonical shape, target-validated there, and can then be
-// emitted back in a DECLARED supported version, validated against that
-// version's immutable schema, with every v1 field preserved.
 func TestWire_OldClientDocumentAcceptedThenEmitted(t *testing.T) {
 	t.Parallel()
 	p := syntheticV2(t)
@@ -1096,15 +988,9 @@ func TestWire_AcceptCurrentVersionReturnsCurrent(t *testing.T) {
 	}
 }
 
-// TestWire_UndeclaredVersionsFailClosed proves accepted and emitted are
-// DISTINCT declared gates, enforced even when the conversion machinery
-// itself could do the job.
 func TestWire_UndeclaredVersionsFailClosed(t *testing.T) {
 	t.Parallel()
 
-	// Everything about version 2 exists -- schema and both converter
-	// directions -- but only version 1 is declared accepted and only
-	// version 2 is declared emitted.
 	p, err := docmigrate.NewProjector(
 		map[int32]docmigrate.AdjacentConverters{
 			1: {Up: upHeadline(2, v2Prefix), Down: downHeadline(1, v2Prefix)},
@@ -1132,10 +1018,6 @@ func TestWire_UndeclaredVersionsFailClosed(t *testing.T) {
 	}
 }
 
-// TestWire_InvalidInputFailsClosed proves the wire boundary validates
-// unconditionally, INCLUDING at the current version where conversion is the
-// identity -- the production identity projector must never wave a
-// malformed old-client document through.
 func TestWire_InvalidInputFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -1143,7 +1025,7 @@ func TestWire_InvalidInputFailsClosed(t *testing.T) {
 	if err := json.Unmarshal(fullV1Doc(t), &m); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	delete(m, "personalDetails") // required by v1
+	delete(m, "personalDetails")
 	invalid, err := json.Marshal(m)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -1158,10 +1040,6 @@ func TestWire_InvalidInputFailsClosed(t *testing.T) {
 	}
 }
 
-// TestWire_LossyEmissionFailsClosed proves schema validity alone cannot hide
-// data loss: photo is optional in v1, so the emitted document remains valid
-// after a broken Down converter drops it. EmitWire must still reject the
-// non-preserving round trip.
 func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -1178,7 +1056,7 @@ func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 					if !ok {
 						return nil, errors.New("personalDetails is not an object")
 					}
-					delete(pd, "photo") // optional in v1: output remains schema-valid
+					delete(pd, "photo")
 					m["schemaVersion"] = json.Number("1")
 					return json.Marshal(m)
 				},
@@ -1200,9 +1078,6 @@ func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 	}
 }
 
-// TestWire_LosslessEmissionComparesNumbersByExactValue proves the lossless
-// check treats JSON number spellings as representations of a value, without
-// rounding distinct values through float64.
 func TestWire_LosslessEmissionComparesNumbersByExactValue(t *testing.T) {
 	t.Parallel()
 

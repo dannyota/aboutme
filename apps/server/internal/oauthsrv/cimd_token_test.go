@@ -32,7 +32,6 @@ func TestCIMDCodeExchangeAndRefreshUseOnlyStoredIdentity(t *testing.T) {
 	if _, err := f.pool.Exec(context.Background(), `UPDATE oauth_clients SET metadata_url=$1 WHERE id=$2`, id, f.clientID); err != nil {
 		t.Fatal(err)
 	}
-	// No resolver exists and the startup flag is false throughout token use.
 	form := url.Values{"client_id": {id}, "code": {f.code}, "redirect_uri": {"http://127.0.0.1:20090/callback"}, "code_verifier": {f.verifier}}
 	alias := url.Values{}
 	for key, values := range form {
@@ -140,7 +139,6 @@ func TestCIMDApprovedAuthoritySurvivesServiceRestartWithFlagOff(t *testing.T) {
 	if grantErr != nil {
 		t.Fatal(grantErr)
 	}
-	// Reconstruct all process-local OAuth state without a resolver or flag.
 	restarted, restartErr := NewService(ctx, ServiceDependencies{
 		Pool: s.pool, Queries: store.New(s.pool), Clock: s.clock, Entropy: s.entropy.reader,
 		PublicOrigin: s.publicOrigin, RegisterAdmission: s.registerAdmission,
@@ -263,7 +261,6 @@ func TestTokenSharedClientGrantAdmissionIsolatesOwners(t *testing.T) {
 				codeForm := func(raw string) url.Values {
 					return url.Values{"grant_type": {"authorization_code"}, "client_id": {publicID}, "code": {raw}, "redirect_uri": {request.RedirectURI}, "code_verifier": {verifier}}
 				}
-				// Guesses from one shared address stay below the separate token-IP cap.
 				for i := range 10 {
 					form := codeForm("bad")
 					form.Set("code_verifier", "bad")
@@ -349,7 +346,6 @@ func TestTokenSharedClientGrantAdmissionIsolatesOwners(t *testing.T) {
 				if len(policies.grants.entries) != 1 || len(policies.grants.overflow.pending) != 0 || policies.grants.overflow.failures != 0 {
 					t.Fatal("unknown guesses created overflow debt at capacity")
 				}
-				// The other owner shares the first guesser's address without sharing debt.
 				w = post(codeForm(codes[1]), "8.8.8.8", http.StatusOK)
 				var response tokenResponse
 				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
@@ -835,7 +831,6 @@ func TestTokenGrantRefusalDatabaseFailureIsServerError(t *testing.T) {
 				code:  store.OAuthAuthorizationCode{GrantID: f.grantID},
 				token: store.GetOAuthTokenAuthorityByDigestRow{OAuthToken: store.OAuthToken{GrantID: f.grantID, Kind: "refresh"}},
 			}
-			// The admission lookup succeeds, but the validation transaction cannot begin.
 			failedPool, err := store.NewPool(t.Context(), testutil.RequireMigratedTestDatabaseURL(t))
 			if err != nil {
 				t.Fatal(err)
@@ -993,7 +988,6 @@ func TestTokenWrongStoredKindNeverReservesOrRotates(t *testing.T) {
 			if err != nil || kind != TokenKindRefresh {
 				t.Fatal("fixture did not issue a valid refresh token")
 			}
-			// Keep the issued digest but store access kind with a valid access lifetime.
 			var storedKind string
 			if err := f.pool.QueryRow(t.Context(), `UPDATE oauth_tokens
 				SET kind='access', expires_at=created_at + interval '1 hour'

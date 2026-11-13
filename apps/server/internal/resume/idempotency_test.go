@@ -1,12 +1,3 @@
-// idempotency_test.go exercises resume.IdempotencyStore against a live
-// Postgres database: first run, replay, rejected key reuse, mutation rollback,
-// expiry as absence, deterministic same-key contention around the real CAS
-// core, and composition with resume.Store's cap-checked createTx across multiple
-// keys, including cap rejection surfacing from inside mutate. Every
-// DB-backed test here goes through the same
-// internal/testutil helper internal/auth, internal/user, internal/store,
-// and resume's own store_test.go use, so it never depends on another
-// package's test binary having applied migrations first.
 package resume_test
 
 import (
@@ -33,19 +24,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// idempotencyTestRoute is a placeholder route string. IdempotencyStore treats
-// it as an opaque part of the unique key, so any stable string exercises the
-// same logic.
 const idempotencyTestRoute = "PUT /api/v1/resumes/{id}"
 
-// newIntegrationIdempotencyStore returns a resume.IdempotencyStore driven by
-// now instead of the real wall clock (so expiry is proven by advancing an
-// injected clock, never a real sleep), plus the resume.Store sharing the
-// same connection pool. Mutation closures can call
-// (*resume.Store).CreateTxForTest directly, proving
-// Execute composes with the real cap-checked create core rather than
-// reimplementing it. Mirrors store_test.go's own newIntegrationStore, with
-// an injectable clock added.
 func newIntegrationIdempotencyStore(t *testing.T, now func() time.Time) (*resume.IdempotencyStore, *resume.Store, *store.Queries, *store.Pool, context.Context) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -64,13 +44,6 @@ func newIntegrationIdempotencyStore(t *testing.T, now func() time.Time) (*resume
 	return idem, rs, store.New(pool), pool, ctx
 }
 
-// assertJSONEqual compares got and want as JSON VALUES, not bytes: jsonb
-// columns re-serialize on write (e.g. Postgres inserts a space after ":"
-// and ","), so anything read back out of idempotency_records.response_body
-// is never guaranteed byte-identical to the literal a test passed in,
-// even though it is the exact same JSON value. Two reads of the SAME
-// already-stored row, in contrast, ARE byte-identical -- callers proving
-// that should keep using bytes.Equal against another DB read, not this.
 func assertJSONEqual(t *testing.T, got, want json.RawMessage) {
 	t.Helper()
 	var gotVal, wantVal any
@@ -178,11 +151,6 @@ func (tx *deadlineBlockingTx) QueryRow(ctx context.Context, query string, args .
 	return tx.Tx.QueryRow(ctx, query, args...)
 }
 
-// userRowLockedForResumeWrite reports whether another transaction already
-// holds the users-row lock that serializes resume/idempotency writes. NOWAIT
-// makes the observation deterministic: the probe either acquires and
-// immediately releases the row lock, or PostgreSQL returns lock_not_available;
-// it never waits for a scheduling-dependent interval.
 func userRowLockedForResumeWrite(ctx context.Context, pool *store.Pool, userID uuid.UUID) (bool, error) {
 	var got uuid.UUID
 	err := pool.QueryRow(ctx,
@@ -200,8 +168,6 @@ func userRowLockedForResumeWrite(ctx context.Context, pool *store.Pool, userID u
 	}
 	return false, fmt.Errorf("owner-row lock probe: %w", err)
 }
-
-// --- Sequential semantics ---
 
 func TestIdempotencyStore_Execute_BindsPostgresTimeoutsToContextDeadline(t *testing.T) {
 	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, time.Now)
@@ -382,7 +348,6 @@ func TestIdempotencyStore_Execute_Replay_SameKeySameHash_SkipsMutate(t *testing.
 	if !replayed {
 		t.Errorf("second Execute() replayed = false, want true")
 	}
-	// First and replay both use PostgreSQL's normalized stored bytes.
 	if second.Status != int(firstRow.ResponseStatus) || !bytes.Equal(second.Body, firstRow.ResponseBody) {
 		t.Errorf("second Execute() = %+v, want the STORED response {Status:%d Body:%s}", second, firstRow.ResponseStatus, firstRow.ResponseBody)
 	}
@@ -590,8 +555,6 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 		t.Fatalf("GetIdempotencyRecord() after first call error = %v", err)
 	}
 
-	// Advance the injected clock past IdempotencyTTL -- expiry is proven by
-	// moving the fake clock forward, never by sleeping.
 	clock.Advance(resume.IdempotencyTTL + time.Second)
 
 	secondResp := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"n":2}`)}
@@ -631,11 +594,6 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 	}
 }
 
-// TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges proves a
-// same-key contender waits for the winning CAS mutation and then replays or
-// rejects from its stored result. The channels hold the winner open after its
-// CAS write and start the contender while that write is uncommitted; no sleeps
-// or scheduler timing assumptions are involved.
 func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -703,10 +661,6 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 				t.Fatalf("winner SaveDocumentTxForTest() error = %v; Execute result = %+v", ready.err, got)
 			}
 
-			// Execute must hold the same users-row lock Create uses before it
-			// invokes mutate. This is both the serialization invariant and a
-			// deterministic way for the test to observe the critical section
-			// while still releasing every goroutine after an assertion failure.
 			ownerLocked, probeErr := userRowLockedForResumeWrite(ctx, pool, userID)
 			if probeErr != nil {
 				close(releaseWinner)
@@ -742,9 +696,6 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 
 			<-contenderStarted
 			if !ownerLocked {
-				// Without the owner lock, wait until the contender enters mutate and
-				// blocks on the winner's uncommitted resume-row update. With the lock,
-				// the contender cannot reach this callback.
 				<-contenderEnteredMutate
 			}
 			close(releaseWinner)
@@ -814,8 +765,6 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 	}
 }
 
-// --- Composition across multiple keys, including cap rejection ---
-
 func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 	t.Parallel()
 	idem, rs, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
@@ -851,10 +800,6 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 		t.Fatalf("List() = %d resumes, want 3 (cap accounting across 3 distinct Execute() calls)", len(list))
 	}
 
-	// A 4th resume for this user must still be rejected by the REAL cap
-	// check running inside mutate, inside IdempotencyStore's own
-	// transaction -- and Execute must not insert an idempotency record for
-	// the rejected key: nothing to replay for a rejected mutation.
 	fourthKey := uuid.New()
 	fourthHash := sha256.Sum256([]byte("body-4"))
 	calls := 0
@@ -888,8 +833,6 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 		t.Errorf("List() after rejected 4th = %d resumes, want 3 (still capped)", len(list))
 	}
 }
-
-// --- Inspection and commit-outcome contract ---
 
 func TestIdempotencyStore_Inspect_DecidesWithoutReservingOrCleaning(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
@@ -1201,8 +1144,6 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 		assertPair(t, second)
 	})
 }
-
-// --- Bounded retention and capacity accounting ---
 
 func seedIdempotencyRows(ctx context.Context, t *testing.T, pool *store.Pool,
 	userID uuid.UUID, routePrefix string, count int, firstExpiry time.Time,
@@ -1643,9 +1584,6 @@ func TestIdempotencyStore_Execute_ExpiredBacklogRemainsCountedAtCap(t *testing.T
 		}
 	})
 
-	// One bulk insert makes the physical retained-row count itself the cap
-	// authority. Cleanup removes only 200, leaving 50,001 expired rows still
-	// counted, so this request cannot admit a replacement record.
 	seedIdempotencyRows(ctx, t, pool, userID, "capacity-expired-", 50_201, clock.Now().Add(-2*time.Hour))
 	refreshIdempotencyUsage(ctx, t, pool, userID)
 	var calls atomic.Int32
@@ -1702,9 +1640,6 @@ func TestIdempotencyStore_Execute_ExpiredExactKeyRollbackForcesOneSecondRetry(t 
 		FROM idempotency_records WHERE user_id = $1`, userID).Scan(&physicalBytes); err != nil {
 		t.Fatalf("read seeded response bytes: %v", err)
 	}
-	// Synthetic retained-record pressure keeps this regression small. Its
-	// expected counter transition is still exact: cleanup commits -200,
-	// while the exact-key deletion and -1 release must both roll back.
 	setIdempotencyUsage(ctx, t, pool, userID, 50_201, physicalBytes)
 
 	var calls atomic.Int32
@@ -1895,8 +1830,6 @@ func TestIdempotencyStore_Execute_CallbackRollbackLeavesUsageUnchanged(t *testin
 		t.Errorf("usage rows after callback rollback = %d, want 0", usageRows)
 	}
 }
-
-// --- Normalized replay identity and stored-header policy ---
 
 func TestIdempotencyStore_Execute_FirstAndReplayAreByteIdentical(t *testing.T) {
 	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)

@@ -1,5 +1,3 @@
-// Package uatmock provides the local-only Google and LinkedIn OIDC providers
-// used by the native HTTPS authentication proofs.
 package uatmock
 
 import (
@@ -20,7 +18,6 @@ const (
 	maxFormBytes  = 16 << 10
 )
 
-// Service owns an ephemeral signing key and single-use authorization codes.
 type Service struct {
 	cfg Config
 	key *rsa.PrivateKey
@@ -29,12 +26,9 @@ type Service struct {
 	mu    sync.Mutex
 	codes map[string]codeBinding
 
-	// linkedin is nil unless the configuration names LinkedIn credentials.
 	linkedin *linkedinMock
 }
 
-// New constructs a closed mock provider for Google, plus LinkedIn when its
-// credentials are configured.
 func New(cfg Config) (*Service, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -60,7 +54,6 @@ func New(cfg Config) (*Service, error) {
 	return svc, nil
 }
 
-// Handler returns the complete mock provider HTTP handler.
 func (s *Service) Handler() http.Handler {
 	return s.mux
 }

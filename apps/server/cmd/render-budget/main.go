@@ -1,11 +1,3 @@
-// Command render-budget measures the production print queue and browser
-// controller against the fixed local fixture protocol.
-//
-// Usage:
-//
-//	render-budget --repository-root /absolute/aboutme \
-//	  --chromium-executable /absolute/chromium \
-//	  --output-directory /absolute/aboutme/.dev/phase-7/render-budget [--probe]
 package main
 
 import (

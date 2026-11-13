@@ -14,13 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// RateConfig carries the frozen OAuth endpoint budgets from process config.
-//
-// Registration follows docs/design/mcp-client-compatibility.md, "Registration
-// rate from shared egress": an address inside one of RegisterEgressRanges
-// shares that range's RegisterRangeRequests budget, every other address keeps
-// its own RegisterRequests budget, and RegisterGlobalRequests caps every
-// admitted registration together. All three share RegisterWindow.
 type RateConfig struct {
 	TrustedProxies         api.TrustedProxies
 	RegisterRequests       int
@@ -35,11 +28,8 @@ type RateConfig struct {
 	MaxKeys                int
 }
 
-// registerGlobalKey is the one key of the global registration ceiling.
 const registerGlobalKey = "global"
 
-// RatePolicies composes OAuth endpoint admission over the ADR 0007 bounded
-// limiter and one bounded fixed-window failed-grant store.
 type RatePolicies struct {
 	trusted        api.TrustedProxies
 	egressRanges   []netip.Prefix
@@ -50,7 +40,6 @@ type RatePolicies struct {
 	grants         *failedGrantLimiter
 }
 
-// NewRatePolicies validates and constructs one process-wide policy set.
 func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 	if cfg.RegisterRequests <= 0 || cfg.RegisterRangeRequests <= 0 || cfg.RegisterGlobalRequests <= 0 ||
 		cfg.RegisterWindow <= 0 || cfg.TokenRequests <= 0 || cfg.TokenWindow <= 0 ||
@@ -58,8 +47,6 @@ func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 		return nil, errors.New("oauth rate policies: invalid configuration")
 	}
 	for _, prefix := range cfg.RegisterEgressRanges {
-		// Client addresses are unmapped before matching, so a mapped or
-		// non-canonical prefix would not mean what it says.
 		if !prefix.IsValid() || prefix != prefix.Masked() || prefix.Addr().Is4In6() {
 			return nil, errors.New("oauth rate policies: invalid registration egress range")
 		}
@@ -78,15 +65,6 @@ func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 	}, nil
 }
 
-// AdmitRegister enforces the registration budgets against the client address
-// resolved once through the configured trust boundary; no other header is
-// read. An address inside a configured egress range is admitted against that
-// range's shared bucket, any other address against its own bucket. Only a
-// request its own bucket admits is then charged to the global ceiling, so one
-// address or range cannot drain the ceiling with refused requests. The
-// reverse trade-off is accepted: while the ceiling refuses, a retry still
-// spends one token of its own bucket. The Retry-After is that of the bucket
-// that refused. An unresolvable address fails closed.
 func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int) {
 	raw, ok := api.ClientIP(r, p.trusted)
 	if !ok {
@@ -110,10 +88,6 @@ func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int)
 	return p.registerGlobal.Admit(now, registerGlobalKey)
 }
 
-// registerAddressKey is the per-address registration key. An IPv6 address is
-// keyed on its /64, since one host usually controls a whole /64 and could
-// otherwise spread registrations across it to drain the global ceiling. An
-// IPv4 address keeps its own key.
 func registerAddressKey(addr netip.Addr) string {
 	if addr.Is6() {
 		if prefix, err := addr.Prefix(64); err == nil {
@@ -123,8 +97,6 @@ func registerAddressKey(addr netip.Addr) string {
 	return "ip:" + addr.String()
 }
 
-// AdmitToken enforces the token-endpoint budget against the canonical client
-// address accepted from the configured Caddy proxy boundary.
 func (p *RatePolicies) AdmitToken(now time.Time, r *http.Request) (bool, int) {
 	key, ok := api.IPKeyFunc(r, p.trusted)
 	if !ok {
@@ -133,15 +105,10 @@ func (p *RatePolicies) AdmitToken(now time.Time, r *http.Request) (bool, int) {
 	return p.token.Admit(now, key)
 }
 
-// AdmitGrant reserves one failed-grant budget slot before token processing, so
-// concurrent invalid grants cannot all pass an unchanged precheck.
 func (p *RatePolicies) AdmitGrant(grantID uuid.UUID, now time.Time) (GrantAttempt, bool, int) {
 	return p.grants.admit(grantID, now)
 }
 
-// FinishGrant resolves one reserved attempt. Invalid grants retain one failure;
-// neutral outcomes release only their reservation; success clears a tracked
-// grant's window. Overflow success cannot clear other grants' shared debt.
 func (p *RatePolicies) FinishGrant(attempt grantAttempt, result grantAttemptResult) {
 	p.grants.finish(attempt, result)
 }

@@ -13,19 +13,14 @@ import (
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
-// buildTimeout bounds one build: the render deadline plus the photo read
-// and the store transaction.
 const buildTimeout = renderjob.MaxJobTimeout + 10*time.Second
 
-// ErrRender reports a card render that produced no usable image.
 var ErrRender = errors.New("previewcard: render failed")
 
-// Queue is the render queue boundary.
 type Queue interface {
 	Render(context.Context, renderjob.Request) (renderjob.Result, error)
 }
 
-// CardStore is the card storage boundary; Store implements it.
 type CardStore interface {
 	Stored(context.Context, uuid.UUID) (StoredCard, bool, error)
 	Live(context.Context, uuid.UUID) (publicresume.Snapshot, bool, error)
@@ -35,8 +30,6 @@ type CardStore interface {
 
 var _ CardStore = (*Store)(nil)
 
-// Service builds and stores cards. Concurrent requests for the same resume
-// and card version join one build.
 type Service struct {
 	store  CardStore
 	reader *publicresume.Reader
@@ -53,15 +46,12 @@ type flightKey struct {
 }
 
 type flight struct {
-	done chan struct{}
-	png  []byte
-	err  error
-	// joined counts every call that join has returned this flight to,
-	// including the one that started it, while s.mu guards it.
+	done   chan struct{}
+	png    []byte
+	err    error
 	joined int
 }
 
-// NewService creates the card build service.
 func NewService(cards CardStore, reader *publicresume.Reader, queue Queue) (*Service, error) {
 	if cards == nil || reader == nil || queue == nil {
 		return nil, errors.New("previewcard: invalid service dependencies")
@@ -69,26 +59,14 @@ func NewService(cards CardStore, reader *publicresume.Reader, queue Queue) (*Ser
 	return &Service{store: cards, reader: reader, queue: queue, flights: make(map[flightKey]*flight)}, nil
 }
 
-// Version is the current card version of an admitted snapshot.
 func (s *Service) Version(snapshot publicresume.Snapshot) (string, error) {
 	return VersionOf(snapshot)
 }
 
-// Stored returns the stored card of resumeID. The caller has already passed
-// the live-state gate for that resume.
 func (s *Service) Stored(ctx context.Context, resumeID uuid.UUID) (StoredCard, bool, error) {
 	return s.store.Stored(ctx, resumeID)
 }
 
-// Build joins the pending build of the snapshot's current card, or starts
-// one, and waits for it until ctx ends. The build itself runs to its own
-// deadline, so a caller that leaves does not cancel it for the others. A
-// low-priority caller joins any build of the same card; a normal-priority
-// caller joins only a normal one, so a request never waits on background
-// admission that owner exports may refuse. It
-// returns the PNG with a nil error once the card is stored, and with
-// ErrStale when the resume changed its card while the build ran; the bytes
-// then still match the version the caller asked for.
 func (s *Service) Build(ctx context.Context, snapshot publicresume.Snapshot, priority renderjob.Priority) ([]byte, error) {
 	card, err := FromSnapshot(snapshot)
 	if err != nil {
@@ -114,8 +92,6 @@ func (s *Service) Build(ctx context.Context, snapshot publicresume.Snapshot, pri
 	}
 }
 
-// join returns the pending build of the card, or registers a new one and
-// returns its key for the caller to start.
 func (s *Service) join(resumeID uuid.UUID, version string, priority renderjob.Priority) (*flight, *flightKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,8 +153,6 @@ func (s *Service) render(ctx context.Context, snapshot publicresume.Snapshot, ca
 				PublicGeneration: snapshot.Revision, Payload: payload, RevisionTime: snapshot.RevisionTime,
 			}, nil
 		},
-		// The render is kept only while the resume is live with this card
-		// version; an edit that leaves the card unchanged keeps it.
 		ValidateGeneration: func(validateCtx context.Context, frozen renderjob.Snapshot) error {
 			current, live, readErr := s.store.Live(validateCtx, frozen.ResumeID)
 			if readErr != nil || !live {

@@ -1,17 +1,9 @@
 package resumeapi
 
-// Older-client write rules: what a client at an older document version
-// cannot express is restored from the stored document after its write
-// (docs/adr/0004-resume-document-contract.md "Versions and converters").
-
 import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// keepV3Fields restores what a v1 or v2 client cannot express: the stored
-// body alignment, and the display of every detail that survives the write,
-// matched by id. A detail the client added gets none.
-// See docs/adr/0013-resume-header-and-contacts.md.
 func keepV3Fields(doc *schema.Resume, current schema.Resume) {
 	doc.Customization.Font.TextAlign = current.Customization.Font.TextAlign
 	displays := make(map[string]*schema.Display, len(current.PersonalDetails.Details))
@@ -23,12 +15,6 @@ func keepV3Fields(doc *schema.Resume, current schema.Resume) {
 	}
 }
 
-// keepV4Fields restores what a v1 to v3 client cannot express: the stored
-// header photo position, and the subtitle of every project entry that
-// survives the write, matched by entry id. The position applies only while
-// both documents have a header, so a client that removes the header removes
-// the position with it. A project entry the client added gets no subtitle.
-// See docs/adr/0013-resume-header-and-contacts.md.
 func keepV4Fields(doc *schema.Resume, current schema.Resume) {
 	if doc.Customization.Header != nil && current.Customization.Header != nil {
 		doc.Customization.Header.PhotoPosition = current.Customization.Header.PhotoPosition
@@ -52,18 +38,10 @@ func keepV4Fields(doc *schema.Resume, current schema.Resume) {
 	}
 }
 
-// keepV5Fields restores what a v1 to v4 client cannot express: the stored
-// color scheme. It copies the leaf unconditionally, because customization
-// exists in every version and no parent can disappear.
-// See docs/design/public-page-theme.md.
 func keepV5Fields(doc *schema.Resume, current schema.Resume) {
 	doc.Customization.ColorScheme = current.Customization.ColorScheme
 }
 
-// keepV6Fields restores what a v1 to v5 client cannot express: the project
-// link of every project entry that survives the write, matched by entry id.
-// A project entry the client added gets no link.
-// See docs/design/projects.md "Selection".
 func keepV6Fields(doc *schema.Resume, current schema.Resume) {
 	links := make(map[string]*string)
 	for _, section := range current.Content {

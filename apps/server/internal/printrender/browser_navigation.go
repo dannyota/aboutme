@@ -119,9 +119,6 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 	return nil
 }
 
-// enableRequestControl makes the browser attach each new target paused, so the
-// target listener can reject it, and sends every page request through the
-// request policy with the browser cache disabled.
 func enableRequestControl(ctx context.Context, browser, page cdp.Session) error {
 	if _, err := cdp.Call(ctx, browser, target.SetAutoAttach, target.SetAutoAttachParams{
 		AutoAttach: true, WaitForDebuggerOnStart: true, Flatten: new(true),

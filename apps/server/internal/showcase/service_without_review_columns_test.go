@@ -2,14 +2,8 @@ package showcase
 
 import "testing"
 
-// On the migrated head schema, which has no review columns, every showcase
-// query runs: the opt-in insert, the locked role and derived-value updates,
-// the owner's read and list, the public listing, the recompute, the account
-// export, and the opt-out delete (docs/design/release-floors.md "Schema
-// floor").
 func TestServiceRunsWithoutShowcaseReviewColumns(t *testing.T) {
 	e := newFreshEnv(t)
-	// Migration 00018 drops these; the test fails if it stops doing so.
 	reviewColumns := []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
 	var present int
 	if err := e.pool.QueryRow(e.ctx, `

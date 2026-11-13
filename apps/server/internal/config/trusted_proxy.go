@@ -6,25 +6,11 @@ import (
 	"strings"
 )
 
-// minTrustedProxyPrefixBitsIPv4 and minTrustedProxyPrefixBitsIPv6 are the
-// narrowest (i.e. numerically smallest bit count, so widest address range)
-// prefix length TRUSTED_PROXY_CIDRS may configure per address family.
-// Anything broader is too implausible to be a real deployment's actual
-// reverse-proxy hop and silently approaches "trust everyone." Checking every
-// prefix also rejects an address space split into individually broad ranges,
-// such as "0.0.0.0/1,128.0.0.0/1".
 const (
 	minTrustedProxyPrefixBitsIPv4 = 8
 	minTrustedProxyPrefixBitsIPv6 = 48
 )
 
-// loadTrustedProxyCIDRs parses raw as a comma-separated list of CIDRs. When
-// env requires production trust-boundary strictness (see
-// requiresProductionTrustBoundary) it must be non-empty: see
-// Config.TrustedProxyCIDRs for why production has no safe default to fall
-// back to. Outside that, an empty/unset raw returns (nil, nil) — trust no
-// one, the same safe default api.TrustedProxies documents for its own zero
-// value.
 func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -48,12 +34,6 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
 				"must be a comma-separated list of CIDRs: %w", raw, err)
 		}
-		// An IPv4-in-IPv6 mapped prefix (e.g. "::ffff:0.0.0.0/104") is
-		// judged against the IPv6 minimum below, yet can never match a real
-		// peer: api.resolveClientIP Unmap()s every peer address before
-		// testing it, so a v4-mapped trusted prefix silently trusts nobody.
-		// Reject it with a message pointing at the plain IPv4 form rather than
-		// accept an inert value that appears configured.
 		if prefix.Addr().Is4In6() {
 			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
 				"%s is an IPv4-in-IPv6 mapped prefix, which never matches a real peer "+
@@ -61,11 +41,6 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 				"IPv4 CIDR (the %s address, e.g. its IPv4 form) instead (design spec §6)",
 				raw, field, prefix.Addr().Unmap().String())
 		}
-		// See the const doc comment above: a mismatched but non-trivial
-		// (i.e. within these bounds) CIDR can't be caught here, since Go
-		// has no way to know the real topology at config-load time; the
-		// runtime mismatch warning in api.RateLimit is what catches that
-		// case.
 		minBits := minTrustedProxyPrefixBitsIPv4
 		if !prefix.Addr().Is4() {
 			minBits = minTrustedProxyPrefixBitsIPv6

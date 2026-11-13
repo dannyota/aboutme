@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestProjectHTMLRejection_EqualRepositoryAndDemoRenderTwoButtons proves an
-// external link may appear once per request field that supplies it, so a
-// project whose repository and demo are the same address keeps both buttons.
 func TestProjectHTMLRejection_EqualRepositoryAndDemoRenderTwoButtons(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["project-en-every-field"]
@@ -23,8 +20,6 @@ func TestProjectHTMLRejection_EqualRepositoryAndDemoRenderTwoButtons(t *testing.
 	}
 }
 
-// projectValidatorCases applies one addition before </main> to both corpus
-// modes and returns each mode's rejection.
 func projectValidatorRules(t *testing.T, addition string) map[string]string {
 	t.Helper()
 	origin := mustPublicOrigin(t)
@@ -36,15 +31,11 @@ func projectValidatorRules(t *testing.T, addition string) map[string]string {
 	}
 }
 
-// staticIcon uses every SVG element and attribute a static icon may carry.
 const staticIcon = `<svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" ` +
 	`stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">` +
 	`<title>Icon</title><g><path d="M1 1h2"></path><circle cx="1" cy="1" r="1"></circle><rect x="1" y="1" width="2" height="2" rx="1" ry="1"></rect>` +
 	`<line x1="0" y1="0" x2="1" y2="1"></line><polyline points="0,0 1,1"></polyline><polygon points="0,0 1,1 1,0"></polygon></g></svg>`
 
-// TestProjectValidators_SVGIsStaticIconsOnly proves both validators accept a
-// static icon and reject every other SVG element or attribute, so SVG
-// cannot embed, animate or point at a resource.
 func TestProjectValidators_SVGIsStaticIconsOnly(t *testing.T) {
 	for mode, rule := range projectValidatorRules(t, staticIcon) {
 		if rule != "" {
@@ -79,8 +70,6 @@ func TestProjectValidators_SVGIsStaticIconsOnly(t *testing.T) {
 	}
 }
 
-// projectModes runs a source edit through both corpus modes and returns
-// each mode's rejection.
 func projectModes(t *testing.T, edit func(source string) string) map[string]string {
 	t.Helper()
 	origin := mustPublicOrigin(t)
@@ -92,8 +81,6 @@ func projectModes(t *testing.T, edit func(source string) string) map[string]stri
 	}
 }
 
-// TestProjectValidators_CarryNoInlineCSS proves both modes refuse every style
-// element and every style attribute, wherever it sits and whatever it holds.
 func TestProjectValidators_CarryNoInlineCSS(t *testing.T) {
 	for name, test := range map[string]struct{ old, replacement, rule string }{
 		"empty style element in the head":  {"</head>", "<style></style></head>", "style_element"},
@@ -116,9 +103,6 @@ func TestProjectValidators_CarryNoInlineCSS(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_LoadExactlyTheTwoStylesheets proves both modes
-// require the font and project stylesheets once each, with rel and href only
-// and one shared 16-hex-digit version, and refuse any other stylesheet.
 func TestProjectValidators_LoadExactlyTheTwoStylesheets(t *testing.T) {
 	const fonts = `<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css?v=0123456789abcdef">`
 	const pages = `<link rel="stylesheet" href="/_nuxt/assets/project-pages.css?v=0123456789abcdef">`
@@ -150,8 +134,6 @@ func TestProjectValidators_LoadExactlyTheTwoStylesheets(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_AcceptTheFormatDetectionMeta proves both modes accept
-// the resume page's format-detection element exactly, at most once.
 func TestProjectValidators_AcceptTheFormatDetectionMeta(t *testing.T) {
 	const element = `<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">`
 	for name, test := range map[string]struct{ replacement, rule string }{
@@ -170,8 +152,6 @@ func TestProjectValidators_AcceptTheFormatDetectionMeta(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_SVGTransformIsNumericOnly proves an icon's transform
-// may only rotate, translate and scale by plain numbers, in both modes.
 func TestProjectValidators_SVGTransformIsNumericOnly(t *testing.T) {
 	for value, accepted := range map[string]bool{
 		"rotate(-8 15 16)":            true,

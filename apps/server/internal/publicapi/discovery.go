@@ -12,38 +12,28 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// DiscoveryRouteClass is the cache route class of robots.txt.
 const DiscoveryRouteClass publiccache.RouteClass = "discovery"
 
-// DiscoveryDependencies contains dependencies for discovery documents.
 type DiscoveryDependencies struct {
-	// Store reads the discovery generation and the eligible slugs.
-	Store store.PublicDiscoveryQueries
-	// Coordinator admits sitemap and llms.txt requests under a discovery lease.
-	Coordinator *publicstate.Coordinator
-	// Cache holds robots.txt only; sitemap and llms.txt are never cached.
-	Cache *publiccache.Cache
-	// PublicOrigin is the canonical origin every listed URL resolves against.
+	Store        store.PublicDiscoveryQueries
+	Coordinator  *publicstate.Coordinator
+	Cache        *publiccache.Cache
 	PublicOrigin publicresume.PublicOrigin
-	// AppDigest identifies the application build in the robots.txt cache key.
-	AppDigest string
+	AppDigest    string
 }
 
 var _ store.PublicDiscoveryQueries = (*store.Queries)(nil)
 
 type discoveryEncoder func(publicresume.PublicOrigin, []string) ([]byte, error)
 
-// NewSitemapHandler creates the sitemap handler.
 func NewSitemapHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	return newDiscoveryHandler(dependencies, publicstate.RepresentationSitemap, "application/xml; charset=utf-8", publicformat.Sitemap)
 }
 
-// NewLLMSHandler creates the llms.txt handler.
 func NewLLMSHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	return newDiscoveryHandler(dependencies, publicstate.RepresentationLLMS, "text/plain; charset=utf-8", publicformat.LLMS)
 }
 
-// NewRobotsHandler creates the robots.txt handler.
 func NewRobotsHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	if dependencies.Cache == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" {
 		return nil, ErrUnavailableDependencies
@@ -81,10 +71,6 @@ func newDiscoveryHandler(dependencies DiscoveryDependencies, representation publ
 			return
 		}
 		defer releaseAfterFlush(w, lease)
-		// Encode the slugs this request read and never cache the bytes.
-		// Operator account deletion removes slugs without a new discovery
-		// generation, so a generation-keyed entry stored after its cache
-		// eviction would keep listing them.
 		body, err := encoder(dependencies.PublicOrigin, slugs)
 		if err != nil {
 			serveTextError(w, request, http.StatusServiceUnavailable)

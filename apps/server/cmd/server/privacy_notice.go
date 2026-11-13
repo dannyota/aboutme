@@ -29,7 +29,6 @@ func runPrivacyNotice(args []string) error {
 
 func executePrivacyNoticeCommand(ctx context.Context, args []string, getenv func(string) string, output, diagnostics io.Writer, run privacyNoticeRunner) error {
 	invalid := func() error {
-		// All failure paths hide configuration, database, and provider details.
 		if _, writeErr := io.WriteString(diagnostics, "invalid_state\n"); writeErr != nil {
 			return privacyNoticeExitError{code: 1}
 		}

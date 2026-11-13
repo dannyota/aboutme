@@ -11,14 +11,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-// unreachableDSN points at a closed local port so connection attempts fail
-// fast (connection refused) without needing a real Postgres instance —
-// same technique internal/store's unit tests use.
 const unreachableDSN = "postgres://user:pass@127.0.0.1:1/aboutme?connect_timeout=1"
-
-// These tests use t.Setenv, which the testing package forbids combining
-// with t.Parallel (it mutates process-global state), so they run
-// sequentially — each is still fast, since none reaches a real dial.
 
 func TestRun_MissingDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
@@ -58,10 +51,6 @@ func TestRun_UnreachableDatabase_CheckMode(t *testing.T) {
 	}
 }
 
-// TestMigrationCommandErrorReportsVersionAndSQLSTATEWithoutDetail proves
-// migrationCommandError names the failing migration's version and
-// Postgres SQLSTATE while keeping every other error detail (query text,
-// data values, the DSN) out of the command's output.
 func TestMigrationCommandErrorReportsVersionAndSQLSTATEWithoutDetail(t *testing.T) {
 	sensitive := "dial tcp postgres://admin:secret@private-host:5432/db SQLSTATE 08006"
 	partial := &goose.PartialError{
@@ -79,9 +68,6 @@ func TestMigrationCommandErrorReportsVersionAndSQLSTATEWithoutDetail(t *testing.
 	}
 }
 
-// TestMigrationCommandErrorFallsBackWithoutAPartialError proves a
-// non-migration failure (e.g. Status's own catalog-read error) still gets
-// a generic, detail-free message.
 func TestMigrationCommandErrorFallsBackWithoutAPartialError(t *testing.T) {
 	got := migrationCommandError(errors.New("postgres://secret@host/database SQLSTATE 08006")).Error()
 	if got != "migration operation failed" {

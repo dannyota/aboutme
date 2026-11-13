@@ -12,8 +12,6 @@ import (
 
 const shutdownTimeout = 10 * time.Second
 
-// servePair runs the public and private print servers until ctx ends or one
-// of them stops, then stops rendering and joins both.
 func servePair(ctx context.Context, logger *slog.Logger, publicListener net.Listener, publicHandler http.Handler,
 	printListener net.Listener, printHandler http.Handler, stopRendering func(),
 ) error {
@@ -43,12 +41,6 @@ func servePair(ctx context.Context, logger *slog.Logger, publicListener net.List
 	return first
 }
 
-// serve runs handler on ln until ctx is done, then drains in-flight
-// requests via a graceful shutdown (bounded by shutdownTimeout) before
-// returning. It takes a context and a listener, rather than reading
-// signals or a port straight from the environment, so shutdown behavior
-// can be exercised directly in tests without touching real OS signals or
-// binding a fixed port.
 func serve(ctx context.Context, logger *slog.Logger, ln net.Listener, handler http.Handler) error {
 	return serveHTTP(ctx, logger, ln, &http.Server{
 		Handler:           handler,

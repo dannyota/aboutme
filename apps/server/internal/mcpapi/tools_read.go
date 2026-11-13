@@ -115,13 +115,6 @@ func responseData(body []byte) (map[string]any, error) {
 	return envelope.Data, nil
 }
 
-// stripAgentOnlyFields removes REST-only resume fields that this feature
-// deliberately keeps out of every agent and MCP response. MCP has no
-// publish tool, so an agent has no path to read or change signInToView;
-// the REST resume response still carries it
-// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"). The community
-// showcase state is the same: no tool reads or changes it
-// (docs/design/showcase.md "Opt-in").
 func stripAgentOnlyFields(data map[string]any) {
 	delete(data, "signInToView")
 	delete(data, "showcase")

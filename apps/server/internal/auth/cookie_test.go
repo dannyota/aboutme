@@ -1,6 +1,3 @@
-// Package auth_test exercises the __Host-oauth-tx cookie helpers. These
-// tests are hermetic (no database): SetOAuthTxCookie, ReadOAuthTxCookie,
-// and ClearOAuthTxCookie only touch net/http.ResponseWriter/Request.
 package auth_test
 
 import (
@@ -13,7 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
-// setCookie parses the emitted Set-Cookie header, not an intermediate struct.
 func setCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	t.Helper()
 
@@ -27,8 +23,6 @@ func setCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	return cookies[0]
 }
 
-// TestSetOAuthTxCookie_EmitsPinnedAttributes checks each __Host-oauth-tx
-// attribute independently.
 func TestSetOAuthTxCookie_EmitsPinnedAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -56,14 +50,11 @@ func TestSetOAuthTxCookie_EmitsPinnedAttributes(t *testing.T) {
 	if c.MaxAge != 600 {
 		t.Errorf("MaxAge = %d, want 600 (10 minutes, matching oauthTxTTL)", c.MaxAge)
 	}
-	// A __Host- cookie must not set Domain.
 	if c.Domain != "" {
 		t.Errorf("Domain = %q, want empty (a __Host- cookie must not set Domain)", c.Domain)
 	}
 }
 
-// TestClearOAuthTxCookie_ExpiresWithMatchingAttributes ensures the deletion
-// cookie matches the attributes that identify the stored cookie.
 func TestClearOAuthTxCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -92,9 +83,6 @@ func TestClearOAuthTxCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 	}
 }
 
-// TestReadOAuthTxCookie_RoundTripsSetValue proves ReadOAuthTxCookie
-// recovers exactly the handle a request carries under
-// auth.OAuthTxCookieName.
 func TestReadOAuthTxCookie_RoundTripsSetValue(t *testing.T) {
 	t.Parallel()
 
@@ -110,10 +98,6 @@ func TestReadOAuthTxCookie_RoundTripsSetValue(t *testing.T) {
 	}
 }
 
-// TestReadOAuthTxCookie_MissingReturnsSentinel guards the no-cookie path:
-// callers (the /callback handler) branch on ErrOAuthTxCookieMissing
-// specifically, so it must be exactly this sentinel, not merely a
-// non-nil error.
 func TestReadOAuthTxCookie_MissingReturnsSentinel(t *testing.T) {
 	t.Parallel()
 

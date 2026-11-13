@@ -255,14 +255,11 @@ func TestFailedBuildRetriesAfterTheDelayAtMostFiveTimes(t *testing.T) {
 		h.clock.Advance(time.Second)
 		h.idle(t)
 	}
-	// One build at once, one after the quiet period, and MaxRetries retries.
 	if got, want := h.queue.renderCalls(), 2+MaxRetries; got != want {
 		t.Fatalf("renders = %d, want %d", got, want)
 	}
 }
 
-// A rename in the middle of an edit burst removes the card; the change that
-// follows builds at once instead of waiting for the quiet period.
 func TestRenameDuringAnEditBurstBuildsAtOnce(t *testing.T) {
 	t.Parallel()
 	before := testSnapshot(t, "Ada Lovelace", "Engineer", nil)

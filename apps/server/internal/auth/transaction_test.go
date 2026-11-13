@@ -1,5 +1,3 @@
-// Package auth_test exercises single-use TransactionStore behavior against a
-// migrated live database. Tests skip when TEST_DATABASE_URL is unset.
 package auth_test
 
 import (
@@ -15,7 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// newTestPool opens a fresh pool after idempotently applying migrations.
 func newTestPool(t *testing.T) *store.Pool {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -32,14 +29,11 @@ func newTestPool(t *testing.T) *store.Pool {
 	return pool
 }
 
-// newTestQueries opens a fresh pool after idempotently applying migrations and
-// returns its query surface.
 func newTestQueries(t *testing.T) *store.Queries {
 	t.Helper()
 	return store.New(newTestPool(t))
 }
 
-// createTestUser returns a valid foreign-key target for linking transactions.
 func createTestUser(t *testing.T, q *store.Queries) uuid.UUID {
 	t.Helper()
 
@@ -102,10 +96,6 @@ func TestTransactionStore_BeginThenConsume_ReturnsSameData(t *testing.T) {
 	}
 }
 
-// TestTransactionStore_BeginThenConsume_GitHubHasNoNonce guards
-// Begin's provider-conditional nonce generation: GitHub has no OIDC ID
-// token to bind a nonce to, so Begin must leave it empty rather than
-// generating one that will never be checked.
 func TestTransactionStore_BeginThenConsume_GitHubHasNoNonce(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)
@@ -120,11 +110,6 @@ func TestTransactionStore_BeginThenConsume_GitHubHasNoNonce(t *testing.T) {
 	}
 }
 
-// TestTransactionStore_BeginThenConsume_LinkCarriesLinkingUserID guards
-// the link/reauth purpose path: Begin must round-trip the linking user's
-// ID through to the Transaction Consume later returns, since that's how
-// the callback handler knows which existing account to attach the new
-// identity to.
 func TestTransactionStore_BeginThenConsume_LinkCarriesLinkingUserID(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)

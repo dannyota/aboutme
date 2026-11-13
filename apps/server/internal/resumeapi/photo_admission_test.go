@@ -15,27 +15,20 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// photoHeldBody blocks its first Read until release closes, so an upload
-// holds the photo permit while it waits for the body.
 type photoHeldBody struct {
 	entered chan struct{}
 	release chan struct{}
 	once    sync.Once
 }
 
-// Read signals entered on its first call, then blocks until release closes.
 func (b *photoHeldBody) Read([]byte) (int, error) {
 	b.once.Do(func() { close(b.entered) })
 	<-b.release
 	return 0, errors.New("held photo body released")
 }
 
-// Close implements io.ReadCloser.
 func (*photoHeldBody) Close() error { return nil }
 
-// TestPhotoAdmissionSharedByUploadPaths builds one Service and shows that its
-// REST upload handler and its agent upload path take the same photo permit:
-// while a REST upload holds it, an agent upload waits and reports media_busy.
 func TestPhotoAdmissionSharedByUploadPaths(t *testing.T) {
 	service := New(nil, nil, nil, nil, Options{PhotoAdmission: media.NewPhotoAdmission()})
 	resumeID := uuid.New()

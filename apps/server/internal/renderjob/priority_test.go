@@ -10,9 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// A low-priority render enters only while at most LowPriorityMaxWaiting
-// places behind the running render are taken, so owner exports keep the
-// rest of the queue and readiness never fails because of background work.
 func TestLowPriorityAdmissionLeavesPlacesForExports(t *testing.T) {
 	t.Parallel()
 

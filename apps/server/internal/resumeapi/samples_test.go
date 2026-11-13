@@ -16,16 +16,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-// The web app seeds a new resume from packages/schema/samples. Each sample
-// must pass the server's complete create path (wire decode, schema, store
-// validation, bounds, and the rich-text sanitizer) and be stored unchanged,
-// so a seeded resume never differs from the preview the owner chose.
 func TestSampleDocumentsCreateUnchanged(t *testing.T) {
 	all, err := filepath.Glob(filepath.Join("..", "..", "..", "..", "packages", "schema", "samples", "*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Files starting with "_" fill the gallery and are never create seeds.
 	paths := make([]string, 0, len(all))
 	for _, path := range all {
 		if !strings.HasPrefix(filepath.Base(path), "_") {
@@ -37,7 +32,6 @@ func TestSampleDocumentsCreateUnchanged(t *testing.T) {
 	}
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			// A fresh owner per sample stays under the per-user resume cap.
 			h := newResumeAPITestHarness(t)
 			sample, readErr := os.ReadFile(path)
 			if readErr != nil {
@@ -72,7 +66,6 @@ func TestSampleDocumentsCreateUnchanged(t *testing.T) {
 	}
 }
 
-// jsonDifferences lists the JSON paths where got and want differ.
 func jsonDifferences(t *testing.T, got, want []byte) []string {
 	t.Helper()
 	var gotValue, wantValue any

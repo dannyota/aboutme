@@ -1,9 +1,5 @@
 package resume
 
-// Stored-response encoding: converting between a StoredResponse and the
-// jsonb body/headers columns a record persists, and classifying the
-// PostgreSQL errors Execute treats specially.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -13,10 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// bodyForStorage validates stored's status/body pairing and returns the
-// jsonb value to persist: the body bytes for a non-204 response, or the
-// internal jsonb null sentinel (exactly four bytes, counted as such by the
-// capacity accounting) for bodyless 204 success.
 func bodyForStorage(stored StoredResponse) (json.RawMessage, error) {
 	if stored.Status < 100 || stored.Status > 599 {
 		return nil, fmt.Errorf("resume: idempotency: invalid response status %d", stored.Status)
@@ -33,9 +25,6 @@ func bodyForStorage(stored StoredResponse) (json.RawMessage, error) {
 	return stored.Body, nil
 }
 
-// storedResponseFromRecord converts a stored record's columns back into a
-// StoredResponse, translating the 204 null-body sentinel to exactly zero
-// body bytes.
 func storedResponseFromRecord(status int32, body, headersJSON json.RawMessage) (StoredResponse, error) {
 	headers, err := decodeStoredHeaders(headersJSON)
 	if err != nil {
@@ -46,15 +35,12 @@ func storedResponseFromRecord(status int32, body, headersJSON json.RawMessage) (
 		if !bytes.Equal(bytes.TrimSpace(body), []byte(`null`)) {
 			return StoredResponse{}, fmt.Errorf("resume: idempotency: stored 204 record body is not the null sentinel")
 		}
-		return resp, nil // Body stays nil: zero bytes on the wire, always.
+		return resp, nil
 	}
 	resp.Body = body
 	return resp, nil
 }
 
-// encodeStoredHeaders validates the approved-header allowlist and encodes
-// the map as the jsonb object to store. Empty and nil both encode as the
-// empty object (two bytes, per the capacity accounting).
 func encodeStoredHeaders(headers map[string]string) (json.RawMessage, error) {
 	if len(headers) == 0 {
 		return json.RawMessage(`{}`), nil
@@ -71,9 +57,6 @@ func encodeStoredHeaders(headers map[string]string) (json.RawMessage, error) {
 	return encoded, nil
 }
 
-// decodeStoredHeaders parses a stored jsonb headers object back into a map;
-// an empty object decodes to nil for symmetry with a response that never
-// set headers.
 func decodeStoredHeaders(headersJSON json.RawMessage) (map[string]string, error) {
 	if len(headersJSON) == 0 {
 		return nil, fmt.Errorf("resume: idempotency: stored headers value is empty")
@@ -102,16 +85,11 @@ func isStoredHeaderName(name string) bool {
 	}
 }
 
-// PostgreSQL names these SQLSTATEs as indeterminate outcomes. They remain
-// unknown even though pgx can decode the server message as *pgconn.PgError.
+// PostgreSQL defines these SQLSTATEs as indeterminate outcomes, even when pgx decodes a *pgconn.PgError.
 func commitOutcomeUnknownSQLState(code string) bool {
 	return code == "08007" || code == "40003"
 }
 
-// isIdempotencyKeyConflict reports whether err is exactly the unique-index
-// violation on idempotency_records_user_route_key_key: the defensive signal
-// that a record for this exact (userID, operation, key) committed between
-// this call's presence check and insert despite its user-row serialization.
 func isIdempotencyKeyConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {

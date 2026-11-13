@@ -17,25 +17,19 @@ import (
 	"time"
 )
 
-// ErrBreachUnavailable is the closed error returned when a breach lookup
-// cannot be completed and no valid cached answer exists (fail closed).
 var ErrBreachUnavailable = errors.New("breach service unavailable")
 
-// HIBP budgets (docs/design/budgets.md) and protocol constants.
 const (
 	hibpMaxPrefixes    = 256
-	hibpMaxCacheBytes  = 16 * 1024 * 1024 // 16 MiB of parsed digest bytes
+	hibpMaxCacheBytes  = 16 * 1024 * 1024
 	hibpCacheTTL       = 24 * time.Hour
 	hibpMaxResponse    = 128 * 1024
 	hibpPrefixLen      = 5
-	hibpSuffixHexLen   = 35 // 40 hex chars total, minus the 5-char prefix
+	hibpSuffixHexLen   = 35
 	hibpDigestLen      = sha1.Size
 	hibpDefaultTimeout = 5 * time.Second
 )
 
-// HIBP is the HaveIBeenPwned range client. It sends only the first five
-// uppercase hex characters of the SHA-1 digest, never the full digest or
-// password.
 type HIBP struct {
 	client  *http.Client
 	baseURL string
@@ -43,19 +37,12 @@ type HIBP struct {
 	cache   *hibpCache
 }
 
-// HIBPOption customizes a HIBP client. Tests inject the base URL and a short
-// timeout; production uses the defaults.
 type HIBPOption func(*HIBP)
 
-// WithHIBPBaseURL overrides the API origin (test servers use this).
 func WithHIBPBaseURL(u string) HIBPOption { return func(h *HIBP) { h.baseURL = u } }
 
-// WithHIBPTimeout overrides the per-request deadline (tests use this to make
-// timeout behavior deterministic; production keeps the 5s default).
 func WithHIBPTimeout(d time.Duration) HIBPOption { return func(h *HIBP) { h.timeout = d } }
 
-// NewHIBP returns a HIBP client. The supplied client is copied and forced to
-// never follow redirects.
 func NewHIBP(client *http.Client, opts ...HIBPOption) *HIBP {
 	if client == nil {
 		client = &http.Client{}
@@ -76,8 +63,6 @@ func NewHIBP(client *http.Client, opts ...HIBPOption) *HIBP {
 	return h
 }
 
-// Breached reports whether the normalized password is in the HIBP corpus. A
-// cache miss plus an upstream failure returns ErrBreachUnavailable.
 func (h *HIBP) Breached(ctx context.Context, password string) (bool, error) {
 	digest := sha1.Sum([]byte(password)) //nolint:gosec // HIBP requires SHA-1; the full digest never leaves the process
 	prefix := strings.ToUpper(hex.EncodeToString(digest[:3]))[:hibpPrefixLen]
@@ -94,8 +79,6 @@ func (h *HIBP) Breached(ctx context.Context, password string) (bool, error) {
 	return containsSHA1(fetched, digest), nil
 }
 
-// fetch performs one range request and parses the suffix list. It returns a
-// nil slice (not breached) for a 404 or an empty 200 body.
 func (h *HIBP) fetch(ctx context.Context, prefix string) ([][20]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
@@ -122,8 +105,6 @@ func (h *HIBP) fetch(ctx context.Context, prefix string) ([][20]byte, error) {
 	}
 }
 
-// parseRangeBody enforces the content type and the 128 KiB response cap before
-// parsing any line.
 func (h *HIBP) parseRangeBody(prefix string, resp *http.Response) ([][20]byte, error) {
 	mt, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || mt != "text/plain" {
@@ -142,9 +123,6 @@ func (h *HIBP) parseRangeBody(prefix string, resp *http.Response) ([][20]byte, e
 	return h.parseRangeLines(prefix, body)
 }
 
-// parseRangeLines parses strict ASCII "<35-hex-uppercase>:<decimal>" lines,
-// reconstructs each full 20-byte digest from the prefix, rejects malformed
-// lines and duplicate suffixes, and returns the digests sorted.
 func (h *HIBP) parseRangeLines(prefix string, body []byte) ([][20]byte, error) {
 	text := string(body)
 	lines := strings.Split(text, "\n")
@@ -172,10 +150,9 @@ func (h *HIBP) parseRangeLines(prefix string, body []byte) ([][20]byte, error) {
 	return digests, nil
 }
 
-// parseHIBPSuffix parses one response line into a full [20]byte digest.
 func parseHIBPSuffix(prefix, line string) ([20]byte, error) {
 	var zero [20]byte
-	if len(line) < hibpSuffixHexLen+2 { // suffix + ':' + at least one count digit
+	if len(line) < hibpSuffixHexLen+2 {
 		return zero, errors.New("password: HIBP suffix line too short")
 	}
 	if line[hibpSuffixHexLen] != ':' {
@@ -225,7 +202,6 @@ func isUpperHex(s string) bool {
 	return true
 }
 
-// isUpperHexChar reports whether c is an uppercase ASCII hex digit.
 func isUpperHexChar(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'A' && c <= 'F'
 }
@@ -242,9 +218,6 @@ func isDecimal(s string) bool {
 	return true
 }
 
-// hibpCache is a bounded, TTL'd LRU over parsed HIBP range responses. It holds
-// at most 256 prefixes and 16 MiB of digest bytes for 24 hours, evicting
-// expired entries first and then least-recently-used entries.
 type hibpCache struct {
 	mu         sync.Mutex
 	entries    map[string]*hibpCacheEntry
@@ -296,7 +269,7 @@ func (c *hibpCache) put(prefix string, digests [][20]byte, now time.Time) {
 
 	size := len(digests) * hibpDigestLen
 	if size > hibpMaxCacheBytes {
-		return // refuse to cache a single entry larger than the whole budget
+		return
 	}
 	c.counter++
 	c.entries[prefix] = &hibpCacheEntry{

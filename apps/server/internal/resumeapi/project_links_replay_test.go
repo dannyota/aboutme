@@ -15,8 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// keyedLinkRequest sends a cookie POST with a caller-chosen Idempotency-Key,
-// so a test can replay it exactly.
 func keyedLinkRequest(t *testing.T, h *resumeAPITestHarness, path, body string, revision int64, key string) testHTTPResponse {
 	t.Helper()
 	var reader io.Reader

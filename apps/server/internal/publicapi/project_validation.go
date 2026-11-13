@@ -1,11 +1,5 @@
 package publicapi
 
-// Closed validators for the two project page modes
-// (docs/design/projects-contract.md "Render envelope"). They check named
-// hooks and parsed trees, never whitespace or class order, so the
-// renderer's exact output passes as the reference HTML does. Every rule
-// name is a closed constant, safe to log.
-
 import (
 	"strings"
 	"unicode/utf8"
@@ -17,32 +11,20 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// projectExternalRel is the exact rel of every repository, demo and entry
-// link.
 const projectExternalRel = "noopener noreferrer nofollow"
 
-// projectExpectation is what one project page's HTML must carry.
 type projectExpectation struct {
 	resume      directrender.ProjectPageResume
 	title       string
 	faviconHref string
 	pageURL     string
 	preview     previewmeta.Meta
-	// internal holds every internal link target a page may carry; listed
-	// holds the ones the list must link exactly once.
-	internal map[string]bool
-	listed   []string
-	// external counts, for each repository, demo and entry link of the
-	// request, the fields that supply it: the page may carry that link at
-	// most that many times, so equal repository and demo addresses keep
-	// both buttons.
-	external map[string]int
-	// description is the project's sanitized rich text, or "" for none.
+	internal    map[string]bool
+	listed      []string
+	external    map[string]int
 	description string
 }
 
-// projectListHTMLRejection returns "" for list HTML that passes every rule,
-// or the name of the first rule it breaks.
 func projectListHTMLRejection(source []byte, request directrender.ProjectListRenderRequest, origin publicresume.PublicOrigin) string {
 	want := projectExpectation{
 		resume: request.Resume, title: request.PageTitle, faviconHref: request.FaviconHref, pageURL: request.PageURL,
@@ -55,8 +37,6 @@ func projectListHTMLRejection(source []byte, request directrender.ProjectListRen
 	return projectPageRejection(source, want, origin)
 }
 
-// projectHTMLRejection returns "" for project page HTML that passes every
-// rule, or the name of the first rule it breaks.
 func projectHTMLRejection(source []byte, request directrender.ProjectRenderRequest, origin publicresume.PublicOrigin) string {
 	want := projectExpectation{
 		resume: request.Resume, title: request.PageTitle, faviconHref: request.FaviconHref, pageURL: request.PageURL,
@@ -72,17 +52,14 @@ func projectHTMLRejection(source []byte, request directrender.ProjectRenderReque
 	return projectPageRejection(source, want, origin)
 }
 
-// projectValidator walks one parsed page and records the first broken rule.
 type projectValidator struct {
 	want   projectExpectation
 	origin publicresume.PublicOrigin
 	meta   *headMeta
 	rule   string
 
-	htmlRoot, title, canonical, main *html.Node
-	mains, headings, favicons        int
-	// stylesheetVersions maps each project stylesheet path to the version
-	// its one link carries.
+	htmlRoot, title, canonical, main        *html.Node
+	mains, headings, favicons               int
 	stylesheetVersions                      map[string]string
 	skipLinks, credits, backs, descriptions int
 	internalSeen, externalSeen              map[string]int
@@ -123,9 +100,6 @@ func (v *projectValidator) walk(node *html.Node) {
 	if node.Type == html.ElementNode {
 		v.visitElement(node)
 		if v.rule == "" && relHasToken(attribute(node, "class"), "project-description") {
-			// The description region is compared as a tree; its own links
-			// are the description's, so its children are not walked as page
-			// elements.
 			v.visitDescription(node)
 			return
 		}
@@ -151,8 +125,6 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		}
 	}
 	if attributeCount(node, "style") != 0 {
-		// The pages carry no inline CSS; all of it is in the versioned
-		// project stylesheet.
 		v.reject("style_attribute")
 		return
 	}
@@ -169,7 +141,6 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		}
 	case "title":
 		if node.Namespace != "" {
-			// An icon's own SVG title names the icon, not the page.
 			break
 		}
 		if v.title != nil || len(node.Attr) != 0 || textNode(node) != v.want.title {
@@ -196,8 +167,6 @@ func (v *projectValidator) visitElement(node *html.Node) {
 	}
 }
 
-// visitHTML checks the root: lang equal to the resume language, at most a
-// data-scheme equal to its color scheme, and nothing else.
 func (v *projectValidator) visitHTML(node *html.Node) {
 	if v.htmlRoot != nil {
 		return
@@ -214,9 +183,6 @@ func (v *projectValidator) visitHTML(node *html.Node) {
 	}
 }
 
-// visitLink allows the favicon only when the request names one, the one
-// canonical link to the page itself, and at most the versioned font
-// stylesheet.
 func (v *projectValidator) visitLink(node *html.Node) {
 	rel := attribute(node, "rel")
 	switch {
@@ -239,7 +205,6 @@ func (v *projectValidator) visitLink(node *html.Node) {
 	}
 }
 
-// finish checks the counts the walk cannot decide alone.
 func (v *projectValidator) finish() string {
 	if name := v.meta.finish(); name != "" {
 		return name
@@ -276,19 +241,12 @@ func (v *projectValidator) finish() string {
 	return ""
 }
 
-// projectPreviewWithinBounds reports whether the request's preview text fits
-// the project page bounds agreed with the renderer: a title of 1 to 683 code
-// points and at most 2,727 bytes, and a description of at most 300 code
-// points and 1,200 bytes.
 func projectPreviewWithinBounds(preview previewmeta.Meta) bool {
 	return preview.Title != "" &&
 		utf8.RuneCountInString(preview.Title) <= maxProjectPreviewTitleRunes && len(preview.Title) <= maxProjectPreviewTitleBytes &&
 		utf8.RuneCountInString(preview.Description) <= maxProjectPreviewDescriptionRunes && len(preview.Description) <= maxProjectPreviewDescriptionBytes
 }
 
-// newProjectHeadMeta expects the resume page's preview elements with
-// og:type website, og:url the page itself, and the description pair only
-// when the page has a description.
 func newProjectHeadMeta(want projectExpectation, origin publicresume.PublicOrigin) *headMeta {
 	meta := newHeadMeta(publicresume.PublicResume{Slug: want.resume.Slug}, want.preview, origin)
 	meta.expected[metaKey{"property", "og:type"}] = "website"
@@ -300,8 +258,6 @@ func newProjectHeadMeta(want projectExpectation, origin publicresume.PublicOrigi
 	return meta
 }
 
-// onlyAttributes reports whether every attribute of node is one of keys,
-// in no namespace, and appears at most once.
 func onlyAttributes(node *html.Node, keys ...string) bool {
 	for _, attr := range node.Attr {
 		known := attr.Namespace == ""

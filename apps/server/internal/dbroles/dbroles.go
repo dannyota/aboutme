@@ -1,6 +1,3 @@
-// Package dbroles creates and verifies the fixed database roles used by
-// aboutme, and grants them the database and schema privileges the migrator
-// and the app need on the database db-setup targets.
 package dbroles
 
 import (
@@ -13,21 +10,13 @@ import (
 	"time"
 )
 
-// LockID is the advisory lock key that serializes catalog writes on one
-// database: the first 8 bytes of sha256("aboutme.db-setup.v1") as a
-// big-endian int64 (TestLockIDMatchesNamespaceDigest). Ensure and
-// SetLoginVerifiers both take it, because PostgreSQL advisory locks are
-// scoped to the database a session is connected to: it only serializes role
-// and pg_database ACL writes that db-setup and its tests make through one
-// database, never across databases.
+// PostgreSQL advisory locks are per database, so LockID serializes catalog writes made through one database only.
 const LockID int64 = 1229627785684121947
 
 var (
-	// ErrDrift reports that an existing fixed role set is not exact.
 	ErrDrift = errors.New("database role configuration drift")
 )
 
-// Result reports fixed-role outcomes without connection information.
 type Result struct {
 	Created  int
 	Verified int
@@ -39,9 +28,6 @@ type role struct {
 	replication, bypassRLS                          bool
 }
 
-// fixedRoles are the two login roles: aboutme_migrator owns every schema
-// object, and aboutme_app is the server's runtime identity. Neither holds a
-// role membership (ADR 0005).
 var fixedRoles = []role{
 	{name: "aboutme_migrator", login: true},
 	{name: "aboutme_app", login: true},
@@ -61,10 +47,6 @@ type catalogStore interface {
 	grantDatabaseAndSchema(context.Context, string) error
 }
 
-// Ensure atomically creates the fixed role set (or verifies an existing
-// one) and grants the database and schema privileges aboutme_migrator and
-// aboutme_app need on the database db is connected to. It never repairs,
-// alters, drops, or changes a password on an existing role.
 func Ensure(ctx context.Context, db *sql.DB) (Result, error) {
 	if db == nil {
 		return Result{}, errors.New("dbroles: nil database")
@@ -107,8 +89,6 @@ func rollbackBounded(tx interface{ Rollback() error }, timeout time.Duration) {
 	defer timer.Stop()
 	select {
 	case err := <-done:
-		// A finished transaction needs no rollback. Other errors may contain
-		// connection details, so log only the outcome.
 		if err != nil && !errors.Is(err, sql.ErrTxDone) {
 			slog.Warn("dbroles: rollback failed")
 		}
@@ -167,9 +147,7 @@ func ensureCatalog(ctx context.Context, store catalogStore) (Result, error) {
 	return result, nil
 }
 
-// verifyMemberships allows only the ADMIN grant that PostgreSQL gives a
-// non-superuser creator (INHERIT and SET false). Any other membership on a
-// fixed role is drift.
+// PostgreSQL grants a non-superuser role creator ADMIN membership with INHERIT and SET false.
 func verifyMemberships(got []membership, currentUser string) error {
 	for _, edge := range got {
 		if edge.member == currentUser && edge.admin && !edge.inherit && !edge.set {
@@ -196,9 +174,6 @@ func (s sqlCatalog) lock(ctx context.Context) error {
 	return lockCatalog(ctx, s.tx)
 }
 
-// lockCatalog takes the shared LockID advisory lock for the lifetime of tx,
-// serializing this transaction's role and ACL writes against any other
-// db-setup transaction on the same database.
 func lockCatalog(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, LockID)
 	return err
@@ -256,9 +231,6 @@ func (s sqlCatalog) createRole(ctx context.Context, r role) error {
 	return err
 }
 
-// grantDatabaseAndSchema applies the fixed grants on every run. The database
-// name comes from current_database() and is quoted because DDL takes no
-// identifier parameters.
 func (s sqlCatalog) grantDatabaseAndSchema(ctx context.Context, database string) error {
 	ident := quoteIdentifier(database)
 	statements := []string{
@@ -277,9 +249,7 @@ func (s sqlCatalog) grantDatabaseAndSchema(ctx context.Context, database string)
 	return nil
 }
 
-// quoteIdentifier double-quotes a PostgreSQL identifier, doubling any
-// embedded double quote, so it is safe to interpolate into DDL that has no
-// bind-parameter form for identifiers.
+// PostgreSQL DDL has no bind parameters for identifiers, so names are interpolated as quoted identifiers.
 func quoteIdentifier(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }

@@ -38,8 +38,6 @@ func (p *revokeLostCommitAcknowledgement) TraceQueryStart(ctx context.Context, c
 		return ctx
 	}
 	p.injected = true
-	// Commit below pgx, then close before pgx's Commit can observe success.
-	// This forces the committed side of an unknown transaction outcome.
 	results, err := conn.PgConn().Exec(ctx, "commit").ReadAll()
 	p.commitErr = err
 	p.committed = err == nil && len(results) == 1 && results[0].CommandTag.String() == "COMMIT"
@@ -149,7 +147,6 @@ func TestRevokeConcurrentLogoutAndDuplicateConverge(t *testing.T) {
 			for _, duplicateAccess := range []bool{false, true} {
 				t.Run(mode+"/access first="+strconv.FormatBool(accessFirst)+"/duplicate access="+strconv.FormatBool(duplicateAccess), func(t *testing.T) {
 					f := newRevokeFixture(t, mode)
-					// Keep the blocker and observer out of the three request connections.
 					cfg := f.pool.Config()
 					cfg.MaxConns = 3
 					requestPool, err := pgxpool.NewWithConfig(t.Context(), cfg)
@@ -191,8 +188,7 @@ func TestRevokeConcurrentLogoutAndDuplicateConverge(t *testing.T) {
 	}
 }
 
-// A third request can wait on a tuple lock behind a transaction-id waiter.
-// Follow PostgreSQL's blocker graph so all three belong to this fixture.
+// PostgreSQL can queue a waiter on a tuple lock behind a transaction-ID waiter, so follow its blocker graph.
 func waitForRevokeLockChain(t *testing.T, pool *store.Pool, holderPID int32, want int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)

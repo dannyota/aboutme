@@ -1,4 +1,3 @@
-// Package publicapi serves cacheable public resume representations.
 package publicapi
 
 import "net/http"

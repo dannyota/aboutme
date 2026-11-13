@@ -1,8 +1,5 @@
 package auth_test
 
-// These tests pin the IssueTx primitive's exact session fields and rollback
-// behavior, and the user-lock fence that Issue and rotation serialize on.
-
 import (
 	"bytes"
 	"context"
@@ -18,8 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// TestIssueTx_CreatesExactFreshSessionFields drives IssueTx through a locked
-// user row and pins every fresh-login field, including rotated_from = NULL.
 func TestIssueTx_CreatesExactFreshSessionFields(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -84,9 +79,6 @@ func TestIssueTx_CreatesExactFreshSessionFields(t *testing.T) {
 	}
 }
 
-// TestIssueTx_NonexistentUser_InsertFailsAndRollsBack proves IssueTx does not
-// mint a session for a user row that does not exist (its own user-row lock
-// finds no row), and the transaction leaves no partial session row.
 func TestIssueTx_NonexistentUser_InsertFailsAndRollsBack(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -146,8 +138,6 @@ func TestIssueTx_UsesLockedEpochWhenSnapshotIsStale(t *testing.T) {
 	}
 }
 
-// TestIssueTx_SessionRowRollsBackWhenTransactionFails proves a later failure in
-// the same transaction rolls back an already-inserted session row.
 func TestIssueTx_SessionRowRollsBackWhenTransactionFails(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -179,8 +169,6 @@ func TestIssueTx_SessionRowRollsBackWhenTransactionFails(t *testing.T) {
 	}
 }
 
-// TestIssue_WithPool_LocksUser proves the Issue compatibility wrapper acquires
-// the user row lock before inserting, via the deterministic lock probe.
 func TestIssue_WithPool_LocksUser(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -207,7 +195,6 @@ func TestIssue_WithPool_LocksUser(t *testing.T) {
 		t.Fatalf("Issue() returned before the lock probe fired; the wrapper did not acquire the user lock first: %v", err)
 	}
 
-	// While Issue holds the user lock, a reset cannot acquire it.
 	now := time.Now()
 	resetErr := make(chan error, 1)
 	go func() {

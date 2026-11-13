@@ -104,9 +104,6 @@ func mustTestMCPRates(t *testing.T) *RatePolicies {
 	return rates
 }
 
-// TestServer_InitializeResultCarriesBrandedServerInfo proves the initialize
-// handshake names aboutme with the seal icons and website URL a client uses
-// for its connector list, per docs/design/api.md#agent-access-and-the-bearer-world.
 func TestServer_InitializeResultCarriesBrandedServerInfo(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
@@ -236,8 +233,6 @@ func TestServer_MutatingToolSchemasRequireIdempotencyKey(t *testing.T) {
 func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	// Mutation tools reject a response without a revision, so each mutating
-	// operation returns a canonical resume state.
 	canonical := resumeapi.AgentResponse{
 		Status: http.StatusOK, Header: make(http.Header),
 		Body: []byte(`{"data":{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f","revision":"2","document":{}}}`),
@@ -902,8 +897,6 @@ func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
 	}
 }
 
-// The icon_key description lists the section icons the renderer draws, so an
-// agent picks one that renders (docs/design/templates/contract.md §5.3).
 func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
@@ -950,8 +943,6 @@ func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
 	t.Fatal("update_section tool not listed")
 }
 
-// The production server listens on loopback behind the reverse proxy, so every
-// request arrives on a loopback address with the public Host.
 func TestServer_AcceptsPublicHostOnLoopbackListener(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)

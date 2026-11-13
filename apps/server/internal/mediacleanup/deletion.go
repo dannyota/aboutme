@@ -11,9 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// DeleteDue drains at most 2,000 jobs that were due when this run began. It
-// claims only one four-worker wave at a time so no job waits behind another
-// wave while its 30-second lease runs down.
 func (w *Worker) DeleteDue(ctx context.Context) (result Result, err error) {
 	started := w.now()
 	defer func() { result.Duration = durationSince(w.now, started) }()

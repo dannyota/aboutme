@@ -1,9 +1,5 @@
 package auth
 
-// Public login uses GET. Privileged link and reauthentication use authenticated,
-// CSRF-protected POST and return an authorization URL. See
-// docs/adr/0016-sign-in-providers.md.
-
 import (
 	"context"
 	"errors"
@@ -16,33 +12,19 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// The start budget limits transaction inserts and downstream account-existence
-// probes. Anonymous login is keyed by IP; authenticated link and reauth use
-// account and IP.
 const (
 	startRateLimitRequests = 30
 	startRateLimitWindow   = time.Minute
 )
 
-// startReapBatch bounds the cleanup cost paid by one start request.
 const startReapBatch = 200
 
-// authorizeURLBuilder creates the provider-specific transaction and URL. op is
-// a fixed failure label and is empty on success.
 type authorizeURLBuilder func(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error)
 
-// startAuthorizeResponse lets the client open the provider as a top-level
-// navigation instead of following a fetch redirect.
 type startAuthorizeResponse struct {
 	AuthorizeURL string `json:"authorizeUrl"`
 }
 
-// startRoute applies the purpose-specific middleware order:
-//
-//	GET:  logStartRejections -> limit -> handleLoginStart
-//	POST: logStartRejections -> RequireSession -> limit -> RequireCSRF -> handleLinkStart
-//
-// Authentication must precede the POST limiter so its account key is present.
 func (s *Service) startRoute(provider Provider, build authorizeURLBuilder, limit api.Middleware) http.Handler {
 	login := limit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleLoginStart(w, r, provider, build)
@@ -58,8 +40,6 @@ func (s *Service) startRoute(provider Provider, build authorizeURLBuilder, limit
 		case http.MethodPost:
 			link.ServeHTTP(w, r)
 		default:
-			// HEAD must not create or consume a transaction when a crawler
-			// previews the route.
 			markStartRejection(r.Context(), reasonStartMethodNotAllowed)
 			w.Header().Set("Allow", "GET, POST")
 			api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed",
@@ -68,8 +48,6 @@ func (s *Service) startRoute(provider Provider, build authorizeURLBuilder, limit
 	}))
 }
 
-// startRateLimit keys anonymous GET by IP and authenticated POST by account and
-// IP. Service fields let tests reduce the budget.
 func (s *Service) startRateLimit() api.Middleware {
 	return api.RateLimit(api.RateLimiterConfig{
 		Requests:       s.startRateLimitRequests,
@@ -80,8 +58,6 @@ func (s *Service) startRateLimit() api.Middleware {
 	})
 }
 
-// handleLoginStart rejects privileged purposes before database or cookie work.
-// Other values retain the least-privileged login default.
 func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provider Provider, build authorizeURLBuilder) {
 	switch Purpose(r.URL.Query().Get("purpose")) {
 	case PurposeLink, PurposeReauth:
@@ -91,8 +67,6 @@ func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provi
 			"purpose=link and purpose=reauth require POST on "+r.URL.Path)
 		return
 	case PurposeView:
-		// Sign in to view gates one public resume, never an account
-		// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow").
 		s.handleViewStart(w, r, provider)
 		return
 	}
@@ -111,17 +85,9 @@ func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provi
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
-// handleLinkStart accepts only link or reauth after session and CSRF checks.
-// Link requires recent reauth, rechecked under the user lock with the factor
-// proof for an enrolled account, before a transaction is created; reauth
-// cannot require its own result. The callback rechecks link authority again
-// before it writes. See docs/design/security.md and
-// docs/design/second-factor-authentication.md.
 func (s *Service) handleLinkStart(w http.ResponseWriter, r *http.Request, provider Provider, build authorizeURLBuilder) {
 	sess, ok := SessionFromContext(r.Context())
 	if !ok {
-		// RequireSession normally populates this. Fail closed if the middleware
-		// order is violated.
 		markStartRejection(r.Context(), reasonStartSessionRequired)
 		rejectSession(w)
 		return
@@ -164,8 +130,6 @@ func (s *Service) handleLinkStart(w http.ResponseWriter, r *http.Request, provid
 	api.WriteData(w, http.StatusOK, startAuthorizeResponse{AuthorizeURL: authURL})
 }
 
-// reapExpiredOAuthTransactions performs bounded, best-effort cleanup before a
-// start creates its row. Cleanup failure is logged but does not fail login.
 func (s *Service) reapExpiredOAuthTransactions(ctx context.Context, r *http.Request, provider Provider) {
 	if _, err := s.q.DeleteExpiredOAuthTransactions(ctx, store.DeleteExpiredOAuthTransactionsParams{
 		Cutoff:  s.tx.now(),
@@ -175,40 +139,28 @@ func (s *Service) reapExpiredOAuthTransactions(ctx context.Context, r *http.Requ
 	}
 }
 
-// startRejectionContextKey is an unexported context key type
-// (google.github.io/styleguide/go/decisions#contexts), so the recorder
-// below can never collide with a value stored elsewhere.
 type startRejectionContextKey struct{}
 
-// startRejectionRecord carries an inner rejection reason through shared
-// middleware. It distinguishes equal status codes such as reauth and CSRF 403s.
-// One request goroutine writes it before the outer logger reads it.
 type startRejectionRecord struct {
 	reason rejectReason
 	set    bool
 }
 
-// markStartRejection is a no-op outside logStartRejections.
 func markStartRejection(ctx context.Context, reason rejectReason) {
 	if rec, ok := ctx.Value(startRejectionContextKey{}).(*startRejectionRecord); ok {
 		rec.reason, rec.set = reason, true
 	}
 }
 
-// startStatusRecorder captures the response status for rejection logging.
-//
-// Unwrap preserves optional interfaces reached through http.ResponseController.
 type startStatusRecorder struct {
 	http.ResponseWriter
 	status int
 }
 
-// Unwrap returns the wrapped writer for http.ResponseController.
 func (w *startStatusRecorder) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
-// WriteHeader records the first status written and forwards it.
 func (w *startStatusRecorder) WriteHeader(status int) {
 	if w.status == 0 {
 		w.status = status
@@ -216,18 +168,13 @@ func (w *startStatusRecorder) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
-// Write records net/http's implicit 200 before forwarding the body.
 func (w *startStatusRecorder) Write(b []byte) (int, error) {
 	if w.status == 0 {
-		w.status = http.StatusOK // net/http's own implicit WriteHeader(200).
+		w.status = http.StatusOK
 	}
 	return w.ResponseWriter.Write(b)
 }
 
-// logStartRejections wraps a whole start route and emits exactly one Warn
-// record per rejected request, naming the provider and a typed reason
-// (reason.go's closed vocabulary). Successful starts log nothing here --
-// the access log already records them.
 func (s *Service) logStartRejections(provider Provider) api.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -256,9 +203,6 @@ func (s *Service) logStartRejections(provider Provider) api.Middleware {
 	}
 }
 
-// startReasonForStatus maps unmarked shared-middleware responses. Handler
-// rejections with overlapping statuses mark their reason explicitly. Unknown
-// statuses remain unspecified rather than guessed.
 func startReasonForStatus(status int) rejectReason {
 	switch status {
 	case http.StatusUnauthorized:

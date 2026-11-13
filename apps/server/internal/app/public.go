@@ -25,10 +25,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
 
-// NewPublicState reads the durable public state and returns the public
-// coordinator seeded with its discovery generation. A missing, non-singleton,
-// or non-positive state fails, so the server never admits public traffic with
-// a guessed discovery generation.
 func NewPublicState(ctx context.Context, queries *store.Queries) (*publicstate.Coordinator, error) {
 	state, err := queries.GetPublicState(ctx)
 	if err != nil {
@@ -44,7 +40,6 @@ func NewPublicState(ctx context.Context, queries *store.Queries) (*publicstate.C
 	return coordinator, nil
 }
 
-// NewReader returns the public resume reader behind public-state admission.
 func NewReader(queries *store.Queries, projector *docmigrate.Projector, coordinator *publicstate.Coordinator,
 	blobs media.Backend, runtime PublicRuntime,
 ) (*publicresume.Reader, error) {
@@ -53,12 +48,10 @@ func NewReader(queries *store.Queries, projector *docmigrate.Projector, coordina
 	})
 }
 
-// NewShowcase returns the community showcase service.
 func NewShowcase(pool *store.Pool, reader *publicresume.Reader, projector *docmigrate.Projector, logger *slog.Logger) (*showcase.Service, error) {
 	return showcase.New(showcase.Dependencies{DB: pool, Reader: reader, Projector: projector, Logger: logger})
 }
 
-// NewStreams returns the realtime metadata stream service.
 func NewStreams(cfg config.Config, hub *realtime.Hub, queries *store.Queries, sessions *auth.SessionManager,
 	coordinator *publicstate.Coordinator, viewPassKey []byte,
 ) (*realtimeapi.Service, error) {
@@ -68,41 +61,23 @@ func NewStreams(cfg config.Config, hub *realtime.Hub, queries *store.Queries, se
 	})
 }
 
-// PublicDependencies are the public service's collaborators.
 type PublicDependencies struct {
-	// Config supplies trusted proxies, sign-in-to-view providers, and the join
-	// invite target.
-	Config config.Config
-	// Runtime supplies the canonical origin and build digests.
-	Runtime PublicRuntime
-	// Logger receives closed, content-free diagnostics.
-	Logger *slog.Logger
-	// Reader reads public resume projections.
-	Reader *publicresume.Reader
-	// Queries serves discovery reads.
-	Queries *store.Queries
-	// Coordinator is the shared public-generation coordinator.
+	Config      config.Config
+	Runtime     PublicRuntime
+	Logger      *slog.Logger
+	Reader      *publicresume.Reader
+	Queries     *store.Queries
 	Coordinator *publicstate.Coordinator
-	// Cache holds public artifacts.
-	Cache *publiccache.Cache
-	// Renderer is the direct public render worker client.
-	Renderer *directrender.Client
-	// Streams supplies the public live handler.
-	Streams *realtimeapi.Service
-	// PrintQueue is the shared print queue for public artifacts.
-	PrintQueue *renderjob.Queue
-	// Cards serves stored preview cards (ADR 0014); nil keeps the og.png
-	// share image.
-	Cards publicapi.PreviewCards
-	// Views records crawler and link-preview fetches of resume pages.
-	Views *viewcount.Counter
-	// Showcase serves the community showcase listing.
-	Showcase *showcase.Service
-	// ViewPassKey seals and opens the __Host-view-pass cookie.
+	Cache       *publiccache.Cache
+	Renderer    *directrender.Client
+	Streams     *realtimeapi.Service
+	PrintQueue  *renderjob.Queue
+	Cards       publicapi.PreviewCards
+	Views       *viewcount.Counter
+	Showcase    *showcase.Service
 	ViewPassKey []byte
 }
 
-// NewPublic returns the public resume, discovery, and artifact service.
 func NewPublic(deps PublicDependencies) (*publicapi.Service, error) {
 	cfg, runtime := deps.Config, deps.Runtime
 	return publicapi.NewService(publicapi.ServiceDependencies{
@@ -115,9 +90,6 @@ func NewPublic(deps PublicDependencies) (*publicapi.Service, error) {
 	})
 }
 
-// signInToViewGateProviders is the fixed subset of ["google","linkedin"] the
-// sign-in-to-view gate offers: each provider enabled for account sign-in
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"; ADR 0016).
 func signInToViewGateProviders(cfg config.Config) []string {
 	providers := make([]string, 0, 2)
 	if cfg.ProviderLogin.Google {
@@ -129,8 +101,6 @@ func signInToViewGateProviders(cfg config.Config) []string {
 	return providers
 }
 
-// joinInviteTarget is "/register" when password registration is open, else
-// "/login" (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
 func joinInviteTarget(cfg config.Config) string {
 	if cfg.PasswordRegistrationDisabled {
 		return "/login"

@@ -17,7 +17,7 @@ func TestValidateURL(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
-		want string // error substring; empty means accepted
+		want string
 	}{
 		{name: "loopback url", raw: valid},
 		{name: "postgresql scheme", raw: "postgresql://127.0.0.1/aboutme_dev"},

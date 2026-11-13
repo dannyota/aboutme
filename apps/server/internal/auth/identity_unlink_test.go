@@ -1,10 +1,5 @@
 package auth_test
 
-// These tests pin DELETE /api/v1/me/identities/{id}: the full cookie CSRF rule
-// set plus recent reauthentication, a uniform not-found for malformed, absent,
-// and foreign IDs, a refusal to remove the last usable sign-in method, and a
-// user-row lock that serializes concurrent unlinks.
-
 import (
 	"context"
 	"encoding/json"
@@ -25,8 +20,6 @@ import (
 
 var allProviders = config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}
 
-// newUnlinkTestService builds the production router with the given providers
-// enabled; unlink never starts a provider flow, so no issuer is needed.
 func newUnlinkTestService(t *testing.T, providers config.ProviderLogin) (http.Handler, *store.Queries) {
 	t.Helper()
 	pool := newTestPool(t)
@@ -60,7 +53,6 @@ func addPassword(t *testing.T, q *store.Queries, userID uuid.UUID) {
 
 func unlinkPath(id string) string { return auth.MeIdentitiesPath + "/" + id }
 
-// unlinkResult is what a test needs from one unlink response.
 type unlinkResult struct {
 	StatusCode int
 	RetryAfter string
@@ -104,7 +96,6 @@ func TestUnlinkIdentity_RemovesOwnIdentityAndKeepsSessions(t *testing.T) {
 	if identityIDs(t, q, userID)[google] {
 		t.Fatal("identity still linked after 204")
 	}
-	// Sessions are not tied to a provider: the current and other sessions live on.
 	for _, cookie := range []string{raw, otherRaw} {
 		if me := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(cookie)); me.StatusCode != http.StatusOK { //nolint:bodyclose // doJSON closes the body itself before returning.
 			t.Fatalf("GET /me after unlink = %d, want 200", me.StatusCode)
@@ -147,8 +138,6 @@ func TestUnlinkIdentity_RequiresTheCookieCSRFRuleSet(t *testing.T) {
 	}
 }
 
-// Agents authenticate with bearer tokens; this cookie-mode route never parses
-// one, so a bearer-only request is an anonymous request.
 func TestUnlinkIdentity_BearerTokenIsNotAuthentication(t *testing.T) {
 	handler, q := newUnlinkTestService(t, allProviders)
 	userID := createTestUser(t, q)
@@ -215,8 +204,6 @@ func TestUnlinkIdentity_OneOfTwoProvidersThenRefusesTheLast(t *testing.T) {
 	}
 }
 
-// A disabled provider's identity is not a sign-in method, but it can always be
-// removed.
 func TestUnlinkIdentity_CountsOnlyEnabledProvidersAsSignInMethods(t *testing.T) {
 	handler, q := newUnlinkTestService(t, config.ProviderLogin{Google: true})
 	userID := createTestUser(t, q)
@@ -336,8 +323,6 @@ func TestGetMe_IdentitiesCarryIDAndCreatedAt(t *testing.T) {
 	}
 }
 
-// Two concurrent unlinks of an account's only two identities must not both
-// succeed: the user-row lock serializes the count check with the delete.
 func TestUnlinkIdentity_ConcurrentUnlinksKeepOneSignInMethod(t *testing.T) {
 	handler, q := newUnlinkTestService(t, allProviders)
 	for round := range 10 {
@@ -381,9 +366,6 @@ func TestUnlinkIdentity_ConcurrentUnlinksKeepOneSignInMethod(t *testing.T) {
 	}
 }
 
-// unlinkAuditCount counts identity_unlinked audit events. The event carries no
-// user, provider, or identity reference, so tests compare counts around one
-// request; no test in this package writes the kind concurrently with them.
 func unlinkAuditCount(t *testing.T) int {
 	t.Helper()
 	var n int
@@ -427,9 +409,6 @@ func TestUnlinkIdentity_AuditsOnlyASuccessfulUnlink(t *testing.T) {
 	}
 }
 
-// TestUnlinkIdentity_EnrolledAccountNeedsFactorProof proves unlink rechecks
-// both recent proofs for an enrolled account under the user lock and removes
-// nothing without the factor proof.
 func TestUnlinkIdentity_EnrolledAccountNeedsFactorProof(t *testing.T) {
 	handler, q := newUnlinkTestService(t, allProviders)
 	userID := createTestUser(t, q)

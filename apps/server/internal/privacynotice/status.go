@@ -9,7 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Report holds an internal snapshot. JSON exposes only the closed aggregates.
 type Report struct {
 	Campaign store.PrivacyNoticeCampaign
 	Totals   store.PrivacyNoticeTotalsRow
@@ -17,7 +16,6 @@ type Report struct {
 	result   string
 }
 
-// Status reads aggregate evidence in one consistent read-only snapshot.
 func (s *Service) Status(ctx context.Context) (result Report, resultErr error) {
 	return s.aggregate(ctx, true)
 }
@@ -109,7 +107,6 @@ func readReport(ctx context.Context, q *store.Queries) (Report, error) {
 	return report, nil
 }
 
-// Activate records completion or rechecks retained evidence for receipt recovery.
 func (s *Service) Activate(ctx context.Context) (result Report, resultErr error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

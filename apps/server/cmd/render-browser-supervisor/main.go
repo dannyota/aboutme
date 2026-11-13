@@ -1,4 +1,3 @@
-// Command render-browser-supervisor owns and joins one browser process group.
 package main
 
 import (

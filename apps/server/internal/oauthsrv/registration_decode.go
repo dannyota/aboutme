@@ -19,61 +19,30 @@ var (
 	errRegisterRequestInvalid  = errors.New("oauth registration request invalid")
 )
 
-// registrationInput is a decoded RFC 7591 registration request. Each Set field
-// reports whether the request named that optional member.
 type registrationInput struct {
-	// ClientName is the required client_name member, before ValidateClientName
-	// checks it.
-	ClientName string
-	// RedirectURIs is the required redirect_uris member, before HandleRegister
-	// checks its count and each URI.
-	RedirectURIs []string
-	// TokenEndpointAuthMethod is the token_endpoint_auth_method member: "none"
-	// when present, empty when omitted.
+	ClientName              string
+	RedirectURIs            []string
 	TokenEndpointAuthMethod string
-	// ApplicationType is the application_type member; HandleRegister accepts
-	// only native or web.
-	ApplicationType string
-	// ApplicationTypeSet reports whether the request named application_type.
-	ApplicationTypeSet bool
-	// GrantTypes is the grant_types member, checked by validGrantTypesSet.
-	GrantTypes []string
-	// GrantTypesSet reports whether the request named grant_types.
-	GrantTypesSet bool
-	// ResponseTypes is the response_types member, checked by
-	// validResponseTypesSet.
-	ResponseTypes []string
-	// ResponseTypesSet reports whether the request named response_types.
-	ResponseTypesSet bool
-	// Scope is the scope member, checked by ParseScopes. It grants nothing at
-	// registration; consent decides.
-	Scope string
-	// ScopeSet reports whether the request named scope.
-	ScopeSet bool
+	ApplicationType         string
+	ApplicationTypeSet      bool
+	GrantTypes              []string
+	GrantTypesSet           bool
+	ResponseTypes           []string
+	ResponseTypesSet        bool
+	Scope                   string
+	ScopeSet                bool
 }
 
-// nativeLoopbackRedirect reports whether raw is an http redirect to a loopback
-// host, the application_type native requirement. It uses the general redirect
-// grammar's loopbackRedirectHost in redirect.go, which admits "localhost" for
-// a client that omits application_type, so a native client such as Claude Code
-// may register a localhost loopback redirect; see
-// docs/design/mcp-client-compatibility.md rule 3. A redirect must match the
-// client's registered value exactly, port included.
 func nativeLoopbackRedirect(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "http" && loopbackRedirectHost(strings.ToLower(u.Hostname()))
 }
 
-// webRedirect reports whether raw is an https redirect, the application_type
-// web requirement of docs/design/mcp-client-compatibility.md rule 3.
 func webRedirect(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "https"
 }
 
-// registrationGrantType reports whether value is in the closed set a
-// registration's grant_types member may name, per
-// docs/design/mcp-client-compatibility.md rule 2.
 func registrationGrantType(value string) bool {
 	switch value {
 	case "authorization_code", "refresh_token":
@@ -83,8 +52,6 @@ func registrationGrantType(value string) bool {
 	}
 }
 
-// validGrantTypesSet reports whether values is a non-empty, duplicate-free
-// set of registration grant types.
 func validGrantTypesSet(values []string) bool {
 	if len(values) == 0 {
 		return false
@@ -99,8 +66,6 @@ func validGrantTypesSet(values []string) bool {
 	return true
 }
 
-// validResponseTypesSet reports whether values is exactly ["code"], the only
-// response_types a registration may name.
 func validResponseTypesSet(values []string) bool {
 	return len(values) == 1 && values[0] == "code"
 }
@@ -140,10 +105,6 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 		if err := decoder.Decode(&value); err != nil {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
-		// A member name outside this set is ignored, per RFC 7591 section 2
-		// and docs/design/mcp-client-compatibility.md rule 2: it is never
-		// stored, logged, or echoed. The duplicate-member check above also
-		// applies to it.
 		switch name {
 		case "client_name", "redirect_uris", "token_endpoint_auth_method", "application_type",
 			"grant_types", "response_types", "scope":

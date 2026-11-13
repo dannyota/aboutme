@@ -1,8 +1,3 @@
-// Package accountemail implements the canonical account-email parser of
-// docs/design/security.md ("Password authentication"): a deliberate
-// deliverable-address subset of addr-spec that is bounded, pure ASCII, and
-// stored lowercase. The full grammar is authoritative for account creation and
-// lookup.
 package accountemail
 
 import (
@@ -10,26 +5,14 @@ import (
 	"strings"
 )
 
-// MaxBytes is the maximum number of ASCII bytes in a canonical account email.
 const MaxBytes = 254
 
-// ErrEmailInvalid is the closed error returned for every malformed email.
 var ErrEmailInvalid = errors.New("account email invalid")
 
-// Canonicalize accepts a raw email address and returns its lowercase ASCII
-// canonical form. It rejects surrounding space, controls, non-ASCII bytes,
-// quoted local parts, comments, domain literals, empty labels, a
-// leading/trailing dot, consecutive local dots, a leading/trailing domain
-// hyphen, and domain labels over 63 bytes. The local part is 1–64 bytes from
-// the exact atext set; the domain is 1–253 bytes of dot-separated labels of
-// ASCII letters, digits, and internal hyphens.
 func Canonicalize(raw string) (string, error) {
 	if len(raw) < 5 || len(raw) > MaxBytes {
 		return "", ErrEmailInvalid
 	}
-	// Reject non-ASCII bytes, controls (including space and DEL) up front, so
-	// every later check operates only on printable ASCII and ToLower is a pure
-	// ASCII fold.
 	for i := 0; i < len(raw); i++ {
 		b := raw[i]
 		if b >= 0x80 || b < 0x21 || b == 0x7f {
@@ -39,7 +22,6 @@ func Canonicalize(raw string) (string, error) {
 
 	lower := strings.ToLower(raw)
 
-	// Exactly one '@'. strings.IndexByte on the tail checks for a second one.
 	at := strings.IndexByte(lower, '@')
 	if at < 0 || strings.IndexByte(lower[at+1:], '@') >= 0 {
 		return "", ErrEmailInvalid
@@ -56,8 +38,6 @@ func Canonicalize(raw string) (string, error) {
 	return lower, nil
 }
 
-// validLocal reports whether local is 1–64 bytes of the exact local-part
-// character set with no leading/trailing or consecutive dots.
 func validLocal(local string) bool {
 	if len(local) < 1 || len(local) > 64 {
 		return false
@@ -83,9 +63,6 @@ func validLocal(local string) bool {
 	return true
 }
 
-// isLocalAtom reports whether c is one of the exact local-part atoms:
-// A-Z a-z 0-9 ! # $ % & ' * + - / = ? ^ _ ` { | } ~ (plus '.', handled by the
-// caller). Callers pass an already-lowercased byte, so only a-z is checked.
 func isLocalAtom(c byte) bool {
 	if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
 		return true
@@ -97,9 +74,6 @@ func isLocalAtom(c byte) bool {
 	return false
 }
 
-// validDomain reports whether domain is 1–253 bytes with at least one dot and
-// dot-separated labels of 1–63 bytes each, containing only ASCII letters,
-// digits, and internal hyphens.
 func validDomain(domain string) bool {
 	if len(domain) < 1 || len(domain) > 253 {
 		return false
@@ -124,8 +98,6 @@ func validDomain(domain string) bool {
 	return true
 }
 
-// isDomainLabelChar reports whether c is an ASCII letter, digit, or hyphen —
-// the only characters allowed in a domain label.
 func isDomainLabelChar(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-'
 }

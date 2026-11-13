@@ -1,7 +1,3 @@
-// Package contactlink decides whether an email or phone contact detail renders
-// as a mailto: or tel: link, and computes its exact href. The web renderer
-// applies the same rules; a shared corpus keeps them identical. See
-// docs/adr/0013-resume-header-and-contacts.md.
 package contactlink
 
 import (
@@ -16,9 +12,6 @@ const (
 	maxPhoneDigits = 20
 )
 
-// Href returns the anchor target for a contact detail and true, or "" and
-// false when the value stays text. Only email and phone details link here;
-// URL types follow the https rule of ADR 0013.
 func Href(detailType, value string) (string, bool) {
 	switch detailType {
 	case "email":
@@ -33,15 +26,8 @@ func Href(detailType, value string) (string, bool) {
 	return "", false
 }
 
-// forbiddenEmailRunes cannot appear in a linked address: they are unusual in
-// real addresses, and ? # % would let the value add mail headers or a fragment
-// to the mailto: URL.
 const forbiddenEmailRunes = "<>\"'`()\\,;:?#%"
 
-// validEmail accepts at most 254 characters with exactly one @ and at least
-// one character before it. The part after it contains a dot and neither
-// starts nor ends with one. White space, control and format characters, and
-// forbiddenEmailRunes are rejected.
 func validEmail(value string) bool {
 	if value == "" || utf8.RuneCountInString(value) > maxEmailLength {
 		return false
@@ -59,8 +45,6 @@ func validEmail(value string) bool {
 	return strings.Contains(domain, ".") && !strings.HasPrefix(domain, ".") && !strings.HasSuffix(domain, ".")
 }
 
-// phoneNumber removes spaces, dots, hyphens, and parentheses, then accepts an
-// optional leading + followed by 3 to 20 ASCII digits.
 func phoneNumber(value string) (string, bool) {
 	number := strings.Map(func(r rune) rune {
 		switch r {

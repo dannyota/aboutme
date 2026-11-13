@@ -1,12 +1,5 @@
 package secondfactor
 
-// Ordered races between TOTP replacement or removal and a code use, a
-// recovery-code use, or session rotation. Each case forces one of the two
-// possible orders with a real PostgreSQL user-row lock, then checks that the
-// order has one winner and leaves no partial state
-// (docs/design/totp-second-factor-contract.md#removal-recovery-and-races;
-// AC-AUTH-027).
-
 import (
 	"context"
 	"errors"
@@ -20,9 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// holdUserLock opens a transaction that holds the user's row lock and returns
-// it with its backend PID. Every TOTP mutation, pending verification, and
-// rotation successor takes this lock first, so the calls queue behind it.
 func (h *harness) holdUserLock(userID uuid.UUID) (pgx.Tx, int32) {
 	h.t.Helper()
 	ctx := testContext(h.t)
@@ -49,9 +39,6 @@ func (h *harness) rollbackHolder(tx pgx.Tx) {
 	}
 }
 
-// waitForLockQueue waits until want backends wait, directly or through
-// another waiter, on the holder. It observes PostgreSQL's lock graph, so the
-// order never depends on a timing guess; the deadline only bounds a failure.
 func (h *harness) waitForLockQueue(holderPID int32, want int) {
 	h.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -82,11 +69,6 @@ func (h *harness) waitForLockQueue(holderPID int32, want int) {
 	}
 }
 
-// runInLockOrder starts first, waits until it queues on the held user lock,
-// then starts second and waits until it queues behind first. Releasing the
-// lock lets first take the user row, commit, and only then lets second take
-// it, while second's reads before its own lock already ran against the state
-// before first committed.
 func (h *harness) runInLockOrder(userID uuid.UUID, first, second func() error) (firstErr, secondErr error) {
 	h.t.Helper()
 	holder, pid := h.holdUserLock(userID)
@@ -115,8 +97,6 @@ func (h *harness) runInLockOrder(userID uuid.UUID, first, second func() error) (
 	return firstErr, secondErr
 }
 
-// totpRaceFixture is one account with an active first-factor TOTP credential,
-// its ten recovery codes, and the rotated current session.
 type totpRaceFixture struct {
 	user          store.User
 	secret        TOTPSecret
@@ -141,9 +121,6 @@ func (h *harness) newTOTPRaceFixture(now time.Time) totpRaceFixture {
 	}
 }
 
-// totpChange is a prepared replacement or removal on the fixture's current
-// session. Preparation, such as starting the replacement enrollment, runs
-// before the race; call runs inside it.
 type totpChange struct {
 	name  string
 	final bool
@@ -172,8 +149,6 @@ func (h *harness) prepareTOTPChange(ctx context.Context, f totpRaceFixture, remo
 	}}
 }
 
-// requireOnlyLiveSession checks that the change's replacement session is the
-// account's one unrevoked session and carries the advanced epoch.
 func (h *harness) requireOnlyLiveSession(f totpRaceFixture, replacement auth.SessionIssue) {
 	h.t.Helper()
 	if got := h.epoch(f.user.ID); got != f.epoch+1 {
@@ -189,13 +164,6 @@ func (h *harness) requireOnlyLiveSession(f totpRaceFixture, replacement auth.Ses
 	}
 }
 
-// TestTOTPChangeRacesCodeAndRecoveryUse forces both orders of a TOTP
-// replacement or removal against a login that uses a TOTP code or a recovery
-// code. Whichever commits first wins: a use that commits first issues a
-// session that the change then revokes, and a change that commits first
-// leaves the pending login dead with nothing consumed or counted
-// (docs/design/totp-second-factor-contract.md#removal-recovery-and-races;
-// AC-AUTH-027).
 func TestTOTPChangeRacesCodeAndRecoveryUse(t *testing.T) {
 	for _, useRecovery := range []bool{false, true} {
 		for _, remove := range []bool{false, true} {
@@ -260,10 +228,6 @@ func runTOTPChangeUseRace(t *testing.T, useRecovery, remove, changeFirst bool) {
 
 	wantCodes := 10
 	if changeFirst {
-		// A pending login bound to the old epoch completes nothing. After a
-		// final removal the TOTP check finds no credential first, which the
-		// contract answers with factor_not_found; every other case is the
-		// dead pending row.
 		wantErr := auth.ErrPendingAuthenticationRequired
 		if remove && !useRecovery {
 			wantErr = auth.ErrSecondFactorNotFound
@@ -320,13 +284,6 @@ func runTOTPChangeUseRace(t *testing.T, useRecovery, remove, changeFirst bool) {
 	}
 }
 
-// TestTOTPChangeRacesSessionRotation forces both orders of a TOTP replacement
-// or removal against the 24-hour rotation of the same session. A rotation
-// that commits first mints a successor at the old epoch that the change then
-// revokes; a change that commits first advances the epoch, so the rotation
-// mints nothing. Either way the change's replacement is the only live session
-// (docs/design/second-factor-authentication.md#assurance-boundary;
-// docs/adr/0015-accounts-passwords-and-sessions.md; AC-AUTH-027).
 func TestTOTPChangeRacesSessionRotation(t *testing.T) {
 	for _, remove := range []bool{false, true} {
 		for _, changeFirst := range []bool{false, true} {
@@ -345,9 +302,6 @@ func runTOTPChangeRotationRace(t *testing.T, remove, changeFirst bool) {
 	f := h.newTOTPRaceFixture(clock.Now())
 	ctx := testContext(t)
 	change := h.prepareTOTPChange(ctx, f, remove, clock.Now())
-	// Age the session past the rotation threshold so its next authentication
-	// rotates it. Primary and factor proof times stay recent, so the change
-	// still passes its recent-reauthentication check.
 	if _, err := h.pool.Exec(ctx, "UPDATE sessions SET created_at = created_at - interval '25 hours' WHERE id = $1", f.current.Session.ID); err != nil {
 		t.Fatalf("age session: %v", err)
 	}

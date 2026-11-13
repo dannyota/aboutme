@@ -113,9 +113,6 @@ func (f *attemptFailure) output() []byte {
 	return f.bytes
 }
 
-// configureCaptureEnvironment sets the media and viewport of format. Like every
-// protocol request of a render, it sets each optional flag explicitly, so a
-// render never depends on browser defaults such as the choice of tagged PDFs.
 func configureCaptureEnvironment(ctx context.Context, session cdp.Session, format renderjob.Format) error {
 	if format == renderjob.PDF {
 		if _, err := cdp.Call(ctx, session, emulation.SetEmulatedMedia, emulation.SetEmulatedMediaParams{Media: "print"}); err != nil {
@@ -160,8 +157,6 @@ func awaitPageReadiness(ctx context.Context) error {
 	return nil
 }
 
-// readinessEvaluation completes the parameters that chromedp.Evaluate starts
-// with the expression and returnByValue.
 func readinessEvaluation(params *runtime.EvaluateParams) {
 	params.IncludeCommandLineAPI = new(false)
 	params.Silent = new(false)
@@ -207,17 +202,12 @@ type cdpPDFStream struct {
 	handle  cdpio.StreamHandle
 }
 
-// read decodes IO.read itself because cdpio.ReadResult decodes data as base64,
-// while the protocol returns raw text when base64Encoded is false.
 func (s *cdpPDFStream) read(ctx context.Context, size int64) (streamChunk, error) {
 	params := cdpio.ReadParams{Handle: s.handle, Size: size}
 	var result struct {
-		// Base64Encoded reports whether Data holds base64 rather than raw text.
-		Base64Encoded bool `json:"base64Encoded"`
-		// Data is the chunk of stream content that IO.read returned.
-		Data string `json:"data"`
-		// EOF reports whether the stream has no more content after Data.
-		EOF bool `json:"eof"`
+		Base64Encoded bool   `json:"base64Encoded"`
+		Data          string `json:"data"`
+		EOF           bool   `json:"eof"`
 	}
 	if err := s.session.Call(ctx, cdpio.Read.Method, params, &result); err != nil {
 		return streamChunk{}, err

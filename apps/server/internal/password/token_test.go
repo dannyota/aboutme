@@ -49,7 +49,6 @@ func TestTokenRoundTripDigest(t *testing.T) {
 
 func TestDigestTokenKnownSpelling(t *testing.T) {
 	t.Parallel()
-	// 32 zero bytes encode as 43 unpadded base64url 'A' characters.
 	raw := strings.Repeat("A", 43)
 	digest, err := DigestToken(raw)
 	if err != nil {

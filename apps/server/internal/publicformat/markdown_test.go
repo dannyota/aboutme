@@ -16,8 +16,6 @@ import (
 )
 
 func TestMarkdownFullHostileGolden(t *testing.T) {
-	// This fails if a formatter drops layout order, rich-text conversion, or a
-	// required Markdown escape.
 	name := "Ada *Lovelace*"
 	headline := "  Build\tthings\ncarefully  "
 	label := "Portfolio"
@@ -68,7 +66,6 @@ func TestMarkdownFullHostileGolden(t *testing.T) {
 }
 
 func TestMarkdownRichTextPreservesUnicodeWhitespace(t *testing.T) {
-	// This fails if rich-text folding treats NBSP or EM SPACE as ASCII spaces.
 	name := "Ada"
 	text := "<p>\u00a0\u2003Left\r\n\tRight\u00a0\u2003</p><ul><li>\u00a0\u2003Item\fNext\u00a0</li></ul>"
 	resume := publicresume.PublicResume{Document: publicresume.PublicResumeDocument{
@@ -90,7 +87,6 @@ func TestMarkdownRichTextPreservesUnicodeWhitespace(t *testing.T) {
 }
 
 func TestMarkdownEveryContactEntryAndDateFormGolden(t *testing.T) {
-	// This fails if any public contact, section entry, link variant, or MM/YYYY date line changes.
 	month1, month2, month3, month4 := int64(1), int64(2), int64(3), int64(4)
 	level := int64(4)
 	resume := publicresume.PublicResume{Document: publicresume.PublicResumeDocument{
@@ -124,7 +120,6 @@ func TestMarkdownEveryContactEntryAndDateFormGolden(t *testing.T) {
 }
 
 func TestMarkdownMinimalPhotoAbsenceAndYearDates(t *testing.T) {
-	// This fails if absent/empty public leaves, photo projection, or YYYY dates affect Markdown.
 	date := publicresume.PublicYearMonth{Y: 2020}
 	empty := ""
 	base := publicresume.PublicResume{Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Minimal", Headline: &empty, Details: publicresume.PresentPublicDetails([]publicresume.PublicPersonalDetail{{Type: "email", Value: ""}})}, Content: publicresume.PublicContent{"certificate": {SectionType: "certificate", CertificateEntries: []publicresume.PublicCertificateEntry{{ID: "1", Title: ptr("Year only"), Date: &date}}}}, Customization: schema.Customization{DateFormat: schema.Yyyy, Layout: schema.Layout{Sections: schema.Sections{Main: []string{"certificate"}}}}}}
@@ -144,7 +139,6 @@ func TestMarkdownMinimalPhotoAbsenceAndYearDates(t *testing.T) {
 }
 
 func TestMarkdownMaxShapedDocumentHashAndInvariants(t *testing.T) {
-	// A 512 KiB golden is wasteful; this pins a deterministic max-cardinality public shape by SHA-256 and byte invariants.
 	const canonicalDocumentCeiling = 524_288
 	const maxProfileTextBytes = 8_102
 	const expectedRemainingMargin = 38

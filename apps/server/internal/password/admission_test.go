@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// waitFor polls a condition with a deadline, failing the test if it never
-// holds. It synchronizes the admission tests against the goroutines that are
-// blocked waiting for a slot.
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -21,9 +18,6 @@ func waitFor(t *testing.T, cond func() bool) {
 	}
 }
 
-// fillAdmission takes both running slots and fills the 16-waiter queue,
-// returning a channel of the waiters' results. Each waiter releases its slot on
-// success, so the caller drains them by releasing the two running slots.
 func fillAdmission(ctx context.Context, t *testing.T, a *Admission) chan error {
 	t.Helper()
 	if err := a.Acquire(ctx); err != nil {
@@ -51,12 +45,10 @@ func TestAdmissionTwoRunSixteenWaitSeventeenthFails(t *testing.T) {
 	ctx := context.Background()
 	results := fillAdmission(ctx, t, a)
 
-	// The seventeenth waiter fails immediately with ErrHashAdmission.
 	if err := a.Acquire(ctx); !errors.Is(err, ErrHashAdmission) {
 		t.Fatalf("seventeenth Acquire error = %v, want ErrHashAdmission", err)
 	}
 
-	// Releasing both running slots drains all sixteen waiters.
 	a.Release()
 	a.Release()
 	for range admissionWaiting {

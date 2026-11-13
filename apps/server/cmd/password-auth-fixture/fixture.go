@@ -14,17 +14,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/password"
 )
 
-// fixtureDatabase is the only database name the command will touch. Matching
-// it by exact name is the explicit opt-in that keeps the fixture from ever
-// mutating the test aboutme database or a stray development database.
 const fixtureDatabase = "aboutme_dev"
 
-// testEmailPrefix reserves the runtime-random account namespace the browser
-// proof creates, so cleanup can remove exactly those rows without ever
-// touching a real development account.
 const testEmailPrefix = "pa-test-"
 
-// Config holds the validated seed/cleanup input.
 type Config struct {
 	DatabaseURL    string
 	CredentialFile string
@@ -91,25 +84,20 @@ func parseConfig(args []string) (string, Config, error) {
 	return cmd, Config{DatabaseURL: databaseURL, CredentialFile: credentialFile, Proof: proof}, nil
 }
 
-// providerIdentity is one linked OAuth identity for a fixture account.
 type providerIdentity struct {
 	Provider       string
 	ProviderUserID string
 }
 
-// fixtureAccount is one deterministic account the seed writes.
 type fixtureAccount struct {
 	ID         uuid.UUID
 	IdentityID uuid.UUID
 	Email      string
 	Name       string
 	Provider   *providerIdentity
-	Password   string // raw password; hashed at seed time when non-empty
+	Password   string
 }
 
-// Frozen fixture accounts. The fixed UUIDs can never collide with real
-// development data, and the provider subjects match the local mock accounts
-// (uat-google-001/002) so the proof can sign into them.
 var fixtureAccounts = []fixtureAccount{
 	{
 		ID:         uuid.MustParse("52000000-0000-4000-8000-000000000001"),
@@ -165,8 +153,6 @@ func open(ctx context.Context, cfg Config) (*sql.DB, error) {
 	return db, nil
 }
 
-// runSeed writes the three fixed accounts. It is idempotent: re-running
-// against an already-seeded database is a no-op rather than an error.
 func runSeed(ctx context.Context, cfg Config) error {
 	db, err := open(ctx, cfg)
 	if err != nil {
@@ -230,10 +216,6 @@ func seedAccount(ctx context.Context, db *sql.DB, hasher *password.Hasher, acct 
 	return nil
 }
 
-// runCleanup removes exactly the fixed fixture accounts (by their frozen IDs,
-// cascading to identities, credentials, reset tokens, sessions, and email
-// jobs) and any runtime-random proof account (by the reserved email prefix).
-// It is idempotent: absent rows are not errors.
 func runCleanup(ctx context.Context, cfg Config) error {
 	db, err := open(ctx, cfg)
 	if err != nil {
@@ -250,8 +232,6 @@ func runCleanup(ctx context.Context, cfg Config) error {
 		ids = append(ids, acct.ID)
 	}
 
-	// Password registrations have no user FK (they precede the user), so the
-	// reserved-prefix rows are removed first, before their later user row.
 	if _, err := db.ExecContext(ctx,
 		`DELETE FROM password_registrations WHERE email::text LIKE $1`,
 		testEmailPrefix+"%@example.invalid"); err != nil {

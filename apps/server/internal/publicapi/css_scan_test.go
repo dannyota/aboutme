@@ -8,9 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-// TestSharedStyleCheck_QuotedCommentsCannotHideAURL proves the resume page and
-// gate validators, which share unsafeInlineStyle with the project pages, find
-// a url() between quoted comment markers.
 func TestSharedStyleCheck_QuotedCommentsCannotHideAURL(t *testing.T) {
 	const payload = `--a:"/*";background-image:url(/api/v1/public/resumes/other-resume/photo);--b:"*/"`
 	origin := mustPublicOrigin(t)

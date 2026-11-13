@@ -30,7 +30,6 @@ type personalDetailsPrepared struct {
 
 type personalDetailsMutation struct{ service *Service }
 
-// Run implements mutationOperation for whole personal-details replacement.
 func (op personalDetailsMutation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {

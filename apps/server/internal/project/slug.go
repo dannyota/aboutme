@@ -10,10 +10,8 @@ import (
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// ValidSlug checks the account-local project slug grammar.
 func ValidSlug(s string) bool { return len(s) >= 2 && len(s) <= 40 && slugPattern.MatchString(s) }
 
-// ProposeSlug folds a name into an ASCII project slug.
 func ProposeSlug(s string) string {
 	var b strings.Builder
 	hyphen := false

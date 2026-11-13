@@ -1,6 +1,3 @@
-// Package media_test holds the one table-driven conformance suite both
-// backends must pass identically, plus backend-specific tests in fs_test.go /
-// s3_test.go and key grammar tests in media_test.go.
 package media_test
 
 import (
@@ -20,11 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media/mediatest"
 )
 
-// backendCase constructs one Backend under test. The returned namespace
-// function prefixes every valid key with a unique first segment so
-// concurrent runs against the one shared S3 test bucket cannot collide;
-// the filesystem backend gets a fresh root per test but uses the same
-// namespace shape so both backends see byte-identical keys.
 type backendCase struct {
 	name string
 	new  func(t *testing.T) media.Backend
@@ -58,7 +50,6 @@ func backendCases() []backendCase {
 	}
 }
 
-// namespace returns a unique key prefix segment for this test run.
 func namespace(t *testing.T) string {
 	t.Helper()
 	var raw [8]byte
@@ -68,11 +59,6 @@ func namespace(t *testing.T) string {
 	return "t" + hex.EncodeToString(raw[:])
 }
 
-// checkPutPair fails the test on any outcome/error pair outside the three
-// the contract allows: (PutCreated, nil), (PutNotCreated, non-nil),
-// (PutUnknown, non-nil). ErrAlreadyExists must ride PutNotCreated. Every
-// Put in the whole suite goes through this, so an implementation cannot
-// drift into an invalid pair unnoticed.
 func checkPutPair(t *testing.T, outcome media.PutOutcome, err error) {
 	t.Helper()
 	switch outcome {
@@ -225,10 +211,6 @@ func TestConformance_DeleteThenGet(t *testing.T) {
 	}
 }
 
-// TestConformance_SecondPutIsRejected proves create-only semantics: a
-// second Put at the same key returns ErrAlreadyExists with PutNotCreated
-// and leaves the original bytes AND content type unchanged (ADR 0009: no
-// overwrite path exists).
 func TestConformance_SecondPutIsRejected(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -257,9 +239,6 @@ func TestConformance_SecondPutIsRejected(t *testing.T) {
 	}
 }
 
-// TestConformance_ConcurrentSameKey races two writers at one key: exactly
-// one wins with PutCreated, the loser proves non-creation, and the winner's
-// bytes survive untouched (the loser can neither overwrite nor delete).
 func TestConformance_ConcurrentSameKey(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -292,7 +271,6 @@ func TestConformance_ConcurrentSameKey(t *testing.T) {
 					created++
 					winner = i
 				case media.PutNotCreated:
-					// Proved non-create: the loser's normal result.
 				default:
 					t.Fatalf("writer %d outcome = %d (err %v); concurrent local/test-service writes must be proved", i, outcomes[i], errs[i])
 				}
@@ -308,9 +286,6 @@ func TestConformance_ConcurrentSameKey(t *testing.T) {
 	}
 }
 
-// invalidKeys is the alias/hostile key matrix: empty keys,
-// empty/"."/".." segments, repeated separators, leading or trailing
-// separators, backslash, NUL — plus oversize and non-UTF-8 defense cases.
 func invalidKeys() []string {
 	return []string{
 		"",
@@ -334,11 +309,6 @@ func invalidKeys() []string {
 	}
 }
 
-// TestConformance_InvalidKeysRejectedBeforeIO drives every invalid key
-// through Put, Get, and Delete on both backends with an already-canceled
-// context: getting ErrInvalidKey back (never a context error, never
-// ErrNotFound) proves the grammar rejected the key before any I/O was even
-// attempted.
 func TestConformance_InvalidKeysRejectedBeforeIO(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -364,9 +334,6 @@ func TestConformance_InvalidKeysRejectedBeforeIO(t *testing.T) {
 	}
 }
 
-// TestConformance_ContentTypeValidated rejects unusable content types
-// before I/O; the stored content type must round-trip exactly, so it must
-// be a single bounded header-safe line.
 func TestConformance_ContentTypeValidated(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -386,8 +353,6 @@ func TestConformance_ContentTypeValidated(t *testing.T) {
 	}
 }
 
-// TestConformance_ExactSize proves Put accepts only a body whose EOF is
-// exactly at size, and that a failed Put never exposes a partial object.
 func TestConformance_ExactSize(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -418,7 +383,6 @@ func TestConformance_ExactSize(t *testing.T) {
 				}
 			}
 
-			// Exactly at the budget is accepted.
 			atLimit := bytes.Repeat([]byte("a"), media.MaxObjectBytes)
 			mustPut(t, b, ns+"/at-limit.jpg", "image/jpeg", atLimit)
 			got, _ := mustGet(t, b, ns+"/at-limit.jpg")
@@ -429,8 +393,6 @@ func TestConformance_ExactSize(t *testing.T) {
 	}
 }
 
-// TestConformance_CancelBeforeDispatchIsNotCreated: a context canceled
-// before the backend dispatches any write is a proved non-create.
 func TestConformance_CancelBeforeDispatchIsNotCreated(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -465,10 +427,6 @@ func (r *cancelAtEOFReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// TestConformance_CancelAfterBodyBeforeIOIsNotCreated proves the second
-// pre-dispatch cancellation boundary. The body is valid and exact-size but
-// cancels the context when readExact performs its EOF probe; neither backend
-// may begin storage I/O after that point.
 func TestConformance_CancelAfterBodyBeforeIOIsNotCreated(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -491,9 +449,6 @@ func TestConformance_CancelAfterBodyBeforeIOIsNotCreated(t *testing.T) {
 	}
 }
 
-// TestConformance_ListPage covers stable prefix-scoped pages at the exact
-// limit, cursor advance without duplicates, update-time exposure for the
-// age gate, and neighbor isolation.
 func TestConformance_ListPage(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -509,7 +464,6 @@ func TestConformance_ListPage(t *testing.T) {
 				want = append(want, key)
 				mustPut(t, b, key, "image/jpeg", []byte{byte(i)})
 			}
-			// A neighbor under a sibling prefix must never appear.
 			neighbor := ns + "/q/other.jpg"
 			mustPut(t, b, neighbor, "image/jpeg", []byte("n"))
 
@@ -550,7 +504,6 @@ func TestConformance_ListPage(t *testing.T) {
 				}
 			}
 
-			// An unmatched prefix returns an empty terminal page.
 			objects, next, err := b.ListPage(context.Background(), ns+"/p/zz", "", 2)
 			if err != nil || len(objects) != 0 || next != "" {
 				t.Errorf("ListPage(unmatched) = %v, %q, %v; want empty terminal page", objects, next, err)
@@ -559,10 +512,6 @@ func TestConformance_ListPage(t *testing.T) {
 	}
 }
 
-// TestConformance_ListPagePrefixAliasesRejected: only the canonical prefix
-// and its one optional trailing-slash form are accepted; every other alias
-// fails before I/O (canceled-context proof, as above). Invalid cursors and
-// non-positive limits are rejected the same way.
 func TestConformance_ListPagePrefixAliasesRejected(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -595,11 +544,6 @@ func TestConformance_ListPagePrefixAliasesRejected(t *testing.T) {
 	}
 }
 
-// TestConformance_FileSegmentShadowing: when an object exists at "k", a
-// deeper path "k/child" is simply absent — both backends answer Get and
-// Delete with ErrNotFound, so lifecycle code behaves
-// identically over both. (Creating such a deeper key is an FS-impossible
-// layout the photo-key grammar never produces; see fs.go.)
 func TestConformance_FileSegmentShadowing(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {

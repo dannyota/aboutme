@@ -21,7 +21,7 @@ func TestParseConfigGuardsTheDatabase(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		args []string
-		want string // substring the error must contain; empty = must succeed
+		want string
 	}{
 		{name: "seed ok", args: []string{"seed", "--database-url", validDSN}},
 		{name: "cleanup ok", args: []string{"cleanup", "--database-url", validDSN}},
@@ -277,7 +277,6 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 		t.Fatalf("seed resume rows = %d, want 1 private v2 resume at revision 1", n)
 	}
 
-	// An edited document survives a re-seed.
 	if _, err := db.ExecContext(ctx, `UPDATE resumes SET title = 'edited', revision = 7 WHERE id = $1`, seedResumeID); err != nil {
 		t.Fatal(err)
 	}

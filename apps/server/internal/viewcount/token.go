@@ -13,24 +13,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// A view token is sealed with AES-256-GCM under a key made at process start
-// and never stored (docs/design/viewer-analytics/counting.md, "Layers 5 and
-// 6"). The GCM tag authenticates it, and the encryption keeps the resume ID
-// out of the viewer's hands. The plaintext is
-// resumeID (16) || issuedAt Unix milliseconds (8) || viewID (16).
 const (
 	viewIDSize      = 16
 	tokenPlainSize  = 16 + 8 + viewIDSize
 	tokenNonceSize  = 12
 	tokenSealedSize = tokenNonceSize + tokenPlainSize + 16
-	// maxTokenText bounds the base64url text before decoding.
-	maxTokenText = 200
+	maxTokenText    = 200
 )
 
 var errInvalidToken = errors.New("viewcount: invalid token")
 
-// viewID names one issued token. It is the one-time nonce and binds the
-// proof-of-work challenge to the token.
 type viewID [viewIDSize]byte
 
 func (id viewID) text() string {

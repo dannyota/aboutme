@@ -1,10 +1,5 @@
 package secondfactor
 
-// Row locking and ceremony persistence shared by the factor mutations. Every
-// helper runs in the caller's transaction and follows the lock order in
-// docs/design/second-factor-authentication.md: user, session, factor policy,
-// credential, then pending authentication or ceremony.
-
 import (
 	"context"
 	"crypto/sha256"
@@ -20,8 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// lockAccount locks the user, then the concrete caller session, then the
-// factor policy, and rechecks that the session is live, owned, and current.
 func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, now time.Time) (store.User, store.Session, *store.SecondFactorPolicy, error) {
 	user, err := qtx.GetUserForUpdate(ctx, current.UserID)
 	if err != nil {
@@ -63,9 +56,6 @@ func lockPolicyBeforePending(ctx context.Context, qtx *store.Queries, user store
 	return err
 }
 
-// claimCeremony locks the ceremony and consumes it only when it is live and
-// bound to this user, purpose, epoch, and binding. Unknown, foreign, expired,
-// consumed, and wrong-purpose ceremonies are left unchanged.
 func claimCeremony(ctx context.Context, qtx *store.Queries, digest []byte, user store.User, purpose string, sessionID, pendingID *uuid.UUID, now time.Time) (store.WebauthnCeremony, error) {
 	ceremony, err := qtx.GetWebAuthnCeremonyByTokenDigestForUpdate(ctx, digest)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -89,9 +79,6 @@ func claimCeremony(ctx context.Context, qtx *store.Queries, digest []byte, user 
 	return claimed, nil
 }
 
-// createCeremony consumes the binding's prior live ceremony and inserts a new
-// one. It returns the ceremony ID and the raw challenge; only digests are
-// stored.
 func (s *Service) createCeremony(ctx context.Context, qtx *store.Queries, user store.User, purpose string, sessionID, pendingID *uuid.UUID, proposed []byte, now time.Time) (string, []byte, error) {
 	if _, err := qtx.ConsumeLiveWebAuthnCeremoniesForBinding(ctx, store.ConsumeLiveWebAuthnCeremoniesForBindingParams{
 		ConsumedAt: now, UserID: user.ID, Purpose: purpose, SessionID: sessionID, PendingAuthenticationID: pendingID,
@@ -117,8 +104,6 @@ func (s *Service) createCeremony(ctx context.Context, qtx *store.Queries, user s
 	return base64.RawURLEncoding.EncodeToString(token), challenge, nil
 }
 
-// cleanup makes the bounded best-effort expiry calls before a ceremony is
-// created. A failure writes one fixed warning and never fails the request.
 func (s *Service) cleanup(ctx context.Context) {
 	if _, err := s.q.DeleteExpiredPendingAuthentications(ctx, cleanupLimit); err != nil && s.logger != nil {
 		s.logger.Warn("pending authentication cleanup failed")

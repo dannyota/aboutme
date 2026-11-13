@@ -204,7 +204,6 @@ func (s *Service) readOwnerPDFPhoto(ctx context.Context, row resume.Resume) ([]b
 	body, contentType, err := s.blobs.Get(ctx, photo.Key)
 	if err != nil {
 		if body != nil {
-			// Both storage and close failures map to the same opaque response.
 			_ = body.Close() //nolint:errcheck // The storage read already failed; cleanup cannot change its result.
 		}
 		return nil, "", errOwnerPDFPreparation

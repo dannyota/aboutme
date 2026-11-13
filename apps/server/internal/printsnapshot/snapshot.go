@@ -1,5 +1,3 @@
-// Package printsnapshot prepares the frozen document passed to private print
-// rendering. It performs no authorization, storage, or queue operations.
 package printsnapshot
 
 import (
@@ -25,11 +23,8 @@ import (
 )
 
 const (
-	// MaxEnvelopeBytes is the complete frozen JSON payload ceiling.
-	MaxEnvelopeBytes = 3_407_872
-	// MaxPhotoBytes is the decoded normalized-photo ceiling.
-	MaxPhotoBytes = media.MaxObjectBytes
-	// MaxLanguageCharacters is the canonical render-language ceiling.
+	MaxEnvelopeBytes      = 3_407_872
+	MaxPhotoBytes         = media.MaxObjectBytes
 	MaxLanguageCharacters = resume.MaxLngCharacters
 	maxJPEGEdge           = 2048
 	maxPNGEdge            = 1024
@@ -37,7 +32,6 @@ const (
 
 var errInvalid = errors.New("print snapshot is invalid")
 
-// Envelope is the closed payload redeemed by the private print renderer.
 type Envelope struct {
 	Version          int                               `json:"version"`
 	ResumeID         string                            `json:"resumeId"`
@@ -48,7 +42,6 @@ type Envelope struct {
 	ProjectLinks     map[string]string                 `json:"projectLinks,omitempty"`
 }
 
-// FromOwner projects and freezes one already-authorized owner revision.
 func FromOwner(source resume.Resume, photo []byte, contentType string) (Envelope, error) {
 	if source.ID == uuid.Nil || source.Revision <= 0 || source.Doc.SchemaVersion != schema.CurrentVersion {
 		return Envelope{}, errInvalid
@@ -76,7 +69,6 @@ func FromOwner(source resume.Resume, photo []byte, contentType string) (Envelope
 	return envelope, nil
 }
 
-// FromPublic copies and freezes one already-admitted public generation.
 func FromPublic(source publicresume.Snapshot, photo []byte, contentType string) (Envelope, error) {
 	wantRevision := strconv.FormatInt(source.Revision, 10)
 	if source.ResumeID == uuid.Nil || source.Revision <= 0 || source.Public.Revision != wantRevision || source.Public.Document.SchemaVersion != schema.CurrentVersion {
@@ -105,8 +97,6 @@ func FromPublic(source publicresume.Snapshot, photo []byte, contentType string) 
 	return envelope, nil
 }
 
-// Marshal validates and emits the exact frozen JSON bytes digested by the
-// render queue.
 func Marshal(source Envelope) ([]byte, error) {
 	if !validVersionLinks(source) || !canonicalUUID(source.ResumeID) || !canonicalPositiveInt64(source.Revision) {
 		return nil, errInvalid

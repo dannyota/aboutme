@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// A library link is copied into a resume entry link, which requires a
-// lowercase scheme and at most 2048 characters, so a save lowercases the
-// scheme, keeps every other byte, and refuses a longer link. Lowercasing a
-// host could change where an internationalised link points.
 func TestPrepare_NormalizesAndBoundsLinks(t *testing.T) {
 	d := draft()
 	d.RepositoryURL = "HTTPS://Example.COM/Atlas/Path?Query=Kept#Frag"

@@ -1,8 +1,5 @@
 package auth
 
-// GET /api/v1/me returns the authenticated user, linked providers, and the
-// synchronizer token required for mutating cookie-authenticated requests.
-
 import (
 	"encoding/base64"
 	"errors"
@@ -15,7 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// meUser is the public user shape returned by GET /me.
 type meUser struct {
 	ID          string  `json:"id"`
 	Email       string  `json:"email"`
@@ -24,28 +20,22 @@ type meUser struct {
 	HasPassword bool    `json:"hasPassword"`
 }
 
-// meIdentity exposes the link's own ID, provider, and creation time, never the
-// provider's subject.
 type meIdentity struct {
 	ID        string    `json:"id"`
 	Provider  string    `json:"provider"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// meResponse is GET /me's full "data" payload:
-// {data:{user, csrfToken, identities:[{id, provider, createdAt}]}}.
 type meResponse struct {
 	User       meUser       `json:"user"`
 	CSRFToken  string       `json:"csrfToken"`
 	Identities []meIdentity `json:"identities"`
 }
 
-// handleMe relies on the session already stored by RequireSession.
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
 	if !ok {
-		// Fail closed if middleware ordering is broken.
 		rejectSession(w)
 		return
 	}
@@ -56,7 +46,6 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// hasPassword is a single existence probe, never the credential itself.
 	hasPassword := false
 	if _, credErr := s.q.GetPasswordCredential(ctx, sess.UserID); credErr == nil {
 		hasPassword = true
@@ -89,8 +78,6 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// csrfTokenForSession encodes the secret the client must echo in
-// X-CSRF-Token. It is returned only in the GET /me response body.
 func csrfTokenForSession(sess store.Session) string {
 	return base64.RawURLEncoding.EncodeToString(sess.CSRFSecret)
 }

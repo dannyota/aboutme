@@ -11,11 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// rotateRefreshToken rotates a live refresh token. claimedClientIDs is the
-// request's client_id field, absent or exactly one value. A present client_id
-// must name the token's own client (rule 4 of
-// docs/design/mcp-client-compatibility.md); when the token is not found and the
-// client_id names no stored client, the result is errOAuthUnknownClient.
 func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedClientIDs []string) (response tokenResponse, err error) {
 	return s.processRefreshToken(ctx, raw, claimedClientIDs, true)
 }
@@ -61,16 +56,9 @@ func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedCl
 	}
 	now := s.clock()
 	token := authority.OAuthToken
-	// A client_id naming another client, or none, must not rotate or revoke
-	// the family, so it fails before the reuse check below and the deferred
-	// rollback discards the transaction.
 	if len(claimedClientIDs) == 1 && !publicClientMatches(client, claimedClientIDs[0]) {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	// The refresh token's grant must still be live, belong to this account,
-	// and carry the account's current authentication epoch. A stale epoch
-	// (an intervening factor change) rejects rotation exactly like a revoked
-	// grant. See docs/design/second-factor-authentication.md.
 	if token.Kind != string(TokenKindRefresh) || grant.RevokedAt != nil || token.RevokedAt != nil || token.ExpiresAt.Compare(now) <= 0 || token.FamilyExpiresAt.Compare(now) <= 0 ||
 		token.ClientID != client.ID || token.UserID != user.ID || token.GrantID != grant.ID || grant.UserID != user.ID || grant.ClientID != client.ID || grant.AuthEpoch != user.AuthEpoch {
 		return tokenResponse{}, errOAuthInvalidGrant
@@ -128,9 +116,6 @@ func publicClientMatches(client store.OAuthClient, raw string) bool {
 	return err == nil && id == client.ID
 }
 
-// missingRefreshTokenError classifies a refresh token that does not exist. A
-// client_id naming no stored client is errOAuthUnknownClient; every other case
-// is errOAuthInvalidGrant.
 func (s *Service) missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
 	if len(claimedClientIDs) != 1 {
 		return errOAuthInvalidGrant

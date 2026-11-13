@@ -8,14 +8,6 @@ import (
 	"time"
 )
 
-// AgentAccessConfig holds the frozen OAuth and MCP admission budgets. It is
-// populated as one complete unit even when disabled so enabling the feature
-// cannot expose a partially initialized limiter or body boundary.
-//
-// OAuthRegisterEgressRanges is the one deployment-supplied value: published
-// client egress ranges whose addresses share one registration bucket per
-// range (docs/design/mcp-client-compatibility.md, "Registration rate from
-// shared egress"). Empty means every address keeps the per-address budget.
 type AgentAccessConfig struct {
 	CIMD                        CIMDConfig
 	Enabled                     bool
@@ -39,10 +31,7 @@ type AgentAccessConfig struct {
 }
 
 const (
-	oauthRegisterRequests = 5
-	// oauthRegisterRangeRequests is the shared budget of one configured
-	// egress range, and oauthRegisterGlobalRequests caps all registrations
-	// together (docs/design/mcp-client-compatibility.md).
+	oauthRegisterRequests       = 5
 	oauthRegisterRangeRequests  = 120
 	oauthRegisterGlobalRequests = 600
 	oauthRegisterWindow         = time.Hour
@@ -60,9 +49,6 @@ const (
 	agentRateMaxKeys            = 10_000
 )
 
-// Bounds on OAUTH_REGISTER_EGRESS_CIDRS. A range broader than these is not a
-// plausible published egress block and would let a large share of the
-// internet share one bucket instead of the per-address budget.
 const (
 	maxRegisterEgressRanges         = 16
 	minRegisterEgressPrefixBitsIPv4 = 16
@@ -106,10 +92,6 @@ func loadAgentAccessConfig(rawEnabled, rawEgress string) (AgentAccessConfig, err
 	}, nil
 }
 
-// ValidateAgentAccess rejects a manually assembled, partially enabled
-// configuration. Load always supplies the complete frozen values, but the
-// composition root also calls this method so tests and future constructors
-// cannot bypass startup validation with a Config literal.
 func (c Config) ValidateAgentAccess() error {
 	if err := c.validateCIMD(); err != nil {
 		return err
@@ -132,9 +114,6 @@ func (c Config) ValidateAgentAccess() error {
 	return validateRegisterEgressRanges(a.OAuthRegisterEgressRanges)
 }
 
-// loadRegisterEgressRanges parses OAUTH_REGISTER_EGRESS_CIDRS, a
-// comma-separated CIDR list. Empty or unset means no ranges. An unparseable
-// entry is named by position, never echoed.
 func loadRegisterEgressRanges(raw string) ([]netip.Prefix, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -158,11 +137,6 @@ func loadRegisterEgressRanges(raw string) ([]netip.Prefix, error) {
 	return prefixes, nil
 }
 
-// validateRegisterEgressRanges rejects a list that could match more than the
-// operator wrote: a prefix with host bits set, an IPv4-mapped IPv6 prefix
-// (client addresses are unmapped before matching, so it would never match),
-// a range broader than the per-family minimum, too many entries, or
-// overlapping entries.
 func validateRegisterEgressRanges(prefixes []netip.Prefix) error {
 	if len(prefixes) > maxRegisterEgressRanges {
 		return fmt.Errorf("config: %s: at most %d entries", registerEgressVar, maxRegisterEgressRanges)

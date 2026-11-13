@@ -62,15 +62,6 @@ func installTOTPCredential(ctx context.Context, t *testing.T, q *store.Queries, 
 	return cred
 }
 
-// truncateTOTPTables clears totp_credentials and totp_enrollments inside the
-// test's own rolled-back transaction. ListTOTPCredentialsOffActiveKey,
-// CountTOTPCredentialsOffActiveKey, their enrollment equivalents, and
-// ListTOTPActiveKeyIDs scan both tables with no per-test scoping, by design:
-// production rotation must see every row (docs/design/totp-key-management.md
-// "Rotation"). A test that asserts an exact count or membership against one
-// of those queries needs a table with nothing in it but its own fixture, so
-// it truncates first; the truncate itself rolls back with everything else in
-// t.Cleanup, so it never touches rows outside this transaction.
 func truncateTOTPTables(ctx context.Context, t *testing.T, tx pgx.Tx) {
 	t.Helper()
 	if _, err := tx.Exec(ctx, "TRUNCATE TABLE totp_credentials, totp_enrollments"); err != nil {
@@ -107,12 +98,6 @@ func TestTOTPStore_CredentialCascadesFromUser(t *testing.T) {
 	}
 }
 
-// TestTOTPStore_EnrollmentSurvivesSessionRevocationButNotSessionDeletion
-// isolates the session_id foreign key from the user_id one: revocation is a
-// soft flag the row survives, and only physically deleting the session row
-// removes the enrollment through that specific cascade, while the account
-// and its user row are untouched
-// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
 func TestTOTPStore_EnrollmentSurvivesSessionRevocationButNotSessionDeletion(t *testing.T) {
 	ctx, _, tx, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
@@ -306,9 +291,6 @@ func TestTOTPStore_ConcurrentStepAdvanceHasOneWinner(t *testing.T) {
 	if err := txA.Commit(ctx); err != nil {
 		t.Fatalf("A commit: %v", err)
 	}
-	// B's lock acquires only after A commits, so B observes last_used_step = 1
-	// already and its own advance to the same step 1 is a replay: it must
-	// affect zero rows because the step is not greater than the stored one.
 	if got := <-outcomeB; !errors.Is(got.err, pgx.ErrNoRows) {
 		t.Errorf("B replayed advance error = %v, want pgx.ErrNoRows", got.err)
 	}
@@ -396,15 +378,12 @@ func TestTOTPStore_FailureBudgetDoublesEveryFifthFailureAndSaturates(t *testing.
 		t.Fatalf("fifth failure last_failed_at = %v, want %v", cred.LastFailedAt, fifthAt)
 	}
 
-	// The cool-down guard blocks a sixth failure recorded before it elapses.
 	if _, err := q.RecordTOTPCredentialFailure(ctx, store.RecordTOTPCredentialFailureParams{
 		UserID: userID, Now: fifthAt.Add(time.Second),
 	}); !errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("failure during cool-down error = %v, want pgx.ErrNoRows", err)
 	}
 
-	// After the cool-down elapses, failures 6 through 9 accrue with no new
-	// cool-down, and the tenth doubles it to 30 minutes.
 	afterFirstCooldown := cred.CooldownUntil.Add(time.Second)
 	for i := 6; i <= 9; i++ {
 		cred = fail(afterFirstCooldown.Add(time.Duration(i) * time.Second))
@@ -427,11 +406,6 @@ func TestTOTPStore_FailureBudgetCapsCooldownAtTwentyFourHours(t *testing.T) {
 	userID := newOAuthStoreUser(ctx, t, q)
 	installTOTPCredential(ctx, t, q, userID, totpKeyID('a'), 0, totpStoreNow)
 
-	// Seed failed_attempts to 999 directly: the doubling formula's cap is
-	// arithmetic on whatever count the row holds, not on the path that
-	// produced it, and 199 real failure-and-wait cycles would only restate
-	// the same doubling TestTOTPStore_FailureBudgetDoublesEveryFifthFailureAndSaturates
-	// already proves.
 	if _, err := tx.Exec(ctx, `UPDATE totp_credentials SET failed_attempts = 999 WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("seed failed_attempts: %v", err)
 	}
@@ -448,8 +422,6 @@ func TestTOTPStore_FailureBudgetCapsCooldownAtTwentyFourHours(t *testing.T) {
 		t.Fatalf("1000th failure last_failed_at = %v, want %v", cred.LastFailedAt, at)
 	}
 
-	// At the ceiling, the counter cannot exceed 1,000 and every further
-	// failure keeps resetting the 24-hour cool-down.
 	after := cred.CooldownUntil.Add(time.Second)
 	cred, err = q.RecordTOTPCredentialFailure(ctx, store.RecordTOTPCredentialFailureParams{UserID: userID, Now: after})
 	if err != nil {
@@ -513,8 +485,6 @@ func TestTOTPStore_ReplacementPreservesIdentityAndResetsFailureBudget(t *testing
 }
 
 func TestTOTPStore_CleanupExpiredEnrollmentsIsBoundedAndSkipsLiveRows(t *testing.T) {
-	// Cleanup compares against the database clock, so these rows are placed
-	// relative to the real clock rather than the fixed test instant.
 	ctx, _, _, q := newOAuthStoreTx(t)
 	realNow := time.Now().UTC()
 	liveUser := newOAuthStoreUser(ctx, t, q)
@@ -540,8 +510,6 @@ func TestTOTPStore_CleanupExpiredEnrollmentsIsBoundedAndSkipsLiveRows(t *testing
 	if err != nil {
 		t.Fatalf("CleanupExpiredTOTPEnrollments(200): %v", err)
 	}
-	// Other suites share the database, so the second sweep may also remove
-	// their expired rows. The lookups below check this test's rows exactly.
 	if deleted < 1 {
 		t.Fatalf("CleanupExpiredTOTPEnrollments(200) remaining rows = %d, want at least 1", deleted)
 	}
@@ -592,8 +560,6 @@ func TestTOTPStore_ReencryptionBatchIsBoundedAndCompareBeforeUpdate(t *testing.T
 		t.Fatalf("ReencryptTOTPCredential rows = %d, want 1", rows)
 	}
 
-	// A second attempt with the same stale old_key_id compares before update
-	// and affects zero rows: the row is no longer sealed under that key.
 	rows, err = q.ReencryptTOTPCredential(ctx, store.ReencryptTOTPCredentialParams{
 		ID: staleA.ID, OldKeyID: totpKeyID('o'), NewKeyID: totpKeyID('n'),
 		Nonce: totpNonce(6), Ciphertext: totpCiphertext(6), Now: totpStoreNow.Add(2 * time.Minute),
@@ -646,7 +612,6 @@ func TestTOTPStore_EnrollmentReencryptionBatchAndCompareBeforeUpdate(t *testing.
 		t.Fatalf("ReencryptTOTPEnrollment rows = %d, want 1", rows)
 	}
 
-	// The stale old_key_id no longer matches, so a repeat affects zero rows.
 	rows, err = q.ReencryptTOTPEnrollment(ctx, store.ReencryptTOTPEnrollmentParams{
 		ID: stale.ID, OldKeyID: totpKeyID('o'), NewKeyID: totpKeyID('n'),
 		Nonce: totpNonce(8), Ciphertext: totpCiphertext(8),

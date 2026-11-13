@@ -20,38 +20,24 @@ import (
 )
 
 var (
-	// ErrNotFound reports an absent or non-public resume.
-	ErrNotFound = errors.New("public resume not found")
-	// ErrUnavailable reports a public-resume dependency or consistency failure.
+	ErrNotFound    = errors.New("public resume not found")
 	ErrUnavailable = errors.New("public resume unavailable")
 )
 
-// Snapshot is an admitted public resume projection and its generation data.
 type Snapshot struct {
 	ResumeID         uuid.UUID
 	Revision         int64
 	DiscoveryEnabled bool
 	Public           PublicResume
-	// RevisionTime is when the served revision was saved. The PDF carries it
-	// as its creation date.
-	RevisionTime time.Time
-	// PublicTitle and FaviconEmoji are the owner's page settings. They shape
-	// only the HTML head, so they stay out of the public JSON.
-	PublicTitle  *string
-	FaviconEmoji *string
-	// SignInToView and ViewPassEpoch are the sign-in-to-view switch and its
-	// pass epoch (docs/design/viewer-analytics/sign-in-to-view.md "Setting",
-	// "Gated routes"). The epoch never leaves this process in any response.
-	SignInToView  bool
-	ViewPassEpoch int32
-	// ProjectLinks is the project link context of the served revision: one
-	// link per visible entry that links a project of the owner, in layout
-	// and entry order. Only the public JSON carries it.
-	ProjectLinks []ProjectLink
-	photoKey     string
+	RevisionTime     time.Time
+	PublicTitle      *string
+	FaviconEmoji     *string
+	SignInToView     bool
+	ViewPassEpoch    int32
+	ProjectLinks     []ProjectLink
+	photoKey         string
 }
 
-// ReaderDependencies contains the stores and services needed to read a resume.
 type ReaderDependencies struct {
 	Store       store.PublicReadQueries
 	Projector   *docmigrate.Projector
@@ -60,7 +46,6 @@ type ReaderDependencies struct {
 	Origin      PublicOrigin
 }
 
-// Reader reads public resume projections behind public-state admission.
 type Reader struct {
 	store       store.PublicReadQueries
 	projector   *docmigrate.Projector
@@ -69,7 +54,6 @@ type Reader struct {
 	origin      PublicOrigin
 }
 
-// NewReader creates a reader with the required public dependencies.
 func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 	if dependencies.Store == nil || dependencies.Projector == nil || dependencies.Coordinator == nil || dependencies.Origin.value == "" {
 		return nil, errors.New("invalid public reader dependencies")
@@ -77,9 +61,6 @@ func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 	return &Reader{store: dependencies.Store, projector: dependencies.Projector, coordinator: dependencies.Coordinator, media: dependencies.Media, origin: dependencies.Origin}, nil
 }
 
-// ReadResume reads a live row, admits its exact revision, and retries one
-// changed generation before returning unavailable. No later cache or
-// conditional work can be performed without the returned lease.
 func (r *Reader) ReadResume(ctx context.Context, slug string, representation publicstate.Representation) (Snapshot, *publicstate.Lease, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		read, err := r.store.GetPublicResumeBySlug(ctx, slug)
@@ -125,10 +106,6 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 	return Snapshot{}, nil, ErrUnavailable
 }
 
-// ProjectRow projects a stored row into a snapshot without admission. It
-// takes no lease and checks no live state, so a caller must gate before it
-// serves anything derived from the result; the preview card store uses it to
-// recompute a card version from a row it holds locked.
 func (r *Reader) ProjectRow(row store.Resume) (Snapshot, error) {
 	if row.Slug == nil || row.Revision <= 0 {
 		return Snapshot{}, ErrUnavailable
@@ -136,9 +113,6 @@ func (r *Reader) ProjectRow(row store.Resume) (Snapshot, error) {
 	return r.snapshot(row)
 }
 
-// PhotoKeyDigest is the hex SHA-256 of the private photo storage key, or ""
-// when the snapshot has no photo. It lets a caller detect a photo change
-// without the key itself leaving this package.
 func (s Snapshot) PhotoKeyDigest() string {
 	if s.photoKey == "" {
 		return ""
@@ -165,16 +139,11 @@ func (r *Reader) snapshot(row store.Resume) (Snapshot, error) {
 		photoKey = doc.PersonalDetails.Photo.Key
 	}
 	return Snapshot{
-		// Effective discovery is forced off while sign in to view is on; the
-		// stored seo_geo_enabled value is unchanged in the row itself
-		// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"; AC-VIEW-010).
 		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled && !row.SignInToView, Public: public, RevisionTime: row.UpdatedAt,
 		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji, SignInToView: row.SignInToView, ViewPassEpoch: row.ViewPassEpoch, photoKey: photoKey,
 	}, nil
 }
 
-// ReadPhoto keeps the storage key private to Reader and uses the lease-owned
-// request context so a revocation can interrupt a blocked object read.
 func (r *Reader) ReadPhoto(ctx context.Context, snapshot Snapshot) ([]byte, string, error) {
 	if r.media == nil || snapshot.photoKey == "" {
 		return nil, "", ErrUnavailable
@@ -185,7 +154,6 @@ func (r *Reader) ReadPhoto(ctx context.Context, snapshot Snapshot) ([]byte, stri
 	body, contentType, err := r.media.Get(ctx, snapshot.photoKey)
 	if err != nil {
 		if body != nil {
-			// Both storage and close failures map to the same opaque response.
 			_ = body.Close() //nolint:errcheck // The storage read already failed; cleanup cannot change its result.
 		}
 		return nil, "", ErrUnavailable

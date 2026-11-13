@@ -23,7 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// The trace retains closed operation labels, never SQL arguments or credentials.
 type revokeStorageTrace struct {
 	mu       sync.Mutex
 	steps    []string
@@ -163,7 +162,6 @@ func captureRevokeLogs(t *testing.T, f revokeFixture, fail bool) *revokeLogWrite
 	previousWriter, previousFlags := log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(w, nil)))
 	t.Cleanup(func() {
-		// SetDefault also redirects log's writer and clears its flags.
 		slog.SetDefault(previous)
 		log.SetOutput(previousWriter)
 		log.SetFlags(previousFlags)

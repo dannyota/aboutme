@@ -31,11 +31,6 @@ func TestBrowserHandoff(t *testing.T) {
 	}
 }
 
-// Passkeys are live in production and the owner workflow signs in with
-// password only. The browser helper reports a 202 secondFactorRequired login
-// as browserResultSecondFactor rather than folding it into a generic failure,
-// so Open must surface the matching sentinel instead of hanging or reporting
-// errBrowserFailed.
 func TestBrowserHandoffSecondFactorRequired(t *testing.T) {
 	directory := t.TempDir()
 	if err := atomicPrivateWrite(directory, "browser-ready", []byte("ready")); err != nil {

@@ -6,9 +6,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
-// richTextPaths is guarded against the embedded schema by
-// TestRichTextPaths_ExactlyMatchCurrentSchema. It names semantic section
-// types, not content map keys, because users choose the latter.
 var richTextPaths = []string{
 	"profile.text",
 	"work.description",
@@ -19,9 +16,6 @@ var richTextPaths = []string{
 	"custom.description",
 }
 
-// sanitizeDocument returns a copy whose schema-declared rich-text fields have
-// passed the shared Go sanitizer. Nil stays nil and a present empty string
-// stays present.
 func sanitizeDocument(doc schema.Resume) schema.Resume {
 	out := doc
 	out.Content = make(map[string]schema.Section, len(doc.Content))

@@ -20,19 +20,11 @@ import (
 )
 
 var (
-	errRuntime = errors.New("runtime_unavailable")
-	// errTLSRoots names a trust store that could not be built, and errConnect
-	// carries the SDK discovery, registration, or authorization failure so the
-	// one-word report can name the stage.
+	errRuntime  = errors.New("runtime_unavailable")
 	errTLSRoots = fmt.Errorf("%w: tls roots", errRuntime)
-	// errTLSOverride names a production run whose environment names an
-	// SSL_CERT_FILE or SSL_CERT_DIR override. x509.SystemCertPool honors
-	// both, so an inherited local-mode override (or one set by any other
-	// caller) would make production silently trust a non-system root instead
-	// of refusing outright.
-	errTLSOverride = fmt.Errorf("%w: tls override", errRuntime)
-	errConnect     = fmt.Errorf("%w: connect", errWorkflowBlocked)
-	// errCallbackBind names a loopback listener that could not bind.
+	// x509.SystemCertPool honors SSL_CERT_FILE and SSL_CERT_DIR (crypto/x509 docs).
+	errTLSOverride  = fmt.Errorf("%w: tls override", errRuntime)
+	errConnect      = fmt.Errorf("%w: connect", errWorkflowBlocked)
 	errCallbackBind = fmt.Errorf("%w: callback listener", errConnect)
 )
 
@@ -41,9 +33,6 @@ const (
 	tokenEndpointPath = "/oauth/token"
 )
 
-// workflowDeps is the narrow runtime boundary. Tests inject every field;
-// newRuntimeDeps wires the official SDK, the one-shot OAuth gate, and the
-// restricted HTTP client.
 type workflowDeps struct {
 	Connect       func(context.Context) (sdkToolClient, error)
 	Observations  serverObservations
@@ -54,8 +43,6 @@ type workflowDeps struct {
 	LocalNow      func() time.Time
 }
 
-// serverObservations exposes same-origin server facts seen by the restricted
-// transport. Marks order observations without retaining request content.
 type serverObservations interface {
 	mark() uint64
 	authenticatedDateSince(mark uint64) (time.Time, bool)
@@ -69,8 +56,6 @@ type dateEvent struct {
 	date time.Time
 }
 
-// serverObserver records only sequence numbers, response dates, statuses, and
-// a SHA-256 of the bearer used on /mcp. It never stores tokens or bodies.
 type serverObserver struct {
 	base http.RoundTripper
 
@@ -146,8 +131,6 @@ func (o *serverObserver) recordRefusal() {
 	o.seq++
 }
 
-// observedOAuth records when the one-shot gate refuses reauthorization. It
-// adds no authority of its own.
 type observedOAuth struct {
 	inner    auth.OAuthHandler
 	observer *serverObserver
@@ -170,7 +153,6 @@ func (h observedOAuth) Authorize(ctx context.Context, request *http.Request, res
 	return err
 }
 
-// runtimeToolClient closes the callback listener with the MCP session.
 type runtimeToolClient struct {
 	session  sdkToolClient
 	listener loopbackListener
@@ -196,11 +178,6 @@ func (c *runtimeToolClient) Close() error {
 	return c.err
 }
 
-// finishConnect clears the browser-handoff files only after a successful SDK
-// connect. A failed connect must leave browser-result.json in place: the
-// launcher still has to read the browser helper's own result word from it
-// before the launcher's own cleanup removes the whole browser root. See
-// docs/design/mcp-owner-workflow.md#browser-helper-interface.
 func finishConnect(browserRoot string, connected bool) error {
 	if !connected {
 		return nil
@@ -208,8 +185,6 @@ func finishConnect(browserRoot string, connected bool) error {
 	return removeBrowserFiles(browserRoot)
 }
 
-// closeListener reports nothing when the callback receiver already closed the
-// listener, so cleanup never masks the failure that ended the run.
 func closeListener(listener loopbackListener) error {
 	if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 		return err
@@ -217,9 +192,6 @@ func closeListener(listener loopbackListener) error {
 	return nil
 }
 
-// newBaseTransport builds the trust store explicitly, so a local run that
-// points SSL_CERT_FILE or SSL_CERT_DIR at the development root fails with a
-// named reason instead of an opaque handshake error.
 func newBaseTransport() (http.RoundTripper, error) {
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
@@ -234,9 +206,6 @@ func newBaseTransport() (http.RoundTripper, error) {
 	return transport, nil
 }
 
-// newRuntimeDeps wires the production and local runtime: the official SDK
-// session behind the one-shot OAuth gate, all HTTP through one restricted
-// same-origin client, and server time taken only from observed responses.
 func newRuntimeDeps(config workflowConfig) (workflowDeps, error) {
 	if config.Mode == modeProduction &&
 		(os.Getenv("SSL_CERT_FILE") != "" || os.Getenv("SSL_CERT_DIR") != "") {

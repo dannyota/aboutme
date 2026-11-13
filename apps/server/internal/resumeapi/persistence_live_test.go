@@ -203,9 +203,6 @@ func TestLiveHTTPWriteReadSanitizesBeforePersistedBounds(t *testing.T) {
 		return document
 	}
 
-	// The declared schema counts code points while the persisted bound counts
-	// UTF-8 bytes. This stays within the former and exceeds the latter until the
-	// sanitizer removes the comment and script.
 	removable := "<!--" + strings.Repeat("é", 9_000) + "--><script>alert(1)</script><p>safe</p>"
 	accepted := created.Doc
 	accepted.Content = map[string]schema.Section{
@@ -253,9 +250,6 @@ func TestLiveHTTPWriteReadSanitizesBeforePersistedBounds(t *testing.T) {
 	}
 }
 
-// TestDocumentSaveRespondsWithTheStoredResume proves the customization and
-// personal-details saves answer with the stored resume: each body and entity
-// tag are those of a fresh read.
 func TestDocumentSaveRespondsWithTheStoredResume(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
@@ -273,7 +267,6 @@ func TestDocumentSaveRespondsWithTheStoredResume(t *testing.T) {
 		if read.status != http.StatusOK {
 			t.Fatalf("read = %d %s, want 200", read.status, read.body)
 		}
-		// The PATCH body is replayable JSONB, so compare decoded values, not bytes.
 		var savedValue, readValue any
 		if err := json.Unmarshal(saved.body, &savedValue); err != nil {
 			t.Fatalf("decode PATCH %s body: %v", save.path, err)

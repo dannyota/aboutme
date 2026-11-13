@@ -23,12 +23,6 @@ type lockOrderTarget struct {
 	delete  func(context.Context) error
 }
 
-// TestDeleteAccount_FollowsResumeWriteLockOrder holds the user row the way a
-// resume write does, lets a deletion of the same account queue behind it, and
-// then takes the slug claim and public state the way a publish does. With one
-// lock order the deletion waits and then succeeds. A deletion that takes slug
-// claims before the user row deadlocks here, and PostgreSQL aborts one side
-// with SQLSTATE 40P01.
 func TestDeleteAccount_FollowsResumeWriteLockOrder(t *testing.T) {
 	t.Run("self-service deletion", func(t *testing.T) {
 		env := newDeletionEnvironment(t)
@@ -148,8 +142,6 @@ func runLockOrderRace(t *testing.T, target lockOrderTarget) {
 	}
 }
 
-// waitUntilBlockedBy polls until backend waiter waits on a lock held by
-// backend holder, or ctx ends.
 func waitUntilBlockedBy(ctx context.Context, t *testing.T, pool *store.Pool, waiter, holder int) {
 	t.Helper()
 	for {

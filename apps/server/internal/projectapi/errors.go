@@ -29,8 +29,6 @@ func requestError() *clientError {
 	return failure(400, "request_invalid", "request does not match the operation")
 }
 
-// decodeError answers request_invalid. When one value is at fault the message
-// names its path; request_invalid carries no details.
 func decodeError(err error) *clientError {
 	var pathErr *api.JSONPathError
 	if errors.As(err, &pathErr) {
@@ -61,10 +59,8 @@ func mapError(err error) *clientError {
 	if errors.As(err, &mismatch) {
 		e := failure(412, "revision_mismatch", "project revision has changed")
 		e.details = struct {
-			// Revision is the current revision as decimal text.
-			Revision string `json:"revision"`
-			// Project is the canonical current owner project.
-			Project resource `json:"project"`
+			Revision string   `json:"revision"`
+			Project  resource `json:"project"`
 		}{Revision: strconv.FormatInt(mismatch.current.Revision, 10), Project: mismatch.current}
 		return e
 	}
@@ -100,26 +96,19 @@ func mapError(err error) *clientError {
 	}
 }
 
-// linkedMismatch is a failed project precondition with the current project
-// and its linked resume ids.
 type linkedMismatch struct {
 	current resource
 }
 
-// Error returns a closed mismatch description.
 func (e *linkedMismatch) Error() string { return "project revision mismatch" }
 
 type errorBody struct {
-	// Code is the closed machine-readable failure code.
-	Code string `json:"code"`
-	// Message is a fixed description without submitted project content.
+	Code    string `json:"code"`
 	Message string `json:"message"`
-	// Details carries the current owned project for revision mismatches.
-	Details any `json:"details,omitempty"`
+	Details any    `json:"details,omitempty"`
 }
 
 type errorEnvelope struct {
-	// Error is the problem returned to the owner.
 	Error errorBody `json:"error"`
 }
 

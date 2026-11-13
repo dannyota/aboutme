@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// namedColumn is a projects column of entry id, project slug and name rows,
-// each document with only an English text.
 func namedColumn(t *testing.T, rows ...[3]string) json.RawMessage {
 	t.Helper()
 	column := []map[string]any{}
@@ -23,10 +21,6 @@ func namedColumn(t *testing.T, rows ...[3]string) json.RawMessage {
 	return raw
 }
 
-// TestReaderReadProjects_BlankNamedProjectIsUnavailable proves a linked,
-// visible project whose renderable name is blank by the renderer's rule is
-// not available: the list skips it and its own page shows nothing, so both
-// answer as an unknown resume when nothing else remains.
 func TestReaderReadProjects_BlankNamedProjectIsUnavailable(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
@@ -55,9 +49,6 @@ func TestReaderReadProjects_BlankNamedProjectIsUnavailable(t *testing.T) {
 	}
 }
 
-// TestReaderReadProjects_OtherProjectsNeedARenderableName proves a project
-// page counts another project as available only when its name, in the
-// language the renderer would show, is not blank, as the list does.
 func TestReaderReadProjects_OtherProjectsNeedARenderableName(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)

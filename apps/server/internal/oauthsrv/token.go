@@ -6,36 +6,22 @@ import (
 	"io"
 )
 
-// ErrTokenInvalid is the closed error for every malformed access- or
-// refresh-token spelling and for a kind outside the closed set. It never
-// carries the presented value.
 var ErrTokenInvalid = errors.New("oauth token invalid")
 
-// TokenKind is the closed set of stored token kinds.
 type TokenKind string
 
-// The token kinds. The values are the stored kind column's spellings.
 const (
-	// TokenKindAccess is a bearer access token.
-	TokenKindAccess TokenKind = "access"
-	// TokenKindRefresh is a refresh token that rotates on use.
+	TokenKindAccess  TokenKind = "access"
 	TokenKindRefresh TokenKind = "refresh"
 )
 
 const (
-	// accessTokenPrefix and refreshTokenPrefix are the token prefixes.
 	accessTokenPrefix  = "amat_"
 	refreshTokenPrefix = "amrt_"
-	// tokenPrefixChars is the shared prefix width; tokenChars is the only
-	// valid total token length.
-	tokenPrefixChars = len(accessTokenPrefix)
-	tokenChars       = tokenPrefixChars + secretBodyChars
+	tokenPrefixChars   = len(accessTokenPrefix)
+	tokenChars         = tokenPrefixChars + secretBodyChars
 )
 
-// NewToken returns a fresh token of the given kind and the SHA-256 digest that
-// is its only stored form. It reads exactly 32 bytes from entropy — after
-// checking the kind, so an unknown kind consumes none — and returns no token
-// at all when the reader is short.
 func NewToken(kind TokenKind, entropy io.Reader) (raw string, digest [32]byte, err error) {
 	prefix, ok := tokenPrefixFor(kind)
 	if !ok {
@@ -49,14 +35,6 @@ func NewToken(kind TokenKind, entropy io.Reader) (raw string, digest [32]byte, e
 	return raw, sha256.Sum256([]byte(raw)), nil
 }
 
-// ParseToken checks a presented token against the exact token spelling (a
-// known 5-byte prefix followed by 43 canonical, unpadded base64url characters)
-// and returns its kind and digest. Shape decoding happens before hashing, so no
-// malformed spelling reaches a store lookup.
-//
-// The digest covers the prefix, which domain-separates the two kinds: the same
-// entropy spelled as the other kind yields a different digest and so can never
-// match a stored row of the kind it was not issued as.
 func ParseToken(raw string) (kind TokenKind, digest [32]byte, err error) {
 	if len(raw) != tokenChars {
 		return "", [32]byte{}, ErrTokenInvalid
@@ -71,8 +49,6 @@ func ParseToken(raw string) (kind TokenKind, digest [32]byte, err error) {
 	return kind, sha256.Sum256([]byte(raw)), nil
 }
 
-// tokenPrefixFor maps a kind to its prefix. The second result is false for
-// any kind outside the closed set.
 func tokenPrefixFor(kind TokenKind) (string, bool) {
 	switch kind {
 	case TokenKindAccess:
@@ -84,8 +60,6 @@ func tokenPrefixFor(kind TokenKind) (string, bool) {
 	}
 }
 
-// tokenKindFor maps a token prefix to its kind. The second result is false for
-// any other prefix.
 func tokenKindFor(prefix string) (TokenKind, bool) {
 	switch prefix {
 	case accessTokenPrefix:

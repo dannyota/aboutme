@@ -49,8 +49,6 @@ func TestReadinessRenderRequestPostsValidMinimalPublicResume(t *testing.T) {
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	// The worker reads the preview head values from every render request,
-	// probes included (docs/design/link-previews.md).
 	wantPreview := previewmeta.Meta{Title: "Readiness Probe", Description: "Resume on aboutme.vn", Locale: "en_US", ImageAlt: "Readiness Probe"}
 	if envelope.Preview == nil || *envelope.Preview != wantPreview {
 		t.Fatalf("render envelope preview = %#v, want %#v", envelope.Preview, wantPreview)

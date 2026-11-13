@@ -180,8 +180,6 @@ func TestCIMDCurrentDocumentNeverFallsBackToStoredRedirects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Expired metadata must refetch even when the approved stored snapshot is
-	// still valid. A failed DNS lookup cannot restore that snapshot.
 	s.cimd.clock = func() time.Time { return s.clock().Add(6 * time.Minute) }
 	s.cimd.cfg.DevStubAddr = ""
 	s.cimd.lookup = func(context.Context, string) ([]netip.Addr, error) { return nil, errCIMDInvalid }

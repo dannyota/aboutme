@@ -545,7 +545,7 @@ func TestRenderJoinsAlreadyStartedTimerCallbackBeforeReturning(t *testing.T) {
 		done <- renderErr
 	}()
 	deadlineTimer := <-factory.timers
-	<-factory.timers // capability-expiry timer
+	<-factory.timers
 	<-rendererStarted
 	deadlineTimer.Fire()
 	<-deadlineTimer.started

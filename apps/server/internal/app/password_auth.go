@@ -1,12 +1,5 @@
 package app
 
-// Password-authentication composition. This file builds the
-// blocklist/policy/hasher, the mail key ring and outbox, the mode-selected
-// sender (SES, SMTP, or loopback capture), the rate policies, the password
-// service, and the leased mail worker; the server command wires the routes
-// and joins the worker on shutdown. No AWS client is ever constructed in
-// capture or SMTP mode.
-
 import (
 	"context"
 	"crypto/rand"
@@ -27,17 +20,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// PasswordAuth is the fully-composed password service and its mail worker.
 type PasswordAuth struct {
-	// Service serves the password routes.
 	Service *auth.PasswordService
-	// Worker delivers queued auth mail; the caller runs and joins it.
-	Worker *authmail.Worker
+	Worker  *authmail.Worker
 }
 
-// NewPasswordAuth builds every password-mail dependency and returns the service
-// plus worker. It fails closed on any construction error so a missing or
-// misconfigured dependency refuses to start rather than degrading silently.
 func NewPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config, pool *store.Pool, queries *store.Queries) (*PasswordAuth, error) {
 	blocklist, err := password.LoadBlocklist()
 	if err != nil {
@@ -53,8 +40,6 @@ func NewPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	if err != nil {
 		return nil, err
 	}
-	// Startup readiness: every key ID referenced by a live (pending/leased)
-	// job must be present in the ring, or the worker cannot decrypt it later.
 	liveKeyIDs, err := queries.ListLiveAuthEmailJobKeyIDs(ctx, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("list live mail key ids: %w", err)
@@ -125,8 +110,6 @@ func NewPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	return &PasswordAuth{Service: service, Worker: worker}, nil
 }
 
-// newMailKeyRing builds the auth-mail key ring from config: exactly one active
-// key plus at most one previous key.
 func newMailKeyRing(cfg config.Config) (*authmail.KeyRing, error) {
 	keys := map[string][32]byte{cfg.AuthEmail.ActiveKeyID: cfg.AuthEmail.ActiveKey}
 	if cfg.AuthEmail.HasPrevious {
@@ -139,10 +122,6 @@ func newMailKeyRing(cfg config.Config) (*authmail.KeyRing, error) {
 	return ring, nil
 }
 
-// newMailSender selects the capture, SES, or SMTP sender. Capture and SMTP mode
-// construct no AWS client; SES mode uses the standard credential chain and
-// never reads a credential env field. SMTP verifies the server against the
-// system roots.
 func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) (authmail.Sender, error) {
 	switch cfg.AuthEmail.Mode {
 	case authmailModeCaptureValue:
@@ -188,17 +167,12 @@ func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) 
 	}
 }
 
-// The config package owns the mode strings; these mirrors keep this package
-// from spelling them a second time while the mode stays a closed three-value
-// set.
 const (
 	authmailModeCaptureValue = "capture"
 	authmailModeSESValue     = "ses"
 	authmailModeSMTPValue    = "smtp"
 )
 
-// fullJitter returns a uniform random duration in [0, d]. The worker owns retry
-// timing, so the jitter source is injected here rather than inside the worker.
 func fullJitter(d time.Duration) time.Duration {
 	if d <= 0 {
 		return 0

@@ -91,8 +91,6 @@ func newMultipartClosingObserver(reader io.Reader, boundary string) *multipartCl
 	return &multipartClosingObserver{reader: reader, marker: []byte("\r\n--" + boundary + "--")}
 }
 
-// Read reads from the wrapped body and records whether the closing boundary
-// and the bytes after it have been seen.
 func (o *multipartClosingObserver) Read(p []byte) (int, error) {
 	n, err := o.reader.Read(p)
 	for _, b := range p[:n] {

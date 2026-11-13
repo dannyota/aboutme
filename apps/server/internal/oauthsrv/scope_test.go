@@ -154,8 +154,6 @@ func TestScopesHas(t *testing.T) {
 func TestScopeConstantsMatchTheDecision(t *testing.T) {
 	t.Parallel()
 
-	// ADR 0018 fixes the scope spellings; a rename here would silently widen or
-	// break every stored grant.
 	if got := string(ScopeResumesRead); got != "resumes:read" {
 		t.Errorf("ScopeResumesRead = %q, want %q", got, "resumes:read")
 	}

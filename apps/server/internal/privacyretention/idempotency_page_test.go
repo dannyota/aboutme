@@ -260,7 +260,6 @@ func pageResult(records, bytes int64) store.ExpireIdempotencyPageRow {
 	return store.ExpireIdempotencyPageRow{DeletedRecords: records, DeletedBytes: bytes, ReleasedRecords: records, ReleasedBytes: bytes}
 }
 
-// insertExpiredBulk stores count records of 6 bytes each ("null" plus "{}").
 func insertExpiredBulk(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, count int, expiresAt time.Time) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `INSERT INTO idempotency_records
@@ -271,10 +270,6 @@ func insertExpiredBulk(ctx context.Context, t *testing.T, pool *store.Pool, user
 	}
 }
 
-// releaseReplayRowsAfterFirstPage locks userID's replay rows, but not the
-// user, in another transaction. The first page locks the user and selects
-// those rows but cannot delete them, so it comes back short. The worker hook
-// records each page's deletions and releases the rows after the first page.
 func releaseReplayRowsAfterFirstPage(ctx context.Context, t *testing.T, pool *store.Pool, worker *Worker, userID uuid.UUID) *[]int64 {
 	t.Helper()
 	rowLocks, err := pool.Begin(ctx)
@@ -297,8 +292,6 @@ func releaseReplayRowsAfterFirstPage(ctx context.Context, t *testing.T, pool *st
 	return pages
 }
 
-// createIdleUsers creates accounts that each hold one unexpired 6-byte record
-// with matching usage, and removes them when the test ends.
 func createIdleUsers(ctx context.Context, t *testing.T, pool *store.Pool, count int) []uuid.UUID {
 	t.Helper()
 	rows, err := pool.Query(ctx, `INSERT INTO users (email, name)
@@ -326,8 +319,6 @@ func createIdleUsers(ctx context.Context, t *testing.T, pool *store.Pool, count 
 	return ids
 }
 
-// countLockableUsers reports how many of ids another transaction can lock
-// right now; a row held by an open transaction is skipped.
 func countLockableUsers(ctx context.Context, t *testing.T, pool *store.Pool, ids []uuid.UUID) int64 {
 	t.Helper()
 	probe, err := pool.Begin(ctx)

@@ -38,7 +38,6 @@ func cimdTLSResolver(t *testing.T, handler http.Handler, clock func() time.Time)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The trusted harness override preserves example.com certificate checks.
 	f.cfg.DevStubAddr = server.Listener.Addr().String()
 	return f, server
 }
@@ -448,7 +447,6 @@ func TestCIMDAddressFixturesAtDNSAndConnect(t *testing.T) {
 		} else if len(dialed) != 0 {
 			t.Fatalf("refused fixture %s dialed %v", fixture.address, dialed)
 		}
-		// Membership alone cannot bypass the connect-time address policy.
 		approved := map[netip.Addr]bool{fixture.address.Unmap(): true}
 		if err := f.checkConnectAddress(netip.AddrPortFrom(fixture.address, 443).String(), 443, approved); (err == nil) != fixture.allowed {
 			t.Fatalf("connect fixture %s: %v", fixture.address, err)

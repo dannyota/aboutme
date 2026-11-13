@@ -12,16 +12,11 @@ import (
 var errCreateIntent = errors.New("create_intent_invalid")
 
 const (
-	createIntentVersion = 1
-	// createReplayLifetime is the design's exact-replay cutoff, far inside the
-	// server's 24-hour idempotency lifetime.
+	createIntentVersion  = 1
 	createReplayLifetime = 12 * time.Hour
-	// serverDateResolution covers the one-second resolution of HTTP Date.
 	serverDateResolution = time.Second
 )
 
-// createIntent is the durable, byte-equivalent create request. It is written
-// and synced before the first send and survives crashes and failed runs.
 type createIntent struct {
 	Version        int             `json:"version"`
 	Origin         string          `json:"origin"`
@@ -96,8 +91,6 @@ func encodeCreateIntent(intent createIntent) ([]byte, error) {
 	return json.Marshal(intent)
 }
 
-// persistCreateIntent creates the intent exclusively. An existing intent,
-// resolved or not, is never replaced.
 func persistCreateIntent(control privateArtifacts, intent createIntent) error {
 	if !validCreateIntent(intent, intent.Origin) {
 		return errCreateIntent
@@ -109,8 +102,6 @@ func persistCreateIntent(control privateArtifacts, intent createIntent) error {
 	return control.createExclusive(createIntentName, encoded)
 }
 
-// loadCreateIntent returns the durable intent. A present but malformed intent
-// blocks every create.
 func loadCreateIntent(control privateArtifacts, origin string) (createIntent, bool, error) {
 	present, err := control.exists(createIntentName)
 	if err != nil {
@@ -130,9 +121,6 @@ func loadCreateIntent(control privateArtifacts, origin string) (createIntent, bo
 	return intent, true, nil
 }
 
-// replayDeadline returns the local deadline for an exact replay. Replay needs
-// a fresh server time that is not before the baseline and a whole request
-// window that ends before the 12-hour cutoff.
 func replayDeadline(intent createIntent, serverNow time.Time, localNow time.Time) (time.Time, bool) {
 	if serverNow.IsZero() || serverNow.Before(intent.ServerTime) {
 		return time.Time{}, false

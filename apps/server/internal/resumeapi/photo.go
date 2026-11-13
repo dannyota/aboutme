@@ -30,14 +30,11 @@ func photoRoutes() []routeSpec {
 }
 
 type photoCropInput struct {
-	// ResumeID is the resume named by the request path.
 	ResumeID uuid.UUID
-	// Crop is the requested crop; nil clears the stored crop.
-	Crop *schema.PhotoCrop
+	Crop     *schema.PhotoCrop
 }
 
 type photoDeleteInput struct {
-	// ResumeID is the resume named by the request path.
 	ResumeID uuid.UUID
 }
 

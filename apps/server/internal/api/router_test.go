@@ -24,17 +24,6 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 }
 
-// TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain proves New's
-// variadic register extension point. A caller-supplied func(*http.ServeMux)
-// can attach routes New itself knows nothing about
-// (internal/auth's Google/LinkedIn/GitHub start/callback handlers, wired
-// from internal/app/router.go; internal/auth imports internal/api, so the
-// reverse import would cycle, hence this inversion). The registered route
-// must actually respond AND go through the same middleware chain as
-// /healthz and /readyz: X-Request-Id is set on the response only if
-// RequestID wrapped it, so asserting that header here is what proves the
-// extra route isn't served by some bypass path that skips the standard
-// chain.
 func TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain(t *testing.T) {
 	t.Parallel()
 
@@ -116,10 +105,6 @@ func TestPublicDispatchWrongMethodPrecedesDefaultBodyAndRateChain(t *testing.T) 
 	}
 }
 
-// TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply proves every
-// register func New receives is actually applied, not just the first;
-// internal/app/router.go passes more than one provider or service
-// RegisterRoutes function.
 func TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply(t *testing.T) {
 	t.Parallel()
 
@@ -176,10 +161,6 @@ func TestRouter_Readyz_ReturnsOKWhenDBReachable(t *testing.T) {
 	}
 }
 
-// TestRouter_Readyz_Returns503AgainstRealUnreachableStore wires the router
-// with a real store.Pool pointed at an unreachable address (nothing is
-// listening on 127.0.0.1:1), reproducing an actual database outage without
-// requiring a live Postgres instance in the test environment.
 func TestRouter_Readyz_Returns503AgainstRealUnreachableStore(t *testing.T) {
 	t.Parallel()
 
@@ -235,12 +216,6 @@ func TestRouter_Healthz_IgnoresDBOutage(t *testing.T) {
 	}
 }
 
-// TestRouter_BodyLimitAppliesToAllRoutes proves Options.BodyLimitBytes is
-// honored on the non-health chain. It deliberately targets a non-health
-// path: /healthz and /readyz use their own small, fixed
-// api.HealthBodyLimitBytes cap instead. See
-// TestRouter_HealthEndpoints_BodyCapIndependentOfOptions for that
-// decoupling.
 func TestRouter_BodyLimitAppliesToAllRoutes(t *testing.T) {
 	t.Parallel()
 
@@ -256,10 +231,6 @@ func TestRouter_BodyLimitAppliesToAllRoutes(t *testing.T) {
 	}
 }
 
-// TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit freezes the exact
-// photo-upload dispatch boundary. Only a canonical POST photo path reaches the
-// mux without the ordinary JSON buffer; wrong methods and near-match paths
-// retain it.
 func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
 	t.Parallel()
 
@@ -297,10 +268,6 @@ func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
 	}
 }
 
-// TestRouter_MCPAloneBypassesDefaultBodyLimit freezes the route-specific MCP
-// body boundary. The MCP handler owns its 4 MiB cap; the outer 256 KiB JSON
-// middleware must not reject a valid photo-bearing JSON-RPC request first.
-// Near matches retain the ordinary cap.
 func TestRouter_MCPAloneBypassesDefaultBodyLimit(t *testing.T) {
 	t.Parallel()
 
@@ -331,10 +298,6 @@ func TestRouter_MCPAloneBypassesDefaultBodyLimit(t *testing.T) {
 	}
 }
 
-// decodeErrorEnvelope unmarshals rec's body as {"error":{"code","message"}}
-// and fails the test if it isn't shaped that way; every non-2xx response
-// from this router must use the standard envelope, never a stdlib default
-// plain-text body.
 func decodeErrorEnvelope(t *testing.T, rec *httptest.ResponseRecorder) struct {
 	Code    string
 	Message string
@@ -381,9 +344,6 @@ func TestRouter_UnknownRoute_Returns404WithErrorEnvelope(t *testing.T) {
 	decodeErrorEnvelope(t, rec)
 }
 
-// TestRouter_UnknownAPIRoute_Returns404WithErrorEnvelope proves an unknown path
-// under the API's own /api/v1/* namespace still gets the JSON envelope, not the stdlib
-// ServeMux's default plain-text 404.
 func TestRouter_UnknownAPIRoute_Returns404WithErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
@@ -423,15 +383,6 @@ func TestRouter_WrongMethodOnExistingRoute_Returns405WithErrorEnvelope(t *testin
 	}
 }
 
-// TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody verifies that HEAD
-// satisfies the GET route registered for /healthz and that the response
-// body is genuinely empty on the wire. This deliberately uses a real
-// httptest.Server rather than the httptest.NewRecorder() pattern used
-// elsewhere in this file: net/http's HEAD body suppression lives in the
-// real server's connection-writing path, which httptest.ResponseRecorder,
-// constructed with no request of its own, never exercises, so asserting
-// an empty body against a Recorder would prove nothing. The route relies on
-// transport-level suppression, so the test observes the real transport.
 func TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody(t *testing.T) {
 	t.Parallel()
 
@@ -465,9 +416,6 @@ func TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody(t *testing.T) {
 	}
 }
 
-// TestRouter_Readyz_HeadRequest_MatchesGetStatus checks that HEAD /readyz
-// runs the same handler as GET /readyz and reports the same status under
-// the same (healthy) pinger condition.
 func TestRouter_Readyz_HeadRequest_MatchesGetStatus(t *testing.T) {
 	t.Parallel()
 
@@ -489,9 +437,6 @@ func TestRouter_Readyz_HeadRequest_MatchesGetStatus(t *testing.T) {
 	}
 }
 
-// TestRouter_Healthz_PostStillReturns405 guards against the method-matching
-// relaxation added to let HEAD satisfy a GET route accidentally loosening
-// enforcement for genuinely disallowed methods.
 func TestRouter_Healthz_PostStillReturns405(t *testing.T) {
 	t.Parallel()
 
@@ -510,14 +455,6 @@ func TestRouter_Healthz_PostStillReturns405(t *testing.T) {
 	}
 }
 
-// TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit proves
-// isHealthPath compares the exact, unencoded canonical path. net/http's own
-// ServeMux still resolves
-// a percent-encoded variant of /healthz or /readyz (e.g. "/%68ealthz") to
-// the same registered handler, since mux matching happens on the decoded
-// path, but the health/non-health DISPATCH decision in router.go must not
-// make the same mistake, or a percent-encoded health path would silently
-// take the RateLimit-exempt branch.
 func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 	t.Parallel()
 
@@ -534,8 +471,6 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 				handler.ServeHTTP(rec, req)
 				switch rec.Code {
 				case http.StatusOK:
-					// Still under the (non-exempt) budget; ServeMux still
-					// resolves this to the health handler by decoded path.
 				case http.StatusTooManyRequests:
 					sawTooManyRequests = true
 				default:
@@ -551,9 +486,6 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 	}
 }
 
-// TestRouter_HealthEndpoints_BodyCapIndependentOfOptions proves health
-// endpoints reject an over-cap body using api.HealthBodyLimitBytes, never
-// Options.BodyLimitBytes, even when the latter is configured far larger.
 func TestRouter_HealthEndpoints_BodyCapIndependentOfOptions(t *testing.T) {
 	t.Parallel()
 
@@ -571,9 +503,6 @@ func TestRouter_HealthEndpoints_BodyCapIndependentOfOptions(t *testing.T) {
 	}
 }
 
-// countingReader wraps r and records how many bytes have actually been
-// read through it, so a test can assert an upper bound on real I/O rather
-// than only on the final outcome.
 type countingReader struct {
 	r    io.Reader
 	mu   sync.Mutex
@@ -594,12 +523,6 @@ func (c *countingReader) bytesRead() int64 {
 	return c.read
 }
 
-// TestRouter_HealthEndpoint_BoundedBodyRead proves a 256 KB body to /healthz is
-// rejected/aborted after at most api.HealthBodyLimitBytes+1 bytes are
-// actually read into memory, not the whole 256 KB, regardless of
-// Options.BodyLimitBytes. The request deliberately omits a declared
-// Content-Length so BodyLimit cannot short-circuit on that alone and must
-// actually bound the read via http.MaxBytesReader.
 func TestRouter_HealthEndpoint_BoundedBodyRead(t *testing.T) {
 	t.Parallel()
 
@@ -608,7 +531,7 @@ func TestRouter_HealthEndpoint_BoundedBodyRead(t *testing.T) {
 	const oversizedBody = 256 * 1024
 	cr := &countingReader{r: bytes.NewReader(bytes.Repeat([]byte("a"), oversizedBody))}
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", io.NopCloser(cr))
-	req.ContentLength = -1 // undeclared: forces the streaming (not fast-path) branch
+	req.ContentLength = -1
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -622,10 +545,6 @@ func TestRouter_HealthEndpoint_BoundedBodyRead(t *testing.T) {
 	}
 }
 
-// countingPinger is a non-blocking DBPinger that always returns err (nil
-// for success) and counts how many times Ping actually ran, so a test can
-// assert the readiness cache collapses repeated requests into a bounded
-// number of real pings.
 type countingPinger struct {
 	err error
 
@@ -646,11 +565,6 @@ func (p *countingPinger) callCount() int {
 	return p.calls
 }
 
-// blockingCountingPinger is a DBPinger whose Ping blocks until release is
-// closed (or ctx is done), and counts how many times Ping actually started.
-// It is used to prove the readiness cache's single-flight behavior under real
-// concurrency: N callers arriving while a ping is in flight must collapse
-// into exactly one real Ping call, not N.
 type blockingCountingPinger struct {
 	release <-chan struct{}
 	err     error
@@ -678,10 +592,6 @@ func (p *blockingCountingPinger) callCount() int {
 	return p.calls
 }
 
-// TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing proves concurrent
-// requests collapse into one real database ping while it is in flight. This
-// proves the single-flight half of
-// the readiness cache, not just its post-completion TTL reuse.
 func TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing(t *testing.T) {
 	t.Parallel()
 
@@ -708,11 +618,6 @@ func TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing(t *testing.T) {
 		}(i)
 	}
 
-	// Wait until the one real ping has started (and is now blocked on
-	// <-release) before releasing it: from this point on, every other
-	// goroutine that reaches the cache is guaranteed to observe an
-	// in-flight ping (inflight is set, under lock, strictly before Ping is
-	// called), never a nil one: deterministic, not a timing guess.
 	for pinger.callCount() == 0 {
 		runtime.Gosched()
 	}
@@ -729,9 +634,6 @@ func TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing(t *testing.T) {
 	}
 }
 
-// TestRouter_Readyz_CachesResultUntilTTLThenPingsAgain proves the TTL half of
-// the readiness cache. Repeated requests within the TTL reuse the last result,
-// and a request after TTL expiry performs a fresh one.
 func TestRouter_Readyz_CachesResultUntilTTLThenPingsAgain(t *testing.T) {
 	t.Parallel()
 
@@ -757,7 +659,7 @@ func TestRouter_Readyz_CachesResultUntilTTLThenPingsAgain(t *testing.T) {
 		t.Fatalf("within TTL: real Ping() calls = %d across 5 requests, want 1", got)
 	}
 
-	clock.Advance(time.Second) // exactly at the TTL boundary: now stale
+	clock.Advance(time.Second)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
@@ -769,11 +671,6 @@ func TestRouter_Readyz_CachesResultUntilTTLThenPingsAgain(t *testing.T) {
 	}
 }
 
-// TestRouter_Readyz_FailingPingIsAlsoCachedForTTL proves a failing ping
-// must be cached for the TTL exactly like a succeeding one, so a sustained
-// flood against an already-down database does not retrigger a fresh
-// connection attempt on every single request (a thundering herd against
-// the very dependency that is already failing).
 func TestRouter_Readyz_FailingPingIsAlsoCachedForTTL(t *testing.T) {
 	t.Parallel()
 

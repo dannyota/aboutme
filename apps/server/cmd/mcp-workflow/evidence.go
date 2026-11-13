@@ -9,8 +9,6 @@ const maxEvidenceBytes = 4 << 10
 
 var errEvidence = errors.New("evidence_invalid")
 
-// Fixed evidence labels. Evidence never holds content, identifiers, tokens,
-// URLs, hashes, or photos. See docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
 const (
 	evidenceVersion       = 1
 	stageOwnerWorkflow    = "owner_workflow"
@@ -72,7 +70,6 @@ func validEvidence(value runEvidence) bool {
 	}
 }
 
-// writeEvidence writes the closed allowlisted shape, at most 4 KiB.
 func writeEvidence(run privateArtifacts, value runEvidence) error {
 	if !validEvidence(value) {
 		return errEvidence

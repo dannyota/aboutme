@@ -10,10 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-// TestProjectPages_RevocationEndsABlockedWrite proves a revoking transition
-// ends a project response blocked on a slow reader, fresh or cached: the
-// lease's cancel hook sets the write deadline, the write returns, the
-// handler ends and the lease drains before the transition's deadline.
 func TestProjectPages_RevocationEndsABlockedWrite(t *testing.T) {
 	for _, cached := range []bool{false, true} {
 		name := "fresh"

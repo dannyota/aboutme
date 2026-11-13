@@ -1,10 +1,3 @@
-// Command db-setup prepares a database for the aboutme_migrator and
-// aboutme_app roles. Run it as the database owner with DATABASE_URL. It is
-// idempotent: it creates missing roles, fails on drift in existing ones, and
-// grants their database and schema privileges. If MIGRATOR_PASSWORD and
-// APP_PASSWORD are both set, it also stores their SCRAM verifiers. If only
-// one is set, or a set password fails dbroles.ValidatePasswords, it fails
-// before connecting. See ADR 0005.
 package main
 
 import (
@@ -44,8 +37,6 @@ func main() {
 	}
 }
 
-// run reads DATABASE_URL and the optional passwords, then prints one
-// outcome line. Its output and errors never contain a password or the DSN.
 func run(args []string, getenv func(string) string, stdout io.Writer, ensure ensureFunc, setLogin setLoginFunc) error {
 	if len(args) != 0 {
 		return errArguments
@@ -101,8 +92,6 @@ func validDatabaseURL(raw string) bool {
 	return err == nil
 }
 
-// passwordsFromEnv returns ok=false when neither password is set, and an
-// error when only one is set.
 func passwordsFromEnv(getenv func(string) string) (dbroles.LoginPasswords, bool, error) {
 	migrator := getenv("MIGRATOR_PASSWORD")
 	app := getenv("APP_PASSWORD")
@@ -153,7 +142,6 @@ func closeBy(db interface{ Close() error }, deadline time.Time) {
 	select {
 	case err := <-done:
 		if err != nil {
-			// Database errors may contain connection details, so log only the outcome.
 			slog.Warn("db-setup: database close failed")
 		}
 	case <-timer.C:

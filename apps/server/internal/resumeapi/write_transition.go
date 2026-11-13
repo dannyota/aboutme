@@ -1,9 +1,5 @@
 package resumeapi
 
-// Public-state transitions: executeTransition and its preflight, idempotency
-// recheck, transaction lock order, committed-state report, recovery, and
-// single retry after a discovery-generation mismatch.
-
 import (
 	"context"
 	"errors"
@@ -17,9 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// executeTransition runs spec.Run under the public-state fence. Inside the
-// transaction it locks the transition slugs, then public state for a global
-// transition, then rereads the resume and rechecks the caller before Run.
 func (s *Service) executeTransition(ctx context.Context, mutation mutationContext, prepared preparedInput,
 	spec mutationSpec,
 ) (resume.ExecuteResult, error) {
@@ -196,9 +189,6 @@ func (s *Service) executeTransition(ctx context.Context, mutation mutationContex
 	result, transitionErr := runPlan(plan)
 	var mismatch *publicstate.GenerationMismatchError
 	if errors.As(transitionErr, &mismatch) {
-		// A contender may have read the old owner generation before the winner
-		// committed. First distinguish that real content race from an unrelated
-		// discovery-generation advance.
 		fresh, readErr := reader.Get(runCtx, mutation.UserID, current.ID)
 		if readErr != nil {
 			return result, readErr
@@ -207,9 +197,6 @@ func (s *Service) executeTransition(ctx context.Context, mutation mutationContex
 			return result, &resume.RevisionMismatchError{CurrentRevision: fresh.Revision, Current: fresh}
 		}
 		if plan.DiscoveryGeneration == nil {
-			// A non-global fence mismatch means another owner completed between
-			// preflight and Begin. Even when a test seam observes the same durable
-			// revision, it is a stale optimistic-concurrency result, never 500.
 			return result, &resume.RevisionMismatchError{CurrentRevision: fresh.Revision, Current: fresh}
 		}
 		public, readErr := store.New(s.recoveryPool).GetPublicState(runCtx)

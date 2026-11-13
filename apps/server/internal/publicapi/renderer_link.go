@@ -1,12 +1,6 @@
 package publicapi
 
-// The renderer reads every external link with the WHATWG URL parser, which
-// refuses some links Go's net/url, and so the library, accepts: a port above
-// 65535, a host ending in a number that is not a valid IPv4 address, an
-// IPv6 zone, a forbidden host code point, or a host that fails IDNA. The
-// builder leaves such a link out, so the page still renders. This parses
-// only what decides acceptance, the authority, without net/url, whose own
-// refusals differ.
+// The WHATWG URL parser refuses links net/url accepts: ports above 65535, invalid numeric IPv4 hosts, IPv6 zones, forbidden host code points, IDNA failures.
 
 import (
 	"net/netip"
@@ -19,9 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// rendererLink reports whether the renderer's decoder accepts link: an
-// https link of at most project.MaxLinkCharacters code points whose host and
-// port the WHATWG URL parser accepts.
 func rendererLink(link string) bool {
 	if !strings.HasPrefix(link, "https://") || utf8.RuneCountInString(link) > project.MaxLinkCharacters {
 		return false
@@ -30,11 +21,6 @@ func rendererLink(link string) bool {
 	return ok
 }
 
-// whatwgAuthority returns the host and port of a special URL from the text
-// after its scheme, as the WHATWG parser finds them: it drops ASCII tab and
-// newline and trailing controls and spaces, skips leading slashes and
-// backslashes, ends the authority at "/", "\", "?" or "#", and drops any
-// user information before the last "@".
 func whatwgAuthority(rest string) string {
 	rest = strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\n' || r == '\r' {
@@ -53,9 +39,6 @@ func whatwgAuthority(rest string) string {
 	return rest
 }
 
-// whatwgHostPort parses an authority's host and optional port as the WHATWG
-// URL parser does for a special scheme, and returns the serialized host and
-// the port as a decimal number, "" when absent.
 func whatwgHostPort(hostPort string) (host, port string, ok bool) {
 	rawHost, rawPort := hostPort, ""
 	if strings.HasPrefix(hostPort, "[") {
@@ -79,8 +62,6 @@ func whatwgHostPort(hostPort string) (host, port string, ok bool) {
 	return host, port, ok
 }
 
-// whatwgPort accepts no port, an empty one, or ASCII digits of value at most
-// 65535, and returns its decimal value.
 func whatwgPort(raw string) (string, bool) {
 	if raw == "" {
 		return "", true
@@ -101,9 +82,6 @@ func whatwgPort(raw string) (string, bool) {
 	return strconv.Itoa(value), true
 }
 
-// whatwgHost parses one host: an IPv6 literal without a zone, or a domain
-// that passes IDNA with the WHATWG settings, has no forbidden code point,
-// and, when its last label is a number, is a valid IPv4 address.
 func whatwgHost(raw string) (string, bool) {
 	if strings.HasPrefix(raw, "[") {
 		inner := strings.TrimSuffix(strings.TrimPrefix(raw, "["), "]")
@@ -138,8 +116,6 @@ func whatwgHost(raw string) (string, bool) {
 	return address, true
 }
 
-// whatwgPercentDecode decodes each "%" and two hexadecimal digits to its
-// byte and keeps any other "%" as it is.
 func whatwgPercentDecode(raw string) string {
 	var out strings.Builder
 	for i := 0; i < len(raw); i++ {
@@ -155,8 +131,6 @@ func whatwgPercentDecode(raw string) string {
 	return out.String()
 }
 
-// whatwgEndsInANumber reports whether a domain's last label, ignoring one
-// trailing dot, is decimal digits or a 0x hexadecimal number.
 func whatwgEndsInANumber(domain string) bool {
 	labels := strings.Split(domain, ".")
 	if len(labels) > 1 && labels[len(labels)-1] == "" {
@@ -170,9 +144,6 @@ func whatwgEndsInANumber(domain string) bool {
 	return found && strings.Trim(hex, "0123456789abcdef") == ""
 }
 
-// whatwgIPv4 parses a domain ending in a number as the WHATWG IPv4 parser
-// does: at most four decimal, octal or hexadecimal parts, the last filling
-// the remaining bytes, and returns it dotted.
 func whatwgIPv4(domain string) (string, bool) {
 	parts := strings.Split(domain, ".")
 	if len(parts) > 1 && parts[len(parts)-1] == "" {
@@ -203,8 +174,6 @@ func whatwgIPv4(domain string) (string, bool) {
 	return netip.AddrFrom4([4]byte{byte(address >> 24), byte(address >> 16), byte(address >> 8), byte(address)}).String(), true
 }
 
-// whatwgIPv4Number parses one IPv4 part: 0x hexadecimal, a leading-zero
-// octal, or decimal. A value too large for any address is not ok.
 func whatwgIPv4Number(part string) (uint64, bool) {
 	if part == "" {
 		return 0, false

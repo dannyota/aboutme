@@ -18,9 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// heldLease is a public response admitted at a resume's revision before a
-// deletion starts. A revoked lease releases itself, as a canceled public
-// request does.
 type heldLease struct {
 	lease   *publicstate.Lease
 	revoked atomic.Bool
@@ -68,8 +65,6 @@ func requireStillLinkedAt(t *testing.T, h *resumeAPITestHarness, item resume.Res
 	}
 }
 
-// failingSaveResumes fails the second document save of one transaction, after
-// the first has been written.
 type failingSaveResumes struct {
 	*resume.Store
 	saves atomic.Int32
@@ -184,8 +179,6 @@ func TestRemoveProject_UndrainedLiveLeaseTimesOutAndChangesNothing(t *testing.T)
 	}
 	t.Cleanup(stuck.Release)
 	draftLease := holdLease(t, h, draft)
-	// The drain deadline is the service clock plus five seconds, so a clock
-	// five seconds behind makes the deadline now.
 	h.service.clock = func() time.Time { return time.Now().Add(-publicStateDrainTimeout) }
 	_, err = h.service.RemoveProject(h.ctx, newTestRemoval(h, owned.ID, nil))
 	var drain *publicstate.DrainTimeoutError

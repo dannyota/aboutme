@@ -46,10 +46,6 @@ func (cache *testDatabaseSetupCache) prepare(dsn string) error {
 	return entry.err
 }
 
-// prepareMigratedTestDatabase brings dsn's database to head: ensure the
-// fixed roles and grants (ADR 0005's db-setup, run here as the test
-// database's superuser owner), then open as the migrator (migrations.Open)
-// and apply every embedded migration.
 func prepareMigratedTestDatabase(dsn string) (resultErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

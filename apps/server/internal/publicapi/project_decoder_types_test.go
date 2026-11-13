@@ -7,7 +7,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// envelopeMap is request as the renderer receives it.
 func envelopeMap(t *testing.T, request any) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(request)
@@ -21,10 +20,6 @@ func envelopeMap(t *testing.T, request any) map[string]any {
 	return envelope
 }
 
-// TestProjectDecoderRules_TypesAreExact proves the Go copy of the decoder
-// refuses a value of the wrong type wherever the renderer's decoder does:
-// null, a number or an array where a string is required is never read as
-// an empty string.
 func TestProjectDecoderRules_TypesAreExact(t *testing.T) {
 	completed := &schema.DateRange{Start: schema.YearMonth{Y: 2020, M: monthOf(1)}, End: &schema.YearMonth{Y: 2021}}
 	input := projectTestInput(t, projectTestSnapshot("en", "Ada", nil, schema.MmYyyy, false), 2,
@@ -129,8 +124,6 @@ func TestProjectDecoderRules_TypesAreExact(t *testing.T) {
 	}
 }
 
-// TestProjectDecoderRules_BlankIsJavaScriptTrim proves the decoder copy reads
-// a name as blank as String.prototype.trim does, not as Go's TrimSpace.
 func TestProjectDecoderRules_BlankIsJavaScriptTrim(t *testing.T) {
 	bom, nel := string(rune(0xfeff)), string(rune(0x85))
 	page, err := buildProjectRequest(projectTestInput(t, projectTestSnapshot("en", "Ada", nil, schema.MmYyyy, false), 1, limitProject("names", 1, nil)))

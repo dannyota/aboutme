@@ -1,13 +1,5 @@
 package app
 
-// Second-factor composition: the WebAuthn relying party, the TOTP key ring
-// and health checker, the secondfactor.Service, and the HTTP handlers that
-// register every pending, state, passkey, recovery, and TOTP route. See
-// docs/design/passkey-second-factor-contract.md,
-// docs/design/totp-second-factor-contract.md,
-// docs/design/totp-key-management.md, and
-// docs/design/second-factor-authentication.md.
-
 import (
 	"crypto/rand"
 	"errors"
@@ -25,33 +17,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// SecondFactor is NewSecondFactor's result: the registrar that attaches every
-// second-factor route, plus the TOTP key-health checker the caller must run
-// at startup and on a five-minute ticker (docs/design/totp-key-management.md
-// "Key failures").
 type SecondFactor struct {
-	// RegisterRoutes attaches every second-factor route to a mux.
 	RegisterRoutes func(*http.ServeMux)
-	// TOTPHealth checks the stored TOTP key IDs against the configured ring.
-	TOTPHealth *secondfactor.TOTPHealthChecker
+	TOTPHealth     *secondfactor.TOTPHealthChecker
 }
 
-// NewSecondFactor builds the relying party, the TOTP key ring and
-// unavailable signal, the factor service, the TOTP health checker, and the
-// handlers, and returns a registrar that attaches every second-factor route
-// unconditionally: registration options and completion recheck
-// cfg.PasskeyEnrollment, and TOTP enrollment start and completion recheck
-// cfg.TOTPEnrollment, themselves
-// (auth.SecondFactorHandlers.RegisterRoutes), while assertion, recovery,
-// removal, regeneration, state, and TOTP verification and removal routes
-// ignore their respective flags, per the contract. Building the relying
-// party from cfg.PublicOrigin and the TOTP key ring from cfg.TOTPActiveKey
-// always run, so an origin that cannot host WebAuthn ceremonies or a
-// malformed key ring fails startup closed the same way any other required
-// dependency does; see docs/design/second-factor-authentication.md,
-// "Passkeys", docs/design/totp-key-management.md, "Key ring", and
-// internal/config/passkey.go and internal/config/totp.go for the narrower
-// checks that give an operator a clearer, earlier error.
 func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool) (SecondFactor, error) {
 	rp, err := secondfactor.NewRelyingParty(cfg.PublicOrigin)
 	if err != nil {
@@ -121,14 +91,6 @@ func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool) (
 	return SecondFactor{RegisterRoutes: h.RegisterRoutes, TOTPHealth: health}, nil
 }
 
-// totpIssuerFromPublicOrigin derives the canonical TOTP issuer (the
-// lowercase ASCII PUBLIC_ORIGIN host, no port) from cfg.PublicOrigin, which
-// internal/config.loadPublicOrigin has already normalized to a plain
-// scheme://host[:port] origin. secondfactor.New's ValidateTOTPIssuer call
-// rejects an IP literal or non-canonical host when TOTP enrollment is
-// enabled, so this helper only extracts the host; it does not itself
-// validate it (docs/design/totp-second-factor-contract.md "Provisioning
-// data").
 func totpIssuerFromPublicOrigin(publicOrigin string) (string, error) {
 	u, err := url.Parse(publicOrigin)
 	if err != nil || u.Host == "" {

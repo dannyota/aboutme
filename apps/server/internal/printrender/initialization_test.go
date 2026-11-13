@@ -90,7 +90,6 @@ printf 'Google Chrome for Testing %s\n'
 `, directory, directory, expectedBrowserVersion))
 	hooks := safeProcessHooks(t)
 	version := hooks.version
-	// Construction isolates the readiness failure from version verification.
 	hooks.version = func(context.Context, string) (string, error) { return expectedBrowserVersion, nil }
 	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
 	hooks.now = func() time.Time { return now }
@@ -236,7 +235,6 @@ func TestReadinessDoesNotLaunchWhileARenderOwnsTheBrowser(t *testing.T) {
 	if readyErr = renderer.Ready(); readyErr != nil || probes.Load() != 1 {
 		t.Fatalf("Ready() after render teardown = %v, probes = %d", readyErr, probes.Load())
 	}
-	// Cached success does not launch another browser during a later render.
 	gate := renderer.browserGate()
 	gate <- struct{}{}
 	readyErr = renderer.Ready()
@@ -304,7 +302,6 @@ func TestInitializationDiagnosticsUseOnlyClosedReasons(t *testing.T) {
 }
 
 func TestInitializationDiagnosticsClassifyTheDevToolsAddressTimeout(t *testing.T) {
-	// The exec allocator reports the elapsed limit and the browser output.
 	err := errors.New("websocket url timeout reached after 5s, chrome printed:\nTOKEN=private-value /private/path document-text")
 	failure := diagnoseInitialization(context.Background(), ErrUnavailable, "launch", err, nil, 5*time.Second)
 	if failure.stage != "timeout" || failure.reason != "deadline exceeded" {

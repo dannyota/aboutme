@@ -1,4 +1,3 @@
-// Package main runs the MCP owner workflow.
 package main
 
 import (
@@ -11,19 +10,11 @@ import (
 )
 
 var (
-	errBrowserTimeout = errors.New("browser_timeout")
-	errBrowserFailed  = errors.New("browser_failed")
-	// errSecondFactorRequired is the browser helper's own outcome for a
-	// password login that answers 202 secondFactorRequired. Passkeys are live
-	// in production and the owner workflow signs in with password only, so
-	// this is a distinct closed reason rather than the generic browser
-	// failure a login rejection or a stuck consent page produces.
+	errBrowserTimeout       = errors.New("browser_timeout")
+	errBrowserFailed        = errors.New("browser_failed")
 	errSecondFactorRequired = errors.New("second_factor_required")
 )
 
-// browserResultSecondFactor is the exact byte content the browser helper
-// writes to browser-result.json when the password login response carries
-// secondFactorRequired. See docs/design/mcp-owner-workflow.md#browser-helper-interface.
 const browserResultSecondFactor = "second_factor_required"
 
 const browserTimeout = 5 * time.Minute

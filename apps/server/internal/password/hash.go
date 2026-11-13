@@ -13,16 +13,11 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// ErrHashInvalid is the closed error returned for any malformed, noncanonical,
-// or over-budget encoded password hash.
 var ErrHashInvalid = errors.New("password hash invalid")
 
-// Argon2id parameters (docs/design/budgets.md). These are the parse budget:
-// any encoded hash that exceeds them is rejected before allocation; a hash
-// below them verifies and reports NeedsRehash.
 const (
 	argon2Version     = 19
-	argon2MemoryKiB   = 65536 // 64 MiB
+	argon2MemoryKiB   = 65536
 	argon2Iterations  = 3
 	argon2Parallelism = 1
 	argon2SaltLen     = 16
@@ -30,23 +25,15 @@ const (
 	phcMaxLen         = 192
 )
 
-// HashPolicy is a complete Argon2id parameter set.
 type HashPolicy struct {
-	// Version is the Argon2 version number.
-	Version int
-	// MemoryKiB is the memory cost in KiB.
-	MemoryKiB uint32
-	// Iterations is the time cost.
-	Iterations uint32
-	// Parallelism is the lane count.
+	Version     int
+	MemoryKiB   uint32
+	Iterations  uint32
 	Parallelism uint8
-	// SaltLen is the salt length in bytes.
-	SaltLen int
-	// KeyLen is the derived key length in bytes.
-	KeyLen uint32
+	SaltLen     int
+	KeyLen      uint32
 }
 
-// DefaultHashPolicy returns the production Argon2id parameters.
 func DefaultHashPolicy() HashPolicy {
 	return HashPolicy{
 		Version:     argon2Version,
@@ -58,7 +45,6 @@ func DefaultHashPolicy() HashPolicy {
 	}
 }
 
-// equal reports whether two policies are identical.
 func (p HashPolicy) equal(o HashPolicy) bool {
 	return p.Version == o.Version &&
 		p.MemoryKiB == o.MemoryKiB &&
@@ -68,17 +54,11 @@ func (p HashPolicy) equal(o HashPolicy) bool {
 		p.KeyLen == o.KeyLen
 }
 
-// VerifyResult is the outcome of verifying a password against an encoded hash.
 type VerifyResult struct {
-	// Match reports whether the password matches the hash.
-	Match bool
-	// NeedsRehash reports that the hash's parameters differ from the current
-	// policy.
+	Match       bool
 	NeedsRehash bool
 }
 
-// Hasher hashes and verifies passwords with Argon2id behind the shared
-// admission controller.
 type Hasher struct {
 	policy    HashPolicy
 	entropy   io.Reader
@@ -86,8 +66,6 @@ type Hasher struct {
 	dummy     string
 }
 
-// NewHasher returns a Hasher for the given policy, entropy source, and
-// admission controller, and generates the startup dummy encoding.
 func NewHasher(policy HashPolicy, entropy io.Reader, admission *Admission) (*Hasher, error) {
 	h := &Hasher{policy: policy, entropy: entropy, admission: admission}
 	dummy, err := h.deriveDummy()
@@ -98,8 +76,6 @@ func NewHasher(policy HashPolicy, entropy io.Reader, admission *Admission) (*Has
 	return h, nil
 }
 
-// deriveDummy produces one valid encoding with the current policy, used by
-// VerifyDummy so unknown/no-credential logins pay the same Argon2 cost.
 func (h *Hasher) deriveDummy() (string, error) {
 	salt := make([]byte, h.policy.SaltLen)
 	if _, err := io.ReadFull(h.entropy, salt); err != nil {
@@ -109,7 +85,6 @@ func (h *Hasher) deriveDummy() (string, error) {
 	return encodePHC(h.policy, salt, key), nil
 }
 
-// Hash derives an Argon2id hash for normalized and returns its PHC encoding.
 func (h *Hasher) Hash(ctx context.Context, normalized string) (string, error) {
 	if err := h.admission.Acquire(ctx); err != nil {
 		return "", err
@@ -124,8 +99,6 @@ func (h *Hasher) Hash(ctx context.Context, normalized string) (string, error) {
 	return encodePHC(h.policy, salt, key), nil
 }
 
-// Verify checks normalized against encoded. Parsing completes all bounds and
-// canonical-syntax checks before any Argon2 allocation.
 func (h *Hasher) Verify(ctx context.Context, encoded, normalized string) (VerifyResult, error) {
 	parsed, salt, want, err := parsePHC(encoded)
 	if err != nil {
@@ -141,14 +114,11 @@ func (h *Hasher) Verify(ctx context.Context, encoded, normalized string) (Verify
 	return VerifyResult{Match: match, NeedsRehash: !parsed.equal(h.policy)}, nil
 }
 
-// VerifyDummy runs a full verification against the startup dummy encoding so an
-// unknown or no-credential login is indistinguishable in cost from a real one.
 func (h *Hasher) VerifyDummy(ctx context.Context, normalized string) error {
 	_, err := h.Verify(ctx, h.dummy, normalized)
 	return err
 }
 
-// encodePHC renders the closed PHC encoding for the given parameters.
 func encodePHC(p HashPolicy, salt, key []byte) string {
 	return fmt.Sprintf(
 		"$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
@@ -158,9 +128,6 @@ func encodePHC(p HashPolicy, salt, key []byte) string {
 	)
 }
 
-// parsePHC parses and validates an encoded hash without allocating any Argon2
-// memory. It rejects over-length, non-ASCII, malformed, duplicate, missing,
-// unknown, over-budget, and noncanonical encodings.
 func parsePHC(encoded string) (HashPolicy, []byte, []byte, error) {
 	var zero HashPolicy
 	if len(encoded) > phcMaxLen {
@@ -220,8 +187,6 @@ func parsePHCVersion(s string) (uint64, error) {
 	return parsePHCDecimal(s[2:])
 }
 
-// parsePHCParams parses the canonical "m=<dec>,t=<dec>,p=<dec>" field and
-// rejects over-budget values before any narrowing conversion.
 func parsePHCParams(s string) (uint32, uint32, uint8, error) {
 	fields := strings.Split(s, ",")
 	if len(fields) != 3 {
@@ -252,8 +217,6 @@ func parsePHCUintField(field, key string) (uint64, error) {
 	return parsePHCDecimal(field[len(key)+1:])
 }
 
-// parsePHCDecimal parses a canonical decimal: non-empty, ASCII digits, no
-// leading zeros.
 func parsePHCDecimal(s string) (uint64, error) {
 	if len(s) == 0 {
 		return 0, errors.New("empty decimal")

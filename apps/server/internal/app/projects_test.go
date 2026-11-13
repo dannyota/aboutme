@@ -40,8 +40,6 @@ func (c sharedAdmissionClient) send(t *testing.T, method, path, body string) int
 	return rec.Code
 }
 
-// spendUntilLimited sends one request shape until the limiter answers 429
-// and requires that earlier requests were admitted.
 func (c sharedAdmissionClient) spendUntilLimited(t *testing.T, method, path, body string) {
 	t.Helper()
 	for attempt := 1; attempt <= 1000; attempt++ {

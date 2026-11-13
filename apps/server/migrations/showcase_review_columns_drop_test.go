@@ -1,7 +1,3 @@
-// Migration 00018 (docs/design/release-floors.md "Schema floor"): the unused
-// showcase review columns, their checks, and the approval index are gone, the
-// rest of the table and every kept value stay, and Down restores the
-// version-17 table.
 package migrations_test
 
 import (
@@ -20,8 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// droppedShowcaseObjects are the showcaseCatalog keys of every object 00018
-// drops.
 var droppedShowcaseObjects = []string{
 	"column review_key", "column reviewed_key", "column review_outcome",
 	"column reviewed_at", "column first_listed_at",
@@ -33,13 +27,6 @@ var droppedShowcaseObjects = []string{
 	"index resume_showcase_listing_idx",
 }
 
-// showcaseCatalogQuery describes resume_showcase by object name: each column's
-// type, nullability, and default; each constraint's definition; and each
-// index's definition. Names, not column positions, identify the objects, so a
-// column that Down re-adds at the end compares equal. PostgreSQL 18 also lists
-// each NOT NULL as a constraint with a generated name; those are keyed by their
-// column instead, with their definition and validity, so a NOT VALID restore
-// fails while the snapshot needs no name that only some server versions make.
 const showcaseCatalogQuery = `
 SELECT 'column ' || a.attname,
        format_type(a.atttypid, a.atttypmod)
@@ -64,7 +51,6 @@ FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = 'public.resume_showcase'::regclass`
 
-// keptShowcase is the value of every column 00018 keeps, for one row.
 type keptShowcase struct {
 	resumeID    uuid.UUID
 	requestedAt time.Time
@@ -83,8 +69,6 @@ func (k keptShowcase) equal(other keptShowcase) bool {
 		sameOptional(k.templateID, other.templateID)
 }
 
-// showcaseCatalog reads resume_showcase's catalog, keyed by object kind and
-// name.
 func showcaseCatalog(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]string {
 	t.Helper()
 	rows, err := conn.Query(ctx, showcaseCatalogQuery)
@@ -109,7 +93,6 @@ func showcaseCatalog(ctx context.Context, t *testing.T, conn *pgx.Conn) map[stri
 	return catalog
 }
 
-// requireCatalog fails with every entry where got differs from want.
 func requireCatalog(t *testing.T, stage string, got, want map[string]string) {
 	t.Helper()
 	keys := slices.Collect(maps.Keys(got))
@@ -133,8 +116,6 @@ func requireCatalog(t *testing.T, stage string, got, want map[string]string) {
 	}
 }
 
-// seedShowcaseOptIns commits three opt-ins the way v0.9.2 inserts them, with
-// and without a role and a template, each on its own resume.
 func seedShowcaseOptIns(ctx context.Context, t *testing.T, conn *pgx.Conn) map[uuid.UUID]keptShowcase {
 	t.Helper()
 	requested := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
@@ -166,8 +147,6 @@ func seedShowcaseOptIns(ctx context.Context, t *testing.T, conn *pgx.Conn) map[u
 	return seeded
 }
 
-// requireKeptShowcaseRows fails unless the table holds exactly want, by the
-// columns 00018 keeps.
 func requireKeptShowcaseRows(ctx context.Context, t *testing.T, conn *pgx.Conn, stage string, want map[uuid.UUID]keptShowcase) {
 	t.Helper()
 	rows, err := conn.Query(ctx, `SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase`)
@@ -194,16 +173,12 @@ func requireKeptShowcaseRows(ctx context.Context, t *testing.T, conn *pgx.Conn, 
 	}
 }
 
-// requireShowcaseReviewObjectsDropped fails unless the catalog is version 17's
-// without exactly the objects 00018 drops, and a v0.8.28 read fails on it.
 func requireShowcaseReviewObjectsDropped(ctx context.Context, t *testing.T, conn *pgx.Conn, stage string, version17 map[string]string) {
 	t.Helper()
 	want := maps.Clone(version17)
 	for _, key := range droppedShowcaseObjects {
 		delete(want, key)
 		if column, ok := strings.CutPrefix(key, "column "); ok {
-			// A NOT NULL constraint goes with its column, on server versions
-			// that list one.
 			delete(want, "not null "+column)
 		}
 	}
@@ -215,9 +190,6 @@ func requireShowcaseReviewObjectsDropped(ctx context.Context, t *testing.T, conn
 	}
 }
 
-// Up drops the five review columns, their five checks, and the approval index
-// and keeps every other object and value; Down restores the version-17 catalog
-// with review defaults on every row; Up runs again.
 func TestShowcaseReviewColumnsDropMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)

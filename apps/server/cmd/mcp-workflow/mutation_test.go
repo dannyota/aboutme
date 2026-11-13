@@ -53,8 +53,6 @@ func TestMutationCapsRefuseEveryToolOutsideTheWorkflowBeforeSending(t *testing.T
 }
 
 func TestMutationCapsSourceCannotInhabitTargetWrites(t *testing.T) {
-	// Method expressions reach unexported methods; In(0) is the receiver,
-	// In(1) the context, and In(2) the resume handle.
 	for method, value := range map[string]any{
 		"uploadPhoto":    (*toolGuard).uploadPhoto,
 		"cropPhoto":      (*toolGuard).cropPhoto,

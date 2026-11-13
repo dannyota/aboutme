@@ -2,9 +2,6 @@ package publicapi
 
 import "testing"
 
-// TestCSSWithoutComments_IsStringAware proves the shared CSS scanner removes
-// only comments outside strings, honors escapes inside strings, and reports
-// an unterminated string or comment.
 func TestCSSWithoutComments_IsStringAware(t *testing.T) {
 	for _, test := range []struct {
 		name, css, want string

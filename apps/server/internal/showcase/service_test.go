@@ -12,8 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// cardBuilderValues reads the resume the way the preview card builder does and
-// returns its card version.
 func cardBuilderValues(t *testing.T, e *env, id uuid.UUID) string {
 	t.Helper()
 	cards, err := previewcard.NewStore(e.pool, e.reader, time.Now)
@@ -35,9 +33,6 @@ func cardBuilderValues(t *testing.T, e *env, id uuid.UUID) string {
 	return version
 }
 
-// AC-SHOW-006: the in-transaction derivation equals the card builder's output
-// for the same resume, and a write that changes what the listing shows
-// recomputes it.
 func TestSyncTxEqualsTheCardBuilder(t *testing.T) {
 	e := newEnv(t)
 	spec := defaultSpec()
@@ -68,7 +63,6 @@ func TestSyncTxEqualsTheCardBuilder(t *testing.T) {
 		t.Fatalf("a name change moved requested_at from %v to %v", row.RequestedAt, changed.RequestedAt)
 	}
 
-	// A color change moves the card version too.
 	spec.customization.Colors.Primary = "#be123c"
 	_, _, customization := spec.parts(t)
 	if _, err := e.pool.Exec(e.ctx, `UPDATE resumes SET customization = $2 WHERE id = $1`, f.id, customization); err != nil {
@@ -81,7 +75,6 @@ func TestSyncTxEqualsTheCardBuilder(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: the sync derives the template of a preset customization.
 func TestSyncTxDerivesTheTemplate(t *testing.T) {
 	e := newEnv(t)
 	files := readTemplateFiles(t)
@@ -103,7 +96,6 @@ func TestSyncTxDerivesTheTemplate(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: a resume without a row gets none and nothing is written.
 func TestSyncTxLeavesAResumeWithoutARowAlone(t *testing.T) {
 	e := newEnv(t)
 	f := e.addResume(t, defaultSpec())
@@ -113,8 +105,6 @@ func TestSyncTxLeavesAResumeWithoutARowAlone(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001: a row whose resume is no longer live, or requires sign in to
-// view, never survives a sync.
 func TestSyncTxDeletesARowThatCannotBeListed(t *testing.T) {
 	e := newEnv(t)
 	for name, statement := range map[string]string{
@@ -132,9 +122,6 @@ func TestSyncTxDeletesARowThatCannotBeListed(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001, AC-SHOW-005: turning the switch on inserts a row, a row that
-// stays on keeps its opt-in time and takes the new role, and turning it off and
-// on again starts a new opt-in.
 func TestPublishTxLifecycle(t *testing.T) {
 	e := newEnv(t)
 	f := e.addResume(t, defaultSpec())
@@ -175,7 +162,6 @@ func TestPublishTxLifecycle(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001: a resume that is not listable gets no row from an opt-in.
 func TestPublishTxIgnoresAnOptInForAResumeThatCannotBeListed(t *testing.T) {
 	e := newEnv(t)
 	notLive := defaultSpec()
@@ -191,8 +177,6 @@ func TestPublishTxIgnoresAnOptInForAResumeThatCannotBeListed(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: a startup recompute applies the current derivation to every row
-// and skips a resume that cannot be projected.
 func TestRecomputeAllAppliesTheCurrentDerivation(t *testing.T) {
 	e := newFreshEnv(t)
 	files := readTemplateFiles(t)
@@ -205,7 +189,6 @@ func TestRecomputeAllAppliesTheCurrentDerivation(t *testing.T) {
 	brokenFixture := e.addResume(t, broken)
 	e.optIn(t, brokenFixture.id, nil)
 	brokenBefore, _ := e.showcaseRow(t, brokenFixture.id)
-	// A photo with no key cannot yield a card; the row keeps its values.
 	if _, err := e.pool.Exec(e.ctx, `UPDATE resumes SET personal_details = '{"photo":{"key":""}}' WHERE id = $1`, brokenFixture.id); err != nil {
 		t.Fatalf("break resume: %v", err)
 	}

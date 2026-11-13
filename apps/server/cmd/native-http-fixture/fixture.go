@@ -19,25 +19,16 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// frozenNow is the single accepted --now value. Freezing it keeps every seed
-// and cleanup deterministic: the tombstone age, discovery generation, and
-// resume revisions are all derived from this one injected clock.
 const frozenNow = "2035-01-01T00:00:00Z"
 
-// fixtureDatabase is the only database name the command will touch. Matching
-// it by exact name is the explicit opt-in that keeps the fixture from ever
-// mutating aboutme_dev or the test aboutme database.
 const fixtureDatabase = "aboutme_p5a_fixture"
 
-// Config holds the validated seed/cleanup inputs.
 type Config struct {
 	DatabaseURL string
 	MediaRoot   string
 	Now         time.Time
 }
 
-// parseConfig parses and validates the seed/cleanup command line. root is the
-// repository root the media root is resolved and confined below.
 func parseConfig(args []string, root string) (string, Config, error) {
 	if len(args) == 0 {
 		return "", Config{}, errors.New("subcommand is required (seed or cleanup)")
@@ -91,9 +82,6 @@ func parseConfig(args []string, root string) (string, Config, error) {
 	return cmd, Config{DatabaseURL: databaseURL, MediaRoot: resolvedMediaRoot, Now: now}, nil
 }
 
-// resolveMediaRoot canonicalizes the media root against the repository root
-// and rejects anything that is the filesystem root, the repository root, or a
-// path that escapes the repository.
 func resolveMediaRoot(raw, root string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", errors.New("--media-root is required")
@@ -116,9 +104,6 @@ func resolveMediaRoot(raw, root string) (string, error) {
 	return candidate, nil
 }
 
-// Frozen fixture identities. These are literal so the capture script's
-// expected routes and response hashes are deterministic, and the fixed UUIDs
-// can never collide with real development data in aboutme_dev.
 var (
 	fixtureOwnerID = uuid.MustParse("51000000-0000-4000-8000-000000000000")
 
@@ -135,7 +120,6 @@ var (
 	fixtureOwnerName     = "P5A Fixture Owner"
 )
 
-// resumeFixture is one deterministic resume row the seed writes.
 type resumeFixture struct {
 	ID       uuid.UUID
 	Slug     string
@@ -145,9 +129,6 @@ type resumeFixture struct {
 	HasPhoto bool
 }
 
-// seedPlan is the complete deterministic fixture state, derived only from
-// Config. Every field is literal except the tombstone timestamp, which is
-// always exactly one hour before the frozen --now clock.
 type seedPlan struct {
 	OwnerID             uuid.UUID
 	OwnerEmail          string
@@ -172,21 +153,14 @@ func buildSeedPlan(cfg Config) seedPlan {
 	}
 }
 
-// The fixture command is self-contained: the current-v2 document and the
-// source photo are embedded, so the binary never depends on a working
-// directory or on testdata remaining adjacent to the source checkout.
-//
 //go:embed testdata/resume-v2.json
 var resumeV2JSON []byte
 
 //go:embed testdata/photo.png
 var photoPNG []byte
 
-// fixtureTombstoneID is a fixed UUID for the seeded tombstone row, distinct
-// from every resume and owner UUID.
 var fixtureTombstoneID = uuid.MustParse("53000000-0000-4000-8000-000000000001")
 
-// run dispatches the validated subcommand.
 func run(ctx context.Context, cmd string, cfg Config) error {
 	plan := buildSeedPlan(cfg)
 	switch cmd {
@@ -199,9 +173,6 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 	}
 }
 
-// runSeed writes the complete deterministic fixture state. It is idempotent:
-// re-running against an already-seeded database and media root is a no-op
-// rather than an error.
 func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
@@ -234,10 +205,6 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 			return fmt.Errorf("check resume %s: %w", r.Slug, err)
 		}
 		if exists {
-			// Idempotent re-seed. Skipping also avoids the resume cap
-			// trigger, which fires on INSERT before any ON CONFLICT
-			// resolution and would otherwise reject a re-seed of an
-			// already-full owner.
 			continue
 		}
 		pd := personalDetails
@@ -274,8 +241,6 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 	return writePhoto(ctx, cfg.MediaRoot, plan.PhotoKey)
 }
 
-// runCleanup removes exactly the fixture rows and the fixture photo object.
-// It is idempotent: absent rows or an absent object are not errors.
 func runCleanup(ctx context.Context, cfg Config, plan seedPlan) error {
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
@@ -295,8 +260,6 @@ func runCleanup(ctx context.Context, cfg Config, plan seedPlan) error {
 		resumeIDs = append(resumeIDs, r.ID)
 	}
 
-	// media_deletion_jobs has no foreign key to resumes, so it must be
-	// removed before its referenced rows disappear.
 	if _, err = db.ExecContext(ctx,
 		`DELETE FROM media_deletion_jobs WHERE resume_id = ANY($1)`, resumeIDs); err != nil {
 		return fmt.Errorf("delete media jobs: %w", err)
@@ -317,9 +280,6 @@ func runCleanup(ctx context.Context, cfg Config, plan seedPlan) error {
 	return deletePhoto(ctx, cfg.MediaRoot, plan.PhotoKey)
 }
 
-// splitResumeDoc pulls the three jsonb columns out of the embedded current-v2
-// document and confirms the schema version, so the seed never writes a
-// document the store did not project.
 func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte, err error) {
 	var doc struct {
 		SchemaVersion   int             `json:"schemaVersion"`
@@ -336,8 +296,6 @@ func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte,
 	return doc.PersonalDetails, doc.Content, doc.Customization, nil
 }
 
-// injectPhoto adds the private photo key to a copy of the personalDetails
-// object, leaving the embedded base document untouched.
 func injectPhoto(personalDetails []byte, photoKey string) ([]byte, error) {
 	var pd map[string]json.RawMessage
 	if err := json.Unmarshal(personalDetails, &pd); err != nil {
@@ -347,8 +305,6 @@ func injectPhoto(personalDetails []byte, photoKey string) ([]byte, error) {
 	return json.Marshal(pd)
 }
 
-// writePhoto normalizes the embedded source photo and stores the normalized
-// object. An existing object is treated as already-seeded, never overwritten.
 func writePhoto(ctx context.Context, mediaRoot, key string) error {
 	normalized, err := media.NewPhotoNormalizer().NormalizePhoto(photoPNG)
 	if err != nil {
@@ -371,7 +327,6 @@ func writePhoto(ctx context.Context, mediaRoot, key string) error {
 	return nil
 }
 
-// deletePhoto removes the fixture photo object. Absence is not an error.
 func deletePhoto(ctx context.Context, mediaRoot, key string) error {
 	backend, err := media.NewFS(mediaRoot)
 	if err != nil {

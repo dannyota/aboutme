@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// LoadPrivacyJob loads only the database and optional private-media settings
-// needed by a one-shot privacy command.
 func LoadPrivacyJob(getenv func(string) string, needsMedia bool) (Config, error) {
 	if getenv == nil {
 		return Config{}, errors.New("config: environment reader is required")

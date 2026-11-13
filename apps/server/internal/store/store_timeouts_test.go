@@ -16,8 +16,6 @@ import (
 func TestNewPool_TimeoutDefaults(t *testing.T) {
 	t.Parallel()
 
-	// want maps each timeout setting to the value NewPool must send, or ""
-	// when NewPool must leave the key out.
 	tests := []struct {
 		name    string
 		query   string
@@ -142,8 +140,6 @@ func TestNewPool_TimeoutDefaults(t *testing.T) {
 	}
 }
 
-// TestPool_Integration_TimeoutDefaults checks the settings a pooled
-// connection reports.
 func TestPool_Integration_TimeoutDefaults(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -167,9 +163,6 @@ func TestPool_Integration_TimeoutDefaults(t *testing.T) {
 	}
 }
 
-// TestPool_Integration_SetLocalResetsAfterCommit checks that a transaction's
-// SET LOCAL wins inside it and that the same connection is back at the
-// default after commit.
 func TestPool_Integration_SetLocalResetsAfterCommit(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -212,10 +205,6 @@ func TestPool_Integration_SetLocalResetsAfterCommit(t *testing.T) {
 	}
 }
 
-// TestPool_Integration_IdleTransactionEndsAndPoolRecovers leaves a
-// transaction idle past a short idle timeout from the URL and checks that
-// PostgreSQL ends the session and the one-connection pool serves the next
-// query on a new connection.
 func TestPool_Integration_IdleTransactionEndsAndPoolRecovers(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -258,9 +247,6 @@ func TestPool_Integration_IdleTransactionEndsAndPoolRecovers(t *testing.T) {
 	}
 }
 
-// TestPool_Integration_ExplicitLockTimeoutFailsLockWait sets a short
-// lock_timeout through options, so the lock wait fails fast, and checks the
-// URL's value reached the session.
 func TestPool_Integration_ExplicitLockTimeoutFailsLockWait(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -295,9 +281,6 @@ func TestPool_Integration_ExplicitLockTimeoutFailsLockWait(t *testing.T) {
 	}
 }
 
-// TestPool_Integration_StatementTimeoutCutsLockWait checks that, with no
-// lock_timeout, the statement timeout ends a lock wait. A short explicit
-// statement_timeout keeps the test fast.
 func TestPool_Integration_StatementTimeoutCutsLockWait(t *testing.T) {
 	dsn := testutil.RequireTestDatabaseURL(t)
 
@@ -335,12 +318,8 @@ func TestPool_Integration_StatementTimeoutCutsLockWait(t *testing.T) {
 	}
 }
 
-// testLockKey is the advisory lock the lock-wait tests contend for.
 const testLockKey = `hashtextextended('aboutme.store-test.lock-timeout', 0)`
 
-// holdAdvisoryLock takes testLockKey in a transaction on pool and returns
-// the function that releases it. Callers defer it after the pools' Close, so
-// it runs first and Close does not wait on the held connection.
 func holdAdvisoryLock(ctx context.Context, t *testing.T, pool *store.Pool) func() {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -360,7 +339,6 @@ func holdAdvisoryLock(ctx context.Context, t *testing.T, pool *store.Pool) func(
 	return release
 }
 
-// showSetting runs SHOW for name, one of the fixed setting names above.
 func showSetting(ctx context.Context, t *testing.T, pool *store.Pool, name string) string {
 	t.Helper()
 	var value string

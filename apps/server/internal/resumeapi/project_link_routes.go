@@ -1,9 +1,5 @@
 package resumeapi
 
-// Project link and refresh routes: each inserts or rewrites one prefilled
-// project entry, or links one existing entry, through the entry-write chain
-// (docs/design/projects.md "Selection").
-
 import (
 	"context"
 	"encoding/json"
@@ -22,8 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedSectionKey is the key of the project section a link creates when the
-// resume has none.
 const linkedSectionKey = "projects"
 
 func projectLinkRoutes() []routeSpec {
@@ -33,19 +27,12 @@ func projectLinkRoutes() []routeSpec {
 	}
 }
 
-// projectLinkPrepared is a link or a refresh. A link names ProjectID, and
-// EntryID too when it links an existing entry; a refresh names only EntryID.
 type projectLinkPrepared struct {
-	// ResumeID is the resume the entry belongs to.
-	ResumeID uuid.UUID
-	// ProjectID is the project a link adds; zero for a refresh.
+	ResumeID  uuid.UUID
 	ProjectID uuid.UUID
-	// EntryID is the existing entry a link names or a refresh rewrites;
-	// empty for a link that inserts an entry.
-	EntryID string
+	EntryID   string
 }
 
-// refresh reports whether the input is a refresh rather than a link.
 func (p projectLinkPrepared) refresh() bool { return p.ProjectID == uuid.Nil }
 
 func decodeProjectLink(r *http.Request) (boundedInput, error) {
@@ -54,14 +41,9 @@ func decodeProjectLink(r *http.Request) (boundedInput, error) {
 		return boundedInput{}, pathErr
 	}
 	var body struct {
-		// ProjectID is the canonical UUID of an owned library project.
 		ProjectID *string `json:"projectId"`
-		// EntryID, when present, is the canonical UUID of an existing entry
-		// to link instead of inserting one.
-		EntryID *string `json:"entryId"`
+		EntryID   *string `json:"entryId"`
 	}
-	// An omitted entryId inserts an entry, so an explicit null is refused
-	// rather than read as an omission.
 	shape := api.JSONShapeOf(reflect.TypeOf(&body))
 	shape.Fields["entryId"] = &api.JSONShape{Kind: api.JSONString}
 	input, err := decodeJSONBodyAs(r, &body, shape)
@@ -112,16 +94,11 @@ func projectLinkTargets(input boundedInput) ([]string, error) {
 	if prepared.refresh() {
 		return []string{"resume_id", prepared.ResumeID.String(), "entry_id", prepared.EntryID}, nil
 	}
-	// A link keeps one identity whether it inserts or names an entry, so a
-	// key cannot do both for the same project.
 	return []string{"resume_id", prepared.ResumeID.String(), "project_id", prepared.ProjectID.String()}, nil
 }
 
 type projectLinkOperation struct{ service *Service }
 
-// Run writes the prefilled entry, links the named one or refreshes one, and
-// saves the document at the next revision. The save checks under the owner
-// lock that the link names an owned project no other entry links.
 func (op projectLinkOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -158,10 +135,6 @@ func (op projectLinkOperation) Run(ctx context.Context, qtx *store.Queries, muta
 	return mutationRunResult{Response: response}, err
 }
 
-// linkedDocument returns the current-version document with the linked entry
-// inserted, linked or refreshed. It works on the current version whatever
-// the wire version, because an older client cannot express the link it asks
-// for, so every declared version gets the same answer.
 func linkedDocument(ctx context.Context, qtx *store.Queries, current resume.Resume, input projectLinkPrepared) (json.RawMessage, error) {
 	raw, err := resume.AssembleCanonical(current.Doc)
 	if err != nil {
@@ -219,7 +192,6 @@ func linkedDocument(ctx context.Context, qtx *store.Queries, current resume.Resu
 	return applyEntryUpsert(raw, sectionKey, encoded)
 }
 
-// firstProjectSection returns the first project section in layout order.
 func firstProjectSection(doc schema.Resume) string {
 	layout := doc.Customization.Layout.Sections
 	for _, key := range append(append([]string(nil), layout.Main...), layout.Sidebar...) {

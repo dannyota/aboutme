@@ -1,7 +1,5 @@
 package api
 
-// Deriving a JSONShape from the Go type encoding/json decodes into.
-
 import (
 	"encoding"
 	"encoding/json"
@@ -10,12 +8,6 @@ import (
 	"unicode"
 )
 
-// JSONShapeOf derives the shape encoding/json binds into t: exact JSON names
-// for every struct level, free keys for maps, elements for slices and arrays,
-// and scalar kinds. Null is admitted everywhere, as encoding/json admits it.
-// A type with its own UnmarshalJSON accepts any value; a text unmarshaler
-// accepts a string. []byte and json.Number keep every form encoding/json
-// accepts for them.
 func JSONShapeOf(t reflect.Type) *JSONShape {
 	return shapeOf(t, make(map[reflect.Type]*JSONShape))
 }
@@ -40,8 +32,6 @@ func shapeOf(t reflect.Type, built map[reflect.Type]*JSONShape) *JSONShape {
 	case t.Kind() == reflect.Map:
 		shape.Values = shapeOf(t.Elem(), built)
 	case t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8:
-		// encoding/json decodes a string as base64 and an array element by
-		// element, through the element's own decoder when it has one.
 		if !decodesItself(t.Elem(), reflect.TypeFor[json.Unmarshaler]()) &&
 			!decodesItself(t.Elem(), reflect.TypeFor[encoding.TextUnmarshaler]()) {
 			shape.Kind = JSONBytes
@@ -54,7 +44,6 @@ func shapeOf(t reflect.Type, built map[reflect.Type]*JSONShape) *JSONShape {
 	return shape
 }
 
-// decodesItself reports whether t or *t implements the decoder interface.
 func decodesItself(t, face reflect.Type) bool {
 	return t.Implements(face) || reflect.PointerTo(t).Implements(face)
 }
@@ -75,24 +64,15 @@ func scalarKind(kind reflect.Kind) JSONKind {
 	}
 }
 
-// jsonField is one struct field encoding/json could bind a property to.
 type jsonField struct {
-	// name is the property name the field binds.
-	name string
-	// tagged reports that the name came from a json tag.
+	name   string
 	tagged bool
-	// depth is the embedding depth, 0 for the struct's own fields.
-	depth int
-	// typ is the field's Go type.
-	typ reflect.Type
-	// quoted reports a ",string" option encoding/json honors, which wraps a
-	// string, number, or boolean value in a JSON string.
+	depth  int
+	typ    reflect.Type
 	quoted bool
 }
 
-// structShapes applies encoding/json's field rules: exported fields named by
-// their tag or Go name, "-" skipped, untagged embedded structs promoted, and
-// the shallowest (then the only tagged) field winning a name.
+// Field selection follows encoding/json: tag or Go name, "-" skipped, untagged embedded structs promoted, shallowest then tagged field wins.
 func structShapes(t reflect.Type, built map[reflect.Type]*JSONShape) map[string]*JSONShape {
 	var found []jsonField
 	collectFields(t, 0, map[reflect.Type]bool{}, &found)
@@ -157,8 +137,7 @@ func collectFields(t reflect.Type, depth int, visiting map[reflect.Type]bool, ou
 	}
 }
 
-// quotable reports whether encoding/json honors ",string" on a field of type
-// t: a string, number, or boolean, through one unnamed pointer.
+// encoding/json honors ",string" only on a string, number, or boolean field, through one unnamed pointer.
 func quotable(t reflect.Type) bool {
 	if t.Name() == "" && t.Kind() == reflect.Pointer {
 		t = t.Elem()

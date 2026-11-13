@@ -27,15 +27,10 @@ const (
 	scriptedInitialURL = scriptedOrigin + "/print/00000000-0000-0000-0000-000000000001"
 )
 
-// scriptedAsset is a request that the scripted page makes after the document.
 type scriptedAsset struct {
 	url, resourceType, contentType, mimeType, charset string
 }
 
-// scriptedBrowser is a chromedp.Transport that plays the browser side of one
-// render. It answers each request, emits the events of a page that loads the
-// print document and then each asset, and records every request of the
-// browser and page sessions in one ordered transcript.
 type scriptedBrowser struct {
 	assets    []scriptedAsset
 	pdf, png  []byte
@@ -90,7 +85,6 @@ func (b *scriptedBrowser) Close() error {
 	return nil
 }
 
-// answer returns the result of msg and the events that follow it.
 func (b *scriptedBrowser) answer(msg *cdproto.Message) (string, []*cdproto.Message) {
 	switch msg.Method {
 	case "Target.setDiscoverTargets":
@@ -131,7 +125,6 @@ func (b *scriptedBrowser) answer(msg *cdproto.Message) (string, []*cdproto.Messa
 	return "{}", nil
 }
 
-// afterContinue pauses the next asset, or loads every continued request.
 func (b *scriptedBrowser) afterContinue() []*cdproto.Message {
 	var events []*cdproto.Message
 	if b.continued == 1 {
@@ -185,7 +178,6 @@ func encodeScripted(value any) string {
 	return string(encoded)
 }
 
-// scriptedAllocator gives a chromedp context the scripted browser.
 type scriptedAllocator struct{ browser *scriptedBrowser }
 
 func (a scriptedAllocator) Allocate(ctx context.Context, opts ...chromedp.BrowserOption) (*chromedp.Browser, error) {
@@ -194,8 +186,6 @@ func (a scriptedAllocator) Allocate(ctx context.Context, opts ...chromedp.Browse
 
 func (scriptedAllocator) Wait() {}
 
-// chromedpTargetSetup is what chromedp sends to find, attach and prepare the
-// first page target before the renderer sends anything.
 func chromedpTargetSetup() []string {
 	return []string{
 		`browser Target.setDiscoverTargets {"discover":true}`,
@@ -255,8 +245,6 @@ func TestRenderRequestsMatchTheProtocolFixtures(t *testing.T) {
 	}
 }
 
-// runScriptedNavigation runs one attempt as renderAttempt does, with the
-// scripted browser in place of the launched one.
 func runScriptedNavigation(t *testing.T, browser *scriptedBrowser, format renderjob.Format) ([]byte, bool, error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())

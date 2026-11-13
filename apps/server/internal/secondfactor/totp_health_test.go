@@ -17,21 +17,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// totpHealthCapturingLogger returns a JSON logger and the buffer that
-// receives its records, matching the pattern in
-// internal/auth/handlers_test.go's newCapturingLogger.
 func totpHealthCapturingLogger() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return slog.New(slog.NewJSONHandler(&buf, nil)), &buf
 }
 
-// ---- TOTPUnavailableSignal: pure logic, no database -----------------------
-
-// TestTOTPUnavailableSignal_RateLimitsPerReasonPerProcess proves the fixed
-// totp_unavailable line logs at most once per minute per reason: a repeat
-// within the window is silent, a repeat after the window logs again, and a
-// different reason is tracked independently (docs/design/totp-key-management.md
-// "Key failures"; docs/design/budgets.md "totp_unavailable log line").
 func TestTOTPUnavailableSignal_RateLimitsPerReasonPerProcess(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	logger, buf := totpHealthCapturingLogger()
@@ -61,9 +51,6 @@ func TestTOTPUnavailableSignal_RateLimitsPerReasonPerProcess(t *testing.T) {
 	}
 }
 
-// TestTOTPUnavailableSignal_EmitDecryptFailureIncludesKindAndID proves only
-// decrypt_failed carries the record kind and internal row ID
-// (docs/design/totp-key-management.md "Key failures").
 func TestTOTPUnavailableSignal_EmitDecryptFailureIncludesKindAndID(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	logger, buf := totpHealthCapturingLogger()
@@ -90,9 +77,6 @@ func TestTOTPUnavailableSignal_EmitDecryptFailureIncludesKindAndID(t *testing.T)
 	}
 }
 
-// TestTOTPUnavailableSignal_NilLoggerIsSilent proves a nil logger makes
-// Emit and EmitDecryptFailure no-ops instead of panicking, matching Logger
-// may be nil in Options elsewhere in this package.
 func TestTOTPUnavailableSignal_NilLoggerIsSilent(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	signal := NewTOTPUnavailableSignal(clock.Now, nil)
@@ -100,14 +84,6 @@ func TestTOTPUnavailableSignal_NilLoggerIsSilent(t *testing.T) {
 	signal.EmitDecryptFailure(TOTPRecordKindCredential, uuid.New())
 }
 
-// ---- TOTPHealthChecker.Check: pure branching logic, no database -----------
-
-// fakeTOTPKeyIDLister returns a fixed ID list or error, letting
-// TestTOTPHealthChecker_Check exercise Check's branching deterministically.
-// The real query is unscoped across every account's rows
-// (docs/design/totp-key-management.md "Key failures"), so it cannot be
-// pinned to one test's fixtures against the shared test database; this fake
-// is the reliable way to test the branching itself.
 type fakeTOTPKeyIDLister struct {
 	ids []string
 	err error
@@ -175,13 +151,6 @@ func TestTOTPHealthChecker_Check(t *testing.T) {
 	}
 }
 
-// ---- TOTPHealthChecker: live-database wiring -------------------------------
-
-// newTOTPHealthPool opens a real pool against the migrated test database.
-// ListTOTPActiveKeyIDs scans every account's rows with no per-test scoping
-// (docs/design/totp-key-management.md "Key failures"), so this test only
-// proves the real store.Queries wiring succeeds; TestTOTPHealthChecker_Check
-// above is the reliable source for Check's branching behavior.
 func newTOTPHealthPool(t *testing.T) *store.Pool {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -195,8 +164,6 @@ func newTOTPHealthPool(t *testing.T) *store.Pool {
 	return pool
 }
 
-// totpHealthTestContext returns a bounded context tied to t's lifetime,
-// matching the pattern in service_test.go's testContext.
 func totpHealthTestContext(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -204,10 +171,6 @@ func totpHealthTestContext(t *testing.T) context.Context {
 	return ctx
 }
 
-// TestTOTPHealthChecker_LiveCheckSucceedsAgainstAnInstalledCredential proves
-// NewTOTPHealthChecker and Check run the real bounded query end to end
-// without decrypting or erroring, regardless of what else the shared test
-// database holds.
 func TestTOTPHealthChecker_LiveCheckSucceedsAgainstAnInstalledCredential(t *testing.T) {
 	pool := newTOTPHealthPool(t)
 	ctx := totpHealthTestContext(t)

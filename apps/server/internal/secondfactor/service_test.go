@@ -20,8 +20,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// harness wires the real service over the migrated test database. Every
-// account it creates is new, so tests only read their own rows.
 type harness struct {
 	t        *testing.T
 	pool     *store.Pool
@@ -116,7 +114,6 @@ func (h *harness) newSession(userID uuid.UUID) store.Session {
 	return sess
 }
 
-// publicKeyFields reads the challenge and user handle from options.
 func publicKeyFields(t *testing.T, options auth.SecondFactorOptions) (challenge, handle []byte) {
 	t.Helper()
 	var pk struct {
@@ -218,8 +215,6 @@ func (h *harness) epoch(userID uuid.UUID) int64 {
 	return epoch
 }
 
-// runConcurrently starts every call behind one barrier and fails the test if
-// they do not all return within the timeout.
 func runConcurrently(t *testing.T, calls ...func() error) []error {
 	t.Helper()
 	start := make(chan struct{})
@@ -331,8 +326,6 @@ func TestLaterRegistration_ReusesHandleWithoutRecoveryCodes(t *testing.T) {
 	}
 }
 
-// TestCompetingFirstCompletions_OneWinner races two first-enrollment
-// ceremonies from two sessions of one account.
 func TestCompetingFirstCompletions_OneWinner(t *testing.T) {
 	h := newHarness(t, nil)
 	acct := h.newAccount()
@@ -417,8 +410,6 @@ func TestDisabledEnrollment_OptionsCreateNothingAndCompletionConsumes(t *testing
 	if n := h.count("SELECT count(*) FROM webauthn_ceremonies WHERE user_id = $1", acct.user.ID); n != 1 {
 		t.Fatalf("ceremonies after disabled options = %d, want only the enabled one", n)
 	}
-	// A stale primary proof must not keep a disabled completion from
-	// consuming its ceremony.
 	if _, err := h.pool.Exec(testContext(t), "UPDATE sessions SET reauthenticated_at = reauthenticated_at - interval '16 minutes' WHERE id = $1", acct.sess.ID); err != nil {
 		t.Fatalf("age session: %v", err)
 	}
@@ -554,9 +545,6 @@ func TestAssertion_ReplayAndConcurrentCompletionFailClosed(t *testing.T) {
 	}
 }
 
-// TestFailedAssertion_CommitsOnlyFailureWrites checks the pending rule: a
-// failed verification commits the ceremony consumption, the counter event,
-// and the counted attempt, and never the credential counter or a session.
 func TestFailedAssertion_CommitsOnlyFailureWrites(t *testing.T) {
 	h := newHarness(t, nil)
 	acct := h.newAccount()
@@ -638,8 +626,6 @@ func TestFifthFailedAttempt_ExhaustsAndNotifies(t *testing.T) {
 
 func fakeOtherFactor(context.Context, *store.Queries, uuid.UUID) (int, error) { return 1, nil }
 
-// TestFinalPasskeyRemoval_KeepsPolicyWhileAnotherFactorRemains uses a fake
-// second counter to prove removal counts every factor type.
 func TestFinalPasskeyRemoval_KeepsPolicyWhileAnotherFactorRemains(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.Counters = []FactorCounter{PasskeyCounter, fakeOtherFactor} })
 	acct := h.newAccount()
@@ -709,7 +695,6 @@ func TestRemovePasskey_ForeignAndMissingAreNotFound(t *testing.T) {
 	}
 }
 
-// liveAgentAuthority creates one live grant with one refresh token family.
 func (h *harness) liveAgentAuthority(userID uuid.UUID) (grantID, tokenID uuid.UUID) {
 	h.t.Helper()
 	ctx := testContext(h.t)
@@ -790,9 +775,6 @@ func TestActiveFactorCount_SumsEveryCounter(t *testing.T) {
 	}
 }
 
-// TestState_NeverTornDuringFirstEnrollment reads the state while a first
-// enrollment commits and requires every read to be one consistent snapshot:
-// never disabled while a passkey or recovery code is visible.
 func TestState_NeverTornDuringFirstEnrollment(t *testing.T) {
 	h := newHarness(t, nil)
 	acct := h.newAccount()

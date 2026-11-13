@@ -8,12 +8,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// TestAuthEmailJobQueries_UseMatchingIndexes proves each mail-worker query
-// reads its rows in ORDER BY order from the index built for it. Sequential
-// scans and sorts are disabled, and PostgreSQL picks a plan without disabled
-// nodes over any cheaper one, so the plan is the same on an empty or a full
-// table. An index whose filter or order did not match would leave a Sort or
-// another index in the plan.
+// PostgreSQL prefers a plan without disabled nodes over any cheaper one, so the plan does not depend on table size.
 func TestAuthEmailJobQueries_UseMatchingIndexes(t *testing.T) {
 	t.Parallel()
 	ctx, _, tx, _ := newPasswordStoreTx(t)

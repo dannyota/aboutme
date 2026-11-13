@@ -1,18 +1,3 @@
-// Package resume provides the aggregate store and write-safety kernel.
-//
-// service.go is the transaction seam: the exported tx-scoped mirrors
-// of Store's pool-backed methods, plus the full-aggregate metadata CAS, the
-// revision-CAS delete, and the transactional media deletion-job enqueue.
-//
-// Each method takes the transaction-bound *store.Queries that
-// IdempotencyStore.Execute supplies to its callback, so a read-modify-write
-// and its idempotency record commit or roll back together (ADR
-// 0006). None of these methods manages a transaction of its own — no
-// Begin/Commit/Rollback. The pool-backed methods in store.go are thin
-// wrappers over these, so each behavior has exactly one implementation.
-//
-// Every method is scoped by id AND userID: a wrong-owner id is ErrNotFound,
-// identical to a nonexistent one (no existence oracle).
 package resume
 
 import (
@@ -29,20 +14,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// MaxLngCharacters is the budgets.md stored language-tag limit. It is
-// measured in Unicode code points to match PostgreSQL char_length(text).
 const MaxLngCharacters = 35
 
-// ErrLngTooLong is returned before a transaction or statement when an
-// already-canonicalized language tag exceeds MaxLngCharacters. Syntax and
-// canonicalization belong to the HTTP boundary.
 var ErrLngTooLong = errors.New("resume: language tag exceeds 35 characters")
 
-// CreateTx is Create's transaction-scoped core: validate, lock the owner's
-// users row, check the resume cap and the document's project links, insert. lng is the already-canonicalized
-// BCP 47 tag, or nil for unset — the HTTP boundary owns parsing and
-// canonicalization; this store enforces only the stored-length bound,
-// before any statement runs.
 func (s *Store) CreateTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, lng *string, doc schema.Resume) (Resume, error) {
 	if err := validateTitle(title); err != nil {
 		return Resume{}, err
@@ -51,18 +26,11 @@ func (s *Store) CreateTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 		return Resume{}, err
 	}
 
-	// Force the current version so a caller's zero-value or stale
-	// doc.SchemaVersion can never validate against the wrong schema.
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
 		return Resume{}, err
 	}
 
-	// Lock the owner row first, matching the trigger's own lock
-	// order (belt and suspenders) so the two can never deadlock. This
-	// alone does not make the count race-proof by itself -- it is the
-	// FOR UPDATE lock plus reading the count only after acquiring it,
-	// under READ COMMITTED, that does (see the trigger's own comment).
 	if _, err := qtx.LockUserForResumeWrite(ctx, userID); err != nil {
 		return Resume{}, fmt.Errorf("resume: create: lock owner row: %w", err)
 	}
@@ -102,9 +70,6 @@ func (s *Store) CreateTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 	return toDomain(row, doc), nil
 }
 
-// GetTx is Get's transaction-scoped mirror: userID's resume id with Doc
-// projected to docmigrate.CurrentVersion, or ErrNotFound for both a
-// missing and a differently owned id.
 func (s *Store) GetTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID) (Resume, error) {
 	row, err := qtx.GetResumeForUser(ctx, store.GetResumeForUserParams{ID: id, UserID: userID})
 	if err != nil {
@@ -123,9 +88,6 @@ func (s *Store) GetTx(ctx context.Context, qtx *store.Queries, userID, id uuid.U
 	return got, nil
 }
 
-// ListTx is List's transaction-scoped mirror: every resume userID owns,
-// ordered by created_at then id, each with Doc projected to
-// docmigrate.CurrentVersion.
 func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID) ([]Resume, error) {
 	rows, err := qtx.ListResumesForUser(ctx, userID)
 	if err != nil {
@@ -145,15 +107,6 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 	return out, nil
 }
 
-// SaveDocumentTx is SaveDocument's transaction-scoped core: ValidateForStore
-// and the project link check, then UpdateResumeDocumentCAS at schema_version
-// = docmigrate.CurrentVersion.
-// It returns the stored resume as GetTx would read it after the write, from
-// the row the update returned. A 0-row CAS (pgx.ErrNoRows, since it is a
-// RETURNING :one query) means either id doesn't exist for userID, or
-// expectedRevision is stale -- afterCASMiss re-reads inside the SAME
-// transaction to tell the two apart and, for the stale case, to return the
-// actual winning row.
 func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (Resume, error) {
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
@@ -196,14 +149,6 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 	return saved, nil
 }
 
-// AdvanceRevisionTx advances the revision of userID's resume id from
-// expectedRevision by one and changes nothing else: not the document, not
-// updated_at, and no showcase state, since no showcase input changed. A
-// library edit that changes no resume document uses it so every public
-// artifact keyed by the revision rebuilds (docs/design/projects-contract.md
-// "Revision-only advance"). It returns the advanced resume without its
-// showcase state. A stale expectedRevision surfaces the winning row as
-// *RevisionMismatchError; a wrong-owner or missing id is ErrNotFound.
 func (s *Store) AdvanceRevisionTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, expectedRevision int64) (Resume, error) {
 	row, err := qtx.AdvanceResumeRevisionCAS(ctx, store.AdvanceResumeRevisionCASParams{
 		ID: id, UserID: userID, ExpectedRevision: expectedRevision,
@@ -217,15 +162,6 @@ func (s *Store) AdvanceRevisionTx(ctx context.Context, qtx *store.Queries, userI
 	return s.projectRow(row)
 }
 
-// SaveMetadataAndDocumentTx writes title, lng, and the caller-supplied
-// already-projected, sanitized, validated current-version aggregate under
-// ONE revision CAS. The store persists the document
-// unchanged — validation here is the same store validation every document
-// write gets, not a second sanitizer. lng is stored as given: nil clears,
-// a non-nil canonical tag over 35 characters is rejected before any
-// statement runs. A stale expectedRevision changes nothing and surfaces
-// the winning row as *RevisionMismatchError; a wrong-owner or missing id
-// is ErrNotFound.
 func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID,
 	title string, lng *string, doc schema.Resume, expectedRevision int64,
 ) (int64, error) {
@@ -271,11 +207,6 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
 	return newRevision, nil
 }
 
-// DeleteTx is the revision-CAS delete. It returns the deleted row —
-// projected like any read — so its caller can validate the stored photo
-// key and enqueue media cleanup in the same transaction. On a CAS miss it
-// re-reads the scoped winner so the HTTP layer can produce 412; a wrong
-// owner and a missing id remain indistinguishable (ErrNotFound).
 func (s *Store) DeleteTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, expectedRevision int64) (Resume, error) {
 	row, err := qtx.DeleteResumeForUserCAS(ctx, store.DeleteResumeForUserCASParams{
 		ID:       id,
@@ -291,14 +222,6 @@ func (s *Store) DeleteTx(ctx context.Context, qtx *store.Queries, userID, id uui
 	return s.projectRow(row)
 }
 
-// EnqueueMediaDeletionTx records exact-key cleanup work in the caller's
-// transaction (ADR 0009). The caller validates key against resumeID before
-// this call; the ledger's own database check (photo-key grammar with the
-// embedded canonical resume ID equal to resume_id) is the fail-closed
-// backstop, so a malformed or cross-resume key errors here and aborts the
-// caller's transaction. Duplicate enqueue of the immutable key is
-// idempotent. The document, not this job, remains the media ownership
-// authority.
 func (s *Store) EnqueueMediaDeletionTx(ctx context.Context, qtx *store.Queries, resumeID uuid.UUID, key string) error {
 	if _, err := qtx.EnqueueMediaDeletionJob(ctx, store.EnqueueMediaDeletionJobParams{
 		ResumeID:  resumeID,

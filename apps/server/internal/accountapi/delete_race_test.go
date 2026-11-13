@@ -236,11 +236,6 @@ func TestDeleteAccountOAuthGrantRace(t *testing.T) {
 	})
 }
 
-// TestDeleteAccountSecondFactorPolicyRace proves account deletion and a
-// concurrent second-factor enrollment -- both of which lock the user row
-// before the factor policy row, per docs/design/second-factor-authentication.md
-// -- serialize on the user lock rather than deadlocking, and that the loser
-// gets a correct, non-oracle outcome either way.
 func TestDeleteAccountSecondFactorPolicyRace(t *testing.T) {
 	t.Run("enrollment wins then epoch blocks deletion", func(t *testing.T) {
 		env := newDeletionEnvironment(t)

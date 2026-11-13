@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// View tokens are sealed and authenticated (docs/design/viewer-analytics/
-// counting.md, "Layers 5 and 6").
 func TestTokenRoundTripAndTamper(t *testing.T) {
 	s, err := newSealer(mathrand.NewChaCha8([32]byte{1}))
 	if err != nil {

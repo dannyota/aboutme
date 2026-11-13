@@ -7,8 +7,6 @@ import (
 
 const v6TestProjectID = "018f0000-0000-7000-8000-0000000000d1"
 
-// v6Document returns the v5 test document at version 6 with a project link,
-// the one field v5 cannot represent.
 func v6Document(t *testing.T) map[string]any {
 	t.Helper()
 	doc := v5Document(t)
@@ -26,8 +24,6 @@ func v6Document(t *testing.T) map[string]any {
 	return doc
 }
 
-// withoutV6Fields removes the one link v6Document adds, by its literal path,
-// independently of the production converter.
 func withoutV6Fields(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
 	out := decodeFontTestMap(t, mustJSON(t, doc))
@@ -40,8 +36,6 @@ func withoutV6Fields(t *testing.T, doc map[string]any) map[string]any {
 	return out
 }
 
-// TestV6ToV5KeepsEveryFieldButLinksOfTheFullFixture links the retained v5
-// full fixture's project entry and expects exactly that fixture back.
 func TestV6ToV5KeepsEveryFieldButLinksOfTheFullFixture(t *testing.T) {
 	v5 := readFontV2Fixture(t, "packages", "schema", "fixtures", "v5", "full.json")
 	linked := decodeFontTestMap(t, v5)
@@ -220,7 +214,6 @@ func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV6Loss(t *testing.T) {
 		t.Fatalf("declared v6 loss rejected: %v", err)
 	}
 
-	// A v5 emission must keep the v5 colorScheme; only project links may go.
 	lostV5 := withoutV5Fields(t, withoutV6Fields(t, doc))
 	lostV5["schemaVersion"] = float64(5)
 	if err := productionEmissionLossPolicy(current, mustJSON(t, lostV5), restored, 5); err == nil {

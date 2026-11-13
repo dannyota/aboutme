@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// With PREVIEW_CARD_ENABLED off, nothing of the card path is wired: the
-// public service gets a nil boundary and keeps og.png, the hub has no
-// observer, and no scheduler runs.
 func TestPreviewCardsOffWiresNothing(t *testing.T) {
 	t.Parallel()
 	cards, err := NewPreviewCards(false, nil, nil, nil, nil)

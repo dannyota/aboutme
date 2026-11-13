@@ -10,43 +10,22 @@ import (
 )
 
 type (
-	// secondFactorPasskeyBody is one passkey in a second-factor response.
 	secondFactorPasskeyBody struct {
-		// ID is the passkey's UUID.
-		ID string `json:"id"`
-		// CreatedAt is when the passkey was registered, RFC 3339 in UTC.
-		CreatedAt string `json:"createdAt"`
-		// LastUsedAt is the passkey's last successful use, RFC 3339 in UTC;
-		// it is null until first use.
+		ID         string  `json:"id"`
+		CreatedAt  string  `json:"createdAt"`
 		LastUsedAt *string `json:"lastUsedAt"`
 	}
-	// secondFactorStateBody is the account's second-factor state response.
 	secondFactorStateBody struct {
-		// Enabled reports whether the account has any active factor.
-		Enabled bool `json:"enabled"`
-		// Passkeys lists the active passkeys ordered by creation time, then
-		// ID; it is an empty array, never null, without passkeys.
-		Passkeys []secondFactorPasskeyBody `json:"passkeys"`
-		// TOTPEnabled reports whether the account has an active TOTP
-		// credential.
-		TOTPEnabled bool `json:"totpEnabled"`
-		// RecoveryCodesRemaining is the number of unused recovery codes,
-		// 0 to 10.
-		RecoveryCodesRemaining int `json:"recoveryCodesRemaining"`
+		Enabled                bool                      `json:"enabled"`
+		Passkeys               []secondFactorPasskeyBody `json:"passkeys"`
+		TOTPEnabled            bool                      `json:"totpEnabled"`
+		RecoveryCodesRemaining int                       `json:"recoveryCodesRemaining"`
 	}
-	// secondFactorRegistrationBody is the passkey registration response.
 	secondFactorRegistrationBody struct {
-		// Passkey is the newly registered passkey.
-		Passkey secondFactorPasskeyBody `json:"passkey"`
-		// RecoveryCodes holds ten new codes only on first enrollment; it is
-		// omitted otherwise.
-		RecoveryCodes []string `json:"recoveryCodes,omitempty"`
+		Passkey       secondFactorPasskeyBody `json:"passkey"`
+		RecoveryCodes []string                `json:"recoveryCodes,omitempty"`
 	}
-	// secondFactorRecoveryCodesBody is the recovery-code regeneration
-	// response.
 	secondFactorRecoveryCodesBody struct {
-		// RecoveryCodes holds the ten new codes that replace every prior
-		// code.
 		RecoveryCodes []string `json:"recoveryCodes"`
 	}
 )
@@ -74,8 +53,6 @@ func (h *SecondFactorHandlers) handleState(w http.ResponseWriter, r *http.Reques
 	api.WriteData(w, http.StatusOK, body)
 }
 
-// handleRegistrationOptions answers exactly like an unregistered route while
-// enrollment is disabled, before any authentication or state work.
 func (h *SecondFactorHandlers) handleRegistrationOptions(w http.ResponseWriter, r *http.Request) {
 	if !h.service.PasskeyEnrollmentEnabled() {
 		api.NotFound()(w, r)
@@ -97,8 +74,6 @@ func (h *SecondFactorHandlers) startRegistration(w http.ResponseWriter, r *http.
 	api.WriteData(w, http.StatusOK, options)
 }
 
-// handleRegistrationComplete stores a verified passkey. While enrollment is
-// disabled every outcome is the uniform not-found response.
 func (h *SecondFactorHandlers) handleRegistrationComplete(w http.ResponseWriter, r *http.Request) {
 	if !h.service.PasskeyEnrollmentEnabled() {
 		h.discardRegistration(w, r)
@@ -121,18 +96,12 @@ func (h *SecondFactorHandlers) handleRegistrationComplete(w http.ResponseWriter,
 	api.WriteData(w, http.StatusCreated, secondFactorRegistrationBody{Passkey: passkeyBody(registration.Passkey), RecoveryCodes: registration.RecoveryCodes})
 }
 
-// discardRegistration lets the service consume a disabled completion's
-// matching ceremony without storing anything. It applies the same session,
-// Origin, CSRF, and management rate checks as an enabled completion, but every
-// outcome, a rate rejection included, is the uniform not-found response.
 func (h *SecondFactorHandlers) discardRegistration(w http.ResponseWriter, r *http.Request) {
 	defer api.NotFound()(w, r)
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil || cookie.Value == "" {
 		return
 	}
-	// The epoch-checked lookup neither rotates nor touches the session; the
-	// service locks and rechecks it before consuming anything.
 	sess, err := h.sessions.q.GetSessionByTokenHash(r.Context(), hashSessionToken(cookie.Value))
 	if err != nil || RequireLiveSession(sess, h.clock()) != nil || h.checkSessionCSRF(r, sess) != nil {
 		return

@@ -22,8 +22,6 @@ const (
 	closedInvalidRequest = `{"error":"invalid_request","error_description":"The request is invalid."}`
 )
 
-// grantResultRecorder admits every request and records how each admitted
-// grant attempt finished.
 type grantResultRecorder struct {
 	mu      sync.Mutex
 	results []grantAttemptResult
@@ -60,9 +58,6 @@ func refreshBody(raw string, extra string) string {
 	return "grant_type=refresh_token&refresh_token=" + raw + extra
 }
 
-// assertRefreshFamilyUnchanged proves a rejected refresh wrote nothing: the
-// family has the same live and rotated rows as before, and the presented
-// token is neither superseded nor revoked by the request.
 func assertRefreshFamilyUnchanged(t *testing.T, f refreshFixture, digest [32]byte, wantLive, wantRotated int, wantSuperseded bool) {
 	t.Helper()
 	var live, rotated int
@@ -95,9 +90,6 @@ func createOtherClient(t *testing.T, f refreshFixture) store.OAuthClient {
 	return other
 }
 
-// Rules 1 and 4 of docs/design/mcp-client-compatibility.md: refresh accepts
-// the same two resource spellings as authorize and the code exchange, and
-// every other value is invalid_grant with nothing written.
 func TestToken_RefreshResource(t *testing.T) {
 	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
 	for _, tc := range resourceCases {
@@ -112,7 +104,6 @@ func TestToken_RefreshResource(t *testing.T) {
 			}
 			want := closedInvalidGrant
 			if tc.name == "malformed" {
-				// A body that does not parse as a form is a malformed request.
 				want = closedInvalidRequest
 			}
 			if w.Code != http.StatusBadRequest || w.Body.String() != want {
@@ -123,10 +114,6 @@ func TestToken_RefreshResource(t *testing.T) {
 	}
 }
 
-// Rule 4 of docs/design/mcp-client-compatibility.md: a refresh client_id must
-// name the refresh token's own client. A mismatch is invalid_grant, counts as
-// a failed grant attempt, and writes nothing, so neither the rightful client's
-// token nor its family is harmed by another client presenting it.
 func TestToken_RefreshClientBinding(t *testing.T) {
 	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 
@@ -175,7 +162,6 @@ func TestToken_RefreshClientBinding(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("first rotation = %d", w.Code)
 		}
-		// One superseded refresh, one live successor refresh, one live access.
 		assertRefreshFamilyUnchanged(t, f, f.digest, 3, 1, true)
 		w = postTokenForm(t, f.s, refreshBody(f.raw, "&client_id="+other.ID.String()))
 		if w.Code != http.StatusBadRequest || w.Body.String() != closedInvalidGrant {
@@ -236,10 +222,6 @@ func TestToken_RefreshClientBinding(t *testing.T) {
 	})
 }
 
-// Rule 8 of docs/design/mcp-client-compatibility.md: a token request whose
-// client_id names no stored client is 401 invalid_client, so a client whose
-// registration was swept registers again. A known client with a bad grant
-// stays 400 invalid_grant.
 func TestToken_UnknownClientIs401(t *testing.T) {
 	now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	assert401 := func(t *testing.T, w *httptest.ResponseRecorder) {

@@ -27,14 +27,13 @@ const origin = "https://project-api.example.test"
 const projectBody = `{"slug":"example","defaultLanguage":"en","text":{"en":{"name":"Example","description":"<p onclick=\"bad()\">Work<script>bad()</script></p>"}}}`
 
 type harness struct {
-	pool    *store.Pool
-	q       *store.Queries
-	svc     *Service
-	mux     *http.ServeMux
-	user    store.User
-	session store.Session
-	token   string
-	// coordinator is the public-state coordinator the linked resumes use.
+	pool        *store.Pool
+	q           *store.Queries
+	svc         *Service
+	mux         *http.ServeMux
+	user        store.User
+	session     store.Session
+	token       string
 	coordinator *publicstate.Coordinator
 }
 

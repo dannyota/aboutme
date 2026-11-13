@@ -29,14 +29,11 @@ const (
 )
 
 type photoUploadInput struct {
-	// ResumeID is the resume named by the request path.
 	ResumeID uuid.UUID
-	// File is the raw uploaded file part, before normalization.
-	File []byte
+	File     []byte
 }
 
 func (s *Service) handleUploadResumePhoto(w http.ResponseWriter, r *http.Request) {
-	// These preflight checks intentionally precede admission and body reads.
 	if _, err := parseMutationHeaders(r, true, s.acceptedVersions); err != nil {
 		writeResumeError(w, err)
 		return
@@ -121,7 +118,6 @@ func (s *Service) handleUploadResumePhoto(w http.ResponseWriter, r *http.Request
 
 type preparedPhotoCandidate struct {
 	photoCandidate
-	// ExecuteBefore is when the candidate's create-to-commit lifetime ends.
 	ExecuteBefore time.Time
 }
 

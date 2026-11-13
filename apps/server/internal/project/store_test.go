@@ -118,9 +118,6 @@ func TestStore_StoredByteBoundary(t *testing.T) {
 	ctx, pool, q, owner := projectDB(t)
 	s := NewStore()
 	now := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
-	// Links are bounded at 2048 characters, so the padding is description
-	// text: a backslash is one byte of the 16 KiB description bound and two
-	// bytes of stored JSON text.
 	d := draft()
 	d.Text["en"] = Text{Name: "en", Description: strings.Repeat(`\`, 16384)}
 	d.Text["ja"] = Text{Name: "ja", Description: strings.Repeat(`\`, 16384)}

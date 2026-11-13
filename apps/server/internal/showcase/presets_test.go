@@ -19,8 +19,6 @@ func objectAt(t *testing.T, parent map[string]any, key string) map[string]any {
 	return value
 }
 
-// expectedMatchForm derives a preset's showcase match form straight from its
-// template file, independently of the generator.
 func expectedMatchForm(t *testing.T, file templateFile) string {
 	t.Helper()
 	raw, err := json.Marshal(file.Customization)
@@ -47,8 +45,6 @@ func expectedMatchForm(t *testing.T, file templateFile) string {
 	return form
 }
 
-// AC-SHOW-004: the generated table matches packages/schema/templates, preset
-// for preset, so a template edit without a regeneration fails here.
 func TestPresetTableMatchesTemplateFiles(t *testing.T) {
 	t.Parallel()
 	files := readTemplateFiles(t)
@@ -76,8 +72,6 @@ func TestPresetTableMatchesTemplateFiles(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: no two presets share a match form, so every preset derives
-// itself.
 func TestPresetMatchFormsAreDistinct(t *testing.T) {
 	t.Parallel()
 	seen := map[string]string{}
@@ -102,8 +96,6 @@ func mustTemplateID(t *testing.T, customization schema.Customization) *string {
 	return id
 }
 
-// AC-SHOW-004: an applied preset derives its own ID, whatever section order
-// the resume holds.
 func TestTemplateIDMatchesEveryPreset(t *testing.T) {
 	t.Parallel()
 	for _, file := range readTemplateFiles(t) {
@@ -120,8 +112,6 @@ func TestTemplateIDMatchesEveryPreset(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: the five leaves a template apply keeps or resets for the owner
-// never change the match.
 func TestTemplateIDIgnoresTheOwnerLeaves(t *testing.T) {
 	t.Parallel()
 	dark, justify, right := schema.Dark, schema.Justify, schema.Right
@@ -147,7 +137,6 @@ func TestTemplateIDIgnoresTheOwnerLeaves(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: one changed token is "Custom design".
 func TestTemplateIDOneChangedTokenGivesCustom(t *testing.T) {
 	t.Parallel()
 	accent, otherSurface := "#abcdef", "#0a0b0c"
@@ -194,7 +183,6 @@ func TestTemplateIDOneChangedTokenGivesCustom(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: the default document, which no template produced, is custom.
 func TestTemplateIDOfAnUnstyledDocumentIsCustom(t *testing.T) {
 	t.Parallel()
 	if got := mustTemplateID(t, baseCustomization()); got != nil {

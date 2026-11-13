@@ -1,6 +1,3 @@
-// Package auth_test exercises the Google OIDC login flow end to end
-// against oidctest's in-process mock provider through the same
-// golang.org/x/oauth2 and coreos/go-oidc code paths production uses.
 package auth_test
 
 import (
@@ -22,12 +19,6 @@ func ptrTrue() *bool {
 	return &b
 }
 
-// TestGoogleCallback_NewUser_CreatesUserAndSession drives a browser-shaped
-// start and callback. It proves account creation, PKCE exchange, session issue,
-// and transaction-cookie clearing.
-//
-// Unique identifiers ensure the persistent test database reaches the new-user
-// branch on every run.
 func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	t.Parallel()
 
@@ -65,7 +56,6 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 		t.Fatal("start response missing __Host-oauth-tx cookie")
 	}
 
-	// Echo the start nonce into the signed token; go-oidc does not validate it.
 	p.RegisterCode("code-new-user", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -78,7 +68,6 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	if cbResp.StatusCode != 302 {
 		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
 	}
-	// Success targets the resume list; rejection targets login.
 	if got := cbResp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
 		t.Errorf("successful callback Location = %q, want %q", got, testPublicOrigin+"/app/resumes")
 	}
@@ -107,7 +96,6 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	if usr.Email != email {
 		t.Errorf("user.Email = %q, want %q", usr.Email, email)
 	}
-	// The fixture omits name, forcing the non-leaking local-part fallback.
 	wantName, _, _ := strings.Cut(email, "@")
 	if usr.Name != wantName {
 		t.Errorf("user.Name = %q, want %q (email local part, never the full email)", usr.Name, wantName)
@@ -125,8 +113,6 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	}
 }
 
-// TestGoogleCallback_LoginNextRoundTrip catches a provider login dropping the
-// validated consent return path between /start and /callback.
 func TestGoogleCallback_LoginNextRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -164,8 +150,6 @@ func TestGoogleCallback_LoginNextRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow proves a repeat
-// provider identity returns the same user without another identity insert.
 func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T) {
 	t.Parallel()
 
@@ -227,8 +211,6 @@ func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T)
 	}
 }
 
-// TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail proves
-// an absent name never exposes the full email as a display name.
 func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *testing.T) {
 	t.Parallel()
 
@@ -274,8 +256,6 @@ func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *te
 	}
 }
 
-// newServiceWithOrigin lets start and callback use different origins while
-// sharing one database.
 func newServiceWithOrigin(t *testing.T, pool *store.Pool, issuer, origin string) http.Handler {
 	t.Helper()
 
@@ -292,9 +272,6 @@ func newServiceWithOrigin(t *testing.T, pool *store.Pool, issuer, origin string)
 	return api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 }
 
-// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin uses two
-// Service origins sharing one database. The provider must receive the redirect
-// URI stored by /start, even when /callback runs under a new origin.
 func TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin(t *testing.T) {
 	t.Parallel()
 
@@ -351,14 +328,6 @@ func TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin(t *testing.
 	}
 }
 
-// TestGoogleStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath
-// asserts the one authorize-URL query parameter no existing test checked
-// directly: redirect_uri. Every other /start assertion (state,
-// code_challenge, code_challenge_method, nonce) already has coverage;
-// redirect_uri is what a real provider validates as an exact match
-// against what it has on file for this client, so a wrong value here
-// would silently break every real login while every hermetic test (which
-// never validates it) kept passing.
 func TestGoogleStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath(t *testing.T) {
 	t.Parallel()
 

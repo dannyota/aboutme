@@ -28,8 +28,6 @@ func putProject(t *testing.T, h *harness, id, body string, revision int64) *http
 	return h.request(t, http.MethodPut, "/api/v1/projects/"+id, body, uuid.NewString(), revisionTag(revision))
 }
 
-// requireChanged checks a 200 replacement response lists exactly want, as
-// resume id to new revision.
 func requireChanged(t *testing.T, r *httptest.ResponseRecorder, want map[uuid.UUID]int64) {
 	t.Helper()
 	if r.Code != http.StatusOK {
@@ -68,8 +66,6 @@ func requireRevision(t *testing.T, h *harness, item resume.Resume, want int64) {
 	}
 }
 
-// holdPublicLease admits a public request at item's revision. A revoked
-// lease records it and releases itself, as a canceled request does.
 func holdPublicLease(t *testing.T, h *harness, item resume.Resume) (*publicstate.Lease, *atomic.Bool) {
 	t.Helper()
 	lease, err := h.coordinator.AcquireResume(t.Context(), item.ID, item.Revision, publicstate.RepresentationHTML)
@@ -139,8 +135,6 @@ func TestProjectReplace_UnchangedStoredFormsAdvanceNoResume(t *testing.T) {
 	draft := seedLinkedResume(t, h, uuid.MustParse(id), "")
 	for i, body := range []string{
 		projectBody,
-		// The same stored document from other bytes: key order, spacing, and
-		// markup that sanitizing removes.
 		`{ "text": { "en": { "description": "<p onmouseover=\"other()\">Work<script>other()</script></p>", "name": "Example" } },
 		   "defaultLanguage": "en", "slug": "example" }`,
 	} {
@@ -232,8 +226,6 @@ func TestPublicJSON_FromTheDatabaseLinksOnlyVisibleOwnedProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A link to another account's project can only be stored around the
-	// write checks; the public read must still ignore it.
 	slug := "links-" + uuid.NewString()[:8]
 	foreignEntry := `[{"id":"` + uuid.NewString() + `","title":"Foreign","projectId":"` + foreign + `"}]`
 	if _, err = h.pool.Exec(t.Context(), `UPDATE resumes SET slug = $2, live = true, revision = revision + 1,

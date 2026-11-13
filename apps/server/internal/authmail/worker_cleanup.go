@@ -10,9 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// requeueExpired returns every lease whose lease_expires_at has passed back to
-// pending in one bounded transaction, rolling back the claim's attempt
-// increment (the send never happened).
 func (w *Worker) requeueExpired(ctx context.Context, now time.Time) error {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
@@ -34,9 +31,6 @@ func (w *Worker) requeueExpired(ctx context.Context, now time.Time) error {
 	return tx.Commit(ctx)
 }
 
-// cleanup runs three bounded cleanups, each in its own transaction:
-// expired registrations, expired reset tokens, and sent/terminal jobs older
-// than seven days. Every delete is capped at cleanupBatch (200).
 func (w *Worker) cleanup(ctx context.Context, now time.Time) error {
 	if err := w.deleteInTx(ctx, func(qtx *store.Queries) error {
 		_, err := qtx.CleanupExpiredPasswordRegistrations(ctx, store.CleanupExpiredPasswordRegistrationsParams{
@@ -82,8 +76,6 @@ func (w *Worker) deleteInTx(ctx context.Context, fn func(*store.Queries) error) 
 	return tx.Commit(ctx)
 }
 
-// backoffCap returns min(30s * 2^(attempt-1), 1h) for the attempt that just
-// failed. Attempt 1 has a 30s cap; each retry doubles until the one-hour cap.
 func backoffCap(attempt int32) time.Duration {
 	if attempt < 1 {
 		attempt = 1

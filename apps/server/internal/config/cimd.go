@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// CIMDConfig holds the complete metadata-fetch budgets from docs/design/budgets.md.
 type CIMDConfig struct {
 	Enabled           bool
 	DevStubAddr       string

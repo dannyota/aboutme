@@ -87,11 +87,6 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 	}
 }
 
-// TestServe_DrainsInFlightMCPRequestBeforeReturning is a regression test for
-// graceful shutdown: canceling the context must not cut off an MCP request
-// that's already being handled. serve must wait for it to finish (up to
-// shutdownTimeout) before returning, exactly like a SIGTERM during a real
-// deploy is supposed to drain in-flight work rather than abort it.
 func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	t.Parallel()
 
@@ -107,7 +102,7 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
-		<-release // held open until the test explicitly releases it
+		<-release
 		completed.Store(true)
 		w.WriteHeader(http.StatusOK)
 	})
@@ -122,10 +117,6 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 
 	reqDone := make(chan error, 1)
 	go func() {
-		// Deliberately context.Background(), not ctx: this is the client's
-		// request context, independent of the server's shutdown-trigger
-		// context above. Tying it to ctx would cancel the in-flight request
-		// the moment cancel() fires below, defeating the point of this test.
 		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://"+ln.Addr().String()+"/mcp", nil)
 		if err != nil {
 			reqDone <- err
@@ -144,13 +135,8 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 		t.Fatal("handler never started; request did not reach the server")
 	}
 
-	// Trigger shutdown while the handler is blocked mid-request.
 	cancel()
 
-	// serve() must not return while the in-flight request is still being
-	// held open. Give shutdown a moment to (incorrectly) race ahead before
-	// we release the handler, so a bug that aborts in-flight work would
-	// show up as serveDone firing before we release() below.
 	select {
 	case err := <-serveDone:
 		t.Fatalf("serve() returned before the in-flight request completed; shutdown did not drain: %v", err)

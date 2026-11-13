@@ -11,12 +11,8 @@ import (
 	"testing"
 )
 
-// oauthPrimSentinel is the marker embedded in malformed inputs across this
-// package's tests. No error, panic, or test log may echo it back.
 const oauthPrimSentinel = "S3NT1NEL-RAW-VALUE"
 
-// primEntropy returns a reader over n copies of fill so every generated
-// spelling in these tests is deterministic.
 func primEntropy(fill byte, n int) *bytes.Reader {
 	return bytes.NewReader(bytes.Repeat([]byte{fill}, n))
 }
@@ -35,8 +31,6 @@ func TestNewTokenSpelling(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			// The reader holds 40 bytes so the test can prove NewToken
-			// consumes exactly 32 of them.
 			r := primEntropy(0x42, 40)
 			raw, digest, err := NewToken(tc.kind, r)
 			if err != nil {
@@ -128,9 +122,6 @@ func TestParseTokenKindsAreDomainSeparated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewToken error = %v, want nil", err)
 	}
-	// The same 32 entropy bytes spelled as the other kind must not collide
-	// with the access digest, so a refresh spelling can never match a stored
-	// access row.
 	refresh := "amrt_" + access[5:]
 	kind, refreshDigest, err := ParseToken(refresh)
 	if err != nil {
@@ -187,8 +178,6 @@ func TestParseTokenRejectsMalformedSpellings(t *testing.T) {
 func TestParseTokenDigestIsStable(t *testing.T) {
 	t.Parallel()
 
-	// Locks the stored-digest definition: SHA-256 over the canonical raw
-	// spelling, prefix included. 32 zero bytes encode as 43 'A' characters.
 	cases := []struct {
 		name string
 		raw  string

@@ -10,20 +10,12 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// secondFactorPendingStatusBody is the pending second-factor status response.
 type secondFactorPendingStatusBody struct {
-	// Purpose is the pending authentication's purpose, login or reauth.
-	Purpose string `json:"purpose"`
-	// Methods lists the account's factor methods in the fixed order passkey,
-	// totp, recovery; it is never empty.
-	Methods []string `json:"methods"`
-	// ExpiresAt is when the pending authentication expires, RFC 3339 in UTC.
-	ExpiresAt string `json:"expiresAt"`
-	// ReturnPath is the validated same-origin path to open after completion.
-	ReturnPath string `json:"returnPath"`
-	// CSRFToken is the pending row's 32-byte CSRF secret, unpadded
-	// base64url, sent back as X-CSRF-Token on every pending POST.
-	CSRFToken string `json:"csrfToken"`
+	Purpose    string   `json:"purpose"`
+	Methods    []string `json:"methods"`
+	ExpiresAt  string   `json:"expiresAt"`
+	ReturnPath string   `json:"returnPath"`
+	CSRFToken  string   `json:"csrfToken"`
 }
 
 func (h *SecondFactorHandlers) handlePendingStatus(w http.ResponseWriter, r *http.Request) {
@@ -49,15 +41,12 @@ func (h *SecondFactorHandlers) handlePendingStatus(w http.ResponseWriter, r *htt
 	})
 }
 
-// pendingRequest is a pending POST that passed every check before work.
 type pendingRequest struct {
 	token      string
 	sessionID  *uuid.UUID
 	credential SecondFactorCredential
 }
 
-// admitPending runs the pending POST checks in contract order. It writes the
-// response and returns false on any failure.
 func (h *SecondFactorHandlers) admitPending(w http.ResponseWriter, r *http.Request, limit int64, decode func([]byte) (SecondFactorCredential, error)) (pendingRequest, bool) {
 	body, err := readSecondFactorBody(w, r, limit, true)
 	if err != nil {
@@ -106,7 +95,6 @@ func (h *SecondFactorHandlers) handlePendingOptions(w http.ResponseWriter, r *ht
 	api.WriteData(w, http.StatusOK, options)
 }
 
-// pendingCompletion serves a pending verify route whose body decode is decode.
 func (h *SecondFactorHandlers) pendingCompletion(limit int64, decode func([]byte) (SecondFactorCredential, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if req, ok := h.admitPending(w, r, limit, decode); ok {
@@ -137,11 +125,6 @@ func (h *SecondFactorHandlers) completePending(w http.ResponseWriter, r *http.Re
 	writeNoContent(w)
 }
 
-// writePendingError maps pending-route outcomes. Only authentication_required
-// and the exhausting failure clear the pending cookie. A live TOTP cool-down
-// is 429 rate_limited with a bounded Retry-After
-// ("Per-account TOTP failure budget"); it changes no row, so nothing else
-// here applies.
 func (h *SecondFactorHandlers) writePendingError(w http.ResponseWriter, err error) {
 	var failure *PendingVerificationFailure
 	var cooling *totpCoolingDown

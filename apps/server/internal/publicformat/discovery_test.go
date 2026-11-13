@@ -10,7 +10,6 @@ import (
 )
 
 func TestSitemapBytewiseSortedGolden(t *testing.T) {
-	// This fails if discovery exposes an unsorted slug or changes XML bytes.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +28,6 @@ func TestSitemapBytewiseSortedGolden(t *testing.T) {
 }
 
 func TestDiscoveryZeroOneAndRobotsGolden(t *testing.T) {
-	// This fails if empty discovery leaks a URL or robots loses its canonical origin.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)

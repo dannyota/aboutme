@@ -732,7 +732,7 @@ func webPWithMetadata(t *testing.T, source []byte, width, height uint32, chunks 
 		t.Fatal("invalid WebP test fixture")
 	}
 	vp8x := make([]byte, 10)
-	vp8x[0] = 0x3c // ICC, alpha, Exif, and XMP flags.
+	vp8x[0] = 0x3c
 	putUint24LE(vp8x[4:7], width-1)
 	putUint24LE(vp8x[7:10], height-1)
 	out := append([]byte(nil), source[:12]...)
