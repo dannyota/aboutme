@@ -2,9 +2,7 @@ package publicresume
 
 import (
 	"errors"
-	"net"
 	"net/netip"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -15,75 +13,71 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 	if raw == "" || len(raw) > 512 {
 		return PublicOrigin{}, errors.New("public origin is empty or too long")
 	}
-	for i := range raw {
-		if raw[i] < 0x21 || raw[i] > 0x7e {
-			return PublicOrigin{}, errors.New("public origin must be printable ASCII")
-		}
+	scheme, authority, ok := strings.Cut(raw, "://")
+	if !ok || (scheme != "https" && scheme != "http") {
+		return PublicOrigin{}, errors.New("public origin must start with https:// or http://")
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || u.RawPath != "" || u.Host == "" {
-		return PublicOrigin{}, errors.New("invalid public origin")
+	host, port, ok := splitAuthority(authority)
+	if !ok || !canonicalPort(scheme, port) {
+		return PublicOrigin{}, errors.New("public origin must already be in canonical form")
 	}
-	if strings.HasSuffix(raw, "/") {
-		return PublicOrigin{}, errors.New("public origin must be canonical")
+	if scheme == "http" && (!isDevelopment(environment) || !loopback(host)) {
+		return PublicOrigin{}, errors.New("an HTTP public origin must be a development loopback")
 	}
-	scheme := strings.ToLower(u.Scheme)
-	hostname := strings.ToLower(u.Hostname())
-	port := u.Port()
-	if !canonicalPort(port) {
-		return PublicOrigin{}, errors.New("public origin port must be canonical")
-	}
-	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
-		port = ""
-	}
-	host := hostname
-	if strings.Contains(hostname, ":") {
-		host = "[" + hostname + "]"
-	}
-	if port != "" {
-		host += ":" + port
-	}
-	if strings.Contains(u.Host, "%") || !canonicalHost(hostname) {
-		return PublicOrigin{}, errors.New("public origin host must be canonical")
-	}
-	if scheme != "https" && scheme != "http" {
-		return PublicOrigin{}, errors.New("public origin must use HTTP(S)")
-	}
-	if scheme == "http" && !isDevelopment(environment) {
-		return PublicOrigin{}, errors.New("public origin must use HTTPS")
-	}
-	if scheme == "http" {
-		ip := net.ParseIP(hostname)
-		if hostname != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			return PublicOrigin{}, errors.New("development HTTP public origin must be loopback")
-		}
-	}
-	return PublicOrigin{value: scheme + "://" + host}, nil
+	return PublicOrigin{value: raw}, nil
 }
 
-func canonicalPort(port string) bool {
+func splitAuthority(authority string) (host, port string, ok bool) {
+	if rest, bracketed := strings.CutPrefix(authority, "["); bracketed {
+		literal, after, closed := strings.Cut(rest, "]")
+		addr, err := netip.ParseAddr(literal)
+		if !closed || err != nil || !addr.Is6() || addr.Is4In6() || addr.Zone() != "" || addr.String() != literal {
+			return "", "", false
+		}
+		if after != "" && !strings.HasPrefix(after, ":") {
+			return "", "", false
+		}
+		return literal, after, true
+	}
+	host, digits, hasPort := strings.Cut(authority, ":")
+	if hasPort {
+		port = ":" + digits
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return host, port, addr.Is4() && addr.String() == host
+	}
+	return host, port, domainName(host)
+}
+
+func canonicalPort(scheme, port string) bool {
 	if port == "" {
 		return true
 	}
-	n, err := strconv.Atoi(port)
-	return err == nil && n >= 0 && n <= 65535 && strconv.Itoa(n) == port
+	digits := strings.TrimPrefix(port, ":")
+	n, err := strconv.Atoi(digits)
+	if err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != digits {
+		return false
+	}
+	return (scheme != "https" || n != 443) && (scheme != "http" || n != 80)
 }
 
-func canonicalHost(hostname string) bool {
-	if addr, err := netip.ParseAddr(hostname); err == nil {
-		return addr.Zone() == "" && !addr.Is4In6() && addr.String() == hostname
-	}
-	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
+func domainName(host string) bool {
+	labels := strings.Split(strings.TrimSuffix(host, "."), ".")
 	for _, label := range labels {
 		if label == "" || strings.Trim(label, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
 			return false
 		}
 	}
 	last := labels[len(labels)-1]
-	if strings.HasPrefix(last, "0x") {
-		return false
+	return !strings.HasPrefix(last, "0x") && strings.Trim(last, "0123456789") != ""
+}
+
+func loopback(host string) bool {
+	if host == "localhost" {
+		return true
 	}
-	return strings.Trim(last, "0123456789") != ""
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
 }
 
 func isDevelopment(environment string) bool {

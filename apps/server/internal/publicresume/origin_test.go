@@ -1,60 +1,53 @@
 package publicresume
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+)
 
-func TestPublicOriginEnvironmentRules(t *testing.T) {
-	for _, test := range []struct {
-		name, raw, environment string
-		want                   string
-		valid                  bool
-	}{
-		{"production HTTPS", "https://resume.example", "production", "https://resume.example", true},
-		{"normalizes default port", "HTTPS://RESUME.EXAMPLE:443", "production", "https://resume.example", true},
-		{"staging HTTPS", "https://staging.example:8443", "staging", "https://staging.example:8443", true},
-		{"development loopback HTTP", "http://127.0.0.1:20080", "development", "http://127.0.0.1:20080", true},
-		{"credentials", "https://u:p@example.test", "production", "", false},
-		{"path", "https://example.test/x", "production", "", false},
-		{"query", "https://example.test?q=x", "production", "", false},
-		{"fragment", "https://example.test#x", "production", "", false},
-		{"trailing slash", "https://example.test/", "production", "", false},
-		{"production HTTP", "http://example.test", "production", "", false},
-		{"development non-loopback HTTP", "http://example.test", "development", "", false},
-		{"canonical IPv6 loopback", "http://[::1]:20080", "development", "http://[::1]:20080", true},
-		{"uppercase IPv6", "https://[2001:DB8::1]", "production", "https://[2001:db8::1]", true},
-		{"uncompressed IPv6", "https://[2001:0db8::0001]", "production", "", false},
-		{"unabbreviated IPv6", "https://[2001:db8:0:0:0:0:0:1]", "production", "", false},
-		{"long-form IPv6 loopback", "http://[0:0::1]:20080", "development", "", false},
-		{"IPv4-mapped IPv6", "https://[::ffff:1.2.3.4]", "production", "", false},
-		{"IPv6 zone", "http://[::1%25lo0]:20080", "development", "", false},
-		{"short IPv4", "https://127.1", "production", "", false},
-		{"hex IPv4", "https://0x7f.0.0.1", "production", "", false},
-		{"three-part IPv4", "https://1.2.3", "production", "", false},
-		{"leading-zero IPv4", "https://010.0.0.1", "production", "", false},
-		{"numeric last label", "https://example.123", "production", "", false},
-		{"canonical IPv4", "https://192.0.2.1", "production", "https://192.0.2.1", true},
-		{"percent-encoded host", "https://b%C3%BCcher.example", "production", "", false},
-		{"percent-encoded ASCII host", "https://%61.example", "production", "", false},
-		{"forbidden host character", "https://a<b.example", "production", "", false},
-		{"underscore host", "https://a_b.example", "production", "", false},
-		{"empty label", "https://a..b.example", "production", "", false},
-		{"punycode host", "https://xn--bcher-kva.example", "production", "https://xn--bcher-kva.example", true},
-		{"trailing dot", "https://resume.example.", "production", "https://resume.example.", true},
-		{"hyphenated label", "https://my-resume.example", "production", "https://my-resume.example", true},
-		{"leading-zero default port", "https://resume.example:0443", "production", "", false},
-		{"leading-zero port", "https://resume.example:08443", "production", "", false},
-		{"port out of range", "https://resume.example:65536", "production", "", false},
-		{"port zero", "https://resume.example:0", "production", "https://resume.example:0", true},
-		{"highest port", "https://resume.example:65535", "production", "https://resume.example:65535", true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			origin, err := ParsePublicOrigin(test.raw, test.environment)
-			if test.valid != (err == nil) {
-				t.Fatalf("ParsePublicOrigin() error = %v, valid = %v", err, test.valid)
+type originCase struct {
+	Origin      string `json:"origin"`
+	Environment string `json:"environment"`
+	Accept      bool   `json:"accept"`
+}
+
+func TestPublicOriginParityTable(t *testing.T) {
+	raw, err := os.ReadFile("testdata/public-origins.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table struct {
+		Cases []originCase `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &table); err != nil || len(table.Cases) == 0 {
+		t.Fatalf("parity table unreadable: %v", err)
+	}
+	for _, test := range table.Cases {
+		t.Run(test.Environment+" "+test.Origin, func(t *testing.T) {
+			origin, err := ParsePublicOrigin(test.Origin, test.Environment)
+			if test.Accept != (err == nil) {
+				t.Fatalf("ParsePublicOrigin() error = %v, want accept = %v", err, test.Accept)
 			}
-			if err == nil && origin.String() != test.want {
-				t.Fatalf("String() = %q, want %q", origin.String(), test.want)
+			if err == nil && origin.String() != test.Origin {
+				t.Fatalf("String() = %q, want the input unchanged", origin.String())
 			}
 		})
+	}
+}
+
+func TestPublicOriginLengthBound(t *testing.T) {
+	host := strings.Repeat(strings.Repeat("a", 63)+".", 8)
+	longest := "https://" + host[:512-len("https://")-len(".vn")] + ".vn"
+	if _, err := ParsePublicOrigin(longest, "production"); err != nil || len(longest) != 512 {
+		t.Fatalf("512-byte origin: %v", err)
+	}
+	if _, err := ParsePublicOrigin(longest+"n", "production"); err == nil {
+		t.Fatal("513-byte origin accepted")
+	}
+	if _, err := ParsePublicOrigin("", "production"); err == nil {
+		t.Fatal("empty origin accepted")
 	}
 }
 
