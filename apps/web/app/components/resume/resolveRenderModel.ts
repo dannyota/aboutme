@@ -9,25 +9,16 @@ import type {
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 
 import { sectionIconKey } from './icons';
+import type { ProjectLinkMap } from './projectLinks';
 import { type ResumeStyles, useResumeStyles } from './useResumeStyles';
 
 export interface RenderContext {
   lng: string;
   mode: 'continuous' | 'paged';
   photoUrl?: string;
-  /**
-   * The element the header renders the resume name as. Only an embed that
-   * owns its own page `h1` passes `'p'`; every other caller omits this and
-   * keeps the default `'h1'`.
-   */
   nameHeading?: 'h1' | 'p';
-  /**
-   * The owner's dark or Match device scheme. Only the public page and the
-   * editor's Web preview pass it. The PDF stays light because the print
-   * snapshot drops the stored field and PrintResumeApp never passes a scheme
-   * (docs/design/public-page-theme.md, "What stays light").
-   */
   colorScheme?: 'dark' | 'system';
+  projectLinks?: ProjectLinkMap;
 }
 
 export type ResumeRenderErrorCode

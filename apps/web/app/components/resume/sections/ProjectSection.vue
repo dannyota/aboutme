@@ -2,6 +2,7 @@
 import type { Customization, Section } from '@aboutme/schema';
 
 import { formatDateRange, useResumeLng } from '../formatDate';
+import { useProjectLinks } from '../projectLinks';
 import EntryHeader from '../primitives/EntryHeader.vue';
 import RichText from '../primitives/RichText.vue';
 import SectionHeading from '../primitives/SectionHeading.vue';
@@ -12,6 +13,7 @@ withDefaults(defineProps<{
   renderPart?: 'all' | 'heading' | 'entry' | 'continuation';
 }>(), { renderPart: 'all' });
 const lng = useResumeLng();
+const projectLinks = useProjectLinks();
 </script>
 
 <template>
@@ -33,7 +35,10 @@ const lng = useResumeLng();
         <EntryHeader
           v-if="renderPart !== 'continuation'"
           :title="entry.title"
-          :title-link="entry.link || undefined"
+          :title-link="projectLinks.get(entry.id) ?? (entry.link || undefined)"
+          :title-project-entry="projectLinks.has(entry.id)
+            ? entry.id
+            : undefined"
           :subtitle="entry.subtitle || undefined"
           :meta="entry.dates
             ? [formatDateRange(entry.dates, dateFormat, lng)]

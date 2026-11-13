@@ -82,6 +82,7 @@ export default defineConfig({
         'card.spec.ts',
         'sign-in-gate.spec.ts',
         'project-pages.spec.ts',
+        'entry-points.spec.ts',
       ]
     : [
         'normal-csp.spec.ts',

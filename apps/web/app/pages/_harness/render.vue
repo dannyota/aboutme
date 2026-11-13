@@ -29,6 +29,10 @@ import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
 import { withWrappingBody } from './justify-fixture';
+import {
+  type EntryPointFixture,
+  withEntryPoints,
+} from './entry-point-fixtures';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
 import {
   ENGLISH_PRINT_FIXTURES,
@@ -117,6 +121,7 @@ let printMode = false;
 let requestedZoomValue: number | undefined;
 let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
+let entryPoints: EntryPointFixture | undefined;
 
 if (isCorpus) {
   requireAllowedKeys(new Set(['payload', 'raw']));
@@ -173,8 +178,8 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'invite', 'lng', 'mode', 'paper', 'print',
-        'repeat', 'scheme', 'template', 'zoom',
+        'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'paper',
+        'print', 'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
   );
@@ -343,6 +348,11 @@ if (isCorpus) {
   // The public page measure is about line length, so its cells need body
   // text that wraps.
   if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
+  const requestedLinks = singleton('links');
+  if (requestedLinks !== undefined) {
+    if (requestedLinks !== '1' || resolvedMode === 'paged') badQuery();
+    entryPoints = withEntryPoints(resolvedDocument, renderLanguage);
+  }
   const requestedFont = singleton('font');
   if (requestedFont !== undefined) {
     resolveFontSelection(requestedFont);
@@ -358,6 +368,9 @@ if (isCorpus) {
     lng: renderLanguage,
     mode: resolvedMode === 'public' ? 'continuous' : resolvedMode,
     ...(photoUrl === undefined ? {} : { photoUrl }),
+    ...(entryPoints === undefined
+      ? {}
+      : { projectLinks: entryPoints.projectLinks }),
   };
 }
 
@@ -558,6 +571,7 @@ onMounted(async () => {
       v-if="publicResume !== undefined"
       :home-href="HOME_HREF"
       :public-resume="publicResume"
+      v-bind="entryPoints ?? {}"
     />
     <ScaledSheet
       v-else-if="requestedZoomValue !== undefined"

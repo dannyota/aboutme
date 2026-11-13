@@ -177,6 +177,7 @@ apps/web/app/components/public/ProjectListPage.vue
 apps/web/app/components/public/ProjectPage.vue
 apps/web/app/components/public/ProjectPageBar.vue
 apps/web/app/components/public/ProjectText.vue
+apps/web/app/components/public/PublicDownloadLink.vue
 apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicMark.vue
 apps/web/app/components/public/PublicResumeApp.vue
@@ -204,6 +205,7 @@ apps/web/app/components/resume/primitives/LevelWidget.vue
 apps/web/app/components/resume/primitives/Photo.vue
 apps/web/app/components/resume/primitives/RichText.vue
 apps/web/app/components/resume/primitives/SectionHeading.vue
+apps/web/app/components/resume/projectLinks.ts
 apps/web/app/components/resume/resolveRenderModel.ts
 apps/web/app/components/resume/resumeColorScheme.css
 apps/web/app/components/resume/resumeScreenMargins.css
@@ -471,6 +473,7 @@ apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts
 apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/[...slug].vue
+apps/web/app/pages/_harness/entry-point-fixtures.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
@@ -539,6 +542,7 @@ apps/web/e2e/chrome-details.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/display-assertions.ts
+apps/web/e2e/entry-points.spec.ts
 apps/web/e2e/filter-sheet-details.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
 apps/web/e2e/fixtures/deployment/mismatch-missing.json

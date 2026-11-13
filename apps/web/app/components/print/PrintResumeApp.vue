@@ -6,6 +6,11 @@ import type { components } from '../../api/generated/openapi';
 import LayoutColumns from '../resume/LayoutColumns.vue';
 import ResumeHeader from '../resume/ResumeHeader.vue';
 import { ResumeLngKey } from '../resume/formatDate';
+import {
+  NO_PROJECT_LINKS,
+  type ProjectLinkMap,
+  ProjectLinksKey,
+} from '../resume/projectLinks';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
 import '../resume/ResumeDocument.vue?vue&type=style&index=0&lang.css';
 
@@ -14,6 +19,7 @@ type PublicResumeDocument = components['schemas']['PublicResumeDocument'];
 const props = defineProps<{
   document: PublicResumeDocument;
   lng: string;
+  projectLinks?: ProjectLinkMap;
 }>();
 
 const document = computed(() => {
@@ -50,6 +56,8 @@ const model = computed(() => resolveRenderModel(document.value, {
     : { photoUrl: props.document.personalDetails.photo.url }),
 }));
 provide(ResumeLngKey, computed(() => model.value.lng));
+provide(ProjectLinksKey, computed(() =>
+  props.projectLinks ?? NO_PROJECT_LINKS));
 
 const rootStyle = computed(() => ({
   ...model.value.styles.root,
