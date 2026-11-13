@@ -4,7 +4,6 @@ import { createRequire } from "node:module";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Reuse the parser pinned by the repository's Markdown lint tool.
 const require = createRequire(import.meta.url);
 const lintRequire = createRequire(require.resolve("markdownlint-cli2"));
 const MarkdownIt = lintRequire("markdown-it");
@@ -87,10 +86,8 @@ function srcsetURLs(value) {
     while (position < value.length && !/[\t\n\f\r ]/u.test(value[position])) position++;
     const url = value.slice(start, position);
     if (!url) break;
-    // Commas inside URLs belong to the URL, including data URL payloads.
     urls.push(url.replace(/,+$/u, ""));
     if (url.endsWith(",")) continue;
-    // Skip width or density descriptors up to the next candidate.
     while (position < value.length && value[position] !== ",") position++;
   }
   return urls;
@@ -152,7 +149,6 @@ function readMarkdown(root, file) {
   return parse(readFileSync(file, "utf8"));
 }
 
-// Check only selected sources. Linked documents supply anchors, not another crawl.
 export function checkFiles(root, files) {
   root = realpathSync(root);
   const errors = [];
@@ -215,7 +211,6 @@ export function selectFiles(root, changed, available) {
       if (present.has(index)) selected.add(index);
     }
   }
-  // Include indexes elsewhere that link to a changed or deleted target.
   for (const file of present) {
     if (!/(^|\/)README\.md$/u.test(file) || selected.has(file)) continue;
     const { links } = readMarkdown(root, resolve(root, file));

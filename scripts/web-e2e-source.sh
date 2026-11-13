@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Build a deterministic Playwright source tar from reviewed blobs at HEAD.
 set -Eeuo pipefail
 export LC_ALL=C
 umask 077

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Once the comparison base contains .v1-baseline, the marker and every
-# migration already present on that base are immutable; only new migration
-# files may be added. A base without the marker allows edits.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

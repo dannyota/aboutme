@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Real process tests, run by hosted Linux and macOS jobs.
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-run-owned.XXXXXX")
@@ -47,7 +46,6 @@ with patch.object(watchdog.subprocess, "check_output", return_value="10 1 10 Mon
     watchdog.snapshot()
     assert "rss" not in " ".join(observe.call_args.args[0]).lower()
 IDENTITY
-# Legacy memory settings cannot refuse, cap, report, or change priority.
 export RUN_CAPPED_TOTAL_KIB=invalid RUN_CAPPED_RESERVE_KIB=999999999 RUN_CAPPED_REPORT=1
 for entry in run-owned run-capped; do
   check 17 bash "$ROOT/scripts/$entry.sh" -- bash -c 'exit 17'
@@ -55,7 +53,6 @@ for entry in run-owned run-capped; do
   check 124 bash "$ROOT/scripts/$entry.sh" --timeout 1 -- sleep 30
   check 0 bash "$ROOT/scripts/$entry.sh" -- python3 -c 'x=bytearray(2*1024*1024)'
 done
-# Launch observes the inherited priority without adding nice.
 priority=$(ps -o nice= -p "$$" | tr -d ' ')
 check 0 bash "$ROOT/scripts/run-owned.sh" -- bash -c 'ps -o nice= -p "$$"' > /dev/null
 [[ $(tr -d '[:space:]' <"$WORK/out") == "$priority" ]] || fail 'priority changed'

@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Wrapper refusal and staging tests. Podman is stubbed, so successful staging
-# reaches the real host runner without building an image or contacting a host.
-# The lock and watchdog fixtures keep these tests independent of local checks.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
@@ -40,8 +37,6 @@ run_wrapper() {
     "$@" "$REPO/scripts/totp-production-proof.sh" totp-prod-flag-off
 }
 
-# --- usage --------------------------------------------------------------
-
 if output=$(ABOUTME_LOCAL_CHECK_LOCK_PATH=$LOCK_PATH \
   "$REPO/scripts/totp-production-proof.sh" 2>&1); then
   fail 'missing mode argument was accepted'
@@ -55,8 +50,6 @@ if output=$(ABOUTME_LOCAL_CHECK_LOCK_PATH=$LOCK_PATH \
 fi
 grep -Fq 'mode must be totp-prod-flag-off, totp-prod-enabled, or totp-prod-cleanup' \
   <<<"$output" || fail 'unknown mode returned the wrong diagnostic'
-
-# --- account input --------------------------------------------------------
 
 if output=$(run_wrapper 2>&1); then
   fail 'a missing account.env was accepted'
@@ -82,15 +75,11 @@ grep -Fq 'production input directory ownership or mode mismatch' <<<"$output" ||
   fail 'wrong-mode production input directory returned the wrong diagnostic'
 chmod 0700 "$REPO/.dev/v0.4.7/production-input"
 
-# --- watchdog refusal --------------------------------------------------------
-
 if output=$(STUB_OWNED_REFUSAL=invalid run_wrapper 2>&1); then
   fail 'missing process ownership was accepted'
 fi
 grep -Fq 'refused: cannot inspect process ownership' <<<"$output" ||
   fail 'missing ownership returned the wrong diagnostic'
-
-# --- active stack ------------------------------------------------------------
 
 printf '%s' "$$" >"$REPO/.dev/native-https/run/server.pid"
 if output=$(run_wrapper 2>&1); then
@@ -104,8 +93,6 @@ printf '{"version":1}\n' >"$REPO/.dev/native-https/run/session"
 if output=$(run_wrapper 2>&1); then fail 'development session state was accepted'; fi
 grep -Fq 'development session state exists' <<<"$output" || fail 'missing session refusal'
 rm "$REPO/.dev/native-https/run/session"
-
-# --- shared lock --------------------------------------------------------
 
 python3 - "$LOCK_PATH" "$WORK/lock-ready" <<'LOCK' &
 import fcntl, sys, time
@@ -130,7 +117,6 @@ wait "$holder" || true
 grep -Fq 'another local check holds the shared lock' <<<"$output" ||
   fail 'held shared lock returned the wrong diagnostic'
 
-# Exercise the wrapper's staging through the real runner's validation.
 copy_browser_sources() {
   local source=$1 destination=$2 file
   local -a spec_sources=()
@@ -216,7 +202,6 @@ if [ "${1-}" = -I ] && [ "${2-}" = -c ] && [[ ${3-} == *'os.lstat(sys.argv[2])'*
 fi
 exec "$STUB_REAL_PYTHON" "$@"
 STUB
-# Refuse GNU find formatting even when this test runs on Linux.
 export STUB_REAL_FIND
 STUB_REAL_FIND=$(command -v find)
 export OWNER_INJECTED=$WORK/owner-injected

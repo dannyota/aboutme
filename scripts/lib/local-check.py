@@ -28,7 +28,7 @@ def lock_paths(path):
 
 
 def make_parents(path):
-    # makedirs ignores mode for intermediate directories such as a new .dev.
+    # os.makedirs ignores mode for intermediate directories (Python os.makedirs docs).
     directory = os.path.dirname(path)
     missing = []
     while not os.path.isdir(directory):
@@ -44,7 +44,7 @@ def open_lock(path, pre_move):
     except PermissionError:
         if not pre_move:
             raise
-        # A Codex sandbox cannot write .git; flock works on a read-only descriptor.
+        # The Codex sandbox cannot write .git, and flock works on a read-only descriptor (flock(2)).
         return os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
 
 

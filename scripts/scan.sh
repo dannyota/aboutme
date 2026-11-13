@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Scan secrets over full Git history with the pinned gitleaks toolchain.
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."

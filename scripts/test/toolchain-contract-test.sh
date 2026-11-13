@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Contract tests for the local/hosted CI tool-version boundary.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -136,7 +135,6 @@ grep -Fq "node: .github/workflows/ci.yml has 99.0.0, want $FIXTURE_NODE" \
   "$WORK/partial-drift.out" ||
   fail "repository contract did not identify the drifted Node job"
 
-# A drifted pin in a composite action the workflow uses is drift too.
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
 sed 's/go-version:.*/go-version: "1.99.0"/' \
   "$CONTRACT/.github/actions/setup-go/action.yml" >"$WORK/action.yml"
@@ -149,7 +147,6 @@ grep -Fq "go: .github/actions/setup-go/action.yml has 1.99.0, want $FIXTURE_GO" 
   "$WORK/action-drift.out" ||
   fail "repository contract did not identify the drifted composite action"
 
-# Hosted CI pins golangci-lint by the ci-tools archive name.
 cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
 for action in "$CONTRACT"/.github/actions/*/action.yml; do
   sed "s/golangci-lint-$FIXTURE_GOLANGCI-linux-amd64/golangci-lint-9.9.9-linux-amd64/g" \
@@ -164,7 +161,6 @@ grep -Fq "golangci-lint: hosted CI must contain 'golangci-lint-$FIXTURE_GOLANGCI
   "$WORK/golangci-drift.out" ||
   fail "repository contract did not identify the drifted golangci-lint archive"
 
-# Hosted CI pins Caddy by the ci-tools archive name too.
 cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
 for action in "$CONTRACT"/.github/actions/*/action.yml; do
   sed "s/caddy_${FIXTURE_CADDY}_linux_amd64/caddy_9.9.9_linux_amd64/g" "$action" >"$WORK/action.yml"

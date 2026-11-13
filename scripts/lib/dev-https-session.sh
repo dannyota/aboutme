@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# One anchor owns the service group until an explicit stop drains it.
 start_session() {
   local name generated attempt token
   for name in "${SERVICES[@]}"; do write_service_env "$name" || return 1; done
@@ -33,11 +32,8 @@ stop_session() {
       notify_proofs failed || return 1
     fi
     session_matches "$token" && [ "$SESSION_PID" = "$pid" ] || return 1
-    # Remove readiness before an intentional drain, after recording its health.
     rm -f -- "$RUN_DIR/session.ready"
     platform_signal_group TERM "$pid" "$(session_command)" || return 1
-    # The supervisor stays alive during this interval, including when TERM
-    # reaches it before its children. Its anchor permits the final group KILL.
     deadline=$((SECONDS + 10))
     for attempt in $(seq 1 "$STOP_TERM_ATTEMPTS"); do
       [ "$SECONDS" -lt "$deadline" ] || break
@@ -61,7 +57,6 @@ stop_session() {
   fi
   members=$(platform_group_members "$pid") || return 1
   [ -z "$members" ] && session_matches "$token" || return 1
-  # Remove only this validated launch's records. Preserve keys, logs and data.
   for file in "${SERVICES[@]}"; do rm -f -- "$(pidfile "$file")" "$(service_env_file "$file")"; done
   rm -f -- "$RUN_DIR/session.children" "$RUN_DIR/session.ready" "$RUN_DIR/session.failed" "$RUN_DIR/session.failed-service" "$RUN_DIR/session.stopping"
   session_matches "$token" || return 1
@@ -143,13 +138,9 @@ PY
         esac
       done
     fi
-    # A changed record cannot accept our latch. Retain the failure and live
-    # anchor, and persist it only when this launch's record validates again.
     if [ -n "$failed_service" ] && latch_session_failure "$token" "$failed_service"; then
       failed_service=
     fi
-    # A group TERM interrupts sleep. Keep the anchor until the operator KILLs
-    # the group, even when every service has already exited.
     if [ "$SECONDS" -le "$tick" ]; then
       sleep 1 &
       wait "$!" || true
@@ -165,7 +156,6 @@ launch_service() {
   LAUNCHED_PID=$!
 }
 
-# Proof markers survive intentional down/up transitions within one journey.
 notify_proofs() {
   local outcome=$1 file temporary
   case $outcome in stopped | failed) ;; *) return 1 ;; esac
@@ -176,8 +166,6 @@ notify_proofs() {
       [[ $SESSION_TOKEN =~ ^[0-9a-f]{32}$ ]] || return 1
       [ ! -L "$file.stopped" ] && { [ ! -e "$file.stopped" ] || [ -f "$file.stopped" ]; } || return 1
       temporary=$(mktemp "$file.stopped.XXXXXXXXXX") || return 1
-      # Each validated stop publishes its launch token atomically. Readers can
-      # distinguish a new drain from permission left by an earlier session.
       if ! { printf '%s\n' "$SESSION_TOKEN" >"$temporary" &&
         python3 -I -c 'import os,sys; os.replace(sys.argv[1], sys.argv[2])' "$temporary" "$file.stopped"; }; then
         rm -f -- "$temporary"
@@ -199,7 +187,6 @@ proof_stop_observed() {
 proof_health() {
   local file=$1 allow_stop=$2 stopped='' ready='' health_marker='' reason=7
   [[ ${file##*/} =~ ^proof\.[A-Za-z0-9]{10}$ ]] && [ "${file%/*}" = "$RUN_DIR" ] || return 2
-  # Integrity rejection exits, so callers never clean up through a rejected path.
   validate_state_path_integrity "$allow_stop"
   [ -f "$file" ] || return 2
   [ ! -e "$file.failed" ] || return 3

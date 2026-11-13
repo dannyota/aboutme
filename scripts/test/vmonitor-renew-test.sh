@@ -258,7 +258,6 @@ for byte in {1..32} 127; do
   GITHUB_TOKEN="fake-token${control}hostile-secret" run 1 check 'Synthetic quota diagnostic: stage=environment reason=token-format'
   [ ! -e "$tmp/state/curl-argv" ]
 done
-# Non-ASCII tokens stay invalid in UTF-8 locales.
 utf8_locale=
 available_locales=$(locale -a)
 for candidate in en_US.UTF-8 en_US.utf8 C.UTF-8 C.utf8; do
@@ -321,7 +320,6 @@ for fault in tempdir-fail mkdir-fail config-fail validator-fail copy-fail-get co
     assert_count 0 renew-synthetic-quota
   fi
 done
-# An unwritable summary still gets the exact diagnostic in the log.
 reset_case
 mkdir "$tmp/summary-directory"
 rc=0
@@ -337,7 +335,6 @@ set_end() {
   change get ".Quota.EndTime = \"$1\""
   change status ".Items[0].EndTime = \"$1\""
 }
-# Decisions use current time and exact expiry, including boundary fractions.
 reset_case
 set_end 2026-01-04T00:00:00Z
 run 0 renew
@@ -391,7 +388,6 @@ reset_case
 change status '.Items[0].RenewWindowOpen = null'
 run 0 renew
 assert_count 0 renew-synthetic-quota
-# All recognized output combinations either close or retain the durable hold.
 outcome_case() {
   local sent=$1 stage=$2 code=$3 status=$4 cli_exit=$5 expected_hold=$6 expected_exit=$7 pending=${8:-false} renewed=false error=null
   local diagnostic_code=$code
@@ -429,7 +425,6 @@ outcome_case yes refused Forbidden 403 1 closed 1
 outcome_case yes refused Throttled 429 1 closed 1
 outcome_case yes refused Unauthorized 401 3 closed 3
 outcome_case yes refused NotFound 404 4 closed 4
-# Pending payment cannot authorize closure or an accepted outcome.
 outcome_case no not-due null 0 0 open 1 true
 outcome_case yes confirmed null 0 0 open 1 true
 outcome_case unknown confirmed null 0 0 open 1 true
@@ -440,7 +435,6 @@ outcome_case yes refused Conflict 409 1 open 1 true
 outcome_case yes refused Unauthorized 401 3 open 3 true
 outcome_case yes refused NotFound 404 4 open 4 true
 outcome_case yes accepted null 0 0 open 1 true
-# Transmission, settlement, error, and exit evidence must agree.
 outcome_case no confirmed null 0 0 open 1
 outcome_case yes not-due null 0 0 open 1
 outcome_case unknown preflight RequestFailed 0 1 open 1
@@ -456,7 +450,6 @@ outcome_case no preflight InvalidConfig 0 2 open 2 false true
 outcome_case yes refused Conflict 409 1 open 1 false true
 outcome_case yes accepted null 0 0 open 1 false true
 outcome_case yes unconfirmed NotSettled 200 1 open 1 false true
-# Contradictory confirmation retains the hold even with unchanged expiry.
 reset_case
 cp "$tmp/state/status" "$tmp/state/status-after"
 change outcome '.PaymentPending = true'
@@ -534,11 +527,9 @@ cp "$tmp/state/status-after" "$tmp/state/status"
 change get '.Quota.EndTime = "2026-02-01T00:00:00Z"'
 run 1 renew
 assert_count 1 renew-synthetic-quota
-# Human reconciliation arms the next run.
 echo closed > "$tmp/state/issue"
 run 0 renew
 assert_count 1 renew-synthetic-quota
-# Diagnostics identify the boundary without exposing either captured stream.
 reset_case
 run 1 invalid 'Synthetic quota diagnostic: stage=environment reason=args'
 reset_case
@@ -606,7 +597,6 @@ echo 3 > "$tmp/state/exit"
 : > "$tmp/state/fail-close"
 run 3 renew 'Synthetic quota diagnostic: stage=issue-write http=5xx'
 [ "$(cat "$tmp/state/issue")" = open ]
-# Each documented code is accepted only as one complete structured value.
 for code in PriceAboveMax Unpriced QuotaChanged NotSettled Conflict BadRequest Forbidden Throttled Unauthorized NotFound RequestFailed InvalidUsage ReadOnly InvalidConfig NoCredentials ServiceAccountLoginFailed TokenCacheFailed UnexpectedStatus ServerError ClientError InvalidResponse ResponseTooLarge QuotaStatusIncomplete; do
   reset_case
   echo 1 > "$tmp/state/get-exit"
@@ -647,7 +637,6 @@ run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=1 code=other'
 reset_case
 echo 124 > "$tmp/state/exit"
 run 1 renew 'Synthetic quota diagnostic: stage=renew cli-exit=124 code=other'
-# Structured codes cannot carry terminal controls or oversized text into diagnostics.
 for code in '"Forbidden\u001b[31m"' '("x" * 65536)'; do
   for fixture in status outcome status-after; do
     reset_case
@@ -669,7 +658,6 @@ for code in '"Forbidden\u001b[31m"' '("x" * 65536)'; do
     fi
   done
 done
-# Exercise shell-generated stderr with an explicit numeric CLI exit.
 for fixture in get status outcome status-after; do
   reset_case
   exit_file=$fixture-exit

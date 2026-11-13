@@ -23,10 +23,7 @@
 set -Eeuo pipefail
 
 TRIVY_VERSION=0.76.1
-# sha256 values copied from trivy_0.76.1_checksums.txt, the release's own
-# manifest at https://github.com/aquasecurity/trivy/releases/tag/v0.76.1.
-# Both tarballs carry a GitHub build attestation, confirmed at pin time with
-# `gh api repos/aquasecurity/trivy/attestations/sha256:<digest>`.
+# Pinned sha256 values come from trivy_0.76.1_checksums.txt (https://github.com/aquasecurity/trivy/releases/tag/v0.76.1); both tarballs carry a GitHub build attestation.
 TRIVY_SHA256_LINUX_ARM64=e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f
 TRIVY_SHA256_LINUX_AMD64=c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
 
@@ -49,8 +46,6 @@ trivy_asset() {
   esac
 }
 
-# Verifies the pinned Trivy archive for the current architecture in $2
-# against the sha256 pinned above and extracts only the binary into $1.
 install_trivy() {
   [ "$#" -eq 2 ] || die "usage: $0 install-trivy DEST ARCHIVE_DIR"
   local dest=$1 dir=$2 pair asset sha256
@@ -64,7 +59,7 @@ install_trivy() {
   "$dest/trivy" --version
 }
 
-# Retry GHCR directly because Trivy does not fall back on every error.
+# Trivy does not fall back to another database repository on every error (Trivy db-repository docs).
 fetch_db() {
   local trivy_bin=${1:?fetch-db needs the trivy binary path}
   local cache_dir=${2:?fetch-db needs a cache directory}
@@ -84,10 +79,6 @@ fetch_db() {
   [ -s "$cache_dir/db/trivy.db" ] && [ -s "$cache_dir/db/metadata.json" ]
 }
 
-# Scans one image into a JSON report. Engine errors fail here; `report`
-# below decides pass/fail from findings in that file, so the scan and the
-# failing-findings table read the same data instead of two divergent Trivy
-# calls (one for the exit code, one for the printed table).
 scan_image() {
   local trivy_bin=${1:?scan-image needs the trivy binary path}
   local ref=${2:?scan-image needs an image reference}
@@ -185,9 +176,6 @@ release_image_ref() {
   printf '%s\n' "$ref"
 }
 
-# Scan published platform digests. The observer may be retained from a separate
-# release. Missing assets, findings, and engine errors fail the run without
-# preventing collection of other targets. This is not deployed-version inventory.
 weekly_scan() {
   local trivy_bin=${1:?weekly-scan needs the trivy binary path}
   local report_dir=${2:?weekly-scan needs a report directory}

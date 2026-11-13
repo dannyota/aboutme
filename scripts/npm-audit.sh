@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Runs `npm audit --omit=dev` in one directory and fails on any high or
-# critical advisory, like `--audit-level=high`, except advisories listed in
-# .github/npm-audit-exceptions.json. Each exception names a GHSA id, the
-# directories it applies to (`dirs`, relative to the repository root, "." for
-# the root), a reason, and an `expires` date (YYYY-MM-DD). An exception is
-# valid through its expiry date, and the date may be at most 90 days ahead.
-# Any expired or malformed entry fails every run, so a stale exception cannot
-# hide a finding.
-#
-# Usage: scripts/npm-audit.sh [directory]   (default: the current directory)
-# Test hooks: NPM_AUDIT_NPM (npm command), NPM_AUDIT_EXCEPTIONS (file),
-# NPM_AUDIT_TODAY (YYYY-MM-DD), NPM_AUDIT_ROOT (the repository root),
-# NPM_AUDIT_TIMEOUT (seconds per audit attempt).
 set -Eeuo pipefail
 
 ROOT=${NPM_AUDIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}
@@ -55,14 +42,9 @@ toolong=$(jq -r --arg limit "$limit" '
 ' "$EXCEPTIONS")
 [ -z "$toolong" ] || die "exception expires more than 90 days ahead (latest $limit): $toolong"
 
-# The directory as the exceptions file names it: relative to the repository
-# root, "." for the root itself.
 reldir=$(realpath -m --relative-to="$ROOT" "$DIR")
 
-# npm audit exits non-zero when it finds anything; the report decides. Each
-# attempt has a time limit, after which npm and its children are killed, and an
-# unusable report gets one retry. The report goes to a file, not a pipe, so a
-# leftover child that still holds the output cannot block the script.
+# npm audit exits non-zero whenever it finds anything, so the report decides (npm-audit(1)).
 out=$(mktemp "${TMPDIR:-/tmp}/npm-audit.XXXXXX")
 trap 'rm -f -- "$out"' EXIT
 usable() { jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null 2>&1; }
@@ -74,8 +56,7 @@ for attempt in 1 2; do
 done
 usable || die "npm audit gave no usable report in $DIR"
 
-# Advisories are the object entries of each package's `via`; string entries
-# only name another vulnerable package that carries the advisory.
+# In npm audit JSON, object entries of via are advisories; string entries name another vulnerable package (npm-audit(1)).
 failing=$(jq -r --arg dir "$reldir" --slurpfile ex "$EXCEPTIONS" '
   [.vulnerabilities[].via[] | select(type == "object")
     | select(.severity == "high" or .severity == "critical")

@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-# Tests scripts/ci-browser-proofs.sh against a fake make: proof order and
-# harness restarts, shard environment, shard evidence staging (including a
-# TOTP shard list split into one staging directory per shard), that the
-# exports proof's evidence is staged even when it fails, the request peak in
-# the summary, and that one failing proof neither stops the rest nor lets the
-# group pass.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -38,13 +32,6 @@ status=$?
 exit "$status"
 EOF
 
-# The fake make logs each target with the shard variables it saw. A TOTP
-# check leaves one enabled run directory holding each listed shard's own
-# evidence directory, plus disabled evidence when epoch-disabled is listed; a
-# passkey check leaves enabled evidence; the editor check logs 61 requests
-# over 70 seconds, one of them answered 429; and dev-https-exports-check
-# leaves its own evidence directory (as a real failure does, exports.spec.ts)
-# and fails.
 cat >"$BIN/make" <<'EOF'
 #!/usr/bin/env bash
 printf '%s totp=%s passkey=%s\n' "$1" "${ABOUTME_TOTP_SHARD-unset}" \

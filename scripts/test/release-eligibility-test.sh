@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Release checks use only stubbed GitHub, Git, registry, and SSH commands.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
@@ -22,12 +21,8 @@ write_jobs=$(awk '
 [[ $write_jobs == $'build\nimage\nobserver-image\nobserver-image-amd64\nrelease' ]] ||
   fail 'write-capable jobs changed without eligibility coverage'
 
-# These edges put the read-only gate before every job holding write authority.
-# The release job's image dependency preserves the optional observer policy.
 for job in build observer-image observer-image-amd64; do
   body=$(job_body "$job")
-  # trivy-db is read-only (the write-job list above excludes it) and only
-  # prepares the scan database; eligibility must stay a direct dependency.
   grep -Fxq '    needs: [eligibility, trivy-db]' <<<"$body" || fail "$job can start before eligibility"
   ! grep -Eq '^    (if:|continue-on-error:)' <<<"$body" || fail "$job overrides dependency success"
 done
@@ -52,7 +47,6 @@ grep -Eq '^      actions: read$' <<<"$body" || fail 'eligibility cannot read CI 
 grep -Eq '^          fetch-depth: 0$' <<<"$body" || fail 'eligibility needs main ancestry'
 grep -Fq 'TAG: ${{ github.ref_name }}' <<<"$body" || fail 'eligibility must use the event tag'
 grep -Fq 'COMMIT: ${{ github.sha }}' <<<"$body" || fail 'eligibility must bind the event commit'
-# Run the actual workflow command, so bypassing the helper is a regression.
 gate_command() {
   job_body "$1" | awk '
     /^      - name: Check release eligibility$/ { found=1; next }
@@ -124,8 +118,6 @@ done
 chmod +x "$work/bin/"*
 export PATH=$work/bin:$PATH
 export TAG=v0.7.5 COMMIT=$TEST_COMMIT
-# Model the candidate checkout and the separate trusted main checkout. Static
-# checks below bind the trusted fixture to the workflow's checkout source.
 mkdir -p "$work/workspace/scripts" "$work/workspace/.release-trusted/scripts"
 cp "$root/scripts/release-eligibility.sh" "$work/workspace/scripts/"
 cp "$root/scripts/release-eligibility.sh" "$work/workspace/.release-trusted/scripts/"
@@ -138,7 +130,6 @@ runs() {
        conclusion: $conclusion, status: $status}]' >"$work/runs.json"
 }
 publication() {
-  # A failed gate stops before registry login, image push, or release creation.
   bash -euo pipefail -c "${1-$command}" || return
   docker login ghcr.io || return
   docker push test-image || return
@@ -168,8 +159,6 @@ bash scripts/release-eligibility.sh --deploy-checkout "$TAG" >"$work/out" 2>&1 |
 }
 [[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'checkout gate did not return the resolved commit'
 
-# Without a tag, --deploy-checkout proves only a clean checkout equal to the
-# release repository's main. It reads no tag or CI evidence and prints nothing.
 for CHECKOUT_CASE in dirty staged untracked stale branch detached status-error; do
   export CHECKOUT_CASE
   if TAG='' bash scripts/release-eligibility.sh --deploy-checkout >"$work/out" 2>&1; then
@@ -211,7 +200,6 @@ for TEST_CASE in off-main fetch-error missing-tag api-error wrong-sha branch-onl
     no-run) echo '[]' >"$work/runs.json" ;;
     malformed-evidence) echo '{' >"$work/runs.json" ;;
     newer-red|newer-pending)
-      # Old success comes first to prove selection does not trust array order.
       jq --arg status "$TEST_CASE" '. + [.[0] | .databaseId = 21 |
         .conclusion = (if $status == "newer-red" then "failure" else null end) |
         .status = (if $status == "newer-red" then "completed" else "queued" end)]' \
@@ -238,7 +226,6 @@ for TAG in v0.7.5 v999.999.999; do
   grep -q 'docker push' "$work/writes" || fail 'valid release did not reach publication'
 done
 TAG=v0.7.5
-# A candidate can replace its own helper, but cannot replace the main helper.
 printf '#!/usr/bin/env bash\nexit 0\n' >scripts/release-eligibility.sh
 failures=0
 expect_job_rejected() {
@@ -258,8 +245,6 @@ for job in eligibility $write_jobs; do
   expect_job_rejected "$job"
 done
 
-# A partial rerun reuses the successful prerequisite, but reruns the failed
-# publishing job's own steps. Main CI can turn red between those attempts.
 cp "$root/scripts/release-eligibility.sh" scripts/release-eligibility.sh
 TEST_CASE=success
 runs
@@ -278,8 +263,6 @@ for job in $write_jobs; do
 done
 [[ $failures == 0 ]] || fail "$failures publication bypasses"
 
-# Every job checks trusted code before candidate checkout or artifact handling.
-# Exact prefix comparison also rejects conditional or fail-open gate steps.
 expected_prefix=$(cat <<'YAML'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Tests scripts/mcp-owner-workflow.sh with fake Git, Go, curl, runner,
-# fixture, and browser-container commands in a private temporary tree. It
-# starts no stack, container, browser, or network request.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -62,7 +59,6 @@ not_called() { ! grep -Eq "$1" "$CTL/calls"; }
 mode_of() { stat -c %a -- "$1"; }
 sha() { sha256sum -- "$1" | cut -c1-64; }
 dead() { [ ! -s "$1" ] || ! kill -0 "$(cat "$1")" 2>/dev/null; }
-# container_removed proves cleanup force-removed the exact named container.
 container_removed() {
   local name
   name=$(grep -oE 'CONTAINER_NAME=aboutme-mcp-sdk-[0-9a-f]{32}' "$CTL/trace" | head -n 1 | cut -d= -f2)
@@ -349,8 +345,6 @@ respond 404 ''
 EOF
 }
 
-# The fake browser container records its exact arguments and what it can
-# see, then plays the helper side of the handoff.
 write_container() {
   write_fake "$BROWSER/run.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -434,15 +428,13 @@ refresh_image_manifest() {
   chmod 0600 "$STATE/browser-image.manifest"
 }
 
-# refresh_effective_config records the HTTPS stack server hash the way
-# scripts/dev-https.sh does, among other effective-config lines.
 refresh_effective_config() {
   printf 'web_port=20030\nserver_binary_sha256=%s\nmigrate_binary_sha256=%s\n' \
     "$(sha "$STATE/bin/server")" "$(printf migrate | sha256sum | cut -c1-64)" >"$STATE/effective-config"
   chmod 0600 "$STATE/effective-config"
 }
 
-write_registry_index() { # name arm64-digest amd64-digest
+write_registry_index() {
   jq -n --arg arm "$2" --arg amd "$3" '{
     schemaVersion: 2,
     mediaType: "application/vnd.oci.image.index.v1+json",
@@ -456,7 +448,7 @@ write_registry_index() { # name arm64-digest amd64-digest
   printf '%s\n' "$INDEX" >"$CTL/ghcr.$1.digest"
 }
 
-write_registry_single() { # name digest
+write_registry_single() {
   printf '%s\n' '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"layers":[]}' \
     >"$CTL/ghcr.$1.json"
   printf '%s\n' "$2" >"$CTL/ghcr.$1.digest"
@@ -514,8 +506,6 @@ setup_tree() {
   echo ok >"$CTL/curl.behavior"
 }
 
-# run_workflow runs the script with an xtrace on a private descriptor, so a
-# test can prove which paths the shell touched.
 run_workflow() {
   local mode=$1
   shift
@@ -623,7 +613,6 @@ set_release() {
   printf '%s\n' "$TAG" >"$CTL/git.tags"
 }
 
-# 1. Closed modes.
 setup_tree
 for args in "" "staging" "local extra" "production local"; do
   STATUS=0
@@ -633,7 +622,6 @@ for args in "" "staging" "local extra" "production local"; do
 done
 check 'usage runs nothing' [ ! -s "$CTL/calls" ]
 
-# 2. Local synthetic proof on an untagged checkout.
 setup_tree
 CURL_BEHAVIOR=register-unavailable run_workflow local
 check 'local MCP setup does not depend on live password registration' [ "$STATUS" -eq 0 ]
@@ -779,7 +767,6 @@ check 'staging and browser output are removed' \
 check 'launcher lock is released' flock -n "$MAIN/.dev/mcp-workflow-launcher.lock" true
 check 'local success removes the named container' container_removed
 
-# 3. Local proof on a clean release tag writes the closed attestation.
 set_release
 run_workflow local env ABOUTME_RELEASE_APP_IMAGE="sha256:$(printf 'f%.0s' {1..64})"
 check 'release local proof succeeds' [ "$STATUS" -eq 0 ]
@@ -846,7 +833,6 @@ run_production() {
   run_workflow production "$@"
 }
 
-# 4. Production with the matching attestation.
 restore_release
 run_production env SSL_CERT_FILE=/caller/override.pem SSL_CERT_DIR=/caller
 PROD_RUN=$(local_run_root)
@@ -906,7 +892,6 @@ RUNNER_BEHAVIOR=bad-evidence run_production
 check 'evidence outside the allowlist fails' [ "$STATUS" -eq 1 ]
 check 'evidence rejection is reported' has 'evidence rejected' "$CTL/out"
 
-# 5. Attestation rejections happen before any credential access or launch.
 expect_rejection() {
   local label=$1 message=$2
   check "$label: fails" [ "$STATUS" -eq 1 ]
@@ -1066,7 +1051,6 @@ refresh_image_manifest sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 run_production
 expect_rejection 'other browser image' 'attestation rejected: browser image mismatch'
 
-# 6. The owner credential is checked only after the attestation passes.
 restore_release
 chmod 0644 "$OWNER_CREDENTIAL"
 run_production
@@ -1082,7 +1066,6 @@ check 'symbolic owner credential fails' has 'owner credential must be a regular 
 rm -f -- "$OWNER_CREDENTIAL"
 mv -- "$MAIN/.dev/credentials/real.env" "$OWNER_CREDENTIAL"
 
-# 7. Joined failure: either side failing stops and reaps the other.
 restore_release
 : >"$CTL/git.tags"
 RUNNER_BEHAVIOR=fail run_workflow local
@@ -1150,7 +1133,6 @@ CURL_BEHAVIOR=public-target run_workflow local
 check 'a public target fails inspection' has 'target inspection failed' "$CTL/out"
 check 'inspection failure still cleans the fixture' [ "$(grep -c '^fixture cleanup$' "$CTL/calls")" -eq 2 ]
 
-# 8. The proof binds the HTTPS stack server that its effective config names.
 restore_release
 : >"$CTL/git.tags"
 rm -f -- "$STATE/bin/server"
@@ -1168,7 +1150,6 @@ check 'a mismatched server launches nothing' not_called '^(runner|container|fixt
 restore_release
 : >"$CTL/git.tags"
 
-# 9. One workflow at a time, and never beside another local check.
 (
   exec 8>>"$MAIN/.dev/mcp-workflow-launcher.lock"
   flock 8
@@ -1184,7 +1165,6 @@ kill "$holder" 2>/dev/null || true
 wait "$holder" 2>/dev/null || true
 rm -f -- "$CTL/lock.held"
 
-# A caller from a branch older than the .dev/locks move holds only the .git lock.
 (
   exec 8>>"$MAIN/.git/aboutme-local-check.lock"
   flock 8
@@ -1253,7 +1233,6 @@ check_workflow 'a shell holding the shared lock runs the proof' [ "$STATUS" -eq 
 check_workflow 'the shell lock descriptor reaches the lock helper' \
   has 'matched=1' "$CTL/trace"
 
-# 10. The browser-source digest covers content, mode, and membership.
 digest_dir=$T/digest
 mkdir -p "$digest_dir"
 printf 'a\n' >"$digest_dir/a.ts"

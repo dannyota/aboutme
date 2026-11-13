@@ -27,7 +27,6 @@ def load(path):
 
 
 def command(case, directory):
-    # Each command has fresh files and waits for the observer to release it.
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if case in ("escalation", "interrupt"):
@@ -102,8 +101,6 @@ def driver(path, case, directory):
         if samples == 2:
             wait_for(lambda: (directory / "ready").exists(), "command readiness")
         if case == "sampling-failure" and samples >= 2 and not group_signaled:
-            # Sampling stays unavailable until the whole group is signaled;
-            # no post-launch identities can populate the fallback member set.
             raise ValueError("forced first post-launch sample failure")
         if case == "replacement" and (directory / "reaped").exists():
             (directory / "replace").touch()
@@ -125,9 +122,6 @@ def driver(path, case, directory):
         return rows
 
     sys.argv = [path, "--", sys.executable, "-B", __file__, "command", case, str(directory)]
-    # The hook changes observation only. Launch, group signaling and teardown
-    # use real OS processes. The poll hook reaps the leader before replacement
-    # or cleanup cancellation; the next drain sample delivers the real signal.
     with patch.object(watchdog.subprocess, "Popen", side_effect=launch), \
             patch.object(watchdog.os, "killpg", side_effect=signal_group):
         return watchdog.main(observe=observe)
@@ -168,8 +162,6 @@ def run_cases(path):
             finally:
                 if runner.poll() is None:
                     runner.kill()
-                # Successful cases proved emptiness. Failed cases still own
-                # their launched session and must clean it before joining pipes.
                 if not completed and (directory / "group").exists():
                     try:
                         os.killpg(int((directory / "group").read_text()), signal.SIGKILL)

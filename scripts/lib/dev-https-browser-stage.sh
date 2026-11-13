@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Shared per-run spec staging for the dev-https browser image, sourced by
-# scripts/dev-https-check.sh and scripts/totp-production-proof.sh. Copies the
-# exact spec fileset run.sh's validate_spec_dir expects into a fresh, owner-
-# matched, mode-0700 directory: the live source tree always carries extra
-# files (Dockerfile, run.sh itself, and so on), which validate_spec_dir
-# rejects (deploy/dev-https-browser/run.sh "validate_spec_dir").
 set -Eeuo pipefail
 
 # stage_dev_https_browser_specs <context-dir> <staging-dir>

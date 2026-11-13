@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Port probing, Caddy route generation, and effective-config rendering
-# for the native HTTPS harness.
-# Sourced by scripts/dev-https.sh; defines functions and constants only.
 
 port_listening() {
   local status
@@ -67,8 +64,6 @@ generate_caddyfile() {
   content=$(replace_exact "$content" 'reverse_proxy web:3000' \
     "reverse_proxy 127.0.0.1:${WEB_PORT}" 2) || return 1
   printf '%s\n' "$content"
-  # The resolver preserves client.example as Host and SNI while dialing the
-  # development-only loopback address. No browser visits this metadata host.
   printf '\nhttps://client.example:%s {\n' "$CADDY_PORT"
   cat <<'CIMD'
 	bind 127.0.0.1
@@ -104,8 +99,6 @@ render_effective_config() {
   printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\nmail_capture_port=%s\n' \
     "$WEB_PORT" "$SERVER_PORT" "$MOCK_PORT" "$CADDY_PORT" "$MAIL_CAPTURE_PORT"
   printf 'stop_term_attempts=%s\nstop_kill_attempts=%s\n' "$STOP_TERM_ATTEMPTS" "$STOP_KILL_ATTEMPTS"
-  # Covers the entry point and every sourced library file, so editing any
-  # of them while the harness is running is still detected as source drift.
   printf 'lifecycle_source_sha256=%s\n' \
     "$(sha256sum "$ROOT/scripts/dev-https.sh" "$ROOT"/scripts/lib/dev-https-*.sh "$ROOT/scripts/lib/platform.sh" | sha256sum | awk '{print $1}')"
   printf 'deployed_route_source_sha256=%s\n' "$(sha256_file "$CADDYFILE_SRC")"

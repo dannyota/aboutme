@@ -27,7 +27,6 @@ recipe_patterns() {
         command=${command%\\}
         continue
       fi
-      # Ignore quoted text, then separate shell operators from arguments.
       command=$(sed -E "s/'[^']*'/ quoted /g; s/\"([^\"\\\\]|\\\\.)*\"/ quoted /g" <<<"$command")
       command=${command//;/ ; }
       command=${command//&/ & }
@@ -75,9 +74,6 @@ check_inventory() {
     [[ -d $root/$base ]] || { fail "pattern matches no directory: $pattern"; return 1; }
   done
 
-  # Match the environment key and RequireTestDatabaseURL,
-  # RequireMigratedTestDatabaseURL, and NewMigratedTestDatabase, also as values.
-  # internal/testutil is the test support package with non-test Go helpers.
   find "$root" -type f \( -name '*_test.go' -o -path "$root/internal/testutil/*.go" \) >"$WORK/test-files" || return 1
   while IFS= read -r file; do
     if grep -E '["`]TEST_DATABASE_URL["`]|RequireTestDatabaseURL|RequireMigratedTestDatabaseURL|NewMigratedTestDatabase' "$file" >/dev/null; then

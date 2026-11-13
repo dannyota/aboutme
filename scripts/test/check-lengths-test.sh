@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Fixture repositories prove each length limit at its boundary and that only
-# the generated header in the first five lines exempts sqlc output.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -20,8 +18,6 @@ fresh_repo() {
   git init -q "$REPO"
 }
 
-# lines_file <path> <lines> [header-line]: writes and tracks <lines> lines,
-# with the header on [header-line] when given.
 lines_file() {
   local path=$1 lines=$2 header=${3:-0} i
   mkdir -p "$(dirname "$REPO/$path")"
@@ -42,7 +38,6 @@ expect_pass() {
   grep -q '^check-lengths: ok ' "$WORK/output" || fail "$1: no ok line"
 }
 
-# expect_fail <case> <path> <lines> <max>
 expect_fail() {
   local status=0
   bash "$REPO/scripts/check-lengths.sh" >"$WORK/output" 2>&1 || status=$?

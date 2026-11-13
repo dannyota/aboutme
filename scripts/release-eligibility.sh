@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Shared publication and deployment gate. Prints only the eligible commit.
-# With --deploy-checkout and no tag, it only proves that this checkout is clean
-# and equals the release repository's main, and prints nothing.
 set -euo pipefail
 
 fail() { printf 'release-eligibility: %s\n' "$*" >&2; exit 1; }
@@ -47,8 +44,6 @@ commit=$(git -C "$root" rev-parse --verify "refs/tags/$tag^{commit}") || fail 't
 git -C "$root" merge-base --is-ancestor "$commit" refs/remotes/origin/main || fail 'tag is not on main'
 if ((checkout)); then checkout_current; fi
 
-# Do not filter for success in the API: a newer pending or failed run must
-# block an older success. Branch and dispatch results never authorize release.
 ci=$(gh run list --repo "$repo" --workflow ci.yml --commit "$commit" --event push --branch main \
   --json databaseId,conclusion,status,event,headBranch,headSha --limit 20 |
   jq -er --arg c "$commit" '

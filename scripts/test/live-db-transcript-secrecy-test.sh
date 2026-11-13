@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Black-box contract for secret-free live-database Make transcripts. The fake
-# Go command records environment propagation without running tests or a DB.
 set -u -o pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

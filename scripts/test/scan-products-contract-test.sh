@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Black-box contract for full-history secret scanning and scanner failures.
-# The fake tools make no network calls.
 set -u -o pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

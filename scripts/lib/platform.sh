@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Shared local tooling prerequisites and process helpers.
 require_modern_bash() {
   if ((BASH_VERSINFO[0] < 4)); then
     printf 'Bash 4+ is required; put Homebrew bash on PATH on macOS\n' >&2
@@ -18,7 +17,6 @@ require_gnu_tools() {
   done
 }
 
-# ensure_dev_ignored adds .dev to the Git exclude file when it is not ignored.
 ensure_dev_ignored() {
   local root exclude status=0
   root=$(git rev-parse --show-toplevel) || return 1
@@ -50,9 +48,6 @@ ensure_dev_ignored() {
   }
 }
 
-# local_check_lock_path [dir] prints the shared local-check lock. It lives in
-# the main checkout's ignored .dev/locks directory, outside .git, so every
-# worktree resolves the same file and Codex sandboxes can take it.
 local_check_lock_path() {
   local common
   common=$(git -C "${1:-.}" rev-parse --path-format=absolute --git-common-dir) || return 1
@@ -88,7 +83,6 @@ file_mode() {
   stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
 }
 
-# Metadata and hashing for host-side HTTPS browser checks.
 platform_stat() {
   python3 -I -c 'import os,stat,sys
 s = os.lstat(sys.argv[2])
@@ -124,8 +118,6 @@ for _, _, path in sorted(dirs, reverse=True)[keep:]:
     shutil.rmtree(path)' "$1" "$2" "$3"
 }
 
-# Numeric columns precede the untouched command remainder. A lost process makes
-# inspection fail rather than turning incomplete ownership into an empty set.
 platform_process_snapshot() {
   python3 -I - "$@" <<'PY'
 import os, re, subprocess, sys
@@ -170,9 +162,6 @@ platform_group_members() {
   local pgid=$1 host
   [[ $pgid =~ ^[1-9][0-9]*$ ]] && [ "$pgid" -gt 1 ] || return 2
   host=$(uname -s) || return 2
-  # Cross-check BSD selection against PGIDs in the same snapshot. Separate
-  # listings and getsid calls race children exiting during a group drain.
-  # Membership alone never grants authority to signal the group.
   python3 -I - "$pgid" "$host" <<'PY'
 import re, subprocess, sys
 group, host = sys.argv[1:]
@@ -209,7 +198,6 @@ except (OSError, UnicodeError, subprocess.SubprocessError):
 PY
 }
 
-# Exit 1 means no listeners; exit 2 means inspection could not prove owners.
 platform_listener_pids() {
   local host
   host=$(uname -s) || return 2

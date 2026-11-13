@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Adversarial contract tests for local gates and development-stack safety.
-# Every exercised script runs from a temporary repository with a fake PATH.
 set -u -o pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -148,7 +148,6 @@ assert_all_yaml_values() {
   done
 }
 
-# Hosted CI pins tools in ci.yml and in the local composite actions it uses.
 ci_files() {
   local path
   printf '%s\n' .github/workflows/ci.yml
@@ -157,8 +156,6 @@ ci_files() {
   done
 }
 
-# assert_ci_yaml_values checks every KEY value in every hosted CI file and
-# requires at least one.
 assert_ci_yaml_values() {
   local label=$1 key=$2 wanted=$3 path found=0
   while IFS= read -r path; do
@@ -170,7 +167,6 @@ assert_ci_yaml_values() {
   [ "$found" -eq 1 ] || die "$label: hosted CI has no '$key' values"
 }
 
-# assert_ci_text requires WANTED in at least one hosted CI file.
 assert_ci_text() {
   local label=$1 wanted=$2 path
   while IFS= read -r path; do

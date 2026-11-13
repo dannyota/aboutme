@@ -1,24 +1,4 @@
 #!/usr/bin/env bash
-# Checks the published deployment document on production
-# (docs/design/deployment-transparency/README.md "Serving and caching" and
-# "Run, freshness, and staleness", verification.md "Verify it yourself").
-# For the apex and www URLs it fetches the document with a cross-origin
-# request, checks the response headers, runs the document-check command
-# (schema, size, forbidden identifiers, staleness at Date plus Age), then
-# verifies the build provenance and the SBOM attestation of every distinct
-# image digest with gh. Every failure is recorded and the run continues, so
-# one run reports everything.
-#
-# Usage: scripts/deployment-document-check.sh   (no arguments)
-#
-# The manager runs it after a deploy or an observer update. Evidence goes to
-# .dev/prod-checks/transparency/<UTC time>/ with a summary.txt of PASS and
-# FAIL lines; the exit status is 0 only when every check passed. It holds
-# the shared local-check lock in a parent and runs through run-owned.sh.
-#
-# Test overrides: ABOUTME_LOCAL_CHECK_LOCK_PATH selects a scratch lock;
-# ABOUTME_DOCUMENT_CHECK_BIN selects a prebuilt document-check binary.
-# ABOUTME_DOCUMENT_CHECK_SCOPED marks the watchdog pass.
 # shellcheck disable=SC2317 # helpers run through check
 set -Eeuo pipefail
 
@@ -36,8 +16,6 @@ fail() {
 
 [ "$#" -eq 0 ] || fail 'usage: deployment-document-check.sh (no arguments)'
 [ "$(id -u)" -ne 0 ] || fail 'must not run as root'
-
-# --- Preflight and deadline ------------------------------------------------------
 
 # shellcheck source=scripts/lib/platform.sh
 source "$REPO/scripts/lib/platform.sh"
@@ -61,19 +39,18 @@ SUMMARY=$EVIDENCE/summary.txt
 : >"$SUMMARY"
 FAILED=0
 
-record() { # record <PASS|FAIL> <message>
+record() {
   printf '%s %s\n' "$1" "$2" >>"$SUMMARY"
   [ "$1" = PASS ] || FAILED=1
 }
 
-# check <label> <command...> records PASS or FAIL from the command's status.
 check() {
   local label=$1
   shift
   if "$@"; then record PASS "$label"; else record FAIL "$label"; fi
 }
 
-matches() { # matches <value> <glob>
+matches() {
   # shellcheck disable=SC2254 # the pattern is meant to glob
   case $1 in $2) return 0 ;; esac
   return 1
@@ -85,8 +62,6 @@ finish() {
   printf 'evidence: %s\n' "$EVIDENCE"
   exit "$FAILED"
 }
-
-# --- document-check binary ---------------------------------------------------
 
 BUILD=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-document-check.XXXXXX")
 trap 'rm -rf -- "$BUILD"' EXIT
@@ -103,15 +78,11 @@ else
   }
 fi
 
-# --- Headers -----------------------------------------------------------------
-
-# header <file> <name> prints the values of a header, lower-cased name match.
 header() {
   awk -F: -v n="$2" 'tolower($1) == n {
     sub(/^[^:]*:[ \t]*/, ""); sub(/[ \t]+$/, ""); print }' "$1"
 }
 
-# expect_header <label> <file> <name> <glob>: the lower-cased value must match.
 expect_header() {
   local label=$1 file=$2 name=$3 pattern=$4 value
   value=$(header "$file" "$name" | tr '[:upper:]' '[:lower:]')
@@ -120,7 +91,7 @@ expect_header() {
 
 server_ok() { [ -z "$1" ] || [ "$1" = CloudFront ]; }
 
-check_headers() { # check_headers <label> <header file>
+check_headers() {
   local label=$1 file=$2 status name
   status=$(awk 'NR == 1 {print $2}' "$file")
   check "$label http status 200" [ "$status" = 200 ]
@@ -136,8 +107,6 @@ check_headers() { # check_headers <label> <header file>
   done
 }
 
-# fetch_and_check <label> <url> leaves the document-check lines in
-# $EVIDENCE/<label>.images.
 fetch_and_check() {
   local label=$1 url=$2 hdr body date_value age now rc
   hdr=$EVIDENCE/$label.headers
@@ -148,14 +117,12 @@ fetch_and_check() {
     return
   fi
   record PASS "$label fetch $url"
-  # Keep only the last response block, without carriage returns.
   tr -d '\r' <"$hdr.raw" | awk 'BEGIN{RS=""} {last=$0} END{print last}' >"$hdr"
   rm -f -- "$hdr.raw"
   check_headers "$label" "$hdr"
 
   date_value=$(header "$hdr" date)
-  # GNU date reads an empty string as midnight, so a missing Date header
-  # must fail here rather than judge staleness at the wrong time.
+  # GNU date reads an empty string as midnight (date(1)).
   if [ -z "$date_value" ] || [[ $date_value == *$'\n'* ]]; then
     record FAIL "$label one date header"
     return
@@ -178,9 +145,7 @@ for entry in "${URLS[@]}"; do
   fetch_and_check "${entry%% *}" "${entry#* }"
 done
 
-# --- Attestations (apex document) --------------------------------------------
-
-verify() { # verify <outfile> <image> <digest> <version> [extra args]
+verify() {
   local out=$1 image=$2 digest=$3 version=$4
   shift 4
   env -u GH_DEBUG bash "$REPO/scripts/run-owned.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
@@ -190,7 +155,6 @@ verify() { # verify <outfile> <image> <digest> <version> [extra args]
 }
 
 check 'apex lists at least one running image' [ -s "$EVIDENCE/apex.images" ]
-# The design says www serves the same object, so its images must match.
 check 'www lists the same images as apex' \
   cmp -s "$EVIDENCE/apex.images" "$EVIDENCE/www.images"
 while read -r image digest version; do

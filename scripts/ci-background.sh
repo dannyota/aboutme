@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Overlaps independent work inside one hosted CI job. `start NAME CMD...` runs
-# CMD detached, with its output in a log, and returns at once; a later step
-# runs `wait NAME [SECONDS]`, which waits for CMD, prints its log in a
-# collapsed group, and exits with CMD's status. Files live under
-# CI_BACKGROUND_DIR (default $RUNNER_TEMP/ci-background).
 set -Eeuo pipefail
 
 usage() {

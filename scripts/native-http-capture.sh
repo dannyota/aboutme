@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Deterministic public HTTP capture. It seeds the frozen fixture into an
-# isolated database and media root, launches the native stack against it, and
-# records bounded viewer evidence through http://localhost:20080. It is the
-# live slice of AC-PUB-003/004, AC-OPS-005/012b, and AC-SEC-001.
-#
-# The normal native stack is recorded and stopped first, then restored only if
-# it was up. Every path touched is below the repository root and removed again;
-# only the aboutme_p5a_fixture database is created and dropped.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -33,9 +25,7 @@ run_id=
 cleanup() {
   local status=$?
   set +e
-  # Stop the isolated stack first (its state root is the fixture runtime).
   ABOUTME_DEV_STATE_DIR="$FIXTURE_RUNTIME" bash scripts/dev-native.sh down >/dev/null 2>&1
-  # Remove fixture rows and the photo object, then the whole fixture database.
   if [ -x "$ROOT/.dev/bin/native-http-fixture" ]; then
     native-http-fixture cleanup --database-url "$FIXTURE_DATABASE_URL" --media-root "$FIXTURE_MEDIA" --now "$FROZEN_NOW" >/dev/null 2>&1
   fi
@@ -45,14 +35,11 @@ cleanup() {
       podman exec "$DB_CONTAINER" psql -U aboutme -d aboutme -c "DROP DATABASE $FIXTURE_DB" >/dev/null 2>&1
   fi
   rm -rf -- "$ROOT/$FIXTURE_RUNTIME" "$ROOT/$FIXTURE_MEDIA"
-  # Restore the normal stack only if it was up before this capture began.
   if [ "$normal_was_up" = 1 ]; then
     bash scripts/dev-native.sh up >/dev/null 2>&1
   fi
   exit "$status"
 }
-
-# ---- capture helpers ---------------------------------------------------------
 
 fetch() {
   local url=$1 out=$2
@@ -78,8 +65,6 @@ no_set_cookie() {
     die "$out: public response carried a Set-Cookie header"
   fi
 }
-
-# ---- main --------------------------------------------------------------------
 
 trap cleanup EXIT
 
@@ -124,15 +109,11 @@ mkdir -p "$ROOT/$FIXTURE_EVIDENCE"
 run_id=$(mktemp -d "$ROOT/$FIXTURE_EVIDENCE/run.XXXXXX")
 
 info "--- capturing public routes"
-# JSON, discoverable live
 fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-live-photo" json-live
 expect_status json-live 200
 no_set_cookie json-live
 grep -qi '^etag:' "$run_id/json-live.headers" || die 'json-live: missing ETag'
 
-# Conditional re-fetch proves the strict 304 path live (the "demonstrated live"
-# slice of AC-OPS-012b): the exact body-digest ETag must round-trip to an empty
-# 304, not a second 200.
 json_live_etag=$(sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' "$run_id/json-live.headers" | tr -d '\r')
 [ -n "$json_live_etag" ] || die 'json-live: empty ETag'
 cond_status=$(curl -sS -o "$run_id/json-live-304.body" -D "$run_id/json-live-304.headers" \
@@ -141,49 +122,37 @@ cond_status=$(curl -sS -o "$run_id/json-live-304.body" -D "$run_id/json-live-304
 [ "$cond_status" = "304" ] || die "json-live: expected HTTP 304 for If-None-Match, got $cond_status"
 [ ! -s "$run_id/json-live-304.body" ] || die 'json-live: 304 response must have an empty body'
 
-# JSON, private -> uniform 404
 fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-private" json-private
 expect_status json-private 404
 
-# JSON, old tombstone slug -> uniform 404
 fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-renamed-old" json-tombstone
 expect_status json-tombstone 404
 
-# Photo, discoverable live
 fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-live-photo/photo" photo-live
 expect_status photo-live 200
 grep -qi '^content-type: image/png' "$run_id/photo-live.headers" || die 'photo-live: not image/png'
 
-# HTML, discoverable live
 fetch "$PUBLIC_ORIGIN/p5a-live-photo" html-live
 expect_status html-live 200
 no_set_cookie html-live
 
-# The fixed-name hydration asset carries a raw content fingerprint in its query.
-# Vue includes checkout-root __file metadata in development builds, so the
-# golden comparison replaces only that checkout-root prefix below.
 hydration_path=$(node scripts/native-http-hashes.mjs --script-path "$run_id/html-live.body")
 fetch "$PUBLIC_ORIGIN$hydration_path" public-hydration
 expect_status public-hydration 200
 
-# HTML, nondiscoverable -> 200 with noindex
 fetch "$PUBLIC_ORIGIN/p5a-live-noindex" html-noindex
 expect_status html-noindex 200
 grep -qi '^x-robots-tag: noindex' "$run_id/html-noindex.headers" || die 'html-noindex: missing X-Robots-Tag noindex'
 
-# HTML, old tombstone slug -> 404
 fetch "$PUBLIC_ORIGIN/p5a-renamed-old" html-tombstone
 expect_status html-tombstone 404
 
-# Markdown, discoverable -> 200
 fetch "$PUBLIC_ORIGIN/p5a-live-photo.md" md-live
 expect_status md-live 200
 
-# Markdown, nondiscoverable -> 404 (AC-PUB-004)
 fetch "$PUBLIC_ORIGIN/p5a-live-noindex.md" md-noindex
 expect_status md-noindex 404
 
-# Discovery aggregate: sitemap lists discoverable, excludes nondiscoverable
 fetch "$PUBLIC_ORIGIN/sitemap.xml" sitemap
 expect_status sitemap 200
 grep -q 'p5a-live-photo' "$run_id/sitemap.body" || die 'sitemap: missing p5a-live-photo'
@@ -197,10 +166,6 @@ expect_status robots 200
 fetch "$PUBLIC_ORIGIN/llms.txt" llms
 expect_status llms 200
 
-# Hostile rich text never survives the projection. Event handlers and
-# javascript: URLs are hostile in every representation; JSON and Markdown must
-# carry no <script> at all. The HTML page's two structural scripts (external
-# hydration + discoverable JSON-LD) are Go-validated, not hostile content.
 if grep -rqiE '\bon[a-z]+=|javascript:' "$run_id"/*.body; then
   die 'hostile event handler or javascript: URL leaked into a public representation'
 fi
@@ -208,10 +173,6 @@ if grep -rqiE '<script' "$run_id/json-live.body" "$run_id/md-live.body"; then
   die 'raw <script> leaked into JSON or Markdown'
 fi
 
-# Every captured representation must match its frozen SHA-256, so any drift in
-# the projection, renderer, sanitizer, or formats fails the capture. The public
-# HTML links a fixed-name hydration asset whose checkout-root __file metadata is
-# canonicalized only after its raw fingerprint matches the query string.
 node scripts/native-http-hashes.mjs \
   "$run_id/public-hydration.body" "$run_id/html-live.body" "$ROOT" \
   >"$run_id/html-live.canonical.json"

@@ -52,8 +52,6 @@ timing=.dev/proof-timing/proofs.tsv
 install -d -m 0700 "${timing%/*}" || exit 1
 printf 'proof\tstatus\trestart_seconds\tcheck_seconds\ttotal_seconds\n' >"$timing" || exit 1
 
-# move_shard_evidence moves every KIND-* evidence directory the shard left in
-# the evidence root into the shard's own staging directory.
 move_shard_evidence() {
   local kind=$1 shard=$2 dest dir
   dest=$staging/$kind-browser-proof-evidence-$shard
@@ -64,11 +62,6 @@ move_shard_evidence() {
   done
 }
 
-# move_exports_evidence moves the exports proof's NAME.* evidence directory
-# (dev-https-check.sh mktemp names it with a dot, not the dash the sharded
-# kinds above use) into a fixed staging directory, on both outcomes: unlike
-# the sharded kinds, this proof needs no per-shard coverage check, only a
-# single place for its pass or failure evidence to reach the upload step.
 move_exports_evidence() {
   local dest=$staging/exports-browser-proof-evidence dir
   install -d -m 0700 "$staging" "$dest"
@@ -78,9 +71,6 @@ move_exports_evidence() {
   done
 }
 
-# move_linkedin_import_evidence does the same for the linkedin-import proof's
-# NAME.* evidence directory (linkedin-import.spec.ts writes redacted failure
-# evidence on a mid-test failure, the same as exports.spec.ts).
 move_linkedin_import_evidence() {
   local dest=$staging/linkedin-import-browser-proof-evidence dir
   install -d -m 0700 "$staging" "$dest"
@@ -90,11 +80,6 @@ move_linkedin_import_evidence() {
   done
 }
 
-# stage_totp_evidence moves each listed TOTP shard's /evidence/SHARD/ output
-# out of every totp-enabled.* run directory into that shard's staging
-# directory under the run directory's own name. Whatever is left, such as
-# the disabled-phase run, then goes to epoch-disabled when it is listed, or
-# to the first listed shard.
 stage_totp_evidence() {
   local list=$1 shard run owner dest
   local -a shards=()
@@ -115,7 +100,6 @@ stage_totp_evidence() {
   move_shard_evidence totp "$owner"
 }
 
-# log_lines prints how many lines the server log holds now.
 log_lines() {
   if [ -f "$server_log" ]; then wc -l <"$server_log"; else echo 0; fi
 }
@@ -138,7 +122,6 @@ api_load() {
 guarded_proof() {
   local -a options=()
   case $kind in passkey | totp) options+=(--allow-stop) ;; esac
-  # The workflow safety contract checks the explicit shard-to-make dispatch.
   bash scripts/dev-https.sh guard "${options[@]}" -- bash -c '
     kind=$1 shard=$2 target=$3
     case $kind in

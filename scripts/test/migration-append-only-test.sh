@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Regression tests for local and hosted migration immutability checks.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -182,7 +181,6 @@ new_repo "$repo"
 printf '%s\n' '-- corrected before first v1' >"$repo/apps/server/migrations/00001_released.sql"
 run_local "$repo" >/dev/null
 
-# An obsolete UAT marker does not freeze a pre-v1 base.
 for mode in modified deleted renamed type-changed; do
   repo=$WORK/pre-v1-$mode
   new_repo "$repo"
@@ -285,9 +283,7 @@ git -C "$repo" add -- apps/server/migrations/00002_new.sql
 git -C "$repo" commit -qm "test: add forward migration"
 run_commits "$repo" "$base" HEAD >/dev/null
 
-# A baseline reset (new marker, migrations collapsed) is rejected like any
-# other marker change, in both modes.
-new_marked_repo() { # repo
+new_marked_repo() {
   local repo=$1
   mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
   cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
@@ -301,7 +297,7 @@ new_marked_repo() { # repo
   git -C "$repo" commit -qm "test: marked baseline"
 }
 
-collapse_migrations() { # repo
+collapse_migrations() {
   local repo=$1
   rm -f "$repo"/apps/server/migrations/*.sql
   printf '%s\n' '-- collapsed baseline' >"$repo/apps/server/migrations/00001_baseline.sql"
@@ -355,14 +351,12 @@ if run_commits "$repo" "$resolved" HEAD >/dev/null 2>&1; then
   echo 'migration-append-only-test: dispatch hid a frozen migration edit' >&2
   exit 1
 fi
-# An older main commit cannot hide a guard introduced on newer main ancestry.
 git -C "$repo" update-ref refs/remotes/origin/main "$bypass"
 if run_dispatch_base "$repo" "$trusted" >/dev/null 2>&1; then
   echo 'migration-append-only-test: stale main base passed' >&2
   exit 1
 fi
 run_dispatch_base "$repo" "$bypass" >/dev/null
-# A fetched main with unrelated history must fail closed.
 git -C "$repo" switch -q --orphan unrelated
 git -C "$repo" rm -q -rf --ignore-unmatch -- .
 printf '%s\n' 'unrelated' >"$repo/unrelated.txt"

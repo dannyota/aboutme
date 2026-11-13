@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Run local CI under the shared lock and owned-child deadline.
 set -Eeuo pipefail
 
 readonly TIMEOUT_SECONDS=3600

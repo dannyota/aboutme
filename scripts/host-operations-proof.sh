@@ -5,7 +5,6 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 (($# == 1)) && [[ $1 =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || { echo invalid_request >&2; exit 2; }
 id=$1
 status=$(bash "$root/deploy/vn/scripts/operations.sh" verify "$id")
-# Verify starts a read attempt. Resolve it through resume before publishing proof.
 stop_at=$((SECONDS+60))
 while ((SECONDS<stop_at)); do
   status=$(bash "$root/deploy/vn/scripts/operations.sh" resume "$id" 2>/dev/null) || { sleep 1; continue; }
@@ -20,7 +19,7 @@ trap 'rm -rf "$work"' EXIT
 umask 077
 stop_at=$((SECONDS+300))
 result=pass
-read_url() { # absolute path, expected status
+read_url() {
   local code
   ((SECONDS<stop_at)) || return 1
   code=$(curl --silent --show-error --max-time 10 --max-filesize 1048576 \
@@ -57,8 +56,6 @@ PYTHON
     else result=fail; fi
   done
 done < <(jq -r '.[]' <<<"$slugs")
-# Traverse every page within the total bound. The host records card coverage
-# and lost committed slugs as limited even when this traversal passes.
 page=1
 while ((SECONDS<stop_at)); do
   read_url "/api/v1/public/showcase?page=$page" 200 || { result=fail; break; }
@@ -68,7 +65,6 @@ while ((SECONDS<stop_at)); do
   ((page+=1))
 done
 ((SECONDS<stop_at)) || result=fail
-# Fixed stdin receipt only. SSH settings match the operations coordinator.
 # shellcheck source=../deploy/vn/scripts/ssh-lib.sh
 source "$root/deploy/vn/scripts/ssh-lib.sh"
 jq -cn --arg id "$id" --arg nonce "$nonce" --arg result "$result" \

@@ -82,7 +82,6 @@ status=0; run || status=$?; [[ $status == 2 ]] || fail 'session checkout did not
 grep -q 'development session state exists' "$WORK/out" || fail 'missing session refusal'
 if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran with development session state'; fi
 rm "$WORK/tree/.dev/native-https/run/session"
-# A linked ancestor can redirect both installation and generated output.
 mv "$WORK/tree/apps" "$WORK/apps-real"
 ln -s "$WORK/apps-real" "$WORK/tree/apps"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'linked ancestor did not exit 2'
@@ -114,8 +113,6 @@ done
 status=0; STUB_OWNED_STATUS=125 run || status=$?; [[ $status == 2 ]] || fail 'watchdog refusal did not exit 2'
 grep -q 'watchdog could not start' "$WORK/out" || fail 'missing watchdog refusal'
 if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran after watchdog refusal'; fi
-# A check in another worktree holds the main checkout's shared lock, or a
-# caller from a branch older than the .dev/locks move holds the .git lock.
 mkdir -p "$repo/.dev/locks"
 old_lock=$repo/.git/aboutme-local-check.lock new_lock=$repo/.dev/locks/local-check.lock
 for held in "$new_lock" "$old_lock"; do
@@ -136,8 +133,6 @@ PY
   touch "$WORK/locked.done"
   wait "$holder"
 done
-# A new caller holds the pre-move lock too, so an old caller waits. A Codex
-# sandbox cannot write .git; a read-only lock file stands in for that here.
 for mode in writable read-only; do
   [[ $mode == writable ]] || chmod 0444 "$old_lock"
   rm -f "$WORK/locked" "$WORK/locked.done"

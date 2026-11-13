@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# State-directory and secret-file helpers for the native HTTPS harness.
-# Sourced by scripts/dev-https.sh; defines functions and constants only.
 
 pidfile() { printf '%s/%s.pid' "$RUN_DIR" "$1"; }
 logfile() { printf '%s/%s.log' "$LOG_DIR" "$1"; }
@@ -153,8 +151,6 @@ ensure_secrets() {
   PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
   AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
   AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
-  # TOTP_ACTIVE_KEY takes the same 32-byte state secret and base64url shape as
-  # the keys above (docs/design/totp-key-management.md "Key ring").
   TOTP_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/totp-key-a")
 }
 

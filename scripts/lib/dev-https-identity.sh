@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Session ownership and live service/listener checks for the HTTPS harness.
 port_of() {
   case $1 in
   mock-oauth) printf '%s' "$MOCK_PORT" ;;
@@ -26,7 +25,6 @@ read_pid() {
   printf '%s' "$pid"
 }
 
-# HTTP stack exclusion needs no signal authority.
 is_ours() {
   local row pid ppid pgid uid sid rest
   row=$(platform_process_snapshot "$1") || return 1
@@ -103,7 +101,6 @@ service_pid() {
 
 validate_service_identity() { service_pid "$1" >/dev/null; }
 
-# Require every socket owner to descend from this service's live direct child.
 validate_service_listeners() {
   local name=$1 allow_absent=${2:-0} child owners status owner row pid ppid pgid uid sid state command seen port absent=0
   local -a ports=("$(port_of "$1")")
@@ -146,8 +143,6 @@ session_health() {
   [ ! -e "$RUN_DIR/session.failed" ] && [ ! -e "$RUN_DIR/session.stopping" ] || return 1
   for name in "${SERVICES[@]}"; do
     if ! validate_service_listeners "$name"; then
-      # An allowed proof can inspect a child while a validated stop drains it.
-      # A prior session's stop marker cannot excuse an unexpected service loss.
       if [ -z "$proof" ] || ! proof_stop_observed "$proof" "$stopped" "$token"; then
         latch_session_failure "$token" "$name" || true
       fi
@@ -157,7 +152,6 @@ session_health() {
   validate_session_anchor && [ "$SESSION_TOKEN" = "$token" ] && [ ! -e "$RUN_DIR/session.failed" ]
 }
 
-# Startup permits unbound ports, but never a foreign or unreadable owner.
 session_startup_health() {
   local name status token
   validate_session_anchor || return 1
