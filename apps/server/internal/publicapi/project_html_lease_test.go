@@ -2,61 +2,13 @@ package publicapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"sync"
 	"testing"
 	"time"
 
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
-
-// deadlineBlockedWriter blocks every body write until a write deadline is
-// set, as a connection to a reader that stopped reading does.
-type deadlineBlockedWriter struct {
-	header       http.Header
-	writing      chan struct{}
-	deadline     chan struct{}
-	released     chan struct{}
-	writingOnce  sync.Once
-	deadlineOnce sync.Once
-	releaseOnce  sync.Once
-}
-
-func newDeadlineBlockedWriter() *deadlineBlockedWriter {
-	return &deadlineBlockedWriter{header: http.Header{}, writing: make(chan struct{}), deadline: make(chan struct{}), released: make(chan struct{})}
-}
-
-func (w *deadlineBlockedWriter) Header() http.Header { return w.header }
-func (w *deadlineBlockedWriter) WriteHeader(int)     {}
-func (w *deadlineBlockedWriter) Write([]byte) (int, error) {
-	w.writingOnce.Do(func() { close(w.writing) })
-	select {
-	case <-w.deadline:
-		return 0, os.ErrDeadlineExceeded
-	case <-w.released:
-		return 0, errors.New("released by the test")
-	}
-}
-
-// SetWriteDeadline is what http.ResponseController calls.
-func (w *deadlineBlockedWriter) SetWriteDeadline(time.Time) error {
-	w.deadlineOnce.Do(func() { close(w.deadline) })
-	return nil
-}
-
-func (w *deadlineBlockedWriter) release() { w.releaseOnce.Do(func() { close(w.released) }) }
-
-func (w *deadlineBlockedWriter) deadlineSet() bool {
-	select {
-	case <-w.deadline:
-		return true
-	default:
-		return false
-	}
-}
 
 // TestProjectPages_RevocationEndsABlockedWrite proves a revoking transition
 // ends a project response blocked on a slow reader, fresh or cached: the
