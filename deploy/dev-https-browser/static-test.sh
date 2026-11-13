@@ -95,7 +95,6 @@ for (const [path, route] of [
 assert.equal(classify(message('secret content', 'https://other.invalid/api/v1/events'), id, slug), 'console-non-http-other');
 assert.equal(classify(message(failed, 'invalid secret'), id, slug), 'console-404-other');
 assert.match(spec, /countedConsoleFailure \?\?= `\$\{classifyConsoleFailure\(message, resumeID, slug\)\}-at-\$\{currentStage\}`/);
-// Each of the four tests names its first counted console error.
 assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 4);
 assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?countedConsoleFailure/s);
 NODE
@@ -202,9 +201,6 @@ assert.equal(aborted(message(abortedText, `${ALLOWED_ORIGIN}/api/v1/public/resum
 assert.equal(aborted(message(failed(404), `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
 assert.equal(aborted(message('Failed to load resource: net::ERR_FAILED', `${ALLOWED_ORIGIN}/api/v1/public/showcase`)), false);
 
-// Statuses: only the unknown resume's answer, which project addresses must
-// equal, and the owner read of a deleted resume are exact 404s, and no
-// public status check accepts 200 after a revocation.
 assert.deepEqual(spec.match(/expect\([^\n]*\)\.toBe\(40\d\)/g), [
   'expect(uniformNotFound.status).toBe(404)',
   'expect(await ownerReadStatus(page, id)).toBe(404)',
@@ -288,10 +284,6 @@ assert.equal(count(spec, /await writePublishEvidence\(\);/g), 1);
 assert.ok(spec.indexOf('test.afterEach(async ({ browser }') < spec.indexOf('test.afterEach(async ({}, info)'));
 assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 1);
 
-// The project pages test: cleanup deletes the project after the resume that
-// links it; every unavailable project address is compared with the unknown
-// resume's answer, six times in all; and only the 404 line for an address
-// the test has already asked for as one is excused.
 assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);\n\s*if \(projectID !== undefined\) \{\n\s*await deleteRecordedProject\(cleanupPage, projectID\);/);
 const projects = testBody('PROJECT_PAGES_TEST_TITLE');
 assert.match(projects, /createdProjectID = project\.id;\n\s*expect\(project\.status\)\.toBe\(201\);/);
@@ -1067,8 +1059,6 @@ try {
   ]) {
     assert.equal(accepted((evidence) => { evidence.elapsedMs.revocation = elapsed; }), ok, `revocation ${elapsed}`);
   }
-  // The project pages test's part: every step, no diagnostics, and the
-  // exact counts, or the evidence is rejected.
   assert.equal(accepted((evidence) => { delete evidence.projects; }), false, 'projects missing');
   for (const name of Object.keys(JSON.parse(valid).projects.steps)) {
     assert.equal(accepted((evidence) => { evidence.projects.steps[name] = false; }), false, `project step ${name}`);

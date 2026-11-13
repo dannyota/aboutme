@@ -307,8 +307,6 @@ async function signInWithPassword(page: Page): Promise<void> {
   );
 }
 
-// Cleanup uses a separate session after the counted contexts close. It
-// deletes the resume first, so the project it linked is linked by none.
 async function deleteOutsideCounters(
   browser: Browser,
   resumeID: string,
@@ -346,14 +344,6 @@ async function auditDialog(page: Page): Promise<void> {
   }
 }
 
-// The public project pages over the real stack: Caddy routes both addresses
-// to Go, Go admits the resume, gates and decides availability, and the
-// renderer writes pages with no inline CSS (docs/design/projects.md "Project
-// pages and entry points"; docs/design/projects-contract.md "Routes and
-// dispatch", "Representations"; AC-PROJ-005, AC-PROJ-006). It is declared
-// before the publish journey, whose cleanup writes the run's evidence, so
-// that evidence carries what this test proved and refuses to be written
-// until every step here is true.
 const PROJECT_PAGES_TEST_TITLE =
   "proves the public project pages, their gate, and their revocations";
 const projectSteps = {
@@ -368,25 +358,17 @@ const projectSteps = {
   cleanup: false,
 };
 const projectCounts = {
-  // Stylesheets loaded on the list and the page, two each.
   stylesheets: 0,
-  // Elements with a style attribute on either page.
   styleAttributes: 0,
-  // Answers byte for byte the unknown resume's 404.
   uniformNotFound: 0,
-  // Addresses that served the gate, the unknown project's included.
   gatedAddresses: 0,
 };
-// The project test's own diagnostics, unset until it finishes.
 const projectErrors = {
   certificate: -1,
   console: -1,
   externalRequest: -1,
   page: -1,
 };
-// A served list or project page: CSS only from the two versioned
-// stylesheets at one version, no inline style or script, noindex while SEO
-// and GEO is off (docs/design/projects-contract.md "Render envelope").
 const SERVED_PROJECT_PAGE = {
   styleSources: ["style-src 'self'"],
   unsafeInline: false,
@@ -400,8 +382,6 @@ const SERVED_PROJECT_PAGE = {
   projectMains: 1,
   gates: 0,
 };
-// The resume's gate standing in for a project address
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gate").
 const GATE_FOR_PROJECT = {
   noStore: true,
   robotsHeader: "noindex, noarchive",
@@ -429,8 +409,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
   const unknownPath = `${listPath}/${unknownSlug}`;
   let resumeID: string | undefined;
   let viewerContext: BrowserContext | undefined;
-  // Every address this test reads as the uniform 404. Only the browser's
-  // line for a read of one of them is excused.
   const notFoundPaths = new Set<string>();
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
@@ -442,8 +420,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
   };
   await installPublicGuards(context, counters);
   pageDiagnosticsAttacher(counters, hooks)(page);
-  // An unavailable project address answers exactly as an unknown resume:
-  // the same status, headers that matter, robots and bytes.
   let uniformNotFound: NotFoundShape | undefined;
   const expectUniformNotFound = async (
     target: Page,
@@ -459,8 +435,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
   try {
     stage("projects-login");
     await signInWithPassword(page);
-    // The setup goes through the owner API: this test proves the public
-    // pages, not the editor.
     stage("projects-create-resume-status");
     const created = await ownerCreate(
       page,
@@ -529,7 +503,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
     expect(await ownerSetEntryHidden(page, id, linked, true)).toBe(200);
     stage("projects-hidden-page-uniform");
     await expectUniformNotFound(viewer, pagePath);
-    // It was the resume's only project, so the list goes with it.
     stage("projects-hidden-list-uniform");
     await expectUniformNotFound(viewer, listPath);
     projectSteps.hiddenUniform = true;
@@ -546,8 +519,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
         signInToView: true,
       }),
     ).toBe(200);
-    // The gate comes before availability, so a well-formed unknown address
-    // gets it too, differing only in the page its links return to.
     const gateTexts = new Map<string, string>();
     for (const [name, path, gatePage] of [
       ["list", listPath, "projects"],
@@ -572,8 +543,6 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
     );
     projectSteps.gate = true;
 
-    // The viewer is on the project's gate: signing in there returns to the
-    // project page with a pass for the resume.
     stage("projects-pass-sign-in");
     await signInWithGoogle(viewer, {
       activator: gateProviderLink(viewer, slug, `projects/${projectSlug}`),

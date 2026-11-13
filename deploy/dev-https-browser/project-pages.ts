@@ -1,8 +1,3 @@
-// Owner API calls and page readings for the public project pages proof in
-// publish.spec.ts (docs/design/projects-contract.md "Routes and dispatch",
-// "Representations", "Render envelope"; docs/design/ui/project-pages.md).
-// Every reading returns closed facts the spec compares; none returns a URL,
-// slug, name, header value or page text for evidence.
 import type { ConsoleMessage, Page, Response } from '@playwright/test';
 
 import { freshCSRF } from './editor-fixtures';
@@ -11,15 +6,10 @@ import { ALLOWED_ORIGIN, httpFailureStatus } from './network-policy';
 const ORIGIN = ALLOWED_ORIGIN;
 const SCHEMA_VERSION = '6';
 const VIEW_PASS_COOKIE = '__Host-view-pass';
-// The gate offers these providers in the harness, as public.spec.ts proves.
 const GATE_PROVIDERS: readonly string[] = ['google', 'linkedin'];
-// The two versioned stylesheets a project page may link
-// (docs/design/projects-contract.md "Render envelope").
 const STYLESHEET_HREF =
   /^\/_nuxt\/assets\/(print-fonts|project-pages)\.css\?v=([A-Za-z0-9_-]+)$/u;
 
-// The library project this proof creates: one English text with a name, so
-// the project is available wherever an entry links it.
 export interface ProjectDocument {
   readonly defaultLanguage: string;
   readonly technologies: readonly string[];
@@ -34,8 +24,6 @@ export function projectDocument(name: string): ProjectDocument {
   };
 }
 
-// ownerCreateProject creates a library project at slug through the owner
-// API. It returns the status and the new project's ID.
 export async function ownerCreateProject(
   page: Page,
   slug: string,
@@ -63,8 +51,6 @@ export async function ownerCreateProject(
   );
 }
 
-// ownerRenameProject replaces the project whole with its document at a new
-// slug, the rename the contract defines. It returns the replace status.
 export async function ownerRenameProject(
   page: Page,
   id: string,
@@ -94,8 +80,6 @@ export async function ownerRenameProject(
   );
 }
 
-// deleteRecordedProject deletes a project this proof created, if it still
-// exists. It runs in the cleanup session, outside every counted page.
 export async function deleteRecordedProject(page: Page, id: string): Promise<void> {
   const token = await freshCSRF(page);
   const statuses = await page.evaluate(
@@ -129,8 +113,6 @@ export interface LinkedEntry {
   readonly entry: Readonly<Record<string, unknown>> | undefined;
 }
 
-// ownerLinkProject links the project to the resume as a new prefilled entry
-// and returns the status with the linked entry and its section key.
 export async function ownerLinkProject(
   page: Page,
   resumeID: string,
@@ -171,8 +153,6 @@ export async function ownerLinkProject(
   );
 }
 
-// ownerSetEntryHidden replaces the linked entry with its hidden flag set as
-// given and returns the write status.
 export async function ownerSetEntryHidden(
   page: Page,
   resumeID: string,
@@ -223,8 +203,6 @@ export interface PublishState {
   readonly signInToView: boolean;
 }
 
-// ownerSetPublishState sends one complete publish command with downloads and
-// discovery off and returns its status.
 export async function ownerSetPublishState(
   page: Page,
   resumeID: string,
@@ -264,15 +242,12 @@ export async function ownerSetPublishState(
   );
 }
 
-// openPublic navigates page to a same-origin path and returns the document
-// response.
 export async function openPublic(page: Page, path: string): Promise<Response> {
   const response = await page.goto(`${ORIGIN}${path}`);
   if (response === null) throw new Error('public document is unavailable');
   return response;
 }
 
-// The parts of a not-found answer a reader or crawler can tell apart.
 export interface NotFoundShape {
   readonly status: number;
   readonly contentType: string | null;
@@ -283,9 +258,6 @@ export interface NotFoundShape {
   readonly bytes: string;
 }
 
-// readNotFoundShape opens path and returns its status, the headers that
-// matter, the robots meta and the exact body bytes, for comparison with an
-// unknown resume's answer.
 export async function readNotFoundShape(page: Page, path: string): Promise<NotFoundShape> {
   const response = await openPublic(page, path);
   const headers = await response.allHeaders();
@@ -302,9 +274,6 @@ export async function readNotFoundShape(page: Page, path: string): Promise<NotFo
   };
 }
 
-// isExpectedNotFoundConsole matches the line the browser logs for a
-// document this test reads as the uniform 404, and only for an address the
-// test has already asked for as one.
 export function isExpectedNotFoundConsole(
   message: ConsoleMessage,
   paths: ReadonlySet<string>,
@@ -323,7 +292,6 @@ export function isExpectedNotFoundConsole(
   );
 }
 
-// What a served project page or list shows about its delivery rules.
 export interface ProjectPageFacts {
   readonly styleSources: readonly string[];
   readonly unsafeInline: boolean;
@@ -338,9 +306,6 @@ export interface ProjectPageFacts {
   readonly gates: number;
 }
 
-// projectPageFacts reads a served project page: its CSP style directive,
-// its robots header, which versioned stylesheets it links and how many of
-// them loaded, and whether any inline style or script is in the DOM.
 export async function projectPageFacts(page: Page, response: Response): Promise<ProjectPageFacts> {
   const headers = await response.allHeaders();
   const csp = headers['content-security-policy'] ?? '';
@@ -380,7 +345,6 @@ export async function projectPageFacts(page: Page, response: Response): Promise<
   };
 }
 
-// The gate as it stands in for a project address.
 export interface GateFacts {
   readonly noStore: boolean;
   readonly robotsHeader: string | null;
@@ -391,10 +355,6 @@ export interface GateFacts {
   readonly revealsName: boolean;
 }
 
-// gateFacts reads a gate page served for /{slug}/{gatePage}: its caching and
-// robots headers, whether it is the gate and not a project page, whether
-// each offered provider link carries exactly that page, and whether the
-// project's name appears anywhere in it.
 export async function gateFacts(
   page: Page,
   response: Response,
@@ -425,15 +385,12 @@ export async function gateFacts(
   };
 }
 
-// gateProviderLink is the gate's Google link for /{slug}/{gatePage}.
 export function gateProviderLink(page: Page, slug: string, gatePage: string) {
   return page.locator(
     `a.gate-provider[href="/api/v1/auth/google/start?purpose=view&slug=${slug}&page=${gatePage}"]`,
   );
 }
 
-// hasViewPass reports whether the context holds a view pass cookie, without
-// reading its value.
 export async function hasViewPass(page: Page): Promise<boolean> {
   return (await page.context().cookies(ORIGIN)).some((cookie) => cookie.name === VIEW_PASS_COOKIE);
 }
