@@ -35,7 +35,9 @@ var droppedShowcaseObjects = []string{
 // showcaseCatalogQuery describes resume_showcase by object name: each column's
 // type, nullability, and default; each constraint's definition; and each
 // index's definition. Names, not column positions, identify the objects, so a
-// column that Down re-adds at the end compares equal.
+// column that Down re-adds at the end compares equal. PostgreSQL 18 also lists
+// each NOT NULL as a named constraint; nullability is read from the column, so
+// those are left out and the snapshot is the same on every server version.
 const showcaseCatalogQuery = `
 SELECT 'column ' || a.attname,
        format_type(a.atttypid, a.atttypmod)
@@ -47,7 +49,7 @@ WHERE a.attrelid = 'public.resume_showcase'::regclass AND a.attnum > 0 AND NOT a
 UNION ALL
 SELECT 'constraint ' || c.conname, pg_get_constraintdef(c.oid)
 FROM pg_constraint c
-WHERE c.conrelid = 'public.resume_showcase'::regclass
+WHERE c.conrelid = 'public.resume_showcase'::regclass AND c.contype <> 'n'
 UNION ALL
 SELECT 'index ' || ic.relname, pg_get_indexdef(i.indexrelid)
 FROM pg_index i
