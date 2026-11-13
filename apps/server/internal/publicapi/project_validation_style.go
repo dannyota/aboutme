@@ -11,14 +11,19 @@ import (
 )
 
 // cssContentDeclaration finds each content declaration and its value in
-// CSS with comments removed. A name such as justify-content does not match.
+// CSS with comments outside strings removed. A name such as justify-content
+// does not match.
 var cssContentDeclaration = regexp.MustCompile(`(?i)(?:^|[{;\s])content\s*:([^;}]*)`)
 
 // unsafeStyleContent reports whether css sets content to anything but an
 // empty string or none, which would put text on the page outside the
-// validated tree.
+// validated tree, or cannot be scanned.
 func unsafeStyleContent(css string) bool {
-	for _, match := range cssContentDeclaration.FindAllStringSubmatch(stripCSSComments(css), -1) {
+	scanned, ok := cssWithoutComments(css)
+	if !ok {
+		return true
+	}
+	for _, match := range cssContentDeclaration.FindAllStringSubmatch(scanned, -1) {
 		value := strings.TrimSpace(match[1])
 		if len(value) >= len("!important") && strings.EqualFold(value[len(value)-len("!important"):], "!important") {
 			value = strings.TrimSpace(value[:len(value)-len("!important")])

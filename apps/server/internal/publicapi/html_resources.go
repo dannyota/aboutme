@@ -151,12 +151,18 @@ func unexpectedResourceAttribute(node *html.Node) string {
 	return ""
 }
 
+// unsafeInlineStyle reports whether CSS can load a resource: any escape,
+// an unterminated string or comment, or url, image-set or @import outside a
+// comment.
 func unsafeInlineStyle(value string) bool {
 	lower := strings.ToLower(value)
 	if strings.Contains(lower, "\\") {
 		return true
 	}
-	withoutComments := stripCSSComments(lower)
+	withoutComments, ok := cssWithoutComments(lower)
+	if !ok {
+		return true
+	}
 	compact := strings.Map(func(character rune) rune {
 		switch character {
 		case ' ', '\t', '\n', '\r', '\f':
@@ -168,19 +174,52 @@ func unsafeInlineStyle(value string) bool {
 	return strings.Contains(compact, "url") || strings.Contains(compact, "image-set") || strings.Contains(compact, "@import")
 }
 
-func stripCSSComments(value string) string {
+// cssWithoutComments removes each CSS comment that sits outside a string,
+// leaving a space so the tokens around it stay apart, and keeps every string
+// as written. A quote or backslash escaped inside a string does not end it.
+// ok is false for an unterminated comment or string, or a string broken by
+// a newline, which every caller rejects (CSS Syntax, "Consume comments" and
+// "Consume a string token").
+func cssWithoutComments(value string) (string, bool) {
 	var output strings.Builder
-	for {
-		start := strings.Index(value, "/*")
-		if start < 0 {
-			output.WriteString(value)
-			return output.String()
+	for i := 0; i < len(value); {
+		switch {
+		case value[i] == '"' || value[i] == '\'':
+			end, ok := cssStringEnd(value, i)
+			if !ok {
+				return "", false
+			}
+			output.WriteString(value[i:end])
+			i = end
+		case strings.HasPrefix(value[i:], "/*"):
+			end := strings.Index(value[i+2:], "*/")
+			if end < 0 {
+				return "", false
+			}
+			output.WriteByte(' ')
+			i += 2 + end + 2
+		default:
+			output.WriteByte(value[i])
+			i++
 		}
-		output.WriteString(value[:start])
-		end := strings.Index(value[start+2:], "*/")
-		if end < 0 {
-			return output.String()
-		}
-		value = value[start+2+end+2:]
 	}
+	return output.String(), true
+}
+
+// cssStringEnd returns the index just past the string that opens at start,
+// or false when the string has no closing quote before a newline or the end.
+// An escaped newline continues the string.
+func cssStringEnd(value string, start int) (int, bool) {
+	quote := value[start]
+	for i := start + 1; i < len(value); i++ {
+		switch value[i] {
+		case '\\':
+			i++
+		case '\n', '\r', '\f':
+			return 0, false
+		case quote:
+			return i + 1, true
+		}
+	}
+	return 0, false
 }

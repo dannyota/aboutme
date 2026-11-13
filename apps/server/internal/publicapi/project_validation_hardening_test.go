@@ -118,3 +118,45 @@ func TestProjectValidators_StyleContentIsEmptyOrNone(t *testing.T) {
 		t.Fatal("the corpus reference style already sets content")
 	}
 }
+
+// TestProjectValidators_QuotedCommentMarkersStayInStrings proves the style
+// checks read comment markers inside a CSS string as string text, and reject
+// an unterminated string or comment, in both modes, in the style element and
+// in style attributes.
+func TestProjectValidators_QuotedCommentMarkersStayInStrings(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	corpus := readProjectCorpus(t)
+	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
+	modes := map[string]struct {
+		source   string
+		validate func(string) string
+	}{
+		"project": {page.HTML, func(source string) string {
+			return projectHTMLRejection([]byte(source), projectCorpusPage(t, page), origin)
+		}},
+		"project-list": {list.HTML, func(source string) string {
+			return projectListHTMLRejection([]byte(source), projectCorpusList(t, list), origin)
+		}},
+	}
+	const photo = "url(/api/v1/public/resumes/other-resume/photo)"
+	for name, test := range map[string]struct {
+		rule, declarations, styleRule, attributeRule string
+	}{
+		"comment markers in content":    {"h1::before", `content:"/*private@example.test*/"`, "style_content", "style_content"},
+		"comment markers around a url":  {"h1", `--a:"/*";background-image:` + photo + `;--b:"*/"`, "style_element", "inline_style"},
+		"escaped quote before a marker": {"h1", `--a:"\"/*";background-image:` + photo + `;--b:"*/"`, "style_element", "inline_style"},
+		"unterminated string":           {"h1", `color:red;--a:"unterminated`, "style_element", "inline_style"},
+		"unterminated comment":          {"h1", `color:red;/* unterminated`, "style_element", "inline_style"},
+	} {
+		for mode, m := range modes {
+			styled := replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+test.rule+"{"+test.declarations+"}</style>")
+			if got := m.validate(styled); got != test.styleRule {
+				t.Errorf("%s in a %s style element: rejection = %q, want %q", name, mode, got, test.styleRule)
+			}
+			attributed := replaceOnce(m.source, "<h1>", `<h1 style='`+test.declarations+`'>`)
+			if got := m.validate(attributed); got != test.attributeRule {
+				t.Errorf("%s in a %s style attribute: rejection = %q, want %q", name, mode, got, test.attributeRule)
+			}
+		}
+	}
+}
