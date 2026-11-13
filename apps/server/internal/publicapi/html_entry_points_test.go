@@ -199,6 +199,19 @@ func TestResumePageValidatorUntitledLinkedEntry(t *testing.T) {
 	}
 }
 
+func TestResumePageValidatorWhitespaceTitleIsTitled(t *testing.T) {
+	html := resumeLinksHTML(t, "en-two-linked-entries")
+	second := `<div class="entry-title">` + titleAnchor(secondProjectEntry, corpusSecondPage, "Next.js performance checklist") + `</div>`
+	blank := "   "
+	page := entryPointPageFor(t, untitledSecondEntry(&blank))
+	if rule := page.rejection(t, replaceOnce(html, second, `<div class="entry-title">`+titleAnchor(secondProjectEntry, corpusSecondPage, blank)+`</div>`)); rule != "" {
+		t.Fatalf("anchor for a whitespace-only title rejected by %q", rule)
+	}
+	if rule := page.rejection(t, replaceOnce(html, second, "<!---->")); rule != "project_entry_link" {
+		t.Fatalf("whitespace-only title without an anchor: rule = %q, want project_entry_link", rule)
+	}
+}
+
 func TestBlankNamedProjectLeavesTheJSONTheRenderRequestAndThePrintMap(t *testing.T) {
 	source := resumeLinksSourceNamed(t, "en-two-linked-entries")
 	source.blankName = "nextjs-perf-checklist"

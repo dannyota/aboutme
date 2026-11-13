@@ -19,6 +19,19 @@ func TestPublicOriginEnvironmentRules(t *testing.T) {
 		{"trailing slash", "https://example.test/", "production", "", false},
 		{"production HTTP", "http://example.test", "production", "", false},
 		{"development non-loopback HTTP", "http://example.test", "development", "", false},
+		{"canonical IPv6 loopback", "http://[::1]:20080", "development", "http://[::1]:20080", true},
+		{"uppercase IPv6", "https://[2001:DB8::1]", "production", "https://[2001:db8::1]", true},
+		{"uncompressed IPv6", "https://[2001:0db8::0001]", "production", "", false},
+		{"unabbreviated IPv6", "https://[2001:db8:0:0:0:0:0:1]", "production", "", false},
+		{"long-form IPv6 loopback", "http://[0:0::1]:20080", "development", "", false},
+		{"IPv4-mapped IPv6", "https://[::ffff:1.2.3.4]", "production", "", false},
+		{"IPv6 zone", "http://[::1%25lo0]:20080", "development", "", false},
+		{"short IPv4", "https://127.1", "production", "", false},
+		{"hex IPv4", "https://0x7f.0.0.1", "production", "", false},
+		{"three-part IPv4", "https://1.2.3", "production", "", false},
+		{"leading-zero IPv4", "https://010.0.0.1", "production", "", false},
+		{"numeric last label", "https://example.123", "production", "", false},
+		{"canonical IPv4", "https://192.0.2.1", "production", "https://192.0.2.1", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			origin, err := ParsePublicOrigin(test.raw, test.environment)

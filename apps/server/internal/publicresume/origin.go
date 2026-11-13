@@ -3,6 +3,7 @@ package publicresume
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -38,6 +39,9 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 	if port != "" {
 		host += ":" + port
 	}
+	if !canonicalHost(hostname) {
+		return PublicOrigin{}, errors.New("public origin host must be canonical")
+	}
 	if scheme != "https" && scheme != "http" {
 		return PublicOrigin{}, errors.New("public origin must use HTTP(S)")
 	}
@@ -51,6 +55,21 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 		}
 	}
 	return PublicOrigin{value: scheme + "://" + host}, nil
+}
+
+func canonicalHost(hostname string) bool {
+	if addr, err := netip.ParseAddr(hostname); err == nil {
+		return addr.Zone() == "" && !addr.Is4In6() && addr.String() == hostname
+	}
+	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
+	last := labels[len(labels)-1]
+	if last == "" {
+		return true
+	}
+	if strings.HasPrefix(last, "0x") {
+		return false
+	}
+	return strings.Trim(last, "0123456789") != ""
 }
 
 func isDevelopment(environment string) bool {
