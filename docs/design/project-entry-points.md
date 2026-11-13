@@ -37,3 +37,8 @@ can show, so a title never links to a page that answers 404.
   map whole on every refetch, so a project's first link appears, and a renamed,
   hidden or removed project's link disappears, with the revision that changed
   it.
+
+The print envelope's link map follows the same rule.
+`printsnapshot.WithProjectLinks` is the only code that builds version 2, and it
+checks each value against the canonical origin and slug. `Marshal` checks only
+each value's shape, so no caller may set the map directly.
