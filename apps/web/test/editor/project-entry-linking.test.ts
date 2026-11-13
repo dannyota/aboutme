@@ -1,11 +1,12 @@
 import type { Section } from '@aboutme/schema';
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref, type Ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SectionPanel from '../../app/components/editor/forms/SectionPanel.vue';
 import type { Project } from '../../app/components/projects/projectDocument';
+import type { ProjectResult } from '../../app/composables/projectsApi';
 import type { EntryLocation } from '../../app/editor/projectLinks';
 import { parseRevision } from '../../app/editor/revision';
 import type { AcceptedResume } from '../../app/editor/types';
@@ -73,9 +74,12 @@ const data = () => project({ id: DATA, text: { en: { name: 'Data kit' } } });
 
 function resume(
   entries: readonly Entry[],
-  options: { readonly live?: boolean } = {},
+  options: { readonly live?: boolean; readonly work?: boolean } = {},
 ): AcceptedResume {
   const base = acceptedFixture();
+  const work = options.work === true
+    ? { work: { sectionType: 'work', entries: [] } as Section }
+    : {};
   return acceptedFixture({
     metadata: { ...base.metadata, live: options.live ?? false },
     document: {
@@ -86,12 +90,15 @@ function resume(
           displayName: 'Projects',
           entries: [...entries],
         } as Section,
+        ...work,
       },
       customization: {
         ...base.document.customization,
         layout: {
           ...base.document.customization.layout,
-          sections: { main: ['projects'], sidebar: [] },
+          sections: {
+            main: ['projects', ...Object.keys(work)], sidebar: [],
+          },
         },
       },
     },
@@ -115,6 +122,7 @@ function accountResumes(thisLive: boolean, otherLive = true) {
 }
 
 let api: ReturnType<typeof fakeApi>;
+let authControls: ReturnType<typeof fakeAuth>;
 let resumeList: ReturnType<typeof vi.fn>;
 const mounted: { unmount: () => void }[] = [];
 
@@ -126,14 +134,26 @@ async function settle(): Promise<void> {
   }
 }
 
-async function mountEditor(initial: AcceptedResume) {
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+/** The inspector shows the section `sectionKey` holds, as the shell does. */
+async function mountEditor(
+  initial: AcceptedResume,
+  sectionKey: Ref<string> = ref('projects'),
+) {
   const context = openEditor(initial);
   const selected: EntryLocation[] = [];
   const Host = defineComponent({
     setup: () => () => h(SectionPanel, {
       actions: context.actions,
-      sectionKey: 'projects',
-      section: context.record().current.document.content.projects!,
+      sectionKey: sectionKey.value,
+      section: context.record().current.document.content[sectionKey.value]!,
       onSelectEntry: (location: EntryLocation) => selected.push(location),
     }),
   });
@@ -181,7 +201,8 @@ beforeEach(() => {
   setSiteLocale('en');
   api = fakeApi();
   fake.api = api;
-  fake.auth = fakeAuth().auth;
+  authControls = fakeAuth();
+  fake.auth = authControls.auth;
   resumeList = vi.fn().mockResolvedValue(accountResumes(false));
   fake.resumes = { list: resumeList };
 });
@@ -389,26 +410,33 @@ describe('Save to my projects', () => {
       .toBeNull();
   });
 
-  it('asks first when the account resumes cannot be read, and Cancel '
-    + 'creates nothing', async () => {
+  it('creates the private project first, then asks before linking when '
+    + 'the account resumes cannot be read; Cancel keeps it saved and '
+    + 'unlinked', async () => {
     api.list.mockResolvedValue(ok([]));
+    api.create.mockResolvedValue(ok(created()));
+    api.read.mockResolvedValue(ok(created()));
     resumeList.mockResolvedValue({ kind: 'failed', reason: 'network' });
     const { context } = await mountEditor(resume([written()], { live: true }));
 
     inDocument(`${card()} [data-action="save-entry-project"]`).click();
     await settle();
+    expect(api.create).toHaveBeenCalledOnce();
     expect(asked()).not.toBeNull();
     inDocument('[data-action="cancel-project-privacy"]').click();
     await settle();
 
-    expect(api.create).not.toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
     expect(links(context)).toEqual([]);
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+    expect(entryStatus().textContent?.trim()).toBe('Saved to your projects.');
   });
 
-  it('does not ask on a published resume, since a new project shows on no '
-    + 'other', async () => {
+  it('does not ask when no other published resume shows the created '
+    + 'project', async () => {
     api.list.mockResolvedValue(ok([]));
     api.create.mockResolvedValue(ok(created()));
+    api.read.mockResolvedValue(ok(created()));
     resumeList.mockResolvedValue(accountResumes(true));
     const { context } = await mountEditor(resume([written()], { live: true }));
 
@@ -416,8 +444,152 @@ describe('Save to my projects', () => {
     await settle();
 
     expect(asked()).toBeNull();
-    expect(api.read).not.toHaveBeenCalled();
+    expect(api.read).toHaveBeenCalledWith(CREATED);
     expect(links(context)).toEqual([{ projectId: CREATED, entryId: ENTRY }]);
+  });
+
+  describe('when a retried create returns a project another tab showed on '
+    + 'a published resume', () => {
+    const shown = () => project({
+      id: CREATED, text: { en: { name: 'Old shop' } },
+      linkedResumeIds: ['other'],
+    });
+
+    async function saveTwice() {
+      api.list.mockResolvedValue(ok([]));
+      api.create.mockResolvedValueOnce(failed('unavailable'))
+        .mockResolvedValueOnce(ok(shown()));
+      api.read.mockResolvedValue(ok(shown()));
+      resumeList.mockResolvedValue(accountResumes(true));
+      const mountedEditor = await mountEditor(
+        resume([written()], { live: true }),
+      );
+      const save = `${card()} [data-action="save-entry-project"]`;
+      inDocument(save).click();
+      await settle();
+      inDocument(save).click();
+      await settle();
+      return mountedEditor;
+    }
+
+    it('asks after the create, from that project\'s links read then, and '
+      + 'Cancel leaves it saved and unlinked', async () => {
+      const { context } = await saveTwice();
+
+      const [first, second] = api.create.mock.calls;
+      expect(second![1]).toBe(first![1]);
+      expect(api.read).toHaveBeenCalledWith(CREATED);
+      expect(asked()?.textContent)
+        .toContain('This project is already shown on another public resume.');
+      expect(links(context)).toEqual([]);
+      inDocument('[data-action="cancel-project-privacy"]').click();
+      await settle();
+
+      expect(links(context)).toEqual([]);
+      expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+      expect(entryStatus().textContent?.trim())
+        .toBe('Saved to your projects.');
+    });
+
+    it('links it once after Add anyway', async () => {
+      const { context } = await saveTwice();
+
+      inDocument('[data-action="confirm-project-privacy"]').click();
+      await settle();
+
+      expect(links(context)).toEqual([{ projectId: CREATED, entryId: ENTRY }]);
+      expect(entryStatus().textContent?.trim())
+        .toBe('Saved to your projects.');
+    });
+  });
+
+  it('creates one project for a double click', async () => {
+    api.list.mockResolvedValue(ok([]));
+    api.create.mockResolvedValue(ok(created()));
+    const { context } = await mountEditor(resume([written()]));
+
+    const save = inDocument(`${card()} [data-action="save-entry-project"]`);
+    save.click();
+    save.click();
+    await settle();
+
+    expect(api.create).toHaveBeenCalledOnce();
+    expect(links(context)).toEqual([{ projectId: CREATED, entryId: ENTRY }]);
+  });
+
+  it.each([
+    ['while the project is created', 'create'],
+    ['while the privacy reads run', 'reads'],
+  ] as const)('abandons a save whose signed-in person changed %s: nothing '
+    + 'goes out with the other session and no link is queued', async (
+    _case, when,
+  ) => {
+    api.list.mockResolvedValue(ok([]));
+    const create = deferred<ProjectResult<Project>>();
+    api.create.mockReturnValue(create.promise);
+    api.read.mockResolvedValue(ok(created()));
+    const reads = deferred<unknown>();
+    resumeList.mockReturnValue(reads.promise);
+    const { context } = await mountEditor(resume([written()]));
+    const otherPersonSignsIn = () => {
+      context.userId.value = 'owner-2';
+      authControls.user.value = { ...authControls.user.value, id: 'owner-2' };
+      authControls.csrfToken.value = 'csrf-other';
+    };
+
+    inDocument(`${card()} [data-action="save-entry-project"]`).click();
+    if (when === 'create') otherPersonSignsIn();
+    create.resolve(ok(created()));
+    await settle();
+    if (when === 'reads') otherPersonSignsIn();
+    reads.resolve(accountResumes(false));
+    await settle();
+
+    expect(api.create.mock.calls.map(([, , csrf]) => csrf)).toEqual(['csrf-1']);
+    expect(asked()).toBeNull();
+    expect(links(context)).toEqual([]);
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+  });
+
+  it('queues no link when the editor closes while the project is created',
+    async () => {
+      api.list.mockResolvedValue(ok([]));
+      const create = deferred<ProjectResult<Project>>();
+      api.create.mockReturnValue(create.promise);
+      api.read.mockResolvedValue(ok(created()));
+      const { context } = await mountEditor(resume([written()]));
+
+      inDocument(`${card()} [data-action="save-entry-project"]`).click();
+      context.actions.stop();
+      create.resolve(ok(created()));
+      await settle();
+
+      expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+      expect(links(context)).toEqual([]);
+      expect(resumeList).not.toHaveBeenCalled();
+    });
+
+  it('links the entry it was saved from after the inspector moved to '
+    + 'another section, and keeps that entry\'s status', async () => {
+    api.list.mockResolvedValue(ok([]));
+    const create = deferred<ProjectResult<Project>>();
+    api.create.mockReturnValue(create.promise);
+    api.read.mockResolvedValue(ok(created()));
+    const sectionKey = ref('projects');
+    const { context } = await mountEditor(
+      resume([written()], { work: true }), sectionKey,
+    );
+
+    inDocument(`${card()} [data-action="save-entry-project"]`).click();
+    sectionKey.value = 'work';
+    await settle();
+    create.resolve(ok(created()));
+    await settle();
+
+    expect(links(context)).toEqual([{ projectId: CREATED, entryId: ENTRY }]);
+    sectionKey.value = 'projects';
+    await settle();
+    expect(entryStatus().textContent?.trim()).toBe('Saved to your projects.');
   });
 
   it('says to try again when the create fails, and sends the same request '
@@ -450,8 +622,8 @@ describe('Save to my projects', () => {
       await settle();
 
       expect(entryStatus().textContent?.trim()).toBe('To save it as a '
-        + 'project, the entry needs a title, and a title and subtitle of at '
-        + 'most 120 characters each.');
+        + 'project, the entry needs a title, and its title and subtitle can '
+        + 'have at most 120 characters each.');
       expect(api.create).not.toHaveBeenCalled();
       expect(resumeList).not.toHaveBeenCalled();
     });
@@ -521,7 +693,7 @@ describe('From your projects for a project the resume has as an entry', () => {
     expect(links(context)).toEqual([{ projectId: SHOP }]);
   });
 
-  it('sends nothing when the question is dismissed', async () => {
+  it('sends nothing when the question is dismissed with Escape', async () => {
     api.list.mockResolvedValue(ok([shop()]));
     const { context } = await mountEditor(resume([
       written({ title: 'Shop site' }),
@@ -536,6 +708,29 @@ describe('From your projects for a project the resume has as an entry', () => {
     expect(asked()).toBeNull();
     expect(links(context)).toEqual([]);
     expect(resumeList).not.toHaveBeenCalled();
+  });
+
+  it('offers Cancel, which adds and links nothing', async () => {
+    api.list.mockResolvedValue(ok([shop()]));
+    const { context } = await mountEditor(resume([
+      written({ title: 'Shop site' }),
+    ]));
+
+    await chooseFromProjects(SHOP);
+    const cancel = inDocument('[data-action="cancel-duplicate-entry"]');
+    expect(cancel.textContent?.trim()).toBe('Cancel');
+    expect(document.activeElement?.getAttribute('data-action'))
+      .toBe('link-duplicate-entry');
+    cancel.click();
+    await settle();
+
+    expect(asked()).toBeNull();
+    expect(links(context)).toEqual([]);
+    expect(resumeList).not.toHaveBeenCalled();
+    expect(api.read).not.toHaveBeenCalled();
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+    expect(context.record().current.document.content.projects?.entries)
+      .toEqual([written({ title: 'Shop site' })]);
   });
 
   it.each([

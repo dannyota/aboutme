@@ -8,13 +8,12 @@ import {
   type ProjectsApi,
 } from '../../../composables/projectsApi';
 import { useAuth } from '../../../composables/useAuth';
-import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
+import type {
+  EditorContinuation,
+  ResumeEditorActions,
+} from '../../../composables/useResumeEditor';
 import type { EntryLocation } from '../../../editor/projectLinks';
-import {
-  canonicalJSON,
-  PROJECT_LIMIT,
-  type CreateProjectRequest,
-} from '../../projects/projectDocument';
+import { canonicalJSON, PROJECT_LIMIT } from '../../projects/projectDocument';
 import {
   canSaveEntry,
   projectFromEntry,
@@ -40,14 +39,16 @@ export interface EntryAction {
 }
 
 export interface ProjectEntryLinking {
-  /** The latest action on an entry of this section, and how it went. */
+  /**
+   * The latest action on an entry and how it went. It belongs to that
+   * entry, so moving to another section and back keeps it.
+   */
   readonly action: Ref<EntryAction | null>;
   readonly busy: ComputedRef<boolean>;
   /** Save to my projects gives way to the limit line. */
   readonly atLimit: ComputedRef<boolean>;
   link(entryId: string, projectId: string): Promise<void>;
   save(entryId: string): Promise<void>;
-  reset(): void;
 }
 
 interface QueuedEntryLink {
@@ -74,13 +75,22 @@ function createKeys(uuid: () => string) {
   };
 }
 
+// Nothing ran, or the outcome is unknown: Save again sends the same request
+// with the same key, and the server answers it at most once.
+const RETRYABLE: ReadonlySet<string> = new Set([
+  'rate-limited', 'unavailable', 'csrf-rejected',
+]);
+
 /**
  * An unlinked project entry's Link to a project and Save to my projects
  * (docs/design/ui/projects.md "In the resume editor"). Either one links
  * the entry through the editor's write queue, keeping all its text; Save
- * first creates the library project from the entry. A link that fails
- * after the create leaves the project in the library, and nothing is
- * retried on the person's behalf.
+ * first creates the library project from the entry. Each action is bound,
+ * before its first await, to the entry it started on and to the editor and
+ * verified owner it started in; it ends without acting once the editor
+ * closes, the resume is opened again or another person signs in. A link
+ * that fails after the create leaves the project in the library, and
+ * nothing is retried on the person's behalf.
  */
 export function useProjectEntryLinking(options: {
   readonly actions: ResumeEditorActions;
@@ -99,11 +109,12 @@ export function useProjectEntryLinking(options: {
   const auth = options.auth ?? useAuth();
   const keys = createKeys(options.uuid ?? (() => crypto.randomUUID()));
   const action = ref<EntryAction | null>(null);
-  const creating = ref(false);
+  /** An action runs from the click until its link is queued or it ends. */
+  const working = ref(false);
   const queued = ref<QueuedEntryLink | null>(null);
   const limitHit = ref(false);
 
-  const busy = computed(() => creating.value || queued.value !== null);
+  const busy = computed(() => working.value || queued.value !== null);
   const atLimit = computed(() => limitHit.value
     || (library.view.value.kind === 'ready'
       && library.view.value.items.length >= PROJECT_LIMIT));
@@ -112,28 +123,76 @@ export function useProjectEntryLinking(options: {
     if (view.kind === 'ready') limitHit.value = false;
   });
 
-  function entryOf(entryId: string): ProjectEntry | undefined {
+  /** The entry at `location` while it is an unlinked project entry. */
+  function entryAt(location: EntryLocation): ProjectEntry | undefined {
     const section = actions.record.value?.current.document
-      .content[options.sectionKey()];
+      .content[location.sectionKey];
     if (section?.sectionType !== 'project') return undefined;
-    const entry = section.entries.find((candidate) => candidate.id === entryId);
+    const entry = section.entries.find((candidate) =>
+      candidate.id === location.entryId);
     return entry?.projectId === undefined ? entry : undefined;
   }
 
-  const blocked = () => busy.value || linking.busy.value;
-
-  function enqueue(entryId: string, projectId: string, saved: boolean): void {
+  /** Starts an action on the entry shown now, or null when it cannot. */
+  function start(entryId: string): {
+    readonly location: EntryLocation;
+    readonly entry: ProjectEntry;
+    readonly run: EditorContinuation;
+  } | null {
+    if (working.value || queued.value !== null || linking.busy.value) {
+      return null;
+    }
     const location = { sectionKey: options.sectionKey(), entryId };
+    const entry = entryAt(location);
+    const run = actions.continuation();
+    return entry === undefined || run === null
+      ? null
+      : { location, entry, run };
+  }
+
+  /** Ends an action that may no longer act: nothing is sent or shown. */
+  function abandon(): void {
+    working.value = false;
+    action.value = null;
+  }
+
+  function finish(
+    location: EntryLocation,
+    status: EntryActionStatus,
+    projectId?: string,
+  ): void {
+    working.value = false;
+    action.value = {
+      entryId: location.entryId,
+      status,
+      ...(projectId === undefined ? {} : { projectId }),
+    };
+  }
+
+  /** Queues the link of the entry the action started on. */
+  function enqueue(
+    run: EditorContinuation,
+    location: EntryLocation,
+    projectId: string,
+    saved: boolean,
+  ): void {
+    if (!run.current()) {
+      abandon();
+      return;
+    }
+    const failed = saved ? 'saved-not-linked' : 'not-linked';
+    if (entryAt(location) === undefined) {
+      finish(location, failed, projectId);
+      return;
+    }
     const result = actions.edit({
       kind: 'projectLinkEntry', ...location, projectId,
     });
     if (result.kind !== 'enqueued') {
-      action.value = {
-        entryId, projectId, status: saved ? 'saved-not-linked' : 'not-linked',
-      };
+      finish(location, failed, projectId);
       return;
     }
-    action.value = { entryId, projectId, status: saved ? 'saving' : 'linking' };
+    finish(location, saved ? 'saving' : 'linking', projectId);
     queued.value = {
       location, projectId, commandId: result.command.id, saved,
     };
@@ -167,81 +226,68 @@ export function useProjectEntryLinking(options: {
     };
   });
 
-  async function create(
-    entryId: string,
-    body: CreateProjectRequest,
-  ): Promise<void> {
-    const ownerId = auth.user.value?.id;
-    if (ownerId === undefined || entryOf(entryId) === undefined) {
-      action.value = { entryId, status: 'save-failed' };
-      return;
-    }
-    const key = keys.keyFor({ ownerId, body });
-    creating.value = true;
-    action.value = { entryId, status: 'saving' };
-    const result = await sendWithCsrf(auth, ownerId, (csrfToken) =>
-      api.create(body, key, csrfToken));
-    creating.value = false;
-    if (result.kind === 'ok') {
-      keys.settle();
-      void library.load();
-      if (entryOf(entryId) === undefined) {
-        action.value = {
-          entryId, projectId: result.value.id, status: 'saved-not-linked',
-        };
-        return;
-      }
-      enqueue(entryId, result.value.id, true);
-      return;
-    }
-    const failure = result.kind === 'failed' ? result.failure : 'unavailable';
-    // Nothing ran, or the outcome is unknown: Save again sends the same
-    // request with the same key, and the server answers it at most once.
-    if (failure !== 'rate-limited' && failure !== 'unavailable'
-      && failure !== 'csrf-rejected') {
-      keys.settle();
-    }
-    if (failure === 'limit') {
-      limitHit.value = true;
-      void library.load();
-    }
-    action.value = {
-      entryId,
-      status: failure === 'limit'
-        ? 'limit'
-        : failure === 'invalid' ? 'save-invalid' : 'save-failed',
-    };
+  async function link(entryId: string, projectId: string): Promise<void> {
+    const started = start(entryId);
+    if (started === null) return;
+    const { location, run } = started;
+    working.value = true;
+    action.value = null;
+    const decided = await linking.decide(
+      projectId,
+      () => enqueue(run, location, projectId, false),
+      abandon,
+    );
+    if (!decided) abandon();
   }
 
-  return {
-    action,
-    busy,
-    atLimit,
-    async link(entryId, projectId) {
-      if (blocked() || entryOf(entryId) === undefined) return;
-      action.value = null;
-      await linking.decide(projectId, () => {
-        if (entryOf(entryId) === undefined) {
-          action.value = { entryId, projectId, status: 'not-linked' };
-          return;
-        }
-        enqueue(entryId, projectId, false);
-      });
-    },
-    async save(entryId) {
-      const entry = entryOf(entryId);
-      if (blocked() || entry === undefined) return;
-      if (!canSaveEntry(entry)) {
-        action.value = { entryId, status: 'save-invalid' };
-        return;
+  /**
+   * Creates the project, which is private until linked, then decides the
+   * privacy question for the link from the publication state and that
+   * project's links read then, once for the action.
+   */
+  async function save(entryId: string): Promise<void> {
+    const started = start(entryId);
+    if (started === null) return;
+    const { location, entry, run } = started;
+    if (!canSaveEntry(entry)) {
+      finish(location, 'save-invalid');
+      return;
+    }
+    working.value = true;
+    action.value = { entryId, status: 'saving' };
+    // The body is taken when the person acts, from the text they see.
+    const body = projectFromEntry(entry, options.language());
+    const key = keys.keyFor({ ownerId: run.ownerId, body });
+    const result = await sendWithCsrf(auth, run.ownerId, (csrfToken) =>
+      api.create(body, key, csrfToken));
+    const failure = result.kind === 'failed' ? result.failure : null;
+    if (failure === null || !RETRYABLE.has(failure)) keys.settle();
+    if (!run.current()) {
+      abandon();
+      return;
+    }
+    if (result.kind !== 'ok') {
+      if (failure === 'limit') {
+        limitHit.value = true;
+        void library.load();
       }
-      action.value = null;
-      // The body is taken when the person acts, from the text they see.
-      const body = projectFromEntry(entry, options.language());
-      await linking.decide(null, () => void create(entryId, body));
-    },
-    reset() {
-      if (!busy.value) action.value = null;
-    },
-  };
+      finish(location, failure === 'limit'
+        ? 'limit'
+        : failure === 'invalid' ? 'save-invalid' : 'save-failed');
+      return;
+    }
+    const projectId = result.value.id;
+    void library.load();
+    const decided = await linking.decide(
+      projectId,
+      () => enqueue(run, location, projectId, true),
+      () => {
+        if (run.current()) finish(location, 'saved', projectId);
+        else abandon();
+      },
+    );
+    if (!decided) finish(location, 'saved-not-linked', projectId);
+  }
+
+  return { action, busy, atLimit, link, save };
 }

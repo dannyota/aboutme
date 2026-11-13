@@ -167,7 +167,6 @@ function entryAction(entryId: string) {
 
 watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
   linking.reset();
-  entryLinking.reset();
   if (project) void library.load();
 }, { immediate: true });
 
@@ -562,6 +561,7 @@ function assertNever(value: never): never {
       :question="linkCopy.duplicateQuestion(linking.duplicate.value.title)"
       :link-label="linkCopy.linkThatEntry"
       :add-label="linkCopy.addNewEntry"
+      :cancel-label="copy.cancel"
       @link="linking.linkThatEntry()"
       @add="linking.addNewEntry()"
       @cancel="linking.cancelDuplicate()"

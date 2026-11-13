@@ -27,6 +27,7 @@ interface QueuedLink extends Choice {
 /** The question asked before showing a project on a second public resume. */
 interface PrivacyAsk {
   readonly proceed: () => void;
+  readonly cancel?: () => void;
 }
 
 /** An unlinked entry that may already be the chosen project. */
@@ -50,11 +51,15 @@ export interface ProjectLinking {
   addNewEntry(): Promise<void>;
   cancelDuplicate(): void;
   /**
-   * Runs `proceed` now, or once the owner answers the privacy question.
-   * `projectId` is null for a project not created yet, which no resume
-   * shows.
+   * Runs `proceed` now, or `proceed` or `cancel` once the owner answers the
+   * privacy question. False when it could not decide: the editor has no
+   * record, or another link is being decided or sent.
    */
-  decide(projectId: string | null, proceed: () => void): Promise<void>;
+  decide(
+    projectId: string,
+    proceed: () => void,
+    cancel?: () => void,
+  ): Promise<boolean>;
   addAnyway(): void;
   cancelAsk(): void;
   refresh(entryId: string): void;
@@ -154,24 +159,25 @@ export function useProjectLinking(options: {
    * of the same link do not decide again, and no answer is kept.
    */
   async function decide(
-    projectId: string | null,
+    projectId: string,
     proceed: () => void,
-  ): Promise<void> {
+    cancel?: () => void,
+  ): Promise<boolean> {
     const record = actions.record.value;
-    if (record === undefined || busy.value) return;
+    if (record === undefined || busy.value) return false;
     outcome.value = null;
     deciding.value = true;
     const [published, linkedIds] = await Promise.all([
-      library.published(),
-      projectId === null ? [] : library.linkedTo(projectId),
+      library.published(), library.linkedTo(projectId),
     ]);
     deciding.value = false;
     const resumeId = record.accepted.metadata.id;
     if (revealsAcrossResumes(resumeId, linkedIds, published)) {
-      asking.value = { proceed };
-      return;
+      asking.value = { proceed, ...(cancel === undefined ? {} : { cancel }) };
+      return true;
     }
     proceed();
+    return true;
   }
 
   function link(choice: Choice): void {
@@ -188,8 +194,9 @@ export function useProjectLinking(options: {
     }
   }
 
-  const decideAndLink = (choice: Choice): Promise<void> =>
-    decide(choice.projectId, () => link(choice));
+  const decideAndLink = async (choice: Choice): Promise<void> => {
+    await decide(choice.projectId, () => link(choice));
+  };
 
   /**
    * A project the resume already has as an unlinked entry asks first
@@ -270,7 +277,9 @@ export function useProjectLinking(options: {
       ask?.proceed();
     },
     cancelAsk() {
+      const ask = asking.value;
       asking.value = null;
+      ask?.cancel?.();
     },
     refresh(entryId) {
       outcome.value = null;

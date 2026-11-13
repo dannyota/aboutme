@@ -280,6 +280,44 @@ describe('a link of an existing entry through the write queue', () => {
       .toEqual({ ...written(), projectId: PROJECT });
   });
 
+  it('sends typing before the link without the reference, the link, then '
+    + 'typing after it with the reference, in order', async () => {
+    const context = open();
+    const field = (
+      path: 'title' | 'subtitle',
+      value: string,
+    ): AtomicCommandIntent => ({
+      kind: 'entryField',
+      sectionKey: 'projects',
+      entryId: ENTRY,
+      path,
+      value: { present: true, value },
+    });
+    context.edit(field('subtitle', 'Before'));
+    context.edit(linkEntry());
+    context.edit(field('title', 'After'));
+
+    await context.idle();
+
+    expect(context.server.sent.map(({ attempt }) => [
+      attempt.operation,
+      attempt.payload.kind === 'json' ? JSON.parse(attempt.payload.utf8) : null,
+    ])).toEqual([
+      ['upsertResumeEntry', { entry: written({ subtitle: 'Before' }) }],
+      ['linkResumeProject', { projectId: PROJECT, entryId: ENTRY }],
+      ['upsertResumeEntry', {
+        entry: {
+          ...written({ subtitle: 'Before', title: 'After' }),
+          projectId: PROJECT,
+        },
+      }],
+    ]);
+    expect(entriesOf(context.server.stored.document)![0]).toEqual({
+      ...written({ subtitle: 'Before', title: 'After' }), projectId: PROJECT,
+    });
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
+  });
+
   it.each([
     ['an entry the server no longer has', 'entry_not_found'],
     ['a project the resume already shows', 'project_already_linked'],
@@ -301,5 +339,16 @@ describe('a link of an existing entry through the write queue', () => {
     });
     expect(entriesOf(context.record().current.document)![0])
       .toEqual(written());
+  });
+});
+
+describe('an editor that closed', () => {
+  it('queues nothing more, so no late action can bring work back', () => {
+    const context = openEditor(withEntries([written()]));
+    context.actions.stop();
+
+    expect(context.actions.edit(linkEntry()))
+      .toEqual({ kind: 'blocked', reason: 'stopped' });
+    expect(context.record()).toMatchObject({ attempt: null, pending: [] });
   });
 });

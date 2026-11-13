@@ -270,11 +270,11 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
       entryNotLinked: 'Chưa gắn được mục với dự án. Hãy thử lại.',
       saving: 'Đang lưu vào Dự án…',
       saved: 'Đã lưu vào Dự án.',
-      savedNotLinked: 'Dự án đã được lưu, nhưng chưa gắn được với mục này. '
-        + 'Hãy dùng Gắn với dự án.',
+      savedNotLinked: 'Dự án đã được lưu nhưng chưa gắn được với mục này. '
+        + 'Hãy bấm “Gắn với dự án”.',
       saveFailed: 'Chưa lưu được vào Dự án. Hãy thử lại.',
-      saveNeedsTitle: (limit) => 'Để lưu thành dự án, mục cần có tiêu đề, '
-        + `và tiêu đề cùng phụ đề tối đa ${limit} ký tự mỗi trường.`,
+      saveNeedsTitle: (limit) => 'Để lưu thành dự án, mục cần có tiêu đề; '
+        + `tiêu đề và phụ đề tối đa ${limit} ký tự mỗi trường.`,
     },
     section: {
       addEntry: 'Thêm mục',
@@ -458,8 +458,8 @@ export const editorFieldsCopy: WorkspaceCopy<EditorFieldsCopy> = {
         + 'linked to it. Use Link to a project.',
       saveFailed: 'Could not save to your projects. Try again.',
       saveNeedsTitle: (limit) => 'To save it as a project, the entry needs a '
-        + `title, and a title and subtitle of at most ${limit} characters `
-        + 'each.',
+        + `title, and its title and subtitle can have at most ${limit} `
+        + 'characters each.',
     },
     section: {
       addEntry: 'Add entry',

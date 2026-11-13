@@ -21,8 +21,10 @@ export function openEditor(initial: AcceptedResume = startingResume()) {
   store.initialize(initial);
   /** The session's CSRF token; null makes the next write refresh it. */
   const token = ref<string | null>('csrf-1');
+  /** Who is signed in; another id is another person's session. */
+  const userId = ref('owner-1');
   const auth = {
-    user: computed(() => ({ id: 'owner-1' })),
+    user: computed(() => ({ id: userId.value })),
     csrfToken: computed(() => token.value),
     authState: computed(() => 'authenticated'),
     refresh: vi.fn(async (): Promise<void> => {
@@ -65,6 +67,7 @@ export function openEditor(initial: AcceptedResume = startingResume()) {
     server,
     store,
     token,
+    userId,
     record: () => store.recordFor(id)!,
     /** Two minutes of the editor's own timers, with no flush from the test. */
     idle: () => vi.advanceTimersByTimeAsync(120_000),

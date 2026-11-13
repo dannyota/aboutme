@@ -13,13 +13,15 @@ import { Button } from '@/components/ui/button';
 
 // From your projects for a project the resume already has as an unlinked
 // entry (docs/design/ui/projects.md "In the resume editor"). Link that
-// entry is the default and takes the focus; dismissing sends nothing.
+// entry is the default and takes the focus; Cancel or dismissing sends
+// nothing.
 defineProps<{
   readonly open: boolean;
   readonly title: string;
   readonly question: string;
   readonly linkLabel: string;
   readonly addLabel: string;
+  readonly cancelLabel: string;
 }>();
 const emit = defineEmits<{ link: []; add: []; cancel: [] }>();
 
@@ -48,6 +50,14 @@ function onOpenChange(open: boolean): void {
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
+        <Button
+          data-action="cancel-duplicate-entry"
+          type="button"
+          variant="ghost"
+          @click="emit('cancel')"
+        >
+          {{ cancelLabel }}
+        </Button>
         <Button
           data-action="add-duplicate-entry"
           type="button"

@@ -52,8 +52,23 @@ type EditorActionResult
   = | { readonly kind: 'enqueued'; readonly command: AtomicEditorCommand }
     | {
       readonly kind: 'blocked';
-      readonly reason: 'not-loaded' | 'session-lost' | 'owner-mismatch';
+      readonly reason:
+        | 'not-loaded'
+        | 'session-lost'
+        | 'owner-mismatch'
+        | 'stopped';
     };
+
+/** An action the person started in an editor, carried across its awaits. */
+export interface EditorContinuation {
+  /** The editor's verified owner when the action started. */
+  readonly ownerId: string;
+  /**
+   * Whether the action may still act: the editor is open on the same
+   * record and its owner is the one signed in.
+   */
+  current(): boolean;
+}
 
 type TemplateActionResult
   = | { readonly kind: 'enqueued'; readonly group: TemplateGroupCommand }
@@ -64,6 +79,8 @@ export interface ResumeEditorActions {
   readonly record: ComputedRef<ResumeRecord | undefined>;
   createEntityId(): string;
   edit(intent: AtomicCommandIntent): EditorActionResult;
+  /** Binds an action starting now to this editor; null when it cannot act. */
+  continuation(): EditorContinuation | null;
   applyTemplate(preset: Readonly<TemplatePreset>): TemplateActionResult;
   undoTemplate(): TemplateRecovery;
   recoverTemplate(
@@ -153,7 +170,11 @@ export function createResumeEditorActions(
     if (pendingOwner !== undefined && pendingOwner !== ownerId) return null;
     return { state, ownerId };
   };
+  // A closed editor queues nothing: work a late callback queued would stay
+  // in the shared store and be sent by the next editor on the resume.
+  let stopped = false;
   const edit = (intent: AtomicCommandIntent): EditorActionResult => {
+    if (stopped) return blocked('stopped');
     const state = record.value;
     const ownerId = owner();
     if (state === undefined || ownerId === undefined) {
@@ -179,6 +200,20 @@ export function createResumeEditorActions(
     deps.store.enqueue(deps.resumeId, command);
     deps.coordinator.schedule(deps.resumeId);
     return { kind: 'enqueued', command };
+  };
+  const continuation = (): EditorContinuation | null => {
+    const state = record.value;
+    const ownerId = owner();
+    if (stopped || state === undefined || ownerId === undefined) return null;
+    const epoch = toRaw(state);
+    return {
+      ownerId,
+      current: () => !stopped
+        && record.value !== undefined
+        && toRaw(record.value) === epoch
+        && deps.auth.authState.value === 'authenticated'
+        && deps.auth.user.value?.id === ownerId,
+    };
   };
   const applyTemplate = (
     preset: Readonly<TemplatePreset>,
@@ -266,6 +301,7 @@ export function createResumeEditorActions(
     record,
     createEntityId: () => deps.runtime.uuid(),
     edit,
+    continuation,
     applyTemplate,
     undoTemplate,
     recoverTemplate,
@@ -290,6 +326,7 @@ export function createResumeEditorActions(
             ),
     discard: () => deps.coordinator.discard(deps.resumeId),
     stop: () => {
+      stopped = true;
       deps.coordinator.stop(deps.resumeId);
       deps.coordinator.discard(deps.resumeId);
     },

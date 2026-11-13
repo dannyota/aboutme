@@ -177,6 +177,16 @@ to the project, or add a new one?”, with Link that entry (default) and Add a n
 entry. The [privacy rule](../projects.md#privacy) applies to both actions as to
 any link.
 
+The prompt also offers Cancel, which adds nothing. A match is the project's name
+in any of its languages against the entry title, ignoring case and surrounding
+space, or either of its links against the entry's link; hidden entries count,
+and the first match in the section's order is offered. Save to my projects
+writes the project in the resume's primary language (the site language for a
+resume without one), keeps only https links, and refuses an entry with no title
+or a title or subtitle over the project limits instead of shortening them. Its
+privacy question is decided after the project is created and before it is
+linked; Cancel there leaves the project in the library, unlinked.
+
 The editor reads the library list once when a project section is opened and
 again after a link; it never blocks editing on that read. A failed read hides
 From your projects behind a Retry item.
