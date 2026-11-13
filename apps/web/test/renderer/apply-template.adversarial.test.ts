@@ -373,9 +373,7 @@ describe('applyTemplate adversarial placement contract', () => {
       expect(result.sectionDisplay).toEqual(
         presetCustomization.sectionDisplay,
       );
-      // Paper follows where the owner prints, not the template.
       expect(result.pageFormat).toBe(propertyCurrent.pageFormat);
-      // The date format follows the language, not the preset.
       expect(result.dateFormat).toBe('Mon YYYY');
       if (presetCustomization.header !== undefined) {
         expect(result.header).toEqual(presetCustomization.header);
@@ -451,7 +449,6 @@ describe('template switches set the date format from the language', () => {
   });
 
   it('does not drop months under a preset that prints only the year', () => {
-    // The preset carries `YYYY`; the language format wins.
     const yearOnly = preset('keep');
     yearOnly.customization.dateFormat = 'YYYY';
     expect(applyTemplate(current, yearOnly, content, 'vi').dateFormat)

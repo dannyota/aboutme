@@ -16,7 +16,6 @@ export type ProjectLinkStatus
 
 interface Choice {
   readonly projectId: string;
-  /** An unlinked entry to link instead of adding one. */
   readonly entry?: EntryLocation;
 }
 
@@ -24,13 +23,11 @@ interface QueuedLink extends Choice {
   readonly commandId: string;
 }
 
-/** The question asked before showing a project on a second public resume. */
 interface PrivacyAsk {
   readonly proceed: () => void;
   readonly cancel?: () => void;
 }
 
-/** An unlinked entry that may already be the chosen project. */
 export interface DuplicateAsk {
   readonly projectId: string;
   readonly entry: EntryLocation;
@@ -39,22 +36,14 @@ export interface DuplicateAsk {
 
 export interface ProjectLinking {
   readonly status: ComputedRef<ProjectLinkStatus>;
-  /** Busy deciding or waiting for a link; the menu offers no project. */
   readonly busy: ComputedRef<boolean>;
-  /** The link waiting for the owner's privacy answer. */
   readonly asking: Ref<PrivacyAsk | null>;
-  /** The choice waiting for Link that entry or Add a new entry. */
   readonly duplicate: Ref<DuplicateAsk | null>;
   readonly refreshingEntries: ComputedRef<ReadonlySet<string>>;
   choose(projectId: string): Promise<void>;
   linkThatEntry(): Promise<void>;
   addNewEntry(): Promise<void>;
   cancelDuplicate(): void;
-  /**
-   * Runs `proceed` now, or `proceed` or `cancel` once the owner answers the
-   * privacy question. False when it could not decide: the editor has no
-   * record, or another link is being decided or sent.
-   */
   decide(
     projectId: string,
     proceed: () => void,
@@ -66,7 +55,6 @@ export interface ProjectLinking {
   reset(): void;
 }
 
-/** Whether `commandId` is still queued or held by the editor's queue. */
 export function stillQueued(
   actions: ResumeEditorActions,
   commandId: string,
@@ -81,11 +69,6 @@ function sameText(value: string | undefined): string {
   return (value ?? '').trim().normalize('NFC').toLowerCase();
 }
 
-/**
- * The first unlinked project entry of `document` with one of the
- * project's names as its title, ignoring case and surrounding space, or
- * with one of its links (docs/design/projects.md "Selection").
- */
 export function duplicateEntry(
   document: Resume,
   project: Project,
@@ -117,11 +100,6 @@ export function duplicateEntry(
   return undefined;
 }
 
-/**
- * A project section's links and refreshes, sent through the editor's write
- * queue and followed until they leave it (docs/design/ui/projects.md "In
- * the resume editor").
- */
 export function useProjectLinking(options: {
   readonly actions: ResumeEditorActions;
   readonly sectionKey: () => string;
@@ -151,13 +129,6 @@ export function useProjectLinking(options: {
       item.kind === 'projectRefresh' ? [item.entryId] : []));
   });
 
-  /**
-   * Asks first when this resume would be the second published one to show
-   * the project (docs/design/projects.md "Privacy"). It is decided once,
-   * when the person acts, from the account's resumes and the project's
-   * links read again then; a read that fails asks. The queue's own resends
-   * of the same link do not decide again, and no answer is kept.
-   */
   async function decide(
     projectId: string,
     proceed: () => void,
@@ -198,11 +169,6 @@ export function useProjectLinking(options: {
     await decide(choice.projectId, () => link(choice));
   };
 
-  /**
-   * A project the resume already has as an unlinked entry asks first
-   * whether to link that entry or add a new one, so it is not shown twice
-   * by accident.
-   */
   async function choose(projectId: string): Promise<void> {
     const record = actions.record.value;
     if (record === undefined || busy.value) return;
@@ -218,8 +184,6 @@ export function useProjectLinking(options: {
     await decideAndLink({ projectId });
   }
 
-  // The server chooses the new entry's id, so it is selected only once the
-  // link has left the queue and the resume shows where it landed.
   watch(() => linking.value !== null && !queued(linking.value.commandId),
     (left) => {
       const pending = linking.value;

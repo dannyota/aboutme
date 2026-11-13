@@ -76,7 +76,6 @@ describe('Web page theme field (docs/design/public-page-theme.md)', () => {
   it('is the first item of the Colors group, above the five colors', () => {
     const { wrapper } = mountDesign(recordFor());
     const group = wrapper.get('[data-customization-group="Colors"]');
-    // A color row carries its field name on the row and on its form field.
     const fields = [...new Set(group.findAll('[data-field]')
       .map((field) => field.attributes('data-field')))];
     expect(fields).toEqual([

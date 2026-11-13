@@ -1,11 +1,7 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// Go and TypeScript outputs are committed; Dart remains deferred. The manifest
-// supplies every retained version so a new release cannot be omitted from this
-// drift check. rawschema.go is included because generation would otherwise
-// overwrite stale embedded bytes before its Go content test sees them.
 interface ReleasedEntry {
   version: number;
   schema: string;
@@ -38,10 +34,6 @@ const files = [
 
 describe("generated code", () => {
   // Codegen can exceed Vitest's five-second default under concurrent load.
-  // Other test files compile and read these files while this one regenerates
-  // them in place, so the test also reads every file throughout the run: a
-  // reader must never see bytes other than the committed ones, such as a
-  // partial write or quicktype's raw output.
   it("is byte-identical to a fresh generation, and at every moment of it", async () => {
     const before = files.map((f) => readFileSync(f, "utf8"));
     const generator = spawn("node", ["scripts/generate.mjs"], {
@@ -71,14 +63,22 @@ describe("generated code", () => {
     expect(after).toEqual(before);
   }, 30_000);
 
+  it("drift-checks every embedded raw schema", () => {
+    const embedded = readdirSync("gen/go", { recursive: true, encoding: "utf8" })
+      .filter((path) => path.split("/").at(-1) === "rawschema.go")
+      .map((path) => `gen/go/${path}`);
+    expect(embedded).toContain("gen/go/rawschema.go");
+    expect(embedded.length).toBe(released.length + 1);
+    expect(files).toEqual(expect.arrayContaining(embedded));
+  });
+
   it("marks every file as generated", () => {
     for (const f of files) {
       expect(readFileSync(f, "utf8")).toContain("DO NOT EDIT");
     }
   });
 
-  // json-schema-to-typescript suffixes an alias when it fails to recognize an
-  // existing $def. Reject the whole class of misleading duplicate aliases.
+  // json-schema-to-typescript suffixes an alias for a $def it misses.
   it.each(["gen/ts/resume.ts", ...released.map((entry) => entry.tsTypes)])(
     "%s declares no counter-suffixed duplicate of another generated TS type",
     (path) => {

@@ -6,7 +6,6 @@ import { registerCapabilities } from '../support/capabilities';
 
 export const reauthCalls: unknown[] = [];
 
-/** A signed-in session with a password, as the pages read it. */
 export function registerSignedIn(): void {
   registerCapabilities({ providerLogin: false, agentAccess: false });
   registerEndpoint('/api/v1/me', () => ({
@@ -25,7 +24,6 @@ export function registerSignedIn(): void {
   answerReauth(204, null, null);
 }
 
-/** Answers the password reauthentication with this exact response. */
 export function answerReauth(
   status: number,
   contentType: string | null,
@@ -44,7 +42,6 @@ export function answerReauth(
   });
 }
 
-/** Elements in dialogs render outside the mounted wrapper. */
 export function inDocument<T extends Element = HTMLElement>(
   selector: string,
 ): T {

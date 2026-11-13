@@ -89,7 +89,6 @@ describe('sample PDF input expectations', () => {
         altered[7]![0] = 'Thiet ke & phat trien.';
       } else if (mutation === 'replacement') altered[7]![0] = 'Nội dung khác.';
       else if (mutation === 'order') {
-        // Move whole entries; counts and extraction stream order stay intact.
         for (const index of [4, 5, 6, 7]) altered[index]![2] += 120;
         for (const index of [8, 9]) altered[index]![2] -= 80;
       } else altered[8]![1] = 210;

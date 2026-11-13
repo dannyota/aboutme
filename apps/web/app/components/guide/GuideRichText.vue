@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * Renders one `GuideLine` (docs/design/mcp-guide-copy.md): plain text, a
- * weight-600 UI name, inline code, or a link, in order. The caller wraps
- * this in its own block element (`p`, `dd`, and so on); every string comes
- * from `i18n/guide.ts`, never from this template, so display text always
- * stays in the copy catalog.
- */
 import type { GuideInline } from '@/i18n/guide';
 
 defineProps<{

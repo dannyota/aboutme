@@ -153,11 +153,9 @@ describe('paged resume SSR', () => {
     const html = await renderPaged(document);
     const pages = html.split('data-page-index=').slice(1);
     expect(pages.length).toBeGreaterThan(1);
-    // Page one keeps the entry header with its first blocks, then fills up.
     expect(pages[0]).toContain(work.entries[0]!.jobTitle!);
     expect(pages[0]).toContain('Paragraph 1:');
     expect(pages[0]).toContain('Paragraph 2:');
-    // The rest continues on the next page without repeating the header.
     const continued = pages.findIndex((page) => page.includes('Paragraph 14:'));
     expect(continued).toBeGreaterThan(0);
     expect(pages[continued]).not.toContain(work.entries[0]!.jobTitle!);

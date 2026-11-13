@@ -1,9 +1,3 @@
-/**
- * Pure state and derived values for /app/import/linkedin's review screen
- * (docs/design/linkedin-import-ui.md, "Review state" and "Action panel").
- * Kept free of Vue and Nuxt so it runs under a plain Node test, like the
- * rest of apps/web/app/import/linkedin.
- */
 import type { Customization, DateRange } from '@aboutme/schema';
 
 import { formatDateRange } from '../../components/resume/formatDate';
@@ -18,20 +12,15 @@ import type {
   ReviewSection,
 } from './build';
 
-/** The resume the import creates is always English (ADR 0023, decision 7). */
 const DOCUMENT_LNG = 'en';
 
 export type DateFormat = Customization['dateFormat'];
-
-// --- Selection state -------------------------------------------------------
 
 export interface ReviewChoiceSets {
   readonly detailIds: Set<string>;
   readonly entryIds: Set<string>;
 }
 
-/** The selection a fresh review starts from (`selectedByDefault` on each
- * detail and entry). */
 export function initialChoiceSets(review: ImportReview): ReviewChoiceSets {
   const detailIds = new Set(
     review.details.filter((detail) => detail.selectedByDefault)
@@ -48,9 +37,6 @@ export function initialChoiceSets(review: ImportReview): ReviewChoiceSets {
 
 export type GroupState = 'checked' | 'unchecked' | 'indeterminate';
 
-/** A section's group checkbox state: checked when every entry is, unchecked
- * when none is, indeterminate otherwise (docs/design/linkedin-import-ui.md,
- * "Review state"). */
 export function groupCheckState(
   section: ReviewSection,
   entryIds: ReadonlySet<string>,
@@ -63,7 +49,6 @@ export function groupCheckState(
   return 'indeterminate';
 }
 
-/** Toggling the group checkbox sets every entry in the section. */
 export function toggleGroup(
   section: ReviewSection,
   entryIds: ReadonlySet<string>,
@@ -77,7 +62,6 @@ export function toggleGroup(
   return next;
 }
 
-/** `{n} of {m} selected` for one section's group row. */
 export function sectionCount(
   section: ReviewSection,
   entryIds: ReadonlySet<string>,
@@ -86,7 +70,6 @@ export function sectionCount(
   return { n, m: section.entries.length };
 }
 
-/** `{n} items from {s} sections` for the action panel. */
 export function selectedSummary(
   review: ImportReview,
   entryIds: ReadonlySet<string>,
@@ -102,20 +85,12 @@ export function selectedSummary(
   return { n, s };
 }
 
-// --- Size meter --------------------------------------------------------
-
-/** Request bytes divided by 1,024, rounded up (docs/design/
- * linkedin-import-ui.md, "Action panel"). */
 export function requestKb(bytes: number): number {
   return Math.ceil(bytes / 1024);
 }
 
-/** The size meter's maximum, in KB (`REQUEST_MAX_BYTES` / 1,024). */
 export const MAX_REQUEST_KB = 256;
 
-// --- Catalog lookups -----------------------------------------------------
-
-/** A cut field's localized name, from the editor's field catalogs. */
 export function cutFieldName(locale: Locale, field: CutField): string {
   const fields = editorFieldsCopy[locale];
   switch (field) {
@@ -135,8 +110,6 @@ export function cutFieldName(locale: Locale, field: CutField): string {
   }
 }
 
-/** A found section's editor name (the manager's decision on this brief: the
- * Summary group uses the editor's section name, "Profile" / "Hồ sơ"). */
 export function importSectionName(
   locale: Locale,
   key: ImportSectionKey,
@@ -144,8 +117,6 @@ export function importSectionName(
   return editorSectionsCopy[locale].sectionTypes[key];
 }
 
-/** A language level's name in the interface language, or undefined when the
- * level was not read. Levels are 1 to 5; index 0 of the catalog is "None". */
 export function languageLevelName(
   locale: Locale,
   level: number | undefined,
@@ -153,8 +124,6 @@ export function languageLevelName(
   if (level === undefined) return undefined;
   return editorFieldsCopy[locale].levels.language[level];
 }
-
-// --- Entry text ------------------------------------------------------------
 
 function stringField(
   entry: Readonly<Record<string, unknown>>,
@@ -186,11 +155,6 @@ function joinParts(parts: readonly (string | undefined)[]): string {
     .join(' · ');
 }
 
-/**
- * An entry row's label, per docs/design/linkedin-import-ui.md's entry table.
- * The Profile row's label is the fixed `summaryEntry` copy key, not derived
- * from the entry, so callers handle that section on their own.
- */
 export function entryLabel(
   key: ImportSectionKey,
   entry: Readonly<Record<string, unknown>>,
@@ -208,12 +172,6 @@ export function entryLabel(
   }
 }
 
-/**
- * An entry row's description, per the same table. The document's language
- * is always English (ADR 0023, decision 7), so dates print in English
- * regardless of the interface language; the language level name is the
- * interface language's own word.
- */
 export function entryDescription(
   key: ImportSectionKey,
   entry: Readonly<Record<string, unknown>>,
@@ -254,13 +212,6 @@ export function entryDescription(
 
 export type EntryIndicator = 'invalid' | 'noDates' | 'cut' | undefined;
 
-/**
- * The third line an entry row adds, per "Review state": an entry that fails
- * the schema check shows `entryInvalid` instead of any notice mark. A date
- * notice (no dates, or a start date only) takes priority over a cut mark,
- * since a missing date matters more than a shortened field; only one line
- * shows.
- */
 export function entryIndicator(
   entry: ReviewEntry,
   invalidEntryIds: ReadonlySet<string>,
@@ -275,19 +226,12 @@ export function entryIndicator(
   return undefined;
 }
 
-// --- Notices -----------------------------------------------------------
-
 export type NoticeLine
   = | { kind: 'dates'; entry: string }
     | { kind: 'startOnly'; entry: string }
     | { kind: 'cut'; field: string; max: number }
     | { kind: 'overLimit'; section: string };
 
-/**
- * Every notice line for the review's "Notices" banner: cut name/headline
- * fields, then each section's date and cut marks in entry order, then any
- * section over the 64-entry limit.
- */
 export function buildNoticeLines(
   locale: Locale,
   review: ImportReview,
@@ -324,14 +268,11 @@ export function buildNoticeLines(
   return lines;
 }
 
-// --- Rich text as plain text -----------------------------------------------
-
 const ENTITIES: ReadonlyArray<readonly [RegExp, string]> = [
   [/&lt;/g, '<'],
   [/&gt;/g, '>'],
   [/&quot;/g, '"'],
   [/&#39;/g, '\''],
-  // &amp; decodes last, so an already-decoded "&lt;" is never re-decoded.
   [/&amp;/g, '&'],
 ];
 
@@ -343,14 +284,6 @@ function decodeEntities(text: string): string {
   return result;
 }
 
-/**
- * The plain-text view of the escaped `p`/`ul`/`li` HTML that build.ts
- * produces for rich text (docs/design/linkedin-import-ui.md, "Entry rows
- * show plain text only"): list items start "• ", paragraphs and items each
- * end a line, and HTML entities decode back to their characters. The result
- * is shown as a text node, never parsed as HTML, so a decoded "<script>" or
- * "<img>" string stays inert text.
- */
 export function richTextToPlainText(html: string): string {
   const withBreaks = html
     .replace(/<ul>/g, '')

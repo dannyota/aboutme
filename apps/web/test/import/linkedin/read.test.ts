@@ -1,6 +1,4 @@
 // @vitest-environment node
-// The read checks and hostile files of docs/design/linkedin-import.md
-// ("Reading the file", "Tests") and ADR 0023 decisions 3 and 5.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -42,10 +40,6 @@ function fakeWorker(): PdfWorkerHandle & { terminated: number } {
   return handle;
 }
 
-/**
- * A pdf.js stand-in that records `getDocument` and whose loading task never
- * settles, for the time limit and Stop.
- */
 function stalledPdfjs() {
   const calls: Record<string, unknown>[] = [];
   const destroy = vi.fn(async () => {});
@@ -83,15 +77,12 @@ describe('readLinkedInPdf on well-formed files', () => {
     const first = result.pages[0]!.find((item) => item.str !== '')!;
     expect(first.str).toBe('Sample Person');
     expect(first.transform[3]).toBeCloseTo(26);
-    // The media box starts at (10, 20), so positions shift by it.
     expect(first.transform[4]).toBeCloseTo(62);
     expect(first.transform[5]).toBeCloseTo(706.5);
     expect(progress).toEqual([[1, 2], [2, 2]]);
   });
 
   it('terminates the worker when the read succeeds', async () => {
-    // The real pdf.js, with a stand-in GlobalWorkerOptions so the fake port
-    // never reaches it; pdf.js then parses in this process.
     const wrapped = {
       GlobalWorkerOptions: { workerPort: null },
       getDocument: pdfjs.getDocument,
@@ -371,10 +362,6 @@ describe('hostile files built in the test', () => {
   });
 
   it('a stream inflating far past its size settles the read', async () => {
-    // 64 MiB of spaces deflate to about 64 KiB. In this in-process read the
-    // parse shares the test's thread, so only settling is asserted; the time
-    // limit and terminate paths are proven with the stalled stand-in above,
-    // and the browser proof covers a real worker on a stream past 1 GiB.
     const spaces = ' '.repeat(64 * 1024 * 1024);
     const bytes = buildPdf([
       '<< /Type /Catalog /Pages 2 0 R >>',

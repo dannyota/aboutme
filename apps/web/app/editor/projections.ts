@@ -82,7 +82,6 @@ export function projectIntent(
         snapshot,
       );
     case 'projectLinkEntry':
-      // Only the reference: text edited elsewhere never stops the link.
       return sectionProjection(
         presenceOf(findEntry(snapshot.document, intent.entryId)?.entry,
           'projectId'),
@@ -273,8 +272,6 @@ function findEntry(
   return undefined;
 }
 
-// A refresh overwrites these, so it waits for a fresh confirmation when any
-// of them, or the link itself, changed after the person confirmed.
 const REFRESHED_FIELDS = [
   'projectId', 'title', 'subtitle', 'link', 'dates', 'description',
 ] as const;

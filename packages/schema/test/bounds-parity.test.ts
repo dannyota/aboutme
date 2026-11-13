@@ -4,10 +4,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-// AJV and the Go validator read the same committed fixture corpus and must
-// return the same verdicts. Both enable strict format validation. See
-// docs/design/repository.md for the cross-language generation boundary.
-
 const root = new URL("..", import.meta.url).pathname;
 const schema = JSON.parse(
   readFileSync(join(root, "resume.schema.json"), "utf8"),
@@ -53,8 +49,6 @@ describe("bounds/fixtures cross-language JSON-Schema verdict parity (ajv)", () =
 
   it("agrees with the generated bounds corpus's recorded verdicts", () => {
     for (const row of manifest.bounds) {
-      // manifest "file" entries are rooted at fixtures/ (e.g.
-      // "bounds/richtext-maxlength-codepoints-valid.json").
       const instance = loadFixture(row.file);
       checkVerdict(row.file, instance, row.expect === "valid");
     }
@@ -68,7 +62,6 @@ describe("bounds/fixtures cross-language JSON-Schema verdict parity (ajv)", () =
   });
 
   it("agrees with the naming-convention verdict for every top-level fixtures/*.json fixture", () => {
-    // Match the Go fixture loader: top-level regular JSON files only.
     const names = readdirSync(join(root, "fixtures"), { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => entry.name);

@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * /app/import/linkedin: create a resume from a LinkedIn "Save to PDF" file,
- * read entirely in the browser (docs/design/linkedin-import.md and
- * docs/design/linkedin-import-ui.md; ADR 0023). This page wires the states
- * the design names; the pieces live under components/import.
- */
 import type { Resume } from '@aboutme/schema';
 import { ArrowLeft } from '@lucide/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -78,9 +72,6 @@ function endWorker(): void {
   worker.value = undefined;
 }
 
-/** A fresh worker for the next pick, started only on the Pick state, never
- * while the review is shown (docs/design/linkedin-import.md, "Reading the
- * file"). */
 function armWorker(): void {
   endWorker();
   if (reader.value !== undefined) worker.value = reader.value.startWorker();
@@ -102,8 +93,6 @@ onBeforeUnmount(() => {
   endWorker();
   controller.value?.abort();
 });
-
-// --- Pick, Reading, Failed -----------------------------------------------
 
 const pickError = ref<ImportFailure | 'dropOne' | null>(null);
 const stoppedNotice = ref(false);
@@ -149,9 +138,6 @@ async function pick(file: File): Promise<void> {
   pageCount.value = null;
   const usedWorker = worker.value;
   void nextTick(() => pickPanel.value?.focusStop());
-  // No request follows a pick: this worker was already started, and each
-  // pick gets its own, ended whatever the outcome (docs/design/
-  // linkedin-import.md, "Reading the file").
   worker.value = undefined;
   controller.value = new AbortController();
 
@@ -173,8 +159,6 @@ async function pick(file: File): Promise<void> {
   if (!outcome.ok) {
     if (outcome.reason === 'stopped') stoppedNotice.value = true;
     else pickError.value = outcome.reason;
-    // The next pick gets a fresh worker; review stays empty, so this is
-    // still the Pick state.
     armWorker();
     await nextTick();
     pickPanel.value?.focusChoose();
@@ -188,8 +172,6 @@ async function pick(file: File): Promise<void> {
   const choices = initialChoiceSets(outcome.review);
   detailIds.value = choices.detailIds;
   entryIds.value = choices.entryIds;
-  // No worker starts while the review is shown; chooseAnother arms one when
-  // the page returns to Pick.
   await nextTick();
   reviewHeading.value?.focus();
 }
@@ -209,8 +191,6 @@ function chooseAnother(): void {
   stoppedNotice.value = false;
   armWorker();
 }
-
-// --- Review, size, and schema ----------------------------------------------
 
 const resumeDocument = computed<Resume | undefined>(() => {
   if (review.value === undefined) return undefined;
@@ -260,14 +240,9 @@ async function submit(): Promise<void> {
   const check = schemaCheck.value;
   if (!check.ok) {
     if (check.entryIds.length === 0) {
-      // A failure outside any entry or detail: no row to focus, so the
-      // panel's reason text explains it and takes focus (docs/design/
-      // linkedin-import-ui.md, "Action panel").
       actionPanel.value?.focusReason();
       return;
     }
-    // Focus the first marked detail, then the first marked entry, in review
-    // order (spec "Action panel").
     const firstDetail = review.value.details
       .find((detail) => check.entryIds.includes(detail.id));
     const first = firstDetail ?? review.value.sections

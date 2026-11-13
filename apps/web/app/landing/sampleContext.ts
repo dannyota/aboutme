@@ -4,7 +4,5 @@ export const sampleContext: RenderContext = {
   lng: 'en',
   mode: 'continuous',
   photoUrl: '/landing/danny.webp',
-  // The homepage hero owns the page's one h1; the embedded sample's name
-  // is visual only.
   nameHeading: 'p',
 };

@@ -6,7 +6,6 @@ import CheckboxField from '../../app/components/app/CheckboxField.vue';
 const describedBy = (wrapper: ReturnType<typeof mount>) =>
   wrapper.get('[role="checkbox"]').attributes('aria-describedby');
 
-// docs/design/linkedin-import-ui.md Accessibility.
 describe('CheckboxField description id', () => {
   it('points aria-describedby at the description id when there is one', () => {
     const wrapper = mount(CheckboxField, {

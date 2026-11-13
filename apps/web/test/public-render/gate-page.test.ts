@@ -9,10 +9,6 @@ import {
 } from '../../server/utils/public-render/envelope';
 import { renderPublicGate } from '../../server/workers/public-render/render';
 
-// A gate standing in for a project page carries that page on each provider
-// link, so sign-in returns to it (docs/design/projects-contract.md "Render
-// envelope"; docs/design/ui/project-pages.md "Gate").
-
 const VERSIONS = { style: '0123456789abcdef', script: 'fedcba9876543210' };
 
 const gate = {

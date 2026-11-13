@@ -58,7 +58,6 @@ export async function expectShowcaseFlow(page: Page): Promise<void> {
       `[data-testid="showcase-${id}"]`,
     )!.getBoundingClientRect();
     const header = rect('header');
-    // The desktop bar is display:contents; its count owns the grid cell.
     const bar = rect(innerWidth < 1024 ? 'filter-bar' : 'count');
     const results = rect('results');
     if (innerWidth < 1024) {

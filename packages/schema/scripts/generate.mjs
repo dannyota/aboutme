@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-// Generates current and retained Go and TypeScript types from the declared
-// JSON Schema files. Run `npm run generate` here or `make schema-gen` at the
-// repository root.
-//
-// json-schema-to-typescript emits the TypeScript discriminated union directly.
-// quicktype emits the Go entry structs, while hand-written section.go provides
-// the Section dispatch that Go cannot represent as a sum type. In-memory schema
-// transforms compensate for generator limits; AJV validates the unchanged
-// source schema. Section variants are derived from $defs.section.oneOf, and
-// test/conformance.test.ts checks generator fidelity independently. See
-// docs/design/repository.md.
-//
-// This file orchestrates the generation run; the sibling generate*.mjs modules
-// hold the per-topic logic (schema transforms, per-language codegen, the raw
-// schema embed, the released-version registry, templates, samples, and the
-// sanitizer policy).
 
 import {
   mkdirSync,
@@ -93,8 +77,6 @@ async function main() {
       "../../apps/server/internal/showcase/presets.generated.go",
     );
 
-    // Applications compile against these current outputs from the working
-    // resume.schema.json.
     generateGo(sharedSchema, tmpDir, join(goDir, "resume.go"), {
       packageName: "schema",
       sourceName: "resume.schema.json",
@@ -111,10 +93,6 @@ async function main() {
     });
     written.push("gen/go/resume.go", "gen/ts/resume.ts", "gen/go/rawschema.go");
 
-    // The retained per-version snapshots. Each one is regenerated from its
-    // OWN immutable schema file, never from resume.schema.json — that is what
-    // makes regenerating an old namespace mechanically derived rather than a
-    // silent re-cut against whatever the contract has since become.
     for (const entry of manifest.versions) {
       const versionSchemaPath = join(packageRoot, entry.schema);
       const versionBytes = readFileSync(versionSchemaPath);

@@ -323,7 +323,6 @@ describe('SectionPanel', () => {
 
       await wrapper.get('[data-action="add-entry"]').trigger('click');
       if (sectionType === 'project') {
-        // A project section's Add entry is a menu; Blank entry adds as before.
         await flushPromises();
         document.body
           .querySelector<HTMLElement>('[data-action="add-blank-entry"]')!

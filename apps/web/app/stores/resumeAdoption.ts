@@ -17,9 +17,6 @@ import {
   type ResumeRecord,
 } from './resumeRecord';
 
-// What the server says about a resume, taken into the editor's record: write
-// responses, complete reads, stale winners and bodyless acknowledgements.
-
 export function adoptComplete(
   record: ResumeRecord | undefined,
   accepted: AcceptedResume,
@@ -109,8 +106,6 @@ export function replaceConflictedAfterCompleteRead(
     return false;
   }
   const active = record.attempt?.queueItem.id === conflicted.id;
-  // A conflict found before sending leaves its command at the head of
-  // the queue, where a later edit of the same field may have merged in.
   if (!active && !unchangedHead(record, conflicted)) return false;
   record.accepted = cloneAccepted(accepted);
   record.completeReadRequired = false;

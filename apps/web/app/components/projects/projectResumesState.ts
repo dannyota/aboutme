@@ -14,7 +14,6 @@ export type ProjectResumesView
     | { readonly kind: 'ready'; readonly items: readonly ResumeSummary[] }
     | { readonly kind: 'unavailable' };
 
-/** The last Add to this resume, by the design's outcome table. */
 export type LinkStatus
   = | {
     readonly kind: 'linked' | 'document-invalid' | 'busy';
@@ -31,10 +30,8 @@ export interface ProjectResumesDeps {
 export interface ProjectResumesController {
   readonly view: Ref<ProjectResumesView>;
   readonly linked: ComputedRef<ReadonlySet<string>>;
-  /** The resume a link is being sent to. */
   readonly pending: Ref<string | null>;
   readonly status: Ref<LinkStatus | null>;
-  /** The published resume waiting for the owner's privacy answer. */
   readonly asking: Ref<string | null>;
   retry(): Promise<void>;
   add(resumeId: string): Promise<void>;
@@ -42,11 +39,6 @@ export interface ProjectResumesController {
   cancelAsk(): void;
 }
 
-/**
- * The project editor's Resumes section. Adding links at once, as a resume
- * write; it waits while the project has unsaved changes so the prefill uses
- * the text on screen. Links go to the account that loaded the project.
- */
 export function useProjectResumes(
   loaded: Readonly<Ref<Project | null>>,
   dirty: Readonly<Ref<boolean>>,
@@ -105,12 +97,6 @@ export function useProjectResumes(
       : resume;
   }
 
-  /**
-   * The privacy notice, decided once when the person clicks, from the
-   * account's resumes and the project's links read again then: another tab
-   * may have published a resume or linked the project since this page
-   * loaded (docs/design/projects.md "Privacy"). A read that fails asks.
-   */
   async function asksFirst(
     project: Project,
     resumeId: string,
@@ -144,7 +130,6 @@ export function useProjectResumes(
     await send(resume);
   }
 
-  /** The owner's answer covers this one link only; nothing keeps it. */
   async function addAnyway(): Promise<void> {
     const resumeId = asking.value;
     asking.value = null;

@@ -1,6 +1,5 @@
 import type { Locator } from '@playwright/test';
 
-/** Check Range rectangles and visible clips without changing print layout. */
 export async function measurePrintTextContainment(container: Locator) {
   return container.evaluate((root) => {
     type Box = { left: number; right: number; top: number; bottom: number };
@@ -95,11 +94,9 @@ export async function measurePrintTextContainment(container: Locator) {
       }
       for (const rect of rects) {
         const fontSize = parseFloat(css.fontSize) || rect.height;
-        // For equal-size runs, Range bottoms track baseline spacing.
         const line = { node: nodePath, text, range: bounds(rect),
           baseline: rect.bottom, fontSize };
         for (const [index, previous] of lines.entries()) {
-          // Adjacent inline runs can have different font metrics on one line.
           const overlap = Math.min(rect.right, previous.range.right)
             - Math.max(rect.left, previous.range.left);
           const distance = Math.abs(line.baseline - previous.baseline);

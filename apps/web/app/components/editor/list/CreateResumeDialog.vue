@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * `CreateResumeDialog` — create a blank resume, or one started from a gallery
- * sample. The resume language picks the sample language (Vietnamese or
- * English); with another language the English samples show. Starting from a
- * sample copies its content and template into a new private resume.
- */
 import type { Resume } from '@aboutme/schema';
 import { loadSample, type SampleLanguage } from '@aboutme/schema/samples';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
@@ -31,7 +25,6 @@ const props = defineProps<{
   open: boolean;
   busy: boolean;
   retained: OpaqueCreateOutcome | null;
-  /** How many resumes the account has; none opens on the samples. */
   resumeCount?: number;
 }>();
 
@@ -94,8 +87,6 @@ watch(() => props.open, (open) => {
   }
 }, { immediate: true });
 
-// Samples load while the dialog is open in sample mode, in the language the
-// resume will be written in.
 watch([() => props.open, mode, sampleLanguage], async ([
   open,
   current,
@@ -109,7 +100,6 @@ watch([() => props.open, mode, sampleLanguage], async ([
   ));
 }, { immediate: true });
 
-// The title follows the chosen sample until the person types their own.
 watch([mode, selected, chosenDocument, sampleLanguage], () => {
   if (titleEdited.value) return;
   const template = chosenTemplate.value;
@@ -315,7 +305,6 @@ function persona(templateId: string): string {
       v-else
       #footer
     >
-      <!-- First here, so it stacks last on phones (DESIGN.md dialogs). -->
       <div class="flex flex-col gap-2 sm:mr-auto sm:gap-1 sm:self-center">
         <NuxtLink
           class="create-resume-browse text-sm text-link underline
@@ -375,7 +364,6 @@ function persona(templateId: string): string {
   width: 56px;
 }
 
-/* Wider screens: one row of five cards, thumbnail above the name. */
 @media (width >= 640px) {
   .create-resume-samples {
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -394,7 +382,6 @@ function persona(templateId: string): string {
 </style>
 
 <style>
-/* Phones: the sample chooser takes the whole screen. */
 @media (width < 640px) {
   [data-slot="dialog-content"].create-resume-dialog--samples {
     top: 0;

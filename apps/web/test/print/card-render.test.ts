@@ -8,14 +8,11 @@ import { renderPrintCard } from '../../server/workers/print/render';
 import { cardEnvelope } from './fixture';
 
 const parse = (html: string) => new JSDOM(html).window.document;
-// The text of each card paragraph, in order.
 const text = (html: string): string =>
   [...parse(html).querySelectorAll('main p')]
     .map((paragraph) => (paragraph.textContent ?? '').trim())
     .join(' | ');
 
-// docs/design/link-previews.md, "Preview card": the card page is one print
-// document with no script, and shows only the envelope's text.
 describe('print card page', () => {
   it('is one print document with no script', async () => {
     const html = await renderPrintCard(cardEnvelope());

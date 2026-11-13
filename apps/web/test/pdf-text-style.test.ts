@@ -13,7 +13,7 @@ function fontData(weight: number): Uint8Array {
   const view = new DataView(data.buffer);
   view.setUint32(0, 0x00010000);
   view.setUint16(4, 1);
-  view.setUint32(12, 0x4f532f32); // OS/2
+  view.setUint32(12, 0x4f532f32);
   view.setUint32(20, 28);
   view.setUint32(24, 8);
   view.setUint16(32, weight);

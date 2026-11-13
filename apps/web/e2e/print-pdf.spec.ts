@@ -468,10 +468,8 @@ for (const rule of ['orphan', 'widow'] as const) {
     const paragraph = page.locator('.entry-body p');
     await expect(paragraph).toHaveCSS('orphans', '2');
     await expect(paragraph).toHaveCSS('widows', '2');
-    // This is a block flow, outside the grid limit in print.md §4.
     await expect(page.locator('.layout-one-column')).toHaveCount(1);
     await expect(page.locator('.layout-two-columns')).toHaveCount(0);
-    // Wrap only between the tokens, never at a marker's hyphen.
     await paragraph.evaluate((element, selected) => {
       const tokens = ['FIRST', 'SECOND'].map((suffix) => {
         const token = document.createElement('span');
@@ -498,7 +496,6 @@ for (const rule of ['orphan', 'widow'] as const) {
     expect(lines.map((part) => part.length)).toEqual([1, 1]);
     expect(Math.abs(lines[1]![0]! - lines[0]![0]! - 24))
       .toBeLessThanOrEqual(0.1);
-    // print.md §4 requires both constraints for the two-line widow fixture.
     if (rule === 'orphan') {
       await applyStyleMutation(paragraph, { widows: '1' });
     }
@@ -524,7 +521,6 @@ for (const rule of ['orphan', 'widow'] as const) {
     expect(split[0]!.text).toContain(`${rule.toUpperCase()}-FIRST`);
     expect(split[1]!.text).toContain(`${rule.toUpperCase()}-SECOND`);
     if (rule === 'widow') {
-      // Four lines permit a 2/2 split, so widows can be isolated from orphans.
       await applyStyleMutation(page.locator('.harness-paper'), {
         height: ['calc(267mm - 72px)', /^\d+(?:\.\d+)?px$/u],
       }, '::before');
@@ -586,10 +582,6 @@ for (const rule of ['orphan', 'widow'] as const) {
   });
 }
 
-// A long two-column resume must fragment each column in place across a page
-// break rather than lose a column's content to a later page
-// (docs/design/templates/print.md §5). No page may be blank, and the paged
-// preview must estimate the PDF's page count (§1).
 for (const templateId of LONG_TEMPLATES) {
   for (const lng of ['en', 'vi'] as const) {
     test(

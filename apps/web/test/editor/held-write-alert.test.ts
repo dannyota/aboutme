@@ -15,9 +15,6 @@ import { fullName, headline } from './fake-resume-server';
 import { acceptedFixture } from './fixture';
 import { openEditor, type OpenEditor } from './held-write-editor';
 
-// The banner for a write the queue still holds, and its buttons, driven
-// through the real coordinator against the fake server.
-
 const command = {
   id: 'command-1',
   kind: 'personalField',
@@ -46,13 +43,11 @@ function mountAlert(context: OpenEditor, record = context.record()) {
   return mount(HeldWriteAlert, { props: { actions: context.actions, record } });
 }
 
-/** Lets the editor's promises settle and the banner render again. */
 async function settle(): Promise<void> {
   await vi.advanceTimersByTimeAsync(0);
   await nextTick();
 }
 
-/** An edit whose outcome has stayed unknown for a minute. */
 async function unknownForAMinute(context: OpenEditor): Promise<string> {
   context.server.loseEveryResponse({ applied: false });
   const mine = context.edit(headline('Staff engineer'));
@@ -141,7 +136,6 @@ describe('Retry now', () => {
       const wrapper = mountAlert(context);
       const button = wrapper.get('[data-action="retry-held-write"]');
 
-      // The 30-second retry that started at 32.25 s goes out at 62.25 s.
       await vi.advanceTimersByTimeAsync(1_250);
       expect(context.server.sentFor(mine)).toHaveLength(sends + 1);
       await nextTick();

@@ -57,7 +57,6 @@ function resolve(deps: ProjectsDeps): ResolvedDeps {
   };
 }
 
-/** A key per user intent, kept only while the same request may be retried. */
 function intentKeys(uuid: () => string) {
   let pending: { fingerprint: string; key: string } | null = null;
   return {
@@ -74,10 +73,6 @@ function intentKeys(uuid: () => string) {
   };
 }
 
-/**
- * Follows the session like the resume list: a first anonymous visit is the
- * route guard's job; a session lost after a read sends the page to sign in.
- */
 function followSession(
   authState: Readonly<Ref<AuthState>>,
   handlers: {
@@ -123,17 +118,13 @@ export type CreateState
 
 export interface ProjectListController {
   readonly view: Ref<ProjectListView>;
-  /** Newest update first. */
   readonly items: ComputedRef<readonly Project[]>;
   readonly atLimit: ComputedRef<boolean>;
   readonly createState: Ref<CreateState>;
-  /** The account's resumes a new project can be shown on. */
   readonly resumes: Ref<readonly ResumeSummary[]>;
-  /** The privacy note a submit decided to show; cleared when it opens. */
   readonly privacyNote: Ref<boolean>;
   retry(): Promise<void>;
   loadResumes(): Promise<void>;
-  /** Creates the project, links each chosen resume, then opens it. */
   create(name: string, resumeIds?: readonly string[]): Promise<void>;
   resetCreate(): void;
   adopt(project: Project): void;
@@ -197,7 +188,6 @@ export function useProjectList(
     }
   }
 
-  /** Links each resume; the editor names the ones that did not take it. */
   async function linkChosen(
     ownerId: string,
     projectId: string,
@@ -214,13 +204,6 @@ export function useProjectList(
     rememberUnlinked(projectId, missed);
   }
 
-  /**
-   * The privacy note, decided at submit for the resumes checked then, from
-   * the account's resumes read again (docs/design/projects.md "Privacy").
-   * When it applies and the dialog did not show it, it appears and nothing
-   * is created until the owner submits again. A failed read shows it for
-   * two or more checked resumes, since it cannot rule them out.
-   */
   async function privacyNoteAppeared(
     resumeIds: readonly string[],
   ): Promise<boolean> {
@@ -320,7 +303,6 @@ export interface ProjectEditorController {
   readonly view: Ref<ProjectEditorView>;
   readonly loaded: Ref<Project | null>;
   readonly draft: Ref<ProjectDraft | null>;
-  /** Advances when a reload replaces the typed text, to remount fields. */
   readonly generation: Ref<number>;
   readonly dirty: ComputedRef<boolean>;
   readonly saving: Ref<boolean>;
@@ -354,7 +336,6 @@ export function useProjectEditor(
   const keys = intentKeys(uuid);
   const disposed = useDisposed();
   let winner: Project | null = null;
-  // Saves belong to the account that loaded the project.
   let ownerId: string | null = null;
 
   const dirty = computed(() =>
@@ -403,7 +384,6 @@ export function useProjectEditor(
     failed: () => {
       if (loaded.value === null) view.value = 'unavailable';
     },
-    // Typed text stays in memory; the next save reports the lost session.
     lost: () => {
       if (!dirty.value) void navigate('/login');
     },
@@ -442,8 +422,6 @@ export function useProjectEditor(
       winner = null;
       saveFailed.value = false;
       loaded.value = result.value;
-      // The server's sanitized text replaces the draft only when nothing was
-      // typed while the save ran.
       const typed = draft.value === null
         ? null
         : canonicalJSON(requestFromDraft(draft.value));

@@ -10,16 +10,6 @@ import {
   type GalleryTemplate,
 } from './catalog';
 
-/**
- * Search over the template gallery catalog (DESIGN.md, editor Templates
- * panel: the search box finds a template by name, style, sample tag, role,
- * or Library filter chip). A template's display name is a single,
- * unlocalized string, so only its purpose, sample tags, and chip labels
- * vary by site language; those are matched in both languages regardless of
- * the reader's current UI language, so a query in either language still
- * finds a match.
- */
-
 const FILTER_CHIPS: readonly Exclude<GalleryFilter, 'sample'>[]
   = FILTERS.filter(
     (chip): chip is Exclude<GalleryFilter, 'sample'> => chip !== 'sample',
@@ -27,15 +17,11 @@ const FILTER_CHIPS: readonly Exclude<GalleryFilter, 'sample'>[]
 
 const LOCALES: readonly Locale[] = ['en', 'vi'];
 
-/** The catalog fields a search reads from a template. */
 export type TemplateSearchSubject = Pick<
   GalleryTemplate, 'id' | 'name' | 'purpose' | 'sampleTags'
 >;
 
-/**
- * Lowercases, removes Vietnamese diacritics (đ/Đ included, which NFD does
- * not decompose), and trims, so search matching ignores case and accents.
- */
+// NFD leaves đ/Đ as is: U+0111 and U+0110 have no Unicode decomposition.
 export function normalizeSearchText(value: string): string {
   return value
     .toLowerCase()
@@ -45,11 +31,6 @@ export function normalizeSearchText(value: string): string {
     .trim();
 }
 
-/**
- * The normalized text a template offers for search: its name, its purpose
- * and sample tags in both languages, and the labels of any role chip it is
- * the sample for, in both languages.
- */
 export function templateSearchText(template: TemplateSearchSubject): string {
   const parts: string[] = [template.name];
   for (const locale of LOCALES) {
@@ -80,21 +61,12 @@ export function templateSearchText(template: TemplateSearchSubject): string {
   return normalizeSearchText(parts.join(' '));
 }
 
-/**
- * A search query split into normalized, non-empty, whitespace-separated
- * terms.
- */
 function searchTerms(query: string): readonly string[] {
   return normalizeSearchText(query)
     .split(/\s+/)
     .filter((term) => term !== '');
 }
 
-/**
- * Whether a template matches a search query: every term must appear
- * somewhere in its searchable text. An empty or blank query matches every
- * template.
- */
 export function matchesTemplateSearch(
   template: TemplateSearchSubject,
   query: string,

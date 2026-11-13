@@ -1,8 +1,3 @@
-// The owner's public page title and emoji favicon. These mirror the server's
-// internal/publicpage checks so the Publish dialog can explain an issue before
-// saving; the server stays authoritative
-// (docs/adr/0014-public-page-head-and-link-preview.md).
-
 export const MAX_TITLE_GRAPHEMES = 70;
 const MAX_TITLE_CODE_POINTS = 560;
 const MAX_FAVICON_CODE_POINTS = 16;
@@ -11,14 +6,11 @@ type PublicPageIssue
   = 'too_long' | 'invalid_characters' | 'invalid_emoji';
 
 export interface NormalizedPublicPageField {
-  /** The value the server stores, or null when the field clears. */
   readonly value: string | null;
-  /** Every issue, sorted; empty when the value is valid. */
   readonly codes: PublicPageIssue[];
 }
 
 const EDGE_WHITE_SPACE = /^\p{White_Space}+|\p{White_Space}+$/gu;
-// Control and format characters, except U+200D ZERO WIDTH JOINER.
 const INVISIBLE = /\p{Cc}|(?!\u200D)\p{Cf}/u;
 const PICTOGRAPHIC = /^\p{Extended_Pictographic}$/u;
 const REGIONAL_INDICATOR = /^\p{Regional_Indicator}$/u;
@@ -28,8 +20,6 @@ const graphemes = (text: string): string[] => [
   ...new Intl.Segmenter('und', { granularity: 'grapheme' }).segment(text),
 ].map(({ segment }) => segment);
 
-// What may follow an emoji base inside one sequence: ZWJ, variation
-// selectors, skin-tone modifiers, and tag characters.
 const emojiComponent = (codePoint: number): boolean =>
   codePoint === 0x200d || codePoint === 0xfe0e || codePoint === 0xfe0f
   || (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
@@ -79,7 +69,6 @@ export function normalizeFaviconEmoji(raw: string): NormalizedPublicPageField {
   return { value: emoji, codes: [] };
 }
 
-/** The favicon data: URL the public page uses, byte for byte the server's. */
 export function faviconHref(emoji: string): string {
   const svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'>'
     + `<text y='.9em' font-size='90'>${emoji}</text></svg>`;

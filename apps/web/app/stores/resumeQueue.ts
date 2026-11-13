@@ -16,9 +16,6 @@ import {
   type ResumeRecord,
 } from './resumeRecord';
 
-// The editor's own changes to a resume record: queued edits, the write in
-// flight, conflicts and issues the person has to see, and discarding them.
-
 export function enqueue(record: ResumeRecord, item: EditorQueueItem): void {
   const pending = toRaw(record.pending) as readonly EditorQueueItem[];
   record.pending = (isAtomic(item)
@@ -37,11 +34,6 @@ function coalesceAtomicPending(
   return [...pending.slice(0, -1), ...coalescePending([last], item)];
 }
 
-/**
- * Moves `queueItem` from the head of the queue to the write in flight. It
- * must be the head object itself: typing coalesces into a new object with
- * the same id, which an older reference may never consume.
- */
 export function startAttempt(
   record: ResumeRecord,
   queueItem: EditorQueueItem,
@@ -67,17 +59,12 @@ export function holdAttempt(
 ): void {
   const held = record.attempt;
   if (held?.queueItem.id !== state.queueItem.id) return;
-  // Once raised, the alert stays while the same write is still unknown.
   const alert = held.kind === 'unknown' && held.alert === true
     && state.kind === 'unknown' && state.reason !== 'cutoff';
   record.attempt = copy(alert ? { ...state, alert: true as const } : state);
   replay(record);
 }
 
-/**
- * Marks the held write whose attempt has `idempotencyKey` as on its way to
- * the server again, or no longer, so its retry button waits for it.
- */
 export function markSending(
   record: ResumeRecord,
   idempotencyKey: string,
@@ -96,7 +83,6 @@ export function markSending(
   record.attempt = sending ? { ...rest, sending: true } : rest;
 }
 
-/** Raises the alert for a write that is still held as unknown. */
 export function markHeldAlert(record: ResumeRecord, itemId: string): void {
   const held = record.attempt;
   if (held?.kind !== 'unknown' || held.queueItem.id !== itemId) return;

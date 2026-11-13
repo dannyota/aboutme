@@ -1,6 +1,3 @@
-// Reads and validates the sanitizer allowlist and hostile-input corpus, then
-// emits the TypeScript and Go sanitizer policy artifacts derived from them.
-
 import { readFileSync } from "node:fs";
 
 import {

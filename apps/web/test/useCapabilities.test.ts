@@ -26,7 +26,6 @@ const Probe = defineComponent({
 async function probe(): Promise<Record<string, string | undefined>> {
   const wrapper = await mountSuspended(Probe);
   await flushPromises();
-  // A failed read retries once before it settles.
   await vi.waitFor(() =>
     expect(wrapper.get('div').attributes('data-resolved')).toBe('true'));
   const el = wrapper.get('div');

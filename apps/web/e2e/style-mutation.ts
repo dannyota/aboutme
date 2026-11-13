@@ -4,7 +4,6 @@ import {
   expectScreen, expectScreenClass, SCREEN_CLASSES, type ScreenContract,
 } from './display-assertions';
 
-/** Register a mutation proof; WEB_E2E_MUTATIONS=0 leaves these out. */
 export const mutationTest = (
   title: string, body: Parameters<typeof test>[2],
 ): void => test(title, { tag: '@mutation' }, body);
@@ -14,7 +13,6 @@ export type StyleMutation = Readonly<Record<string,
 
 let marker = 0;
 
-/** Applies a temporary style and proves its computed value before returning. */
 export async function applyStyleMutation(
   target: Locator,
   styles: StyleMutation,
@@ -42,7 +40,6 @@ export async function applyStyleMutation(
         sheet.sheet!.insertRule(`[${attribute}="${id}"]${options.pseudo} {}`);
         style = (sheet.sheet!.cssRules[0] as CSSStyleRule).style;
       }
-      // Reduced motion can leave a nonzero transition duration on every node.
       style.setProperty('transition', 'none', 'important');
       style.setProperty('animation', 'none', 'important');
       const computed = getComputedStyle(element, options.pseudo);
@@ -75,7 +72,6 @@ export async function applyStyleMutation(
         values: Array.from({ length: count }, () => matcher),
       });
     }
-    // Companion declarations and already-correct siblings may already match.
     await expect.poll(() => saved.evaluate((records, options) =>
       records.some(({ element, before }) => element.isConnected
         && options.properties.some((property) =>
@@ -112,7 +108,6 @@ export async function applyStyleMutation(
   }
 }
 
-/** Register a real surface's proof for each shared assertion class. */
 export function screenMutationTests(
   name: string,
   open: (page: Page) => Promise<void>,
@@ -164,7 +159,6 @@ export function screenMutationTests(
             }
           }, { content: kind === 'content', attribute, original });
           if (kind === 'images') {
-            // A failed image also sets component state; remount its clean page.
             await open(page);
           }
         };
@@ -211,7 +205,6 @@ export function screenMutationTests(
   }
 }
 
-/** Prove one added assertion without running unrelated surface checks first. */
 export async function proveMutation(
   assertion: () => Promise<void>,
   mutate: () => Promise<() => Promise<void>>,

@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * `LegalDocument` — a static, one-column reading layout for the Privacy
- * Policy and Terms: title, date line, intro, and ruled sections. It performs
- * no data fetch and loads nothing from another origin.
- */
 import {
   type LegalDocument,
   legalContact,

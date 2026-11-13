@@ -8,10 +8,6 @@ import {
   decodePublicRenderEnvelope,
 } from '../../server/utils/public-render/envelope';
 
-// The envelopes Go's project page builder makes for a fixed set of projects
-// (apps/server/internal/publicapi/project_envelope_golden_test.go). Each must
-// pass the renderer's decoder unchanged, its preview included, so a builder
-// change the renderer would refuse fails here.
 const golden = JSON.parse(readFileSync(
   resolve(
     process.cwd(),

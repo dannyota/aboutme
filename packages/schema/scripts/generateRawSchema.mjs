@@ -1,13 +1,7 @@
-// Embeds a schema file's exact bytes into a generated Go source constant.
-// resume.schema.json (and each released version's schema) is outside gen/go's
-// package directory, so go:embed cannot reach it; this is the substitute.
+// go:embed cannot reach schema files outside gen/go's package directory.
 
 import { generatedHeader, writeGenerated } from "./generatePaths.mjs";
 
-// Splits a base64 string into fixed-width lines so the generated Go source
-// doesn't put resume.schema.json's ~29 KB of encoded bytes on a single line
-// (readability/diffability only — Go itself doesn't care about line length
-// here).
 function chunkBase64(base64, width = 96) {
   const lines = [];
   for (let i = 0; i < base64.length; i += width) {
@@ -16,14 +10,7 @@ function chunkBase64(base64, width = 96) {
   return lines;
 }
 
-// Base64, not a Go string literal: resume.schema.json contains a literal
-// backtick (inside a description string), which raw string literals cannot
-// contain at all, and non-ASCII bytes that would need per-rune escaping in
-// an interpreted string literal — both are exactly the kind of fragile,
-// easy-to-get-subtly-wrong transcription this generator should not need to
-// hand-roll. Base64's alphabet has neither problem, so the embedding is a
-// straight, deterministic transcoding of rawSchemaBytes with no escaping
-// logic at all.
+// Base64: the schema holds a backtick, which a Go raw string cannot.
 export function generateRawSchema(
   rawSchemaBytes,
   outFile,

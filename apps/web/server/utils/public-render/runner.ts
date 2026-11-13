@@ -9,9 +9,7 @@ import {
 export interface PublicRenderWorkerOptions {
   signal: AbortSignal;
   deadlineMs: 5_000;
-  /** Internal seam used by lifecycle tests and the direct route. */
   workerUrl?: URL | string;
-  /** Test-only lifecycle seam; production always creates a Node Worker. */
   workerFactory?: (
     url: URL | string,
     workerData: PublicRenderRequest,

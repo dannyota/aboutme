@@ -1,8 +1,4 @@
 <script setup lang="ts">
-/**
- * `PublishPageFields` — the optional tab title and tab icon of the public
- * page, with a preview of the browser tab. Empty fields mean the defaults.
- */
 import { computed, reactive, watch } from 'vue';
 
 import TextField from '@/components/app/TextField.vue';
@@ -20,10 +16,8 @@ import {
 import type { PublishPageCopy } from '../../i18n/publish';
 
 const props = defineProps<{
-  /** The default title the page uses when the field is empty. */
   readonly defaultTitle: string;
   readonly disabled?: boolean;
-  /** The last publish issues; ones on these fields show until edited. */
   readonly serverIssues: readonly { path: string; code: string }[];
   readonly copy: PublishPageCopy;
 }>();

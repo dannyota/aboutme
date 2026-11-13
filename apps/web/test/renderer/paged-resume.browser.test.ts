@@ -223,8 +223,6 @@ describe('PagedResume browser measurement', () => {
       vi.stubGlobal('ResizeObserver', FakeResizeObserver);
       vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
       vi.stubGlobal('cancelAnimationFrame', vi.fn());
-      // List items of the whole entry sit 26px apart and are 20px tall, so
-      // the whole entry leaves 6px between them.
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
         .mockImplementation(function () {
           if (this.tagName === 'LI') {
@@ -306,8 +304,6 @@ describe('PagedResume browser measurement', () => {
           );
         });
 
-      // work stays whole in the main column; the split entry lives in the
-      // sidebar's certificate section instead.
       const sidebarSplit = namedFixture('draft-partial');
       sidebarSplit.customization.layout.columns = 2;
       sidebarSplit.customization.layout.sections
@@ -335,8 +331,6 @@ describe('PagedResume browser measurement', () => {
         '.pagination-measurement .resume-sidebar [data-pagination-whole-entry]',
       );
       expect(sidebarWhole).toHaveLength(1);
-      // Blocks measure in order: the main heading and its whole work entry,
-      // then the sidebar heading and this entry's first part.
       expect(sidebarWhole[0]!.attributes('data-pagination-whole-entry'))
         .toBe('3');
       expect(sidebarWhole[0]!.findAll('li')).toHaveLength(2);
@@ -389,11 +383,7 @@ describe('PagedResume browser measurement', () => {
     const header = wrapper.get(
       '.pagination-measurement [data-pagination-header]',
     ).element;
-    // A CSS zoom ancestor makes the border box (what bindObserver used to
-    // seed from) read differently than the content box the ResizeObserver
-    // callback reports. Every newly observed element delivers once
-    // regardless of a real change, so this first delivery for `header`
-    // carries a "zoomed" content box unlike its own border box below.
+    // ResizeObserver spec: each newly observed element delivers once.
     vi.spyOn(header, 'getBoundingClientRect')
       .mockReturnValue(layoutRect(33.6));
     resizeCallback?.(
@@ -409,7 +399,6 @@ describe('PagedResume browser measurement', () => {
     expect(frames).toHaveLength(0);
     expect(wrapper.attributes('data-pagination-settled')).toBe('true');
 
-    // A later, real size change on the same element still re-paginates.
     resizeCallback?.(
       [
         {

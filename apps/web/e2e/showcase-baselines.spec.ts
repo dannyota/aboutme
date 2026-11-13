@@ -28,7 +28,6 @@ import {
   waitForImages,
 } from './support';
 
-// Synthetic cards keep the showcase independent of committed test images.
 const CARDS = Array.from({ length: 5 }, (_, index) => {
   const canvas = createCanvas(1200, 630);
   const context = canvas.getContext('2d');
@@ -355,8 +354,6 @@ for (const { name, path, body, locale, theme, width } of CASES) {
         await waitForImages(page);
       }
       if (name === 'sheet') {
-        // The sheet is a fixed overlay: a phone-height viewport, captured
-        // without the full page, shows it as a visitor sees it.
         await page.locator('[data-action="showcase-filters-open"]').click();
         await expect(page.getByRole('dialog')).toBeVisible();
         await expect(page.getByTestId('showcase-filter-sheet')).toBeVisible();

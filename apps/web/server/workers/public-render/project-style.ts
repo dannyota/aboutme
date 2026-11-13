@@ -1,14 +1,3 @@
-// The project pages' stylesheet (docs/design/ui/project-pages.md), which the
-// build writes as /_nuxt/assets/project-pages.css (nuxt.config.ts,
-// server/utils/print/assets.ts). The pages carry no inline CSS and load no
-// template CSS, so this holds everything they show: the application tokens
-// (docs/design/ui/typography-and-tokens.md) in the resume's color scheme,
-// selected by the root's data-scheme, the public page bar
-// (docs/design/public-page-bar.md), and both page layouts.
-//
-// Every rule is scoped under .public-project-page, so the render harness,
-// which also loads the resume page's own bar rules, draws the same page.
-
 interface ProjectPageTokens {
   readonly ground: string;
   readonly card: string;
@@ -73,7 +62,6 @@ const tokenDeclarations = (tokens: ProjectPageTokens): string =>
 const FONT = '"Be Vietnam Pro",Inter,system-ui,sans-serif';
 const PAGE = '.public-project-page';
 
-/** One rule: its selectors under the page root, then its declarations. */
 const rules = (
   selectors: string | readonly string[],
   ...declarations: string[]
@@ -82,7 +70,6 @@ const rules = (
     .map((selector) => `${PAGE} ${selector}`)
     .join(',')}{${declarations.join('')}}`;
 
-/** A rule on exactly these selectors, outside the page root. */
 const rule = (selectors: string, ...declarations: string[]): string =>
   `${selectors}{${declarations.join('')}}`;
 
@@ -92,7 +79,6 @@ const media = (query: string, ...blocks: string[]): string =>
 const SCHEME = [
   rule(':root', 'color-scheme:light;background:var(--project-ground);',
     tokenDeclarations(PROJECT_PAGE_TOKENS.light)),
-  // Dark is screen-only: printing either page stays light.
   media('screen', rule(':root[data-scheme="dark"]', 'color-scheme:dark;',
     tokenDeclarations(PROJECT_PAGE_TOKENS.dark))),
   media('screen and (prefers-color-scheme:dark)',
@@ -118,7 +104,6 @@ const FRAME = [
     'line-height:1.3;font-weight:700;'),
   rules('h2', 'margin:0;color:var(--project-ink);font-size:20px;',
     'line-height:1.3;font-weight:600;'),
-  // The skip link stays out of view until keyboard focus reaches it.
   rules('a[href="#public-project"]:not(:focus)', 'position:absolute;',
     'width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;',
     'clip-path:inset(50%);white-space:nowrap;border:0;'),
@@ -135,8 +120,6 @@ const FRAME = [
   media('(min-width:56rem)', rule(PAGE, '--project-gutter:32px;')),
 ];
 
-// The public page bar's structure, sizes and tokens, with the page's own
-// column (docs/design/public-page-bar.md).
 const BAR = [
   rules('.public-toolbar', 'padding-block:8px 7px;',
     'background:var(--project-ground);',
@@ -174,7 +157,7 @@ const BAR = [
 const CHIPS = [
   rules('.project-chips', 'display:flex;flex-wrap:wrap;gap:6px;margin:0;',
     'padding:0;list-style:none;'),
-  // The transparent border keeps each chip's shape under forced colors.
+  // Forced colors mode drops backgrounds; the border keeps the chip shape.
   rules('.project-chips li', 'display:inline-flex;align-items:center;',
     'min-height:24px;padding:2px 10px;border:1px solid transparent;',
     'border-radius:999px;background:var(--project-chip);',
@@ -183,8 +166,6 @@ const CHIPS = [
   rules('.project-chips .project-chips-more', 'color:var(--project-muted);'),
 ];
 
-// The list: rows in one bordered card. Below 40 rem, role and dates move
-// under the name.
 const LIST = [
   rules('.project-owner', 'margin-top:4px;color:var(--project-muted);'),
   rules('.project-owner a', 'color:var(--project-muted);'),
@@ -209,8 +190,6 @@ const LIST = [
     rules('.project-row-meta', 'flex:0 1 auto;')),
 ];
 
-// The project page: text with a facts column 17.5 rem wide beside it from
-// 56 rem; below that the facts come first, full width.
 const DETAIL = [
   rules('.project-breadcrumb ol', 'display:flex;flex-wrap:wrap;',
     'align-items:center;gap:4px 8px;margin:0 0 12px;padding:0;',

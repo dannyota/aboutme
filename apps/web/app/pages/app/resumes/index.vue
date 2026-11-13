@@ -46,8 +46,6 @@ function confirmLeave(): Promise<boolean> {
   });
 }
 
-// A rename or delete still being saved asks before the page goes, with the
-// projects editor's wording; leaving anyway drops it.
 useLeaveGuard(() => list.unsettled(), confirmLeave);
 let twinGeneration = 0;
 let twinOwner = auth.user.value?.id;

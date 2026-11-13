@@ -151,7 +151,6 @@ function entryStatusText(status: EntryActionStatus): string {
   }
 }
 
-/** The latest Link to a project or Save to my projects on this entry. */
 function entryAction(entryId: string) {
   const action = entryLinking.action.value;
   if (action?.entryId !== entryId) {
@@ -173,14 +172,9 @@ watch(() => [props.sectionKey, isProject.value] as const, ([, project]) => {
 interface EntryLink {
   readonly projectId: string;
   readonly name: string;
-  /** The default language's name when the project page falls back to it. */
   readonly fallbackLanguage: string | null;
 }
 
-/**
- * Each linked entry's project. Until the library loads, the entry's own
- * label stands in for the project name and no fallback is known.
- */
 const entryLinks = computed(() => {
   const links = new Map<string, EntryLink>();
   if (!isProject.value) return links;
@@ -285,7 +279,6 @@ function confirmDelete(): void {
     sectionKey: props.sectionKey,
     entryId: target.entry.id,
   });
-  // A deleted entry's unfinished date can no longer be saved.
   drafts?.clearPrefix(`dates:${target.entry.id}`);
   closeDelete();
 }
@@ -540,7 +533,6 @@ function assertNever(value: never): never {
     >
       {{ copy.entryChanged }}
     </p>
-    <!-- docs/design/projects.md "Privacy": Cancel takes the first focus. -->
     <ConfirmDialog
       v-if="linking.asking.value !== null"
       :open="true"

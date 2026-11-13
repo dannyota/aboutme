@@ -7,19 +7,12 @@ import { SHOWCASE_ROLES } from '@/lib/showcaseContract';
 import type { PublishCopy } from '../../i18n/publish';
 import type { ShowcaseBlockReason } from '../../editor/publishShowcase';
 
-// The community showcase block of the publish dialog: the switch, its
-// description, the Listed line, a showcase issue, and the optional role
-// (docs/design/ui/landing-and-library.md, Publish dialog block).
 const props = defineProps<{
-  /** What the switch shows; false while it is disabled. */
   readonly modelValue: boolean;
   readonly role: string;
-  /** Why the switch is disabled, if it is. */
   readonly reason: ShowcaseBlockReason | null;
   readonly busy: boolean;
-  /** Whether the stored opt-in exists and the Listed line shows. */
   readonly listed: boolean;
-  /** The server's showcase issue code, when one is showing. */
   readonly issueCode: string | null;
   readonly copy: PublishCopy;
 }>();

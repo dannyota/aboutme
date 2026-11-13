@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * "Connect Claude" (docs/design/mcp-guide.md, "Page structure" and
- * "Layout"): an `h3` for Claude on the web, desktop, and mobile as a six-
- * step ordered list and a plan note, then an `h3` for Claude Code as three
- * steps with two command blocks. Steps use 24 px number disks:
- * `--surface-blue` fill, a 1 px `--border` ring, and `--foreground` 13 px
- * weight-600 numerals; the ring keeps the disk visible under
- * `forced-colors: active`. Each list numbers from 1.
- */
 import type { GuideCopy } from '@/i18n/guide';
 import GuideCopyBlock from './GuideCopyBlock.vue';
 import GuideRichText from './GuideRichText.vue';

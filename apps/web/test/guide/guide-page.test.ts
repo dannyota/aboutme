@@ -8,9 +8,6 @@ import {
 } from '../../app/i18n/guide';
 import { setSiteLocale } from '../support/locale';
 
-// docs/design/mcp-guide.md: /guide/mcp is server-rendered, reads no API, and
-// shows the same content signed in or out.
-
 type Wrapper = Awaited<ReturnType<typeof mountSuspended>>;
 
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(

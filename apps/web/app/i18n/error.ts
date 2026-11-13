@@ -1,7 +1,3 @@
-// Copy for the app-wide error page (app/error.vue): a 404 message and a
-// generic message for every other error, in both site languages. Never
-// includes the error's own message or stack; docs/design/security.md's CSP
-// section is why the page has no framework-rendered fallback of its own.
 import type { Locale } from './locale';
 
 type ErrorPageContent = {

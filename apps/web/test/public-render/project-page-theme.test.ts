@@ -8,8 +8,6 @@ import {
   PROJECT_PAGE_TOKENS,
 } from '../../server/workers/public-render/project-style';
 
-// WCAG 2 relative luminance and contrast ratio, written here independently
-// of the page style.
 const luminance = (hex: string): number => {
   const channels = [1, 3, 5].map((start) =>
     Number.parseInt(hex.slice(start, start + 2), 16) / 255);
@@ -25,8 +23,6 @@ const contrast = (foreground: string, background: string): number => {
   return (light! + 0.05) / (dark! + 0.05);
 };
 
-// The application tokens the pages take
-// (docs/design/ui/typography-and-tokens.md, "Typography and tokens").
 const EXPECTED = {
   light: {
     ground: '#f9f8f5', card: '#ffffff', ink: '#101b3f', muted: '#5c6178',

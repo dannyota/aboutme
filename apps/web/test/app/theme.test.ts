@@ -11,9 +11,6 @@ const webRoot = resolve(import.meta.dirname, '../..');
 const workspaceRoot = resolve(webRoot, '../..');
 const themePath = resolve(webRoot, 'app/assets/css/theme.css');
 
-// Application chrome tokens (ADR 0020). Resume
-// renderer tokens are covered separately below; they must never move with
-// this palette.
 const lightTokens = {
   '--radius': '10px',
   '--radius-sheet': '2px',
@@ -71,8 +68,6 @@ const lightTokens = {
   '--shadow-cta': '0 8px 24px rgb(38 64 156 / 0.24)',
 } as const;
 
-// The paper tokens are defined in :root only (section 1); they never enter
-// the dark block, so the sheet keeps one white value in both themes.
 const paperOnlyTokens = [
   '--paper',
   '--paper-ink',
@@ -180,7 +175,6 @@ describe('application theme', () => {
     ]) {
       expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
     }
-    // Pink, orange, cyan, and purple are not brand colors (ADR 0020).
     for (const retired of ['pink', 'orange', 'cyan', 'purple']) {
       expect(theme[`--color-brand-${retired}`]).toBeUndefined();
     }
@@ -207,13 +201,10 @@ describe('application theme', () => {
     expect(theme['--text-4xl']).toBe('3rem');
     expect(theme['--text-6xl']).toBe('3.75rem');
     expect(theme['--text-6xl--line-height']).toBe('1.2');
-    // The gallery page uses the Tailwind default text-5xl; the homepage
-    // hero does not need it overridden (DESIGN.md; ADR 0020).
     expect(theme['--text-5xl']).toBeUndefined();
     for (const step of ['xs', 'sm', 'base', 'md']) {
       expect(theme[`--text-${step}--line-height`]).toBe('1.5');
     }
-    // Heading steps leave room for stacked Vietnamese diacritics.
     for (const step of ['lg', 'xl', '2xl']) {
       expect(theme[`--text-${step}--line-height`]).toBe('1.3');
     }
@@ -245,7 +236,6 @@ describe('application theme', () => {
         .map((path) => path.slice(webRoot.length + 1))
         .sort();
 
-      // The logo carries the seal (ADR 0020): its mark and the dot of .vn.
       expect(consumers).toEqual([
         'app/components/app/AppLogo.vue',
         'app/components/app/AppSeal.vue',
@@ -276,7 +266,6 @@ describe('application theme', () => {
         '--surface-indigo', '--surface-sand', '--secondary', '--accent',
         '--popover', '--editor-canvas', '--surface-destructive',
       ];
-      // Body text needs 4.5:1; icons, dots, and input borders need 3:1.
       const text = [
         '--foreground', '--muted-foreground', '--link', '--seal-text',
         '--destructive',
@@ -435,10 +424,6 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
-// Resolves a token value to a six-digit hex color, following a var()
-// reference or computing a color-mix() the way the browser would, so
-// grounds built from either (--surface-destructive) can be checked for
-// contrast like any other ground.
 function resolveColor(
   value: string,
   tokens: Record<string, string>,

@@ -11,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import type { ProjectsCopy } from '@/i18n/projects';
 
-// Also asks on the resume list, with the same wording.
 defineProps<{
   readonly open: boolean;
   readonly copy: Pick<ProjectsCopy, 'leaveTitle' | 'stay' | 'leave'>;
@@ -20,7 +19,6 @@ const emit = defineEmits<{ stay: []; leave: [] }>();
 
 const stayButton = ref<{ $el?: HTMLElement } | null>(null);
 
-// Staying is the safe answer, so it takes the focus.
 function onOpenAutoFocus(event: Event): void {
   event.preventDefault();
   stayButton.value?.$el?.focus();

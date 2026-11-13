@@ -27,8 +27,6 @@ function onRemove(kind: string): void {
     (button) => button.getAttribute('data-filter') === kind,
   );
   const target = buttons[index + 1] ?? buttons[index - 1];
-  // The other chips keep their elements, so they can take focus before the
-  // removed one leaves the DOM.
   target?.focus();
   emit('remove', kind, target === undefined);
 }

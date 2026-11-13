@@ -58,9 +58,6 @@ function onCloseAutoFocus(event: Event): void {
     :open="open"
     @update:open="onOpenChange"
   >
-    <!-- Every form dialog stays inside the viewport and scrolls its content,
-         so its header and first controls stay reachable however long the
-         body grows. -->
     <DialogContent
       :class="cn('max-h-[calc(100dvh-2rem)] overflow-y-auto', props.class)"
       :close-label="closeLabel"
@@ -77,8 +74,6 @@ function onCloseAutoFocus(event: Event): void {
         </DialogDescription>
         <slot name="header-actions" />
       </DialogHeader>
-      <!-- Dialog rhythm (DESIGN.md): 24 px from the header, 16 px between
-           fields, 24 px before the actions; controls fill the width. -->
       <form
         ref="form"
         class="grid gap-4 [&_[data-slot=native-select-wrapper]]:w-full"

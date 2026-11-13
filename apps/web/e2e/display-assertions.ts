@@ -4,7 +4,6 @@ import type { ScreenContract } from './screen-contract';
 
 export { measureTextContainment } from './screen-containment';
 
-/** Measure all adjacent boxes at once to avoid mixing layout frames. */
 export async function measureVerticalFlow(items: Locator): Promise<boolean> {
   return items.evaluateAll((elements) => {
     const boxes = elements.map((element) => element.getBoundingClientRect());
@@ -13,7 +12,6 @@ export async function measureVerticalFlow(items: Locator): Promise<boolean> {
   });
 }
 
-// --- chrome.spec.ts ---
 export async function measureChromeGrid(grid: Locator): Promise<{
   columns: number;
   gapX: number;
@@ -101,7 +99,6 @@ export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
   });
 }
 
-// --- gallery.spec.ts and gallery-baselines.spec.ts ---
 export async function measureGalleryGrid(grid: Locator): Promise<{
   columns: number;
   columnGap: number;
@@ -171,9 +168,6 @@ export async function galleryFontLoaded(root: Locator): Promise<boolean> {
     && face.status === 'loaded'));
 }
 
-// --- verify and card ---
-
-/** Measure crop geometry in viewport coordinates. */
 export async function measureCardCrop(image: Locator): Promise<{
   height: number;
   left: number;
@@ -192,9 +186,6 @@ export async function measureCardCrop(image: Locator): Promise<{
   });
 }
 
-// --- showcase-baselines.spec.ts ---
-
-/** Check grid tracks, gaps, and sibling separation in one layout frame. */
 export async function measureShowcaseGrid(
   grid: Locator,
   columns: number,
@@ -228,7 +219,6 @@ export async function measureShowcaseGrid(
   }, { columns, gap });
 }
 
-/** Check that a fixed sheet and its controls fit the viewport. */
 export async function measureShowcaseSheet(sheet: Locator): Promise<boolean> {
   return sheet.evaluate((element) => {
     const box = element.getBoundingClientRect();
@@ -251,7 +241,6 @@ export async function measureShowcaseSheet(sheet: Locator): Promise<boolean> {
   });
 }
 
-// --- print.spec.ts ---
 export async function measurePrintRules(
   page: Page,
 ): Promise<Record<string, string>> {
@@ -277,7 +266,6 @@ export async function measurePrintRules(
   });
 }
 
-// --- sample-pages.spec.ts ---
 export async function measurePdfLayout(
   page: Page,
   margins: { x: number; y: number },
@@ -423,7 +411,6 @@ export async function measurePdfLayout(
           name: entry.querySelector('.entry-title')?.textContent?.trim() ?? '',
           entry: box(entry),
           title: regionForTitle(entry),
-          // The bar's inline wrapper includes empty line fragments.
           widget: track ? box(track) : widget ? box(widget) : null,
           size: css ? parseFloat(css.fontSize) : 0,
           paddingX: css ? parseFloat(css.paddingLeft) : 0,
@@ -449,7 +436,6 @@ export {
 } from './screen-contract';
 export type { ScreenContract, ScreenClass } from './screen-contract';
 
-// Preset fixtures, encoded independently of the production token resolver.
 export const RESUME_STYLES = {
   'classic-serif': [
     'Roboto Serif', 'Noto Serif', 13, 1.5, 25, 20, 22, 12, '#23262c',
@@ -492,7 +478,6 @@ export function resumeContract(
   return {
     root,
     text: `${document} :is(.resume-name,.resume-headline,.entry-title,`
-      // Level wrappers may hold only graphics or an absent widget slot.
       + '.entry-subtitle,.entry-meta > span:not(.level-widget),.level-tag,'
       + '.entry-body p,.entry-body li,'
       + '.section-heading h2)',

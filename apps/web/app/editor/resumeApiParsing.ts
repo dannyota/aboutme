@@ -122,8 +122,6 @@ export function parseSummary(value: unknown): ResumeSummary {
     live: value.live,
     downloadEnabled: value.downloadEnabled,
     seoGeoEnabled: value.seoGeoEnabled,
-    // A server that predates sign in to view sends no key; absence reads as
-    // off, like the public page fields above.
     signInToView: value.signInToView === true,
     slug: value.slug,
     publicTitle: (value.publicTitle as string | null | undefined) ?? null,
@@ -138,8 +136,6 @@ export function parseSummary(value: unknown): ResumeSummary {
   });
 }
 
-// An owner resource from before the public page fields has neither key;
-// absence reads as the default, like null.
 function optionalText(value: unknown): boolean {
   return value === undefined || value === null || typeof value === 'string';
 }

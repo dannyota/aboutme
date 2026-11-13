@@ -11,7 +11,6 @@ export type ReviewImage
     | 'print-main-overflow-p2'
     | 'print-sidebar-overflow-p2';
 
-/** Optional evidence never changes an assertion result. */
 export async function captureReviewImage(
   testInfo: TestInfo,
   id: ReviewImage,
@@ -21,7 +20,6 @@ export async function captureReviewImage(
   const started = performance.now();
   let expired = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  // Reserve only the bounded capture time, preserving the assertion budget.
   if (timeout > 0) {
     testInfo.setTimeout(timeout + 2_000);
   }

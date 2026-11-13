@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * The limits section (docs/design/deployment-transparency/visual.md,
- * "Limits"): what the page proves and what it does not, plus a link to the
- * full list on GitHub. Not a card.
- */
 import { Check, Minus } from '@lucide/vue';
 import { computed } from 'vue';
 import type { Locale } from '@/i18n/locale';

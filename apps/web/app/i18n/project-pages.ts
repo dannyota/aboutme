@@ -1,9 +1,3 @@
-// Copy for the public project pages (/{slug}/projects and
-// /{slug}/projects/{project-slug}), specified in
-// docs/design/ui/project-pages.md. The pages take their copy language from
-// the resume, as the public page bar does, never from the interface cookie.
-// Only the public render worker imports this catalog.
-
 export type ProjectPageLanguage = 'vi' | 'en';
 
 export type ProjectPageCopy = {
@@ -17,9 +11,7 @@ export type ProjectPageCopy = {
   readonly repository: string;
   readonly demo: string;
   readonly link: string;
-  /** The page credit; Go's validator expects exactly this text. */
   readonly credit: string;
-  /** The accessible name of the bar's link back to the resume. */
   readonly back: (name: string) => string;
 };
 

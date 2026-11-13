@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * Troubleshooting (docs/design/mcp-guide.md, "Page structure" and
- * "Layout"): a `dl` of six question and answer pairs, the question a 15 px
- * weight-600 `dt`, the answer a 15 px `dd`, 16 px between pairs.
- */
 import type { GuideCopy } from '@/i18n/guide';
 import GuideRichText from './GuideRichText.vue';
 

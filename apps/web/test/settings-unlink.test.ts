@@ -420,7 +420,6 @@ describe('unlinking a provider identity', () => {
       'Add a password or link another provider before removing this one.',
     );
     expect(only.attributes('aria-describedby')).toBe(reason.attributes('id'));
-    // The GitHub identity is not a sign-in method, so removing it is allowed.
     expect(unlinkButton(wrapper, 'id-b').attributes('disabled'))
       .toBeUndefined();
   });
@@ -438,7 +437,6 @@ describe('unlinking a provider identity', () => {
       'id-b',
     ]);
     expect(rows[0]!.text()).toContain('Linked on September 1, 2026');
-    // Each is the other's fallback, so both can be removed.
     expect(unlinkButton(wrapper, 'id-a').attributes('disabled'))
       .toBeUndefined();
 

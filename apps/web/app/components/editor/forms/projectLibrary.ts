@@ -18,17 +18,10 @@ export interface ProjectLibrary {
   readonly view: Ref<ProjectLibraryView>;
   load(): Promise<void>;
   find(id: string): Project | undefined;
-  /** Which resumes of the account are published; null when unreadable. */
   published(): Promise<readonly PublishedState[] | null>;
-  /** The resumes that link a project now; null when unreadable. */
   linkedTo(projectId: string): Promise<readonly string[] | null>;
 }
 
-/**
- * The account's library as a project section reads it: once when the
- * section opens and again after a link. Editing never waits for it, and a
- * reread keeps the last list on screen until the new one arrives.
- */
 export function createProjectLibrary(
   api: Pick<ProjectsApi, 'list' | 'read'> = createProjectsApi(),
   resumes: Pick<ResumeApi, 'list'> = createResumeApi(),

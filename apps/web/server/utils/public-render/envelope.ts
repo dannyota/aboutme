@@ -25,24 +25,14 @@ export const PUBLIC_RENDER_FAILURE = 'public render failed';
 
 export type PublicResume = components['schemas']['PublicResume'];
 
-/**
- * The link-preview text for the page head, computed by the server
- * (docs/design/link-previews.md, "Page head").
- */
 export interface PublicRenderPreview {
   title: string;
   description: string;
-  /** og:locale, or '' when the resume language maps to none. */
   locale: string;
   imageAlt: string;
-  /**
-   * The absolute URL of the current stored preview card, sent only while
-   * stored cards are on; without it the page names the og.png alias.
-   */
   imageUrl?: string;
 }
 
-/** The route the sign-in-to-view join invite links to (AC-VIEW-008). */
 type PublicRenderJoinInvite = '/register' | '/login';
 
 export interface PublicRenderEntryProjectLink {
@@ -55,25 +45,16 @@ export interface PublicRenderResumeRequest {
   mode: 'continuous';
   canonicalOrigin: string;
   discoveryEnabled: boolean;
-  /** The exact <title> text, computed by the server (ADR 0014). */
   pageTitle: string;
-  /** The exact favicon data: URL, or '' when the owner set no icon. */
   faviconHref: string;
-  /** Absent from a server that predates link previews. */
   preview?: PublicRenderPreview;
-  /**
-   * Present only for a sign_in resume; the marker the join invite reads
-   * (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
-   */
   joinInvite?: PublicRenderJoinInvite;
   projectLinks?: PublicRenderEntryProjectLink[];
   projectsUrl?: string;
 }
 
-/** A provider offered on the sign-in gate, in envelope order. */
 export type PublicGateProvider = 'google' | 'linkedin';
 
-/** The closed message code the gate shows after a failed or cancelled try. */
 export type PublicGateMessage = 'none' | 'cancelled' | 'failed';
 
 export interface PublicRenderGateRequest {
@@ -86,11 +67,6 @@ export interface PublicRenderGateRequest {
   preview: PublicRenderPreview;
   providers: readonly PublicGateProvider[];
   message: PublicGateMessage;
-  /**
-   * 'projects' or 'projects/{project-slug}' when the gate stands in for a
-   * project page; the provider links carry it. Absent for the resume page
-   * (docs/design/projects-contract.md "Render envelope").
-   */
   page?: string;
 }
 
@@ -128,9 +104,6 @@ const validMessage = (value: unknown): value is PublicGateMessage =>
 const validJoinInvite = (value: unknown): value is PublicRenderJoinInvite =>
   value === '/register' || value === '/login';
 
-// The project list or one project page. The provider links append it to
-// their query unencoded, so it holds nothing but a fixed word, a slash and a
-// project slug.
 const validGatePage = (value: unknown): value is string =>
   value === 'projects'
   || (typeof value === 'string' && value.startsWith('projects/')

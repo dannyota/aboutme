@@ -1,22 +1,10 @@
-/**
- * LinkedIn "Save to PDF" rich text mapping, per
- * docs/design/linkedin-import.md "Rich text" and "Limits".
- */
-
-/**
- * A line of extracted text. `gap` is the baseline distance to the previous
- * line in points; it is null for the first line and the first line of a
- * later page.
- */
 export interface TextLine {
   text: string;
   gap: number | null;
 }
 
-/** Output UTF-8 byte length stays at or under this many bytes. */
 export const RICH_TEXT_MAX_BYTES = 16384;
 
-/** The resume schema's richText field also limits code points to this many. */
 const RICH_TEXT_MAX_CODE_POINTS = 16384;
 
 const NEW_PARAGRAPH_GAP_FACTOR = 1.3;
@@ -27,20 +15,16 @@ type Block
 
 const BULLET_DASH_RE = /^[-*–]\s+(.*)$/s;
 
-/** Strips a leading list marker (`•`, `-`, `*`, `–`) and its space. */
 function stripBulletMarker(text: string): string | null {
   if (text.startsWith('•')) {
     return text.slice(1).replace(/^\s+/, '');
   }
   const match = BULLET_DASH_RE.exec(text);
-  // The single group in BULLET_DASH_RE is mandatory, so it exists on a match.
   return match === null ? null : match[1]!;
 }
 
-/** The most common value in a non-empty list of numbers. */
 function mode(values: readonly number[]): number {
   const counts = new Map<number, number>();
-  // Callers only call mode() with a non-empty list.
   let best = values[0]!;
   let bestCount = 0;
   for (const value of values) {
@@ -106,9 +90,6 @@ function buildBlocks(lines: readonly TextLine[]): Block[] {
   return blocks;
 }
 
-// Only these three need escaping in a text node. Quotes stay literal, as the
-// sanitizer's own serialization writes them, so the output is already in
-// the form the sanitizer returns.
 const ESCAPE_RE = /[&<>]/g;
 const ESCAPES: Readonly<Record<string, string>> = Object.freeze({
   '&': '&amp;',
@@ -116,14 +97,12 @@ const ESCAPES: Readonly<Record<string, string>> = Object.freeze({
   '>': '&gt;',
 });
 
-/** Escapes `&`, `<`, and `>` so text is safe as an HTML text node. */
 function escapeHtml(text: string): string {
   return text.replace(ESCAPE_RE, (character) => ESCAPES[character]!);
 }
 
 const ENTITY_TAIL_RE = /^[a-zA-Z0-9#]*$/;
 
-/** Cut to at most `max` code points at a code point boundary. */
 export function clipText(
   text: string,
   max: number,
@@ -133,10 +112,6 @@ export function clipText(
   return { text: codePoints.slice(0, max).join(''), cut: true };
 }
 
-/**
- * Like clipText, for escaped text: it never ends inside an escape such as
- * `&amp;`, backing off to before its `&`.
- */
 function clipEscaped(
   text: string,
   max: number,
@@ -168,7 +143,6 @@ function fitsBudget(html: string): boolean {
   );
 }
 
-/** Clips already-escaped `text` to fit alongside the given `overhead`. */
 function clipToFit(
   text: string,
   overhead: string,
@@ -198,7 +172,6 @@ function clipToFit(
   return { text: candidate.text, cut: true };
 }
 
-/** Lines to sanitized-allowlist HTML using only p, ul, li. */
 export function linesToRichText(
   lines: readonly TextLine[],
 ): { html: string; cut: boolean } {

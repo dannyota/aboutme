@@ -43,7 +43,6 @@ export type ResumeCreateCopy = {
   readonly browseAll: (count: number) => string;
   readonly cancel: string;
   readonly close: string;
-  /** The LinkedIn import link in the create dialog's footer. */
   readonly importLinkedIn: string;
   readonly languageName: (language: 'vi' | 'en') => string;
   readonly language: {

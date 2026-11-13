@@ -21,20 +21,12 @@ import {
 
 export type ShowcaseView = 'loading' | 'list' | 'empty' | 'no-match' | 'failed';
 
-/** A listing request that outlasts this fails like any other error. */
 export const SHOWCASE_TIMEOUT_MS = 10_000;
 
-/**
- * Loads the community listing in the browser, after hydration: the server
- * renders only the loading state. Nothing is cached or stored, and the
- * request omits credentials, so no cookie travels with it
- * (docs/design/showcase.md, Delivery, caching, and revocation).
- */
 export function useShowcase(query: Readonly<Ref<ShowcaseQuery>>) {
   const listing = shallowRef<ShowcaseListing | null>(null);
   const status = ref<'loading' | 'ready' | 'failed'>('loading');
   const retrying = ref(false);
-  // Counts finished loads, so the page can move focus once one settles.
   const settled = ref(0);
   let started = false;
   let sequence = 0;

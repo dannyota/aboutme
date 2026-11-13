@@ -66,10 +66,8 @@ describe('views detail page', () => {
       expect(bars).toHaveLength(3);
       expect(wrapper.find('[data-testid="views-chart-empty"]').exists())
         .toBe(false);
-      // sr-only table row headers read the formatted day, not the ISO date.
       expect(wrapper.text()).toContain('Sep 24, 2026');
       expect(wrapper.text()).toContain('Sep 26, 2026');
-      // Formatted month total, with grouped thousands.
       const monthly = wrapper.get('[data-testid="views-monthly-totals"]');
       expect(monthly.get('dt').text()).toBe('Sep 2026');
       expect(monthly.get('dd').text()).toBe('12,345 real views');

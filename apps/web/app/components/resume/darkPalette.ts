@@ -9,7 +9,6 @@ import {
 
 type Colors = Customization['colors'];
 
-// Tolerance for float noise at the sRGB cube's faces.
 const GAMUT_EPSILON = 1e-6;
 const CHROMA_STEP = 0.002;
 
@@ -20,11 +19,6 @@ const inGamut = (color: OKLCH): boolean => {
   );
 };
 
-/**
- * `#rrggbb` for an OKLCH color. One outside sRGB loses chroma 0.002 at a time,
- * at the same lightness and hue, until it fits
- * (docs/design/public-page-theme.md, "Dark palette rule").
- */
 export function oklchToGamutHex(color: OKLCH): string {
   let chroma = color.c;
   while (chroma > 0 && !inGamut({ ...color, c: chroma })) {
@@ -39,7 +33,6 @@ const SURFACE_LIGHTNESS = 0.27;
 const DARK_SURFACE_FLOOR = 0.3;
 const INK_CEILING = 0.94;
 
-// A dark navy becomes a light steel blue; a mid tone keeps its lightness.
 const liftInk = (color: string): string => {
   const source = rgbToOKLCH(color);
   return oklchToGamutHex({
@@ -48,15 +41,9 @@ const liftInk = (color: string): string => {
   });
 };
 
-/** Whether the authored background is already dark (lightness below 0.5). */
 export const isDarkBackground = (colors: Colors): boolean =>
   rgbToOKLCH(colors.background).l < 0.5;
 
-/**
- * The five dark source colors for a resume's authored colors. The role
- * derivation then runs on them unchanged, once per surface. A background that
- * is already dark returns the colors as authored.
- */
 export function darkColors(colors: Colors): Colors {
   if (isDarkBackground(colors)) return colors;
   const background = rgbToOKLCH(colors.background);

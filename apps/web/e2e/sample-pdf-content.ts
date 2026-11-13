@@ -24,7 +24,7 @@ import {
 export { samplePdfChunks, samplePdfContentMatches, type SamplePdfChunk }
   from './pdf-input-content';
 
-// Type 3 text may omit descent; every catalog face fits within a quarter em.
+// PDF Type 3 text may omit descent; catalog faces fit a quarter em.
 const FALLBACK_DESCENT = -0.25;
 const POINTS_PER_MM = 72 / 25.4;
 
@@ -346,11 +346,6 @@ export async function assertSampleStyle(
   }
 }
 
-/**
- * How far down a PDF page its text reaches: the lowest glyph bottom below
- * the top margin, as a share of the usable height between the margins.
- * Glyph bottoms use each font's descent, so a descender counts.
- */
 export async function textFill(
   pdfPage: PDFPageProxy,
   marginYmm: number,

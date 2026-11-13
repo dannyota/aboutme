@@ -16,10 +16,6 @@ import type { OwnerShowcase } from '../../app/lib/showcaseContract';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
-// The publish dialog's community showcase block: every state, disabled
-// state, status line, and issue (docs/design/showcase.md, Copy;
-// AC-SHOW-001, 003).
-
 const locale = ref<'vi' | 'en'>('en');
 mockNuxtImport('useLocale', () => () => ({ locale }));
 const signInToViewCapability = ref(false);
@@ -443,7 +439,6 @@ describe('publish showcase issues', () => {
       expect(line.attributes('role')).toBe('alert');
       expect(line.text()).toBe(publishCopy[lng].showcase.issueOpenView);
       expect(line.classes()).toContain('text-destructive');
-      // Not in the dialog's own issue list.
       expect(dialog().find('[data-action="focus-publish-issue"]').exists())
         .toBe(false);
     },

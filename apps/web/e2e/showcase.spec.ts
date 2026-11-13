@@ -14,26 +14,15 @@ import {
   waitForImages,
 } from './support';
 
-// The community showcase (/showcase) in the production build, with the
-// listing API stubbed: the loading state in the server HTML, tiles and card
-// images under the app CSP, filters and paging in the URL, every state, the
-// phone header, and the privacy rules (docs/design/showcase.md; AC-SHOW-002,
-// 005, 008, 013), plus the page layout of docs/design/ui/showcase.md: the
-// filter sheet below 1024 px, the rail from 1024 px, the active-filter chips,
-// the count line, the invite card, and focus clearing the sticky bar. The
-// rail and an open sheet both hold the shared filter fields, so every filter
-// locator is scoped to one of them.
-
 const ORIGIN = 'http://127.0.0.1:20092';
 const LISTING = /\/api\/v1\/public\/showcase(?:\?.*)?$/u;
 const CARD = /\/api\/v1\/public\/resumes\/[a-z0-9-]+\/og\/[0-9a-f]{16}\.png$/u;
-// A 1x1 PNG, so the card image decodes under the CSP.
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGA'
   + 'hKmMIQAAAABJRU5ErkJggg==',
   'base64',
 );
-// Chrome logs the signed-out 401 from GET /api/v1/me.
+// Chrome logs "Failed to load resource" for the signed-out 401.
 const ANONYMOUS_ME_401 = 'a status of 401';
 
 interface Item {
@@ -122,7 +111,6 @@ function chip(page: Page, name: string): Locator {
     .getByRole('button', { name });
 }
 
-// The number of grid columns of the tile list, from its computed tracks.
 async function columns(page: Page): Promise<number> {
   return page.locator('[data-showcase-slug]').first().evaluate((node) =>
     getComputedStyle(node.parentElement!).gridTemplateColumns
@@ -150,8 +138,6 @@ test('the server HTML holds the loading state and no listing', async ({
   expect(html).toContain('<h1');
   expect(html).not.toContain('data-showcase-slug');
   expect(html).not.toContain('data-state="empty"');
-  // Both filter layouts render on the server and switch by CSS alone
-  // (docs/design/ui/showcase.md "Page frame"); the sheet mounts when opened.
   expect(html).toContain('data-testid="showcase-filter-bar"');
   expect(html).toContain('data-testid="showcase-filter-rail"');
   expect(html).not.toContain('data-testid="showcase-filter-sheet"');
@@ -214,14 +200,10 @@ test('lists tiles with lazy card images under the app CSP', async ({
   await expect(first.getByRole('link', {
     name: 'Report resume resume-1 by email',
   })).toBeVisible();
-  // The Report link keeps a 40 by 40 px target (docs/design/ui/showcase.md,
-  // Tile footer).
   const report = await first.locator('[data-action="showcase-report"]')
     .first().boundingBox();
   expect(report!.width).toBeGreaterThanOrEqual(40);
   expect(report!.height).toBeGreaterThanOrEqual(40);
-  // The footer row shows the slug as plain text outside the tile link
-  // (docs/design/ui/showcase.md "Footer row").
   await expect(first.getByText('aboutme.vn/resume-1', { exact: true }))
     .toBeVisible();
   await expect(link.getByText('aboutme.vn/resume-1')).toHaveCount(0);
@@ -245,8 +227,6 @@ test('sends noindex, nofollow once and no counting script', async ({
   await expect(page.locator('meta[name="robots"]'))
     .toHaveAttribute('content', 'noindex, nofollow');
   await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
-  // Only the app's own bundles and its two first-party bootstrap scripts
-  // load: no counting or third-party script.
   const sources = await page.locator('script[src]')
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('src')));
   const own = new Set(['/theme-bootstrap.js', '/csp-bootstrap.js']);
@@ -320,7 +300,6 @@ test('pages with Previous and Next, keeping the filters', async ({ page }) => {
   await pager.locator('a[data-action="showcase-next"]').click();
   await expect(page).toHaveURL(/\/showcase\?role=backend&page=2$/u);
   await expect(page.locator('[data-showcase-slug="resume-2"]')).toBeVisible();
-  // Focus lands on the first tile link once the page loads.
   await expect(page.locator('[data-showcase-tile]').first()).toBeFocused();
   expect(seen.at(-1)?.search).toBe('?role=backend&page=2');
 
@@ -343,13 +322,11 @@ test('shows the empty state, then no-match with a filter', async ({
   await expect(empty.getByRole('link', { name: 'Create your resume' }))
     .toHaveAttribute('href', '/register');
   await expect(rail(page).getByTestId('showcase-roles')).toBeVisible();
-  // The invite card belongs to the list state only.
   await expect(page.getByTestId('showcase-invite')).toHaveCount(0);
 
   await rail(page).locator('[data-role="qa"]').click();
   const noMatch = page.locator('[data-state="no-match"]');
   await expect(noMatch).toHaveText('No resume matches these filters.');
-  // The count line is the page's live region, so the line has no role.
   await expect(noMatch).not.toHaveAttribute('role', 'status');
   await expect(page.getByTestId('showcase-count'))
     .toHaveText('0 resumes · earliest added first');
@@ -413,7 +390,6 @@ test('speaks Vietnamese, fits phone width, and marks the logo down',
     expect(await overflow(page)).toBe(0);
     await expect(page.getByTestId('showcase-pager'))
       .toContainText('Trang 100/100');
-    // Below 64rem, signed out, the logo is the mark alone.
     const logos = page.locator('[data-testid="app-shell"] [data-logo-size]');
     const shown = logos.filter({ visible: true });
     await expect(shown).toHaveCount(1);
@@ -454,8 +430,6 @@ test('stores nothing and sends no cookie with the listing', async ({
   expect(requests).toHaveLength(1);
   const headers = await requests[0]!.allHeaders();
   expect(headers.cookie).toBeUndefined();
-  // The request cache mode is not a header; the response is what the server
-  // marks no-store.
   const reply = await requests[0]!.response();
   expect(reply?.headers()['cache-control']).toContain('no-store');
   const storage = await page.evaluate(() => ({
@@ -463,7 +437,6 @@ test('stores nothing and sends no cookie with the listing', async ({
     session: sessionStorage.length,
   }));
   expect(storage).toEqual({ local: 0, session: 0 });
-  // Only the cookie the test set; the page added none.
   expect((await context.cookies()).map((cookie) => cookie.name))
     .toEqual(['aboutme-locale']);
 });
@@ -479,7 +452,6 @@ test('the count line reads the listing total in both languages', async ({
   await expect(count).toHaveText('3 resumes · earliest added first');
   await expect(count).toHaveAttribute('role', 'status');
   await expect(count).toHaveAttribute('aria-atomic', 'true');
-  // The header holds the title and lead and no focusable element.
   const header = page.getByTestId('showcase-header');
   await expect(header.locator('h1')).toHaveText('Community resumes');
   await expect(header.locator('a, button, input, select, [tabindex]'))
@@ -525,39 +497,32 @@ test('opens the filter sheet on a phone and keeps focus inside it', async ({
   await expect(
     fields.getByTestId('showcase-languages').locator('[data-lang]'),
   ).toHaveCount(3);
-  // All templates, the 20 presets, and Custom design.
   await expect(fields.locator('select[name="template"] option'))
     .toHaveCount(22);
   await expect(fields.locator('[data-action="showcase-filters-clear"]'))
     .toHaveText('Clear filters');
   await expect(fields.locator('[data-action="showcase-filters-apply"]'))
     .toHaveText('Show 3 resumes');
-  // The close button takes focus first.
   await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
 
-  // Tab wraps inside the dialog: close, role, language, template, Clear
-  // filters, Show results, then back to close.
   for (let step = 0; step < 8; step += 1) {
     await page.keyboard.press('Tab');
     expect(await dialog.evaluate((node) =>
       node.contains(document.activeElement))).toBe(true);
   }
 
-  // A role change applies at once, drops page, and keeps the sheet open.
   await fields.getByTestId('showcase-roles').locator('[data-role="frontend"]')
     .click();
   await expect(page).toHaveURL(/\/showcase\?role=frontend$/u);
   await expect.poll(() => seen.at(-1)?.search).toBe('?role=frontend');
   await expect(dialog).toBeVisible();
 
-  // Escape closes the sheet, keeps the filters, and returns focus.
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(button).toBeFocused();
   await expect(button).toHaveAttribute('aria-expanded', 'false');
   await expect(page).toHaveURL(/\/showcase\?role=frontend$/u);
 
-  // Clear filters empties every filter, keeps the sheet open and the focus.
   await button.click();
   await expect(dialog).toBeVisible();
   const clear = fields.locator('[data-action="showcase-filters-clear"]');
@@ -569,15 +534,12 @@ test('opens the filter sheet on a phone and keeps focus inside it', async ({
     fields.getByTestId('showcase-roles').locator('[data-role="all"]'),
   ).toHaveAttribute('aria-pressed', 'true');
 
-  // Show results closes the sheet.
   await fields.locator('[data-action="showcase-filters-apply"]').click();
   await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(/\/showcase$/u);
   expect(await overflow(page)).toBe(0);
 });
 
-// The suite runs with reduced motion, so the global rule caps the sheet's
-// slide (docs/design/ui/showcase.md, Motion).
 test('opens the filter sheet with no animation under reduced motion', async ({
   page,
 }) => {
@@ -670,7 +632,6 @@ test('removes chips and moves focus as the focus table says', async ({
   await open(page, '/showcase?role=backend&lang=vi&template=custom');
   const group = page.getByRole('group', { name: 'Active filters' });
   await expect(group).toBeVisible();
-  // Role, language, template, then Clear all.
   expect(await group.locator('[data-action="showcase-filter-remove"]')
     .evaluateAll((nodes) => nodes.map((node) =>
       node.getAttribute('data-filter')))).toEqual(['role', 'lang', 'template']);
@@ -680,19 +641,16 @@ test('removes chips and moves focus as the focus table says', async ({
   await expect(group.locator('[data-action="showcase-filters-clear-all"]'))
     .toHaveText('Clear all');
 
-  // The first chip goes, focus moves to the next chip.
   await chip(page, 'Backend, remove filter').click();
   await expect(page).toHaveURL(/\/showcase\?lang=vi&template=custom$/u);
   await expect.poll(() => seen.at(-1)?.search)
     .toBe('?lang=vi&template=custom');
   await expect(chip(page, 'Vietnamese, remove filter')).toBeFocused();
 
-  // The last chip goes, focus moves to the previous chip.
   await chip(page, 'Custom design, remove filter').click();
   await expect(page).toHaveURL(/\/showcase\?lang=vi$/u);
   await expect(chip(page, 'Vietnamese, remove filter')).toBeFocused();
 
-  // The only chip goes, focus moves to the Filters button.
   await chip(page, 'Vietnamese, remove filter').click();
   await expect(page).toHaveURL(/\/showcase$/u);
   await expect(page.getByTestId('showcase-active-filters')).toHaveCount(0);
@@ -729,14 +687,12 @@ test('at 1440 px the rail filters and chips hand focus to the rail',
     await expect(fields.getByTestId('showcase-roles').locator('[data-role]'))
       .toHaveCount(11);
 
-    // The last chip goes, focus lands on the rail's pressed Role row.
     await chip(page, 'Vietnamese, remove filter').click();
     await expect(chip(page, 'Backend, remove filter')).toBeFocused();
     await chip(page, 'Backend, remove filter').click();
     await expect(page).toHaveURL(/\/showcase$/u);
     await expect(fields.locator('[data-role="all"]')).toBeFocused();
 
-    // Clear all ends on the same row.
     await fields.locator('[data-role="qa"]').click();
     await fields.locator('[data-lang="en"]').click();
     await page.locator('[data-action="showcase-filters-clear-all"]').click();
@@ -746,7 +702,6 @@ test('at 1440 px the rail filters and chips hand focus to the rail',
       .toHaveAttribute('aria-pressed', 'true');
   });
 
-// docs/design/ui/showcase.md "Page frame", "Grid", and "Header".
 const LAYOUTS = [
   { width: 390, rail: false, columns: 1, h1: '28px' },
   { width: 768, rail: false, columns: 2, h1: '32px' },
@@ -796,26 +751,20 @@ test('the filter bar sticks and no ancestor sets overflow', async ({
     }
     return found;
   });
-  // Only the root may scroll; any other overflow breaks iOS Safari sticky.
   expect(clipped.filter((tag) => tag !== 'html' && tag !== 'body'))
     .toEqual([]);
   await page.evaluate(() => window.scrollTo(0, 600));
   await expect.poll(async () => (await bar.boundingBox())!.y).toBe(0);
 });
 
-// A tile link, Report, or pager link focused with the keyboard never rests
-// under the sticky bar (docs/design/ui/showcase.md "Sticky bar"; WCAG 2.4.11).
 async function expectClearOfBar(page: Page): Promise<void> {
-  // The poll reads "clear" or a description of what is wrong, so a failure
-  // names the focused element and both boxes.
   await expect.poll(() => page.evaluate(() => {
     const active = document.activeElement;
     const bar = document.querySelector('[data-testid="showcase-filter-bar"]');
     if (active === null || bar === null) return 'no focus or no bar';
     const box = active.getBoundingClientRect();
     const barBottom = bar.getBoundingClientRect().bottom;
-    // Layout boxes are fractional while scroll offsets are whole pixels, so
-    // an element scrolled flush to the bottom edge can end up to 1 px past it.
+    // Chromium scroll offsets are whole pixels; layout boxes are fractional.
     if (box.top >= barBottom && box.bottom < window.innerHeight + 1) {
       return 'clear';
     }
@@ -868,7 +817,6 @@ for (const width of [390, 768]) {
     expect([...kinds].sort()).toEqual(['report', 'tile']);
     expect(scrolled).toBe(true);
 
-    // From the invite button, Tab reaches the pager's Next link.
     await page.locator('[data-action="showcase-invite-create"]').focus();
     await page.keyboard.press('Tab');
     await expect(page.locator('a[data-action="showcase-next"]')).toBeFocused();
@@ -907,7 +855,6 @@ test('the invite card ends the list and links by sign-in and registration',
       'When you publish, turn on Show in the community showcase. '
       + 'You can turn it off any time.',
     );
-    // The last cell of the grid, and not a tile.
     expect(await invite.evaluate((node) =>
       node.tagName === 'LI' && node.nextElementSibling === null)).toBe(true);
     await expect(invite.locator('[data-showcase-tile]')).toHaveCount(0);
@@ -940,8 +887,6 @@ interface ShiftEntry extends PerformanceEntry {
   readonly sources: readonly ShiftSource[];
 }
 
-// docs/design/ui/showcase.md "Page frame": the header, the bar, the chip
-// row, and the rail render on the server and never move after load.
 for (const width of [390, 1440]) {
   test(`no layout shift in the header, bar, chips, or rail at ${width} px`,
     async ({ page }) => {
@@ -967,8 +912,6 @@ for (const width of [390, 1440]) {
                   `[data-testid="${region}"]`,
                 );
                 if (inside) {
-                  // Name the moved node and both boxes, so a failure says
-                  // what moved and by how much.
                   const box = (rect: DOMRectReadOnly): string =>
                     `${rect.x},${rect.y} ${rect.width}x${rect.height}`;
                   const tag = element?.tagName.toLowerCase() ?? 'text';

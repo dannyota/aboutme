@@ -13,11 +13,6 @@ import {
 import type { ShowcaseFilters } from '@/lib/showcaseQuery';
 import { GALLERY } from '@/templates/catalog';
 
-// The role group, the language group, and the template select, shared by the
-// bottom sheet and the left rail (docs/design/ui/showcase.md, Filters below
-// 1024 px and Rail from 1024 px). A change emits the whole next filter set;
-// the page writes it to the URL. Element ids come from useId(), so the rail
-// and an open sheet never share one.
 const props = defineProps<{
   readonly filters: ShowcaseFilters;
   readonly locale: Locale;
@@ -39,8 +34,7 @@ const templateOptions = computed(() => [
   { value: SHOWCASE_CUSTOM_TEMPLATE, label: copy.value.customDesign },
 ]);
 
-// Reka's single toggle group emits undefined when the pressed item is
-// pressed again; an option stays selected, like a radio.
+// Reka's single ToggleGroup emits undefined when the pressed item is pressed.
 function onRole(value: unknown): void {
   if (value === undefined) return;
   const role = SHOWCASE_ROLES.find((known) => known === value);
@@ -212,11 +206,8 @@ function onTemplate(value: string): void {
   outline-offset: 2px;
 }
 
-/* The options render inside reka's ToggleGroupItem, which does not carry
-   this component's scope id when the sheet mounts in the browser, so every
-   option rule reaches it through :deep(). */
+/* Reka's ToggleGroupItem lacks this scope id in the sheet, hence :deep(). */
 
-/* Sheet: role pills wrap, language options share three columns. */
 .showcase-filters--sheet .showcase-options--roles :deep(.showcase-option) {
   height: 40px;
   padding: 0 14px;
@@ -237,7 +228,6 @@ function onTemplate(value: string): void {
   white-space: normal;
 }
 
-/* Rail: both groups are lists of 36 px rows. */
 .showcase-filters--rail .showcase-options {
   flex-direction: column;
   flex-wrap: nowrap;

@@ -17,14 +17,10 @@ import { setSiteLocale } from './support/locale';
 
 const PENDING_KEY = 'aboutme.pendingReturnPath';
 
-// These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 afterEach(() => window.localStorage.removeItem(PENDING_KEY));
 
-// The credentials test needs to observe the `credentials` option, which the
-// test runtime's `$fetch` swallows before the h3 mock server sees it. Route
-// every auto-imported `$fetch` call through a delegating spy so the init is
-// observable while real requests still reach `registerEndpoint`.
+// @nuxt/test-utils' $fetch drops the credentials option before the mock.
 const mocks = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const real: any = (globalThis as { $fetch: unknown }).$fetch;
@@ -33,8 +29,7 @@ const mocks = vi.hoisted(() => {
 });
 mockNuxtImport('$fetch', () => mocks.fetchMock);
 
-// Async body reads (readRawBody) and deferred responses resolve a macrotask
-// after `flushPromises` finishes — settle past those.
+// h3's readRawBody resolves a macrotask after flushPromises finishes.
 const settle = async (): Promise<void> => {
   await flushPromises();
   await new Promise<void>((resolve) => {
@@ -483,7 +478,6 @@ describe('register.vue', () => {
       await wrapper.get('#register-password-confirm').setValue('a');
       await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await flushPromises();
-      // No character-class or strength hint is ever rendered.
       expect(wrapper.html()).not.toMatch(
         /uppercase|lowercase|number|symbol|special|strength/i,
       );
@@ -535,8 +529,7 @@ describe('register.vue', () => {
         };
       },
     });
-    // Attach to the live document: happy-dom's `focus()` is a no-op on a
-    // detached tree, and this test asserts the error summary receives focus.
+    // happy-dom's focus() is a no-op on a detached tree.
     const wrapper = await mountSuspended(RegisterPage, {
       attachTo: document.body,
     });

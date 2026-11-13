@@ -1,7 +1,3 @@
-// Splits a LinkedIn Save to PDF export's lines into a sidebar/main layout,
-// and checks the file is a LinkedIn PDF in English. See
-// docs/design/linkedin-import.md, "Reading the file" > "Lines" and "Is it
-// an English LinkedIn PDF?".
 import type { Line } from './lines';
 import { COLUMN_BOUNDARY_MARGIN, stripFooter } from './lines';
 
@@ -56,17 +52,11 @@ export type LayoutResult
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  // values is always non-empty (allSizes below has at least page1's lines),
-  // so mid, and mid - 1 when the length is even, are in bounds.
   return sorted.length % 2 === 0
     ? (sorted[mid - 1]! + sorted[mid]!) / 2
     : sorted[mid]!;
 }
 
-/**
- * Column lines in page order, each with its gap to the previous line of
- * that column on the same page.
- */
 function buildColumnStream(
   pages: readonly (readonly Line[])[],
   inColumn: (line: Line) => boolean,
@@ -84,10 +74,6 @@ function buildColumnStream(
   return stream;
 }
 
-/**
- * The size at which a column's headings print, or undefined when no known
- * heading was found.
- */
 function headingSizeOf(
   stream: readonly ColumnLine[],
   knownHeadings: readonly string[],
@@ -101,10 +87,6 @@ function headingSizeOf(
   return candidateSizes.length === 0 ? undefined : Math.max(...candidateSizes);
 }
 
-/**
- * Splits a column's lines (after any lines to drop, such as the name and
- * intro) into sections at each heading.
- */
 function buildSections(
   lines: readonly ColumnLine[],
   headingSize: number,
@@ -127,7 +109,6 @@ function buildSections(
   return sections;
 }
 
-/** pages[i] holds the lines of page i + 1, footers included. */
 export function analyzeLayout(
   pages: readonly (readonly Line[])[],
 ): LayoutResult {
@@ -140,7 +121,6 @@ export function analyzeLayout(
     stripped.push(page);
   }
 
-  // pages.length > 0 was checked above, so stripped has the same length.
   const page1 = stripped[0];
   if (page1 === undefined || page1.length === 0) {
     return { kind: 'notLinkedIn' };
@@ -205,8 +185,6 @@ export function analyzeLayout(
   ).length;
   if (markerCount < 2) return { kind: 'notEnglish' };
 
-  // nameIndex, when not -1, came from mainStream.findIndex, so it is in
-  // bounds.
   const nameColumnLine: ColumnLine
     = nameIndex === -1 ? { ...name, gap: null } : mainStream[nameIndex]!;
   return { kind: 'ok', layout: { name: nameColumnLine, intro, sidebar, main } };

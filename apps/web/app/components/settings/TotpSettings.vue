@@ -1,24 +1,4 @@
 <script setup lang="ts">
-/**
- * `TotpSettings` — authenticator-app (TOTP) setup, replacement, and removal
- * for the account settings second-factor section
- * (`docs/design/totp-second-factor-contract.md`, ADR 0017).
- *
- * Mounted from `SecondFactorSettings.vue`, which owns the one shared
- * reauthentication flow for the whole second-factor section: a
- * `reauth-required` failure here is forwarded up (`reauth-required` event)
- * rather than handled locally, matching how a passkey or recovery-code
- * action already interrupts into that flow. `changed` carries the new
- * recovery-code set only when this completion created the account's first
- * active factor (never on replacement or when a passkey already enabled
- * enforcement) — see "Enrollment and replacement API".
- *
- * The provisioning secret, URI, and QR markup live only in this
- * component's memory and are cleared on dialog close, locale change while
- * open, completion, a setup-ending failure, and unmount ("Provisioning
- * data"): never a network request, URL, storage, log, or persisting
- * attribute.
- */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import FormField from '../app/FormField.vue';
@@ -45,7 +25,6 @@ import { totpSettingsCopy } from '../../i18n/second-factor-settings';
 
 const props = defineProps<{
   totpEnabled: boolean;
-  /** Whether an active passkey also exists, for the removal warning. */
   hasOtherActiveFactor: boolean;
 }>();
 
@@ -67,8 +46,6 @@ onMounted(() => {
 function failureKind(error: unknown): TotpSettingsErrorKind {
   return error instanceof TotpSettingsFailure ? error.kind : 'unavailable';
 }
-
-// --- setup (start, local QR, and proof) -----------------------------------
 
 const setupOpen = ref(false);
 const replacing = ref(false);
@@ -93,7 +70,6 @@ const addedNotice = ref(false);
 const replacedNotice = ref(false);
 const removedNotice = ref(false);
 
-/** The one place the secret, URI, QR markup, and code are discarded. */
 function clearSetup(): void {
   enrollmentId.value = null;
   secret.value = null;
@@ -107,9 +83,6 @@ function clearSetup(): void {
 
 onBeforeUnmount(clearSetup);
 
-// A live locale change re-renders every string in the open dialog; treat
-// it as a rebuild and drop the secret rather than let stale copy and live
-// provisioning data mix.
 watch(locale, () => {
   if (setupOpen.value) clearSetup();
 });
@@ -151,9 +124,6 @@ function cancelSetup(): void {
 
 async function submitCode(): Promise<void> {
   if (completePending.value) return;
-  // A local const, not `enrollmentId.value` again below: TypeScript cannot
-  // carry a null check on a mutable ref property across the intervening
-  // calls and the `await`.
   const currentEnrollmentId = enrollmentId.value;
   if (currentEnrollmentId === null) return;
   if (!/^\d{6}$/.test(code.value)) {
@@ -182,9 +152,6 @@ async function submitCode(): Promise<void> {
       clearSetup();
       emit('reauth-required');
     } else if (kind === 'closed' || kind === 'expired') {
-      // The proposed secret can no longer be proven; only a fresh start
-      // can recover, so the whole dialog ends rather than staying open on
-      // a QR that no longer matches any enrollment row.
       clearSetup();
       startError.value = kind;
     } else {
@@ -205,8 +172,6 @@ function copySecret(): void {
     })
     .catch(() => undefined);
 }
-
-// --- removal ---------------------------------------------------------------
 
 const removeConfirmOpen = ref(false);
 const removePending = ref(false);

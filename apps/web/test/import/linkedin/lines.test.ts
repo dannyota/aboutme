@@ -28,22 +28,20 @@ describe('buildPageLines', () => {
   });
 
   it('inserts a space when the gap exceeds a quarter of the font size', () => {
-    // font size 12, quarter is 3pt; "Hello" at x=20 width 10 ends at x=30.
     const wide = buildPageLines(1, [
       item('Hello', 20, 700, 12, 10),
-      item('World', 34, 700, 12, 10), // gap 4pt > 3pt threshold
+      item('World', 34, 700, 12, 10),
     ]);
     expect(wide[0].text).toBe('Hello World');
 
     const narrow = buildPageLines(1, [
       item('Hello', 20, 700, 12, 10),
-      item('World', 31, 700, 12, 10), // gap 1pt <= 3pt threshold
+      item('World', 31, 700, 12, 10),
     ]);
     expect(narrow[0].text).toBe('HelloWorld');
   });
 
   it('does not double a space when one side already has whitespace', () => {
-    // gap 4pt > threshold, but "Hello " already ends in a space
     const lines = buildPageLines(1, [
       item('Hello ', 20, 700, 12, 12),
       item('World', 36, 700, 12, 10),
@@ -57,7 +55,6 @@ describe('buildPageLines', () => {
   });
 
   it('normalizes text to NFC', () => {
-    // "Nguyễn" with the "ễ" decomposed into base letter + combining marks.
     const decomposed = 'Nguyễn';
     const lines = buildPageLines(1, [item(decomposed, 20, 700, 12)]);
     expect(lines[0].text).toBe('Nguyễn');
@@ -65,7 +62,6 @@ describe('buildPageLines', () => {
   });
 
   it('joins within 40% of the larger size, separates beyond it', () => {
-    // Larger size is 12, 40% tolerance is 4.8pt.
     const joined = buildPageLines(1, [
       item('A', 20, 700, 12),
       item('B', 40, 695.5, 10),
@@ -88,12 +84,12 @@ describe('buildPageLines', () => {
 
   it('sets line x, y, size from smallest x, first item, largest size', () => {
     const lines = buildPageLines(1, [
-      item('World', 40, 700, 16), // encountered first: sets y
+      item('World', 40, 700, 16),
       item('Hello', 20, 700, 12),
     ]);
-    expect(lines[0].x).toBe(20); // smallest x
-    expect(lines[0].y).toBe(700); // first item's baseline
-    expect(lines[0].size).toBe(16); // largest size
+    expect(lines[0].x).toBe(20);
+    expect(lines[0].y).toBe(700);
+    expect(lines[0].size).toBe(16);
   });
 
   it('orders lines by y descending', () => {

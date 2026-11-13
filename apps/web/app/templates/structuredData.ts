@@ -1,14 +1,12 @@
 import { siteName, siteOrigin } from '../i18n/meta';
 import type { GalleryTemplate } from './catalog';
 
-// JSON-LD is data, not script; escaping "<" keeps "</script>" out of it.
 const LESS_THAN = `${'\\'}u003c`;
 
 function serialize(value: unknown): string {
   return JSON.stringify(value).replace(/</g, LESS_THAN);
 }
 
-/** The gallery as a schema.org collection listing every template page. */
 export function galleryStructuredData(
   name: string,
   description: string,
@@ -39,7 +37,6 @@ export function galleryStructuredData(
   });
 }
 
-/** One template page: a free creative work from aboutme. */
 export function templateStructuredData(
   template: GalleryTemplate,
   description: string,

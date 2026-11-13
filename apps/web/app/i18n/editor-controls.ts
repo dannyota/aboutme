@@ -100,12 +100,7 @@ type EditorControlCopy = Record<
   readonly photoStatusRateLimited: (wait: string) => string;
   readonly templatePart: (part: string, status: string) => string;
   readonly tryAgainLater: (seconds?: number) => string;
-  /**
-   * The visible no-match message, quoting the query (DESIGN.md, editor
-   * Templates panel).
-   */
   readonly templateSearchNoMatch: (query: string) => string;
-  /** "{n} templates" ("1 template" singular in English). */
   readonly templateSearchCount: (count: number) => string;
 };
 

@@ -158,8 +158,7 @@ function clipped(path: Path2D, clip: Path2D): Path2D {
   return new Path2D(path).op(clip, PathOp.Intersect);
 }
 
-// PDF.js 6 encodes DrawOPS inside constructPath, with the consuming operator
-// in args[0]. Keep this parser narrow and reject every other path encoding.
+// PDF.js 6 encodes DrawOPS in constructPath, operator in args[0].
 export function pdfDrawing(data: unknown): { path: Path2D; curves: number } {
   const commands = numbers(data);
   const path = new Path2D();
@@ -218,14 +217,12 @@ export function pdfShapePaintMatches(
     && layer.top < fill.bottom && layer.bottom > fill.top);
   const probes = [1, 2, 4, 6, 8, 10, 12, 14, 15].map((step) => step / 16);
   let onPath = false;
-  // Include narrow outlines and small later patches at overlapping bounds.
   return layers.every((area) => probes.every((x) => probes.every((y) => {
     const left = Math.max(area.left, fill.left);
     const top = Math.max(area.top, fill.top);
     const px = left + (Math.min(area.right, fill.right) - left) * x;
     const py = top + (Math.min(area.bottom, fill.bottom) - top) * y;
     onPath ||= contains(fill, px, py);
-    // Separate strokes of the same ink may form one icon.
     const ink = parts.some((part) => pdfColorMatches(part.color, inkColor)
       && contains(part, px, py));
     const expected = channels(ink ? inkColor : surfaceColor);
@@ -257,14 +254,12 @@ export function pdfPaintMatch(
     return (allowStroke || !stroke) && fill.alpha >= 0.99
       && pdfColorMatches(fill.color, expectedColor) && pdfBoxMatches(fill, box)
       && [0.25, 0.5, 0.75].every((x) => [0.25, 0.5, 0.75].every((y) => {
-        // Edge matching applies the 1 pt tolerance, even for thin rules.
         return hitTest.isPointInPath(path,
           fill.left + (fill.right - fill.left) * x,
           fill.top + (fill.bottom - fill.top) * y,
           path.getFillType() === FillType.EvenOdd ? 'evenodd' : 'nonzero');
       })) && [0.25, 0.5, 0.75].every((x) =>
       [0.25, 0.5, 0.75].every((y) => {
-        // Probe the final source-over color, including later clipped paths.
         const pointX = fill.left + (fill.right - fill.left)
           * (exposed.left - box.left + (exposed.right - exposed.left) * x)
           / (box.right - box.left);
@@ -332,7 +327,6 @@ export function pdfImageMatches(
   expected: Pick<PdfImage, 'width' | 'height' | 'signature'>,
   box: PdfBox,
 ): boolean {
-  // Each 4 by 4 cell allows 8/255 channel drift from PDF image encoding.
   return image !== undefined && image.width === expected.width
     && image.height === expected.height && pdfBoxMatches(image, box)
     && image.signature.length === 64 && expected.signature.length === 64
@@ -478,8 +472,7 @@ export async function pdfPaintOperators(
     fills.push(fill);
   };
   const visit = async (op: number, args: readonly unknown[]) => {
-    // Uncolored Type3 glyphs inherit the text ink. Their paths must never
-    // become candidates for page regions, rules or level widgets.
+    // PDF Type3: uncolored glyphs inherit the text ink.
     if (type3Glyph && [OPS.setFillRGBColor, OPS.setStrokeRGBColor,
       OPS.setFillTransparent, OPS.setStrokeTransparent, OPS.setFont,
       OPS.showText, OPS.paintImageXObject, OPS.paintInlineImageXObject]
@@ -663,8 +656,7 @@ export async function pdfPaintOperators(
       if (state.alpha !== 1 || state.transparent) unsupported();
       text.push({ text: value, font: state.font, color: state.color,
         fontId: state.fontId,
-        // Glyph.width comes from the PDF width table. Exclude text size,
-        // tracking, kerning adjustments and horizontal scaling.
+        // pdf.js Glyph.width is the PDF width-table value, unscaled.
         advances: args[0].flatMap((glyph) => typeof glyph === 'number'
           ? []
           : [{ unicode: glyph.unicode,

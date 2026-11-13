@@ -20,7 +20,6 @@ const props = withDefaults(
     readonly index: number;
     readonly count: number;
     readonly open?: boolean;
-    /** The library project a linked entry comes from. */
     readonly projectName?: string;
     readonly selected?: boolean;
   }>(),

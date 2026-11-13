@@ -1,6 +1,4 @@
 // @vitest-environment node
-// Tests for the LinkedIn import parser's section mapping, per
-// docs/design/linkedin-import.md "Mapping", "Dates", and "What is dropped".
 import { describe, expect, it } from 'vitest';
 import {
   parseProfile,
@@ -305,8 +303,6 @@ describe('parseExperience', () => {
       columnLine(1, 223.6, 308.5, 12, 'Example Co.', 38.5),
       columnLine(1, 223.6, 292.4, 11.5, 'Sample Engineer', 16),
       columnLine(1, 223.6, 277.9, 10.5, 'July 2020 - Present', 14.5),
-      // 21.5 exceeds 1.6 * 10.5 = 16.8, so this line cannot be mistaken for
-      // a location line even though it shares the date line's size.
       columnLine(1, 223.6, 256.4, 10.5, 'Built the sample platform.', 21.5),
     ];
     const work = parseExperience(lines);
@@ -325,7 +321,6 @@ describe('parseExperience', () => {
       columnLine(1, 223.6, 308.5, 12, 'Example Co.', 38.5),
       columnLine(1, 223.6, 292.4, 11.5, 'Sample Engineer', 16),
       columnLine(1, 223.6, 277.9, 10.5, 'July 2020 - August 2022', 14.5),
-      // 1.6 * 10.5 = 16.8; 17 exceeds it, so this is description not location.
       columnLine(1, 223.6, 260.9, 10.5, 'Ho Chi Minh City, Vietnam', 17),
     ];
     const work = parseExperience(lines);
@@ -383,9 +378,6 @@ describe('parseExperience', () => {
     const lines = [
       columnLine(1, 223.6, 308.5, 12, 'Example Co.', 38.5),
       columnLine(1, 223.6, 292.4, 11.5, 'Sample Engineer', 16),
-      // matchDateLine only recognizes a single date as a date line when a
-      // duration follows in parentheses (docs/design/linkedin-import.md
-      // "Experience"); parseDateRange then reports it as start-only.
       columnLine(1, 223.6, 277.9, 10.5, 'July 2020 (5 years)', 14.5),
     ];
     const work = parseExperience(lines);
@@ -408,14 +400,8 @@ describe('parseExperience', () => {
       columnLine(1, 223.6, 308.5, 12, 'Example Co.', 38.5),
       columnLine(1, 223.6, 292.4, 11.5, 'Sample Engineer', 16),
       columnLine(1, 223.6, 277.9, 10.5, 'July 2020 - August 2022', 14.5),
-      // 21.5 keeps this line out of the location check (gap over 1.6 * size)
-      // so it lands in the description instead.
       columnLine(1, 223.6, 256.4, 10.5, '<script>alert(1)</script>', 21.5),
     ];
-    // Rich text HTML-escapes, but the draft's job title / employer fields
-    // are raw; check the underlying description carries escaped text since
-    // linesToRichText always escapes (design: "HTML special characters are
-    // escaped" for rich text output only, not other draft fields).
     expect(parseExperience(lines)[0].description).toContain(
       '&lt;script&gt;',
     );

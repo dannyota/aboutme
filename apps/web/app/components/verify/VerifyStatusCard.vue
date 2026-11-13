@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * The status card (docs/design/deployment-transparency/visual.md, "Status
- * card"): the state's mark, title, one detail line, the meta row, and the
- * release pill. Only the title and detail sit in the `role="status"` region,
- * so a refetch that keeps the same state announces nothing; the meta row's
- * relative age is hidden from screen readers beside a static time.
- */
 import {
   ArrowRightLeft,
   CircleDashed,

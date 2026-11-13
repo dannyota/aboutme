@@ -26,15 +26,12 @@ function pixelSides(image: { width: number; height: number }, crop: {
 
 describe('photo crop geometry', () => {
   it('starts a portrait on a full-width square over the top third', () => {
-    // 3:4 portrait: the 600 px square covers 75% of the height, so centring
-    // it on the top third stops at the top edge.
     expect(defaultCrop(portrait)).toEqual({
       x: 0,
       y: 0,
       width: 1,
       height: 0.75,
     });
-    // 1:2 portrait: the square is half the height, centred on y = 1/3.
     const tall = { width: 600, height: 1200 };
     const crop = defaultCrop(tall);
     expect(pixelSides(tall, crop)).toEqual([600, 600]);

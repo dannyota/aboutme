@@ -14,9 +14,6 @@ const schemaFiles = readdirSync(schemaRoot)
   )
   .sort();
 
-// Published schema files are frozen, so they keep citing ADR paths from before
-// the records were consolidated. docs/adr/README.md maps each former number and
-// slug to its current record; a cited former path must appear in that table.
 const formerAdrPaths = new Set(
   [
     ...readFileSync(

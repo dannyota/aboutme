@@ -10,10 +10,6 @@ import {
   sampleRole,
 } from './catalog';
 
-/**
- * What /app/new?sample=<id>&lng=<vi|en> or /app/new?template=<id> asks for.
- * Anyone can type that URL, so every value is checked against the catalog.
- */
 export type NewResumeRequest
   = | {
     readonly kind: 'sample';
@@ -23,7 +19,6 @@ export type NewResumeRequest
   | {
     readonly kind: 'template';
     readonly template: GalleryTemplate;
-    /** The language the new resume is created with: the site language. */
     readonly lng: string;
   }
   | { readonly kind: 'invalid' };
@@ -43,7 +38,6 @@ export function parseNewResumeQuery(
   if (sampleId !== undefined) {
     const template = galleryTemplate(sampleId);
     const requested = single(query, 'lng');
-    // Any language but vi or en falls back to the site language.
     const lng = requested === 'vi' || requested === 'en'
       ? requested
       : siteLanguage;
@@ -57,10 +51,6 @@ export function parseNewResumeQuery(
     : { kind: 'template', template, lng: siteLanguage };
 }
 
-/**
- * A blank resume that already wears a template, with the date format of the
- * language it is created with.
- */
 export function blankTemplateDocument(
   preset: TemplatePreset,
   lng: string,
@@ -79,7 +69,6 @@ export function blankTemplateDocument(
   } as Resume;
 }
 
-/** The document a new resume starts from. */
 export async function startDocument(
   request: Exclude<NewResumeRequest, { kind: 'invalid' }>,
 ): Promise<Resume> {
@@ -93,17 +82,12 @@ export async function startDocument(
   return sample;
 }
 
-/** A title to prefill, in the sample's language: "Backend engineer resume". */
 export function suggestedTitle(
   request: Exclude<NewResumeRequest, { kind: 'invalid' }>,
 ): string {
   if (request.kind === 'template') return `${request.template.name} resume`;
   const role = sampleRole(request.template, request.lng, request.lng);
   if (role === undefined) return `${request.template.name} resume`;
-  // A Vietnamese role reads in lower case after "CV" ("CV trưởng nhóm
-  // kho"). A role holding another capital is an English job title or an
-  // acronym ("Senior Frontend Engineer", "BrSE", "QA Lead") and keeps its
-  // case (docs/design/vietnam-tech-resumes.md).
   if (request.lng !== 'vi') return `${role} resume`;
   return /\p{Lu}/u.test(role.slice(1))
     ? `CV ${role}`

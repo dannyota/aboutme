@@ -16,9 +16,7 @@ import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
-// h3's `getHeader` does not resolve against `registerEndpoint`'s mocked
-// event in this Nuxt test environment; read the raw Node request headers
-// instead, the same way test/useAuth-csrf-rotation.test.ts does.
+// h3's getHeader does not resolve against registerEndpoint's mocked event.
 interface MockEvent {
   node?: { req?: { headers?: Record<string, string> } };
 }
@@ -51,7 +49,6 @@ interface StatusOverrides {
   csrfToken?: string;
 }
 
-/** Registers `GET /api/v1/auth/second-factor` for one test. */
 function registerStatus(overrides: StatusOverrides = {}): void {
   const {
     status = 200,
@@ -81,7 +78,6 @@ function registerStatus(overrides: StatusOverrides = {}): void {
   });
 }
 
-/** Registers `POST /api/v1/auth/second-factor/passkey/options`. */
 function registerPasskeyOptions(
   publicKey: unknown = VALID_ASSERTION_PUBLIC_KEY,
 ): void {
@@ -94,24 +90,9 @@ function registerPasskeyOptions(
 interface VerifyResult {
   status: number;
   errorCode?: string;
-  /** Sets the `Retry-After` response header (whole seconds) when present,
-   * for a 429 cool-down (docs/design/totp-second-factor-contract.md
-   * "Per-account TOTP failure budget"). */
   retryAfterSeconds?: number;
 }
 
-/**
- * Registers a pending verify POST. When a test does not need the request
- * body or headers, the handler stays synchronous (no `await readBody`):
- * `registerEndpoint`'s mock handler hangs the client's `$fetch` forever for
- * an `async` handler that both awaits and answers with a non-2xx status —
- * reproduced directly against this exact combination, and never against a
- * synchronous handler (`registerStatus` below sets 401/503 the same way,
- * synchronously, and works) or an `async` handler that answers 2xx. Every
- * currently-passing inspection call already only checks the 2xx path, so
- * this keeps those on the working `async` shape and only the error-status
- * registrations move to the working synchronous shape.
- */
 function registerVerify(
   path: string,
   result: VerifyResult,
@@ -142,7 +123,6 @@ function registerVerify(
   });
 }
 
-/** Registers `POST /api/v1/auth/second-factor/passkey/verify`. */
 function registerPasskeyVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
@@ -154,7 +134,6 @@ function registerPasskeyVerify(
   );
 }
 
-/** Registers `POST /api/v1/auth/second-factor/totp/verify`. */
 function registerTotpVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
@@ -166,7 +145,6 @@ function registerTotpVerify(
   );
 }
 
-/** Registers `POST /api/v1/auth/second-factor/recovery/verify`. */
 function registerRecoveryVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
@@ -240,10 +218,6 @@ describe('second-factor.vue loading and method rendering', () => {
         csrfToken: CSRF_TOKEN,
       },
     });
-    // The mocked fetch resolves through a real round trip, so the pending
-    // status's own resolution needs an extra macrotask tick beyond the
-    // first flush — the same double-flush test/connected-agents.test.ts
-    // uses for its own delayed mock response.
     await flushPromises();
     await flushPromises();
     expect(wrapper.find('[data-testid="second-factor-loading"]').exists())
@@ -275,8 +249,6 @@ describe('second-factor.vue loading and method rendering', () => {
     });
 
   it('shows a refresh prompt alone for an unknown method', async () => {
-    // A future method value this build has never heard of, distinct from
-    // 'totp' now that this page recognizes it (AC-AUTH-028).
     registerStatus({ methods: ['sms'] });
     const wrapper = await mountSuspended(SecondFactorPage);
     await flushPromises();
@@ -368,7 +340,6 @@ describe('second-factor.vue ignores its own query string', () => {
       await flushPromises();
       expect(wrapper.html()).not.toContain('<script>alert(1)</script>');
       expect(wrapper.html()).not.toContain('/etc/passwd');
-      // The pending read never carries this page's own query string onward.
       expect(requestedUrl).not.toContain('evil');
       expect(requestedUrl).not.toContain('etc%2Fpasswd');
     });
@@ -476,9 +447,6 @@ describe('second-factor.vue passkey completion', () => {
     await flushPromises();
     await wrapper.get('[data-testid="second-factor-passkey-button"]')
       .trigger('click');
-    // The passkey ceremony chains an options fetch, the mocked credential
-    // ceremony, and the verify fetch; a non-2xx verify response needs an
-    // extra macrotask tick beyond the first flush to finish propagating.
     await flushPromises();
     await flushPromises();
     expect(wrapper.get('[data-testid="second-factor-passkey-error"]').text())
@@ -652,8 +620,6 @@ describe('second-factor.vue totp completion', () => {
       await input.setValue('123456');
       await wrapper.get('[data-testid="second-factor-totp-form"]')
         .trigger('submit');
-      // Cleared synchronously, before the in-flight request resolves —
-      // stricter than the recovery code, which clears only in `finally`.
       expect((input.element as HTMLInputElement).value).toBe('');
       release(null);
       await flushPromises();
@@ -763,8 +729,7 @@ describe('second-factor.vue totp completion', () => {
       status: 401,
       errorCode: 'authentication_required',
     });
-    // Attach to the live document: happy-dom's `focus()` is a no-op on a
-    // detached tree, and this test asserts the expired banner gets focus.
+    // happy-dom's focus() is a no-op on a detached tree.
     const wrapper = await mountSuspended(SecondFactorPage, {
       attachTo: document.body,
     });

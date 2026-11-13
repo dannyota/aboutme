@@ -14,7 +14,6 @@ import type { FieldIntent } from './fieldIntent';
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly personal: PersonalDetails;
-  /** The resume's content language (`metadata.lng`). */
   readonly lng: string | null;
 }>();
 const { locale } = useLocale();

@@ -11,8 +11,6 @@ interface TextStyle {
   bold: boolean;
 }
 
-// Static faces can expose their weight in the embedded OpenType OS/2 table.
-// Variable advances only detect contradictions, even with this table present.
 export function pdfFontWeight(data: unknown): number | undefined {
   if (!(data instanceof Uint8Array) || data.length < 12) return undefined;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -85,8 +83,6 @@ function mergeAdvance(target: Advances, unicode: string, width: number) {
   target.widths.set(key, width);
 }
 
-// Anchor regular resources to independently checked print-DOM weight 400.
-// Compare the same Unicode glyphs in em units, never total text-run widths.
 export function pdfVariableTextWeights(
   paint: PdfPaint, expectedFamily: string, regularText: readonly string[],
 ): PdfPaint {
@@ -173,7 +169,6 @@ export function pdfTextStyleMatches(
 }
 
 function nearestTextRun(paint: PdfPaint, value: string): PdfInk | undefined {
-  // Case folding helps diagnose transforms, never approve text or style.
   const needle = compact(value).toUpperCase();
   if (needle === '') return undefined;
   return paint.text.map((run) => ({ run,

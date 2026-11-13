@@ -80,7 +80,6 @@ export const rgbToOKLCH = (color: string): OKLCH => {
   };
 };
 
-/** Gamma-encoded sRGB channels of an OKLCH color, unclamped. */
 export const oklchToRGB = ({ l, c, h }: OKLCH): RGB => {
   const labA = c * Math.cos(h);
   const labB = c * Math.sin(h);

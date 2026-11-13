@@ -7,12 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 import { CARD_LAYOUT_VERSION } from '../../app/components/preview/cardLayout';
 
-// Every live card's URL carries the layout version, and platforms refetch an
-// image only when its URL changes
-// (docs/adr/0014-public-page-head-and-link-preview.md).
-// A change to any file that draws the card must raise CARD_LAYOUT_VERSION
-// here and LayoutVersion in apps/server/internal/previewcard/card.go, then
-// pin the new hash.
 const LAYOUT_FILES = [
   'app/components/preview/PreviewCard.vue',
   'app/components/preview/preview-card.css',
@@ -23,14 +17,6 @@ const LAYOUT_FILES = [
 
 const PINNED: Record<number, string> = {
   1: 'f2c881e2aa99b538f000099b19845cc00badae743c96cffb69d4ee736cfb2991',
-  // ADR 0020: the footer mark became the seal.
-  // Re-pinned without a version bump: only an ADR citation in a comment
-  // changed, so the rendered card is identical.
-  // Re-pinned again without a version bump: AppLogo.vue now draws its mark
-  // from the shared sealMark.ts geometry module
-  // (docs/design/ui/identity-and-seal.md, "Logo"), so the rendered card is
-  // still identical.
-  // Re-pinned without a version bump: the pin covers sealMark.ts geometry.
   2: 'c514fd4f26c163997bdbaf2c33f2c01a1c03254caca69621ee77fe07b26a0890',
 };
 

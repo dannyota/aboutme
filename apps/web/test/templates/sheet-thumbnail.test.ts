@@ -8,11 +8,6 @@ import SheetThumbnail from
   '../../app/components/templates/SheetThumbnail.vue';
 import { sampleResume } from '../../app/landing/sampleResume';
 
-// A thumbnail scales its A4 page with ScaledSheet's transform, never CSS
-// `zoom`, which WebKit renders with enlarged text (print.md §1).
-
-// The thumbnail's render context carries no photo URL, so the document has
-// no photo.
 const details = { ...sampleResume.personalDetails };
 delete details.photo;
 const document = { ...sampleResume, personalDetails: details };

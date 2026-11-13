@@ -55,7 +55,6 @@ export interface PrivacySettingsActions {
 export const PrivacySettingsActionsKey: InjectionKey<PrivacySettingsActions>
   = Symbol('aboutme-privacy-settings-actions');
 
-/** Maps the closed account-deletion HTTP error vocabulary to UI failures. */
 export function mapAccountDeletionError(
   error: unknown,
 ): PrivacySettingsFailure {

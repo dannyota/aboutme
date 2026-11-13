@@ -1,7 +1,4 @@
 // @vitest-environment node
-// The committed Save to PDF layout fixtures, read end to end with pdf.js:
-// read, lines, layout, and section mapping (docs/design/linkedin-import.md,
-// "Tests"; fixtures/README.md says how they are made).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -104,11 +101,9 @@ describe('basic-en.pdf', () => {
       end: { y: 2023, m: 8 },
       present: false,
     });
-    // The group's duration line is dropped, not read as a description.
     expect(work[0]!.description).not.toContain('2 years 1 month');
     expect(work[0]!.description).not.toContain('Mẫu Group');
     expect(work[1]!.description).toBe('');
-    // The last role's description starts at the top of page 2.
     expect(work[3]!.description).toMatch(
       /^<p>Built the first version .* workstream\.<\/p>$/,
     );
@@ -172,15 +167,11 @@ describe('dates-en.pdf', () => {
         { start: { y: 2020, m: 1 }, end: null, present: true }, undefined],
       ['Example Co. B', 'Analyst',
         { start: { y: 2018 }, end: { y: 2019 }, present: false }, undefined],
-      // A start after the end.
       ['Example Co. C', 'Analyst', undefined, 'unreadable'],
-      // Unknown month words.
       ['Example Co. D', 'Analyst', undefined, 'unreadable'],
-      // "less than a year" as a group duration.
       ['Example Co. E', 'Junior Analyst',
         { start: { y: 2022, m: 6 }, end: { y: 2022, m: 8 }, present: false },
         undefined],
-      // Short month names and an en dash.
       ['Example Co. F', 'Analyst',
         { start: { y: 2016, m: 1 }, end: { y: 2017, m: 9 }, present: false },
         undefined],
@@ -243,7 +234,6 @@ describe('injection-en.pdf', () => {
     expect(profile.work[0]!.jobTitle).toBe('<script>alert(1)</script>');
     expect(profile.summary?.html).not.toMatch(/<(script|img)/);
     expect(profile.work[0]!.description).not.toMatch(/<(script|img)/);
-    // javascript: never becomes a link: its "website" is not imported.
     expect(profile.contacts.map((contact) => contact.value)).toEqual([
       '0900000000',
       '<script>@example.com',

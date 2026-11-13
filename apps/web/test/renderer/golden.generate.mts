@@ -27,16 +27,6 @@ const fixturesDirectory = resolve(workspaceRoot, 'packages/schema/fixtures');
 const templatesDirectory = resolve(workspaceRoot, 'packages/schema/templates');
 const reservedGoldenDirectory = resolve(import.meta.dirname, 'golden');
 
-/**
- * @typedef {object} GoldenCell
- * @property {string} presetFilename
- * @property {string} presetId
- * @property {1 | 2} start
- * @property {'continuous' | 'paged'} mode
- * @property {string} filename
- */
-
-/** @param {string} path */
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 
 const presetFilenames = () =>
@@ -44,7 +34,6 @@ const presetFilenames = () =>
     .filter((name) => name.endsWith('.json'))
     .sort();
 
-/** @returns {GoldenCell[]} */
 export function buildGoldenMatrix() {
   return presetFilenames().flatMap((presetFilename) => {
     const presetId = presetFilename.slice(0, -'.json'.length);
@@ -60,17 +49,12 @@ export function buildGoldenMatrix() {
   });
 }
 
-/** @param {string} name */
 export function localeForFixture(name) {
   if (name === 'full') return 'en';
   if (name === 'vn-full') return 'vi';
   throw new Error(`Unsupported golden fixture locale: ${name}`);
 }
 
-/**
- * @param {import('@aboutme/schema').Resume} source
- * @param {1 | 2} start
- */
 export function buildStartingDocument(source, start) {
   const document = structuredClone(source);
   if (start === 1) {
@@ -121,9 +105,7 @@ export function verifyFixedPhoto() {
   }
 }
 
-/** @param {string} path */
 const canonicalPath = (path) => {
-  /** @type {string[]} */
   const tail = [];
   let ancestor = resolve(path);
   while (!existsSync(ancestor)) {
@@ -135,13 +117,11 @@ const canonicalPath = (path) => {
   return resolve(realpathSync.native(ancestor), ...tail);
 };
 
-/** @param {string} parent @param {string} child */
 const isWithin = (parent, child) => {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith('..') && !isAbsolute(path));
 };
 
-/** @param {readonly string[]} args */
 const git = (args) =>
   spawnSync('git', [...args], {
     cwd: workspaceRoot,
@@ -149,7 +129,6 @@ const git = (args) =>
     env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
   });
 
-/** @param {string} output */
 export function assertSafeOutputDirectory(output) {
   const target = canonicalPath(output);
   const root = realpathSync.native(workspaceRoot);
@@ -187,22 +166,16 @@ export function assertSafeOutputDirectory(output) {
 const loadResumeDocument = async () =>
   (await import('../../app/components/resume/ResumeDocument.vue')).default;
 
-/** @param {GoldenCell} cell */
 export async function renderGoldenCell(cell) {
   verifyFixedPhoto();
-  /** @type {import('@aboutme/schema').Resume} */
   const source = readJson(resolve(fixturesDirectory, 'full.json'));
   const startingDocument = buildStartingDocument(source, cell.start);
-  /** @type {import('@aboutme/schema/templates').TemplatePreset} */
   const preset = readJson(resolve(templatesDirectory, cell.presetFilename));
   if (preset.id !== cell.presetId) {
     throw new Error(
       `Preset filename ${cell.presetFilename} does not match id ${preset.id}.`,
     );
   }
-  // The fixture owner already prints on the preset's paper; a template switch
-  // keeps the owner's page format.
-  /** @type {import('@aboutme/schema').Resume} */
   const document = {
     ...startingDocument,
     customization: applyTemplate(
@@ -215,11 +188,6 @@ export async function renderGoldenCell(cell) {
       localeForFixture('full'),
     ),
   };
-  /**
-   * @type {
-   *   {import('../../app/components/resume/resolveRenderModel').RenderContext}
-   * }
-   */
   const context = {
     lng: localeForFixture('full'),
     mode: cell.mode,
@@ -233,13 +201,11 @@ export async function renderGoldenCell(cell) {
   return renderToString(app);
 }
 
-/** @param {string} output */
 export async function generateGoldenFiles(output) {
   const target = assertSafeOutputDirectory(output);
   verifyFixedPhoto();
   mkdirSync(target, { recursive: true });
 
-  /** @type {string[]} */
   const written = [];
   for (const cell of buildGoldenMatrix()) {
     const html = await renderGoldenCell(cell);

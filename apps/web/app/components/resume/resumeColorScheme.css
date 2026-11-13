@@ -1,15 +1,3 @@
-/*
- * The owner's color scheme (docs/design/public-page-theme.md, "Dark palette
- * rule"). useResumeStyles writes each role's dark value beside its light one
- * as --dark-color-<role>, at every element that carries roles inline: the
- * article, a tinted header band, and a tinted sidebar. These rules point the
- * light roles at the dark values on screen only, so print and the PDF keep
- * the light roles. They need !important because the light roles are inline.
- *
- * A dark page applies them always; a Match device page applies them when the
- * viewer prefers dark. The attribute carries one of two fixed words, never a
- * CSS value, and light pages carry no attribute at all.
- */
 @media screen {
   :is([data-color-scheme="dark"], [data-color-scheme="dark"] *)[style*="--dark-color-surface"] {
     --color-surface: var(--dark-color-surface) !important;
@@ -27,9 +15,6 @@
     --color-track: var(--dark-color-track) !important;
   }
 
-  /* The page's scheme reaches the root, so scrollbars and overscroll match.
-     The document root cannot read the page's inline roles, so Canvas under
-     color-scheme: dark stands in for the ground there. */
   :root:has(.public-resume-page[data-color-scheme="dark"]) {
     color-scheme: dark;
     background: Canvas;
@@ -49,8 +34,6 @@
     --toolbar-button-shadow: none;
   }
 
-  /* The skip link takes the bar's dark Button fill, Button label, and Ring
-     tokens (docs/design/public-page-theme.md, "Tokens"). */
   :root:has(.public-resume-page[data-color-scheme="dark"]) a[href="#public-resume"]:focus {
     background: #141a2e;
     color: #a3b6f5;
@@ -94,8 +77,6 @@
     --toolbar-button-shadow: none;
   }
 
-  /* The skip link takes the bar's dark Button fill, Button label, and Ring
-     tokens (docs/design/public-page-theme.md, "Tokens"). */
   :root:has(.public-resume-page[data-color-scheme="system"]) a[href="#public-resume"]:focus {
     background: #141a2e;
     color: #a3b6f5;

@@ -15,9 +15,6 @@ import ResumeHeader from '../../app/components/resume/ResumeHeader.vue';
 import ProjectSection from
   '../../app/components/resume/sections/ProjectSection.vue';
 
-// The header photo sits on top, left, or right of the name block
-// (docs/adr/0013-resume-header-and-contacts.md).
-
 type Position = ResolvedRenderModel['header']['photoPosition'];
 
 const photo = { url: 'data:image/png;base64,AA==' };
@@ -55,7 +52,6 @@ describe('header photo position', () => {
       const text = header.get('.resume-header-text');
       expect(text.find('.resume-name').text()).toBe('Ada Lovelace');
       expect(text.find('.resume-headline').text()).toBe('Engineer');
-      // header.align applies inside the text column.
       expect(header.attributes('style')).toContain('text-align: center');
     },
   );
@@ -122,7 +118,6 @@ describe('template switches keep the photo position', () => {
         'en',
       );
       expect(left.header?.photoPosition).toBe('left');
-      // The preset's own header settings still apply.
       if (preset.customization.header !== undefined) {
         expect(left.header?.align).toBe(preset.customization.header.align);
       }

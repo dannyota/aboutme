@@ -11,20 +11,12 @@ import ProjectFacts from './ProjectFacts.vue';
 import ProjectPageBar from './ProjectPageBar.vue';
 import ProjectText from './ProjectText.vue';
 
-// One project, /{slug}/projects/{project-slug}
-// (docs/design/ui/project-pages.md, "Project page"). Server-rendered only,
-// with no script. Empty parts are left out with their headings; a column
-// with nothing to show is left out and the other takes the full width. The
-// project's text carries its lang when it is not in the resume's language;
-// dates follow the resume's format and language.
 const props = defineProps<{
   readonly resume: ProjectPageResume;
   readonly project: ProjectDetail;
-  /** The resume entry's own link, sent only when it differs from both. */
   readonly entryLink?: string;
   readonly listUrl: string;
   readonly otherProjects: boolean;
-  /** `{origin}/`, the credit's href. */
   readonly homeHref: string;
 }>();
 

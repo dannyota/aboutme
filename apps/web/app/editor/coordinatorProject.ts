@@ -7,11 +7,6 @@ import type { EditorQueueItem } from './templateGroup';
 import type { ResumeSnapshot } from './types';
 import type { CoordinatorContext } from './coordinatorTypes';
 
-// How a link or refresh leaves the queue when it is not simply applied
-// (docs/design/ui/projects.md "In the resume editor"). The server builds the
-// entry, so a dropped command sets the read barrier: the queue reads what the
-// resume holds before it sends the edits behind it.
-
 type ProjectCommand = Extract<
   AtomicEditorCommand,
   { kind: 'projectLink' | 'projectLinkEntry' | 'projectRefresh' }
@@ -36,18 +31,11 @@ function drop(
   outcome?: ProjectOutcome,
 ): void {
   if (outcome !== undefined) noteProjectOutcome(command.id, outcome);
-  // A conflict a realtime read recorded for this command goes with it.
   ctx.deps.store.resolveConflict(resumeId, command.id);
   ctx.deps.store.dropHead(resumeId, command.id);
   ctx.deps.store.requireCompleteRead(resumeId);
 }
 
-/**
- * A refused link or refresh wrote nothing, and its entry is built by the
- * server, so no edit can make it succeed. It leaves the queue rather than
- * holding the edits behind it, and the read shows what the resume holds:
- * a link another tab made, or an entry whose project was deleted.
- */
 export function dropRefusedProjectCommand(
   ctx: CoordinatorContext,
   resumeId: string,
@@ -60,7 +48,6 @@ export function dropRefusedProjectCommand(
   return true;
 }
 
-/** Why a refresh does not go out over `latest`, or nothing to say. */
 function refreshChange(
   command: Extract<ProjectCommand, { kind: 'projectRefresh' }>,
   latest: ResumeSnapshot,
@@ -69,19 +56,12 @@ function refreshChange(
   const projectId = base.present
     ? (base.value as { projectId?: string } | undefined)?.projectId
     : undefined;
-  // An entry that lost its link loses its note too, so it needs no word.
   return projectId !== undefined
     && linkedEntry(latest.document, projectId)?.entryId === command.entryId
     ? 'refresh-changed'
     : undefined;
 }
 
-/**
- * A refresh whose entry changed after the person confirmed it is not sent
- * over that text; it leaves the queue so Refresh asks again. A link of an
- * existing entry that was removed, moved or linked to another project
- * cannot apply; it leaves the queue too, and the form shows it unlinked.
- */
 export function dropConflictingProject(
   ctx: CoordinatorContext,
   resumeId: string,
@@ -97,13 +77,6 @@ export function dropConflictingProject(
   return true;
 }
 
-/**
- * Settles a project command after a revision mismatch. A link that already
- * landed leaves the queue; any other link is the same request, rebased onto
- * the new revision by the caller within its rebase limit. A refresh is
- * rebased only over unchanged text, and a link of an existing entry only
- * while that entry is still unlinked where it was.
- */
 export function settleStaleProject(
   ctx: CoordinatorContext,
   resumeId: string,

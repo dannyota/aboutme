@@ -4,9 +4,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
-// Shared parsing for the source guards that keep display text in the
-// Vietnamese and English catalogs instead of in components and helpers.
-
 export const appRoot = resolve(process.cwd(), 'app');
 
 const displayKeys = new Set([
@@ -119,11 +116,6 @@ function promptCall(node: ts.CallExpression): boolean {
     && ['alert', 'confirm', 'prompt'].includes(expression.name.text);
 }
 
-/**
- * Returns the literal checks for one guard. A literal listed for a path in
- * `approvedLiterals` passes in text, bound attributes, and scripts; a static
- * guarded attribute never passes.
- */
 export function literalGuard(approvedLiterals: ApprovedLiterals): {
   readonly templateViolations: (path: string, input: string) => string[];
   readonly scriptViolations: (path: string, input: string) => string[];
@@ -276,12 +268,6 @@ function plainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Lists every place the Vietnamese and English catalogs differ in shape or
- * hold an empty string. A function passes when both sides have the same
- * arity; with `functionFixtures`, it must also return nonempty text for the
- * fixture arguments listed under its path.
- */
 export function parityViolations(
   vietnamese: unknown,
   english: unknown,
@@ -363,7 +349,6 @@ export function scriptContents(path: string, input: string): string {
     .join('\n');
 }
 
-/** Resolves an import specifier to a path under `app/` without extension. */
 export function resolvedImport(file: string, specifier: string): string {
   const target = specifier.startsWith('@/') || specifier.startsWith('~/')
     ? join(appRoot, specifier.slice(2))

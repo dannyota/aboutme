@@ -149,7 +149,6 @@ function etag(revision: string): string {
   return `"r${revision}"`;
 }
 
-/** The owner project routes through the generated client. */
 export function createProjectsApi(
   options: ApiClientOptions = {},
 ): ProjectsApi {
@@ -215,7 +214,6 @@ export function createProjectsApi(
   };
 }
 
-/** The CSRF token while the session still belongs to `ownerId`. */
 function tokenFor(auth: ProjectAuth, ownerId: string): string | null {
   const token = auth.csrfToken.value;
   return token !== null
@@ -227,12 +225,6 @@ function tokenFor(auth: ProjectAuth, ownerId: string): string | null {
 
 const SESSION_LOST = { kind: 'failed', failure: 'session-lost' } as const;
 
-/**
- * Sends one write of `ownerId`'s intent. A rotated token is refreshed and
- * the same request, with the same key, is sent once more. Another tab can
- * switch the session to a different account meanwhile: then nothing more
- * is sent and no result is handed back for the new account to adopt.
- */
 export async function sendWithCsrf<
   R extends { readonly kind: string; readonly failure?: string },
 >(
@@ -309,7 +301,6 @@ export interface ReleaseActionDeps {
   readonly auth: ProjectAuth;
   readonly uuid: () => string;
   readonly providerLogin: Readonly<Ref<boolean>>;
-  /** The released project: the renamed one, or null after a deletion. */
   readonly onDone: (kind: ReleaseKind, project: Project | null) =>
     void | Promise<void>;
   readonly onStale: (project: Project) => void;
@@ -338,12 +329,6 @@ function methodOf(state: ReleaseState): 'password' | 'provider' | null {
   return 'method' in state ? state.method : null;
 }
 
-/**
- * Change of address and deletion release a slug, so each may need the
- * reauthentication step the publish dialog uses. After that step, and after
- * a second factor the owner completes in another tab, the same request,
- * with the same idempotency key, is sent once more.
- */
 export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
   const state = ref<ReleaseState>({ kind: 'idle' });
   let attempt: ReleaseAttempt | null = null;
@@ -417,7 +402,6 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
       || failure === 'unavailable'
       || failure === 'csrf-rejected'
     ) {
-      // The outcome is unknown or nothing ran, so a retry reuses this key.
       state.value = { kind: 'try-again' };
       return;
     }
@@ -439,7 +423,6 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
     }
   }
 
-  /** Resends once after a step the owner finished in another tab. */
   function resendAfterOtherTab(
     from: 'provider-started' | 'reauth-second-factor',
   ): Promise<void> {
@@ -519,9 +502,6 @@ export function createReleaseAction(deps: ReleaseActionDeps): ReleaseAction {
         state.value = { kind: 'session-lost' };
         return;
       }
-      // Only 204 completes reauthentication. An enrolled account's 202 opens
-      // a pending factor the server still requires, so the attempt waits for
-      // an explicit Continue; any other answer is not proof and sends nothing.
       if (status === 202 && response?.data?.secondFactorRequired === true) {
         state.value = { kind: 'reauth-second-factor' };
         return;

@@ -13,20 +13,14 @@ import type { EditorFieldsCopy } from '@/i18n/editor-fields';
 import { projectName } from '../../../projects/projectDocument';
 import type { ProjectLibraryView } from '../projectLibrary';
 
-// The two quiet actions under an unlinked project entry's fields, and the
-// status of the latest one (docs/design/ui/projects.md "In the resume
-// editor"). The status stays once the entry is linked, under its fields.
 const props = defineProps<{
-  /** The entry links a project, so only the status shows. */
   readonly linked: boolean;
   readonly library: ProjectLibraryView;
-  /** Projects this resume shows already. */
   readonly shown: ReadonlySet<string>;
   readonly busy: boolean;
   readonly atLimit: boolean;
   readonly limitLine: string;
   readonly status: string;
-  /** A project saved from this entry but not linked to it. */
   readonly savedProjectId: string | null;
   readonly copy: EditorFieldsCopy['projectLinks'];
 }>();

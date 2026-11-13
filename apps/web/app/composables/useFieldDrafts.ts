@@ -1,18 +1,7 @@
 import { computed, inject, reactive, type InjectionKey } from 'vue';
 
-/**
- * `useFieldDrafts` — edits a field holds but has not handed to the store: a
- * date range that is not valid yet, or rich text waiting for its debounce.
- *
- * The editor page provides one registry. The save status reads it, so a held
- * edit shows as Unsaved rather than Saved, and the unsaved-navigation guard
- * flushes what it can and blocks on the rest. A field that remounts (after a
- * section switch or a collapsed card) restores its held value by key. Drafts
- * live in memory only: they can hold resume content.
- */
 interface FieldDraft {
   readonly value: unknown;
-  /** Hands the held value to the store now, when that is possible. */
   readonly flush?: () => void;
 }
 
@@ -21,9 +10,7 @@ export interface FieldDrafts {
   get(key: string): unknown;
   set(key: string, value: unknown, flush?: () => void): void;
   clear(key: string): void;
-  /** Drops every draft whose key starts with `prefix` (a deleted entry). */
   clearPrefix(prefix: string): void;
-  /** Flushes every flushable draft; returns whether any draft remains. */
   flushAll(): boolean;
 }
 
@@ -54,7 +41,6 @@ export function createFieldDrafts(): FieldDrafts {
   };
 }
 
-/** The editor's registry, or undefined outside the editor page. */
 export function useFieldDrafts(): FieldDrafts | undefined {
   return inject(FieldDraftsKey, undefined);
 }

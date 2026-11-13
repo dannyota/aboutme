@@ -40,8 +40,6 @@ interface GuideCell {
   readonly width: number;
 }
 
-// The MCP guide page (/guide/mcp), both locales and themes, at phone and
-// desktop measures (docs/design/mcp-guide.md, "Layout").
 const GUIDE_CELLS: readonly GuideCell[] = [
   { locale: 'vi', name: 'guide--light--390.png', theme: 'light', width: 390 },
   { locale: 'vi', name: 'guide--light--1280.png', theme: 'light', width: 1280 },
@@ -192,10 +190,6 @@ mutationTest('guide flow detects overlapping sections', async ({ page }) => {
   await assertFlow();
 });
 
-/**
- * Describes the shell and its direct children, the nav's, and the right-side
- * group's: tag, test id or text, computed display, and width in pixels.
- */
 async function describeHeader(page: Page): Promise<string> {
   return page.evaluate(() => {
     const shell = document.querySelector<HTMLElement>(
@@ -233,12 +227,6 @@ async function describeHeader(page: Page): Promise<string> {
   });
 }
 
-// The header must not overflow at 704, 768, 896, 1024, or 1152px in either
-// language, signed in or out, and the Connect AI link shows exactly where
-// docs/design/mcp-guide.md, "Navigation", puts it: signed out, from 44rem
-// (704px); signed in, from 64rem (1024px), because the signed-in bar also
-// carries Resumes, Views, and Settings. /guide/mcp carries both states,
-// since the page reads no API and renders the same content either way.
 const HEADER_WIDTHS = [704, 768, 896, 1024, 1152] as const;
 const GUIDE_LINK_VISIBLE_AT: Record<'in' | 'out', readonly number[]> = {
   out: [704, 768, 896, 1024, 1152],
@@ -268,30 +256,20 @@ for (const locale of ['vi', 'en'] as const) {
           const shell = page.locator('[data-testid="app-shell"]');
           await expect(shell).toBeVisible();
           if (session === 'in') {
-            // SSR renders the signed-out shell before hydration's own
-            // GET /api/v1/me settles, so wait for the signed-in-only account
-            // menu before measuring (support.ts mockSignedInSession).
             await expect(page.getByTestId('account-menu')).toBeVisible();
           }
 
           const overflow = await shell.evaluate((element) =>
             element.scrollWidth - element.clientWidth);
-          // A failure lists every part of the header with its width, so the
-          // message names what overflows without a trace artifact.
           expect(
             overflow,
             overflow > 0 ? await describeHeader(page) : '',
           ).toBeLessThanOrEqual(0);
 
-          // The logo link never shrinks away, even in the compact header.
           const logo = await page.locator('[data-testid="app-shell"] > a')
             .first().boundingBox();
           expect(logo?.width ?? 0).toBeGreaterThan(0);
 
-          // The Open source link shows signed out from 72rem (1152px), where
-          // the full header fits with it
-          // (docs/design/ui/landing-and-library.md,
-          // Navigation). The signed-in header never carries it.
           const openSource = page.getByTestId('app-shell-open-source');
           if (session === 'out' && width >= 1152) {
             await expect(openSource).toBeVisible();

@@ -145,9 +145,6 @@ describe("template registry", () => {
     );
   });
 
-  // docs/design/showcase.md "What a listing shows": the showcase match form
-  // drops the five leaves a template apply keeps or resets and the preset's
-  // placement, and a preset without a header cannot be matched.
   it("builds the showcase match form without the owner leaves and placement", () => {
     const preset = TEMPLATES.find((candidate) => candidate.id === "modern-sidebar");
     expect(preset).toBeDefined();

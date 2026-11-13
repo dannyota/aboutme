@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * Password reset landing page.
- *
- * Like verify-email, the single-use token arrives in the URL fragment and is
- * stripped synchronously during browser setup. The token lives in
- * component-local memory only until the reset POST completes, then is
- * replaced with an empty string. A malformed or missing fragment renders a
- * local error and no form.
- */
 import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -42,7 +33,6 @@ if (import.meta.client) {
   const values = params.getAll('token').filter((value) => value !== '');
   if (values.length === 1) {
     token = values[0] as string;
-    // Strip the fragment before any request or telemetry.
     history.replaceState(
       null,
       '',

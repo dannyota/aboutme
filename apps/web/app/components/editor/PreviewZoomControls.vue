@@ -19,8 +19,6 @@ const props = defineProps<{
   readonly zoomInLabel: string;
   readonly fitLabel: string;
   readonly percentLabel: string;
-  /** The polite live-region text announcing the zoom level a user action
-   * just set (EditorPreview.vue's `applyZoom`); empty until the first one. */
   readonly announcement: string;
 }>();
 
@@ -30,9 +28,7 @@ defineEmits<{
   setFit: [];
 }>();
 
-// A step button that disables under keyboard focus would drop focus to the
-// page, outside the preview, where its Ctrl/Cmd shortcuts stop working. Hand
-// focus to the percent button instead.
+// HTML focus fixup rule: a focused button that becomes disabled loses focus.
 const root = ref<HTMLElement | null>(null);
 
 function keepFocusAt(testId: string): void {

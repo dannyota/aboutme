@@ -50,10 +50,6 @@ const document = computed(() => {
   } as unknown as Resume;
 });
 
-// Light, and an absent value, carry no attribute and no dark roles. The
-// attribute and the render context take one of two fixed words, never the
-// document's string (docs/design/public-page-theme.md, "Security, privacy,
-// and size").
 const colorScheme = computed<'dark' | 'system' | undefined>(() => {
   const scheme = props.publicResume.document.customization.colorScheme;
   return scheme === 'dark' || scheme === 'system' ? scheme : undefined;

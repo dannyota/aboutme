@@ -22,7 +22,6 @@ export const syntheticMeasure: MeasurePagination = (request) => {
         ? ''
         : block.part === undefined
           ? JSON.stringify(sectionEntry(section, block.entryIndex))
-          // A split entry's part measures only its own body block.
           : JSON.stringify(
               entryPartSection(section, block.entryIndex, block.part)
                 .entries[0],

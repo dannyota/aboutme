@@ -22,9 +22,7 @@ function mountInvite(
   return wrapper;
 }
 
-// A real page root: a block <main> that spans the viewport around a centered
-// resume box, as in the public page. Both boxes are stubbed since happy-dom
-// does no layout.
+// happy-dom does no layout, so both boxes are stubbed.
 function mountInviteOnPage(measureRight: number) {
   const root = document.createElement('main');
   root.getBoundingClientRect = () => ({ right: window.innerWidth }) as DOMRect;
@@ -41,8 +39,6 @@ function mountInviteOnPage(measureRight: number) {
   return wrapper;
 }
 
-// A page root holding the public page element, with the scheme attribute the
-// public page writes and a stubbed device preference.
 function mountInviteOnScheme(scheme: string | null, prefersDark: boolean) {
   const root = document.createElement('main');
   const page = document.createElement('div');

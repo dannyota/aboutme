@@ -12,7 +12,6 @@ import {
 
 const props = defineProps<{
   readonly controller: PdfDownloadController;
-  /** The page size the PDF uses, shown beside the label. */
   readonly pageFormat?: PageFormat;
 }>();
 

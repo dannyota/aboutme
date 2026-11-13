@@ -108,21 +108,10 @@ export interface ResumeMetadata {
   readonly live: boolean;
   readonly downloadEnabled: boolean;
   readonly seoGeoEnabled: boolean;
-  /**
-   * Whether viewers must sign in to view this resume. Never part of the
-   * document (docs/design/viewer-analytics/sign-in-to-view.md#setting).
-   */
   readonly signInToView: boolean;
   readonly slug: string | null;
-  /** The public page's tab title; null means "<Full name> — Resume". */
   readonly publicTitle: string | null;
-  /** The public page's tab icon emoji; null means the site icon. */
   readonly faviconEmoji: string | null;
-  /**
-   * The community showcase opt-in, owner reads only: null when off. The
-   * resource always carries it; absence reads as off so older fixtures and
-   * clients still parse (docs/design/showcase.md, Data and contract).
-   */
   readonly showcase?: OwnerShowcase | null;
   readonly schemaVersion: typeof CURRENT_VERSION;
   readonly createdAt: string;

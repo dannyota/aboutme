@@ -10,10 +10,6 @@ import {
   normalizePublicTitle,
 } from '../../app/utils/publicPage';
 
-// The corpus is shared with the server's internal/publicpage tests, so the
-// editor's pre-validation matches the authoritative server checks
-// (docs/adr/0014-public-page-head-and-link-preview.md).
-
 interface CorpusCase {
   input: string;
   stored: string | null;

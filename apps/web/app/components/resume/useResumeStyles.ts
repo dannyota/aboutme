@@ -55,10 +55,6 @@ const colorRoles = (
   scheme: ColorScheme = 'light',
 ): Record<string, string> => {
   const accent = customization.colors.accent ?? customization.colors.primary;
-  // On a dark surface a clamped ink turns a muddy mid-tone that passes the
-  // ratio but reads faint, so an ink that fails outright goes near white. The
-  // dark scheme keeps every ink's hue instead: its clamp is the same search
-  // for every role (docs/design/public-page-theme.md, "Dark palette rule").
   const darkSurface = scheme === 'light'
     && contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
   const ink = (color: string, lightInk: string): string =>
@@ -106,8 +102,6 @@ const darkRoles = (roles: Record<string, string>): Record<string, string> =>
     ]),
   );
 
-// Title case is an English convention. Vietnamese capitalizes only the first
-// word, so a Vietnamese resume keeps its headings as typed.
 const headingTransform = (
   style: Customization['heading']['style'],
   lng: string,
@@ -117,12 +111,6 @@ const headingTransform = (
   return lng.toLowerCase().split('-')[0] === 'vi' ? 'none' : 'capitalize';
 };
 
-/**
- * The dark role set, keyed `--dark-color-<role>`, for every scope that carries
- * roles. The role derivation is the light one, run on the dark source colors
- * once per surface. A background that is already dark keeps the light
- * derivation, so the dark scheme equals the light one there.
- */
 function darkScopes(
   tokens: ResumeStyleTokens,
   target: SurfaceTarget,
@@ -175,7 +163,6 @@ export function useResumeStyles(
     '--fs-body': `${tokens.font.baseSizePx}px`,
     '--fs-meta': `${Math.max(tokens.font.baseSizePx * 0.9, 9)}px`,
     '--lh-body': String(tokens.spacing.lineHeight),
-    // Justify hyphenates by the resume's lang (ADR 0013).
     '--body-align': tokens.font.textAlign ?? 'left',
     '--body-hyphens': tokens.font.textAlign === 'justify' ? 'auto' : 'manual',
     '--lh-heading': '1.2',
@@ -185,9 +172,6 @@ export function useResumeStyles(
     '--gap-heading': `${tokens.spacing.sectionGap * 0.4}px`,
     '--gap-block': `${tokens.spacing.entryGap * 0.4}px`,
     '--gap-inline': '0.5em',
-    // Header gaps grow outward: icon to value, row to row, headline to
-    // details, photo to name, header to body. A details row gap of 0.15 line
-    // heights gives the rows the headline's line pitch.
     '--gap-header': `${tokens.spacing.sectionGap * 1.5}px`,
     '--header-padding': '0',
     '--header-photo-gap': '0.9em',
@@ -221,7 +205,6 @@ export function useResumeStyles(
   if (target === 'header') {
     styles.header = {
       ...colorRoles(tokens, tokens.colors.surface!),
-      // A filled plate needs air between its edge and the name and details.
       '--header-padding': '1em 1.25em',
       ...dark?.region,
     };

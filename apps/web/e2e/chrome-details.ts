@@ -1,6 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** Normalize a separately specified declaration, never a production token. */
 async function expectDeclaration(
   target: Locator, property: string, value: string, message: string,
 ): Promise<void> {

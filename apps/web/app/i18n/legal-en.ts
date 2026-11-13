@@ -1,5 +1,3 @@
-// English text of the Privacy Policy and Terms of Service. Every statement
-// here must describe shipped behavior or an owner decision; do not add claims.
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {

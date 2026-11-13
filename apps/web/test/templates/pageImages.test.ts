@@ -10,10 +10,6 @@ import {
   samplePageImages,
 } from '../../app/templates/pageImages';
 
-// Page-one images for gallery samples, stored by sample-pages.spec and read
-// build-time so the server-rendered card carries the image and its
-// dimensions (DESIGN.md, Library).
-
 describe('samplePageImage', () => {
   it('returns page one of every sample, matching the manifest', () => {
     for (const { templateId, lng } of SAMPLES) {

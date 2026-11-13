@@ -31,11 +31,6 @@ import {
   type FakeResumeServer,
 } from './fake-resume-server';
 
-// The resume list page renames and deletes through its own save queue: the
-// card says when that is being saved or held, Try again goes through the
-// queue, leaving warns while it is unsettled, and nothing is read or written
-// once the page has gone.
-
 const mocks = vi.hoisted(() => ({
   auth: undefined as unknown,
   server: undefined as unknown,
@@ -88,22 +83,14 @@ function signedIn(): void {
   };
 }
 
-/** Renders whatever page the app's router shows, as the app does. */
 const RouterHost = defineComponent({ render: () => h(RouterView) });
 
-/** Whether closing or reloading the tab would ask first. */
 function leaveWarns(): boolean {
   const event = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
 
-/**
- * The real list page over the fake server. The rename and delete dialogs
- * are stand-ins that submit at once, as the real ones do on Save. Under the
- * router its route guard asks before the page goes; the clock is faked
- * unless `timers` is false.
- */
 interface ListOptions {
   readonly router?: boolean;
   readonly timers?: boolean;
@@ -151,7 +138,6 @@ async function openList({ router = false, timers = true }: ListOptions = {}) {
     settle,
     wrapper,
     card: () => wrapper.find(ROW),
-    /** Renames the card to "Ada resume" from its menu's dialog. */
     rename: async (): Promise<void> => {
       list.vm.$emit('rename', item());
       await nextTick();
@@ -165,7 +151,6 @@ async function openList({ router = false, timers = true }: ListOptions = {}) {
   };
 }
 
-/** The real editor page on the same resume, its shell a stand-in. */
 async function openEditorPage() {
   const page = await mountSuspended(ResumeEditorPage, {
     route: `/app/resumes/${ID}`,
@@ -301,7 +286,6 @@ describe('the resume list page', () => {
       await context.rename();
       await context.settle(7_250);
 
-      // The queue retries on its own, without a busy loop.
       expect(context.server.sendGapsFor(
         context.server.sent[0]!.attempt.id,
       )).toEqual([250, 1_000, 2_000, 4_000]);
@@ -351,7 +335,6 @@ describe('the resume list page', () => {
 
     expect(context.server.sent).toHaveLength(sends);
     expect(context.server.reads).toBe(reads);
-    // Leaving drops the unsent rename, as closing the editor does.
     expect(useResumeStore().recordFor(ID)).toMatchObject({
       attempt: null,
       pending: [],
@@ -387,7 +370,6 @@ describe('the list and the editor open on the same resume', () => {
   it('leaves the record to an editor that opened it before the list went',
     async () => {
       const context = await openList({ timers: false });
-      // The rename lands, but its answer waits while the editor opens.
       const release = context.server.holdNextResponse();
       await context.rename();
       await vi.waitFor(() => expect(context.server.sent).toHaveLength(1));
@@ -435,7 +417,6 @@ describe('the list and the editor open on the same resume', () => {
 });
 
 describe('leaving the list while a rename is unsettled', () => {
-  /** Asks to go to another page and answers the leave dialog. */
   async function navigateAway(answer: 'stay' | 'confirm') {
     const navigation = useRouter().push('/terms');
     let button: HTMLElement | null = null;
@@ -536,7 +517,6 @@ describe('a delete that landed but whose answer was lost', () => {
       'unknown', 'unknown',
     ]);
 
-    // The list is read again, as after the session is checked again.
     const state = (mocks.auth as { authState: { value: string } }).authState;
     state.value = 'loading';
     await context.settle();
@@ -578,7 +558,6 @@ describe('a rename or delete whose read finished just as the page went', () => {
         runtime,
         authState: computed(() => 'authenticated') as never,
         ownerId: ref('owner-1'),
-        // The page goes as the read finishes, before the action goes on.
         actionsFor: (resumeId) => {
           scope.stop();
           return createResumeEditorActions({
@@ -625,7 +604,6 @@ describe('an editor open while the list held a rename', () => {
     const context = await openList({ timers: false });
     context.server.loseEveryResponse({ applied: false });
     await context.rename();
-    // The rename and its quick replay are both lost; the list holds it.
     await vi.waitFor(() => {
       expect(context.server.sent.length).toBeGreaterThanOrEqual(2);
     });

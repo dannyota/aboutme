@@ -34,18 +34,12 @@ export type EntryActionStatus
 export interface EntryAction {
   readonly entryId: string;
   readonly status: EntryActionStatus;
-  /** The project linked or saved; a saved project stays in the library. */
   readonly projectId?: string;
 }
 
 export interface ProjectEntryLinking {
-  /**
-   * The latest action on an entry and how it went. It belongs to that
-   * entry, so moving to another section and back keeps it.
-   */
   readonly action: Ref<EntryAction | null>;
   readonly busy: ComputedRef<boolean>;
-  /** Save to my projects gives way to the limit line. */
   readonly atLimit: ComputedRef<boolean>;
   link(entryId: string, projectId: string): Promise<void>;
   save(entryId: string): Promise<void>;
@@ -58,7 +52,6 @@ interface QueuedEntryLink {
   readonly saved: boolean;
 }
 
-/** A key per create intent, kept only while that same request may be sent. */
 function createKeys(uuid: () => string) {
   let pending: { fingerprint: string; key: string } | null = null;
   return {
@@ -75,32 +68,17 @@ function createKeys(uuid: () => string) {
   };
 }
 
-// Nothing ran, or the outcome is unknown: Save again sends the same request
-// with the same key, and the server answers it at most once.
 const RETRYABLE: ReadonlySet<string> = new Set([
   'rate-limited', 'unavailable', 'csrf-rejected',
 ]);
 
-/** A create the action no longer sends: its editor closed or changed. */
 const NOT_SENT = { kind: 'failed', failure: 'session-lost' } as const;
 
-/**
- * An unlinked project entry's Link to a project and Save to my projects
- * (docs/design/ui/projects.md "In the resume editor"). Either one links
- * the entry through the editor's write queue, keeping all its text; Save
- * first creates the library project from the entry. Each action is bound,
- * before its first await, to the entry it started on and to the editor and
- * verified owner it started in; it ends without acting once the editor
- * closes, the resume is opened again or another person signs in. A link
- * that fails after the create leaves the project in the library, and
- * nothing is retried on the person's behalf.
- */
 export function useProjectEntryLinking(options: {
   readonly actions: ResumeEditorActions;
   readonly sectionKey: () => string;
   readonly library: ProjectLibrary;
   readonly linking: ProjectLinking;
-  /** The language a project made from an entry is written in. */
   readonly language: () => string;
   readonly onLinked: (location: EntryLocation) => void;
   readonly api?: Pick<ProjectsApi, 'create'>;
@@ -112,7 +90,6 @@ export function useProjectEntryLinking(options: {
   const auth = options.auth ?? useAuth();
   const keys = createKeys(options.uuid ?? (() => crypto.randomUUID()));
   const action = ref<EntryAction | null>(null);
-  /** An action runs from the click until its link is queued or it ends. */
   const working = ref(false);
   const queued = ref<QueuedEntryLink | null>(null);
   const limitHit = ref(false);
@@ -121,12 +98,10 @@ export function useProjectEntryLinking(options: {
   const atLimit = computed(() => limitHit.value
     || (library.view.value.kind === 'ready'
       && library.view.value.items.length >= PROJECT_LIMIT));
-  // A refused create reads the list again, which then tells the count.
   watch(() => library.view.value, (view) => {
     if (view.kind === 'ready') limitHit.value = false;
   });
 
-  /** The entry at `location` while it is an unlinked project entry. */
   function entryAt(location: EntryLocation): ProjectEntry | undefined {
     const section = actions.record.value?.current.document
       .content[location.sectionKey];
@@ -136,7 +111,6 @@ export function useProjectEntryLinking(options: {
     return entry?.projectId === undefined ? entry : undefined;
   }
 
-  /** Starts an action on the entry shown now, or null when it cannot. */
   function start(entryId: string): {
     readonly location: EntryLocation;
     readonly entry: ProjectEntry;
@@ -153,7 +127,6 @@ export function useProjectEntryLinking(options: {
       : { location, entry, run };
   }
 
-  /** Ends an action that may no longer act: nothing is sent or shown. */
   function abandon(): void {
     working.value = false;
     action.value = null;
@@ -172,7 +145,6 @@ export function useProjectEntryLinking(options: {
     };
   }
 
-  /** Queues the link of the entry the action started on. */
   function enqueue(
     run: EditorContinuation,
     location: EntryLocation,
@@ -201,7 +173,6 @@ export function useProjectEntryLinking(options: {
     };
   }
 
-  // The link left the queue: landed, or refused or dropped unapplied.
   watch(() => queued.value !== null
     && !stillQueued(actions, queued.value.commandId), (left) => {
     const pending = queued.value;
@@ -243,11 +214,6 @@ export function useProjectEntryLinking(options: {
     if (!decided) abandon();
   }
 
-  /**
-   * Creates the project, which is private until linked, then decides the
-   * privacy question for the link from the publication state and that
-   * project's links read then, once for the action.
-   */
   async function save(entryId: string): Promise<void> {
     const started = start(entryId);
     if (started === null) return;
@@ -258,10 +224,8 @@ export function useProjectEntryLinking(options: {
     }
     working.value = true;
     action.value = { entryId, status: 'saving' };
-    // The body is taken when the person acts, from the text they see.
     const body = projectFromEntry(entry, options.language());
     const key = keys.keyFor({ ownerId: run.ownerId, body });
-    // Checked before every attempt, including the one after a token refresh.
     const result = await sendWithCsrf(auth, run.ownerId, (csrfToken) =>
       run.current()
         ? api.create(body, key, csrfToken)

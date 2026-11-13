@@ -21,9 +21,6 @@ import type {
   SaveState,
 } from '../editor/types';
 
-// The editor's record of one resume: what the server last accepted, the
-// local queue replayed over it, and the state the editor shows for both.
-
 export type PhotoReadState
   = | { readonly kind: 'none' }
     | {
@@ -58,9 +55,7 @@ export type AttemptState
     readonly command: AtomicEditorCommand;
     readonly attempt: FrozenAttempt;
     readonly reason: 'transport' | 'server' | 'cutoff';
-    /** The write has been failing long enough to tell the person. */
     readonly alert?: true;
-    /** The held write is on its way to the server again. */
     readonly sending?: true;
   }
   | {
@@ -70,7 +65,6 @@ export type AttemptState
     readonly attempt: FrozenAttempt;
     readonly reason: 'rate-limited' | 'media-busy';
     readonly retryAfterMs: number | null;
-    /** The held write is on its way to the server again. */
     readonly sending?: true;
   }
   | {
@@ -83,7 +77,6 @@ export type AttemptState
       | 'csrf-rejected'
       | 'idempotency-reuse'
       | 'stale-limit';
-    /** The held write is on its way to the server again. */
     readonly sending?: true;
   };
 
@@ -108,7 +101,6 @@ export interface ResumeRecord {
   templateState: TemplateGroupState | null;
   photoRead: PhotoReadState;
   completeReadRequired: boolean;
-  /** Set by an explicit discard and cleared by the next queued edit. */
   discarded: boolean;
   sessionLost: boolean;
   opaquePhotoOutcome: OpaquePhotoOutcome | null;
@@ -169,8 +161,7 @@ function replayQueueItem(
   snapshot: ResumeSnapshot,
   item: EditorQueueItem,
 ): ResumeSnapshot {
-  // A held write is a copy the store made reactive; the reducer clones the
-  // values it inserts, which a reactive proxy does not allow.
+  // The reducer's structuredClone throws DataCloneError on a reactive proxy.
   return isAtomic(item)
     ? copy(replayCommand(snapshot, toRaw(item)))
     : copy(item.intendedFinal);
@@ -180,8 +171,6 @@ export function saveState(record: ResumeRecord): SaveState {
   if (record.sessionLost) return 'session-lost';
   if (record.conflicts.length > 0) return 'conflict';
   if (record.attempt?.kind === 'unknown') {
-    // A held write is retried on its own until its retry window closes; its
-    // alert is told apart in a banner, not here.
     return record.attempt.reason === 'cutoff' ? 'error' : 'retrying';
   }
   if (

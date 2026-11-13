@@ -14,11 +14,7 @@ import {
   galleryDetailContract,
   waitForImages,
 } from './support';
-// The template gallery and template pages in the production build: no
-// horizontal page scroll, wrapping desktop rows and a phone filter sheet,
-// intersecting filters, native Style links, template page tabs, and
-// an unknown template is a 404 (DESIGN.md, template gallery).
-// Templates with a sample show its stored page image; the rest render live.
+
 const SAMPLE_TEMPLATES = new Set(SAMPLES.map(({ templateId }) => templateId));
 for (const width of [390, 1440]) {
   test(`gallery at ${width} px fits the viewport`, async ({ page }) => {
@@ -189,8 +185,6 @@ test('template page switches between the page and the ATS text', async ({
   expect(response?.status()).toBe(200);
   await expect(page.locator('.template-detail__info h1'))
     .toHaveText('Engineer Compact');
-  // The embedded sample's name renders as a p, not an h1, so the page
-  // keeps exactly one h1: the template name.
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('.resume-document')).toHaveCount(1);
   const tabs = page.getByRole('tab');
@@ -252,7 +246,6 @@ for (const template of [
     });
   }
 }
-// The executive band sample's PDF tab, whose page count the gallery pins.
 const EXECUTIVE_PAGES = SAMPLE_PAGES['executive-band']!;
 test('the executive band PDF tab shows every stored page', async ({
   page,
@@ -341,7 +334,6 @@ test('the role-filtered gallery still lists every template server-side',
       expect(html).toContain(`href="/templates/${template.id}"`);
     }
   });
-// PDF and ATS tab content and layout at phone and desktop widths.
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
 test('creative accent Page at 390px keeps content and layout', async ({
@@ -384,8 +376,6 @@ for (const theme of THEMES) {
       await page.getByRole('tab', { name: 'PDF' }).click();
       const pages = page.locator('img[data-pdf-page]');
       await expect(pages).toHaveCount(EXECUTIVE_PAGES);
-      // Later pages load lazily; bring each page into view until it has
-      // decoded, so the full-page capture never shows an empty sheet.
       for (let index = 0; index < EXECUTIVE_PAGES; index += 1) {
         const image = pages.nth(index);
         await image.scrollIntoViewIfNeeded();

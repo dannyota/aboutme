@@ -9,8 +9,6 @@ type AgentSettingsCopy = {
   readonly retry: string;
   readonly emptyTitle: string;
   readonly emptyDescription: string;
-  /** Links /guide/mcp from the empty state and under the list
-   * (docs/design/mcp-guide.md Navigation). */
   readonly guideLink: string;
   readonly clientHost: (host: string) => string;
   readonly scopes: Record<AgentGrantScope, string>;

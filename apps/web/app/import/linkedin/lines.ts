@@ -1,11 +1,3 @@
-// Turns pdf.js text items into per-page lines, and finds and removes the
-// page footer. See docs/design/linkedin-import.md, "Reading the file" >
-// "Lines".
-
-/**
- * The fields of a pdf.js TextItem the parser reads; y is relative to the
- * page's bottom edge.
- */
 export interface TextItemLike {
   str: string;
   transform: readonly number[];
@@ -23,7 +15,6 @@ export interface Line {
 
 const FOOTER_PATTERN = /^Page (\d+) of (\d+)$/;
 const FOOTER_MAX_Y = 72;
-/** The column boundary lies this far left of the name's left edge. */
 export const COLUMN_BOUNDARY_MARGIN = 12;
 
 function roundHalf(value: number): number {
@@ -43,7 +34,6 @@ function toPositionedItems(items: readonly TextItemLike[]): PositionedItem[] {
   for (const item of items) {
     if (item.str.trim() === '') continue;
     const t = item.transform;
-    // A pdf.js transform is always the 6-number matrix [a, b, c, d, e, f].
     positioned.push({
       str: item.str,
       x: t[4]!,
@@ -60,12 +50,10 @@ interface Group {
   items: PositionedItem[];
 }
 
-/** Groups items whose baselines lie within 40% of the larger font size. */
 function groupIntoLines(items: readonly PositionedItem[]): Group[] {
   const groups: Group[] = [];
   for (const item of items) {
     const group = groups.find((g) => {
-      // Each group starts with one item and only grows, so items[0] exists.
       const tolerance = 0.4 * Math.max(g.items[0]!.size, item.size);
       return Math.abs(g.baseline - item.y) <= tolerance;
     });
@@ -78,7 +66,6 @@ function groupIntoLines(items: readonly PositionedItem[]): Group[] {
   return groups;
 }
 
-/** Joins a line's items left to right, inserting a space over a wide gap. */
 function joinText(items: readonly PositionedItem[]): string {
   const ordered = [...items].sort((a, b) => a.x - b.x);
   let text = '';
@@ -101,10 +88,6 @@ function joinText(items: readonly PositionedItem[]): string {
   return text.replace(/\s+/g, ' ').trim().normalize('NFC');
 }
 
-/**
- * The column boundary from page 1's items: the left edge of the largest
- * text (the name) minus 12 pt. Undefined when the page has no text.
- */
 export function columnBoundary(
   items: readonly TextItemLike[],
 ): number | undefined {
@@ -121,11 +104,6 @@ export function columnBoundary(
   return name === undefined ? undefined : name.x - COLUMN_BOUNDARY_MARGIN;
 }
 
-/**
- * One page's items to lines, top to bottom. With a column boundary, items on
- * either side never join one line, even when a sidebar line and a main line
- * share a baseline.
- */
 export function buildPageLines(
   page: number,
   items: readonly TextItemLike[],
@@ -145,7 +123,6 @@ export function buildPageLines(
     return {
       page,
       x: roundHalf(minX),
-      // Every group has at least one item (see groupIntoLines).
       y: roundHalf(group.items[0]!.y),
       size: roundHalf(maxSize),
       text,
@@ -155,10 +132,6 @@ export function buildPageLines(
   return lines;
 }
 
-/**
- * Removes the page footer; undefined when it is missing or its numbers are
- * wrong.
- */
 export function stripFooter(
   lines: readonly Line[],
   page: number,
@@ -168,7 +141,6 @@ export function stripFooter(
     (line) => line.y <= FOOTER_MAX_Y && FOOTER_PATTERN.test(line.text),
   );
   if (footers.length !== 1) return undefined;
-  // footers.length === 1 was just checked, so footers[0] exists.
   const footer = footers[0]!;
   const match = FOOTER_PATTERN.exec(footer.text);
   if (!match) return undefined;

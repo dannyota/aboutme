@@ -1,6 +1,3 @@
-// Emits the per-language types (Go via quicktype, TypeScript via
-// json-schema-to-typescript) from the shared in-memory schema copy.
-
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,18 +19,6 @@ function runQuicktype(args) {
   execFileSync(quicktypeBin, args, { stdio: "inherit" });
 }
 
-// sectionMode controls the placeholder Section emitted by quicktype:
-//
-//   "dispatch"  — the CURRENT convenience output (gen/go/resume.go): strip the
-//                 placeholder, because the hand-written gen/go/section.go in
-//                 the same package declares the real typed-dispatch Section.
-//   "rawSection" — a RETAINED released snapshot (gen/go/v<N>/resume.go):
-//                 replace the placeholder with `type Section =
-//                 json.RawMessage`. A retained package holds only generated
-//                 files, so there is no hand-written dispatch to point at, and
-//                 converters operate on raw full-document JSON. Keeping the
-//                 empty struct would falsely claim a released section has no
-//                 fields.
 export function generateGo(
   sharedSchema,
   tmpDir,
@@ -44,8 +29,7 @@ export function generateGo(
   const id = goSchema.$id;
   const variants = deriveSectionVariants(sharedSchema);
 
-  // quicktype names positional inputs from their basenames, so each pointer
-  // filename must match the intended Go type.
+  // quicktype names positional inputs after their file basenames.
   const schemaFilePath = join(tmpDir, "resume.schema.json");
   writeFileSync(schemaFilePath, JSON.stringify(goSchema, null, 2));
 
@@ -57,8 +41,6 @@ export function generateGo(
     pointerFiles.push(pointerPath);
   }
 
-  // quicktype writes its raw output beside the inputs, never to outFile: the
-  // raw text still declares the placeholder Section and does not compile.
   const quicktypeOut = join(tmpDir, "quicktype-output.go");
   runQuicktype([
     "--src-lang",
@@ -85,10 +67,6 @@ export function generateGo(
 
   let raw = readFileSync(quicktypeOut, "utf8");
 
-  // Deal with the placeholder's empty struct (see buildGoCodegenSchema and
-  // this function's sectionMode comment). Matched exactly (not a general
-  // regex) so a future schema change that breaks this assumption fails loudly
-  // (the drift test's byte-compare, or this replace() finding nothing changed).
   const placeholderStruct = "\ntype Section struct {\n}\n";
   if (!raw.includes(placeholderStruct)) {
     throw new Error(
@@ -125,9 +103,6 @@ export function generateGo(
   }
   raw = raw.slice(packagePrefix.length);
 
-  // V1 was released before this custom marshal behavior existed. Retained
-  // generated outputs are immutable, so only current and later releases may
-  // carry it.
   const presenceMarshal =
     sourceName === "resume.v1.schema.json"
       ? ""
@@ -150,9 +125,7 @@ func (p PersonalDetails) MarshalJSON() ([]byte, error) {
     `${generatedHeader(sourceName)}\n\npackage ${packageName}\n\n${preamble}` +
     raw +
     presenceMarshal;
-  // quicktype's Go column-alignment pass misaligns struct fields when an
-  // inline comment sits between them (visible on Customization pre-gofmt);
-  // gofmt fixes that and is the canonical formatter for committed Go anyway.
+  // quicktype misaligns Go struct fields near inline comments; gofmt fixes it.
   writeGenerated(outFile, body, "go");
 }
 
@@ -163,17 +136,9 @@ export async function generateTs(sharedSchema, outFile, { sourceName }) {
     {
       bannerComment: "",
       style: { semi: true },
-      // Every object $def in resume.schema.json except entryBase (folded away
-      // once nothing references it — see below) already sets its own
-      // `additionalProperties` explicitly; this only supplies the default for
-      // the couple of places that rely on it being closed implicitly.
       additionalProperties: false,
-      // Without this, `maxItems: 16`/`64` array fields (personalDetails,
-      // section entries) expand into a union of every fixed-length tuple from
-      // 0 to maxItems instead of `T[]` — unreadable and not what maxItems
-      // means here (a runtime bound ajv enforces, not a type-level one).
+      // json-schema-to-typescript expands maxItems arrays into tuple unions.
       ignoreMinAndMaxItems: true,
-      // Prefer `unknown` over `any` for any residual underspecified schema.
       unknownAny: true,
     },
   );

@@ -1,6 +1,5 @@
 import { expect, type Page } from '@playwright/test';
 
-/** Page membership recorded from the accepted Vietnamese renderer captures. */
 export async function expectRendererPageMembership(
   page: Page, template: string, justify = false, letter = false,
   language: 'vi' | 'en' = 'vi',
@@ -57,9 +56,6 @@ const ENGLISH_TITLES = [
   'Lovelace Medal', 'Hackathon Winner',
 ] as const;
 
-// Approved against hosted Linux output. Executive-band, academic-dense, and
-// consulting-formal break at the same section as the accepted Vietnamese
-// captures.
 const ENGLISH_PAGES: Record<string, readonly (readonly number[])[]> = {
   'classic-serif': [[0, 1, 2, 3, 4, 5, 6], [7, 8, 9]],
   'classic-serif-justify': [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]],

@@ -1,14 +1,4 @@
 <script setup lang="ts">
-/**
- * `ReauthPrompt` asks the signed-in user to prove it is them again before a
- * sensitive account change: the current password, or a round trip through one
- * of their linked providers.
- *
- * The caller owns the flow and the copy; this component only draws the step.
- * Each `data-testid` is a prop so every caller keeps the selectors its tests
- * and browser proofs use. The default slot sits under the description, for an
- * error banner.
- */
 import PasswordField from '../auth/PasswordField.vue';
 import { Button } from '../ui/button';
 import type { AuthProvider } from '../../composables/useAuth';
@@ -29,7 +19,6 @@ withDefaults(defineProps<{
   };
   passwordDescription?: string;
   providerDescription?: string;
-  // Disables Cancel while a check is in flight.
   lockCancel?: boolean;
   formTestid?: string;
   providerTestid?: string;

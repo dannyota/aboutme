@@ -1,10 +1,3 @@
-/**
- * Session-authenticated agent-consent operations.
- *
- * The generated OpenAPI types are the only source for request and response
- * shapes. Errors are deliberately reduced to a closed union before a page
- * can render them.
- */
 import { createApiClient } from '../api/client';
 import type { components } from '../api/generated/openapi';
 import { useAuth } from './useAuth';
@@ -52,7 +45,6 @@ function codeOf(error: unknown): unknown {
   return value.data?.error?.code ?? value.error?.code;
 }
 
-/** Map only exact status/code pairs to the closed consent failure union. */
 function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
   const status = statusOf(error);
   const code = codeOf(error);
@@ -68,9 +60,6 @@ function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
   ) {
     return new OAuthConsentFailure('invalid-request');
   }
-  // The ten-grant limit gets its own closed code so the page can point the
-  // person at Settings instead of showing the generic failure banner; see
-  // docs/design/mcp-client-compatibility.md, rule 7.
   if (status === 409 && code === 'agent_limit_reached') {
     return new OAuthConsentFailure('agent-limit');
   }
@@ -159,11 +148,7 @@ export function useOAuthConsent(): UseOAuthConsent {
   const auth = useAuth();
 
   async function get(query: OAuthConsentRequest): Promise<OAuthConsentView> {
-    // Build the client at call time so this authenticated operation cannot run
-    // during SSR. The absolute same-origin base also supports Nuxt's Node
-    // backed test runtime, whose Request constructor rejects relative URLs.
-    // The bridge exists only for the Nuxt endpoint registry. Production uses
-    // the shared client's normal browser fetch and credential semantics.
+    // The test base is absolute: Node's Request rejects relative URLs.
     const api = import.meta.env.MODE === 'test'
       ? createApiClient({
           baseUrl: 'http://localhost/api/v1',

@@ -109,7 +109,7 @@ describe('account page language toggle', () => {
   it('switches a shown error and the page copy to English', async () => {
     const wrapper = await mountSuspended(AppRoot, { route: '/login' });
     await flushPromises();
-    // The head manager writes html attributes after the render settles.
+    // @unhead/vue writes html attributes after the render settles.
     await vi.waitFor(() => expect(document.documentElement.lang).toBe('vi'));
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     expect(wrapper.get('[data-testid="login-form-error"]').text()).toBe(

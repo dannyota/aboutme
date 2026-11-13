@@ -1,9 +1,3 @@
-// Filesystem locations, the shared "generated" banner every generator in
-// this directory writes at the top of its output, and the one function that
-// writes each output. Centralized here so every sibling module derives the
-// same paths regardless of which file computes them (all live in
-// packages/schema/scripts, so the relative depth is the same either way).
-
 import { execFileSync } from "node:child_process";
 import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -26,26 +20,13 @@ export const hostileCorpusPath = join(
   "hostile-corpus.json",
 );
 export const quicktypeBin = join(packageRoot, "node_modules", ".bin", "quicktype");
-// json-schema-to-typescript already installs the formatter it uses for the
-// generated resume types. Reuse that pinned binary for the sanitizer artifact.
 export const prettierBin = join(packageRoot, "node_modules", ".bin", "prettier");
 
-// The Go import path of gen/go in the root module (go.mod). The released-schema
-// registry (gen/go/released.go) imports one retained package per released
-// version from underneath it. They are packages of the root module, not
-// modules of their own, so adding a version changes no module file.
 export const GO_MODULE_PATH = "danny.vn/aboutme/packages/schema/gen/go";
 
 export const generatedHeader = (sourceName) =>
   `// Code generated from ${sourceName}. DO NOT EDIT.`;
 
-// writeGenerated formats content with gofmt or Prettier (format "go" or
-// "prettier"; any other value writes it unchanged) and then replaces outFile
-// in one rename. `npm test` regenerates these files in place while other test
-// files compile and read them, so a reader must only ever see a complete,
-// formatted file. The temporary name starts with a dot, which Go builds
-// ignore, and carries the process ID, so concurrent generator runs never
-// share one.
 export function writeGenerated(outFile, content, format) {
   let formatted = content;
   if (format === "go") {

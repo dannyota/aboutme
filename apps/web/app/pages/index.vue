@@ -23,8 +23,6 @@ const { locale } = useLocale();
 const copy = computed(() => landingCopy[locale.value]);
 const legal = computed(() => legalCopy[locale.value]);
 const gallery = computed(() => galleryCopy[locale.value]);
-// The head of the second headline line, with the emphasized suffix removed
-// (DESIGN.md; ADR 0020): "Your link. " before "Your control." lights up.
 const head = computed(() => copy.value.title[1].slice(
   0,
   copy.value.title[1].length - copy.value.titleEmphasis.length,
@@ -513,12 +511,6 @@ useHead(computed(() => ({
 </template>
 
 <style scoped>
-/* The stage takes the scaled sheet's size explicitly and centers itself:
-   on phones the chip row below can make the figure wider than the sheet,
-   so a stage sized by its content left the ghost wider than the sheet and
-   the pair off center. The sheet scales with a transform, never `zoom`,
-   which WebKit renders with enlarged text (print.md §1). The scale follows
-   the viewport width, so it stays in CSS rather than in ScaledSheet's prop. */
 .landing-stage {
   --sheet-zoom: 0.39;
   width: calc(210mm * var(--sheet-zoom));

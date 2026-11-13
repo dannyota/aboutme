@@ -8,18 +8,10 @@ import { flushPromises } from '@vue/test-utils';
 import { readRawBody, setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 
-// logout() navigates away via `navigateTo` on success — stub it so tests
-// can assert on the target without a real page transition tearing the
-// mounted wrapper down mid-test. `mockNuxtImport`'s factory is hoisted
-// above any top-level `const` (same as `vi.mock`), so the mock function
-// has to be created inside it; `navigateTo` itself becomes accessible as
-// an auto-import in this file afterward, via `vi.mocked(navigateTo)`.
+// mockNuxtImport's factory is hoisted like vi.mock, so it creates the mock.
 mockNuxtImport('navigateTo', () => vi.fn());
 
-// The registerEndpoint mock's event doesn't normalize header casing the way
-// a real Node request does, and h3's own `getRequestHeader` disagrees with
-// the mocked event shape across the versions pinned here — so read the
-// mocked request headers directly, case-insensitively.
+// registerEndpoint's mocked event does not normalize header casing.
 interface MockEvent {
   node?: { req?: { headers?: Record<string, string> } };
 }
@@ -66,10 +58,6 @@ const Probe = defineComponent({
         'button',
         {
           'data-testid': 'logout-button',
-          // The CSRF self-heal retry (and its "surface a second failure"
-          // counterpart below) means logout() can genuinely reject; the
-          // tests assert on side effects (mock call counts, navigateTo),
-          // not on catching this click handler's own promise.
           'onClick': () => {
             this.logout().catch(() => {});
           },
@@ -223,8 +211,6 @@ describe('useAuth', () => {
     await flushPromises();
     await flushPromises();
 
-    // The CSRF×rotation self-heal applies to PUT too: refresh once and
-    // retry, then surface a second genuine rejection rather than looping.
     expect(putCalls).toBe(2);
   });
 
@@ -271,18 +257,11 @@ describe('useAuth', () => {
     'renders a logged-out state instead of throwing on an unexpected '
     + '/me response shape',
     async () => {
-      // Simulates contract drift (e.g. a missing `data` envelope key) —
-      // `data.value?.data.user` would throw reading `.user` off
-      // `undefined`; `data.value?.data?.user` must degrade to null instead.
       registerEndpoint('/api/v1/me', { method: 'GET', handler: () => ({}) });
 
       const wrapper = await mountSuspended(Probe);
       await flushPromises();
-      // Force a genuine refetch against the malformed handler above —
-      // `useFetch`'s automatic initial fetch is keyed by URL and can reuse
-      // an already-`success` result from an earlier test's mount in this
-      // same file, so asserting against it alone isn't reliable; `refresh()`
-      // always re-fetches.
+      // Nuxt's useFetch can reuse a URL's cached result; refresh() refetches.
       await wrapper.get('[data-testid="refresh-button"]').trigger('click');
       await flushPromises();
 
@@ -346,12 +325,6 @@ describe('useAuth', () => {
   });
 
   describe('CSRF x rotation self-heal (mutate())', () => {
-    // "Refetches /me once and retries with the REFRESHED token" lives in
-    // its own file, `useAuth-csrf-rotation.test.ts` — it needs the very
-    // first resolution of /me in a fresh Nuxt app instance to be
-    // deterministic (see that file's own doc comment), which a shared
-    // instance with this file's other tests can't reliably guarantee.
-
     // eslint-disable-next-line max-len
     it('surfaces a second csrf_rejected instead of retrying forever', async () => {
       let logoutCalls = 0;
@@ -369,8 +342,6 @@ describe('useAuth', () => {
 
       await expect(wrapper.vm.logout()).rejects.toBeDefined();
 
-      // Exactly the original attempt plus one retry — a second genuine
-      // rejection surfaces (no navigation), it does not loop.
       expect(logoutCalls).toBe(2);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
@@ -395,11 +366,6 @@ describe('useAuth', () => {
 
         await expect(wrapper.vm.logout()).rejects.toBeDefined();
 
-        // A boolean flag can't tell "called once" from "called twice" — a
-        // weakened guard checking the status code instead of the specific
-        // error code (`if (statusCode !== 403) throw`) would also retry
-        // this, silently double-firing a request the server already
-        // refused for a reason retrying can never fix.
         expect(logoutCalls).toBe(1);
         expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
       },

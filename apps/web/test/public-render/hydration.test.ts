@@ -190,9 +190,6 @@ describe('public resume hydration', () => {
         const credit = root.querySelector('a.public-credit');
         expect(credit?.getAttribute('href')).toBe('https://aboutme.example/');
         expect(credit?.textContent).toBe('Built with aboutme.vn');
-        // The brand mark sits beside the credit inside the same span, both
-        // hydrated from the same SSR markup (docs/design/public-page-theme.md,
-        // "Structure").
         const mark = root.querySelector('span.public-brand > svg.public-mark');
         expect(mark?.getAttribute('aria-hidden')).toBe('true');
         expect(mark?.getAttribute('focusable')).toBe('false');
@@ -399,10 +396,6 @@ describe('public resume hydration', () => {
     expect(root.querySelector('a')?.textContent).toBe('Link');
   });
 
-  // A sign_in resume's JSON read is the uniform 404 without the view pass
-  // cookie, and that 404 reloads the page, so both reads must send it
-  // (docs/design/viewer-analytics/sign-in-to-view.md#gated-routes;
-  // AC-VIEW-003).
   it('sends same-origin cookies on both public JSON reads', async () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
     vi.stubGlobal('fetch', fetcher);

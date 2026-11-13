@@ -1,9 +1,3 @@
-// Sends the public page's human-view beacon: start, solve the proof of
-// work, wait for visible time and a trusted interaction, then collect
-// (docs/design/viewer-analytics/counting.md, "Layer 4" and "Layers 5 and
-// 6"). Nothing about events, timing, referrer, screen, or device is sent,
-// and nothing is stored in a cookie or in browser storage.
-
 import { solveChallenge } from 'altcha-lib';
 import { deriveKey } from 'altcha-lib/algorithms/web/pbkdf2';
 import type { components } from '../api/generated/openapi';
@@ -12,22 +6,13 @@ type ViewChallenge = components['schemas']['ViewChallenge'];
 
 interface ViewStartData {
   readonly owner: boolean;
-  /**
-   * True when the request carries any valid account session, owner or not.
-   * The join invite uses it, together with `owner`, to decide whether to
-   * show (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
-   */
   readonly signedIn: boolean;
   readonly token?: string;
   readonly challenge?: ViewChallenge;
 }
 
-// 8 s is the owner-approved visible-time floor (counting.md, Layer 4).
 const VISIBLE_MS_REQUIRED = 8_000;
-// The proof-of-work budget; a null result after this means "give up".
 const SOLVE_TIMEOUT_MS = 60_000;
-// The token lives 30 minutes server-side; stop one minute early so a
-// collect sent right at the deadline is never rejected as expired.
 const TOKEN_LIFETIME_MS = 29 * 60_000;
 
 const INTERACTION_EVENTS = [
@@ -38,31 +23,19 @@ export interface ViewBeaconOptions {
   readonly slug: string;
   readonly fetch?: typeof fetch;
   readonly document?: Document;
-  /** Where interaction events are observed; defaults to `window`. */
   readonly target?: EventTarget;
   readonly solve?: typeof solveChallenge;
   readonly now?: () => number;
   readonly setTimeout?: typeof setTimeout;
   readonly clearTimeout?: typeof clearTimeout;
-  /**
-   * Called once, only when view start succeeds, with the `owner` and
-   * `signedIn` flags it returned; the join invite reads them to decide
-   * whether to show (docs/design/viewer-analytics/sign-in-to-view.md#
-   * join-invite).
-   */
   readonly onStart?: (result: {
     readonly owner: boolean;
     readonly signedIn: boolean;
   }) => void;
 }
 
-/**
- * Starts counting a view of the public resume at `options.slug`. Runs to
- * completion or gives up silently; never throws into the page.
- */
 export function startViewBeacon(options: ViewBeaconOptions): void {
   void runViewBeacon(options).catch(() => {
-    // Never let a beacon failure surface to the page.
   });
 }
 
@@ -101,7 +74,6 @@ async function runViewBeacon(options: ViewBeaconOptions): Promise<void> {
     return;
   }
   options.onStart?.({ owner: data.owner, signedIn: data.signedIn === true });
-  // The owner is never counted and sees no beacon activity.
   if (data.owner || !data.token || !data.challenge) return;
   const token = data.token;
   const challenge = data.challenge;
@@ -222,9 +194,6 @@ async function runViewBeacon(options: ViewBeaconOptions): Promise<void> {
     sent = true;
   }, TOKEN_LIFETIME_MS);
 
-  // The generated ViewChallenge type is a closed OpenAPI schema; the
-  // library's own Challenge type is looser (an open string map for
-  // `data`). Both describe the same wire shape.
   type LibChallenge = Parameters<typeof solveChallenge>[0]['challenge'];
   let solved: { counter: number; derivedKey: string } | null;
   try {

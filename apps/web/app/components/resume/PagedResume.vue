@@ -162,8 +162,6 @@ const sectionSlice = (
   return clone;
 };
 
-// Paged preview slices measured blocks and breaks a long entry between its
-// body blocks, as print does; the PDF remains authoritative.
 export default defineComponent({
   name: 'PagedResume',
   props: {
@@ -213,13 +211,10 @@ export default defineComponent({
         section: sectionSlice(targetSections, block),
         dateFormat: targetModel.dateFormat,
         sectionDisplay: targetModel.sectionDisplay,
-        // Later parts of a split entry carry no entry header.
         renderPart: block.kind === 'entry' && (block.part ?? 0) > 0
           ? 'continuation'
           : block.kind,
       })]);
-      // The measurement tree also lays out each split entry whole, so the
-      // measurer can read the space between its body blocks.
       const renderWholeEntries = (
         targetModel: ResolvedRenderModel,
         targetRequest: PaginationRequest,
@@ -412,14 +407,7 @@ export default defineComponent({
       const root = measurementRoot.value;
       if (!active || root === null || observer === undefined) return;
       observer.disconnect();
-      // No seeded sizes: getBoundingClientRect() (border box, in the
-      // zoomed visual frame under a CSS zoom ancestor) is not comparable
-      // to the ResizeObserver callback's entry.contentRect (content box,
-      // in the unzoomed layout frame). Seeding from the former made every
-      // element's first delivery look like a change under zoom, which
-      // rescheduled forever. Each element's own first delivery below sets
-      // its baseline instead, so every later comparison is contentRect
-      // against contentRect.
+      // getBoundingClientRect is zoomed under CSS zoom; contentRect is not.
       observedSizes = new WeakMap<Element, string>();
       for (const element of root.querySelectorAll(
         '[data-pagination-header], [data-pagination-block-index]',
@@ -482,9 +470,7 @@ export default defineComponent({
       const root = measurementRoot.value;
       if (root === null) return;
       observer = new ResizeObserver((entries) => {
-        // Every newly observed element delivers once on the next frame
-        // regardless of whether its size changed (spec-guaranteed), so an
-        // element with no prior baseline is seeding, not changing.
+        // ResizeObserver spec: each newly observed target is delivered once.
         const changed = entries.some((entry) => {
           const size = `${entry.contentRect.width}:${entry.contentRect.height}`;
           const previous = observedSizes.get(entry.target);
@@ -529,15 +515,7 @@ export default defineComponent({
   gap: 24px;
   justify-content: center;
 
-  /*
-   * Chromium on Linux rounds each glyph advance to a whole pixel when
-   * hinting is on, which is the default in a user's browser. The PDF is
-   * laid out with --font-render-hinting=none (docs/design/templates/print.md),
-   * so its advances keep fractions. geometricPrecision makes Blink use
-   * subpixel positioning and no hinting here too, so lines wrap where the
-   * PDF wraps. It is a no-op where the platform already positions
-   * subpixel, and it applies to the preview only.
-   */
+  /* Chromium on Linux hints glyph advances to whole pixels by default. */
   text-rendering: geometricPrecision;
 }
 

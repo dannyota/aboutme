@@ -76,8 +76,6 @@ const copy = computed(() => workspaceCopy[locale.value]);
         :locale="locale"
         size="mark"
       />
-      <!-- A long link truncates rather than pushing the controls beside it
-           off-screen; the title keeps the whole address readable. -->
       <a
         class="min-w-0 truncate"
         data-public-link

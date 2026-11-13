@@ -196,7 +196,6 @@ export async function generatePages(directory: string): Promise<void> {
           }).promise;
           const raw = canvas.toBuffer('image/png');
           pngDimensions(raw);
-          // Decode and re-encode only bounded pixels into the deliverable.
           const clean = createCanvas(width, height);
           clean.getContext('2d').drawImage(await loadImage(raw), 0, 0);
           const png = clean.toBuffer('image/png');

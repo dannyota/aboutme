@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * `ResumeLanguageField` — the resume's content language in the editor.
- * Tiếng Việt and English save on change; Other… saves a BCP 47 tag on blur or
- * Enter once it is valid. "Not set" is offered only while no language is set.
- */
 import { computed, ref, watch } from 'vue';
 import { editorFieldsCopy } from '@/i18n/editor-fields';
 

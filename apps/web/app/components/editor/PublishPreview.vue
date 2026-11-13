@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * `PublishPreview`: the publish dialog's link-preview section
- * (docs/design/link-preview-card.md, "Publish-dialog preview"). Renders the
- * same card component, scaled down inside a neutral chat card with the
- * preview title, description, and domain, from editor data with no server
- * call.
- */
 import type { Resume } from '@aboutme/schema';
 import { ChevronDown } from '@lucide/vue';
 import {
@@ -47,9 +40,6 @@ const props = defineProps<{
 const { locale } = useLocale();
 const copy = computed(() => publishCopy[locale.value].preview);
 
-// Collapsed by default; the card and chat card mount only once expanded,
-// since the dialog already scrolls and the photo makes this the heaviest
-// part of it.
 const open = ref(false);
 const expanded = ref(false);
 
@@ -92,8 +82,6 @@ const title = computed(() => {
 const description = computed(() =>
   previewDescription(props.document, lng.value));
 
-// k: the image area's width divided by 1200, read with a ResizeObserver. The
-// card stays hidden until the first reading.
 const scale = ref(0);
 const measured = computed(() => scale.value > 0);
 let observer: ResizeObserver | undefined;

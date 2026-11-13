@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * /app/new — the confirm step before creating a resume from a gallery sample
- * or a blank resume with a template. A visit never creates anything; only the
- * button does, so a refresh or a replayed link cannot use up the resume
- * limit.
- */
 import type { Resume } from '@aboutme/schema';
 import { computed, ref, watch } from 'vue';
 

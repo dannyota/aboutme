@@ -1,7 +1,5 @@
 // @vitest-environment node
 
-// The byte-exact HTML golden diff is the renderer review artifact.
-
 import type { Resume, Section } from '@aboutme/schema';
 import { JSDOM } from 'jsdom';
 import {

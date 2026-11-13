@@ -339,8 +339,6 @@ for (const theme of ['light', 'dark'] as const) {
 test('gallery header at 360 px fits the viewport in English', async ({
   page,
 }) => {
-  // The narrowest supported phone width; the English header labels are the
-  // longer ones, so English is the tighter fit.
   await page.setViewportSize({ width: 360, height: 900 });
   await page.context().addCookies([{
     name: 'aboutme-locale',

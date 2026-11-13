@@ -56,8 +56,6 @@ const withPreview = (fields: Record<string, unknown>) => ({
   preview: { ...preview, ...fields },
 });
 
-// A string of exactly `bytes` UTF-8 bytes built from 3-byte characters and
-// ASCII padding, so byte limits are measured in bytes, not characters.
 const bytesOf = (bytes: number) =>
   'ệ'.repeat(Math.floor(bytes / 3)) + 'a'.repeat(bytes % 3);
 

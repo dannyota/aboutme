@@ -25,8 +25,6 @@ interface DraftFields {
 }
 type DateError = 'invalidStart' | 'missingEnd' | 'order';
 
-// A range that cannot be saved yet (a start with no end) is held in the
-// editor's draft registry, so a remount restores it instead of losing it.
 const drafts = useFieldDrafts();
 const draftKey = `dates:${props.fieldId}`;
 const restored = drafts?.get(draftKey) as DraftFields | undefined;
@@ -69,7 +67,6 @@ watch(
   { immediate: true },
 );
 
-// A restored draft shows what it still needs; a valid one saves at once.
 onMounted(() => {
   if (restored !== undefined) commit();
 });
@@ -153,7 +150,6 @@ function sameRange(left: DateRange, right: DateRange | undefined): boolean {
 }
 
 function unset(): void {
-  // Also discards an unfinished range that was never saved.
   dirty.value = false;
   error.value = undefined;
   startYear.value = '';

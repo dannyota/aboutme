@@ -26,7 +26,6 @@ const props = defineProps<{
   readonly sectionKey: string;
   readonly sectionCount: number;
   readonly sidebarCount: number;
-  /** Sections in the main column; a moved section goes after them. */
   readonly mainCount: number;
 }>();
 const { locale } = useLocale();
@@ -55,7 +54,6 @@ const emit = defineEmits<{
   ];
 }>();
 
-// Keep an icon set elsewhere (an agent or an older editor) selectable.
 const iconOptions = computed(() => {
   const current = props.section.iconKey;
   if (

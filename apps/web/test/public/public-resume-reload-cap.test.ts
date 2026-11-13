@@ -8,9 +8,6 @@ import {
 } from '../../app/public/public-resume.client';
 import type { RealtimeEventSource } from '../../app/realtime/controller';
 
-// A public-page 404 reload runs at most once per slug per window, and never
-// when session storage is unavailable (docs/design/realtime.md#refresh-ladder).
-
 class FakeEventSource implements RealtimeEventSource {
   onopen: (() => void) | null = null;
   onerror: (() => void) | null = null;

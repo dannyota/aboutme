@@ -12,7 +12,6 @@ import { OAuthConsentFailure } from '../app/composables/useOAuthConsent';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
-// These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 
 mockNuxtImport('navigateTo', () => vi.fn());
@@ -442,7 +441,6 @@ describe('/authorize', () => {
     });
 });
 
-// Rule 6: the consent page names where approval returns.
 describe('consent return-to line', () => {
   it.each([
     [
@@ -545,7 +543,6 @@ describe('consent return-to line', () => {
   );
 });
 
-// Rule 7: the ten-grant limit gets its own message and a link to Settings.
 describe('grant limit banner', () => {
   it.each(['en', 'vi'] as const)(
     'shows the %s banner text with a settings link',

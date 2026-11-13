@@ -9,14 +9,6 @@ import {
 import { chromeScreenContract } from './support';
 import { expectVerifyIcon, expectVerifyStructure } from './verify-details';
 
-// Fixture and route helpers for verify.spec.ts
-// (docs/design/deployment-transparency/page.md,
-// docs/design/deployment-transparency/document.md). The verify page fetches
-// `/.well-known/deployment.json` same-origin and reads its freshness from the
-// response's `Date` and `Age` headers, never the visitor's clock, so every
-// helper here sets `Date` from the fixture's own `observed_at` instead of the
-// wall clock.
-
 export const VERIFY_BASE_URL = 'http://127.0.0.1:20092';
 const FIXTURES_DIR = resolve(import.meta.dirname, 'fixtures/deployment');
 
@@ -25,21 +17,13 @@ async function readFixtureText(name: string): Promise<string> {
 }
 
 export interface ServeOptions {
-  /** The fixture file base name, without `.json`. Omit for a raw `body`. */
   readonly fixture?: string;
   readonly body?: string;
   readonly status?: number;
-  /**
-   * Milliseconds added to the fixture's `observed_at` for the `Date` header.
-   * A fresh fixture uses a small margin; the stale fixture uses one past its
-   * own `stale_after` (docs/design/deployment-transparency/README.md,
-   * run freshness and staleness).
-   */
   readonly dateOffsetMs?: number;
   readonly age?: string;
 }
 
-/** Serves `/.well-known/deployment.json` from a fixture or a raw body. */
 export async function serveDeployment(
   page: Page,
   options: ServeOptions,
@@ -64,7 +48,6 @@ export async function serveDeployment(
   });
 }
 
-/** Sets the locale and theme cookies and opens `/verify`. */
 export async function gotoVerify(
   page: Page,
   locale: 'vi' | 'en' = 'vi',
@@ -77,12 +60,7 @@ export async function gotoVerify(
   await page.goto('/verify');
 }
 
-/**
- * Replaces `navigator.clipboard.writeText` with a recorder so headless
- * Chromium never needs the unreliable clipboard permission. The written text
- * lands on `window.__verifyClipboardText`; a rejecting stub exercises the
- * copy-failed announcement.
- */
+// Headless Chromium's clipboard permission is unreliable; stub writeText.
 export async function stubClipboard(
   page: Page,
   { reject = false }: { reject?: boolean } = {},
@@ -111,7 +89,6 @@ export async function readClipboard(page: Page): Promise<string | null> {
   }).__verifyClipboardText);
 }
 
-/** Disables CSS transitions and animations, as chrome.spec.ts does. */
 export async function disableTransitions(page: Page): Promise<void> {
   await page.addStyleTag({
     content: '*, *::before, *::after { transition: none !important; '

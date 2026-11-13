@@ -1,8 +1,3 @@
-/**
- * Browser image: mcr.microsoft.com/playwright:v1.64.0-noble
- * AMD64 digest:
- * sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
- */
 import { defineConfig } from '@playwright/test';
 import { isAbsolute, resolve } from 'node:path';
 
@@ -36,10 +31,6 @@ const serverCommand = surface === 'harness'
   ? 'node .output/harness/server/index.mjs'
   : 'node .output/server/index.mjs';
 
-// Fast-lane knobs (make web-e2e-fast). The hermetic gate never sets them:
-// PLAYWRIGHT_WORKERS parallelizes independent spec files, and
-// PLAYWRIGHT_SKIP_BUILD=1 reuses the existing .output build for spec-only
-// iteration.
 const workers = Number.parseInt(process.env.PLAYWRIGHT_WORKERS ?? '1', 10);
 if (!Number.isInteger(workers) || workers < 1 || workers > 8) {
   throw new Error('PLAYWRIGHT_WORKERS must be an integer from 1 to 8.');

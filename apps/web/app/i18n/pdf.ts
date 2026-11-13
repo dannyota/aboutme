@@ -6,7 +6,6 @@ export type PdfCopy = {
   readonly ariaDownload: (size: string) => string;
   readonly openTab: string;
   readonly openingTab: string;
-  /** Shown in place of the download wording for a save-required stop. */
   readonly openSaveRequired: string;
   readonly error: Record<
     'save-required' | 'session-lost' | 'download-failed'

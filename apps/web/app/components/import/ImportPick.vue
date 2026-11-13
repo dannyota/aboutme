@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * The Pick, Reading, and Failed states of /app/import/linkedin: the steps
- * card, the drop zone (which becomes the reading progress in place), and the
- * privacy note (docs/design/linkedin-import-ui.md, "Pick state" and
- * "Reading state").
- */
 import { FileUp, Languages, LockKeyhole } from '@lucide/vue';
 import { computed, ref, useTemplateRef } from 'vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -13,11 +7,7 @@ import type { ImportCopy } from '@/i18n/import';
 
 const props = defineProps<{
   readonly copy: ImportCopy;
-  /** The message key for the error banner above the drop zone, or null. */
   readonly error: string | null;
-  /** Shows the `stopped` info banner in the same slot as `error`, since only
-   * one banner shows at a time (docs/design/linkedin-import-ui.md,
-   * "Messages"). */
   readonly stopped: boolean;
   readonly reading: boolean;
   readonly fileName: string | null;
@@ -56,15 +46,9 @@ function onInputChange(event: Event): void {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (file !== undefined) emit('pick', file);
-  // Cleared so the same file can be picked again (docs/design/
-  // linkedin-import-ui.md, "Behavior").
   target.value = '';
 }
 
-/**
- * Dropping more than one file reads nothing and shows dropOne (docs/design/
- * linkedin-import-ui.md, "Pick state"); the caller passes that as `error`.
- */
 function onDropFiles(event: DragEvent): void {
   dragOver.value = false;
   if (props.reading) return;
@@ -155,11 +139,6 @@ defineExpose({
         {{ copy.pickHeading }}
       </h2>
 
-      <!-- Both states stay mounted, stacked in the same grid cell, so the
-        zone keeps the same height in Reading as in Pick (docs/design/
-        linkedin-import-ui.md, "Reading state"). The inactive one is
-        `invisible` (still sized) and `aria-hidden`, which also drops it from
-        the tab order. -->
       <div class="grid">
         <div
           :aria-hidden="reading || undefined"

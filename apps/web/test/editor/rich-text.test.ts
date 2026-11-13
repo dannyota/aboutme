@@ -55,8 +55,6 @@ function latestEmission(
 
 describe('closed rich-text schema', () => {
   it(unsupportedWrapperCase, () => {
-    // This fails if an unsupported tag becomes a schema node or text in an
-    // unsupported wrapper is discarded instead of normalized to a paragraph.
     expect(Object.keys(richTextSchema.nodes)).toEqual([
       'doc',
       'paragraph',

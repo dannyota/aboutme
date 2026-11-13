@@ -7,11 +7,6 @@ import {
 } from 'node:fs';
 import { resolve } from 'node:path';
 
-/**
- * Writes the public pages' fixed-name stylesheets and fonts beside the
- * hydration bundle: print.css from the print worker build, print-fonts.css,
- * and project-pages.css, the project pages' stylesheet text.
- */
 export function buildPrintAssets(
   assetsDir: string,
   fontsDir: string,
@@ -39,13 +34,6 @@ export function buildPrintAssets(
   }
 }
 
-/**
- * Version of the stylesheets the public pages link: print.css and
- * print-fonts.css on the resume page, print-fonts.css and project-pages.css
- * on the project pages. The files keep fixed names and are cached as
- * immutable, so each page appends this content hash as a query to fetch
- * fresh CSS whenever any of them changes.
- */
 export function publicStyleVersion(
   printCSS: string,
   fontsCSS: string,
@@ -54,16 +42,10 @@ export function publicStyleVersion(
   return contentVersion(printCSS, fontsCSS, projectCSS);
 }
 
-/**
- * Version of the public hydration bundle, which also keeps a fixed, immutable
- * name; the public page loads it as public-resume.mjs?v=<version>.
- */
 export function publicScriptVersion(source: string): string {
   return contentVersion(source);
 }
 
-// contentVersion is the first 16 hex characters of the SHA-256 of the parts
-// joined by NUL, so a byte moved across a boundary changes the version.
 function contentVersion(...parts: string[]): string {
   return createHash('sha256')
     .update(parts.join('\0'))

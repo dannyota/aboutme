@@ -249,7 +249,6 @@ describe('PasswordSettings', () => {
       expect(wrapper.get('[data-testid="password-action"]').text()).toBe(
         'Add a password',
       );
-      // Provider-only add never asks for a current password up front.
       expect(wrapper.find('#password-current').exists()).toBe(false);
     },
   );
@@ -285,7 +284,6 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
 
-      // Reauth first: current password only.
       await wrapper.get('#password-current').setValue('current-secret');
       await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
@@ -293,19 +291,15 @@ describe('PasswordSettings', () => {
       expect(actions.reauthenticate).toHaveBeenCalledWith('current-secret');
       expect(actions.setPassword).not.toHaveBeenCalled();
 
-      // Reauth succeeded — now the new-password form (with confirmation).
       expect(wrapper.find('#password-new').exists()).toBe(true);
       await wrapper.get('#password-new').setValue('new-secret');
       await wrapper.get('#password-new-confirm').setValue('new-secret');
       await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
-      // The confirmation value is component-local: only the new password
-      // reaches the action, and the current password never does.
       expect(actions.setPassword).toHaveBeenCalledWith('new-secret');
       expect(wrapper.emitted('updated')).toBeTruthy();
 
-      // Exact success copy and back to idle.
       expect(wrapper.get('[data-testid="password-success"]').text()).toBe(
         'Password changed.',
       );
@@ -328,8 +322,6 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
 
-      // Straight to the new-password form — the server arbitrates whether a
-      // recent provider reauth is still required.
       await wrapper.get('#password-new').setValue('brand-new-password');
       await wrapper.get('#password-new-confirm').setValue('brand-new-password');
       await wrapper.get('[data-testid="password-form"]').trigger('submit');
@@ -366,7 +358,6 @@ describe('PasswordSettings', () => {
     expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
       'Incorrect password.',
     );
-    // Still asking for the current password — the flow did not advance.
     expect(wrapper.find('#password-current').exists()).toBe(true);
     expect(wrapper.find('#password-new').exists()).toBe(false);
   });
@@ -396,7 +387,6 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
-      // Back to the password-reauth step, with recovery copy.
       expect(wrapper.find('#password-current').exists()).toBe(true);
       expect(wrapper.get('[data-testid="password-error"]').text()).toContain(
         'Sign in again',
@@ -425,7 +415,6 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
-      // Only the linked providers are offered, each as a reauth target.
       expect(
         wrapper
           .find('[data-testid="password-provider-reauth-google"]')
@@ -545,12 +534,10 @@ describe('PasswordSettings', () => {
     await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
 
-    // While the action is unresolved the submit is disabled.
     expect(
       wrapper.get('[data-testid="password-set-submit"]').attributes('disabled'),
     ).toBeDefined();
 
-    // A second submit during the pending window is a no-op.
     await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
     expect(setPassword).toHaveBeenCalledOnce();
@@ -592,8 +579,6 @@ describe('PasswordSettings', () => {
     await wrapper.get('[data-testid="password-action"]').trigger('click');
     await flushPromises();
 
-    // No provider email is shown in any state; the provider labels are
-    // fixed names, never email addresses.
     expect(wrapper.text()).not.toContain('@');
     expect(wrapper.text()).not.toMatch(/[a-z]+@[a-z]+\.[a-z]+/);
   });

@@ -1,14 +1,10 @@
 import type { Resume } from '@aboutme/schema';
 
-// Where a resume's library links live, and which project text a resume uses
-// (docs/design/projects.md "Selection" and "Language").
-
 export interface EntryLocation {
   readonly sectionKey: string;
   readonly entryId: string;
 }
 
-/** The entry of `document` that links `projectId`; a resume holds one. */
 export function linkedEntry(
   document: Resume,
   projectId: string,
@@ -21,7 +17,6 @@ export function linkedEntry(
   return undefined;
 }
 
-/** Every project the resume already links. */
 export function linkedProjectIds(document: Resume): ReadonlySet<string> {
   const ids = new Set<string>();
   for (const section of Object.values(document.content)) {
@@ -34,12 +29,6 @@ export function linkedProjectIds(document: Resume): ReadonlySet<string> {
   return ids;
 }
 
-/**
- * The text a project page under this resume uses: the key equal to the
- * resume language's primary subtag, otherwise the default language. It
- * falls back only when the resume has a language the project lacks; an
- * undetermined (`und`) or missing language uses the default by rule.
- */
 export function projectPageLanguage(
   lng: string | null | undefined,
   project: {
@@ -60,13 +49,6 @@ export interface PublishedState {
   readonly live: boolean;
 }
 
-/**
- * Whether linking `targetId` would show the project on a second published
- * resume, so a reader of both can tell they belong to the same person
- * (docs/design/projects.md "Privacy"). Drafts never count. An input that
- * could not be read (null) counts as revealing, so the owner is asked
- * rather than not; only a target known to be a draft is never asked about.
- */
 export function revealsAcrossResumes(
   targetId: string,
   linkedResumeIds: Iterable<string> | null,
@@ -83,7 +65,6 @@ export function revealsAcrossResumes(
   return false;
 }
 
-/** Whether the chosen resumes include two published ones. */
 export function choosesTwoPublished(
   resumes: readonly PublishedState[],
   chosen: readonly string[],

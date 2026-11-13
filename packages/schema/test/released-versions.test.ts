@@ -11,9 +11,6 @@ import {
   releasedSchema,
 } from "../gen/ts/released";
 
-// The manifest is the only release registry, and unknown versions fail closed.
-// See docs/design/data.md#document-versions.
-
 interface ManifestEntry {
   version: number;
   schema: string;
@@ -72,7 +69,6 @@ describe("released-version manifest", () => {
 });
 
 describe("released schema and generated output", () => {
-  // A version bump adds a new snapshot and changes CURRENT_VERSION together.
   it("keeps resume.v6.schema.json byte-identical to resume.schema.json while CURRENT_VERSION is 6", () => {
     expect(CURRENT_VERSION).toBe(6);
     const current = readFileSync("resume.schema.json");
@@ -94,8 +90,6 @@ describe("released schema and generated output", () => {
     }
   });
 
-  // Byte-identical inputs must produce identical bodies after the source
-  // header. This also detects a hand edit to either generated file.
   it("derives the current TS output from the v6 schema while CURRENT_VERSION is 6", () => {
     const dropHeader = (path: string) =>
       readFileSync(path, "utf8").split("\n").slice(1).join("\n");
@@ -190,7 +184,6 @@ describe("released-schema registry (TypeScript)", () => {
 });
 
 describe("retained v1 TypeScript types", () => {
-  // The application does not import retained v1 types, so compile them here.
   it("compile independently under tsc --strict", () => {
     expect(() =>
       execFileSync(

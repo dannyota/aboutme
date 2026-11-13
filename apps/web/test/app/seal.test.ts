@@ -11,8 +11,6 @@ import {
   STAMP_MIN_WIDTH,
 } from '../../app/components/app/sealLayout';
 
-// AppSeal v2 (ADR 0020): a rounded ticket stamp carrying the logo's seal, the
-// word PUBLIC or CÔNG KHAI, and the public link; and a 20 px seal tile mark.
 describe('AppSeal', () => {
   it('renders the word, the logo seal, and the public link in the stamp',
     () => {
@@ -55,7 +53,6 @@ describe('AppSeal', () => {
       mount(AppSeal, { props: { link, locale: 'en' } })
         .get('[data-seal-link]').attributes('textLength');
 
-    // A short link leaves the ticket at the width the word needs.
     expect(width('/ada')).toBeGreaterThanOrEqual(STAMP_MIN_WIDTH);
     expect(width('/ada')).toBe(width('/bob'));
     expect(width('/nguyen-van-an-backend-engineer'))
@@ -67,8 +64,6 @@ describe('AppSeal', () => {
   });
 
   it('keeps every slug inside the ticket, at its measured width', () => {
-    // Any slug is `^[a-z0-9]+(-[a-z0-9]+)*$`, 4 to 30 characters; the widest
-    // ones repeat the widest glyphs.
     for (const char of 'abcdefghijklmnopqrstuvwxyz0123456789') {
       for (const length of [4, 12, 20, 30]) {
         const link = `/${char.repeat(length)}`;

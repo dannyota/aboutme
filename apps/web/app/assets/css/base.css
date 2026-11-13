@@ -1,11 +1,3 @@
-/* Chrome reset. Replaces Tailwind Preflight for application routes only and
-   never reaches the resume renderer (decisions U2). */
-
-/* The Aurora canvas (ADR 0020) is the body background: static CSS glows that
-   scroll with the page and never animate. A background adds no element, so it
-   cannot intercept pointer events. The render harness, print path, and public
-   resume pages never set data-ui and keep their own plain background. The
-   body fills the viewport so a short page does not cut the glows off. */
 html[data-ui="app"] body {
   min-height: 100vh;
   margin: 0;

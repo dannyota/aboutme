@@ -9,10 +9,6 @@ import {
   mockSignedInSession,
 } from './support';
 
-// The workspace Projects screens (docs/design/ui/projects.md) against a
-// stateful fake of the owner project API (docs/api/openapi.yaml, /projects)
-// and of the resume routes a link, refresh or personal detail writes through.
-
 interface ProjectText {
   name?: string;
   role?: string;
@@ -70,27 +66,18 @@ interface ResumeRow {
   lng: string;
   slug: string | null;
   revision: number;
-  /** The project section's entries; null when the resume has none. */
   entries: ResumeEntry[] | null;
-  /** The last personal details saved; the fixed details until then. */
   personalDetails?: Record<string, unknown>;
 }
 
 interface LibraryOptions {
-  /** The account has a second factor, so a password only opens it. */
   readonly enrolled?: boolean;
   readonly resumes?: readonly ResumeRow[];
-  /** Holds each refresh response this long, as a slow server would. */
   readonly refreshDelayMs?: number;
-  /** Resumes another tab saves just before their first link arrives. */
   readonly savedElsewhere?: readonly string[];
-  /** Headlines another tab saves just before a resume's first write. */
   readonly headlinesElsewhere?: Readonly<Record<string, string>>;
-  /** A second tab of the same session, served by the same fake. */
   readonly otherTab?: Page;
-  /** Resume writes whose connection drops before they reach the server. */
   readonly lostWrites?: number;
-  /** Resume writes refused for a stale CSRF token. */
   readonly csrfRejectedWrites?: number;
 }
 
@@ -98,7 +85,6 @@ const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
 const FRONTEND = '0190f000-0000-7000-8000-0000000000b2';
 const DATA = '0190f000-0000-7000-8000-0000000000b3';
 
-/** Three resumes; `linked` maps a resume to the project it already shows. */
 function resumeRows(linked: Record<string, string> = {}): ResumeRow[] {
   const entries = (id: string): ResumeEntry[] => {
     const projectId = linked[id];
@@ -111,7 +97,6 @@ function resumeRows(linked: Record<string, string> = {}): ResumeRow[] {
       revision: 1, entries: entries(BACKEND) },
     { id: FRONTEND, title: 'Frontend', lng: 'vi', slug: null,
       revision: 1, entries: entries(FRONTEND) },
-    // Data has no project section until a link creates one.
     { id: DATA, title: 'Data', lng: 'und', slug: null,
       revision: 1,
       entries: linked[DATA] === undefined ? null : entries(DATA) },
@@ -164,7 +149,6 @@ function resumeData(row: ResumeRow, withDocument: boolean) {
   };
 }
 
-/** The server's prefill: the resume language's text, else the default. */
 function prefill(entry: ResumeEntry, project: Project, lng: string) {
   const primary = lng.toLowerCase().split('-')[0] ?? '';
   const text = (primary === 'und' ? undefined : project.text[primary])
@@ -303,9 +287,6 @@ async function fakeLibrary(
       updatedAt: '2026-11-11T01:00:00Z', linkedResumeIds: [],
     };
     projects.set(current.id, next);
-    // Every replacement in these tests changes the project, so each
-    // published resume linking it advances its revision and keeps its
-    // document.
     const changedResumes = linkedTo(current.id)
       .map((resumeId) => resumes.get(resumeId)!)
       .filter((row) => row.slug !== null)
@@ -318,8 +299,6 @@ async function fakeLibrary(
       json: { data: { project: shown(next), changedResumes } },
     });
   });
-  // A successful, immediately closed stream keeps the editor's live
-  // connection quiet.
   await routeAll('**/api/v1/events', async (route) => {
     await route.fulfill({
       status: 200, contentType: 'text/event-stream', body: '',
@@ -403,7 +382,6 @@ async function fakeLibrary(
           return;
         }
         if (entryId !== undefined) {
-          // An existing entry gains the reference and keeps its text.
           const index = entries.findIndex((entry) => entry.id === entryId);
           if (index === -1) {
             await route.fulfill(problem(404, 'entry_not_found'));
@@ -448,7 +426,6 @@ async function fakeLibrary(
     writes,
     resumeWrites,
     reauths,
-    /** The owner finishes the factor in the other tab. */
     completeFactor: () => {
       reauthenticated = true;
     },
@@ -881,8 +858,6 @@ test('adding to a second published resume asks first, once', async ({
   await row.getByRole('button', { name: 'Add to this resume' }).click();
   await ask.getByRole('button', { name: 'Add anyway' }).click();
   await expect(row).toContainText('Shown');
-  // The first link meets a revision another tab saved; the same request is
-  // sent once more on the new revision without asking again.
   await expect(ask).toBeHidden();
   expect(fake.resumeWrites.map((write) => [write.path, write.ifMatch]))
     .toEqual([
@@ -937,7 +912,6 @@ test('New project decides the note at submit from the resumes read then',
     await dialog.getByRole('checkbox', { name: 'Backend' }).check();
     await dialog.getByRole('checkbox', { name: 'Frontend' }).check();
     await expect(note).toHaveCount(0);
-    // Another tab publishes Frontend after the dialog read the resumes.
     fake.resumes.get(FRONTEND)!.slug = 'ada-frontend';
 
     await dialog.getByRole('button', { name: 'Create' }).click();
@@ -995,8 +969,6 @@ test('the resume editor adds a library project, selects it and refreshes it',
     );
     await confirm.getByRole('button', { name: 'Replace text' }).click();
 
-    // Refresh is disabled while the refresh is out, so focus waits on Open
-    // project and returns once the response has landed.
     await expect(card.getByRole('link', { name: 'Open project' }))
       .toBeFocused();
     await expect(card.locator('[data-entry-field="title"] input'))
@@ -1176,11 +1148,8 @@ test('the resume editor keeps an edit while the session check fails, and '
   );
   const status = page.getByTestId('save-status');
   const banner = page.locator('[data-session-check]');
-  // The session goes down only once the editor is open: a check that fails
-  // before the first load shows Editor unavailable instead.
   await expect(headline).toBeVisible();
   await expect(status).toHaveAttribute('data-state', 'saved');
-  // The token refresh after the refused write cannot reach the session.
   let sessionDown = true;
   await page.route('**/api/v1/me', async (route) => {
     if (!sessionDown) {
@@ -1246,7 +1215,6 @@ test('a held resume edit saves after a project replacement advances only '
   const released = new Promise<void>((resolve) => {
     release = () => resolve();
   });
-  // The first save waits here, so it reaches the fake after the replacement.
   await page.route(`**${personalPath}`, async (route) => {
     await released;
     await route.fallback();
@@ -1261,7 +1229,6 @@ test('a held resume edit saves after a project replacement advances only '
   await headline.press('Tab');
   expect((await held).headers()['if-match']).toBe('"r1"');
 
-  // The other tab replaces the project's summary.
   await other.goto(`/app/projects/${FIRST}`);
   const replaced = other.waitForResponse((response) =>
     response.request().method() === 'PUT'
@@ -1275,7 +1242,6 @@ test('a held resume edit saves after a project replacement advances only '
   expect(replacement.data.changedResumes)
     .toEqual([{ id: BACKEND, revision: '2' }]);
 
-  // The held save meets revision 2 with the document it was based on.
   release();
   await expect(page.getByTestId('save-status'))
     .toHaveAttribute('data-state', 'saved');
@@ -1356,8 +1322,6 @@ test('both screens fit 320 px without horizontal overflow', async ({
   await expect(page.getByTestId('project-title')).toHaveText('Shop site');
   await expect(page.locator('[data-resume-row]')).toHaveCount(3);
   await expectScreen(page, editorContract());
-  // The signed-in English bar overflows 640 px without the Projects link
-  // too, so only the page column is checked there.
   await page.setViewportSize({ width: 640, height: 900 });
   await expect.poll(() => page.getByTestId('project-editor').evaluate(
     (main) => main.scrollWidth <= main.clientWidth

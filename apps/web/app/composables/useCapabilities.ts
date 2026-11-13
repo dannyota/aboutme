@@ -7,7 +7,6 @@ const loginProviderIds = ['google', 'github', 'linkedin'] as const;
 
 export type LoginProvider = (typeof loginProviderIds)[number];
 
-/** Brand names for the English settings surface. */
 export const providerNames: Record<LoginProvider, string> = {
   google: 'Google',
   github: 'GitHub',
@@ -20,34 +19,15 @@ interface CapabilitiesEnvelope {
 
 export interface UseCapabilitiesReturn {
   providerLogin: ComputedRef<boolean>;
-  /** Email/password sign-up is open; a missing field keeps it open. */
   passwordRegistration: ComputedRef<boolean>;
-  /** Providers whose sign-in button renders, in display order. */
   loginProviders: ComputedRef<readonly LoginProvider[]>;
   agentAccess: ComputedRef<boolean>;
-  /** New passkey enrollment is open; anything else keeps it closed. */
   passkeyEnrollment: ComputedRef<boolean>;
-  /**
-   * New TOTP enrollment and replacement may start and complete; anything
-   * else keeps it closed. Verification, removal, recovery, and state reads
-   * ignore this flag (totp-second-factor-contract.md "Release surface").
-   */
   totpEnrollment: ComputedRef<boolean>;
-  /**
-   * Owners may turn the per-resume sign-in-to-view switch on. Never derived
-   * from any resume's own state (docs/design/viewer-analytics/
-   * sign-in-to-view.md#setting).
-   */
   signInToView: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
 
-/**
- * `useCapabilities` — which optional surfaces this deployment enables, read
- * from `GET /api/v1/capabilities` in the browser only (Nuxt never fetches Go
- * during SSR). Anything but an exact boolean `true` is `false`, so a failed
- * or malformed read hides every optional surface.
- */
 export function useCapabilities(): UseCapabilitiesReturn {
   const { data, status, error } = useFetch<CapabilitiesEnvelope>(
     '/api/v1/capabilities',
@@ -56,8 +36,6 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const providerLogin = computed(
     () => data.value?.data?.providerLogin === true,
   );
-  // ADR 0016: only the providers the server lists render a button. A missing
-  // or malformed list renders none, never all three.
   const loginProviders = computed<readonly LoginProvider[]>(() => {
     const listed: unknown = data.value?.data?.providers;
     return Array.isArray(listed)
@@ -74,8 +52,6 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const signInToView = computed(
     () => data.value?.data?.signInToView === true,
   );
-  // Only an explicit false closes sign-up, so an older server that lacks the
-  // field keeps the form.
   const passwordRegistration = computed(
     () => data.value?.data?.passwordRegistration !== false,
   );

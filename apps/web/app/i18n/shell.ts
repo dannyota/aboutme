@@ -1,4 +1,3 @@
-// Header copy for the localized routes; every other route uses English.
 import type { Locale } from './locale';
 
 export type ShellCopy = {
@@ -8,12 +7,9 @@ export type ShellCopy = {
   readonly createResume: string;
   readonly openSource: string;
   readonly templates: string;
-  /** Header link to the community showcase, right after the Library. */
   readonly community: string;
-  /** Header link to the MCP guide (docs/design/mcp-guide.md Navigation). */
   readonly guideMcp: string;
   readonly resumes: string;
-  /** Header link to the project library, right after Resumes. */
   readonly projects: string;
   readonly views: string;
   readonly settings: string;

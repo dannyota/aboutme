@@ -12,7 +12,6 @@ function isLoopbackHostname(hostname: string): boolean {
   );
 }
 
-/** Validate the only authorize URLs that privileged browser flows may open. */
 export function validateAuthorizeUrl(
   provider: AuthProvider,
   value: unknown,

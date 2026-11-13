@@ -11,9 +11,6 @@ import { setSiteLocale } from '../support/locale';
 
 const originalClientWidth = document.documentElement.clientWidth;
 
-// A viewport wide enough that the preview's 29.5rem floor never limits the
-// panel (needs more than 98rem), so the default max reads as the flat 48rem
-// ceiling.
 function useWideViewport(): void {
   Object.defineProperty(document.documentElement, 'clientWidth', {
     configurable: true,
@@ -30,8 +27,6 @@ afterEach(() => {
   setSiteLocale(undefined);
   window.localStorage.removeItem(EDITOR_PANEL_STORAGE_KEY);
   document.documentElement.style.removeProperty(EDITOR_PANEL_CSS_VAR);
-  // A test that fails mid-drag can leave these set; later tests must not
-  // inherit them.
   document.body.style.userSelect = '';
   document.body.style.cursor = '';
   Object.defineProperty(document.documentElement, 'clientWidth', {
@@ -138,12 +133,10 @@ describe('PanelResizeHandle', () => {
 
     await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
     await element.trigger('pointermove', { clientX: 184, pointerId: 1 });
-    // 16px left at a 16px root font size is exactly 1rem.
     expect(element.attributes('aria-valuenow')).toBe('23');
 
     await element.trigger('pointerup', { clientX: 184, pointerId: 1 });
     await element.trigger('pointermove', { clientX: 100, pointerId: 1 });
-    // The drag ended, so a later move with no new pointerdown is ignored.
     expect(element.attributes('aria-valuenow')).toBe('23');
     wrapper.unmount();
   });
@@ -222,7 +215,6 @@ describe('PanelResizeHandle', () => {
       const element = handle(wrapper);
 
       await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
-      // 19px left at a 16px root font size is 22 + 1.1875 = 23.1875rem.
       await element.trigger('pointermove', { clientX: 181, pointerId: 1 });
 
       expect(element.attributes('aria-valuenow')).toBe('23');
@@ -239,7 +231,6 @@ describe('PanelResizeHandle', () => {
       const element = handle(wrapper);
 
       await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
-      // 19px left is 23.1875rem live; committed, it snaps to 23.25rem.
       await element.trigger('pointermove', { clientX: 181, pointerId: 1 });
       await element.trigger('pointerup', { clientX: 181, pointerId: 1 });
 

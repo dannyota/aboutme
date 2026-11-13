@@ -39,8 +39,6 @@ watch(
   () => props.details,
   (next) => {
     details.value = copyDetails(next);
-    // A label revealed but not yet committed stays open while another
-    // detail's change comes back; only removed details drop their flag.
     visibleLabels.value = Object.fromEntries(
       details.value
         .filter(
@@ -170,7 +168,6 @@ function changeHidden(id: string, isHidden: boolean): void {
   );
 }
 
-// Absent `display` means short (ADR 0013), so choosing short drops the key.
 function changeDisplay(id: string, display: LinkDisplay): void {
   const detail = detailById(id);
   if (detail === undefined || display === (detail.display ?? 'short')) return;
@@ -238,8 +235,6 @@ function isWebProfile(type: PersonalDetail['type']): boolean {
   );
 }
 
-// Only a detail that renders as a link has a display choice: the four URL
-// types, and a custom value with the renderer's exact https:// prefix.
 function rendersAsLink(detail: PersonalDetail): boolean {
   return (
     isWebProfile(detail.type)
@@ -290,7 +285,6 @@ const typeOptions = computed(
         {{ copy.contactDetail }} {{ index + 1 }}
       </h3>
       <div class="grid gap-4">
-        <!-- prettier-ignore -->
         <div
           class="grid grid-cols-[auto_minmax(0,1fr)_auto]
             items-end gap-2"

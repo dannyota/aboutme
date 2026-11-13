@@ -2,10 +2,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Wires the sign-in-to-view join invite: mounted only when the resume HTML
-// carries the marker, view start succeeds, and both `owner` and `signedIn`
-// are false (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
-
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
@@ -29,7 +25,6 @@ function stubFetch(startData: Record<string, unknown>): void {
         json: async () => ({ data: startData }),
       } as unknown as Response;
     }
-    // The realtime hydration read; failing it is harmless and silent.
     return { ok: false, status: 404, json: async () => ({}) } as Response;
   }));
 }

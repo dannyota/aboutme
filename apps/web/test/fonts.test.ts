@@ -1,16 +1,3 @@
-// fonts.test.ts — Task 5 asset and license checker (AC-REN-003,
-// AC-FONT-001).
-//
-// The 26-row input matrix in docs/design/fonts.md is the frozen
-// authority for this suite. Instead of a second hand transcription that
-// could drift, the suite parses that document directly and asserts the
-// committed manifest (app/assets/fonts/catalog.json), the vendored
-// bytes, the runtime license tree, the generated CSS, and the runtime
-// mapping against it. Font tables (name, fvar, OS/2, cmap) are
-// re-parsed here with fontkit — a different parser than the fonttools
-// pipeline that generated the assets — so recorded internal names,
-// axes, and coverage are measured twice, independently, from the final
-// bytes.
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,10 +18,6 @@ const fixturePath = join(here, 'fixtures', 'font-coverage.txt');
 
 const sha256 = (data: Buffer | string): string =>
   createHash('sha256').update(data).digest('hex');
-
-// ---------------------------------------------------------------------
-// Design-matrix parsing (docs/design/fonts.md, Approved v4).
-// ---------------------------------------------------------------------
 
 interface DesignInput {
   readonly path: string;
@@ -69,7 +52,6 @@ const pathHashPairs = (cell: string): DesignInput[] =>
 
 const parseDesignRow = (line: string): DesignRow => {
   const cells = line.split('|').map((cell) => cell.trim());
-  // cells[0] and cells[8] are the empty edges of the Markdown row.
   const idPattern = new RegExp(
     '^`([a-z0-9-]+)`\\s+—\\s+(.+);\\s*'
     + '(sans|serif|slab serif|display serif|monospace)$',
@@ -123,10 +105,6 @@ const designArchives: readonly DesignArchive[] = designText
     /^\|\s*(A\d+)\s*\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|/.exec(line))
   .filter((m): m is RegExpExecArray => m !== null)
   .map((m) => ({ ref: m[1]!, url: m[2]!, sha256: m[3]! }));
-
-// ---------------------------------------------------------------------
-// Manifest shape.
-// ---------------------------------------------------------------------
 
 interface CatalogAsset {
   readonly path: string;
@@ -220,10 +198,6 @@ const FALLBACK_BY_CATEGORY: Record<string, string> = {
   'monospace': 'space-mono',
 };
 
-// ---------------------------------------------------------------------
-// fontkit re-parse of the final bytes.
-// ---------------------------------------------------------------------
-
 interface FontLike {
   readonly 'copyright': string;
   readonly 'familyName': string;
@@ -298,10 +272,6 @@ const entryCoverageIntersection = (entry: CatalogEntry): Set<number> => {
   );
 };
 
-// ---------------------------------------------------------------------
-// Suites.
-// ---------------------------------------------------------------------
-
 describe('design matrix', () => {
   it('parses the exact 26 frozen rows and 5 archives', () => {
     expect(designRows).toHaveLength(26);
@@ -320,7 +290,6 @@ describe('manifest schema', () => {
     expect(catalog.catalogVersion).toBe(2);
     expect(catalog.design.document).toBe('docs/design/fonts.md');
     expect(catalog.design.revision).toMatch(/^[0-9a-f]{40}$/);
-    // Tripwire: a change to the frozen design without regeneration.
     expect(catalog.design.sha256).toBe(sha256(designText));
     expect(catalog.generator.python).toBe('3.14.7');
     expect(catalog.generator.fonttools).toBe('4.63.0');
@@ -546,9 +515,6 @@ describe('measured coverage', () => {
   });
 
   it('the fixture never reaches a platform font', () => {
-    // The three deterministic fallbacks must cover the whole fixture
-    // alone; every other entry must cover it in union with its
-    // fallback.
     for (const fallbackId of ['noto-sans', 'noto-serif', 'space-mono']) {
       const entry = entryById.get(fallbackId)!;
       expect(entry.fixtureCoverage.complete, fallbackId).toBe(true);

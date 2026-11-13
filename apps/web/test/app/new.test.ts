@@ -10,12 +10,6 @@ import NewResumePage from '../../app/pages/app/new.vue';
 import { setSiteLocale } from '../support/locale';
 import { holdSignedOutRedirects } from '../support/signedOutRedirects';
 
-// /app/new is reached from a public gallery page, so a signed-out visitor
-// must land on account creation, not sign-in, carrying the sample or
-// template query back with them (register.vue then returns them here). The
-// shared route guard (middleware/signed-in.global.ts) sends them; the page
-// itself does not.
-
 let meStatus = 401;
 const startDocumentSpy = vi.spyOn(
   await import('../../app/templates/startDocument'),
